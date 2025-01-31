@@ -91,7 +91,7 @@ const ConfigGrid: FC = () => {
       <div className={styles.GridSrollWrapper}>
         <table>
           <ConfigGridHeader />
-          <ConfigGridBody />
+          <ConfigGridBody loading={lodaing} />
         </table>
       </div>
     </>
