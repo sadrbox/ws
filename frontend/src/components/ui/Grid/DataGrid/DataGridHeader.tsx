@@ -6,7 +6,7 @@ import { getTranslateColumn } from 'src/i18';
 import DataGridTabHeaderCheckbox from './DataGridHeaderCheckbox';
 
 const DataGridTabHeader: FC = () => {
-  const context = useDataGridContext().context;;
+  const { context } = useDataGridContext();
 
   const handleSorting = useCallback((columnID: string) => {
     if (context?.states?.setOrder) {
