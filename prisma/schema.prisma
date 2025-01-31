@@ -1,0 +1,55 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         Int     @id @default(autoincrement())
+  username   String?
+  password   String?
+  email      String?
+  firstname  String?
+  lastname   String?
+  middlename String?
+  fullname   String?
+}
+
+model Counterparty {
+  id   Int     @id @default(autoincrement())
+  name String
+  bin  String?
+}
+
+model Organization {
+  id              Int               @id @default(autoincrement())
+  name            String
+  bin             String?           @unique
+  ActivityHistory ActivityHistory[]
+}
+
+model ActivityHistory {
+  id           Int          @id @default(autoincrement())
+  actionDate   DateTime     @default(now())
+  actionType   String
+  organization Organization @relation(fields: [bin], references: [bin])
+  bin          String
+  userName     String
+  host         String
+  ip           String?
+  city         String?
+  objectId     String
+  objectType   String
+  objectName   String
+  props        Json
+}

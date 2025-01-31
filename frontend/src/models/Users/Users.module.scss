@@ -1,0 +1,38 @@
+.elementForm {
+  display: flex;
+  flex-direction: column;
+  // max-width: 500px;
+  background-color: $color60;
+  // @apply p-2;
+}
+
+label {
+  // border: 1px solid blue;
+  margin-bottom: 20px;
+  margin-right: 20px;
+  /* display: flex; */
+  /* flex-direction: column; */
+}
+.inputField {
+  min-width: 100px;
+  max-width: 300px;
+  padding: 4px;
+  border-radius: 2px;
+  border: 1px solid $color10;
+  outline: none;
+  &:focus {
+    border: 1px solid $colorPrimaryLight;
+  }
+}
+.submitButton {
+  border: 1px solid $colorPrimaryDark;
+  background-color: $colorPrimaryLight;
+  color: $color60;
+  border-radius: 2px;
+  text-shadow: 0px 0px 1px $color5;
+  box-shadow: 0 0 2px 0px $colorPrimaryLight;
+  padding: 8px;
+  // font-size: 100%;
+  font-weight: 500;
+  // letter-spacing: 0px;
+}

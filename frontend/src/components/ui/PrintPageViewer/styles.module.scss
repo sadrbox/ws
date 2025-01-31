@@ -1,0 +1,370 @@
+@keyframes borderFadeIn {
+	0% {
+		border-color: transparent; /* Прозрачный цвет границы */
+	}
+	100% {
+		border-color: $color10; /* Цвет границы по окончании анимации */
+	}
+}
+
+.GridWrapper {
+	background-color: $color30;
+	transition: all 0.5ms ease;
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	height: calc(100vh - 30px);
+	// width: 100%;
+	// height: 100%; /* Или любую нужную высоту 100cqmin*/
+	// display: grid;
+	// grid-auto-flow: column;
+	// flex-direction: column;
+	// margin: 100px 100px 0px 100px;
+	padding: 4px;
+	border: 1px solid $color10;
+	border-radius: 2px;
+}
+
+.GridPanel {
+	display: grid;
+	grid-auto-flow: column;
+	// grid-template-columns: repeat(1fr);
+	// grid-auto-flow: column;
+	// flex-direction: row;
+	// align-items: center;
+	padding: 4px;
+	border: 1px solid $color10;
+	// box-shadow: 0px 0px 2px $color6;
+	border-radius: 2px;
+	// position: relative; /* Обязательно для использования псевдоэлемента */
+	// overflow: hidden;
+	// box-shadow: inset 0 0 15px #ccc;
+	margin-bottom: 4px;
+	// border: 1px solid red;
+	// justify-content: flex-end;
+}
+
+.GridSrollWrapper {
+	// display: flex;
+	// height: 100%;
+	flex: 1;
+	// grid-template-rows: repeat(auto-fill, minmax(100px, 1fr));
+	// background-color: #fff;
+	// margin: 4px 4px 4px 4px;
+	// width: auto;
+	// background-color: red;
+	padding: 10px;
+	// border: 1px solid $color30;
+	scroll-behavior: smooth;
+	// max-width: 100vw;
+	// max-height: 90vh; /* Высота контейнера */
+	overflow: auto; /* Прокрутка по вертикали */
+	// border-top: 1px solid $color10;
+	// border-bottom: 1px solid $color10;
+	// border-right: 1px solid $color10;
+	border: 1px solid $color10;
+	// box-shadow: 0px 0px 2px $color6;
+	border-radius: 2px;
+	// position: relative; /* Обязательно для использования псевдоэлемента */
+	// overflow: hidden;
+	box-shadow: inset 0 0 15px #ccc;
+
+	&::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+
+	/* Track */
+	&::-webkit-scrollbar-track {
+		// padding-top: 30px;
+		background: $color30;
+	}
+
+	/* Handle */
+	&::-webkit-scrollbar-thumb {
+		// margin-top: 30px;
+		background: $color10;
+		border-radius: 2px;
+	}
+
+	/* Handle on hover */
+	&::-webkit-scrollbar-thumb:hover {
+		background: $color10;
+	}
+}
+
+table {
+	border-collapse: collapse;
+	height: 100%;
+	table-layout: fixed;
+	// table-layout: auto;
+	position: relative;
+}
+
+.onScrollTab {
+	box-shadow: 0px 1px 10px $color6;
+	// box-shadow: 0px 0px 0px red;
+	// border: 3px solid red;
+	transition: box-shadow 1s ease-out;
+}
+
+thead {
+	// display: inline;
+	background-color: $color30;
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	// border-bottom: 1px solid red;
+
+	tr {
+		th {
+			font-weight: 500;
+			padding: 2px 0 3px 0;
+			user-select: none;
+			cursor: default;
+			white-space: nowrap;
+			// border-right: 0px solid $color10;
+			border-left: 1px solid $color10;
+			border-bottom: 0px;
+			&:first-child {
+				border-left: 0px;
+			}
+			&:last-child {
+				border-right: 0px;
+			}
+			div {
+				// height: 27px;
+				display: grid;
+				grid-auto-flow: column;
+				align-items: center;
+				text-align: left;
+				padding: 4px 7px;
+			}
+		}
+	}
+	&::after {
+		margin-bottom: 0px;
+		content: " "; /* Псевдоэлемент нуждается в содержимом */
+		// padding: 2px; /* Отступы */
+		display: block; /* Отображение блока, чтобы отступы работали */
+		position: absolute; /* Позиционирование относительно родителя */
+		bottom: 0; /* Например, расположение внизу */
+		left: 0; /* Сдвиг от левого края */
+		right: 0; /* Сдвиг от правого края, если нужно заполнить */
+		// box-shadow: 0 0 1px 1px $color10;
+		// border-bottom: 22x solid $color10;
+		height: 1px;
+		background: $color5;
+		// transition: box-shadow 1s ease-out;
+		box-shadow: 0px 1px 5px $color6;
+	}
+}
+
+tbody {
+	background-color: $color60;
+	tr {
+		border-bottom: 1px solid $color10;
+		// &:last-child {
+		//   height: 50px;
+		//   border: 0px !important;
+		// }
+		td {
+			border-right: 1px solid $color10;
+			// border-bottom: 1px solid $color10;
+			// border-top: 1px solid $color10;
+
+			&:first-child {
+				border-left: 0px;
+			}
+			&:last-child {
+				border-right: 0px;
+				// border-bottom: 1px solid $colorPrimaryDark;
+			}
+			div {
+				align-items: center;
+				user-select: none;
+			}
+		}
+	}
+}
+
+.Button {
+	display: flex;
+	// border: none; /* Цвет рамки */
+	border: 1px solid transparent;
+	outline: none;
+	margin: 0px;
+	padding: 4px; /* Размер кнопки */
+	font-size: 13px; /* Размер шрифта */
+	text-align: center;
+	cursor: pointer;
+	border-radius: 2px; /* Радиус скругления углов */
+	img {
+		height: 20px;
+	}
+	span {
+		// color: #0c50bd;
+		color: #073989; /* Цвет текста */
+		text-decoration: underline;
+		font-weight: 600;
+		// color: #333; /* Основной цвет текста */
+		// text-shadow: 1px 1px 1px #fff; /* Тонкая тень с мягким размытием */
+		// background-color: #ebebeb; /* Фон блока */
+		// padding: 20px; /* Дополнительное пространство вокруг текста */
+		padding: 0px 6px;
+		align-self: center;
+		// vertical-align: top;
+		line-height: normal;
+		display: grid;
+		// overflow: hidden;
+		// background-color: red;
+		white-space: nowrap;
+		// text-overflow: ellipsis;
+	}
+	// box-shadow: inset 0px 1px 1px $color60, 0px 1px 1px $color5;
+	&:hover {
+		// background-color: #d3e6ff;
+		border: 1px solid $color1;
+		background-color: $color2;
+		span {
+			// color: #0c50bd;
+			text-decoration: underline;
+		}
+		// box-shadow: inset 0px 1px 1px $color60, 0px 1px 1px $color6;
+	}
+	&:active {
+		// border: 1px solid $color5;
+		// box-shadow: inset 0px -1px 0px $color60, 0px 1px 0px $color5;
+	}
+}
+
+.ButtonImg {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 30px;
+	border-radius: 2px;
+	// padding: 10px;
+}
+
+.TabFieldActive {
+	@extend .TabField;
+	border: 1px solid $color1 !important;
+	background: $color2;
+}
+.TabField {
+	display: grid;
+	grid-template-rows: 22px;
+	grid-template-columns: 1fr;
+	// overflow: hidden;
+	// // background-color: red;
+	// white-space: nowrap;
+	// text-overflow: ellipsis;
+	// grid-template-columns: 1fr auto; /* Делаем элемент гибким */
+	// max-width: 100%;
+	// justify-content: center;
+	// align-items: stretch;
+
+	// align-items: center;
+	border: 1px solid transparent;
+	cursor: default;
+	// max-width: 150px;
+	// text-overflow: ellipsis;
+	span {
+		padding: 0px 5px;
+
+		// align-self: center;
+		// vertical-align: top;
+		// line-height: normal;
+		display: grid;
+		overflow: hidden;
+		// background-color: red;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		// font-size: 14px;
+		// margin: auto 0;
+	}
+}
+
+.LabelForCheckbox {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	margin: 0px;
+	// background: red;
+	height: 22px;
+	width: 22px;
+}
+
+input[type="checkbox"] {
+	height: 18px;
+	width: 18px;
+	// border: 9px solid #ccc;
+	// accent-color: $color10;
+	// transform: rotate(45deg);
+	// border-radius: 2px;
+	// appearance: none;
+	cursor: default;
+	margin: 0px;
+	// outline: 1px solid blue;
+	// border: 1px solid red;
+	// transition: all 0.3s ease;
+	&:checked {
+		// background-color: #007bff;
+		// border-color: #007bff;
+		// transform: scale(1.1);
+	}
+	&:focus {
+		outline: none;
+		// box-shadow: 0 0 2px $color6;
+		// border: 1px solid $color1;
+		// box-shadow: 0 1px 3px $color5;
+		// border: 1px solid red;
+		// box-shadow: 0px 0px 3px #262626;
+	}
+}
+
+.contextMenu {
+	user-select: none;
+	z-index: 9999;
+	position: absolute;
+	width: 200px;
+	padding: 0px;
+	// outline: 1px solid $colorTheme;
+
+	background-color: $color60;
+	border: 1px solid $color10;
+	border-radius: 2px;
+	box-shadow: 0px 0px 3px 0px $color10;
+}
+.contextMenu_list {
+	display: flex;
+	flex-direction: column;
+	// justify-content: space-around;
+	padding: 0px;
+
+	li {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: left;
+		padding: 5px;
+
+		&:not(:last-child) {
+			border-bottom: 1px solid $color30;
+		}
+		&:first-child {
+		}
+		a {
+			display: grid;
+			grid-template-columns: 22px 1fr;
+			align-items: center;
+
+			font-size: 12px;
+
+			&:hover {
+				color: $colorTheme;
+			}
+		}
+	}
+}

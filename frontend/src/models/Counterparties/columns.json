@@ -1,0 +1,52 @@
+[
+  {
+    "identifier": "switcher",
+    "type": "boolean",
+    "column": "Switcher",
+    "width": "30px",
+    "alignment": "center",
+    "hint": "Пометка",
+    "visible": true,
+    "position": 1
+  },
+  {
+    "identifier": "id",
+    "type": "number",
+    "column": "Id",
+    "width": "60px",
+    "alignment": "left",
+    "hint": "Номер",
+    "visible": true,
+    "position": 2
+  },
+  {
+    "identifier": "title",
+    "type": "string",
+    "column": "Title",
+    "width": "150px",
+    "alignment": "left",
+    "hint": "Наименование",
+    "visible": true,
+    "position": 3
+  },
+  {
+    "identifier": "fullname",
+    "type": "string",
+    "column": "Fullname",
+    "width": "150px",
+    "alignment": "left",
+    "hint": "Полное наименование",
+    "visible": true,
+    "position": 4
+  },
+  {
+    "identifier": "bin",
+    "type": "string",
+    "column": "BIN",
+    "width": "60px",
+    "alignment": "left",
+    "hint": "БИН",
+    "visible": true,
+    "position": 5
+  }
+]

@@ -1,0 +1,132 @@
+[
+  {
+    "identifier": "switcher",
+    "type": "boolean",
+    "column": "Switcher",
+    "width": "30px",
+    "alignment": "center",
+    "hint": "Пометка",
+    "visible": true,
+    "position": 1
+  },
+  {
+    "identifier": "id",
+    "type": "number",
+    "column": "ID",
+    "width": "80px",
+    "alignment": "left",
+    "hint": "Идентификатор продукта",
+    "visible": true,
+    "position": 2
+  },
+  {
+    "identifier": "title",
+    "type": "string",
+    "column": "Title",
+    "width": "150px",
+    "alignment": "left",
+    "hint": "Название продукта",
+    "visible": true,
+    "position": 3
+  },
+  {
+    "identifier": "description",
+    "type": "string",
+    "column": "Description",
+    "width": "250px",
+    "alignment": "left",
+    "hint": "Описание продукта",
+    "visible": true,
+    "position": 4
+  },
+  {
+    "identifier": "category",
+    "type": "string",
+    "column": "Category",
+    "width": "100px",
+    "alignment": "left",
+    "hint": "Категория продукта",
+    "visible": true,
+    "position": 5
+  },
+  {
+    "identifier": "price",
+    "type": "number",
+    "column": "Price",
+    "width": "80px",
+    "alignment": "right",
+    "hint": "Цена продукта",
+    "visible": true,
+    "position": 6
+  },
+  {
+    "identifier": "discountPercentage",
+    "type": "number",
+    "column": "Discount Percentage",
+    "width": "120px",
+    "alignment": "right",
+    "hint": "Процент скидки",
+    "visible": true,
+    "position": 7
+  },
+  {
+    "identifier": "rating",
+    "type": "number",
+    "column": "Rating",
+    "width": "80px",
+    "alignment": "right",
+    "hint": "Рейтинг продукта",
+    "visible": true,
+    "position": 8
+  },
+  {
+    "identifier": "stock",
+    "type": "number",
+    "column": "Stock",
+    "width": "80px",
+    "alignment": "right",
+    "hint": "Наличие на складе",
+    "visible": true,
+    "position": 9
+  },
+  {
+    "identifier": "brand",
+    "type": "string",
+    "column": "Brand",
+    "width": "100px",
+    "alignment": "left",
+    "hint": "Бренд продукта",
+    "visible": true,
+    "position": 11
+  },
+  {
+    "identifier": "sku",
+    "type": "string",
+    "column": "SKU",
+    "width": "100px",
+    "alignment": "left",
+    "hint": "Артикул",
+    "visible": true,
+    "position": 12
+  },
+  {
+    "identifier": "weight",
+    "type": "number",
+    "column": "Weight",
+    "width": "80px",
+    "alignment": "right",
+    "hint": "Вес продукта",
+    "visible": true,
+    "position": 13
+  },
+  {
+    "identifier": "images",
+    "type": "array",
+    "column": "Images",
+    "width": "150px",
+    "alignment": "left",
+    "hint": "Изображения продукта",
+    "visible": true,
+    "position": 22
+  }
+]
