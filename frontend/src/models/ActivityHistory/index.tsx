@@ -1,65 +1,65 @@
-import { useState, FC, useEffect } from "react";
+import { useState, FC, useEffect, useMemo } from "react";
 import columnsJson from "./columns.json";
-import { TColumn, TDataItem, TModelProps, TSorting } from "src/components/ui/Grid/types";
-import { getModelColumns, orderGridRows } from "src/components/ui/Grid/services";
+import { TColumn, TDataItem, TModelProps, TOrder } from "src/components/ui/Grid/types";
+import { getModelColumns, sortGridRows } from "src/components/ui/Grid/services";
 import Grid from "src/components/ui/Grid";
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const getResponseData = async (signal: AbortSignal) => {
+  try {
+    const response = await fetch("http://192.168.1.112:3000/json", { signal });
+    if (!response.ok) throw new Error(`Ошибка ${response.status}: ${response.statusText}`);
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error && error.name !== "AbortError") {
+      console.error("Ошибка загрузки данных:", error);
+    }
+    return null;
+  }
+};
 
 const ActivityHistory: FC = () => {
   const name = ActivityHistory.name;
-  const [rows, setRows] = useState<TDataItem[] | undefined>(undefined)
-  const [columns, setColumns] = useState<TColumn[]>(columnsJson)
 
-  const [props, setProps] = useState<TModelProps | undefined>(undefined);
-  const [isLoadedGrid, setIsLoadedGrid] = useState<boolean>(false);
-  const [order, setOrder] = useState<TSorting>({
+  const [rows, setRows] = useState<TDataItem[] | null>(null);
+  const [columns] = useState<TColumn[]>(getModelColumns(columnsJson, name));
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [order, setOrder] = useState<TOrder>({
     columnID: "actionDate",
     direction: "desc",
   });
 
-  const getResponseData = async () => {
-    const response = await fetch("http://192.168.1.112:3000/json");
-    const data = await response.json();
-    return data;
-  };
-
   const loadDataGrid = async () => {
-    // console.log(isLoadedGrid)
-    const Data = await delay(2000).then(() => getResponseData());
-    const Rows = orderGridRows(Data, order) || [];
-    const Columns = getModelColumns(columns, name);
+    setIsLoading(true);
+    const controller = new AbortController();
 
-    setRows(Rows)
-    setColumns(Columns)
-    // setIsLoadedGrid(false); // Start loading animation
+    try {
+      const response = await getResponseData(controller.signal);
+      if (response) {
+        setRows(sortGridRows(response, order) || []);
+      }
+    } finally {
+      if (!controller.signal.aborted) setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    setIsLoadedGrid(true); // Stop loading animation
-    // console.log(isLoadedGrid)
-    if (rows?.length) {
-      setProps({
-        name,
-        columns,
-        rows,
-        order,
-        actions: { loadDataGrid, setOrder },
-        states: { isLoadedGrid, setIsLoadedGrid }
-      });
-    }
-
-  }, [rows])
-
-  useEffect(() => {
+    const controller = new AbortController();
     loadDataGrid();
+    return () => controller.abort(); // Отменяем запрос при размонтировании или изменении `order`
   }, [order]);
 
-  return (
-    <>
-      {props ? <Grid props={props} /> : <div>Loading...</div>}
-    </>
+  const props = useMemo<TModelProps>(
+    () => ({
+      name,
+      rows: rows || [],
+      columns,
+      actions: { loadDataGrid },
+      states: { isLoading, setIsLoading, order, setOrder },
+    }),
+    [rows, isLoading, order]
   );
+
+  return <Grid props={props} />;
 };
 
 export default ActivityHistory;

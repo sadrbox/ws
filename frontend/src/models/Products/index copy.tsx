@@ -54,14 +54,14 @@ type TResponseData = {
   skip: number;
   limit: number;
 };
-// type TSortingState = {
+// type TOrderState = {
 //   columnID: keyof IProduct;
 //   orderBy: "ASC" | "DESC";
 // };
 
 type IProductKey = keyof IProduct;
 type TProductValue<K extends IProductKey> = IProduct[K];
-type TSortingDataGridRows = <K extends IProductKey>(
+type TOrderDataGridRows = <K extends IProductKey>(
   DataGridRows: IProduct[],
   columnID: K,
   orderBy: "ASC" | "DESC",
@@ -95,7 +95,7 @@ const Products: FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [sorting, setSorting] = useState<TGridSorting>({
+  const [sorting, seTOrder] = useState<TGridSorting>({
     columnID: 'id',
     orderBy: 'ASC',
   });
@@ -103,7 +103,7 @@ const Products: FC = () => {
   // const [DataGridRows, setDataGridRows] = useState<TDataGridRows>(undefined);
 
   // const handleGridSort = (columnID: keyof IProduct = "id") => {
-  //   setSorting((prev) => {
+  //   seTOrder((prev) => {
   //     // console.log(columnID, { ...prev });
   //     return {
   //       columnID,

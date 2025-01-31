@@ -1,4 +1,4 @@
-import { FC, useEffect, useRef, useCallback, CSSProperties, RefObject, RefAttributes, Ref, useState } from 'react';
+import { FC, useEffect, useState } from 'react';
 import { useDataGridContext } from './DataGridContextProvider';
 import { IoAddCircleOutline, IoRemoveCircleOutline } from "react-icons/io5";
 import { SlRefresh } from "react-icons/sl";
@@ -7,19 +7,18 @@ import DataGridHeader from './DataGridHeader';
 import DataGridBody from './DataGridBody';
 
 
-
-
 const DataGrid: FC = () => {
-  const context = useDataGridContext();
+  const { context } = useDataGridContext();
   const [loading, setLoading] = useState<boolean>(false)
 
-
   useEffect(() => {
-    setLoading(false);
+    if (context?.states?.setIsLoading) {
+      setLoading(context?.states?.isLoading)
+    }
   }, [context?.rows]);
 
   const refreshDataGrid = () => {
-    if (!context?.actions?.loadDataGrid || !context?.states?.setIsLoadedGrid) return;
+    if (!context?.actions?.loadDataGrid || !context?.states?.setIsLoading) return;
     setLoading(true)
     context?.actions.loadDataGrid()
   }

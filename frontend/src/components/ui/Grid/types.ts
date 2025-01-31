@@ -11,7 +11,7 @@ export type TFieldType =
 	| "function"
 	| unknown[];
 
-export type TSorting = {
+export type TOrder = {
 	columnID: string;
 	direction: "asc" | "desc";
 };
@@ -48,13 +48,13 @@ export type TModelStates = {
 	setActiveRow?: Dispatch<SetStateAction<number | null>>;
 	checkedRows?: number[];
 	setCheckedRows?: Dispatch<SetStateAction<number[]>>;
-	orderRows?: TSorting;
-	setOrderRows?: Dispatch<SetStateAction<TSorting>>;
+	order?: TOrder;
+	setOrder?: Dispatch<SetStateAction<TOrder>>;
 	isAllChecked?: boolean;
 	setIsAllChecked?: Dispatch<SetStateAction<boolean>>;
 	setActiveGrid?: Dispatch<SetStateAction<EActiveGrid>>;
-	isLoadedGrid: boolean;
-	setIsLoadedGrid: Dispatch<SetStateAction<boolean>>;
+	isLoading: boolean;
+	setIsLoading: Dispatch<SetStateAction<boolean>>;
 };
 
 export type TResponseData = TDataItem[] & {
@@ -65,22 +65,20 @@ export type TDataGridContext = {
 	name: string;
 	rows: TDataItem[];
 	columns: TColumn[];
-	order: TSorting;
 	actions: {
 		loadDataGrid: () => Promise<void>;
-		setOrder: Dispatch<SetStateAction<TSorting>>;
 	};
 	states?: TModelStates;
 };
 
-export type TModelProps = {
+export type TModelProps_old = {
 	name: string;
 	rows: TDataItem[];
 	columns: TColumn[];
-	order: TSorting;
+	order: TOrder;
 	actions: {
 		loadDataGrid: () => void;
-		setOrder: Dispatch<SetStateAction<TSorting>>;
+		setOrder: Dispatch<SetStateAction<TOrder>>;
 	};
 	states?: TModelStates;
 };
@@ -90,3 +88,13 @@ export enum EActiveGrid {
 	CONFIG,
 	FILTER,
 }
+
+export type TModelProps = {
+	name: string;
+	rows: TDataItem[];
+	columns: TColumn[];
+	actions: {
+		loadDataGrid: () => Promise<void>;
+	};
+	states?: TModelStates;
+};

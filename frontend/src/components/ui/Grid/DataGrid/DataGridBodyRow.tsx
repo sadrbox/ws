@@ -1,4 +1,4 @@
-import { FC, useEffect } from 'react'
+import { FC } from 'react'
 import styles from "../styles.module.scss";
 // import { useContextDataGrid } from './GridContextData';
 import { TColumn, TDataItem } from '../types';
@@ -21,7 +21,7 @@ type TProps = {
 
 const DataGridTabBodyRow: FC<TProps> = ({ countID, rowID, columns, row, loading }) => {
 
-  const context = useDataGridContext();
+  const { context } = useDataGridContext();
   // const { setContext: setAppContext } = useAppContext();
 
   function setActiveRow(rowID: number) {

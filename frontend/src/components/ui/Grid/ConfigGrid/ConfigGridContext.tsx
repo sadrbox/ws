@@ -4,8 +4,8 @@ import { createContext, useContext } from "react";
 // import { TColumn, TDataItem } from "./index";
 import React from "react";
 import { TColumn } from "../types";
-// import { TColumn, TDataItem, TSorting } from "./types";
-// import { TSorting } from ".";
+// import { TColumn, TDataItem, TOrder } from "./types";
+// import { TOrder } from ".";
 // import { TColumn, TDataItem } from "src/objects/Todos";
 
 export type TContextGridSetting = {

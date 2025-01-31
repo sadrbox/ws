@@ -1,4 +1,4 @@
-import { TColumn, TDataItem, TSorting } from "./types";
+import { TColumn, TDataItem, TOrder } from "./types";
 import { CSSProperties } from "react";
 
 const getNestedValue = <T>(obj: T, path: string): any => {
@@ -6,7 +6,7 @@ const getNestedValue = <T>(obj: T, path: string): any => {
 };
 const isCompositeKey = (key: string): boolean => key.includes(".");
 
-export function sortGridRows(
+export function sortGridRows_old(
 	arr: TDataItem[],
 	columnID: string,
 	order: string,
@@ -37,13 +37,13 @@ export function sortGridRows(
 	});
 }
 
-export function orderGridRows(
+export function sortGridRows(
 	arr: TDataItem[],
-	order: TSorting,
+	order: TOrder,
 	// columnID: string,
 	// order: string,
 	locale = "default"
-) {
+): TDataItem[] {
 	let result;
 	if (order.columnID && order.direction) {
 		const { columnID, direction } = order;
@@ -72,7 +72,7 @@ export function orderGridRows(
 		});
 		return result;
 	}
-	return arr;
+	return arr || [];
 }
 
 export function getModelColumns(

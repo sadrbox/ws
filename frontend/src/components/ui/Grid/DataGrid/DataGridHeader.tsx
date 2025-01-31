@@ -6,18 +6,18 @@ import { getTranslateColumn } from 'src/i18';
 import DataGridTabHeaderCheckbox from './DataGridHeaderCheckbox';
 
 const DataGridTabHeader: FC = () => {
-  const context = useDataGridContext();
+  const context = useDataGridContext().context;;
 
   const handleSorting = useCallback((columnID: string) => {
-    if (context?.states?.setOrderRows) {
-      context.states.setOrderRows((prev) => ({
+    if (context?.states?.setOrder) {
+      context.states.setOrder((prev) => ({
         columnID,
         direction: prev.columnID === columnID && prev.direction === 'asc' ? 'desc' : 'asc',
       }));
     }
-  }, [context?.states?.setOrderRows]);
+  }, [context?.states?.setOrder]);
 
-  const { columnID, direction } = context?.states?.orderRows || {};
+  const { columnID, direction } = context?.states?.order || {};
 
   return (
     <thead>

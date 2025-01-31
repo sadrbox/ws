@@ -1,43 +1,43 @@
 import React, {
   createContext,
   useContext,
-  // useEffect,
-  // useState,
-  // Dispatch,
-  // SetStateAction,
+  useEffect,
+  useState,
+  Dispatch,
+  SetStateAction,
   PropsWithChildren,
 } from "react";
 import { TDataGridContext } from "../types";
 
-// type TGridContextInstance = {
-//   context: TDataGridContext | undefined;
-//   setContext: Dispatch<SetStateAction<TDataGridContext | undefined>>;
-// };
+type TGridContextInstance = {
+  context: TDataGridContext;
+  setContext: Dispatch<SetStateAction<TDataGridContext>>;
+};
 
-export const DataGridContext = createContext<TDataGridContext | undefined>(undefined);
+export const DataGridContext = createContext<TGridContextInstance | undefined>(undefined);
 
 export const useDataGridContext = () => {
   const context = useContext(DataGridContext);
-  if (context) {
-    return context;
-    // throw new Error("useDataGridContext must be used within DataGridContextProvider");
+  if (!context) {
+    throw new Error("useDataGridContext must be used within DataGridContextProvider");
   }
+  return context;
 };
 
-const DataGridContextProvider: React.FC<PropsWithChildren<{ initialContext?: TDataGridContext }>> = ({
+const DataGridContextProvider: React.FC<PropsWithChildren<{ initialContext: TDataGridContext }>> = ({
   children,
   initialContext,
 }) => {
-  // const [context, setContext] = useState<TDataGridContext | undefined>(initialContext);
+  const [context, setContext] = useState<TDataGridContext>(initialContext);
 
-  // useEffect(() => {
-  //   if (initialContext && initialContext !== context) {
-  //     setContext(initialContext);
-  //   }
-  // }, [initialContext]);
+  useEffect(() => {
+    if (initialContext !== context) {
+      setContext(initialContext);
+    }
+  }, [initialContext]);
 
   return (
-    <DataGridContext.Provider value={initialContext}>
+    <DataGridContext.Provider value={{ context, setContext }}>
       {children}
     </DataGridContext.Provider>
   );

@@ -16,7 +16,7 @@ import { useDataGridContext } from '../DataGrid/DataGridContextProvider';
 
 const ConfigGridBody: FC = () => {
 
-  const context = useDataGridContext();
+  const { context } = useDataGridContext();
   const [columns, setColumns] = useState<TColumn[]>([])
 
   useEffect(() => {

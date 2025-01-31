@@ -11,7 +11,7 @@ import { TModelParams } from '../types';
 // import GridColumnsSetting from './GridSetting';
 import DataGridTabHeader from './DataGridHeader';
 import DataGridTabBody from './DataGridBody';
-import { TSorting } from '../types';
+import { TOrder } from '../types';
 import { sortGridRows } from '../services';
 // import { columns } from '../../../objects/Products/config';
 // import GridSetting from '../GridSetting';

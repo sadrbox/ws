@@ -1,4 +1,4 @@
-import { FC, useEffect, useLayoutEffect, useState } from 'react'
+import { FC, useEffect, useState } from 'react'
 import styles from "../styles.module.scss";
 // import { useContextTodo } from 'src/objects/Todos/Context';
 // import { TColumn, TDataItem } from 'src/objects/Todos';
@@ -17,7 +17,7 @@ type TProps = {
 
 const DataGridTabBody: FC<TProps> = ({ loading }) => {
 
-  const context = useDataGridContext();
+  const { context } = useDataGridContext();
   const [columns, setColumns] = useState<TColumn[]>([])
 
   useEffect(() => {

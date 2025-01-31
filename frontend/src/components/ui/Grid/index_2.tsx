@@ -8,7 +8,7 @@ import ContextWrapper, { TContextData, } from './DataGrid/DataGridContextProvide
 // import GridColumnsSetting from './GridSetting';
 import DataGridTabHeader from './DataGrid/DataGridHeader';
 import DataGridTabBody from './DataGrid/DataGridBody';
-import { TSorting } from './types';
+import { TOrder } from './types';
 import { sortGridRows } from './services';
 // import { columns } from '../../../objects/Products/config';
 // import GridSetting from '../GridSetting';
@@ -36,7 +36,7 @@ const Grid: FC<TProps> = ({ params: { rows, columns, initOrder }, params, action
   const [checkedRows, setCheckedRows] = useState<number[]>([])
   const [isAllChecked, setIsAllChecked] = useState<boolean>(false)
   const [activeRow, setActiveRow] = useState<number | null>(null)
-  const [sortingRows, setSortingRows] = useState<TSorting>({
+  const [sortingRows, seTOrderRows] = useState<TOrder>({
     columnID: (initOrder?.columnID || 'id'),
     direction: (initOrder?.direction || 'asc')
   });
@@ -57,7 +57,7 @@ const Grid: FC<TProps> = ({ params: { rows, columns, initOrder }, params, action
         },
         states: {
           activeRow, setActiveRow,
-          sortingRows, setSortingRows,
+          sortingRows, seTOrderRows,
           checkedRows, setCheckedRows,
           isAllChecked, setIsAllChecked
         }

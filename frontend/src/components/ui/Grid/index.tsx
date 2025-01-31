@@ -1,9 +1,8 @@
 import { useState, FC, useEffect, useMemo } from 'react';
-import { EActiveGrid, TDataGridContext, TModelProps, TSorting } from './types';
+import { EActiveGrid, TDataGridContext, TModelProps } from './types';
 import DataGrid from './DataGrid/index';
 import styles from './styles.module.scss';
 import DataGridContextProvider from './DataGrid/DataGridContextProvider';
-import { orderGridRows } from './services';
 import { SlSettings } from "react-icons/sl";
 import { TbFilter } from "react-icons/tb";
 import ConfigGrid from './ConfigGrid';
@@ -12,7 +11,7 @@ type TProps = {
   props: TModelProps;
 };
 
-const Grid: FC<TProps> = ({ props: { name, rows, columns, order, actions: { loadDataGrid, setOrder }, states } }) => {
+const Grid: FC<TProps> = ({ props: { name, rows, columns, actions: { loadDataGrid }, states } }) => {
   const [activeGrid, setActiveGrid] = useState<EActiveGrid>(EActiveGrid.DATA);
 
   // Состояния для выбранных строк и активной строки
@@ -20,25 +19,23 @@ const Grid: FC<TProps> = ({ props: { name, rows, columns, order, actions: { load
   const [isAllChecked, setIsAllChecked] = useState<boolean>(false);
   const [activeRow, setActiveRow] = useState<number | null>(null);
 
-  // Локальное состояние сортировки строк
-  const [orderRows, setOrderRows] = useState<TSorting>({
-    columnID: order.columnID || 'id',
-    direction: order.direction || 'asc',
-  });
+  // // Локальное состояние сортировки строк
+  // const [orderRows, setOrderRows] = useState<TOrder>({
+  //   columnID: order.columnID || 'id',
+  //   direction: order.direction || 'asc',
+  // });
 
   // Мемоизация отсортированных строк
-  const orderedRows = useMemo(() => orderGridRows(rows, orderRows) || [], [rows, orderRows]);
+  // const orderedRows = useMemo(() => orderGridRows(rows, order) || [], [rows, order]);
 
   // Мемоизация контекста для провайдера
   const initialContext = useMemo<TDataGridContext>(() => {
     return {
       name,
-      rows: orderedRows,
+      rows,
       columns,
-      order,
       actions: {
         loadDataGrid,
-        setOrder,
       },
       states: {
         ...states,
@@ -48,11 +45,9 @@ const Grid: FC<TProps> = ({ props: { name, rows, columns, order, actions: { load
         setIsAllChecked,
         activeRow,
         setActiveRow,
-        orderRows,
-        setOrderRows
       },
     } as TDataGridContext;
-  }, [orderedRows, columns, order, loadDataGrid, setOrder, checkedRows, isAllChecked, activeRow, orderRows, states, states?.isLoadedGrid]);
+  }, [checkedRows, isAllChecked, activeRow]);
 
   // Обновление состояния выбранных строк при изменении `isAllChecked`
   useEffect(() => {

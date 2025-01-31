@@ -3,8 +3,8 @@ import { atom } from "jotai";
 
 export const storeDataGrid = atom(undefined as TStoreDataGrid);
 
-const initSorting: TGridSorting = {
+const iniTOrder: TGridSorting = {
 	columnID: "id",
 	orderBy: "ASC",
 };
-export const storeGridSorting = atom(initSorting);
+export const storeGridSorting = atom(iniTOrder);
