@@ -19,8 +19,8 @@ const getResponseData = async (signal: AbortSignal) => {
 
 const ActivityHistory: FC = () => {
   const name = ActivityHistory.name;
-
-  const [rows, setRows] = useState<TDataItem[] | null>(null);
+  const [responseData, setResponseData] = useState<TDataItem[] | null>(null);
+  const [rows, setRows] = useState<TDataItem[]>([]);
   const [columns] = useState<TColumn[]>(getModelColumns(columnsJson, name));
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [order, setOrder] = useState<TOrder>({
@@ -28,35 +28,39 @@ const ActivityHistory: FC = () => {
     direction: "desc",
   });
 
-  const loadDataGrid = async () => {
-    setIsLoading(true);
-    const controller = new AbortController();
 
+  const loadDataGrid = async () => {
+    const controller = new AbortController();
+    setIsLoading(true);
     try {
       const response = await getResponseData(controller.signal);
-      if (response) {
-        setRows(sortGridRows(response, order) || []);
-      }
+      if (response) setResponseData(response);
     } finally {
-      if (!controller.signal.aborted) setIsLoading(false);
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    const controller = new AbortController();
     loadDataGrid();
-    return () => controller.abort(); // Отменяем запрос при размонтировании или изменении `order`
-  }, [order]);
+  }, [order]); // Загружаем данные один раз при монтировании
+
+  useEffect(() => {
+    if (responseData) {
+      setRows(sortGridRows(responseData, order) || []);
+    }
+  }, [responseData, order]); // Теперь сортировка обновляется при загрузке новых данных
 
   const props = useMemo<TModelProps>(
     () => ({
       name,
-      rows: rows || [],
+      rows,
       columns,
-      actions: { loadDataGrid },
+      actions: { loadDataGrid }, // `loadDataGrid` больше не нужен
       states: { isLoading, setIsLoading, order, setOrder },
     }),
-    [rows, isLoading, order]
+    [rows, order, isLoading]
   );
 
   return <Grid props={props} />;

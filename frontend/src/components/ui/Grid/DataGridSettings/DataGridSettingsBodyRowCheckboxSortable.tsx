@@ -1,6 +1,6 @@
 import React, { FC, Dispatch, ForwardedRef, forwardRef, ForwardRefExoticComponent, MutableRefObject, ReactNode, RefAttributes, SetStateAction, useEffect, useImperativeHandle } from 'react';
 import styles from "../styles.module.scss";
-import { useContextGridSetting } from './ConfigGridContext';
+import { useContextGridSetting } from './DataGridSettingsContextProvider';
 import { TColumn, TGridStates } from '../types';
 
 
@@ -8,7 +8,7 @@ type TProps = {
   rowID: number;
 }
 
-const ConfigGridBodyRowCheckboxSortable: FC<TProps> = ({ rowID }) => {
+const DataGridSettingsBodyRowCheckboxSortable: FC<TProps> = ({ rowID }) => {
   const context = useContextGridSetting();
 
   function isCheckedRow(rowID: number) {
@@ -37,4 +37,4 @@ const ConfigGridBodyRowCheckboxSortable: FC<TProps> = ({ rowID }) => {
   );
 };
 
-export default ConfigGridBodyRowCheckboxSortable;
+export default DataGridSettingsBodyRowCheckboxSortable;

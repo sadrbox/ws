@@ -6,73 +6,42 @@ const getNestedValue = <T>(obj: T, path: string): any => {
 };
 const isCompositeKey = (key: string): boolean => key.includes(".");
 
-export function sortGridRows_old(
-	arr: TDataItem[],
-	columnID: string,
-	order: string,
-	locale = "default"
-) {
-	return arr.sort((a, b) => {
-		if (isCompositeKey(columnID)) {
-		}
-		const aValue =
-			order === "asc"
-				? getNestedValue(a, columnID)
-				: getNestedValue(b, columnID);
-		const bValue =
-			order === "desc"
-				? getNestedValue(a, columnID)
-				: getNestedValue(b, columnID);
-
-		// console.log(a.organization.name);
-		if (typeof aValue === "number" && typeof bValue === "number") {
-			return aValue - bValue;
-		} else if (typeof aValue === "string" && typeof bValue === "string") {
-			return aValue
-				.toString()
-				.localeCompare(bValue.toString(), locale, { numeric: true });
-		}
-		return aValue ? -1 : bValue ? +1 : 0;
-		// return -1;
-	});
-}
-
 export function sortGridRows(
 	arr: TDataItem[],
 	order: TOrder,
-	// columnID: string,
-	// order: string,
 	locale = "default"
 ): TDataItem[] {
-	let result;
-	if (order.columnID && order.direction) {
-		const { columnID, direction } = order;
-		result = arr.sort((a, b) => {
-			if (isCompositeKey(columnID)) {
-			}
-			const aValue =
-				direction === "asc"
-					? getNestedValue(a, columnID)
-					: getNestedValue(b, columnID);
-			const bValue =
-				direction === "desc"
-					? getNestedValue(a, columnID)
-					: getNestedValue(b, columnID);
+	if (!order.columnID || !order.direction) return arr || [];
 
-			// console.log(a.organization.name);
-			if (typeof aValue === "number" && typeof bValue === "number") {
-				return aValue - bValue;
-			} else if (typeof aValue === "string" && typeof bValue === "string") {
-				return aValue
-					.toString()
-					.localeCompare(bValue.toString(), locale, { numeric: true });
-			}
-			return aValue ? -1 : bValue ? +1 : 0;
-			// return -1;
-		});
-		return result;
-	}
-	return arr || [];
+	const { columnID, direction } = order;
+
+	return [...arr].sort((a, b) => {
+		if (isCompositeKey(columnID)) {
+			// Добавь логику для составных ключей, если необходимо
+		}
+
+		const aValue = getNestedValue(a, columnID);
+		const bValue = getNestedValue(b, columnID);
+
+		// Обработка null и undefined: перемещаем их в конец
+		if (aValue == null && bValue == null) return 0;
+		if (aValue == null) return 1;
+		if (bValue == null) return -1;
+
+		// Числовое сравнение
+		if (typeof aValue === "number" && typeof bValue === "number") {
+			return direction === "asc" ? aValue - bValue : bValue - aValue;
+		}
+
+		// Строковое сравнение
+		if (typeof aValue === "string" && typeof bValue === "string") {
+			return direction === "asc"
+				? aValue.localeCompare(bValue, locale, { numeric: true })
+				: bValue.localeCompare(aValue, locale, { numeric: true });
+		}
+
+		return 0; // Если типы не совпадают или их нельзя сравнить
+	});
 }
 
 export function getModelColumns(

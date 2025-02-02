@@ -76,29 +76,6 @@
 	// box-shadow: 0px 0px 2px $color6;
 	box-shadow: inset 0 0 4px $color30;
 	border-radius: $BRadius;
-
-	&::-webkit-scrollbar {
-		width: 10px;
-		height: 10px;
-	}
-
-	/* Track */
-	&::-webkit-scrollbar-track {
-		// padding-top: 30px;
-		background: $color30;
-	}
-
-	/* Handle */
-	&::-webkit-scrollbar-thumb {
-		// margin-top: 30px;
-		background: $color10;
-		border-radius: $BRadius;
-	}
-
-	/* Handle on hover */
-	&::-webkit-scrollbar-thumb:hover {
-		background: $color10;
-	}
 }
 
 table {
@@ -392,4 +369,116 @@ hr {
 	outline: none;
 	border: 0px;
 	border-bottom: 1px solid $color33;
+}
+
+.HeaderName {
+	position: fixed;
+	font-size: 110%;
+	// font-weight: bold;
+	box-shadow: inset 0 0 4px $color30;
+	background: #fff;
+	border-top: 1px solid $color10;
+	border-left: 1px solid $color10;
+	border-right: 1px solid $color10;
+	padding: 6px;
+	margin: 6px;
+	border-top-left-radius: $BRadius;
+	border-top-right-radius: $BRadius;
+}
+.FormWrapper {
+	flex: 1 1;
+	position: relative;
+	margin: 6px;
+	background-color: #fff;
+	scroll-behavior: smooth;
+	overflow: scroll; /* Прокрутка по вертикали */
+	border: 1px solid $color10;
+	box-shadow: inset 0 0 4px $color30;
+	border-radius: $BRadius;
+}
+
+.ScrollWrapper {
+	// display: grid;
+	flex: 1 1;
+	// width: min-content;
+	// height: 50px;
+	// grid-gap: 6px;
+	position: relative;
+	margin: 6px;
+	background-color: #fff;
+	scroll-behavior: smooth;
+	overflow: auto; /* Прокрутка по вертикали */
+	border: 1px solid $color10;
+	box-shadow: inset 0 0 4px $color30;
+	border-radius: $BRadius;
+}
+
+.CheckboxList {
+	padding: 0;
+	margin: 6px;
+	width: 333px;
+	list-style: decimal;
+	li {
+		display: flex;
+		margin: 6px;
+		padding: 0px;
+		align-items: center;
+		justify-items: center;
+		align-content: center;
+
+		input[type="checkbox"] {
+			height: 18px;
+			width: 18px;
+			// border: 9px solid #ccc;
+			// accent-color: $color10;
+			// transform: rotate(45deg);
+			// appearance: none;
+			cursor: default;
+			margin: 0px;
+			// outline: 1px solid blue;
+			// border: 1px solid red;
+			// transition: all 0.3s ease;
+			&:checked {
+				// background-color: #007bff;
+				// border-color: #007bff;
+				// transform: scale(1.1);
+			}
+			&:focus {
+				outline: none;
+				// box-shadow: 0 0 2px $color6;
+				// border: 1px solid $color1;
+				// box-shadow: 0 1px 3px $color5;
+				// border: 1px solid red;
+				// box-shadow: 0px 0px 3px #262626;
+			}
+		}
+		label {
+			margin-left: 6px;
+		}
+	}
+}
+
+* {
+	&::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+
+	/* Track */
+	&::-webkit-scrollbar-track {
+		// padding-top: 30px;
+		background: $color30;
+	}
+
+	/* Handle */
+	&::-webkit-scrollbar-thumb {
+		// margin-top: 30px;
+		background: $color10;
+		border-radius: $BRadius;
+	}
+
+	/* Handle on hover */
+	&::-webkit-scrollbar-thumb:hover {
+		background: $color10;
+	}
 }

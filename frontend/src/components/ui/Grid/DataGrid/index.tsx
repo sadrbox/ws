@@ -1,30 +1,92 @@
-import { FC, useEffect, useState } from 'react';
-import { useDataGridContext } from './DataGridContextProvider';
+import { FC, useEffect, useMemo, useState } from 'react';
+import DataGridContextProvider from './DataGridContextProvider';
 import { IoAddCircleOutline, IoRemoveCircleOutline } from "react-icons/io5";
 import { SlRefresh } from "react-icons/sl";
 import styles from '../styles.module.scss';
 import DataGridHeader from './DataGridHeader';
 import DataGridBody from './DataGridBody';
+import { TDataGridContext, TModelProps } from '../types';
 
+type TProps = {
+  props: TModelProps;
+};
 
-const DataGrid: FC = () => {
-  const { context } = useDataGridContext();
-  const [loading, setLoading] = useState<boolean>(false)
+const DataGrid: FC<TProps> = ({ props: { name, rows, columns, actions: { loadDataGrid }, states } }) => {
+  // const { context } = useDataGridContext();
+  // const [loading, setLoading] = useState<boolean>(false)
+  // Состояния для выбранных строк и активной строки
+  const [checkedRows, setCheckedRows] = useState<number[]>([]);
+  const [isAllChecked, setIsAllChecked] = useState<boolean>(false);
+  const [activeRow, setActiveRow] = useState<number | null>(null);
 
+  // // Локальное состояние сортировки строк
+  // const [orderRows, setOrderRows] = useState<TOrder>({
+  //   columnID: order.columnID || 'id',
+  //   direction: order.direction || 'asc',
+  // });
+
+  // Мемоизация отсортированных строк
+  // const orderedRows = useMemo(() => orderGridRows(rows, order) || [], [rows, order]);
+
+  // useEffect(() => {
+  //   if (states?.isLoading)
+  //     setLoading(states?.isLoading)
+  // }, [states?.isLoading])
+  // Мемоизация контекста для провайдера
+  const initialContext = useMemo<TDataGridContext>(() => {
+    return {
+      name,
+      rows,
+      columns,
+      // actions: {
+      //   loadDataGrid,
+      // },
+      states: {
+        ...states,
+        checkedRows,
+        setCheckedRows,
+        isAllChecked,
+        setIsAllChecked,
+        activeRow,
+        setActiveRow,
+      },
+    } as TDataGridContext;
+  }, [checkedRows, isAllChecked, activeRow]);
+
+  // Обновление состояния выбранных строк при изменении `isAllChecked`
   useEffect(() => {
-    if (context?.states?.setIsLoading) {
-      setLoading(context?.states?.isLoading)
+    if (isAllChecked) {
+      setCheckedRows(rows.map((row) => row.id as number));
+    } else {
+      setCheckedRows([]);
     }
-  }, [context?.rows]);
+  }, [isAllChecked, rows]);
+
+  // Вычисление, все ли строки выбраны
+  const allChecked = useMemo(() => {
+    const allIDs = rows?.map((row) => row.id as number) || [];
+    return checkedRows.length === allIDs.length && allIDs.length > 0;
+  }, [checkedRows, rows]);
+
+  // Обновление `isAllChecked` без вызова бесконечного рендера
+  useEffect(() => {
+    setIsAllChecked(allChecked);
+  }, [allChecked]);
+
+  // useEffect(() => {
+  //   if (states?.isLoading !== undefined) {
+  //     setLoading(states?.isLoading)
+  //   }
+  // }, [rows]);
 
   const refreshDataGrid = () => {
-    if (!context?.actions?.loadDataGrid || !context?.states?.setIsLoading) return;
-    setLoading(true)
-    context?.actions.loadDataGrid()
+    // if (states?.setIsLoading) return;
+    // setLoading(true)
+    loadDataGrid()
   }
 
   return (
-    <>
+    <DataGridContextProvider initialContext={initialContext}>
       <div className={styles.GridPanel}>
         <div className={styles.colGroup} style={{ justifyContent: 'left', gap: '6px' }}>
           <button className={styles.Button}>
@@ -39,7 +101,7 @@ const DataGrid: FC = () => {
         <div className={styles.colGroup} style={{ justifyContent: 'right', gap: '6px' }}>
           <button onClick={refreshDataGrid} className={styles.Button}>
             <SlRefresh
-              className={(loading === true) ? styles.animationLoop : ""}
+              className={(states?.isLoading === true) ? styles.animationLoop : ""}
               size={17}
               strokeWidth={5}
             />
@@ -51,10 +113,10 @@ const DataGrid: FC = () => {
       <div className={styles.GridSrollWrapper}>
         <table>
           <DataGridHeader />
-          <DataGridBody loading={loading} />
+          <DataGridBody loading={states.isLoading} />
         </table>
       </div>
-    </>
+    </DataGridContextProvider>
   );
 };
 

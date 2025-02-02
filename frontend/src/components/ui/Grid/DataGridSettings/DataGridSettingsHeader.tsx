@@ -12,7 +12,7 @@ import { TColumn } from '../types';
 import { GrView } from "react-icons/gr";
 
 
-const ConfigGridHeader: FC = () => {
+const DataGridSettingsHeader: FC = () => {
   const [columns, setColumns] = useState<TColumn[]>([])
 
   useEffect(() => {
@@ -42,4 +42,4 @@ const ConfigGridHeader: FC = () => {
   );
 };
 
-export default ConfigGridHeader;
+export default DataGridSettingsHeader;

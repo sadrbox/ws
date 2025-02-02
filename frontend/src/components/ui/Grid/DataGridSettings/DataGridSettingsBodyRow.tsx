@@ -8,19 +8,20 @@ import settings from "./settings.json"
 import { TColumn } from '../types';
 import { getColumnSettingValue, getColumnWidthById, getFormatColumnValue, getTextAlignByColumnType } from '../services';
 import { getTranslateColumn, getTranslation } from 'src/i18';
-import { useContextGridSetting } from './ConfigGridContext';
-import GridSettingTabBodyRowCheckboxVisible from './ConfigGridBodyRowCheckboxVisible';
-import GridSettingTabBodyRowCheckboxSortable from './ConfigGridBodyRowCheckboxSortable';
+// import { useContextGridSetting } from './DataGridSettingsContextProvider';
+import GridSettingTabBodyRowCheckboxVisible from './DataGridSettingsBodyRowCheckboxVisible';
+import GridSettingTabBodyRowCheckboxSortable from './DataGridSettingsBodyRowCheckboxSortable';
+import { useDataGridSettingsContext } from './DataGridSettingsContextProvider';
 
 type TProps = {
   column: TColumn;
   rowID: number;
 }
 
-const ConfigGridBodyRow: FC<TProps> = ({ column, rowID }) => {
+const DataGridSettingsBodyRow: FC<TProps> = ({ column, rowID }) => {
   const [rowSettingColumns, setRowSettingColumns] = useState<TColumn[]>([])
 
-  const { context } = useContextGridSetting();
+  const { context } = useDataGridSettingsContext();
 
   function setActiveRow(rowID: number) {
     if (context?.states?.setActiveRow)
@@ -55,7 +56,7 @@ const ConfigGridBodyRow: FC<TProps> = ({ column, rowID }) => {
           return (
             <td key={keyID}>
               <div style={{ justifyItems: rowSettingColumn.alignment }} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.TabField}>
-                <GridSettingTabBodyRowCheckboxVisible rowID={rowID} columnKEY={column?.identifier as keyof TColumn} />
+                {/* <GridSettingTabBodyRowCheckboxVisible rowID={rowID} columnKEY={column?.identifier as keyof TColumn} /> */}
               </div>
             </td>)
         } else if (rowSettingColumn.identifier === 'column' || rowSettingColumn.identifier === 'alignment') {
@@ -79,4 +80,4 @@ const ConfigGridBodyRow: FC<TProps> = ({ column, rowID }) => {
   )
 };
 
-export default ConfigGridBodyRow;
+export default DataGridSettingsBodyRow;

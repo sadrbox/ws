@@ -24,6 +24,7 @@ const DataGridTabBody: FC<TProps> = ({ loading }) => {
     const visibleColumns = context?.columns.filter(column => column.visible);
     if (visibleColumns?.length)
       setColumns(visibleColumns)
+    // context.states.setIsLoading(false)
   }, [])
 
   return (

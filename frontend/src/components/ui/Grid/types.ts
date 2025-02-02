@@ -48,8 +48,8 @@ export type TModelStates = {
 	setActiveRow?: Dispatch<SetStateAction<number | null>>;
 	checkedRows?: number[];
 	setCheckedRows?: Dispatch<SetStateAction<number[]>>;
-	order?: TOrder;
-	setOrder?: Dispatch<SetStateAction<TOrder>>;
+	order: TOrder;
+	setOrder: Dispatch<SetStateAction<TOrder>>;
 	isAllChecked?: boolean;
 	setIsAllChecked?: Dispatch<SetStateAction<boolean>>;
 	setActiveGrid?: Dispatch<SetStateAction<EActiveGrid>>;
@@ -68,19 +68,17 @@ export type TDataGridContext = {
 	actions: {
 		loadDataGrid: () => Promise<void>;
 	};
-	states?: TModelStates;
+	states: TModelStates;
 };
 
-export type TModelProps_old = {
+export type TDataGridSettingsContext = {
 	name: string;
 	rows: TDataItem[];
 	columns: TColumn[];
-	order: TOrder;
 	actions: {
-		loadDataGrid: () => void;
-		setOrder: Dispatch<SetStateAction<TOrder>>;
+		loadDataGrid: () => Promise<void>;
 	};
-	states?: TModelStates;
+	states: TModelStates;
 };
 
 export enum EActiveGrid {
@@ -96,5 +94,5 @@ export type TModelProps = {
 	actions: {
 		loadDataGrid: () => Promise<void>;
 	};
-	states?: TModelStates;
+	states: TModelStates;
 };

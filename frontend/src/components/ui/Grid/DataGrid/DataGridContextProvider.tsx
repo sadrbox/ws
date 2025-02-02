@@ -9,12 +9,12 @@ import React, {
 } from "react";
 import { TDataGridContext } from "../types";
 
-type TGridContextInstance = {
+type TDataGridContextState = {
   context: TDataGridContext;
   setContext: Dispatch<SetStateAction<TDataGridContext>>;
 };
 
-export const DataGridContext = createContext<TGridContextInstance | undefined>(undefined);
+export const DataGridContext = createContext<TDataGridContextState | undefined>(undefined);
 
 export const useDataGridContext = () => {
   const context = useContext(DataGridContext);
