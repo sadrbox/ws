@@ -375,12 +375,12 @@ hr {
 	font-size: 110%;
 	user-select: none;
 	// font-weight: bold;
-	box-shadow: 0 0 6px $color30, inset 0 0 12px $color30;
+	// box-shadow: inset 0 0 3px $color30;
 	background: #fff;
 	border-top: 1px solid $color10;
 	border-left: 1px solid $color10;
 	border-right: 1px solid $color10;
-	border-bottom: 1px solid $color30;
+	border-bottom: 1px solid transparent;
 	padding: 6px;
 	margin: 6px 6px -1px 18px;
 	border-top-left-radius: $BRadius;
@@ -417,7 +417,7 @@ hr {
 	// overflow: scroll;
 	overflow: auto; /* Прокрутка по вертикали */
 	border: 1px solid $color10;
-	box-shadow: inset 0px 0px 6px $color30;
+	// box-shadow: inset 0px 0px 6px 5px $color6;
 	border-radius: $BRadius;
 }
 
@@ -425,7 +425,10 @@ hr {
 	// background-color: $color2 !important;
 	opacity: 0.6; /* Пример стиля, меняющий прозрачность во время перетаскивания */
 	// transform: scale(1) !important; /* Увеличение размера элемента */
-	// box-shadow: 0 0 3px $color3 !important;
+	// box-shadow: 0 0 3px $color3 !important;	&:hover {
+	// border: 1px solid $color1;
+	// background-color: $color2;
+	// box-shadow: inset 0px 1px 3px $color60;
 }
 
 .CheckboxList {
@@ -438,13 +441,15 @@ hr {
 	flex-direction: column;
 	// flex: 1 1;
 	li.ListItem {
+		// z-index: 1;
 		display: flex;
-		box-shadow: 0 0 2px 1px $color5;
+		border: 1px solid $color34;
+		// box-shadow: 0 0 0px 1px $color5;
 		// flex: 1 1 100px;
 		user-select: none;
 		// cursor: grab;
 		margin: 6px 0px;
-		padding: 3px;
+		padding: 2px;
 		align-items: center;
 		background-color: $color30;
 		border-radius: $BRadius;
