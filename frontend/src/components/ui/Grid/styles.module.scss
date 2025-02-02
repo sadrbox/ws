@@ -380,11 +380,14 @@ hr {
 	border-top: 1px solid $color10;
 	border-left: 1px solid $color10;
 	border-right: 1px solid $color10;
+	border-bottom: 1px solid $color30;
 	padding: 6px;
 	margin: 6px;
 	border-top-left-radius: $BRadius;
 	border-top-right-radius: $BRadius;
+	// clip-path: 2px -5px -10px -20px round 5px;
 }
+
 .FormWrapper {
 	flex: 1 1;
 	position: relative;
@@ -401,10 +404,11 @@ hr {
 	// display: grid;
 	flex: 1 1;
 	// width: min-content;
-	// height: 50px;
+	// height: 50px;PiDotsThreeVerticalDuotone
 	// grid-gap: 6px;
 	position: relative;
 	margin: 6px;
+	// padding: 6px;
 	background-color: #fff;
 	scroll-behavior: smooth;
 	overflow: auto; /* Прокрутка по вертикали */
@@ -414,21 +418,41 @@ hr {
 }
 
 .CheckboxList {
-	padding: 0;
+	padding: 0px;
 	margin: 6px;
 	width: 333px;
 	list-style: decimal;
 	li {
+		user-select: none;
 		display: flex;
-		margin: 6px;
+		margin: 6px 0px;
 		padding: 0px;
 		align-items: center;
 		justify-items: center;
 		align-content: center;
+		background-color: $color30;
+		border-radius: $BRadius;
 
+		.DragAndDrop {
+			cursor: pointer;
+			// flex: 0 0;
+			display: flex;
+			align-items: center;
+			border-radius: $BRadius;
+			margin-right: 6px;
+			padding: 3px;
+			// justify-items: end;
+			// flex-direction: row;
+			&:hover {
+				background-color: $color2;
+			}
+		}
 		input[type="checkbox"] {
+			// display: flex;
 			height: 18px;
 			width: 18px;
+			// justify-self: center;
+			// align-self: center;
 			// border: 9px solid #ccc;
 			// accent-color: $color10;
 			// transform: rotate(45deg);

@@ -12,6 +12,10 @@ import { FaAngleUp } from "react-icons/fa";
 import { FaAngleDown } from "react-icons/fa";
 // import DataGridSettingsContextProvider, { DataGridSettingsContext } from './DataGridSettingsContextProvider';
 // import  DataGridSettingsContextProvider  from './DataGridSettingsContextProvider';
+// import { PiDotsThreeOutlineVerticalFill } from "react-icons/pi";
+import { PiDotsThreeVerticalDuotone } from "react-icons/pi";
+import { MdOutlineDragIndicator } from "react-icons/md";
+
 
 type TProps = {
   props: {
@@ -94,68 +98,111 @@ const DataGridSettings: FC = () => {
         <div className={styles.colGroup}>
           <div className={styles.rowGroup}>
             <div className={styles.ScrollWrapper} style={{ marginTop: '40px' }}>
-              <div className={styles.HeaderName} style={{ marginTop: '-32px' }}>Отображение</div>
+              <div className={styles.HeaderName} style={{ marginTop: '-33px' }}>Видимость</div>
               <ul className={styles.CheckboxList}>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item1" />
                   <label htmlFor="item1">Элемент 1</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item2" />
                   <label htmlFor="item2">Элемент 2</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item3" />
                   <label htmlFor="item3">Элемент 3</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item4" />
                   <label htmlFor="item4">Элемент 4</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item5" />
                   <label htmlFor="item5">Элемент 5</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item6" />
                   <label htmlFor="item6">Элемент 6</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item7" />
                   <label htmlFor="item7">Элемент 7</label>
                 </li>
               </ul>
             </div>
           </div>
+
           <div className={styles.rowGroup}>
             <div className={styles.ScrollWrapper} style={{ marginTop: '40px' }}>
-              <div className={styles.HeaderName} style={{ marginTop: '-32px' }}>Видимость</div>
+              <div className={styles.HeaderName} style={{ marginTop: '-33px' }}>Видимость</div>
               <ul className={styles.CheckboxList}>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item1" />
                   <label htmlFor="item1">Элемент 1</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item2" />
                   <label htmlFor="item2">Элемент 2</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item3" />
                   <label htmlFor="item3">Элемент 3</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item4" />
                   <label htmlFor="item4">Элемент 4</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item5" />
                   <label htmlFor="item5">Элемент 5</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item6" />
                   <label htmlFor="item6">Элемент 6</label>
                 </li>
                 <li>
+                  <div className={styles.DragAndDrop}>
+                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+                  </div>
                   <input type="checkbox" id="item7" />
                   <label htmlFor="item7">Элемент 7</label>
                 </li>
@@ -163,7 +210,7 @@ const DataGridSettings: FC = () => {
             </div>
           </div>
         </div>
-      </div >
+      </div>
     </>
   );
 };
