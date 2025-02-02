@@ -2,19 +2,16 @@ import { useState, useEffect, FC } from 'react';
 import { TColumn } from '../types';
 import DataGridSettingsHeader from './DataGridSettingsHeader';
 import DataGridSettingsBody from './DataGridSettingsBody';
-// import ContextWrapper, { TDataGridSettingsContext } from './DataGridSettingsContext';
 import { useDataGridContext } from '../DataGrid/DataGridContextProvider';
-import styles from "../styles.module.scss"
+import styles from "../styles.module.scss";
 import { SlRefresh } from "react-icons/sl";
 import { IoAddCircleOutline, IoRemoveCircleOutline } from "react-icons/io5";
-// import { BlobOptions } from 'buffer';
-import { FaAngleUp } from "react-icons/fa";
-import { FaAngleDown } from "react-icons/fa";
-// import DataGridSettingsContextProvider, { DataGridSettingsContext } from './DataGridSettingsContextProvider';
-// import  DataGridSettingsContextProvider  from './DataGridSettingsContextProvider';
-// import { PiDotsThreeOutlineVerticalFill } from "react-icons/pi";
+import { FaAngleUp, FaAngleDown } from "react-icons/fa";
 import { PiDotsThreeVerticalDuotone } from "react-icons/pi";
-import { MdOutlineDragIndicator } from "react-icons/md";
+import { DndContext, closestCenter } from "@dnd-kit/core";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableItem } from "./SortableItem";
+import { getTranslateColumn } from 'src/i18';
 
 
 type TProps = {
@@ -22,70 +19,49 @@ type TProps = {
     name: string;
     columns: TColumn[];
   };
-
 };
 
-const DataGridSettings: FC = () => {
-  // const { context } = useDataGridContext();
-  // const { name, columns } = context;
-  // const columns = context?.columns;
+const DataGridSettings: FC<TProps> = ({ props: { name, columns } }) => {
   const [activeRow, setActiveRow] = useState<number | null>(null);
-  const [columns, setColumns] = useState<TColumn[]>([]);
-  const [loading, setLoading] = useState<boolean>(false)
-  // Загрузка колонок из localStorage
-  // const getModelColumns = (defaultColumns: TColumn[], modelName: string): TColumn[] => {
-  //   const storedColumns = localStorage.getItem(modelName);
-  //   return storedColumns
-  //     ? JSON.parse(storedColumns).sort((a: TColumn, b: TColumn) => a.position - b.position)
-  //     : defaultColumns.sort((a, b) => a.position - b.position);
-  // };
+  const [loading, setLoading] = useState<boolean>(false);
+  const [gridColumns, setGridColumns] = useState<TColumn[]>(columns);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  // useEffect(() => {
-  //   const loadedColumns = getModelColumns(columns, name);
-  //   setGridColumns(loadedColumns);
-  // }, [columns, name]);
-
-  // Сохранение колонок в localStorage при изменении
   useEffect(() => {
-    // localStorage.setItem(context?.name, JSON.stringify(columns));
-  }, [columns]);
+    // localStorage.setItem(context?.name, JSON.stringify(gridColumns));
+  }, [gridColumns]);
 
-  // Перемещение строки вверх или вниз
-  const updatePosition = (direction: 'up' | 'down') => {
-    if (activeRow === null) return;
+  const onDragStart = (event: any) => {
+    setDraggingId(event.active.id); // Запоминаем ID перетаскиваемого элемента
+  };
 
-    const index = activeRow - 1;
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-
-    if (targetIndex < 0 || targetIndex >= columns.length) return;
-
-    const newColumns = [...columns];
-    [newColumns[index], newColumns[targetIndex]] = [newColumns[targetIndex], newColumns[index]];
-
-    setColumns(
-      newColumns.map((col, i) => ({
-        ...col,
-        position: i + 1,
-      }))
-    );
-    setActiveRow(targetIndex + 1);
+  const onDragEnd = (event: any) => {
+    const { active, over } = event;
+    setDraggingId(null);
+    if (active.id !== over?.id) {
+      setGridColumns((prev) => {
+        const oldIndex = prev.findIndex((col) => col.identifier === active.id);
+        const newIndex = prev.findIndex((col) => col.identifier === over?.id);
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    }
   };
 
   return (
     <>
       <div className={styles.GridPanel}>
         <div className={styles.colGroup} style={{ justifyContent: 'left', gap: '6px' }}>
-          <button onClick={() => updatePosition('up')} className={styles.Button}>
+          <button className={styles.Button}>
             <FaAngleUp size={17} strokeWidth={5} />
           </button>
-          <button onClick={() => updatePosition('down')} className={styles.Button}>
+          <button className={styles.Button}>
             <FaAngleDown size={17} strokeWidth={4} />
           </button>
         </div>
         <div className={styles.colGroup} style={{ justifyContent: 'right', gap: '6px' }}>
           <button onClick={() => console.log('refreshSetting')} className={styles.Button}>
             <SlRefresh
-              className={(loading === true) ? styles.animationLoop : ""}
+              className={loading ? styles.animationLoop : ""}
               size={17}
               strokeWidth={5}
             />
@@ -97,116 +73,22 @@ const DataGridSettings: FC = () => {
       <div className={styles.FormWrapper}>
         <div className={styles.colGroup}>
           <div className={styles.rowGroup}>
-            <div className={styles.ScrollWrapper} style={{ marginTop: '40px' }}>
-              <div className={styles.HeaderName} style={{ marginTop: '-33px' }}>Видимость</div>
-              <ul className={styles.CheckboxList}>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item1" />
-                  <label htmlFor="item1">Элемент 1</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item2" />
-                  <label htmlFor="item2">Элемент 2</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item3" />
-                  <label htmlFor="item3">Элемент 3</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item4" />
-                  <label htmlFor="item4">Элемент 4</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item5" />
-                  <label htmlFor="item5">Элемент 5</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item6" />
-                  <label htmlFor="item6">Элемент 6</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item7" />
-                  <label htmlFor="item7">Элемент 7</label>
-                </li>
-              </ul>
+            <div className={styles.colGroup}>
+              <div className={styles.HeaderName}>Отображение</div>
             </div>
-          </div>
 
-          <div className={styles.rowGroup}>
-            <div className={styles.ScrollWrapper} style={{ marginTop: '40px' }}>
-              <div className={styles.HeaderName} style={{ marginTop: '-33px' }}>Видимость</div>
-              <ul className={styles.CheckboxList}>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item1" />
-                  <label htmlFor="item1">Элемент 1</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item2" />
-                  <label htmlFor="item2">Элемент 2</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item3" />
-                  <label htmlFor="item3">Элемент 3</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item4" />
-                  <label htmlFor="item4">Элемент 4</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item5" />
-                  <label htmlFor="item5">Элемент 5</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item6" />
-                  <label htmlFor="item6">Элемент 6</label>
-                </li>
-                <li>
-                  <div className={styles.DragAndDrop}>
-                    <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-                  </div>
-                  <input type="checkbox" id="item7" />
-                  <label htmlFor="item7">Элемент 7</label>
-                </li>
-              </ul>
+            <div className={styles.colGroup}>
+              <div className={styles.ScrollWrapper} style={{ height: '450px', width: '300px' }}>
+                <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd} onDragStart={onDragStart}>
+                  <SortableContext items={gridColumns.map(col => col.identifier)} strategy={verticalListSortingStrategy}>
+                    <ul className={styles.CheckboxList}>
+                      {[...gridColumns].map((column) => (
+                        <SortableItem key={column.identifier} column={column} isDragging={column.identifier === draggingId} />
+                      ))}
+                    </ul>
+                  </SortableContext>
+                </DndContext>
+              </div>
             </div>
           </div>
         </div>
