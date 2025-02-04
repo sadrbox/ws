@@ -1,4 +1,4 @@
-import { useState, FC } from 'react';
+import { useState, FC, useEffect } from 'react';
 import { EActiveGrid, TModelProps } from './types';
 import DataGrid from './DataGrid/index';
 import styles from './styles.module.scss';
@@ -15,7 +15,11 @@ type TProps = {
 const Grid: FC<TProps> = ({ props }) => {
   const [activeGrid, setActiveGrid] = useState<EActiveGrid>(EActiveGrid.DATA);
 
-
+  useEffect(() => {
+    if (activeGrid === EActiveGrid.DATA) {
+      props.actions.loadDataGrid();
+    }
+  }, [activeGrid])
 
   // Переключение между режимами
   const toggleActiveGrid = () => {

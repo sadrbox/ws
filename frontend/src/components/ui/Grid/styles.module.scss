@@ -381,18 +381,19 @@ hr {
 	border-left: 1px solid $color10;
 	border-right: 1px solid $color10;
 	border-bottom: 1px solid transparent;
-	padding: 6px;
+	padding: 6px 12px 6px 12px;
 	margin: 6px 6px -1px 18px;
 	border-top-left-radius: $BRadius;
 	border-top-right-radius: $BRadius;
-	position: static;
+	// position: static;
 	z-index: 2;
 	// clip-path: 2px -5px -10px -20px round 5px;
 }
 
 .FormWrapper {
-	flex: 1 1;
+	flex: 1;
 	// height: 100%;
+	padding: 6px;
 	margin: 6px;
 	background-color: #fff;
 	scroll-behavior: smooth;

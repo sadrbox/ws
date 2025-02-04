@@ -51,7 +51,7 @@ const DataGrid: FC<TProps> = ({ props: { name, rows, columns, actions: { loadDat
         setActiveRow,
       },
     } as TDataGridContext;
-  }, [checkedRows, isAllChecked, activeRow]);
+  }, [checkedRows, isAllChecked, activeRow, columns]);
 
   // Обновление состояния выбранных строк при изменении `isAllChecked`
   useEffect(() => {

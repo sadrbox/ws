@@ -21,7 +21,7 @@ const ActivityHistory: FC = () => {
   const name = ActivityHistory.name;
   const [responseData, setResponseData] = useState<TDataItem[] | null>(null);
   const [rows, setRows] = useState<TDataItem[]>([]);
-  const [columns] = useState<TColumn[]>(getModelColumns(columnsJson, name));
+  const [columns, setColumns] = useState<TColumn[]>(getModelColumns(columnsJson, name));
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [order, setOrder] = useState<TOrder>({
     columnID: "actionDate",
@@ -43,6 +43,10 @@ const ActivityHistory: FC = () => {
   };
 
   useEffect(() => {
+    setColumns(getModelColumns(columnsJson, name));
+  }, [isLoading])
+
+  useEffect(() => {
     loadDataGrid();
   }, [order]); // Загружаем данные один раз при монтировании
 
@@ -57,10 +61,10 @@ const ActivityHistory: FC = () => {
       name,
       rows,
       columns,
-      actions: { loadDataGrid }, // `loadDataGrid` больше не нужен
+      actions: { loadDataGrid, setColumns }, // `loadDataGrid` больше не нужен
       states: { isLoading, setIsLoading, order, setOrder },
     }),
-    [rows, order, isLoading]
+    [rows, order, isLoading, columns]
   );
 
   return <Grid props={props} />;

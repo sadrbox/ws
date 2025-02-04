@@ -22,14 +22,22 @@ type TProps = {
 };
 
 const DataGridSettings: FC<TProps> = ({ props: { name, columns } }) => {
-  const [activeRow, setActiveRow] = useState<number | null>(null);
+  // const { context: contextDataGrid } = useDataGridContext();
+  // const [activeRow, setActiveRow] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [gridColumns, setGridColumns] = useState<TColumn[]>(columns);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
-    // localStorage.setItem(context?.name, JSON.stringify(gridColumns));
+    // console.log(gridColumns)
+    localStorage.setItem(name, JSON.stringify(gridColumns));
   }, [gridColumns]);
+
+  const updateColumnVisibility = (identifier: string, visible: boolean) => {
+    setGridColumns(prev =>
+      prev.map(col => col.identifier === identifier ? { ...col, visible } : col)
+    );
+  };
 
   const onDragStart = (event: any) => {
     setDraggingId(event.active.id); // Запоминаем ID перетаскиваемого элемента
@@ -50,14 +58,7 @@ const DataGridSettings: FC<TProps> = ({ props: { name, columns } }) => {
   return (
     <>
       <div className={styles.GridPanel}>
-        <div className={styles.colGroup} style={{ justifyContent: 'left', gap: '6px' }}>
-          <button className={styles.Button}>
-            <FaAngleUp size={17} strokeWidth={5} />
-          </button>
-          <button className={styles.Button}>
-            <FaAngleDown size={17} strokeWidth={4} />
-          </button>
-        </div>
+        <div className={styles.colGroup} style={{ justifyContent: 'left', gap: '6px' }}></div>
         <div className={styles.colGroup} style={{ justifyContent: 'right', gap: '6px' }}>
           <button onClick={() => console.log('refreshSetting')} className={styles.Button}>
             <SlRefresh
@@ -68,7 +69,7 @@ const DataGridSettings: FC<TProps> = ({ props: { name, columns } }) => {
             <span>Обновить</span>
           </button>
         </div>
-      </div>
+      </div >
       <hr />
       <div className={styles.FormWrapper}>
         <div className={styles.colGroup}>
@@ -76,14 +77,17 @@ const DataGridSettings: FC<TProps> = ({ props: { name, columns } }) => {
             <div className={styles.colGroup}>
               <div className={styles.HeaderName}>Отображение</div>
             </div>
-
             <div className={styles.colGroup}>
-              <div className={styles.ScrollWrapper} style={{ height: '450px', width: '300px' }}>
+              <div className={styles.ScrollWrapper} style={{ height: '500px', width: '300px' }}>
                 <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd} onDragStart={onDragStart}>
                   <SortableContext items={gridColumns.map(col => col.identifier)} strategy={verticalListSortingStrategy}>
                     <ul className={styles.CheckboxList}>
                       {[...gridColumns].map((column) => (
-                        <SortableItem key={column.identifier} column={column} isDragging={column.identifier === draggingId} />
+                        <SortableItem
+                          key={column.identifier}
+                          column={column}
+                          isDragging={column.identifier === draggingId}
+                          toggleVisibility={updateColumnVisibility} />
                       ))}
                     </ul>
                   </SortableContext>

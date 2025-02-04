@@ -49,8 +49,9 @@ export function getModelColumns(
 	modelName: string
 ): TColumn[] {
 	const storageColumns = localStorage.getItem(modelName);
-	if (storageColumns !== null && !storageColumns.length) {
+	if (storageColumns !== null) {
 		const columns = JSON.parse(storageColumns);
+		// console.log(columns);
 		return columns;
 	}
 	return initColumns;

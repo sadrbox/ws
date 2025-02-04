@@ -18,19 +18,13 @@ type TProps = {
 const DataGridTabBody: FC<TProps> = ({ loading }) => {
 
   const { context } = useDataGridContext();
-  const [columns, setColumns] = useState<TColumn[]>([])
 
-  useEffect(() => {
-    const visibleColumns = context?.columns.filter(column => column.visible);
-    if (visibleColumns?.length)
-      setColumns(visibleColumns)
-    // context.states.setIsLoading(false)
-  }, [])
+  const columns = context?.columns.filter((col) => col.visible);
 
   return (
     <tbody className={(loading === true) ? styles.blur5 : ""}>
       {context?.rows && context?.rows.map((row: TDataItem, key: number) =>
-        <DataGridBodyRow key={key} countID={++key} rowID={row.id} columns={context?.columns} row={row} loading={loading} />
+        <DataGridBodyRow key={key} countID={++key} rowID={row.id} columns={columns} row={row} loading={loading} />
       )}
       <tr style={{ height: "100%" }}><td colSpan={columns.length}></td></tr>
     </tbody>

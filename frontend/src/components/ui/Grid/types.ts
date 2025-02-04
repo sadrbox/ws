@@ -67,19 +67,12 @@ export type TDataGridContext = {
 	columns: TColumn[];
 	actions: {
 		loadDataGrid: () => Promise<void>;
+		setColumns: Dispatch<SetStateAction<TColumn[]>>;
 	};
 	states: TModelStates;
 };
 
-export type TDataGridSettingsContext = {
-	name: string;
-	rows: TDataItem[];
-	columns: TColumn[];
-	actions: {
-		loadDataGrid: () => Promise<void>;
-	};
-	states: TModelStates;
-};
+export type TDataGridSettingsContext = TModelProps & {};
 
 export enum EActiveGrid {
 	DATA,
