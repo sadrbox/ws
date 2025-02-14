@@ -17,10 +17,19 @@
 }
 
 .GridWrapper {
-	display: flex;
-	flex-direction: column;
-	flex: 1;
-	height: calc(100vh - 30px);
+	// display: flex;
+	// flex-direction: column;
+	// flex: 1;
+	height: 98%; /* Автоматическая высота по содержимому */
+	display: grid;
+	grid-template-rows: 40px 40px auto; /* Верхний контент + таблица */
+	min-height: 300px;
+	// flex-grow: 1;
+	// position: relative;
+	// min-height: 500px;
+	// min-height: 0;
+	// max-height: 70%;
+	// height: calc(100vh - 99px);
 	background-color: $color60;
 	transition: all 0.5ms ease;
 	// display: contents;
@@ -30,9 +39,9 @@
 	// grid-auto-flow: column;
 	// flex-direction: column;
 	// margin: 100px 100px 0px 100px;
-	margin: 6px;
+	// margin: 0px 3px;
 	// padding: 6px;
-	border: 1px solid $color10;
+	border: 0px solid $color10;
 	border-radius: $BRadius;
 }
 
@@ -48,15 +57,24 @@
 	// padding-bottom: 4px;
 	// border-bottom: 1px solid $color30;
 	// background-color: red;
-	margin: 6px 6px;
+	margin: 3px 3px;
 }
 
 .GridSrollWrapper {
-	flex: 1;
-	margin: 6px;
+	// position: static;
+	// left: 0;
+	// right: 0;
+	// top: 0;
+	// bottom: 0;
+	// display: flex;
+	// flex-grow: 1;
+	// height: 100px;
+	// min-height: 0;
+	// flex: 1;min-height: 0;
+	margin: 3px 3px;
 	// height: calc(100vh - 70px);
-	// height: 100%;
-	// display: grid;
+	// height: auto;
+	display: grid;
 	// grid-template-rows: repeat(auto-fill, minmax(100px, 1fr));
 	background-color: #fff;
 	// margin: 4px 4px 4px 4px;
@@ -82,7 +100,7 @@ table {
 	border-collapse: collapse;
 	height: 100%;
 	width: 100%;
-	flex: 1;
+	// flex: 1;
 	table-layout: fixed;
 	// table-layout: auto;
 	position: relative;

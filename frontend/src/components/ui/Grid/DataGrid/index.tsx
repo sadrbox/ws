@@ -109,7 +109,7 @@ const DataGrid: FC<TProps> = ({ props: { name, rows, columns, actions: { loadDat
           </button>
         </div>
       </div>
-      <hr />
+      {/* <hr /> */}
       <div className={styles.GridSrollWrapper}>
         <table>
           <DataGridHeader />

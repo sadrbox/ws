@@ -1,28 +1,31 @@
-// import './App.css'
-import { useState } from 'react'
-import PrintPageViewer from './components/ui/PrintPageViewer'
-// import A4Page from './components/ui/PrintPageViewer'
-import ActivityHistory from './models/ActivityHistory'
-import ActivityHistoryView from './models/ActivityHistory/view'
-import AppContext, { TAppContextData } from './components/app/AppContext'
-// import Products from './objects/Products'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import styles from "./styles/global.module.scss"
+import ActivityHistory from './models/ActivityHistory';
+import ContractFORM from './models/Contracts/form';
 
 function App() {
 
-  // const [contextState, setContextState] = useState<TAppContextData | undefined>(undefined);
-
   return (
-    // <AppContext state={undefined}>
-    <>
-      <ActivityHistory />
-      {/* <div>
-          <PrintPageViewer>
-            <ActivityHistoryView id={195} />
-          </PrintPageViewer>
-        </div> */}
-    </>
-    // </AppContext>
-  )
+    <div className={styles.Screen}>
+      <div className={styles.PaneGroup}>
+        {/* <hr style={{ height: '50px', background: 'green' }} /> */}
+
+        <Router>
+          <Routes>
+            <Route path="/" element={<ContractFORM />} />
+            <Route path="contract" element={<ContractFORM />} />
+            <Route path="activityhistory" element={<ActivityHistory />} />
+          </Routes>
+        </Router>
+      </div>
+      <div className={styles.PaneTabs}>
+        <div className={styles.Tab}>Один</div>
+        <div className={styles.Tab}>Два</div>
+        <div className={[styles.Tab, styles.active].join(" ")}>Три</div>
+        <div className={styles.Tab}>Четыре</div>
+      </div>
+    </div >
+  );
 }
 
-export default App
+export default App;

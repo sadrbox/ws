@@ -43,7 +43,7 @@ const Grid: FC<TProps> = ({ props }) => {
           </button>
         </div>
       </div>
-      <hr />
+      {/* <hr /> */}
       {activeGrid === EActiveGrid.DATA && <DataGrid props={props} />}
       {activeGrid === EActiveGrid.CONFIG && <DataGridSettings props={props} />}
     </div>
