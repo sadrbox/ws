@@ -88,7 +88,7 @@ const DataGrid: FC<TProps> = ({ props: { name, rows, columns, actions: { loadDat
   return (
     <DataGridContextProvider initialContext={initialContext}>
       <div className={styles.GridPanel}>
-        <div className={styles.colGroup} style={{ justifyContent: 'left', gap: '6px' }}>
+        <div className={styles.colGroup}>
           <button className={styles.Button}>
             <IoAddCircleOutline size={17} strokeWidth={5} />
             <span>Добавить</span>
@@ -98,7 +98,7 @@ const DataGrid: FC<TProps> = ({ props: { name, rows, columns, actions: { loadDat
             <span>Удалить</span>
           </button>
         </div>
-        <div className={styles.colGroup} style={{ justifyContent: 'right', gap: '6px' }}>
+        <div className={styles.colGroup}>
           <button onClick={refreshDataGrid} className={styles.Button}>
             <SlRefresh
               className={(states?.isLoading === true) ? styles.animationLoop : ""}

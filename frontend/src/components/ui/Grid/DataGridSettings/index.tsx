@@ -78,7 +78,7 @@ const DataGridSettings: FC<TProps> = ({ props: { name, columns } }) => {
               <div className={styles.HeaderName}>Отображение</div>
             </div>
             <div className={styles.colGroup}>
-              <div className={styles.ScrollWrapper} style={{ height: '500px', width: '300px' }}>
+              <div className={styles.ScrollWrapper} style={{ height: '100%', width: '300px' }}>
                 <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd} onDragStart={onDragStart}>
                   <SortableContext items={gridColumns.map(col => col.identifier)} strategy={verticalListSortingStrategy}>
                     <ul className={styles.CheckboxList}>

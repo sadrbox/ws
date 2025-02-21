@@ -1,69 +1,104 @@
 .Screen {
-	height: 100vh;
-	// display: grid;
+	height: 99dvh;
+	display: grid;
+	grid-template-rows: 94dvh 5dvh;
+	/* align-content: stretch; */
+	// height: 92dvh;
+	// display: flex;
 	// flex-direction: column;
 	// flex: 1;
 	// flex-grow: 1;
+	position: relative;
 }
 .PaneGroup {
-	border: 0px solid red;
-	min-height: 400px;
-	height: calc(100vh - 76px);
+	border: 0px solid $color10;
+	height: 92dvh;
+	// display: flex;
+	// flex: 1;
+	// flex-shrink: 1;
+	// height: calc(100vh - 76px);
 	overflow: auto;
 	padding: 6px;
+	position: relative;
 }
 .PaneTabs {
-	padding: 6px;
+	padding: 0px 6px;
 	display: flex;
-	// border-bottom: 2px solid #ccc; /* Линия под вкладками */
+	border-top: 1px solid $color10; /* Линия под вкладками */
 	margin: 0;
 	position: relative; /* Для корректного позиционирования вкладок */
 	flex-direction: row;
+	background-color: $color60;
+
 	// border: 0px solid red;
 	// min-height: 50px;
 	.Tab {
-		/* perspective: 500px; */
-		border-bottom-left-radius: 20px;
-		border-bottom-right-radius: 6px;
-
+		border: 1px solid $color10;
+		border-top: none;
+		border-bottom-left-radius: $BRadius;
+		border-bottom-right-radius: 40px;
 		min-width: 100px;
 		height: 30px;
-		font: bold 13px "Segoe UI";
-		background: #3498db;
-		color: #333;
+		font: 13px "Segoe UI";
+		background: $color30;
+		color: $color3;
 		display: flex;
-		justify-content: center;
+		justify-content: left;
 		align-items: center;
-		/* border: 1px solid red; */
-		clip-path: polygon(
-			0 0,
-			100% 0,
-			100% 100%,
-			calc(100% - 15px) 100%,
-			15px 100%,
-			0 calc(100% - 15px)
-		);
-		// padding: 10px 20px; /* Отступы внутри вкладок */
-		cursor: pointer; /* Курсор в виде указателя */
-		color: #333; /* Цвет текста */
-		// border: 1px solid #ccc; /* Граница вкладок */
-		margin-right: -3px; /* Наложение краев */
-		// background-color: #f9f9f9; /* Фон неактивных вкладок */
-		transition: background-color 0.3s, color 0.3s; /* Плавный переход */
-		position: relative; /* Для z-index */
-		z-index: 1; /* Базовая позиция */
+		box-shadow: 0px 1px 0px 0px rgba($color6, 0.3);
+		/* Используем SVG для скошенного угла */
+		padding: 0 12px;
+		cursor: pointer;
+		margin-right: -5px; /* Наложение краев с учетом границы */
+		transition: background-color 0.3s;
+		// position: relative;
+		z-index: 1;
+
+		// box-shadow: 5px 5px 5px 5px red;
 		&:hover {
-			background-color: #e0e0e0; /* Фон при наведении */
-			color: #000; /* Цвет текста при наведении */
+			background-color: $color2;
+			border-color: $color1;
+			// border-left: 1px solid $color10;
+			// border-right: 1px solid $color10;
+			border-top: none;
+			color: #000;
+			z-index: 3;
 		}
 	}
 	.active {
-		// filter: drop-shadow(0 5px 10px green);
-		background-color: #bd1a1a; /* Фон активной вкладки */
-		// border-color: #ccc; /* Граница активной вкладки */
-		// border-bottom: 2px solid #fff; /* Перекрываем нижнюю границу родителя */
-		color: #000; /* Цвет текста активной вкладки */
-		font-weight: bold; /* Жирный шрифт для активной вкладки */
-		z-index: 2; /* Активная вкладка поверх остальных */
+		height: 40px;
+		margin-top: -1px;
+		background-color: $color60;
+		// border: 1px solid $color60;
+		border-top: 1px solid $color60;
+		// color: #000;
+		font-weight: bold;
+		z-index: 9;
+		&:hover {
+			border-color: $color10;
+			border-top: 1px solid $color60;
+			background-color: $color60;
+		}
 	}
+}
+
+.Form {
+	display: grid;
+	grid-template-rows: min-content auto;
+	/* align-content: stretch; */
+	height: 92dvh;
+	// gap: 6px;
+	// height: 100dvh;
+	// background-color: red;
+	// display: grid;
+	// grid-template-rows: auto 700px;
+}
+
+.FormHeader {
+	// height: auto;
+}
+.FormTable {
+	// padding: 6px;
+	// border: 1px solid red;
+	// height: 50cqi;
 }

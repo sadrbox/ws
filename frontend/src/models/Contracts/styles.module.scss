@@ -1,6 +1,18 @@
 .Form {
-	// height: 800px;
-	// background-color: red;
 	display: grid;
-	grid-template-rows: auto 500px;
+	grid-template-rows: min-content auto;
+	/* align-content: stretch; */
+	height: 92dvh;
+	// height: 100dvh;
+	// background-color: red;
+	// display: grid;
+	// grid-template-rows: auto 700px;
+}
+
+.FormHeader {
+	// height: auto;
+}
+.FormTable {
+	// border: 1px solid red;
+	// height: 50cqi;
 }

@@ -23,12 +23,14 @@ $BRadius: 2px;
 	/* горизонтально */
 	display: flex;
 	flex-direction: column;
+	gap: 6px;
 	/* padding: 9px; */
 }
 .colGroup {
 	/* вертикально */
 	display: flex;
 	flex-direction: row;
+	gap: 6px;
 	/* padding: 9px; */
 }
 

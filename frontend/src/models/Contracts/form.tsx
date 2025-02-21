@@ -9,14 +9,14 @@ const ContractFORM: FC = () => {
 
   return (
     <div className={styles.Form}>
-      <div className={styles.FromHeader}>
-        {/* <InputField label="test" name="testing" /> */}
-        {/* <InputField label="test" name="testing" /> */}
-        {/* <InputField label="test" name="testing" /> */}
+      <div className={styles.FormHeader}>
+
         <InputField label="test" name="testing" />
         <InputField label="test" name="testing" />
+        <InputField label="test" name="testing" />
+        <hr style={{ height: '20px' }} />
       </div>
-      <div className={styles.FromTable}>
+      <div className={styles.FormTable}>
         <ActivityHistory />
       </div>
 

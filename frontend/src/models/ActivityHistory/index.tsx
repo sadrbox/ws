@@ -3,6 +3,7 @@ import columnsJson from "./columns.json";
 import { TColumn, TDataItem, TModelProps, TOrder } from "src/components/ui/Grid/types";
 import { getModelColumns, sortGridRows } from "src/components/ui/Grid/services";
 import Grid from "src/components/ui/Grid";
+import global from "../../styles/global.module.scss";
 
 const getResponseData = async (signal: AbortSignal) => {
   try {
@@ -67,7 +68,9 @@ const ActivityHistory: FC = () => {
     [rows, order, isLoading, columns]
   );
 
-  return <Grid props={props} />;
+  return (
+    <Grid props={props} />
+  );
 };
 
 export default ActivityHistory;

@@ -17,12 +17,16 @@
 }
 
 .GridWrapper {
-	// display: flex;
-	// flex-direction: column;
-	// flex: 1;
-	height: 98%; /* Автоматическая высота по содержимому */
-	display: grid;
-	grid-template-rows: 40px 40px auto; /* Верхний контент + таблица */
+	container-type: size;
+	display: flex;
+
+	flex-direction: column;
+	flex: 1;
+	// flex-shrink: 1;
+	height: 100%;
+	// height: calc(70dvh - 80px); /* Автоматическая высота по содержимому */
+	// display: grid;
+	// grid-template-rows: auto auto auto; /* Верхний контент + таблица */
 	min-height: 300px;
 	// flex-grow: 1;
 	// position: relative;
@@ -39,9 +43,9 @@
 	// grid-auto-flow: column;
 	// flex-direction: column;
 	// margin: 100px 100px 0px 100px;
-	// margin: 0px 3px;
+	// margin: 6px;
 	// padding: 6px;
-	border: 0px solid $color10;
+	border: 1px solid $color10;
 	border-radius: $BRadius;
 }
 
@@ -51,8 +55,10 @@
 
 .GridPanel,
 .TabHeader {
-	display: grid;
-	grid-auto-flow: column;
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	height: 38px;
 	// margin-bottom: 4px;
 	// padding-bottom: 4px;
 	// border-bottom: 1px solid $color30;
@@ -74,7 +80,7 @@
 	margin: 3px 3px;
 	// height: calc(100vh - 70px);
 	// height: auto;
-	display: grid;
+	// display: grid;
 	// grid-template-rows: repeat(auto-fill, minmax(100px, 1fr));
 	background-color: #fff;
 	// margin: 4px 4px 4px 4px;
@@ -203,17 +209,19 @@ tbody {
 }
 .Button {
 	display: flex;
+	align-items: center;
 	background: $color30;
 	border: 1px solid $color10;
 	outline: none;
 	margin: 0;
-	padding: 6px 6px; /* Увеличен размер кнопки */
+	// padding: 6px 6px; /* Увеличен размер кнопки */
 	font-size: 13px;
 	text-align: center;
 	cursor: pointer;
 	border-radius: $BRadius; /* Увеличен радиус скругления */
-	box-shadow: inset 0px 0px 1px $color30, inset 0px 0px 1px $color1;
-	min-height: 22px;
+	box-shadow: 0px 1px 0px 0px rgba($color6, 0.3);
+	// box-shadow: inset 0px 0px 1px $color30, inset 0px 0px 1px $color1;
+	height: 30px;
 	// min-width: 60px;
 	transition: all 0.1s ease; /* Плавные переходы */
 
@@ -235,6 +243,7 @@ tbody {
 		background-color: $color2;
 		box-shadow: inset 0px 1px 3px $color60;
 
+		box-shadow: 0px 1px 0px 0px rgba($color6, 0.3);
 		span {
 			color: $color3; /* Модификация цвета текста при наведении */
 		}

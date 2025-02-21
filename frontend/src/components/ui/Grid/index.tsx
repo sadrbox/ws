@@ -16,6 +16,10 @@ const Grid: FC<TProps> = ({ props }) => {
   const [activeGrid, setActiveGrid] = useState<EActiveGrid>(EActiveGrid.DATA);
 
   useEffect(() => {
+
+  })
+
+  useEffect(() => {
     if (activeGrid === EActiveGrid.DATA) {
       props.actions.loadDataGrid();
     }
@@ -34,7 +38,9 @@ const Grid: FC<TProps> = ({ props }) => {
   return (
     <div className={styles.GridWrapper}>
       <div className={styles.GridPanel}>
-        <div className={styles.colGroup} style={{ justifyContent: 'right', gap: '6px' }}>
+        <div className={styles.colGroup}>
+        </div>
+        <div className={styles.colGroup}>
           <button onClick={toggleActiveGrid} className={styles.Button}>
             <SlSettings size={17} strokeWidth={5} />
           </button>
