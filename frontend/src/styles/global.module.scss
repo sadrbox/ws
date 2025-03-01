@@ -1,7 +1,8 @@
 .Screen {
-	height: 99dvh;
+	// height: 99dvh;
+	container-type: size;
 	display: grid;
-	grid-template-rows: 94dvh 5dvh;
+	grid-template-rows: 4dvh 90dvh 5dvh;
 	/* align-content: stretch; */
 	// height: 92dvh;
 	// display: flex;
@@ -10,9 +11,27 @@
 	// flex-grow: 1;
 	position: relative;
 }
-.PaneGroup {
+
+.NavbarWrapper {
+	padding: 3px;
+	border-bottom: 1px solid $color10;
+	display: flex;
+	align-items: center;
+	// box-shadow: 0px 0px 100px 50px rgba(0, 0, 0, 0.1);
+	.NavbarItem {
+		margin: 6px;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		&:not(:last-child) {
+			margin-right: 15px;
+		}
+	}
+}
+.PaneWrapper {
 	border: 0px solid $color10;
-	height: 92dvh;
+	background-color: $color30;
+	// height: 92dvh;
 	// display: flex;
 	// flex: 1;
 	// flex-shrink: 1;
@@ -20,8 +39,24 @@
 	overflow: auto;
 	padding: 6px;
 	position: relative;
+	// transition: all 1000ms;
+	.Pane {
+		height: 88dvh;
+		// height: 100%;
+		// transform: scaleY(0);
+		display: none;
+		// opacity: 0;
+		// visibility: hidden;
+	}
+	.ActivePane {
+		// transform: scaleY(1);
+		// opacity: 1;
+		// visibility: visible;
+		display: flex;
+	}
 }
-.PaneTabs {
+.PaneTabWrapper {
+	//
 	padding: 0px 6px;
 	display: flex;
 	border-top: 1px solid $color10; /* Линия под вкладками */
@@ -30,54 +65,73 @@
 	flex-direction: row;
 	background-color: $color60;
 
+	// box-shadow: 0px 0px 100px 50px rgba(0, 0, 0, 0.1);
 	// border: 0px solid red;
 	// min-height: 50px;
-	.Tab {
+	.PaneTab {
+		// clip-path: polygon(0 0, 100% 0, 80% 100%, 0% 80%);
+		position: relative;
 		border: 1px solid $color10;
 		border-top: none;
 		border-bottom-left-radius: $BRadius;
-		border-bottom-right-radius: 40px;
+		border-bottom-right-radius: 15px;
 		min-width: 100px;
-		height: 30px;
+		height: 26px;
 		font: 13px "Segoe UI";
 		background: $color30;
-		color: $color3;
+		// color: $color3;
 		display: flex;
 		justify-content: left;
 		align-items: center;
-		box-shadow: 0px 1px 0px 0px rgba($color6, 0.3);
+		// box-shadow: 0px 1px 0px 0px rgba($color6, 0.3);
 		/* Используем SVG для скошенного угла */
 		padding: 0 12px;
 		cursor: pointer;
 		margin-right: -5px; /* Наложение краев с учетом границы */
-		transition: background-color 0.3s;
+		transition: height 1ms;
 		// position: relative;
 		z-index: 1;
+		// &::after {
+		// 	content: "";
+		// 	position: absolute;
+		// 	top: 0;
+		// 	left: 0;
+		// 	width: 100%;
+		// 	height: 100%;
+		// 	border: 1px solid black;
+		// 	clip-path: polygon(20% 0, 80% 0, 100% 100%, 0% 100%);
+		// 	// clip-path: polygon(0 0, 100% 0, 80% 100%, 0% 80%);
+		// 	pointer-events: none;
+		// 	background-color: red;
+		// }
 
 		// box-shadow: 5px 5px 5px 5px red;
 		&:hover {
 			background-color: $color2;
+			// border-top: 1px solid transparent;
 			border-color: $color1;
 			// border-left: 1px solid $color10;
 			// border-right: 1px solid $color10;
-			border-top: none;
-			color: #000;
+			// border-top: transparent;
+			// color: #000;
 			z-index: 3;
 		}
 	}
-	.active {
+	.ActivePaneTab {
 		height: 40px;
 		margin-top: -1px;
-		background-color: $color60;
+		background-color: $color30;
 		// border: 1px solid $color60;
-		border-top: 1px solid $color60;
-		// color: #000;
+		border-top: 1px solid $color30;
+		color: $color3;
 		font-weight: bold;
 		z-index: 9;
 		&:hover {
 			border-color: $color10;
-			border-top: 1px solid $color60;
-			background-color: $color60;
+			border-top: 1px solid $color30;
+			background-color: $color30;
+			cursor: default;
+			color: $color3;
 		}
 	}
 }

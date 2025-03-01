@@ -42,10 +42,10 @@ const Grid: FC<TProps> = ({ props }) => {
         </div>
         <div className={styles.colGroup}>
           <button onClick={toggleActiveGrid} className={styles.Button}>
-            <SlSettings size={17} strokeWidth={5} />
+            <SlSettings size={16} strokeWidth={5} />
           </button>
           <button onClick={onClickButtonDataGridFilter} className={styles.Button}>
-            <TbFilter size={17} strokeWidth={1} />
+            <TbFilter size={17} strokeWidth={2} />
           </button>
         </div>
       </div>

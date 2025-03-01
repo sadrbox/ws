@@ -25,6 +25,7 @@
 
 html,
 body {
+	user-select: none;
 	font-size: 13px;
 	margin: 0;
 	padding: 0;

@@ -90,11 +90,11 @@ const DataGrid: FC<TProps> = ({ props: { name, rows, columns, actions: { loadDat
       <div className={styles.GridPanel}>
         <div className={styles.colGroup}>
           <button className={styles.Button}>
-            <IoAddCircleOutline size={17} strokeWidth={5} />
+            {/* <IoAddCircleOutline size={17} strokeWidth={5} /> */}
             <span>Добавить</span>
           </button>
           <button className={styles.Button}>
-            <IoRemoveCircleOutline size={17} strokeWidth={5} />
+            {/* <IoRemoveCircleOutline size={17} strokeWidth={5} /> */}
             <span>Удалить</span>
           </button>
         </div>
@@ -102,8 +102,8 @@ const DataGrid: FC<TProps> = ({ props: { name, rows, columns, actions: { loadDat
           <button onClick={refreshDataGrid} className={styles.Button}>
             <SlRefresh
               className={(states?.isLoading === true) ? styles.animationLoop : ""}
-              size={17}
-              strokeWidth={5}
+              size={14}
+              strokeWidth={30}
             />
             <span>Обновить</span>
           </button>

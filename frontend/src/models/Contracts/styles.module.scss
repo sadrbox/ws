@@ -1,18 +1,24 @@
 .Form {
+	width: 100%;
 	display: grid;
+	grid-template-columns: 1fr;
 	grid-template-rows: min-content auto;
-	/* align-content: stretch; */
-	height: 92dvh;
-	// height: 100dvh;
-	// background-color: red;
-	// display: grid;
-	// grid-template-rows: auto 700px;
 }
 
 .FormHeader {
-	// height: auto;
+	height: auto;
 }
+.FormBody {
+	// padding: 3px;
+}
+
 .FormTable {
-	// border: 1px solid red;
+	// padding: 3px;
+	width: 100%;
+	margin-top: 20px;
+	container-type: size;
+	flex-direction: column;
+	flex: 1;
+	display: flex; // border: 1px solid red;
 	// height: 50cqi;
 }

@@ -18,19 +18,22 @@ $colorPrimaryDark: #1c5fcb;
 
 $BRadius: 2px;
 
+a {
+	color: $color3;
+}
 // доступ через styles.rowGroup
 .rowGroup {
 	/* горизонтально */
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: 3px;
 	/* padding: 9px; */
 }
 .colGroup {
 	/* вертикально */
 	display: flex;
 	flex-direction: row;
-	gap: 6px;
+	gap: 3px;
 	/* padding: 9px; */
 }
 
