@@ -4,7 +4,7 @@ import styles from "./styles.module.scss";
 import axios from 'axios';
 import { TDataItem } from 'src/components/ui/Grid/types';
 import imgArrow from "src/assets/arrow.png";
-import { useAppContext } from 'src/components/app/AppContext';
+import { useAppContext } from 'src/components/app/AppContextProvider';
 import { getFormatDate } from 'src/utils/main.module'
 import { getTranslation } from "src/i18/index"
 

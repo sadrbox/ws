@@ -1,64 +1,79 @@
-import React, { useEffect, useState } from 'react'
-import Tabs from '../ui/Tabs'
-import AppContext, { TContextParams } from './AppContext'
 
-import { TContextInstance } from "./AppContext"
-import Products from 'src/models/Products'
-import { isArray } from 'lodash'
-import { TTabs } from '../ui/Tabs/types';
-import { getMockTabs } from '../ui/Tabs/dev'
+import ActivityHistory from "../../models/ActivityHistory";
+import { JSX, useMemo, useState } from "react";
+// import ActivityHistory from './models/ActivityHistory/index';
+import ContractFORM from "../../models/Contracts/form";
+import styles from "./styles.module.scss"
+import Navbar from "./layout/Navbar";
+import PaneTab from "./layout/PaneTab";
+import PaneGroup from "./layout/PaneGroup";
+import AppContextProvider from "./AppContextProvider";
+import { TAppContext, TPaneTab } from "./types";
+import MainPage from "./Pages/NavigationPage";
+import Sales from "src/models/Sales";
+import NavigationPage from "./Pages/NavigationPage";
+import Contracts from "src/models/Contracts";
+import { getTranslation } from "src/i18";
 
 
-export const App = () => {
-  const [context, setContext] = useState<TContextParams>(null)
-  const [tabs, setTabs] = useState<TTabs[]>([])
 
-  useEffect(() => { setContext({ tabs }) }, [tabs])
+export default function App() {
+  const [paneTabs, setPaneTabs] = useState<TPaneTab[]>([
+    { id: 1, title: "Навигация", component: <NavigationPage /> },
+    { id: 2, title: "second", component: <ActivityHistory /> }
+  ]);
+  const [activePaneID, setActivePaneID] = useState<number>(1);
 
-  // useEffect(() => {
-  //   const fetchDataTabs = async () => {
-  //     try {
-  //       const dataTabs = await getMockTabs();
-  //       setTabs(dataTabs)
-  //     }
-  //     catch (e) {
-  //       console.log(e)
-  //     }
-  //   }
+  // Словарь компонентов
+  const COMPONENTS: Record<string, JSX.Element> = {
+    ActivityHistory: <ActivityHistory />,
+    ContractFORM: <ContractFORM />,
+    NavigationPage: <NavigationPage />,
+    Sales: <Sales />,
+    // Receipts: <Receipts />,
+    Contracts: <Contracts />
+  };
 
-  //   fetchDataTabs();
-  // }, [])
 
-  // const state: TContextInstance = {
-  //   context, setContext
-  // }
+  function openPane(component: string) {
 
-  function addNewTabItem() {
-
-    const newTab = {
-      id: '29384uhf23',
-      label: 'Frollo',
-      active: true,
-      description: 'jsdfkjasdf'
+    const existsPane = paneTabs.find(paneTab => paneTab.component.type.name === component ? paneTab.id : null)
+    if (!existsPane) {
+      const title = getTranslation(component)
+      const newTab = {
+        id: Date.now(),
+        title: title || `Вкладка ${paneTabs.length + 1}`,
+        component: COMPONENTS[component]
+      };
+      setPaneTabs((prevTabs) => [...prevTabs, newTab]);
+      setActivePaneID(newTab.id);
+    } else {
+      setActivePaneID(existsPane.id)
     }
-
-    // setContext((prev) => {
-    //   const tabs: TTabs[] = (isArray(prev?.tabs) ? prev?.tabs : []);
-    //   return { tabs: [newTab, ...tabs] }
-    // })
-    setTabs((prev) => (isArray(prev) ? [...prev, newTab] : []))
   }
 
+  const initialContext = useMemo<TAppContext>(() => {
+    return {
+      pane: {
+        activePaneID,
+        paneTabs,
+      },
+      actions: {
+        openPane
+      },
+      states: {
+        setActivePaneID
+      }
+    }
+  }, [activePaneID, paneTabs]);
+
   return (
-    <>
-      <AppContext state={{ context, setContext }}>
-        <button type="button" onClick={() => addNewTabItem()}>Добавить вкладку</button>
-        <Tabs />
-        <br></br>
-        <div style={{ margin: "5px" }}>
-          <Products />
-        </div>
-      </AppContext>
-    </>
-  )
+    <AppContextProvider initialContext={initialContext}>
+      <div className={styles.Screen}>
+        <Navbar />
+        <PaneGroup />
+        <PaneTab />
+      </div>
+    </AppContextProvider>
+  );
 }

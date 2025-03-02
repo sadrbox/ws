@@ -1,0 +1,122 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"column": "ID",
+		"width": "80px",
+		"alignment": "left",
+		"hint": "Идентификатор записи",
+		"visible": true,
+		"position": 1
+	},
+	{
+		"identifier": "actionDate",
+		"type": "date",
+		"column": "Action Date",
+		"width": "130px",
+		"alignment": "left",
+		"hint": "Дата действия",
+		"visible": true,
+		"position": 2
+	},
+	{
+		"identifier": "actionType",
+		"type": "string",
+		"column": "Action Type",
+		"width": "130px",
+		"alignment": "center",
+		"hint": "Тип действия",
+		"visible": true,
+		"position": 3
+	},
+	{
+		"identifier": "bin",
+		"type": "string",
+		"column": "BIN",
+		"width": "120px",
+		"alignment": "left",
+		"hint": "БИН организации",
+		"visible": true,
+		"position": 4
+	},
+	{
+		"identifier": "userName",
+		"type": "string",
+		"column": "User Name",
+		"width": "150px",
+		"alignment": "left",
+		"hint": "Имя пользователя",
+		"visible": true,
+		"position": 5
+	},
+	{
+		"identifier": "host",
+		"type": "string",
+		"column": "User Host",
+		"width": "150px",
+		"alignment": "left",
+		"hint": "Хост пользователя",
+		"visible": true,
+		"position": 6
+	},
+	{
+		"identifier": "ip",
+		"type": "string",
+		"column": "User IP",
+		"width": "120px",
+		"alignment": "left",
+		"hint": "IP пользователя",
+		"visible": true,
+		"position": 7
+	},
+	{
+		"identifier": "city",
+		"type": "string",
+		"column": "User City",
+		"width": "100px",
+		"alignment": "left",
+		"hint": "Город пользователя",
+		"visible": true,
+		"position": 8
+	},
+	{
+		"identifier": "objectId",
+		"type": "string",
+		"column": "Object ID",
+		"width": "100px",
+		"alignment": "left",
+		"hint": "Идентификатор объекта",
+		"visible": true,
+		"position": 9
+	},
+	{
+		"identifier": "objectType",
+		"type": "string",
+		"column": "Object Type",
+		"width": "150px",
+		"alignment": "left",
+		"hint": "Тип объекта",
+		"visible": true,
+		"position": 10
+	},
+	{
+		"identifier": "objectName",
+		"type": "string",
+		"column": "Object Name",
+		"width": "200px",
+		"alignment": "left",
+		"hint": "Название объекта",
+		"visible": true,
+		"position": 11
+	},
+	{
+		"identifier": "organization.name",
+		"type": "object",
+		"column": "Organization",
+		"width": "199px",
+		"alignment": "left",
+		"hint": "Организация",
+		"visible": true,
+		"position": 12
+	}
+]

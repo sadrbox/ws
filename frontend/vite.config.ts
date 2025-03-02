@@ -16,10 +16,11 @@ export default defineConfig({
 			scss: {
 				additionalData: `
 					@use "src/styles/variables.scss" as *;
-					@use "src/styles/index.scss" as *;
 				`,
 				// includePaths: [path.resolve(__dirname, "src/styles")],
 			},
 		},
 	},
 });
+
+// @use "src/styles/index.scss" as *;

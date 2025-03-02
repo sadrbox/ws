@@ -1,11 +1,12 @@
-import { FC, useMemo, useState } from 'react';
-import InputField from '../../components/ui/Field/InputField';
+import { FC, useState } from 'react';
+import styles from '../styles.module.scss';
+import InputField from 'src/components/ui/Field/InputField';
 import ActivityHistory from '../ActivityHistory';
-import styles from "../styles.module.scss";
+
 import { crypto } from 'src/utils/main.module';
 
+const Sales: FC = () => {
 
-const ContractFORM: FC = () => {
 
   const initialFormID = crypto.randomUUID()
   const [formID, setFormID] = useState<string>(initialFormID);
@@ -29,4 +30,4 @@ const ContractFORM: FC = () => {
   );
 };
 
-export default ContractFORM;
+export default Sales;

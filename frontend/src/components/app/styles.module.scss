@@ -1,3 +1,29 @@
+@import url("https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;500;600&display=swap&subset=cyrillic");
+/* @import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap"); */
+* {
+	font-family: "PT Sans";
+	/*  */
+	/* font-family: "Inter", sans-serif; */
+	//font-weight: 800;
+	//font-style: normal;
+}
+
+html,
+body {
+	user-select: none;
+	font-size: 13px;
+	margin: 0;
+	padding: 0;
+	/* height: 100dvh; */
+	/* width: 100vw; */
+}
+
+#root {
+	position: relative;
+	padding: 0px;
+	/* height: 100dvh; */
+}
+
 .Screen {
 	// height: 99dvh;
 	container-type: size;
@@ -13,7 +39,7 @@
 }
 
 .NavbarWrapper {
-	padding: 3px;
+	padding: 6px;
 	border-bottom: 1px solid $color10;
 	display: flex;
 	align-items: center;
@@ -28,7 +54,7 @@
 		}
 	}
 }
-.PaneWrapper {
+.PaneGroupWrapper {
 	border: 0px solid $color10;
 	background-color: $color30;
 	// height: 92dvh;
@@ -53,6 +79,7 @@
 		// opacity: 1;
 		// visibility: visible;
 		display: flex;
+		// flex-direction: column;
 	}
 }
 .PaneTabWrapper {
@@ -79,7 +106,7 @@
 		height: 26px;
 		font: 13px "Segoe UI";
 		background: $color30;
-		// color: $color3;
+		color: $color6;
 		display: flex;
 		justify-content: left;
 		align-items: center;
@@ -88,7 +115,7 @@
 		padding: 0 12px;
 		cursor: pointer;
 		margin-right: -5px; /* Наложение краев с учетом границы */
-		transition: height 1ms;
+		// transition: height 1ms;
 		// position: relative;
 		z-index: 1;
 		// &::after {
@@ -118,7 +145,7 @@
 		}
 	}
 	.ActivePaneTab {
-		height: 40px;
+		height: 33px;
 		margin-top: -1px;
 		background-color: $color30;
 		// border: 1px solid $color60;

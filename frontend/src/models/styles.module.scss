@@ -1,4 +1,4 @@
-.Form {
+.FormWrapper {
 	width: 100%;
 	display: grid;
 	grid-template-columns: 1fr;
@@ -17,7 +17,7 @@
 	width: 100%;
 	margin-top: 20px;
 	container-type: size;
-	flex-direction: column;
+	// flex-direction: column;
 	flex: 1;
 	display: flex; // border: 1px solid red;
 	// height: 50cqi;

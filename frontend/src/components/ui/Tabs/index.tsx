@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from "react";
 import styles from "./styles.module.scss";
-import { useAppContext } from "src/components/app/AppContext";
+import { useAppContext } from "src/components/app/AppContextProvider";
 import { TTabs } from "./types";
 import { IoMdClose } from "react-icons/io";
 import { getMockTabs } from "./dev";

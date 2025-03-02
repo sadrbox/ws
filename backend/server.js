@@ -99,6 +99,20 @@ app.post("/json", async (req, res) => {
 	}
 });
 
+app.get("api/json", async (req, res) => {
+	try {
+		const activities = await prisma.activityHistory.findMany({
+			include: { organization: true },
+		});
+		res.status(200).json(activities);
+	} catch (error) {
+		console.error("Error fetching activity history:", error);
+		res
+			.status(500)
+			.json({ message: "Error fetching data.", error: error.message });
+	}
+});
+
 app.get("/json", async (req, res) => {
 	try {
 		const activities = await prisma.activityHistory.findMany({
