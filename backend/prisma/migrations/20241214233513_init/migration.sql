@@ -32,7 +32,7 @@ CREATE TABLE `Organization` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `ActivityHistory` (
+CREATE TABLE `ActivityHistories` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `createDate` DATETIME(3) NOT NULL,
     `action` VARCHAR(191) NOT NULL,
@@ -50,4 +50,4 @@ CREATE TABLE `ActivityHistory` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
-ALTER TABLE `ActivityHistory` ADD CONSTRAINT `ActivityHistory_bin_fkey` FOREIGN KEY (`bin`) REFERENCES `Organization`(`bin`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `ActivityHistories` ADD CONSTRAINT `ActivityHistories_bin_fkey` FOREIGN KEY (`bin`) REFERENCES `Organization`(`bin`) ON DELETE RESTRICT ON UPDATE CASCADE;

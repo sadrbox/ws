@@ -1,7 +1,7 @@
 import { FC, useState } from 'react';
 import styles from '../styles.module.scss';
 import InputField from 'src/components/ui/Field/InputField';
-import ActivityHistory from '../ActivityHistory';
+import ActivityHistories from '../ActivityHistories';
 
 import { crypto } from 'src/utils/main.module';
 
@@ -23,7 +23,7 @@ const Sales: FC = () => {
         {/* <hr style={{ height: '20px' }} /> */}
       </div>
       <div className={styles.FormTable}>
-        <ActivityHistory />
+        <ActivityHistories />
       </div>
 
     </div>

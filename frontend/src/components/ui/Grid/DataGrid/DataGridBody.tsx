@@ -17,7 +17,7 @@ type TProps = {
 
 const DataGridTabBody: FC<TProps> = ({ loading }) => {
 
-  const { context } = useDataGridContext();
+  const { context, context: { rows } } = useDataGridContext();
 
   const columns = context?.columns.filter((col) => col.visible);
 

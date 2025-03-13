@@ -15,6 +15,7 @@ const NavigationPage: FC = () => {
 
       <h3>Документы</h3>
       <ul className={styles.PageList}>
+        <li onClick={() => openPane('Counterparties')}>Контрагенты</li>
         <li onClick={() => openPane('Contracts')}>Договора</li>
         <li onClick={() => openPane('Sales')}>Реализация товара и услуг</li>
         <li onClick={(() => openPane('Receipts'))}>Поступление товара и услуг</li>

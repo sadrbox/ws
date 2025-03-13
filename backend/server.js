@@ -5,10 +5,12 @@ import { PrismaClient } from "@prisma/client";
 import { parse, formatISO } from "date-fns";
 import { formatIpAddress } from "./utils/format.js";
 import { getLocalIP } from "./utils/module.js";
+import apiv1 from "./api/v1.js";
 
 const prisma = new PrismaClient();
 const app = express();
 
+app.use("/api/v1", apiv1);
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -34,20 +36,17 @@ app.post("/users", async (req, res) => {
 	}
 });
 
-app.get("/counterparties", async (req, res) => {
-	const counterparties = await prisma.counterparties.findMany();
-	res.json({ counterparties });
-});
-
 app.get("/", (req, res) => {
 	res.status(200).json({ message: "JSON успешно получен!" });
 });
 
 app.post("/json", async (req, res) => {
+	console.log(JSON.stringify(req.body, null, 2));
+
 	const {
 		actionDate,
 		actionType,
-		organization: { name: organizationName, bin },
+		organization: { shortName, bin },
 		user: { userName, host, ip },
 		object: { id: objectId, name: objectName, type: objectType },
 		props,
@@ -68,9 +67,11 @@ app.post("/json", async (req, res) => {
 	try {
 		const transaction = await prisma.$transaction(async (prisma) => {
 			const existingOrganization = await prisma.organization.upsert({
-				where: { bin },
+				where: {
+					OR: [{ bin: bin || undefined }, { shortName }],
+				},
 				update: {},
-				create: { name: organizationName, bin },
+				create: { shortName, bin },
 			});
 
 			return await prisma.activityHistory.create({
@@ -90,7 +91,7 @@ app.post("/json", async (req, res) => {
 			});
 		});
 
-		console.log(transaction);
+		// console.log(transaction);
 		res.status(200).json({ message: "JSON успешно получен!" });
 	} catch (error) {
 		res
@@ -115,7 +116,18 @@ app.get("api/json", async (req, res) => {
 
 app.get("/json", async (req, res) => {
 	try {
+		const { bin, shortName } = req.query;
 		const activities = await prisma.activityHistory.findMany({
+			where: {
+				OR: [
+					{ bin: bin || undefined }, // Если `bin` есть
+					{
+						organization: {
+							shortName: bin ? undefined : shortName, // Если `bin` пустой, ищем по `shortName`
+						},
+					},
+				],
+			},
 			include: { organization: true },
 		});
 		res.status(200).json(activities);

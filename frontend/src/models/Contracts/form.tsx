@@ -1,6 +1,6 @@
 import { FC, useMemo, useState } from 'react';
 import InputField from '../../components/ui/Field/InputField';
-import ActivityHistory from '../ActivityHistory';
+import ActivityHistories from '../ActivityHistories';
 import styles from "../styles.module.scss";
 import { crypto } from 'src/utils/main.module';
 
@@ -22,7 +22,7 @@ const ContractFORM: FC = () => {
         {/* <hr style={{ height: '20px' }} /> */}
       </div>
       <div className={styles.FormTable}>
-        <ActivityHistory />
+        <ActivityHistories />
       </div>
 
     </div>

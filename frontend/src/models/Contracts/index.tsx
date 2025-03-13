@@ -17,8 +17,8 @@ const getResponseData = async (signal: AbortSignal) => {
   }
 };
 
-const Contracts: FC = () => {
-  const name = Contracts.name;
+const Contract: FC = () => {
+  const name = Contract.name;
   const [responseData, setResponseData] = useState<TDataItem[] | null>(null);
   const [rows, setRows] = useState<TDataItem[]>([]);
   const [columns, setColumns] = useState<TColumn[]>(getModelColumns(columnsJson, name));
@@ -72,4 +72,4 @@ const Contracts: FC = () => {
   );
 };
 
-export default Contracts;
+export default Contract;

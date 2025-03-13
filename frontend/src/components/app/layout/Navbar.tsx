@@ -15,7 +15,7 @@ const Navbar: FC = () => {
       <a href="#" className={styles.NavbarItem} onClick={() => openPane('NavigationPage')}>
         Навигация
       </a>
-      <a href="#" className={styles.NavbarItem} onClick={() => openPane('ActivityHistory')}>
+      <a href="#" className={styles.NavbarItem} onClick={() => openPane('ActivityHistories')}>
         История активности
       </a>
       <a href="#" className={styles.NavbarItem} onClick={() => openPane('ContractFORM')}>

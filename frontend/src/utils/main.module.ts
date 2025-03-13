@@ -34,3 +34,15 @@ export const crypto = {
 		);
 	},
 };
+// Проверка доступности сервера ///////////////////////////////////////////////////////////////
+export const checkServerAvailability = async (
+	url: string,
+	signal: AbortSignal
+) => {
+	try {
+		const response = await fetch(url, { method: "HEAD", signal });
+		return response.ok;
+	} catch {
+		return false;
+	}
+};

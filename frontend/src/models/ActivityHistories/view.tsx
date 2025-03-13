@@ -10,7 +10,7 @@ import { getTranslation } from "src/i18/index"
 
 
 
-type TPropsActivityHistoryView = {
+type TPropsActivityHistoriesView = {
   id?: string | number;
 }
 
@@ -18,7 +18,7 @@ type TProps = {
   [key: string]: string[] | string; // props могут быть как строкой, так и массивом строк
 };
 
-type TActivityHistory = {
+type TActivityHistories = {
   id: number;
   actionDate: string;
   actionType: string;
@@ -33,8 +33,8 @@ type TActivityHistory = {
   props: TProps; // props — это объект, где ключи могут быть строками, а значения могут быть строками или массивами строк
 };
 
-const ActivityHistoryView: FC<TPropsActivityHistoryView> = ({ id }) => {
-  const [data, setData] = useState<TActivityHistory | null>(null);
+const ActivityHistoriesView: FC<TPropsActivityHistoriesView> = ({ id }) => {
+  const [data, setData] = useState<TActivityHistories | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,4 +101,4 @@ const ActivityHistoryView: FC<TPropsActivityHistoryView> = ({ id }) => {
   };
 }
 
-export default ActivityHistoryView;
+export default ActivityHistoriesView;

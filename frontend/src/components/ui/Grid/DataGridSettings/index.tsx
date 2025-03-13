@@ -50,6 +50,7 @@ const DataGridSettings: FC<TProps> = ({ props: { name, columns } }) => {
       setGridColumns((prev) => {
         const oldIndex = prev.findIndex((col) => col.identifier === active.id);
         const newIndex = prev.findIndex((col) => col.identifier === over?.id);
+        // console.log({ oldIndex, newIndex })
         return arrayMove(prev, oldIndex, newIndex);
       });
     }

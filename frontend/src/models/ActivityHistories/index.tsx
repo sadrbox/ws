@@ -1,19 +1,18 @@
-import { useState, FC, useEffect, useMemo } from "react";
+import { useState, FC, useEffect, useMemo, useCallback } from "react";
 import columnsJson from "./columns.json";
-import { TColumn, TDataItem, TModelProps, TOrder } from "src/components/ui/Grid/types";
+import { TDataItem, TModelProps, TOrder } from "src/components/ui/Grid/types";
 import { getModelColumns, sortGridRows } from "src/components/ui/Grid/services";
 import Grid from "src/components/ui/Grid";
 import { checkServerAvailability } from "src/utils/main.module";
-// import Counterparties from 'src/models/Counterparties';
-
 
 const getResponseData = async (signal: AbortSignal) => {
-  const url = "http://192.168.1.112:3000/api/v1/counterparties";
+  const url = "http://192.168.1.112:3000/json";
 
   if (!(await checkServerAvailability(url, signal))) {
     console.warn("Сервер недоступен.");
     return null;
   }
+
   try {
     const response = await fetch(url, { signal });
     if (!response.ok) throw new Error(`Ошибка ${response.status}: ${response.statusText}`);
@@ -26,66 +25,57 @@ const getResponseData = async (signal: AbortSignal) => {
   }
 };
 
-
-
-const Counterparties: FC = () => {
-  const name = Counterparties.name;
-  const [responseData, setResponseData] = useState<TDataItem[] | null>(null);
+const ActivityHistories: FC = () => {
+  const name = ActivityHistories.name;
   const [rows, setRows] = useState<TDataItem[]>([]);
-  const [columns, setColumns] = useState<TColumn[]>(getModelColumns(columnsJson, name));
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [order, setOrder] = useState<TOrder>({
     columnID: "actionDate",
     direction: "desc",
   });
 
+  // Колонки зависят от состояния isLoading
+  const columns = useMemo(() => getModelColumns(columnsJson, name), [isLoading]);
 
-  const loadDataGrid = async () => {
+  // Загрузка данных
+  const loadDataGrid = useCallback(async () => {
     const controller = new AbortController();
     setIsLoading(true);
+
     try {
       const response = await getResponseData(controller.signal);
-
-      if (response !== null) {
-        setResponseData(response);
+      if (response) {
+        // Сортируем данные сразу после получения
+        // console.log(response)
+        setRows(sortGridRows(response, order) || []);
+      } else {
+        setRows([]);
       }
     } finally {
-      if (!controller.signal.aborted) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
-  };
+  }, [order]); // Зависимость от order для корректной сортировки
 
+  // Загружаем данные при монтировании и изменении порядка сортировки
   useEffect(() => {
-    setColumns(getModelColumns(columnsJson, name));
-  }, [isLoading])
+    loadDataGrid();
+  }, [loadDataGrid]);
 
-  // useEffect(() => {
-  //   loadDataGrid();
-  // }, [order]); // Загружаем данные один раз при монтировании
 
-  useEffect(() => {
-    if (responseData) {
 
-      setRows(sortGridRows(responseData, order) || []);
-    }
-  }, [responseData, order]); // Теперь сортировка обновляется при загрузке новых данных
-
+  // Мемоизация пропсов для Grid
   const props = useMemo<TModelProps>(
     () => ({
       name,
       rows,
       columns,
-      actions: { loadDataGrid, setColumns }, // `loadDataGrid` больше не нужен
+      actions: { loadDataGrid }, // setColumns не используется
       states: { isLoading, setIsLoading, order, setOrder },
     }),
-    [rows, order, isLoading, columns]
+    [rows, columns, isLoading, loadDataGrid, order, name]
   );
 
-
-  return (
-    <Grid props={props} />
-  );
+  return <Grid props={props} />;
 };
 
-export default Counterparties;
+export default ActivityHistories;

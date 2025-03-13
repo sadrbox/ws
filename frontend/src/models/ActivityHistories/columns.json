@@ -110,7 +110,7 @@
 		"position": 11
 	},
 	{
-		"identifier": "organization.name",
+		"identifier": "organization.shortName",
 		"type": "object",
 		"column": "Organization",
 		"width": "199px",

@@ -1,10 +1,10 @@
 import { useState, FC, useEffect, useCallback } from 'react';
 import { EActiveGrid, TModelProps } from './types';
-import DataGrid from './DataGrid/index';
+// import DataGrid from './DataGrid/index';
 import styles from './styles.module.scss';
 import { SlSettings } from "react-icons/sl";
 import { TbFilter } from "react-icons/tb";
-import DataGridSettings from './DataGridSettings';
+// import DataGridSettings from './DataGridSettings';
 
 type TProps = {
   props: TModelProps;

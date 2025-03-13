@@ -41,7 +41,6 @@ const DataGridTabBodyRow: FC<TProps> = ({ countID, rowID, columns, row, loading 
   }
 
 
-
   return (
     <tr data-count-id={countID} data-row-id={rowID} onClick={() => onClickRow(rowID)}>
       {columns && columns.filter(column => column.visible).map((column: TColumn, columnIndex: number) => {
@@ -49,46 +48,47 @@ const DataGridTabBodyRow: FC<TProps> = ({ countID, rowID, columns, row, loading 
         if (columns.find(el => rowsKey.includes(el.identifier)))
           if (column.type === 'string' || column.type === "number" || column.type === 'boolean' || column.type === 'date' || column.type === 'object') {
             const value = getFormatColumnValue(row, column);
-            if (typeof (value) === "string")
-              if (column.type === 'boolean') {
-                return (
-                  <td key={columnIndex}>
-                    <div style={{ justifyItems: column?.alignment }} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.TabField}>
-                      <DataGridTabBodyRowCheckbox countID={countID} rowID={rowID} />
-                    </div>
-                  </td>)
-              } else if (column.type === 'string' || column.type === 'number') {
-                return (
-                  <td key={columnIndex} onClick={() => setActiveRow(rowID)}>
-                    <div style={getTextAlignByColumnType(column)} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.TabField}>
-                      <span>{value}</span>
-                    </div>
-                  </td>)
-              } else if (column.type === 'object') {
-                // console.log(value)
-                return (
-                  <td key={columnIndex} onClick={() => setActiveRow(rowID)}>
-                    <div style={getTextAlignByColumnType(column)} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.TabField}>
-                      <span>{value}</span>
-                    </div>
-                  </td>)
-              }
-              else if (column.type === "date") {
-                return (
-                  <td key={columnIndex} onClick={() => setActiveRow(rowID)}>
-                    <div style={getTextAlignByColumnType(column)} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.TabField}>
-                      <span>{value}</span>
-                    </div>
-                  </td>)
-              }
-              else {
-                return (
-                  <td key={columnIndex} onClick={() => setActiveRow(rowID)}>
-                    <div style={getTextAlignByColumnType(column)} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.TabField}>
-                      <span>{value}</span>
-                    </div>
-                  </td>)
-              }
+            // if (typeof (value) === "string")
+            if (column.type === 'boolean') {
+              return (
+                <td key={columnIndex} style={{ width: column.width, maxWidth: column.width }}>
+                  <div style={{ justifyItems: column?.alignment }} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.GridBodyColumn}>
+                    <DataGridTabBodyRowCheckbox countID={countID} rowID={rowID} />
+                  </div>
+                </td>)
+            } else if (column.type === 'string' || column.type === 'number') {
+              return (
+                <td key={columnIndex} onClick={() => setActiveRow(rowID)} >
+                  <div style={getTextAlignByColumnType(column)} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.GridBodyColumn}>
+                    <span>{value}</span>
+                  </div>
+                </td>)
+            } else if (column.type === 'object') {
+              // console.log(column.type)
+              return (
+                <td key={columnIndex} onClick={() => setActiveRow(rowID)}>
+                  <div style={getTextAlignByColumnType(column)} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.GridBodyColumn}>
+                    <span>{value}</span>
+                  </div>
+                </td>)
+            }
+            else if (column.type === "date") {
+              return (
+                <td key={columnIndex} onClick={() => setActiveRow(rowID)}>
+                  <div style={getTextAlignByColumnType(column)} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.GridBodyColumn}>
+                    <span>{value}</span>
+                  </div>
+                </td>)
+            }
+            else {
+              return (
+                <td key={columnIndex} onClick={() => setActiveRow(rowID)}>
+                  <div style={getTextAlignByColumnType(column)} className={isActiveRow(rowID) ? styles.TabFieldActive : styles.GridBodyColumn}>
+                    <span>{value}</span>
+                  </div>
+                </td>)
+            }
+            // console.log(typeof (value))
           }
       }
       )}

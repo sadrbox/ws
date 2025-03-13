@@ -1,9 +1,12 @@
 import { FC, useCallback } from "react";
-import { FaSortAmountDownAlt } from "react-icons/fa";
 import { useDataGridContext } from "./DataGridContextProvider";
 import { TColumn } from "../types";
 import { getTranslateColumn } from "src/i18";
 import DataGridTabHeaderCheckbox from "./DataGridHeaderCheckbox";
+import styles from "../styles.module.scss";
+// import Grid from '../index';
+
+
 
 const DataGridTabHeader: FC = () => {
   const {
@@ -36,7 +39,7 @@ const DataGridTabHeader: FC = () => {
               ...(column.type !== "string" && { minWidth: column.width }),
             };
 
-            if (column.identifier === "switcher") {
+            if (column.type === "boolean") {
               return (
                 <th key={keyID} style={styleWidth}>
                   <div style={{ justifyItems: "center" }}>
@@ -48,17 +51,20 @@ const DataGridTabHeader: FC = () => {
 
             const isActive = columnID === column.identifier;
             const iconStyle = {
+              // border: '1px solid red',
               justifySelf: "end",
               marginLeft: "10px",
-              color: isActive ? "#444" : "transparent",
+              color: isActive ? "#666" : "transparent",
               transform: direction === "asc" ? "none" : "scale(1,-1)",
             };
 
             return (
               <th key={keyID} style={styleWidth} onClick={() => handleSorting(column.identifier)}>
-                <div>
+                <div className={styles.GridHeaderColumn}>
                   <span>{getTranslateColumn(column)}</span>
-                  <FaSortAmountDownAlt size={17} style={iconStyle} />
+                  <svg style={iconStyle} width="18" height="18" viewBox="8 4 8 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path style={{}} d="M12 8V10M12 14L9 11M12 14L15 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </div>
               </th>
             );

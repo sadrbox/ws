@@ -101,7 +101,7 @@ export function getColumnWidth<T extends TColumn>(
 export function getTextAlignByColumnType(column: TColumn): CSSProperties {
 	switch (column.type) {
 		case "number":
-			return { textAlign: "right" };
+			return { textAlign: "right" }; // align-items - не подойдет!
 		case "string":
 			return { textAlign: "left" };
 		case "switcher":

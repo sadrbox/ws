@@ -1,5 +1,5 @@
 {
-	"Contracts": "Договора",
+	"Contract": "Договора",
 	"welcome": "Добро пожаловать",
 	"login": "Войти",
 	"logout": "Выйти",
@@ -70,8 +70,9 @@
 	"stock": "Запас",
 	"brand": "Бренд",
 	"sku": "Артикул",
-	"fullname": "Полное наименование",
 	"bin": "БИН",
+	"shortName ": "Наименование",
+	"displayName": "Полное наименование",
 
 	"warrantyInformation": "Информация о гарантии",
 	"shippingInformation": "Информация о доставке",

@@ -25,17 +25,56 @@ model User {
   fullname   String?
 }
 
-model Counterparty {
-  id   Int     @id @default(autoincrement())
-  name String
-  bin  String?
+model Organization {
+  id                Int               @id @default(autoincrement())
+  shortName         String
+  displayName       String            @default("")
+  bin               String?           @unique
+  contracts         Contract[]
+  contacts          Contact[]
+  activityHistories ActivityHistory[]
 }
 
-model Organization {
-  id              Int               @id @default(autoincrement())
-  name            String
-  bin             String?           @unique
-  ActivityHistory ActivityHistory[]
+model Counterparty {
+  id          Int        @id @default(autoincrement())
+  shortName   String
+  displayName String     @default("")
+  bin         String?    @unique
+  contracts   Contract[]
+  contacts    Contact[]
+}
+
+model Contract {
+  id             Int       @id @default(autoincrement())
+  shortName      String
+  contractNumber String?
+  contractText   String?   @db.Text
+  startDate      DateTime?
+  endDate        DateTime?
+
+  Organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId Int?
+  Counterparty   Counterparty? @relation(fields: [counterpartyId], references: [id])
+  counterpartyId Int?
+}
+
+model Contact {
+  id             Int           @id @default(autoincrement())
+  value          String
+  contactTypes   ContactType   @relation(fields: [contactTypeId], references: [id])
+  contactTypeId  Int
+  ownerId        Int
+  ownerType      String
+  organizationId Int?
+  counterpartyId Int?
+  Organization   Organization? @relation(fields: [organizationId], references: [id])
+  Counterparty   Counterparty? @relation(fields: [counterpartyId], references: [id])
+}
+
+model ContactType {
+  id        Int       @id @default(autoincrement())
+  shortName String
+  contacts  Contact[]
 }
 
 model ActivityHistory {

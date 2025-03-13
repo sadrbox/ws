@@ -1,6 +1,5 @@
 import { FC, useEffect, useMemo, useState } from 'react';
 import DataGridContextProvider from './DataGridContextProvider';
-import { IoAddCircleOutline, IoRemoveCircleOutline } from "react-icons/io5";
 import { SlRefresh } from "react-icons/sl";
 import styles from '../styles.module.scss';
 import DataGridHeader from './DataGridHeader';
@@ -90,11 +89,9 @@ const DataGrid: FC<TProps> = ({ props: { name, rows, columns, actions: { loadDat
       <div className={styles.GridPanel}>
         <div className={styles.colGroup}>
           <button className={styles.Button}>
-            {/* <IoAddCircleOutline size={17} strokeWidth={5} /> */}
             <span>Добавить</span>
           </button>
           <button className={styles.Button}>
-            {/* <IoRemoveCircleOutline size={17} strokeWidth={5} /> */}
             <span>Удалить</span>
           </button>
         </div>
@@ -109,7 +106,6 @@ const DataGrid: FC<TProps> = ({ props: { name, rows, columns, actions: { loadDat
           </button>
         </div>
       </div>
-      {/* <hr /> */}
       <div className={styles.GridSrollWrapper}>
         <table>
           <DataGridHeader />

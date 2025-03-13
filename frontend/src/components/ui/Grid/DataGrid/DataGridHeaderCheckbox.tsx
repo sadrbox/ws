@@ -1,24 +1,22 @@
-import React, { useEffect } from 'react';
 import { useDataGridContext } from './DataGridContextProvider';
-
+import styles from "../styles.module.scss"
 
 const DataGridTabHeaderCheckbox = () => {
   const { context } = useDataGridContext();
+  const { isAllChecked, setIsAllChecked } = context?.states;
 
   function isCheckedAllRows() {
-    return context?.states?.isAllChecked ?? false;
+    return isAllChecked ?? false;
   }
   function setCheckedAllRows() {
-    if (context?.states?.setIsAllChecked) {
-      const setIsAllChecked = context?.states?.setIsAllChecked;
+    if (setIsAllChecked)
       setIsAllChecked((prev) => !prev)
-    }
   }
 
   return (
-    <>
+    <label className={styles.LabelForCheckbox} htmlFor={`selectOption_All`}>
       <input type="checkbox" name={`selectOption_All`} checked={isCheckedAllRows()} onChange={() => setCheckedAllRows()} />
-    </>
+    </label>
   );
 };
 
