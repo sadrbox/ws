@@ -1,14 +1,13 @@
 import { useState, FC, useEffect, useMemo, useCallback } from "react";
 import columnsJson from "./columns.json";
-import { TDataItem, TOrder } from "src/components/ui/Grid/types";
+import { TDataItem, TypeModelProps, TOrder } from "src/components/ui/Table/types";
 import { getModelColumns, sortGridRows } from "src/components/ui/Grid/services";
-import Table from "src/components/ui/Table";
-import { TypeModelProps } from "src/components/ui/Table/types";
 import { checkServerAvailability } from "src/utils/main.module";
-// import Contracts from 'src/models/Contracts';
+import Table from "src/components/ui/Table";
+// import Organizations from 'src/models/Organizations';
 
 const getResponseData = async (signal: AbortSignal, currentPage: number, limit: number) => {
-  const url = `http://192.168.1.112:3000/api/v1/Contracts?page=${currentPage}&limit=${limit}`;
+  const url = `http://192.168.1.112:3000/api/v1/organizations?page=${currentPage}&limit=${limit}`;
 
   if (!(await checkServerAvailability(url, signal))) {
     console.warn("Сервер недоступен.");
@@ -27,8 +26,8 @@ const getResponseData = async (signal: AbortSignal, currentPage: number, limit: 
   }
 };
 
-const Contracts: FC = () => {
-  const name = Contracts.name;
+const Organizations: FC = () => {
+  const name = Organizations.name;
   const [rows, setRows] = useState<TDataItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -87,4 +86,4 @@ const Contracts: FC = () => {
   return <Table props={props} />;
 };
 
-export default Contracts;
+export default Organizations;

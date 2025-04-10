@@ -1,0 +1,723 @@
+.animationLoop {
+	animation: spin 3s linear infinite;
+}
+
+@keyframes spin {
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+.animationLoop {
+	animation: spin 1s linear infinite;
+}
+
+.blur5 {
+	filter: blur(5px);
+}
+
+.GridWrapper {
+	display: flex;
+	// grid-template-rows: 50px 50px auto;
+	container-type: size;
+	flex-direction: column;
+	flex: 1;
+	// flex-shrink: 1;
+	// height: 100%;
+	// height: calc(70dvh - 80px); /* Автоматическая высота по содержимому */
+	// display: grid;
+	// grid-template-rows: auto auto auto; /* Верхний контент + таблица */
+	min-height: 300px;
+	// flex-grow: 1;
+	// position: relative;
+	// min-height: 500px;
+	// min-height: 0;
+	// max-height: 70%;
+	// height: calc(100vh - 99px);
+	// background-color: $color60;
+	transition: all 0.5ms ease;
+	// display: contents;
+	// width: 100%;
+	// height: 100%; /* Или любую нужную высоту 100cqmin*/
+	// display: grid;
+	// grid-auto-flow: column;
+	// flex-direction: column;
+	// margin: 100px 100px 0px 100px;
+	// margin: 6px;
+	// padding: 6px;
+	// border: 1px solid $color10;
+	border-radius: $BRadius;
+}
+
+.TabHeader {
+	// background-color: $color1;
+}
+
+.GridPanel,
+.TabHeader {
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	// background: transparent;
+	// max-height: 38px;
+	// margin-bottom: 4px;
+	// padding-bottom: 4px;
+	// border-bottom: 1px solid $color30;
+	// background-color: red;
+	gap: 8px;
+	margin: 3px 0px;
+}
+
+.GridSrollWrapper {
+	height: 100%;
+	// container-type: size;
+	// display: grid;
+	// grid-template-rows: auto;
+	// position: static;
+	// left: 0;
+	// right: 0;
+	// top: 0;
+	// bottom: 0;
+	// display: flex;
+	// flex-grow: 1;
+	// height: 100px;
+	// min-height: 0;
+	// flex: 1;min-height: 0;
+	margin: 3px 0px;
+	// height: calc(100vh - 70px);
+	// height: auto;
+	// display: grid;
+	// grid-template-rows: repeat(auto-fill, minmax(100px, 1fr));
+	background-color: #fff;
+	// margin: 4px 4px 4px 4px;
+	// width: auto;
+	// background-color: red;
+	// padding: 4px;
+	// border: 1px solid $color30;
+	scroll-behavior: smooth;
+	// max-width: 100vw;
+	// max-height: 90vh; /* Высота контейнера */
+	overflow: auto; /* Прокрутка по вертикали */
+	// border-top: 1px solid $color10;
+	// border-bottom: 1px solid $color10;
+	// border-right: 1px solid $color10;
+	border: 1px solid $color10;
+	// border-bottom: 0px;
+	// box-shadow: 0px 0px 2px $color6;
+	box-shadow: inset 0 0 4px $color30;
+	border-radius: $BRadius;
+}
+
+table {
+	border-collapse: collapse;
+	height: 100%;
+	width: 100%;
+	// flex: 1;
+	table-layout: fixed; // для чего нужен ?
+	// table-layout: auto;
+	position: relative;
+}
+
+.onScrollTab {
+	box-shadow: 0px 1px 10px $color6;
+	// box-shadow: 0px 0px 0px red;
+	// border: 3px solid red;
+	transition: box-shadow 1s ease-out;
+}
+
+thead {
+	// display: inline;
+	background-color: $color30;
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	// border-bottom: 1px solid red;
+
+	tr {
+		th {
+			padding: 0px;
+			font-weight: 500;
+			// padding: 2px 0 3px 0;
+			user-select: none;
+			cursor: default;
+			// white-space: nowrap;
+			// border-right: 0px solid $color10;
+			border-left: 1px solid $color10; // need
+			border-bottom: 0px;
+			// overflow: hidden;
+			// background-color: $color30;
+			// width: max-content;
+			// display: grid;
+			// justify-content: center;
+			&:first-child {
+				border-left: 0px;
+			}
+			&:last-child {
+				border-right: 0px;
+			}
+			.GridHeaderColumn {
+				margin: 1px;
+				display: grid;
+				grid-template-rows: 28px;
+				grid-auto-flow: column;
+				grid-template-columns: 1fr;
+				align-items: center;
+				justify-items: start;
+				overflow: hidden;
+				white-space: nowrap;
+				text-overflow: ellipsis;
+				border: 1px solid transparent;
+				// grid-template-columns: 1fr auto; /* Делаем элемент гибким */
+				// max-width: 100%;
+				// justify-content: center;
+				// align-items: stretch;
+
+				// align-items: center;
+				// border: 1px solid transparent;
+				cursor: default;
+				// max-width: 150px;
+				// text-overflow: ellipsis;
+				span {
+					padding: 0px 5px;
+					// z-index: -999;
+					// position: absolute;
+					// align-self: center;
+					// vertical-align: top;
+					line-height: 20px;
+					// display: grid;
+					overflow: hidden;
+					// background-color: red;
+					white-space: nowrap;
+					text-overflow: ellipsis;
+					// font-size: 14px;
+					// margin: auto 0;
+				}
+			} // .GridHeaderColumn
+
+			// div {
+			// 	// height: 27px;
+			// 	display: grid;
+			// 	grid-auto-flow: column;
+			// 	align-items: center;
+			// 	text-align: left;
+			// 	padding: 4px 7px;
+			// }
+		}
+	}
+	&::after {
+		margin-bottom: 0px;
+		content: " "; /* Псевдоэлемент нуждается в содержимом */
+		// padding: 2px; /* Отступы */
+		display: block; /* Отображение блока, чтобы отступы работали */
+		position: absolute; /* Позиционирование относительно родителя */
+		bottom: 0; /* Например, расположение внизу */
+		left: 0; /* Сдвиг от левого края */
+		right: 0; /* Сдвиг от правого края, если нужно заполнить */
+		// box-shadow: 0 0 1px 1px $color10;
+		// border-bottom: 22x solid $color10;
+		height: 1px;
+		background: $color5;
+		// transition: box-shadow 1s ease-out;
+		box-shadow: 0px 1px 5px $color6;
+	}
+}
+
+tbody {
+	// background-color: $color60;
+	tr {
+		border-bottom: 1px solid $color34;
+		// &:last-child {
+		//   height: 50px;
+		//   border: 0px !important;
+		// }
+		td {
+			padding: 0px;
+			// width: min-content;
+			border-right: 1px solid $color34;
+			// border-bottom: 1px solid $color10;
+			// border-top: 1px solid $color10;
+			.GridBodyColumn {
+				margin: 1px;
+				display: grid;
+				grid-auto-flow: column;
+				grid-template-rows: 22px;
+				grid-template-columns: 1fr;
+				align-items: center;
+				white-space: nowrap;
+				text-overflow: ellipsis;
+				// white-space: nowrap;
+				// text-overflow: ellipsis;
+				// grid-template-columns: 1fr auto; /* Делаем элемент гибким */
+				// max-width: 100%;
+				// justify-content: center;
+				// align-items: stretch;
+
+				// align-items: center;
+				border: 1px solid transparent;
+				cursor: default;
+				// max-width: 150px;
+				// text-overflow: ellipsis;
+				span {
+					padding: 0px 5px;
+					line-height: 20px;
+					// align-self: center;
+					// vertical-align: top;
+					// line-height: normal;
+					// display: grid;
+					overflow: hidden;
+					// background-color: red;
+					white-space: nowrap;
+					text-overflow: ellipsis;
+					// font-size: 14px;
+					// margin: auto 0;
+				}
+			} // .GridBodyColumn
+
+			&:first-child {
+				border-left: 0px;
+			}
+			&:last-child {
+				border-right: 0px;
+				// border-bottom: 1px solid $colorPrimaryDark;
+			}
+			// div {
+			// 	display: flex;
+
+			// 	// min-width: 10px;
+			// 	align-items: center;
+			// 	user-select: none;
+			// }
+		}
+		&:last-child {
+			border: 0px solid transparent;
+		}
+	}
+}
+tfoot {
+	// display: inline;
+	background-color: $color30;
+	position: sticky;
+	bottom: 0;
+	z-index: 1;
+
+	border-top: 0px;
+	tr {
+		td {
+			padding: 0px;
+			font-weight: 500;
+			// padding: 2px 0 3px 0;
+			user-select: none;
+			cursor: default;
+			// white-space: nowrap;
+			// border-right: 0px solid $color10;
+			border-left: 1px solid $color10; // need
+			border-top: 0px;
+			border-bottom: 0px;
+			// border-bottom: 4px solid red;
+			// overflow: hidden;
+			// background-color: $color30;
+			// width: max-content;
+			// display: grid;
+			// justify-content: center;
+			&:first-child {
+				border-left: 0px;
+			}
+			&:last-child {
+				border-right: 0px;
+			}
+			.GridFooterColumn {
+				margin: 1px;
+				display: grid;
+				grid-template-rows: 28px;
+				grid-auto-flow: column;
+				grid-template-columns: 1fr;
+				align-items: center;
+				justify-items: start;
+				// overflow: hidden;
+				// white-space: nowrap;
+				// text-overflow: ellipsis;
+				border: 1px solid transparent;
+				border-top: 0px;
+				// grid-template-columns: 1fr auto; /* Делаем элемент гибким */
+				// max-width: 100%;
+				// justify-content: center;
+				// align-items: center;
+
+				// align-items: center;
+				// border: 1px solid transparent;
+				cursor: default;
+				// max-width: 150px;
+				// text-overflow: ellipsis;
+				.FieldSearch {
+					width: 100%;
+					box-sizing: border-box;
+					border: 1px solid $color34;
+					border-radius: $BRadius;
+					height: 25px;
+					padding: 0px 3px;
+					// line-height: 11px;
+
+					&:focus {
+						// outline: none;
+						outline: 2px solid $color2;
+						// box-shadow: 0 0 5px 1px $color2;
+					}
+				}
+			} // .GridHeaderColumn
+
+			// div {
+			// 	// height: 27px;
+			// 	display: grid;
+			// 	grid-auto-flow: column;
+			// 	align-items: center;
+			// 	text-align: left;
+			// 	padding: 4px 7px;
+			// }
+		}
+	}
+	&::before {
+		// margin-bottom: 0px;
+		content: " "; /* Псевдоэлемент нуждается в содержимом */
+		// padding: 2px; /* Отступы */
+		display: block; /* Отображение блока, чтобы отступы работали */
+		position: absolute; /* Позиционирование относительно родителя */
+		top: 0; /* Например, расположение внизу */
+		left: 0; /* Сдвиг от левого края */
+		right: 0; /* Сдвиг от правого края, если нужно заполнить */
+		// box-shadow: 0 0 1px 1px $color10;
+		// border-bottom: 22x solid $color10;
+		height: 1px;
+		background: $color10;
+		// transition: box-shadow 1s ease-out;
+		// box-shadow: 0px -1px 5px 0px $color6;
+	}
+	&::after {
+		// margin-bottom: 0px;
+		content: " "; /* Псевдоэлемент нуждается в содержимом */
+		// padding: 2px; /* Отступы */
+		display: block; /* Отображение блока, чтобы отступы работали */
+		position: absolute; /* Позиционирование относительно родителя */
+		bottom: 0; /* Например, расположение внизу */
+		left: 0; /* Сдвиг от левого края */
+		right: 0; /* Сдвиг от правого края, если нужно заполнить */
+		// box-shadow: 0 0 1px 1px $color10;
+		// border-bottom: 22x solid $color10;
+		height: 1px;
+		background: $color10;
+		// transition: box-shadow 1s ease-out;
+		// box-shadow: 0px 1px 5px 0px $color6;
+	}
+}
+
+.Button {
+	display: flex;
+	align-items: center;
+	// background-color: #fc0;
+	background: linear-gradient(180deg, $color30, $color33, $color34);
+	// background: linear-gradient(180deg, $color30, $color34);
+	border: 1px solid $color5;
+	outline: none;
+	margin: 0;
+	// padding: 6px 6px; /* Увеличен размер кнопки */
+	font-size: 14px;
+	text-align: center;
+	cursor: pointer;
+	border-radius: 3px; /* Увеличен радиус скругления */
+	// box-shadow: 0px 1px 0px 0px rgba($color6, 0.7);
+	// box-shadow: inset 0px 0px 1px $color30, inset 0px 0px 1px $color1;
+	height: 28px;
+	// min-width: 60px;
+	// transition: all 1000ms ease; /* Плавные переходы */
+	// Цвет текста по умолчанию
+	color: $color6;
+
+	&:not(:last-child) {
+		margin-right: 6px;
+	}
+
+	// Оформление для текста в кнопке
+	span {
+		padding: 0 3px;
+		font-weight: normal;
+		line-height: normal;
+		white-space: nowrap;
+		display: flex;
+		align-items: center;
+	}
+	&:hover {
+		// outline: 1px solid $color2;
+		border: 1px solid $color6;
+	}
+	&:active {
+		// background: linear-gradient(180deg, $color34, $color33, $color30);
+		// outline: 1px solid $color6 // border: 1px solid $color6;
+		// background-color: $color2;
+		// box-shadow: inset 0px 1px 3px $color60;
+		// border: 1px solid $color10;
+		box-shadow: 0px 0px 1px 2px rgba($color6, 0.2);
+	}
+}
+
+.ButtonImg {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 28px;
+}
+
+.TabFieldActive {
+	@extend .GridBodyColumn;
+	border: 1px solid $color1 !important;
+	background: $color2;
+}
+
+.LabelForCheckbox {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	margin: 0px;
+	// background: red;
+	// height: 42px;
+	// width: 22px;
+}
+
+input[type="checkbox"] {
+	height: 18px;
+	width: 18px;
+	// border: 9px solid #ccc;
+	// accent-color: $color10;
+	// transform: rotate(45deg);
+	// appearance: none;
+	cursor: default;
+	margin: 0px;
+	// outline: 1px solid blue;
+	// border: 1px solid red;
+	// transition: all 0.3s ease;
+	&:checked {
+		// background-color: #007bff;
+		// border-color: #007bff;
+		// transform: scale(1.1);
+	}
+	&:focus {
+		outline: none;
+		// box-shadow: 0 0 2px $color6;
+		// border: 1px solid $color1;
+		// box-shadow: 0 1px 3px $color5;
+		// border: 1px solid red;
+		// box-shadow: 0px 0px 3px #262626;
+	}
+}
+
+.contextMenu {
+	user-select: none;
+	z-index: 9999;
+	position: absolute;
+	width: 200px;
+	padding: 0px;
+	// outline: 1px solid $colorTheme;
+
+	background-color: $color60;
+	border: 1px solid $color10;
+	border-radius: $BRadius;
+	box-shadow: 0px 0px 3px 0px $color10;
+}
+.contextMenu_list {
+	display: flex;
+	flex-direction: column;
+	// justify-content: space-around;
+	padding: 0px;
+
+	li {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: left;
+		padding: 5px;
+
+		&:not(:last-child) {
+			border-bottom: 1px solid $color30;
+		}
+		&:first-child {
+		}
+		a {
+			display: grid;
+			grid-template-columns: 22px 1fr;
+			align-items: center;
+
+			font-size: 12px;
+
+			&:hover {
+				color: $colorTheme;
+			}
+		}
+	}
+}
+
+hr {
+	padding: 0px;
+	margin: 0px;
+
+	outline: none;
+	border: 0px;
+	border-bottom: 1px solid $color33;
+}
+
+.HeaderName {
+	font-size: 110%;
+	user-select: none;
+	// font-weight: bold;
+	// box-shadow: inset 0 0 3px $color30;
+	background: #fff;
+	border-top: 1px solid $color10;
+	border-left: 1px solid $color10;
+	border-right: 1px solid $color10;
+	border-bottom: 1px solid transparent;
+	padding: 6px 12px 6px 12px;
+	margin: 6px 6px -1px 18px;
+	border-top-left-radius: $BRadius;
+	border-top-right-radius: $BRadius;
+	// position: static;
+	z-index: 2;
+	// clip-path: 2px -5px -10px -20px round 5px;
+}
+
+.FormWrapper {
+	flex: 1;
+	// height: 100%;
+	padding: 6px;
+	margin: 6px;
+	background-color: #fff;
+	scroll-behavior: smooth;
+	overflow: auto; /* Прокрутка по вертикали */
+	border: 1px solid $color10;
+	box-shadow: inset 0 0 3px $color30;
+	border-radius: $BRadius;
+}
+
+.ScrollWrapper {
+	// height: calc(100vh - 30px);
+	// max-height: 100vh;
+	z-index: 1;
+	// display: grid;
+	flex: 1;
+	// width: min-content;
+	// grid-gap: 6px;
+	margin: 0px 6px 6px 6px;
+	padding: 6px;
+	background-color: #fff;
+	scroll-behavior: smooth;
+	// overflow: scroll;
+	overflow: auto; /* Прокрутка по вертикали */
+	border: 1px solid $color10;
+	// box-shadow: inset 0px 0px 6px 5px $color6;
+	border-radius: $BRadius;
+}
+
+.dragging {
+	// background-color: $color2 !important;
+	opacity: 0.6; /* Пример стиля, меняющий прозрачность во время перетаскивания */
+	// transform: scale(1) !important; /* Увеличение размера элемента */
+	// box-shadow: 0 0 3px $color3 !important;	&:hover {
+	// border: 1px solid $color1;
+	// background-color: $color2;
+	// box-shadow: inset 0px 1px 3px $color60;
+}
+
+.CheckboxList {
+	padding: 0;
+	margin: 6px;
+	// width: 333px;
+	// list-style: none;
+	transition: transform 0.2s ease;
+	display: flex;
+	flex-direction: column;
+	// flex: 1 1;
+	li.ListItem {
+		// z-index: 1;
+		display: flex;
+		border: 1px solid $color34;
+		// box-shadow: 0 0 0px 1px $color5;
+		// flex: 1 1 100px;
+		user-select: none;
+		// cursor: grab;
+		margin: 6px 0px;
+		padding: 2px;
+		align-items: center;
+		background-color: $color30;
+		border-radius: $BRadius;
+
+		.DragAndDrop {
+			// cursor: pointer;
+			cursor: grab;
+			// flex: 0 0;
+			display: flex;
+			align-items: center;
+			border-radius: $BRadius;
+			margin-right: 6px;
+			padding: 3px;
+			// justify-items: end;
+			// flex-direction: row;
+			&:hover {
+				// background-color: $color2;
+			}
+		}
+		input[type="checkbox"] {
+			// display: flex;
+			height: 18px;
+			width: 18px;
+			// justify-self: center;
+			// align-self: center;
+			// border: 9px solid #ccc;
+			// accent-color: $color10;
+			// transform: rotate(45deg);
+			// appearance: none;
+			cursor: default;
+			margin: 0px;
+			// outline: 1px solid blue;
+			// border: 1px solid red;
+			// transition: all 0.3s ease;
+			&:checked {
+				// background-color: #007bff;
+				// border-color: #007bff;
+				// transform: scale(1.1);
+			}
+			&:focus ~ label {
+				// height: 16px;
+				// width: 16px;
+				// font-weight: bold;
+				text-decoration: underline;
+			}
+		}
+		label {
+			margin-left: 6px;
+			overflow: hidden;
+			white-space: nowrap;
+			text-overflow: ellipsis;
+		}
+	}
+}
+
+* {
+	&::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+
+	/* Track */
+	&::-webkit-scrollbar-track {
+		// padding-top: 30px;
+		background: $color30;
+	}
+
+	/* Handle */
+	&::-webkit-scrollbar-thumb {
+		// margin-top: 30px;
+		background: $color10;
+		border-radius: $BRadius;
+	}
+
+	/* Handle on hover */
+	&::-webkit-scrollbar-thumb:hover {
+		background: $color10;
+	}
+}

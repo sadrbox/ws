@@ -1,0 +1,58 @@
+$color60: #ffffff;
+$color30: #eee;
+$color33: #ddd;
+$color34: #bbb;
+$color10: #aaa;
+$color5: #888; // $color5: #aaaaaa;rgba(51, 51, 51, 0.1);
+$color51: #666;
+$color6: #222;
+$colorTheme: #6aa3ff;
+$color1: #6aa3ff;
+$color2: #bcd6ff;
+$color3: #073989;
+
+// $color1: #87a2ff;
+// $color2: #c4d7ff;
+$colorPrimaryLight: #2c77ef;
+$colorPrimaryDark: #1c5fcb;
+
+$BRadius: 2px;
+
+a {
+	color: $color3;
+}
+.h2 {
+	font-size: 20px;
+	font-weight: 400;
+}
+.h3 {
+}
+.blur5 {
+	filter: blur(5px);
+}
+// доступ через styles.rowGroup
+.rowGroup {
+	/* горизонтально */
+	display: flex;
+	flex-direction: column;
+	// height: 100%;
+	// flex: 1;
+	// gap: 6px;
+	/* padding: 9px; */
+}
+.colGroup {
+	/* вертикально */
+	display: flex;
+	flex-direction: row;
+	// width: 100%;
+	// flex: 1;
+	// gap: 6px;
+	/* padding: 9px; */
+}
+
+.gap3 {
+	gap: 3px;
+}
+.gap6 {
+	gap: 6px;
+}

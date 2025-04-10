@@ -2,7 +2,7 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"column": "ID",
+		"column": "Id",
 		"width": "80px",
 		"alignment": "left",
 		"hint": "Идентификатор записи",

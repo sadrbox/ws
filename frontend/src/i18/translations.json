@@ -113,6 +113,6 @@
 	"objecttype": "Тип объекта",
 	"objectname": "Имя объекта",
 	"organization": "Организация",
-	"organization.name": "Организация",
+	"organization.shortName": "Организация",
 	"props": "Реквизиты"
 }

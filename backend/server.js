@@ -41,8 +41,6 @@ app.get("/", (req, res) => {
 });
 
 app.post("/json", async (req, res) => {
-	console.log(JSON.stringify(req.body, null, 2));
-
 	const {
 		actionDate,
 		actionType,
@@ -52,83 +50,114 @@ app.post("/json", async (req, res) => {
 		props,
 	} = req.body;
 
-	const formatActionDate = parse(actionDate, "dd.MM.yyyy HH:mm:ss", new Date());
+	// console.log(req.body);
+
 	const clientIp = ip || formatIpAddress(req.ip);
-	const formattedActionDate = formatISO(formatActionDate);
+	const formattedActionDate = formatISO(
+		parse(actionDate, "dd.MM.yyyy HH:mm:ss", new Date())
+	);
 
 	let city = "";
 	try {
-		const { data: locationData } = await axios.get(
-			`https://json.geoiplookup.io/${clientIp}`
-		);
-		city = locationData.success ? locationData.city : "";
-	} catch (error) {}
+		const { data } = await axios.get(`https://json.geoiplookup.io/${clientIp}`);
+		city = data.success ? data.city : "";
+	} catch (e) {}
 
 	try {
-		const transaction = await prisma.$transaction(async (prisma) => {
-			const existingOrganization = await prisma.organization.upsert({
-				where: {
-					OR: [{ bin: bin || undefined }, { shortName }],
-				},
-				update: {},
-				create: { shortName, bin },
-			});
+		console.log("Запуск!");
 
-			return await prisma.activityHistory.create({
+		let isOrganization = false;
+
+		if (props?.objectName === "Организации") {
+			isOrganization = true;
+		}
+
+		let existingOrganization = await prisma.organization.findUnique({
+			where: { bin },
+		});
+
+		if (existingOrganization) {
+			if (
+				existingOrganization.shortName !== shortName ||
+				(isOrganization &&
+					existingOrganization.displayName !== props?.НаименованиеПолное)
+			) {
+				await prisma.organization.update({
+					where: { bin },
+					data: {
+						shortName,
+						displayName: isOrganization ? props?.НаименованиеПолное : shortName,
+					},
+				});
+			}
+		} else {
+			existingOrganization = await prisma.organization.create({
+				data: {
+					bin,
+					shortName,
+					displayName: isOrganization ? props?.НаименованиеПолное : shortName,
+				},
+			});
+		}
+
+		if (existingOrganization) {
+			const transaction = await prisma.activityHistory.create({
 				data: {
 					actionDate: formattedActionDate,
 					actionType,
 					organization: { connect: { bin: existingOrganization.bin } },
+					organizationShortName: existingOrganization.shortName,
+					bin: existingOrganization.bin,
 					userName,
 					host,
 					ip: clientIp,
-					city: city !== undefined ? city : "",
+					city,
 					objectId,
 					objectType,
 					objectName,
 					props,
 				},
 			});
-		});
-
-		// console.log(transaction);
-		res.status(200).json({ message: "JSON успешно получен!" });
+			console.log({ transaction });
+		}
+		res.status(200).json({ success: true });
 	} catch (error) {
-		res
-			.status(500)
-			.json({ message: "Error processing transaction.", error: error.message });
+		console.error("Ошибка при создании данных:", error);
+		res.status(500).json({ error: "Ошибка сервера" });
 	}
 });
 
-app.get("api/json", async (req, res) => {
-	try {
-		const activities = await prisma.activityHistory.findMany({
-			include: { organization: true },
-		});
-		res.status(200).json(activities);
-	} catch (error) {
-		console.error("Error fetching activity history:", error);
-		res
-			.status(500)
-			.json({ message: "Error fetching data.", error: error.message });
-	}
-});
+// app.get("api/json", async (req, res) => {
+// 	try {
+// 		const activities = await prisma.activityHistory.findMany({
+// 			include: {
+// 				organization: true,
+// 			},
+// 		});
+// 		res.status(200).json(activities);
+// 	} catch (error) {
+// 		console.error("Error fetching activity history:", error);
+// 		res
+// 			.status(500)
+// 			.json({ message: "Error fetching data.", error: error.message });
+// 	}
+// });
 
 app.get("/json", async (req, res) => {
+	// const { bin, shortName } = req.query;
+	// const conditions = {};
+	// if (bin) {
+	// 	conditions.push({ bin });
+	// } else if (shortName) {
+	// 	conditions.push({ shortName });
+	// }
+
 	try {
-		const { bin, shortName } = req.query;
 		const activities = await prisma.activityHistory.findMany({
-			where: {
-				OR: [
-					{ bin: bin || undefined }, // Если `bin` есть
-					{
-						organization: {
-							shortName: bin ? undefined : shortName, // Если `bin` пустой, ищем по `shortName`
-						},
-					},
-				],
+			take: 100,
+			include: {
+				organization: true,
 			},
-			include: { organization: true },
 		});
 		res.status(200).json(activities);
 	} catch (error) {

@@ -16,6 +16,7 @@ datasource db {
 
 model User {
   id         Int     @id @default(autoincrement())
+  uuid       String  @unique @default(uuid())
   username   String?
   password   String?
   email      String?
@@ -27,9 +28,10 @@ model User {
 
 model Organization {
   id                Int               @id @default(autoincrement())
-  shortName         String
-  displayName       String            @default("")
-  bin               String?           @unique
+  uuid              String            @unique @default(uuid())
+  shortName         String?
+  displayName       String?
+  bin               String            @unique @db.VarChar(12)
   contracts         Contract[]
   contacts          Contact[]
   activityHistories ActivityHistory[]
@@ -37,58 +39,64 @@ model Organization {
 
 model Counterparty {
   id          Int        @id @default(autoincrement())
-  shortName   String
-  displayName String     @default("")
-  bin         String?    @unique
+  uuid        String     @unique @default(uuid())
+  shortName   String?
+  displayName String?
+  bin         String     @unique @db.VarChar(12)
   contracts   Contract[]
   contacts    Contact[]
 }
 
 model Contract {
-  id             Int       @id @default(autoincrement())
-  shortName      String
-  contractNumber String?
-  contractText   String?   @db.Text
-  startDate      DateTime?
-  endDate        DateTime?
-
-  Organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId Int?
-  Counterparty   Counterparty? @relation(fields: [counterpartyId], references: [id])
-  counterpartyId Int?
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  shortName        String
+  contractNumber   String?
+  contractText     String?       @db.Text
+  startDate        DateTime?
+  endDate          DateTime?
+  organizationUuid String?
+  counterpartyUuid String?
+  Organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  Counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: Cascade)
 }
 
 model Contact {
-  id             Int           @id @default(autoincrement())
-  value          String
-  contactTypes   ContactType   @relation(fields: [contactTypeId], references: [id])
-  contactTypeId  Int
-  ownerId        Int
-  ownerType      String
-  organizationId Int?
-  counterpartyId Int?
-  Organization   Organization? @relation(fields: [organizationId], references: [id])
-  Counterparty   Counterparty? @relation(fields: [counterpartyId], references: [id])
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  value            String
+  contactTypes     ContactType   @relation(fields: [contactTypeUuid], references: [uuid], onDelete: Cascade)
+  contactTypeUuid  String
+  ownerId          String
+  ownerType        String
+  organizationUuid String?
+  counterpartyUuid String?
+  Organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  Counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: Cascade)
 }
 
 model ContactType {
   id        Int       @id @default(autoincrement())
+  uuid      String    @unique @default(uuid())
   shortName String
   contacts  Contact[]
 }
 
 model ActivityHistory {
-  id           Int          @id @default(autoincrement())
-  actionDate   DateTime     @default(now())
-  actionType   String
-  organization Organization @relation(fields: [bin], references: [bin])
-  bin          String
-  userName     String
-  host         String
-  ip           String?
-  city         String?
-  objectId     String
-  objectType   String
-  objectName   String
-  props        Json
+  id                    Int          @id @default(autoincrement())
+  uuid                  String       @unique @default(uuid())
+  actionDate            DateTime     @default(now())
+  actionType            String
+  organization          Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  organizationUuid      String
+  organizationShortName String
+  bin                   String
+  userName              String
+  host                  String
+  ip                    String?
+  city                  String?
+  objectId              String
+  objectType            String
+  objectName            String
+  props                 Json
 }

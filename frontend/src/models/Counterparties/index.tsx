@@ -1,19 +1,19 @@
-import { useState, FC, useEffect, useMemo } from "react";
+import { useState, FC, useEffect, useMemo, useCallback } from "react";
 import columnsJson from "./columns.json";
-import { TColumn, TDataItem, TModelProps, TOrder } from "src/components/ui/Grid/types";
+import { TDataItem, TypeModelProps, TOrder } from "src/components/ui/Table/types";
 import { getModelColumns, sortGridRows } from "src/components/ui/Grid/services";
-import Grid from "src/components/ui/Grid";
 import { checkServerAvailability } from "src/utils/main.module";
+import Table from "src/components/ui/Table";
 // import Counterparties from 'src/models/Counterparties';
 
-
-const getResponseData = async (signal: AbortSignal) => {
-  const url = "http://192.168.1.112:3000/api/v1/counterparties";
+const getResponseData = async (signal: AbortSignal, currentPage: number, limit: number) => {
+  const url = `http://192.168.1.112:3000/api/v1/counterparties?page=${currentPage}&limit=${limit}`;
 
   if (!(await checkServerAvailability(url, signal))) {
     console.warn("Сервер недоступен.");
     return null;
   }
+
   try {
     const response = await fetch(url, { signal });
     if (!response.ok) throw new Error(`Ошибка ${response.status}: ${response.statusText}`);
@@ -26,66 +26,64 @@ const getResponseData = async (signal: AbortSignal) => {
   }
 };
 
-
-
 const Counterparties: FC = () => {
   const name = Counterparties.name;
-  const [responseData, setResponseData] = useState<TDataItem[] | null>(null);
   const [rows, setRows] = useState<TDataItem[]>([]);
-  const [columns, setColumns] = useState<TColumn[]>(getModelColumns(columnsJson, name));
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(0);
   const [order, setOrder] = useState<TOrder>({
     columnID: "actionDate",
     direction: "desc",
   });
 
+  // Колонки зависят от состояния isLoading
+  const columns = useMemo(() => getModelColumns(columnsJson, name), [isLoading]);
 
-  const loadDataGrid = async () => {
+  // Загрузка данных
+  const loadDataGrid = useCallback(async (currentPage: number = 1, limit: number = 100) => {
     const controller = new AbortController();
     setIsLoading(true);
-    try {
-      const response = await getResponseData(controller.signal);
 
-      if (response !== null) {
-        setResponseData(response);
+    try {
+      const response = await getResponseData(controller.signal, currentPage, limit);
+      if (response) {
+        // Сортируем данные сразу после получения
+        // console.log(response)
+        setRows(sortGridRows(response?.items, order) || []);
+        setTotalPages(response?.totalPages || 0);
+      } else {
+        setRows([]);
       }
     } finally {
-      if (!controller.signal.aborted) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
-  };
+  }, [order, currentPage]); // Зависимость от order для корректной сортировки
 
+  // Загружаем данные при монтировании и изменении порядка сортировки
   useEffect(() => {
-    setColumns(getModelColumns(columnsJson, name));
-  }, [isLoading])
+    loadDataGrid(currentPage);
+  }, [loadDataGrid]);
 
-  // useEffect(() => {
-  //   loadDataGrid();
-  // }, [order]); // Загружаем данные один раз при монтировании
 
-  useEffect(() => {
-    if (responseData) {
-
-      setRows(sortGridRows(responseData, order) || []);
-    }
-  }, [responseData, order]); // Теперь сортировка обновляется при загрузке новых данных
-
-  const props = useMemo<TModelProps>(
+  // Мемоизация пропсов для Grid
+  const props = useMemo<TypeModelProps>(
     () => ({
       name,
       rows,
       columns,
-      actions: { loadDataGrid, setColumns }, // `loadDataGrid` больше не нужен
+      pagination: {
+        currentPage,
+        setCurrentPage,
+        totalPages,
+      },
+      actions: { loadDataGrid },
       states: { isLoading, setIsLoading, order, setOrder },
     }),
-    [rows, order, isLoading, columns]
+    [rows, columns, currentPage, isLoading, loadDataGrid, order, name]
   );
 
-
-  return (
-    <Grid props={props} />
-  );
+  return <Table props={props} />;
 };
 
 export default Counterparties;
