@@ -1,9 +1,9 @@
 import { useState, FC, useEffect, useMemo, useCallback } from "react";
 import columnsJson from "./columns.json";
-import { TDataItem, TOrder } from "src/components/ui/Grid/types";
-import { getModelColumns, sortGridRows } from "src/components/ui/Grid/services";
-import Table from "src/components/ui/Table";
-import { TypeModelProps } from "src/components/ui/Table/types";
+import { TDataItem, TOrder } from "src/components/Grid/types";
+import { getModelColumns, sortGridRows } from "src/components/Grid/services";
+import Table from "src/components/Table";
+import { TypeModelProps } from "src/components/Table/types";
 import { checkServerAvailability } from "src/utils/main.module";
 // import Contracts from 'src/models/Contracts';
 

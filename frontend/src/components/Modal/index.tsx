@@ -2,7 +2,7 @@ import { FC, useRef, useEffect, createContext, useContext, useState, ReactNode }
 import ReactDOM from 'react-dom';
 import styles from './Modal.module.scss';
 import Button from '../Button';
-import { useAppContext } from 'src/components/app/AppContextProvider';
+import { useAppContext } from 'src/app/AppContextProvider';
 
 type ModalProps = {
   isOpen: boolean;
@@ -60,17 +60,18 @@ const Modal: FC<ModalProps> = ({ isOpen, onClose, onSubmit, title, children }) =
   return ReactDOM.createPortal(
     <div className={styles.ModalBackground} onClick={handleOutsideClick}>
       <div className={styles.ModalWrapper} ref={modalRef}>
-        {/* <div className={styles.ModalTitle}>{title}</div> */}
-        <div className={styles.ModalButtons}>
-          <Button onClick={handleSubmit} variant="primary">Применить</Button>
-          <Button onClick={onClose} variant="secondary">Закрыть</Button>
+        <div className={styles.ModalHeader}>
+          <div className={styles.ModalTitle}>{title}</div>
+          <div className={styles.ModalButtons}>
+            <Button onClick={handleSubmit} variant="primary">Применить</Button>
+            <Button onClick={onClose} variant="secondary">Закрыть</Button>
+          </div>
         </div>
         <div className={styles.ModalBody}>
           <ModalContextInstance.Provider value={{ values, setValues }}>
             {children}
           </ModalContextInstance.Provider>
         </div>
-
       </div>
     </div>,
     document.body

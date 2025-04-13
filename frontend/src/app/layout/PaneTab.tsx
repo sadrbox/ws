@@ -1,5 +1,5 @@
 import { FC, useState } from 'react';
-import styles from "../styles.module.scss"
+import styles from "../styles/styles.module.scss"
 import { useAppContext } from '../AppContextProvider';
 
 
@@ -14,7 +14,7 @@ const PaneTab: FC = () => {
   return (
     <div className={styles.PaneTabWrapper}>
       {paneTabs.map((tab) => (
-        <div className={[styles.PaneTab, tab.id === activePaneID ? styles.ActivePaneTab : ""].filter(s => s && s).join(" ")}
+        <div className={[styles.PaneTab, tab.id === activePaneID ? styles.PaneTabActive : ""].filter(s => s && s).join(" ")}
           key={tab.id}
           onClick={() => setActivePaneID(tab.id)}
         >

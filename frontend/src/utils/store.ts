@@ -1,4 +1,4 @@
-import { TGridSorting, TStoreDataGrid } from "src/ui/DataGridTable/types";
+import { TGridSorting, TStoreDataGrid } from "src/DataGridTable/types";
 import { atom } from "jotai";
 
 export const storeDataGrid = atom(undefined as TStoreDataGrid);

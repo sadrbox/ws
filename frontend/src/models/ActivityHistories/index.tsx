@@ -1,12 +1,11 @@
 import { useState, FC, useEffect, useMemo, useCallback } from "react";
 import columnsJson from "./columns.json";
-import { TDataItem, TypeModelProps, TOrder } from "src/components/ui/Table/types";
-import { getModelColumns, sortGridRows } from "src/components/ui/Grid/services";
+import { TDataItem, TypeModelProps, TOrder } from "src/components/Table/types";
+import { getModelColumns, sortGridRows } from "src/components/Grid/services";
 import { checkServerAvailability } from "src/utils/main.module";
-import Table from "src/components/ui/Table";
-import Modal from "src/components/ui/Modal";
-import FieldString from "src/components/ui/Field/FieldString";
-import FieldSelect from "src/components/ui/Field/FieldSelect";
+import Table from "src/components/Table";
+import Modal from "src/components/Modal";
+import { FieldSelect, FieldString } from "src/components/Field";
 import styles from "./ActivityHistories.module.scss"
 
 const getResponseData = async (signal: AbortSignal, currentPage: number, limit: number) => {

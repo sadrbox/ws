@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import Tabs from '../ui/Tabs'
+import Tabs from '../Tabs'
 import AppContext, { TContextParams } from './AppContextProvider'
 
 import { TContextInstance } from "./AppContextProvider"
 import Products from 'src/models/Products'
 import { isArray } from 'lodash'
-import { TTabs } from '../ui/Tabs/types';
-import { getMockTabs } from '../ui/Tabs/dev'
+import { TTabs } from '../Tabs/types';
+import { getMockTabs } from '../Tabs/dev'
 
 
 export const App = () => {

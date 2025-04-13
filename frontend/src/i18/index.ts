@@ -1,14 +1,14 @@
 import translations from "./translations.json" assert { type: "json" };
-import { TColumn } from "src/components/ui/Grid/types";
+import { TColumn } from "src/components/Grid/types";
 
 export function getTranslation(word: string): string {
 	const translate: [string, string] | undefined = Object.entries(
-		translations,
+		translations
 	).find(([key, value]) =>
 		key.toLowerCase().replace(/\s/g, "") ===
 		word.toLowerCase().replace(/\s/g, "")
 			? value
-			: undefined,
+			: undefined
 	);
 	return translate !== undefined ? translate?.[1] : word;
 }

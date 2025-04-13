@@ -31,7 +31,8 @@ a {
 	filter: blur(5px);
 }
 // доступ через styles.rowGroup
-.rowGroup {
+.rowGroup,
+.RowGroup {
 	/* горизонтально */
 	display: flex;
 	flex-direction: column;
@@ -40,7 +41,8 @@ a {
 	// gap: 6px;
 	/* padding: 9px; */
 }
-.colGroup {
+.colGroup,
+.ColGroup {
 	/* вертикально */
 	display: flex;
 	flex-direction: row;

@@ -1,6 +1,6 @@
 import { FC, useState } from 'react';
 import styles from '../styles.module.scss';
-import InputField from 'src/components/ui/Field/InputField';
+import InputField from 'src/components/Field/InputField';
 import ActivityHistories from '../ActivityHistories';
 
 import { crypto } from 'src/utils/main.module';

@@ -1,9 +1,9 @@
 
-import ActivityHistories from "../../models/ActivityHistories";
+import ActivityHistories from "../models/ActivityHistories";
 import { JSX, useMemo, useRef, useState, useCallback } from "react";
 // import ActivityHistory from './models/ActivityHistory/index';
-import ContractFORM from "../../models/Contracts/form";
-import styles from "./styles.module.scss"
+import ContractFORM from "../models/Contracts/form";
+import styles from "./styles/styles.module.scss"
 import Navbar from "./layout/Navbar";
 import PaneTab from "./layout/PaneTab";
 import PaneGroup from "./layout/PaneGroup";

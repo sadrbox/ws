@@ -9,9 +9,13 @@ import { getFormatColumnValue, getTextAlignByColumnType } from './services';
 import { Divider, FieldGroup, PeriodField, SearchField } from '../Field';
 import Modal from '../Modal';
 import { FieldString, FieldSelect } from '../Field/index';
-import filterImage from '../../../assets/filter_16.png';
-import settingsForm from '../../../assets/settingsForm_16.png';
-import reloadImage from '../../../assets/reload_16.png';
+import filterImage from '../../assets/filter_16.png';
+import settingsForm from '../../assets/settingsForm_16.png';
+import reloadImage from '../../assets/reload_16.png';
+import { CSS } from "@dnd-kit/utilities";
+import { DndContext, closestCenter } from "@dnd-kit/core";
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { PiDotsThreeVerticalDuotone } from 'react-icons/pi';
 // import { useAppContext } from 'src/components/app/AppContextProvider';
 
 
@@ -26,7 +30,9 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   const [checkedRows, setCheckedRows] = useState<number[]>([]);
   const [isAllChecked, setIsAllChecked] = useState<boolean>(false);
   const [activeRow, setActiveRow] = useState<number | null>(null);
-  const [filterFormIsOpen, setFilterFormIsOpen] = useState<boolean>(false);
+  const [filterModalFormIsOpen, setFilterModalFormIsOpen] = useState<boolean>(false);
+  const [configModalFormIsOpen, setConfigModalFormIsOpen] = useState<boolean>(false);
+
   // const [currentPage, setCurrentPage] = useState<number>(1);
   // const [totalPages, setTotalPages] = useState<number>(1);
 
@@ -43,6 +49,11 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   }, [checkedRows, rows]);
 
   useEffect(() => setIsAllChecked(allChecked), [allChecked]);
+  useEffect(() => {
+
+    if (loadDataGrid) loadDataGrid(currentPage)
+
+  }, [configModalFormIsOpen])
 
   const refreshDataTable = () => loadDataGrid && loadDataGrid(currentPage);
 
@@ -77,7 +88,8 @@ const Table: FC<TypeTableProps> = ({ props }) => {
 
   return (
     <TableContextProvider init={contextProps}>
-      {filterFormIsOpen && <TableFilterModalForm isOpen={filterFormIsOpen} onClose={() => setFilterFormIsOpen(false)} />}
+      {filterModalFormIsOpen && <TableFilterModalForm isOpen={filterModalFormIsOpen} onClose={() => setFilterModalFormIsOpen(false)} />}
+      {configModalFormIsOpen && <TableConfigModalForm isOpen={configModalFormIsOpen} onClose={() => setConfigModalFormIsOpen(false)} />}
       <div className={styles.TableWrapper}>
         <div className={styles.TablePanel}>
           <div className={[styles.colGroup, styles.gap6].join(" ")}>
@@ -89,26 +101,6 @@ const Table: FC<TypeTableProps> = ({ props }) => {
             </button>
           </div>
           <div className={[styles.colGroup, styles.gap6].join(" ")}>
-            <Divider />
-            <button onClick={refreshDataTable} className={styles.ButtonImage} title='Обновить'>
-              <img src={reloadImage} alt="ten" height={16} width={16} className={(states?.isLoading === true) ? styles.animationLoop : ""} />
-              {/* <SlRefresh
-                className={(states?.isLoading === true) ? styles.animationLoop : ""}
-                size={14}
-                strokeWidth={30}
-              /> */}
-              {/* <span>Обновить</span> */}
-            </button>
-            <button onClick={() => alert('Settings')} className={styles.ButtonImage} title="Настройки">
-              <img src={settingsForm} alt="ten" height={16} width={16} />
-              {/* <SlSettings size={16} strokeWidth={5} /> */}
-            </button>
-            <button onClick={() => setFilterFormIsOpen(true)} className={styles.ButtonImage} title="Фильтр">
-              {/* <TbFilter size={17} strokeWidth={2} /> */}
-              <img src={filterImage} alt="ten" height={16} width={16} />
-            </button>
-            <Divider />
-            <SearchField />
             <div className={[styles.colGroup, styles.gap6].join(" ")} style={totalPages <= 1 ? { display: "none" } : {}}>
               <Divider />
 
@@ -142,6 +134,27 @@ const Table: FC<TypeTableProps> = ({ props }) => {
               </svg>
             </button> */}
             </div>
+            <Divider />
+            <button onClick={refreshDataTable} className={styles.ButtonImage} title='Обновить'>
+              <img src={reloadImage} alt="ten" height={16} width={16} className={(states?.isLoading === true) ? styles.animationLoop : ""} />
+              {/* <SlRefresh
+                className={(states?.isLoading === true) ? styles.animationLoop : ""}
+                size={14}
+                strokeWidth={30}
+              /> */}
+              {/* <span>Обновить</span> */}
+            </button>
+            <button onClick={() => setConfigModalFormIsOpen(true)} className={styles.ButtonImage} title="Настройки">
+              <img src={settingsForm} alt="ten" height={16} width={16} />
+              {/* <SlSettings size={16} strokeWidth={5} /> */}
+            </button>
+            <button onClick={() => setFilterModalFormIsOpen(true)} className={styles.ButtonImage} title="Фильтр">
+              {/* <TbFilter size={17} strokeWidth={2} /> */}
+              <img src={filterImage} alt="ten" height={16} width={16} />
+            </button>
+            <Divider />
+            <SearchField />
+
           </div>
         </div>
         <div className={styles.TableScrollWrapper}>
@@ -233,7 +246,7 @@ const TableHeader = memo(() => {
   );
 })
 
-// --------------------- Sub component - TableBody -----------------------------------------
+// --------------------- Sub component - TableBody -------------------------------------------
 const TableBody = memo(() => {
   const { columns, rows, states: { isLoading } } = useTableContextProps();
   return (
@@ -316,8 +329,7 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
   );
 })
 
-
-// --------------------- Context Provider - TableContextProvider -----------------------------------------
+// --------------------- Context Provider - TableContextProvider ------------------------------
 type TypeTableContextInstance = {
   tableContextProps: TypeTableContextProps;
   setTableContextProps: Dispatch<SetStateAction<TypeTableContextProps>>;
@@ -358,8 +370,7 @@ type TypeModalProps = {
   onClose: () => void;
 };
 
-export const TableFilterModalForm: FC<TypeModalProps> = ({ isOpen, onClose }) => {
-
+const TableFilterModalForm: FC<TypeModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Настройки фильтра" onSubmit={(values) => console.log('Фильтры:', values)}>
@@ -374,3 +385,100 @@ export const TableFilterModalForm: FC<TypeModalProps> = ({ isOpen, onClose }) =>
     </Modal>
   );
 };
+
+const TableConfigModalForm: FC<TypeModalProps> = ({ isOpen, onClose }) => {
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Настройки таблицы" onSubmit={(values) => console.log('Фильтры:', values)}>
+      <TableConfigColumns />
+    </Modal>
+  );
+};
+
+
+const TableConfigColumns = () => {
+  const context = useTableContextProps();
+  const { columns, name } = context;
+  const [gridColumns, setGridColumns] = useState<TColumn[]>(columns);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+
+  useEffect(() => {
+    // console.log(gridColumns)
+    localStorage.setItem(name, JSON.stringify(gridColumns));
+  }, [gridColumns]);
+
+  const updateColumnVisibility = (identifier: string, visible: boolean) => {
+    setGridColumns(prev =>
+      prev.map(col => col.identifier === identifier ? { ...col, visible } : col)
+    );
+  };
+
+  const onDragStart = (event: any) => {
+    setDraggingId(event.active.id); // Запоминаем ID перетаскиваемого элемента
+  };
+
+  const onDragEnd = (event: any) => {
+    const { active, over } = event;
+    setDraggingId(null);
+    if (active.id !== over?.id) {
+      setGridColumns((prev) => {
+        const oldIndex = prev.findIndex((col) => col.identifier === active.id);
+        const newIndex = prev.findIndex((col) => col.identifier === over?.id);
+        // console.log({ oldIndex, newIndex })
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    }
+  };
+
+
+
+
+  return (
+    <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd} onDragStart={onDragStart}>
+      <SortableContext items={gridColumns.map(col => col.identifier)} strategy={verticalListSortingStrategy}>
+        <ul className={styles.CheckboxList}>
+          {[...gridColumns].map((column) => (
+            <TableConfigColumns.Item
+              key={column.identifier}
+              column={column}
+              isDragging={column.identifier === draggingId}
+              toggleVisibility={updateColumnVisibility} />
+          ))}
+        </ul>
+      </SortableContext>
+    </DndContext>
+  );
+};
+
+type TypeTableConfigColumnsItem = {
+  column: TColumn,
+  isDragging: boolean;
+  toggleVisibility: (identifier: string, visible: boolean) => void;
+};
+
+const TableConfigColumnsItem: FC<TypeTableConfigColumnsItem> = ({ column, isDragging, toggleVisibility }) => {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: column.identifier });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+
+  return (
+    <li ref={setNodeRef} style={style} className={`${styles.ListItem} ${isDragging ? styles.dragging : ''}`}>
+      <div {...listeners} className={styles.DragAndDrop}>
+        <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+      </div>
+      <input
+        {...attributes}
+        type="checkbox"
+        id={`${column.identifier}`}
+        checked={column.visible}
+        onChange={(e) => toggleVisibility(column.identifier, e.target.checked)} />
+      <label htmlFor={`${column.identifier}`}>{getTranslateColumn(column)}</label>
+    </li>
+  );
+};
+TableConfigColumns.Item = TableConfigColumnsItem;

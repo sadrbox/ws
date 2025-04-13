@@ -1,5 +1,5 @@
 import React, { useEffect, useState, FC, useMemo, useCallback, useContext, createContext, Dispatch, SetStateAction } from "react";
-import DataGrid from "../../ui/DataGridTable";
+import DataGrid from "../../DataGridTable";
 import axios from "axios";
 // import { atom, useAtom } from "jotai";
 // import { storeDataGrid, storeGridSorting } from "src/utils/store";
@@ -12,10 +12,10 @@ import {
   TDataGridRows,
   TGridSorting,
   TStoreDataGrid,
-} from "src/ui/DataGridTable/types";
-import { ContextProvider } from "src/ui/DataGridTable/ContextProvider";
-// import { ContextProvider, TContextData } from "src/ui/DataGridTable/ContextProvider";
-// import { Context,   } from "src/ui/DataGridTable/ContextProvider";
+} from "src/DataGridTable/types";
+import { ContextProvider } from "src/DataGridTable/ContextProvider";
+// import { ContextProvider, TContextData } from "src/DataGridTable/ContextProvider";
+// import { Context,   } from "src/DataGridTable/ContextProvider";
 
 
 const columns = {

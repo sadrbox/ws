@@ -20,6 +20,15 @@
 	max-width: 500px;
 	animation: fadeIn 0.3s ease;
 }
+.ModalHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 12px;
+	background-color: $color33;
+	border-bottom: 1px solid $color10;
+	border-radius: 3px 3px 0 0;
+}
 .ModalBody {
 	// margin: 12px;
 	padding: 12px;
@@ -33,25 +42,17 @@
 	font-size: 18px;
 	display: flex;
 	justify-content: left;
-	background-color: $color3;
-	border-radius: 3px 3px 0 0;
-	padding: 12px;
-	color: $color60;
+	// background-color: $color3;
+	// border-radius: 3px 3px 0 0;
+	// padding: 12px;
+	// color: $color60;
 	font-weight: normal;
 	font-size: 16px;
+	// text-decoration: underline;
 }
 
 .ModalButtons {
-	border-bottom: 1px solid $color10;
-
-	border-radius: 3px 3px 0 0;
-
-	// margin: 6px;
-	padding: 12px;
-	background-color: $color33;
-	// margin-top: 28px;
 	display: flex;
-	justify-content: flex-end;
 	align-items: center;
 	gap: 6px;
 }

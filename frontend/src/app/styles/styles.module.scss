@@ -14,27 +14,18 @@ body {
 	font-size: 13px;
 	margin: 0;
 	padding: 0;
-	/* height: 100dvh; */
-	/* width: 100vw; */
 }
 
 #root {
 	position: relative;
 	padding: 0px;
-	/* height: 100dvh; */
 }
 
 .Screen {
-	// height: 99dvh;
-	container-type: size;
+	// container-type: size; // не знаю может надо ??
 	display: grid;
 	grid-template-rows: 4dvh 91dvh 5dvh;
-	/* align-content: stretch; */
-	// height: 92dvh;
-	// display: flex;
-	// flex-direction: column;
-	// flex: 1;
-	// flex-grow: 1;
+
 	position: relative;
 }
 
@@ -44,7 +35,6 @@ body {
 	display: flex;
 	align-items: center;
 	background-color: #ddd;
-	// box-shadow: 0px 0px 0px 1px rgba(0, 0, 0, 0.9);
 	z-index: 1;
 	.NavbarItem {
 		margin: 6px;
@@ -59,111 +49,96 @@ body {
 .PaneGroupWrapper {
 	border: 0px solid $color10;
 	background-color: $color30;
-	// height: 92dvh;
-	// display: flex;
-	// flex: 1;
-	// flex-shrink: 1;
-	// height: calc(100vh - 76px);
 	overflow: auto;
-	// padding: 12px;
 	position: relative;
-	// transition: all 1000ms;
 	.Pane {
 		height: 88dvh;
-		// background: #fff;
 		padding: 12px;
-		// height: 100%;
-		// transform: scaleY(0);
+
 		display: none;
-		// opacity: 0;
-		// visibility: hidden;
 	}
 	.ActivePane {
-		// transform: scaleY(1);
-		// opacity: 1;
-		// visibility: visible;
 		display: flex;
-		// flex-direction: column;
 	}
 }
 .PaneTabWrapper {
-	//
 	overflow: auto;
 	padding: 0px 6px;
 	display: flex;
-	border-top: 1px solid $color10; /* Линия под вкладками */
-	margin: 0;
+	// border-top: 1px solid $color10; /* Линия под вкладками */
 	position: relative; /* Для корректного позиционирования вкладок */
 	flex-direction: row;
 	background-color: $color60;
+	z-index: 1;
 
-	// box-shadow: 0px 0px 100px 50px rgba(0, 0, 0, 0.1);
-	// border: 0px solid red;
-	// min-height: 50px;
+	&::before {
+		content: "";
+		position: absolute;
+		background-color: $color10;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 1px;
+		// margin-top: -1px;
+		// z-index: 9;
+	}
+	// padding-bottom: 12px;
 	.PaneTab {
-		// clip-path: polygon(0 0, 100% 0, 80% 100%, 0% 80%);
-		position: relative;
-		border: 1px solid $color10;
-		border-top: none;
+		box-sizing: content-box;
+		border-top: 1px solid $color10;
+		border-left: 1px solid $color10;
+		border-right: 1px solid $color10;
+		border-bottom: 1px solid $color10;
+		// border-top: none;
 		border-bottom-left-radius: $BRadius;
-		border-bottom-right-radius: 15px;
+		border-bottom-right-radius: $BRadius;
 		min-width: 100px;
-		height: 24px;
-		font: 13px "Segoe UI";
-		background: $color30;
-		color: $color6;
+		height: 32px;
+		font-family: "Segoe UI";
+		background: $color33;
+		// background: linear-gradient(-180deg, #eee, #ddd, #bbb);
+		color: $color51;
 		display: flex;
 		justify-content: left;
 		align-items: center;
-		// box-shadow: 0px 1px 0px 0px rgba($color6, 0.3);
 		/* Используем SVG для скошенного угла */
 		padding: 0 12px;
 		cursor: pointer;
-		margin-right: -5px; /* Наложение краев с учетом границы */
-		// transition: height 1ms;
-		// position: relative;
+		margin-right: -1px; /* Наложение краев с учетом границы */
+		font-weight: bold;
 		z-index: 1;
-		// &::after {
-		// 	content: "";
-		// 	position: absolute;
-		// 	top: 0;
-		// 	left: 0;
-		// 	width: 100%;
-		// 	height: 100%;
-		// 	border: 1px solid black;
-		// 	clip-path: polygon(20% 0, 80% 0, 100% 100%, 0% 100%);
-		// 	// clip-path: polygon(0 0, 100% 0, 80% 100%, 0% 80%);
-		// 	pointer-events: none;
-		// 	background-color: red;
-		// }
+		// box-shadow: 0 0 5px 3px rgba($color5, 0.2);
 
-		// box-shadow: 5px 5px 5px 5px red;
 		&:hover {
-			background-color: $color2;
+			// background-color: $color2;
+			// border-color: $color3;
 			// border-top: 1px solid transparent;
-			border-color: $color1;
+			// border-top: 1px solid $color10;
 			// border-left: 1px solid $color10;
 			// border-right: 1px solid $color10;
 			// border-top: transparent;
 			// color: #000;
-			z-index: 3;
+			z-index: 10;
 		}
 	}
-	.ActivePaneTab {
-		height: 26px;
-		margin-top: -1px;
+	.PaneTabActive {
+		border-top: 1px solid transparent;
+		// position: relative;
+		// height: 24px;
+		// margin-top: -2px;
 		background-color: $color30;
 		// border: 1px solid $color60;
-		border-top: 1px solid $color30;
-		color: $color3;
-		font-weight: bold;
-		z-index: 9;
+		// border-top: 1px solid $color3;
+		color: $color6;
+		// font-weight: bold;
+		// z-index: 9;
+
 		&:hover {
-			border-color: $color10;
-			border-top: 1px solid $color30;
-			background-color: $color30;
-			cursor: default;
-			color: $color3;
+			// border-color: $color10;
+			// border-top: 1px solid $color30;
+			// background-color: $color30;
+			// cursor: default;
+			// color: $color3;
 		}
 	}
 }

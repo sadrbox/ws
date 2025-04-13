@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react'
-import { TDataItem } from 'src/components/ui/Grid/types';
+import { TDataItem } from 'src/components/Grid/types';
 // import { IResponseData, ITodo } from './types';
-// import DataGrid from 'src/components/ui/DataGrid';
-// import { TDataGrid } from 'src/components/ui/DataGrid/DataGridContext';
-// import { TDataItem } from 'src/components/ui/DataGrid/services';
-// import { TFieldType } from 'src/components/ui/DataGrid/types';
+// import DataGrid from 'src/components/DataGrid';
+// import { TDataGrid } from 'src/components/DataGrid/DataGridContext';
+// import { TDataItem } from 'src/components/DataGrid/services';
+// import { TFieldType } from 'src/components/DataGrid/types';
 // import co
 
 // import { ContextInstance } from './Context';
-// import { useContextInstance } from 'src/components/ui/DataGrid/ContextProvider';
+// import { useContextInstance } from 'src/components/DataGrid/ContextProvider';
 // import { TContextData } from 'src/objects/Todos/Context';
 // import { translateWord } from 'src/i18';
-// import ContextWrapper, { TDataGrid } from 'src/components/ui/DataGrid/DataGridContext';
+// import ContextWrapper, { TDataGrid } from 'src/components/DataGrid/DataGridContext';
 
 
 // export type TDataItem = { [key: string]: string }

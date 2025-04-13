@@ -1,9 +1,9 @@
 import { useState, FC, useEffect, useMemo, useCallback } from "react";
 import columnsJson from "./columns.json";
-import { TDataItem, TypeModelProps, TOrder } from "src/components/ui/Table/types";
-import { getModelColumns, sortGridRows } from "src/components/ui/Grid/services";
+import { TDataItem, TypeModelProps, TOrder } from "src/components/Table/types";
+import { getModelColumns, sortGridRows } from "src/components/Grid/services";
 import { checkServerAvailability } from "src/utils/main.module";
-import Table from "src/components/ui/Table";
+import Table from "src/components/Table";
 // import Counterparties from 'src/models/Counterparties';
 
 const getResponseData = async (signal: AbortSignal, currentPage: number, limit: number) => {

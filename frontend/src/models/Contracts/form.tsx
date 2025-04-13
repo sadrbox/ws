@@ -1,5 +1,5 @@
 import { FC, useMemo, useState } from 'react';
-import InputField from '../../components/ui/Field/InputField';
+import InputField from '../../components/Field/InputField';
 import ActivityHistories from '../ActivityHistories';
 import styles from "../styles.module.scss";
 import useUID from 'src/hooks/useUID';

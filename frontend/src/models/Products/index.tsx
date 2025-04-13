@@ -1,20 +1,20 @@
 import React, { useEffect, useState, FC, useMemo, useCallback, useContext, createContext, Dispatch, SetStateAction } from "react";
 import _, { reject } from "lodash";
-// import { ContextInstance, ContextProvider } from "src/components/ui/DataGrid/ContextProvider";
-// import { IColumns, IProduct, IRootProduct } from "src/components/ui/DataGrid/types";
-// import ContextProvider, { contextDataInit, TContextData, TOrdering } from "src/components/ui/DataGrid/ContextProvider";
-// import { createColumnsConfigFromResponse, initialCols, initialConfig, TColumn, TConfig } from "src/components/ui/DataGrid/DataGrid.module";
+// import { ContextInstance, ContextProvider } from "src/components/DataGrid/ContextProvider";
+// import { IColumns, IProduct, IRootProduct } from "src/components/DataGrid/types";
+// import ContextProvider, { contextDataInit, TContextData, TOrdering } from "src/components/DataGrid/ContextProvider";
+// import { createColumnsConfigFromResponse, initialCols, initialConfig, TColumn, TConfig } from "src/components/DataGrid/DataGrid.module";
 // import { Testing } from "src/components/Testing";
-// import { TColumn, TDataItem } from "src/components/ui/DataGrid/services";
-// import DataGrid from "src/components/ui/DataGrid";
+// import { TColumn, TDataItem } from "src/components/DataGrid/services";
+// import DataGrid from "src/components/DataGrid";
 // import { ProductType } from './index';
-// import { TContextData } from 'src/ui/DataGridTable/ContextProvider';
-// import { contextDataInit } from '../../components/ui/DataGrid/ContextProvider';
+// import { TContextData } from 'src/DataGridTable/ContextProvider';
+// import { contextDataInit } from '../../components/DataGrid/ContextProvider';
 
 import columns from "./columns.json"
-import DataGrid from "src/components/ui/Grid/DataGrid/index_2";
-import { TColumn, TDataItem } from "src/components/ui/Grid/types";
-import Grid from "src/components/ui/Grid/index_2";
+import DataGrid from "src/components/Grid/DataGrid/index_2";
+import { TColumn, TDataItem } from "src/components/Grid/types";
+import Grid from "src/components/Grid/index_2";
 // import { TProduct } from "./types";
 
 // type TColum = typeof columns;

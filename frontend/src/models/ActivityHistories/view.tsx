@@ -2,7 +2,7 @@ import { FC, useEffect, useState } from 'react';
 import _ from "lodash";
 import styles from "./styles.module.scss";
 import axios from 'axios';
-import { TDataItem } from 'src/components/ui/Grid/types';
+import { TDataItem } from 'src/components/Grid/types';
 import imgArrow from "src/assets/arrow.png";
 import { useAppContext } from 'src/components/app/AppContextProvider';
 import { getFormatDate } from 'src/utils/main.module'
