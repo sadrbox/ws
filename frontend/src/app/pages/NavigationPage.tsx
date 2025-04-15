@@ -1,10 +1,11 @@
 import { FC, useState } from 'react';
 import styles from './styles.module.scss';
-import { useAppContext } from '../AppContextProvider';
+import { useAppContextProps } from '../AppContextProvider';
+// import { useAppContext } from '../AppContextProvider';
 
 
 const NavigationPage: FC = () => {
-  const { context } = useAppContext();
+  const context = useAppContextProps();
   const { openPane } = context?.actions
 
 

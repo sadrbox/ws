@@ -1,0 +1,74 @@
+.Wrapper {
+	background-color: $color30;
+	padding: 10px 20px;
+	border: 1px solid $color10;
+	border-radius: 2px;
+	// height: 300px;
+	// width: ;
+	// display: grid;
+	// flex-direction: column;
+}
+.formName {
+	// margin: 0px 0 0 10px;
+	padding: 0;
+	font-size: 28px;
+	font-weight: 400;
+	color: $color6;
+	// letter-spacing: 0rem;
+}
+
+.FormHeader {
+	margin: 10px 0 30px 10px;
+	// background-color: $color1;
+}
+.inputField {
+	display: flex;
+
+	// flex: 0 1 1;
+	flex-direction: column;
+	gap: 5px;
+	margin: 10px;
+	label {
+		width: 130px;
+		// font-size: 13px;
+		// font-weight: 400;
+		text-align: left;
+		// align-self: center;
+		// justify-self: center;
+		// padding: 0 10px;
+		// line-height: 22px;
+		// padding: 4px 0 0px 0;
+		// border-bottom: 1px dotted $color5;
+	}
+	input[type="date"],
+	input[type="text"] {
+		height: 26px;
+		// align-self: center;
+		// border-width: 1px;
+		// border-color: $color5;
+		// line-height: 28px;
+		border-radius: 2px;
+		padding: 0 5px;
+		border: 1px solid $color5;
+		&:focus {
+			outline: none;
+			border-radius: 0;
+			border: 1px solid $colorPrimaryDark;
+		}
+	}
+}
+
+.ViewWrapper {
+	background-color: $color60;
+	padding: 10px 20px;
+	border: 1px solid $color10;
+	border-radius: 2px;
+	// height: 300px;
+}
+.ViewTitle {
+	font-size: 30px;
+}
+.ViewBody {
+	display: grid;
+	grid-template-columns: min-content;
+}

@@ -1,8 +1,9 @@
 import { FC, useMemo, useState } from 'react';
 import InputField from '../../components/Field/InputField';
 import ActivityHistories from '../ActivityHistories';
-import styles from "../styles.module.scss";
+import styles from "../../app/styles/main.module.scss"
 import useUID from 'src/hooks/useUID';
+import { FieldString } from 'src/components/Field';
 
 
 const ContractFORM: FC = () => {
@@ -15,9 +16,9 @@ const ContractFORM: FC = () => {
   return (
     <div className={styles.FormWrapper}>
       <div className={styles.FormBody}>
-        <InputField label="Наименование" name={`${formUid}_name`} />
-        <InputField label="БИН" name={`${formUid}_bin`} />
-        <InputField label="Комментарии" name={`${formUid}_comment`} />
+        <FieldString label="Наименование" name={`${formUid}_name`} />
+        <FieldString label="БИН" name={`${formUid}_bin`} />
+        <FieldString label="Комментарии" name={`${formUid}_comment`} />
         {/* <hr style={{ height: '20px' }} /> */}
       </div>
       <div className={styles.FormTable}>

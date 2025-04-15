@@ -14,11 +14,11 @@
 .ModalWrapper {
 	background: $color30;
 	// padding: 6px;
-	border-radius: 3px;
+	border-radius: $radius3;
 	box-shadow: 0 32px 32px rgba($color6, 0.5);
 	width: 100%;
 	max-width: 500px;
-	animation: fadeIn 0.3s ease;
+	animation: fadeIn 0.3s ease-in-out;
 }
 .ModalHeader {
 	display: flex;
@@ -35,7 +35,7 @@
 	// border: 1px solid $color5;
 	border-bottom: 0px;
 	background-color: $color30;
-	border-radius: 3px;
+	border-radius: $radius3;
 }
 
 .ModalTitle {
@@ -60,7 +60,7 @@
 @keyframes fadeIn {
 	from {
 		opacity: 0;
-		transform: scale(0.9);
+		transform: scale(0.3);
 	}
 	to {
 		opacity: 1;

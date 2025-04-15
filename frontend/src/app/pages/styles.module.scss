@@ -1,12 +1,14 @@
 .PageWrapper {
-	margin: 6px;
+	// margin: 6px;
 }
 .PageTitle {
 	margin: 0 0 24px -1px;
 	padding: 0px;
 	font-weight: normal;
-	font-size: 24px;
+	font-size: 20px;
 	color: $color6;
+	// font-family: "Segoe UI";
+	// letter-spacing: 1px;
 }
 .PageList {
 	display: flex;

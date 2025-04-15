@@ -46,7 +46,7 @@
 	// margin: 6px;
 	// padding: 6px;
 	// border: 1px solid $color10;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 }
 
 .TabHeader {
@@ -117,7 +117,7 @@
 	// border-bottom: 0px;
 	// box-shadow: 0px 0px 2px $color6;
 	box-shadow: inset 0 0 4px $color30;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 }
 
 table {
@@ -368,7 +368,7 @@ tfoot {
 					width: 100%;
 					box-sizing: border-box;
 					border: 1px solid $color34;
-					border-radius: $BRadius;
+					border-radius: $radius2;
 					height: 25px;
 					padding: 0px 3px;
 					// line-height: 11px;
@@ -438,7 +438,7 @@ tfoot {
 	border-width: 1px;
 	border: 1px solid $color10;
 	background: linear-gradient(180deg, $color30, $color33, $color34);
-	border-radius: 3px; /* Увеличен радиус скругления */
+	border-radius: $radius3; /* Увеличен радиус скругления */
 	// box-shadow: 0px 1px 0px 0px rgba($color6, 0.7);
 	// box-shadow: inset 0px 0px 1px $color30, inset 0px 0px 1px $color1;
 	height: 28px;
@@ -487,7 +487,7 @@ tfoot {
 	justify-content: center;
 	min-width: 28px;
 	border-width: 0px;
-	border-radius: 3px;
+	border-radius: $radius3;
 
 	&:not(:last-child) {
 		// margin-right: 6px;
@@ -555,7 +555,7 @@ input[type="checkbox"] {
 
 	background-color: $color60;
 	border: 1px solid $color10;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 	box-shadow: 0px 0px 3px 0px $color10;
 }
 .contextMenu_list {
@@ -611,8 +611,8 @@ hr {
 	border-bottom: 1px solid transparent;
 	padding: 6px 12px 6px 12px;
 	margin: 6px 6px -1px 18px;
-	border-top-left-radius: $BRadius;
-	border-top-right-radius: $BRadius;
+	border-top-left-radius: $radius2;
+	border-top-right-radius: $radius2;
 	// position: static;
 	z-index: 2;
 	// clip-path: 2px -5px -10px -20px round 5px;
@@ -628,7 +628,7 @@ hr {
 	overflow: auto; /* Прокрутка по вертикали */
 	border: 1px solid $color10;
 	box-shadow: inset 0 0 3px $color30;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 }
 
 .ScrollWrapper {
@@ -647,7 +647,7 @@ hr {
 	overflow: auto; /* Прокрутка по вертикали */
 	border: 1px solid $color10;
 	// box-shadow: inset 0px 0px 6px 5px $color6;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 }
 
 .dragging {
@@ -662,7 +662,7 @@ hr {
 
 .CheckboxList {
 	padding: 0;
-	margin: 6px;
+	margin: 0px;
 	// width: 333px;
 	// list-style: none;
 	transition: transform 0.2s ease;
@@ -681,7 +681,7 @@ hr {
 		padding: 2px;
 		align-items: center;
 		background-color: $color30;
-		border-radius: $BRadius;
+		border-radius: $radius2;
 
 		.DragAndDrop {
 			// cursor: pointer;
@@ -689,7 +689,7 @@ hr {
 			// flex: 0 0;
 			display: flex;
 			align-items: center;
-			border-radius: $BRadius;
+			border-radius: $radius2;
 			margin-right: 6px;
 			padding: 3px;
 			// justify-items: end;
@@ -742,7 +742,7 @@ hr {
 
 	background: $color60;
 	border: 1px solid $color10;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 	padding: 0px 6px;
 	display: flex;
 	align-items: center;
@@ -778,7 +778,7 @@ hr {
 	&::-webkit-scrollbar-thumb {
 		// margin-top: 30px;
 		background: $color10;
-		border-radius: $BRadius;
+		border-radius: $radius2;
 	}
 
 	/* Handle on hover */

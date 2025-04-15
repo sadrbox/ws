@@ -1,5 +1,5 @@
 import { FC } from 'react';
-import styles from "./styles.module.scss"
+import styles from "../../app/styles/main.module.scss"
 
 const AcitvityHistoryForm: FC = () => {
   return (

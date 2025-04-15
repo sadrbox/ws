@@ -7,6 +7,8 @@ type TypeFieldStringProps = {
   name: string
 }
 
+
+
 export const FieldString: FC<TypeFieldStringProps> = ({ label, name }) => {
   const inputRef = useRef<HTMLInputElement>(null)
   const handlerClearField = () => {

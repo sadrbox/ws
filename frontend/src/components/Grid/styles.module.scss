@@ -46,7 +46,7 @@
 	// margin: 6px;
 	// padding: 6px;
 	// border: 1px solid $color10;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 }
 
 .TabHeader {
@@ -105,7 +105,7 @@
 	// border-bottom: 0px;
 	// box-shadow: 0px 0px 2px $color6;
 	box-shadow: inset 0 0 4px $color30;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 }
 
 table {
@@ -352,7 +352,7 @@ tfoot {
 					width: 100%;
 					box-sizing: border-box;
 					border: 1px solid $color34;
-					border-radius: $BRadius;
+					border-radius: $radius2;
 					height: 25px;
 					padding: 0px 3px;
 					// line-height: 11px;
@@ -422,7 +422,7 @@ tfoot {
 	font-size: 14px;
 	text-align: center;
 	cursor: pointer;
-	border-radius: 3px; /* Увеличен радиус скругления */
+	border-radius: $radius3; /* Увеличен радиус скругления */
 	// box-shadow: 0px 1px 0px 0px rgba($color6, 0.7);
 	// box-shadow: inset 0px 0px 1px $color30, inset 0px 0px 1px $color1;
 	height: 28px;
@@ -518,7 +518,7 @@ input[type="checkbox"] {
 
 	background-color: $color60;
 	border: 1px solid $color10;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 	box-shadow: 0px 0px 3px 0px $color10;
 }
 .contextMenu_list {
@@ -574,8 +574,8 @@ hr {
 	border-bottom: 1px solid transparent;
 	padding: 6px 12px 6px 12px;
 	margin: 6px 6px -1px 18px;
-	border-top-left-radius: $BRadius;
-	border-top-right-radius: $BRadius;
+	border-top-left-radius: $radius2;
+	border-top-right-radius: $radius2;
 	// position: static;
 	z-index: 2;
 	// clip-path: 2px -5px -10px -20px round 5px;
@@ -591,7 +591,7 @@ hr {
 	overflow: auto; /* Прокрутка по вертикали */
 	border: 1px solid $color10;
 	box-shadow: inset 0 0 3px $color30;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 }
 
 .ScrollWrapper {
@@ -610,7 +610,7 @@ hr {
 	overflow: auto; /* Прокрутка по вертикали */
 	border: 1px solid $color10;
 	// box-shadow: inset 0px 0px 6px 5px $color6;
-	border-radius: $BRadius;
+	border-radius: $radius2;
 }
 
 .dragging {
@@ -644,7 +644,7 @@ hr {
 		padding: 2px;
 		align-items: center;
 		background-color: $color30;
-		border-radius: $BRadius;
+		border-radius: $radius2;
 
 		.DragAndDrop {
 			// cursor: pointer;
@@ -652,7 +652,7 @@ hr {
 			// flex: 0 0;
 			display: flex;
 			align-items: center;
-			border-radius: $BRadius;
+			border-radius: $radius2;
 			margin-right: 6px;
 			padding: 3px;
 			// justify-items: end;
@@ -713,7 +713,7 @@ hr {
 	&::-webkit-scrollbar-thumb {
 		// margin-top: 30px;
 		background: $color10;
-		border-radius: $BRadius;
+		border-radius: $radius2;
 	}
 
 	/* Handle on hover */

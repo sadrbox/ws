@@ -2,7 +2,8 @@ import { FC, useRef, useEffect, createContext, useContext, useState, ReactNode }
 import ReactDOM from 'react-dom';
 import styles from './Modal.module.scss';
 import Button from '../Button';
-import { useAppContext } from 'src/app/AppContextProvider';
+import { useAppContextProps } from 'src/app/AppContextProvider';
+// import { useAppContext } from 'src/app/AppContextProvider';
 
 type ModalProps = {
   isOpen: boolean;
@@ -22,8 +23,8 @@ export const useModalContextProps = () => {
 
 const Modal: FC<ModalProps> = ({ isOpen, onClose, onSubmit, title, children }) => {
   const modalRef = useRef<HTMLDivElement>(null);
-  const AppContext = useAppContext();
-  const { context: { screenRef } } = AppContext;;
+  const AppContext = useAppContextProps();
+  const { screenRef } = AppContext;
   const [values, setValues] = useState<Record<string, any>>({});
 
   useEffect(() => {

@@ -1,0 +1,173 @@
+@import url("https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;500;600&display=swap&subset=cyrillic");
+/* @import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap"); */
+* {
+	font-family: "PT Sans";
+	/*  */
+	/* font-family: "Inter", sans-serif; */
+	//font-weight: 800;
+	//font-style: normal;
+}
+
+html,
+body {
+	user-select: none;
+	font-size: 13px;
+	margin: 0;
+	padding: 0;
+}
+
+#root {
+	position: relative;
+	padding: 0px;
+}
+
+.Screen {
+	// container-type: size; // не знаю может надо ??
+	display: grid;
+	grid-template-rows: 4dvh 91dvh 5dvh;
+
+	position: relative;
+}
+
+.NavbarWrapper {
+	padding: 6px;
+	border-bottom: 1px solid $color10;
+	display: flex;
+	align-items: center;
+	background-color: #ddd;
+	z-index: 1;
+	.NavbarItem {
+		margin: 6px 6px 6px 6px;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		// &:not(:last-child) {
+		// 	margin-left: 12px;
+		// }
+	}
+}
+.PaneGroupWrapper {
+	border: 0px solid $color10;
+	background-color: $color30;
+	overflow: auto;
+	position: relative;
+	.Pane {
+		height: 88dvh;
+		padding: 12px;
+
+		display: none;
+	}
+	.ActivePane {
+		display: flex;
+	}
+}
+.PaneTabWrapper {
+	overflow: auto;
+	padding: 0px 12px;
+	display: flex;
+	// border-top: 1px solid $color10; /* Линия под вкладками */
+	position: relative; /* Для корректного позиционирования вкладок */
+	flex-direction: row;
+	background-color: $color33;
+	// background: url("../../assets/bgpane.jpg");
+	// background-size: ;
+	z-index: 1;
+
+	&::before {
+		content: "";
+		position: absolute;
+		background-color: $color10;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 1px;
+		// margin-top: -1px;
+		// z-index: 9;
+	}
+	// padding-bottom: 12px;
+	.PaneTab {
+		box-sizing: content-box;
+		border-top: 1px solid $color10;
+		border-left: 1px solid $color10;
+		border-right: 1px solid $color10;
+		border-bottom: 1px solid $color10;
+		// border-top: none;
+		border-bottom-left-radius: 3px;
+		border-bottom-right-radius: 3px;
+		// min-width: 100px;
+		height: 32px;
+		font-family: "Segoe UI";
+		background: $color33;
+		// background: linear-gradient(-180deg, #eee, #ddd, #bbb);
+		color: $color51;
+		display: flex;
+		justify-content: left;
+		align-items: center;
+		/* Используем SVG для скошенного угла */
+		padding: 0 12px;
+		cursor: pointer;
+		margin-right: -1px; /* Наложение краев с учетом границы */
+		font-weight: bold;
+		z-index: 1;
+		// margin: 0px 6px 0px 12px;
+		// box-shadow: 0 0 5px 3px rgba($color5, 0.2);
+
+		&:hover {
+			// background-color: $color2;
+			// border-color: $color3;
+			// border-top: 1px solid transparent;
+			// border-top: 1px solid $color10;
+			// border-left: 1px solid $color10;
+			// border-right: 1px solid $color10;
+			// border-top: transparent;
+			// color: #000;
+			z-index: 10;
+		}
+	}
+	.PaneTabActive {
+		border-top: 1px solid transparent;
+		// position: relative;
+		// height: 24px;
+		// margin-top: -2px;
+		background-color: $color30;
+		// border: 1px solid $color60;
+		// border-top: 1px solid $color3;
+		color: $color6;
+		// font-weight: bold;
+		// z-index: 9;
+
+		&:hover {
+			// border-color: $color10;
+			// border-top: 1px solid $color30;
+			// background-color: $color30;
+			// cursor: default;
+			// color: $color3;
+		}
+	}
+}
+
+.FormWrapper {
+	width: 100%;
+	display: grid;
+	grid-template-columns: 1fr;
+	grid-template-rows: min-content auto;
+}
+
+.FormHeader {
+	height: auto;
+}
+.FormBody {
+	// margin: 3px;
+	// padding: 3px;
+}
+
+.FormTable {
+	// margin: 6px;
+	width: auto;
+	margin-top: 20px;
+	container-type: size;
+	// flex-direction: column;
+	flex: 1;
+	display: flex; // border: 1px solid red;
+	// height: 50cqi;
+}

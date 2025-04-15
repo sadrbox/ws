@@ -1,33 +1,43 @@
 
 import ActivityHistories from "../models/ActivityHistories";
 import { JSX, useMemo, useRef, useState, useCallback } from "react";
-// import ActivityHistory from './models/ActivityHistory/index';
 import ContractFORM from "../models/Contracts/form";
-import styles from "./styles/styles.module.scss"
-import Navbar from "./layout/Navbar";
-import PaneTab from "./layout/PaneTab";
-import PaneGroup from "./layout/PaneGroup";
+import styles from "./styles/main.module.scss"
+
 import AppContextProvider from "./AppContextProvider";
-import { TAppContext, TPaneTab } from "./types";
+// import { TAppContext, TPaneTab } from "./types";
 import NavigationPage from "./pages/NavigationPage";
 import Contracts from "src/models/Contracts";
 import { getTranslation } from "src/i18";
 import Counterparties from "src/models/Counterparties";
 import Organizations from "src/models/Organizations";
+import { Navbar, PaneGroup, PaneTab } from "./DesignSystem";
+import { TypeTabItem, TypeTabs } from "src/components/Tabs/types";
+import { TypeAppContextProps } from "./types";
 
+
+type TypePanes = {
+  activeID: number;
+  tabs: TypeTabItem[];
+}
 
 
 export default function App() {
   const screenRef = useRef<HTMLDivElement>(null);
-
-  const [paneTabs, setPaneTabs] = useState<TPaneTab[]>([
-    { id: 1, title: "Навигация", component: <NavigationPage /> },
-    // { id: 2, title: "second", component: <ActivityHistories /> }
-  ]);
-  const [activePaneID, setActivePaneID] = useState<number>(1);
+  const [panes, setPanes] = useState<TypePanes>({
+    activeID: 0,
+    tabs: [
+      { id: 0, label: "Навигация", content: <NavigationPage /> },
+    ]
+  });
+  // const [paneTabs, setPaneTabs] = useState<TypeTabs>([
+  //   { id: 0, label: "Навигация", content: <NavigationPage /> },
+  //   // { id: 2, title: "second", component: <ActivityHistories /> }
+  // ]);
+  // const [activePaneID, setActivePaneID] = useState<number>(0);
 
   // Словарь компонентов
-  const COMPONENTS: Record<string, JSX.Element> = {
+  const COMPONENTS: Record<string, React.ReactNode> = {
     ActivityHistories: <ActivityHistories />,
     ContractFORM: <ContractFORM />,
     NavigationPage: <NavigationPage />,
@@ -38,45 +48,49 @@ export default function App() {
     Organizations: <Organizations />
   };
 
-
+  const setActivePaneID = (id: number) => {
+    setPanes((prev) => ({ ...prev, activeID: id }));
+  }
   const openPane = useCallback((component: string) => {
+    const currentComponent = COMPONENTS[component];
 
-    const existsPane = paneTabs.find(paneTab =>
-      paneTab.component && paneTab.component.type && paneTab.component.type.name === component
+    if (!currentComponent) return;
+    // const { activeID, tabs: paneTabs } = panes;
+    // const setActivePaneID = setPanes}
+    const existsPane = panes?.tabs.find(paneTab =>
+      paneTab.content && (paneTab.content as React.ReactElement).type === component
     );
 
     if (!existsPane) {
-      const title = getTranslation(component)
+      const label = getTranslation(component)
       const newTab = {
         id: Date.now(),
-        title: title || `Вкладка ${paneTabs.length + 1}`,
-        component: COMPONENTS[component]
+        label: label || `Вкладка ${panes?.tabs.length + 1}`,
+        content: COMPONENTS[component]
       };
-      setPaneTabs((prevTabs) => [...prevTabs, newTab]);
-      setActivePaneID(newTab.id);
+      setPanes((prev) => ({ activeID: newTab.id, tabs: [...prev.tabs, newTab] }));
+      // setActivePaneID(newTab.id);
     } else {
-      setActivePaneID(existsPane.id)
+      // setActivePaneID(existsPane.id)
     }
-  }, [paneTabs, setActivePaneID]);
+  }, [panes]);
 
-  const initialContext = useMemo<TAppContext>(() => {
+  const init = useMemo<TypeAppContextProps>(() => {
     return {
       screenRef,
-      pane: {
-        activePaneID,
-        paneTabs,
+      panes: {
+        activeID: panes.activeID,
+        tabs: panes.tabs,
       },
       actions: {
-        openPane
-      },
-      states: {
+        openPane,
         setActivePaneID
       }
     }
-  }, [activePaneID, paneTabs]);
+  }, [panes]);
 
   return (
-    <AppContextProvider initialContext={initialContext}>
+    <AppContextProvider init={init}>
       <div ref={screenRef} className={styles.Screen}>
         <Navbar />
         <PaneGroup />

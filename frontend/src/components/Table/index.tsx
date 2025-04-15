@@ -51,7 +51,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   useEffect(() => setIsAllChecked(allChecked), [allChecked]);
   useEffect(() => {
 
-    if (loadDataGrid) loadDataGrid(currentPage)
+    if (loadDataGrid && !configModalFormIsOpen) loadDataGrid(currentPage)
 
   }, [configModalFormIsOpen])
 
@@ -336,7 +336,6 @@ type TypeTableContextInstance = {
 };
 
 const TableContextInstance = createContext<TypeTableContextInstance | undefined>(undefined);
-
 const TableContextProvider: React.FC<PropsWithChildren<{ init: TypeTableContextProps }>> = ({
   children,
   init,
