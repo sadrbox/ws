@@ -8,7 +8,7 @@ export type TypeAppContextProps = {
 		tabs: TypeTabs;
 	};
 	actions: {
-		openPane: (component: string) => void;
+		openPane: (component: React.ReactNode) => void;
 		setActivePaneID: (id: number) => void;
 	};
 };

@@ -1,6 +1,9 @@
 import { FC, PropsWithChildren, useState } from 'react';
 import { useAppContextProps } from './AppContextProvider';
 import styles from "./styles/main.module.scss"
+import NavigationPage from './pages/NavigationPage';
+import ActivityHistories from 'src/models/ActivityHistories';
+import ContractFORM from 'src/models/Contracts/form';
 
 
 export const GroupBox: FC<{ align: 'row' | 'col'; gap?: string } & PropsWithChildren> = ({ align, gap, children }) => {
@@ -37,13 +40,13 @@ export const Navbar: FC = () => {
 
   return (
     <div className={styles.NavbarWrapper}>
-      <a href="#" className={styles.NavbarItem} onClick={() => openPane('NavigationPage')}>
+      <a href="#" className={styles.NavbarItem} onClick={() => openPane(<NavigationPage />)}>
         Навигация
       </a>
-      <a href="#" className={styles.NavbarItem} onClick={() => openPane('ActivityHistories')}>
+      <a href="#" className={styles.NavbarItem} onClick={() => openPane(<ActivityHistories />)}>
         История активности
       </a>
-      <a href="#" className={styles.NavbarItem} onClick={() => openPane('ContractFORM')}>
+      <a href="#" className={styles.NavbarItem} onClick={() => openPane(<ContractFORM />)}>
         Форма
       </a>
     </div>

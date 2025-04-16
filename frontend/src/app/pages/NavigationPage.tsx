@@ -1,6 +1,9 @@
 import { FC, useState } from 'react';
 import styles from './styles.module.scss';
 import { useAppContextProps } from '../AppContextProvider';
+import Organizations from 'src/models/Organizations';
+import Counterparties from 'src/models/Counterparties';
+import Contracts from 'src/models/Contracts';
 // import { useAppContext } from '../AppContextProvider';
 
 
@@ -16,9 +19,9 @@ const NavigationPage: FC = () => {
 
       <h3>Документы</h3>
       <ul className={styles.PageList}>
-        <li onClick={() => openPane('Organizations')}>Организации</li>
-        <li onClick={() => openPane('Counterparties')}>Контрагенты</li>
-        <li onClick={() => openPane('Contracts')}>Договора</li>
+        <li onClick={() => openPane(<Organizations />)}>Организации</li>
+        <li onClick={() => openPane(<Counterparties />)}>Контрагенты</li>
+        <li onClick={() => openPane(<Contracts />)}>Договора</li>
         <li>Реализация товара и услуг</li>
         <li>Поступление товара и услуг</li>
         <li>Перемещение ТМЗ</li>
