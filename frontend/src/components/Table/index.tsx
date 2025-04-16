@@ -169,6 +169,8 @@ export default Table;
 // --------------------- Sub component - TableArea -----------------------------------------
 
 const TableArea = () => {
+  const { states: { isLoading } } = useTableContextProps();
+
   return (
     <table>
       <TableHeader />
