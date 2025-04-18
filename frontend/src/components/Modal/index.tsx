@@ -8,7 +8,7 @@ import { useAppContextProps } from 'src/app/AppContextProvider';
 type ModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (values: Record<string, any>) => void;
+  onApply: () => void;
   title: string;
   children: ReactNode;
 };
@@ -21,7 +21,7 @@ export const useModalContextProps = () => {
   return { ...context };
 };
 
-const Modal: FC<ModalProps> = ({ isOpen, onClose, onSubmit, title, children }) => {
+const Modal: FC<ModalProps> = ({ isOpen, onClose, onApply, title, children }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const AppContext = useAppContextProps();
   const { screenRef } = AppContext;
@@ -50,11 +50,12 @@ const Modal: FC<ModalProps> = ({ isOpen, onClose, onSubmit, title, children }) =
       onClose();
     }
   };
-
-  const handleSubmit = () => {
-    onSubmit(values);
+  const handleApplyAndClose = () => {
+    onApply();
     onClose();
-  };
+  }
+
+
 
   if (!isOpen) return null;
 
@@ -64,7 +65,8 @@ const Modal: FC<ModalProps> = ({ isOpen, onClose, onSubmit, title, children }) =
         <div className={styles.ModalHeader}>
           <div className={styles.ModalTitle}>{title}</div>
           <div className={styles.ModalButtons}>
-            <Button onClick={handleSubmit} variant="primary">Применить</Button>
+            <Button onClick={handleApplyAndClose} variant="primary">Применить и закрыть</Button>
+            {/* <Button onClick={onApply} variant="primary">Применить</Button> */}
             <Button onClick={onClose} variant="secondary">Закрыть</Button>
           </div>
         </div>

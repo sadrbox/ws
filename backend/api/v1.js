@@ -16,16 +16,87 @@ router.get("/activityhistories", async (req, res) => {
 		const limit = parseInt(req.query.limit) || 100;
 		const skip = (page - 1) * limit;
 
+		const rawQuery = (req.query.searchQuery || "").trim();
+		const words = rawQuery.split(/\s+/).filter(Boolean);
+
+		let searchColumnsRaw = req.query.searchColumns || "[]";
+		let searchColumns;
+		try {
+			searchColumns = JSON.parse(searchColumnsRaw);
+		} catch (e) {
+			searchColumns = [];
+		}
+		// console.log(searchColumnsRaw);
+
+		const whereClause =
+			words.length && searchColumns.length
+				? {
+						AND: words.map((word) => {
+							const orConditions = searchColumns
+								.map((column) => {
+									const type = column.type;
+									const [field, subField] = column.identifier.split(".");
+
+									// Если тип неизвестен — игнорируем
+									if (!type) return null;
+
+									const value =
+										type === "number" && !isNaN(Number(word))
+											? Number(word)
+											: type === "date" && !isNaN(Date.parse(word))
+											? new Date(word)
+											: word;
+
+									if (type === "string") {
+										const condition = {
+											contains: word,
+											// mode: "insensitive",
+										};
+
+										return subField
+											? { [field]: { [subField]: condition } }
+											: { [field]: condition };
+									}
+
+									const isNumeric = !isNaN(value) && Number.isInteger(+value);
+
+									if (
+										typeof value === "number" &&
+										type === "number" &&
+										isNumeric
+									) {
+										const condition = { equals: value };
+
+										return subField
+											? { [field]: { [subField]: condition } }
+											: { [field]: condition };
+									}
+
+									return null;
+								})
+								.filter(Boolean); // убираем null
+
+							return { OR: orConditions };
+						}),
+				  }
+				: undefined;
+
+		// console.log(JSON.stringify(whereClause, null, 2));
+
 		const [activityHistories, total] = await prisma.$transaction([
 			prisma.activityHistory.findMany({
 				skip,
 				take: limit,
+				where: whereClause,
 				include: {
 					organization: true,
 				},
 			}),
-			prisma.activityHistory.count(),
+			prisma.activityHistory.count({
+				where: whereClause,
+			}),
 		]);
+		// console.log(activityHistories);
 
 		res.status(200).json({
 			items: activityHistories,
@@ -35,9 +106,10 @@ router.get("/activityhistories", async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Error fetching:", error);
-		res
-			.status(500)
-			.json({ message: "Error fetching data.", error: error.message });
+		res.status(500).json({
+			message: "Error fetching data.",
+			error: error.message,
+		});
 	}
 });
 

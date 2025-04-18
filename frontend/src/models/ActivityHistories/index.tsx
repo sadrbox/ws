@@ -4,12 +4,20 @@ import { TDataItem, TypeModelProps, TOrder } from "src/components/Table/types";
 import { getModelColumns, sortGridRows } from "src/components/Grid/services";
 import { checkServerAvailability } from "src/utils/main.module";
 import Table from "src/components/Table";
-import Modal from "src/components/Modal";
-import { FieldSelect, FieldString } from "src/components/Field";
-import styles from "./ActivityHistories.module.scss"
 
-const getResponseData = async (signal: AbortSignal, currentPage: number, limit: number) => {
-  const url = `http://192.168.1.112:3000/api/v1/ActivityHistories?page=${currentPage}&limit=${limit}`;
+const getResponseData = async (signal: AbortSignal, page: number, limit: number, fastSearchQuery: string, searchColumns: { identifier: string, type: string }[]) => {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+  });
+
+  if (fastSearchQuery.trim()) {
+    params.append("searchQuery", fastSearchQuery.trim());
+    params.append("searchColumns", JSON.stringify(searchColumns));
+    // console.log(JSON.stringify(searchColumns))
+  }
+
+  const url = `http://192.168.1.112:3000/api/v1/ActivityHistories?${params.toString()}`;
 
   if (!(await checkServerAvailability(url, signal))) {
     console.warn("Сервер недоступен.");
@@ -28,6 +36,7 @@ const getResponseData = async (signal: AbortSignal, currentPage: number, limit: 
   }
 };
 
+
 const ActivityHistories: FC = () => {
   const name = ActivityHistories.name;
   const [rows, setRows] = useState<TDataItem[]>([]);
@@ -38,17 +47,21 @@ const ActivityHistories: FC = () => {
     columnID: "actionDate",
     direction: "desc",
   });
+  const [fastSearchQuery, setFastSearchQuery] = useState<string>("");
 
   // Колонки зависят от состояния isLoading
   const columns = useMemo(() => getModelColumns(columnsJson, name), [isLoading]);
 
   // Загрузка данных
-  const loadDataGrid = useCallback(async (currentPage: number = 1, limit: number = 100) => {
+  const loadDataGrid = useCallback(async (page: number = 1, limit: number = 100) => {
     const controller = new AbortController();
     setIsLoading(true);
 
+    const searchColumns = columns.filter(column => column.visible && (column.type === "string" || column.type === "number" || column.type === "object")).map(column => ({ identifier: column.identifier, type: column.type }))
+    // console.log(searchColumns)
     try {
-      const response = await getResponseData(controller.signal, currentPage, limit);
+
+      const response = await getResponseData(controller.signal, page, limit, fastSearchQuery, searchColumns);
       if (response) {
         // Сортируем данные сразу после получения
         // console.log(response)
@@ -60,7 +73,7 @@ const ActivityHistories: FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [order, currentPage]); // Зависимость от order для корректной сортировки
+  }, [order, currentPage, fastSearchQuery]); // Зависимость от order для корректной сортировки
 
   // Загружаем данные при монтировании и изменении порядка сортировки
   useEffect(() => {
@@ -80,7 +93,7 @@ const ActivityHistories: FC = () => {
         totalPages,
       },
       actions: { loadDataGrid },
-      states: { isLoading, setIsLoading, order, setOrder },
+      states: { isLoading, setIsLoading, order, setOrder, fastSearchQuery, setFastSearchQuery },
     }),
     [rows, columns, currentPage, isLoading, loadDataGrid, order, name]
   );

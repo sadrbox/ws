@@ -55,6 +55,10 @@ export type TypeModelStates = {
   setActiveGrid?: Dispatch<SetStateAction<EActiveTable>>;
   isLoading: boolean;
   setIsLoading: Dispatch<SetStateAction<boolean>>;
+  columns?: TColumn[];
+  setColumns?: Dispatch<SetStateAction<TColumn[]>>;
+  fastSearchQuery: string;
+  setFastSearchQuery: Dispatch<SetStateAction<string>>;
 };
 
 export type TResponseData = TDataItem[] & {
@@ -65,9 +69,13 @@ export type TypeTableContextProps = {
   name: string;
   rows: TDataItem[];
   columns: TColumn[];
-  actions?: {
-    loadDataGrid?: () => Promise<void>;
-    setColumnsi?: Dispatch<SetStateAction<TColumn[]>>;
+  pagination: {
+    currentPage: number;
+    setCurrentPage: Dispatch<SetStateAction<number>>;
+    totalPages: number;
+  }
+  actions: {
+    loadDataGrid: (page?: number, limit?: number) => Promise<void>;
   };
   states: TypeModelStates;
 };
@@ -79,17 +87,5 @@ export enum EActiveTable {
   FILTER,
 }
 
-export type TypeModelProps = {
-  name: string;
-  rows: TDataItem[];
-  columns: TColumn[];
-  pagination: {
-    currentPage: number;
-    setCurrentPage: Dispatch<SetStateAction<number>>;
-    totalPages: number;
-  }
-  actions: {
-    loadDataGrid: (currentPage: number, limit?: number) => Promise<void>;
-  };
-  states: TypeModelStates;
-};
+export type TypeModelProps = TypeTableContextProps
+

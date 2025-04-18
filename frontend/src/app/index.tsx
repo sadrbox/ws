@@ -77,7 +77,7 @@ export default function App() {
     // const { activeID, tabs: paneTabs } = panes;
     // const setActivePaneID = setPanes}
     const existsPane = panes?.tabs.find(paneTab => {
-      console.log(getComponentName(paneTab.content))
+      // console.log(getComponentName(paneTab.content))
       return paneTab.content && getComponentName(paneTab.content) === componentName;
     });
 

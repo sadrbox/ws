@@ -1,6 +1,7 @@
-import React, { FC, useRef } from 'react'
+import React, { FC, useDeferredValue, useRef } from 'react'
 
 import styles from "./Field.module.scss"
+import { useTableContextProps } from '../Table'
 
 type TypeFieldStringProps = {
   label: string
@@ -58,11 +59,29 @@ export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options }) 
 
 export const SearchField: FC = () => {
 
+  // const APP_CONTEXT_PROPS = useAppContextProps();
+  const TABLE_CONTEXT_PROPS = useTableContextProps();
+  // const { loadDataGrid } = TABLE_CONTEXT_PROPS.actions;
+  const { setFastSearchQuery } = TABLE_CONTEXT_PROPS.states;
   const inputRef = useRef<HTMLInputElement>(null)
+  // const [inputValue, setInputValue] = useState("")
+  // const deferredValue = useDeferredValue(fastSearchQuery) // "медленное" значение
+
   const handlerClearField = () => {
+    setFastSearchQuery("")
     if (inputRef.current)
       inputRef.current.value = ""
+    // loadDataGrid()
   }
+
+  const handlerChangeInputValue = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // if (e.target.value.length > 3)
+    setFastSearchQuery(e.target.value);
+    // if (loadDataGrid)
+    //   loadDataGrid()
+
+  }
+
   const searchField = "searchField";
 
   return (
@@ -76,6 +95,8 @@ export const SearchField: FC = () => {
         className={styles.FieldString}
         autoComplete='off'
         style={{ width: "400px" }}
+        // value={fastSearchQuery}
+        onChange={handlerChangeInputValue}
       />
       <div className={styles.FieldActions}>
         <button onClick={() => handlerClearField()}>

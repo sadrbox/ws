@@ -111,7 +111,7 @@
 	},
 	{
 		"identifier": "organization.shortName",
-		"type": "object",
+		"type": "string",
 		"column": "Organization",
 		"width": "199px",
 		"alignment": "left",

@@ -1,12 +1,9 @@
 import { useState, FC, useEffect, useCallback, useMemo, createContext, SetStateAction, Dispatch, useContext, PropsWithChildren, memo, useDeferredValue } from 'react';
 import styles from './Table.module.scss';
-import { SlSettings } from "react-icons/sl";
-import { TbFilter } from "react-icons/tb";
 import { TColumn, TDataItem, TypeModelProps, TypeTableContextProps } from './types';
-import { SlRefresh } from "react-icons/sl";
 import { getTranslateColumn } from 'src/i18';
 import { getFormatColumnValue, getTextAlignByColumnType } from './services';
-import { Divider, FieldGroup, PeriodField, SearchField } from '../Field';
+import { Divider, SearchField } from '../Field';
 import Modal from '../Modal';
 import { FieldString, FieldSelect } from '../Field/index';
 import filterImage from '../../assets/filter_16.png';
@@ -17,6 +14,7 @@ import { DndContext, closestCenter } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { PiDotsThreeVerticalDuotone } from 'react-icons/pi';
 // import { useAppContext } from 'src/components/app/AppContextProvider';
+import React from 'react';
 
 
 
@@ -71,8 +69,10 @@ const Table: FC<TypeTableProps> = ({ props }) => {
     columns,
     pagination: {
       currentPage,
+      setCurrentPage,
       totalPages,
     },
+    actions: { loadDataGrid },
     states: {
       ...states,
       checkedRows,
@@ -114,8 +114,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
             </button> */}
               <div className={styles.colGroup} style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "0 0px" }}>Страница:</div>
               <div className={styles.PaginationPages}>
-                <input
-                  type="number"
+                <input type="number"
                   value={deferredValueCurrentPage}
                   onChange={handlerChangeCurrentPage}
                   onBlur={() => goToPage(deferredValueCurrentPage)}
@@ -169,7 +168,7 @@ export default Table;
 // --------------------- Sub component - TableArea -----------------------------------------
 
 const TableArea = () => {
-  const { states: { isLoading } } = useTableContextProps();
+  // const { states: { isLoading } } = useTableContextProps();
 
   return (
     <table>
@@ -374,7 +373,7 @@ type TypeModalProps = {
 const TableFilterModalForm: FC<TypeModalProps> = ({ isOpen, onClose }) => {
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Настройки фильтра" onSubmit={(values) => console.log('Фильтры:', values)}>
+    <Modal isOpen={isOpen} onClose={onClose} title="Настройки фильтра" onApply={() => console.log('Фильтры:')}>
       <div className={styles.rowGroup}>
         <FieldString label="Название" name="name" />
         <FieldString label="Название" name="name" />
@@ -388,29 +387,46 @@ const TableFilterModalForm: FC<TypeModalProps> = ({ isOpen, onClose }) => {
 };
 
 const TableConfigModalForm: FC<TypeModalProps> = ({ isOpen, onClose }) => {
+  const { columns, name } = useTableContextProps()
+  const [columnsConfig, setColumnsConfig] = useState<TColumn[]>(columns);
+
+
+  // useEffect(() => {
+  //   // console.log(gridColumns)
+  //   localStorage.setItem(name, JSON.stringify(columnsConfig));
+  // }, [columnsConfig]);
+
+  const handleModalApply = () => {
+    // console.log(columnsConfig)
+    localStorage.setItem(name, JSON.stringify(columnsConfig));
+  }
+
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Настройки таблицы" onSubmit={(values) => console.log('Фильтры:', values)}>
-      <TableConfigColumns />
+    <Modal isOpen={isOpen} onClose={onClose} title="Настройки таблицы" onApply={handleModalApply}>
+      <TableConfigColumns columns={columnsConfig} setColumns={setColumnsConfig} />
     </Modal>
   );
 };
 
 
-const TableConfigColumns = () => {
-  const context = useTableContextProps();
-  const { columns, name } = context;
-  const [gridColumns, setGridColumns] = useState<TColumn[]>(columns);
+type TypeTableConfigColumnsProps = {
+  columns: TColumn[];
+  setColumns: Dispatch<SetStateAction<TColumn[]>>;
+};
+const TableConfigColumns: FC<TypeTableConfigColumnsProps> = ({ columns, setColumns }) => {
+  // const { columns, name } = useTableContextProps();
+  // const [gridColumns, setGridColumns] = useState<TColumn[]>(columns);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
 
-  useEffect(() => {
-    // console.log(gridColumns)
-    localStorage.setItem(name, JSON.stringify(gridColumns));
-  }, [gridColumns]);
+  // useEffect(() => {
+  //   // console.log(gridColumns)
+  //   localStorage.setItem(name, JSON.stringify(gridColumns));
+  // }, [gridColumns]);
 
   const updateColumnVisibility = (identifier: string, visible: boolean) => {
-    setGridColumns(prev =>
+    setColumns(prev =>
       prev.map(col => col.identifier === identifier ? { ...col, visible } : col)
     );
   };
@@ -423,7 +439,7 @@ const TableConfigColumns = () => {
     const { active, over } = event;
     setDraggingId(null);
     if (active.id !== over?.id) {
-      setGridColumns((prev) => {
+      setColumns((prev) => {
         const oldIndex = prev.findIndex((col) => col.identifier === active.id);
         const newIndex = prev.findIndex((col) => col.identifier === over?.id);
         // console.log({ oldIndex, newIndex })
@@ -437,10 +453,10 @@ const TableConfigColumns = () => {
 
   return (
     <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd} onDragStart={onDragStart}>
-      <SortableContext items={gridColumns.map(col => col.identifier)} strategy={verticalListSortingStrategy}>
+      <SortableContext items={columns.map(col => col.identifier)} strategy={verticalListSortingStrategy}>
         <ul className={styles.CheckboxList}>
-          {[...gridColumns].map((column) => (
-            <TableConfigColumns.Item
+          {[...columns].map((column) => (
+            <TableConfigColumnsItem
               key={column.identifier}
               column={column}
               isDragging={column.identifier === draggingId}
@@ -482,4 +498,3 @@ const TableConfigColumnsItem: FC<TypeTableConfigColumnsItem> = ({ column, isDrag
     </li>
   );
 };
-TableConfigColumns.Item = TableConfigColumnsItem;

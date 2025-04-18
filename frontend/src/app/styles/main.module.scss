@@ -49,10 +49,10 @@ body {
 .PaneGroupWrapper {
 	border: 0px solid $color10;
 	background-color: $color30;
-	overflow: auto;
+	overflow: hidden;
 	position: relative;
 	.Pane {
-		height: 88dvh;
+		height: 87dvh;
 		padding: 12px;
 
 		display: none;
@@ -62,7 +62,7 @@ body {
 	}
 }
 .PaneTabWrapper {
-	overflow: auto;
+	overflow: hidden;
 	padding: 0px 12px;
 	display: flex;
 	// border-top: 1px solid $color10; /* Линия под вкладками */

@@ -122,7 +122,10 @@ export function getColumnSettingValue(
 	return rowSettingColumn[column.identifier as keyof TColumn] + "";
 }
 
-export function getFormatColumnValue(row: TDataItem, column: TColumn): string {
+export function getFormatColumnValue(
+	row: TDataItem,
+	column: TColumn
+): string | number {
 	if (column.identifier === "id" && column.type === "number") {
 		return getFormatNumericalID(+row.id);
 	} else if (
@@ -136,13 +139,19 @@ export function getFormatColumnValue(row: TDataItem, column: TColumn): string {
 	} else if (column.type === "date") {
 		const date = getFormatDate(row[column.identifier] as string);
 		return date;
-	} else if (column.type === "object") {
-		return getValueByIdentifier(row, column.identifier);
+		// k else if (column.type === "object") {
+		// 	return getValueByIdentifier(row, column.identifier);
 	} else if (column.type === "string") {
-		// console.log("first");
-		return row[column.identifier] !== undefined
-			? row[column.identifier] + ""
-			: "";
+		const [field, subField]: string[] = column.identifier.split(".");
+
+		if (typeof row[field] === "object" && row[field] !== null) {
+			return (row[field] as Record<string, any>)[subField];
+		} else {
+			// console.log(row);
+			return row[column.identifier] !== undefined
+				? row[column.identifier] + ""
+				: "";
+		}
 	}
 	return "";
 }
