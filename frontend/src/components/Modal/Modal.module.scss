@@ -18,7 +18,7 @@
 	box-shadow: 0 32px 32px rgba($color6, 0.5);
 	width: 100%;
 	max-width: 500px;
-	animation: fadeIn 0.3s ease-in-out;
+	animation: fadeIn 0.3s ease;
 }
 .ModalHeader {
 	display: flex;
@@ -60,7 +60,7 @@
 @keyframes fadeIn {
 	from {
 		opacity: 0;
-		transform: scale(0.3);
+		transform: scale(0.1);
 	}
 	to {
 		opacity: 1;
