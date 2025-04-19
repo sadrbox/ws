@@ -162,7 +162,8 @@ const getValueByIdentifier = (row: any, identifier: string): any => {
 
 // Формат числовой идентификатор /////////////////////////////////////////////////////////////////////////
 export function getFormatNumericalID(n: number): string {
-	return n.toString().padStart(5, "0");
+	// return n.toString().padStart(5, "0");
+	return n.toString();
 }
 
 // Формат числа /////////////////////////////////////////////////////////////////////////

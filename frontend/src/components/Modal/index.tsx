@@ -3,11 +3,11 @@ import ReactDOM from 'react-dom';
 import styles from './Modal.module.scss';
 import Button from '../Button';
 import { useAppContextProps } from 'src/app/AppContextProvider';
+import { TypeModalFormMethod } from '../Table/types';
 // import { useAppContext } from 'src/app/AppContextProvider';
 
 type ModalProps = {
-  isOpen: boolean;
-  onClose: () => void;
+  method: TypeModalFormMethod;
   onApply: () => void;
   title: string;
   children: ReactNode;
@@ -21,43 +21,43 @@ export const useModalContextProps = () => {
   return { ...context };
 };
 
-const Modal: FC<ModalProps> = ({ isOpen, onClose, onApply, title, children }) => {
+const Modal: FC<ModalProps> = ({ method, onApply, title, children }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const AppContext = useAppContextProps();
   const { screenRef } = AppContext;
   const [values, setValues] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    if (isOpen) { screenRef.current?.classList.add(styles.blur5); }
+    if (method?.get === 'open') { screenRef.current?.classList.add(styles.blur5); }
     return () => { screenRef.current?.classList.remove(styles.blur5); }
 
     // else screenRef.current?.classList.remove(styles.blur5);
-  }, [isOpen]);
+  }, [method]);
 
   useEffect(() => {
     // screenRef.current?.classList.add(styles.blur5);
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') method?.set('close');
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [onClose]);
+  }, [method]);
 
   const handleOutsideClick = (e: React.MouseEvent) => {
     if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-      onClose();
+      method?.set('close');
     }
   };
-  const handleApplyAndClose = () => {
+  const onApplyAndClose = () => {
     onApply();
-    onClose();
+    method?.set('apply')
   }
 
 
 
-  if (!isOpen) return null;
+  if (method?.get === 'close') return null;
 
   return ReactDOM.createPortal(
     <div className={styles.ModalBackground} onClick={handleOutsideClick}>
@@ -65,9 +65,9 @@ const Modal: FC<ModalProps> = ({ isOpen, onClose, onApply, title, children }) =>
         <div className={styles.ModalHeader}>
           <div className={styles.ModalTitle}>{title}</div>
           <div className={styles.ModalButtons}>
-            <Button onClick={handleApplyAndClose} variant="primary">Применить и закрыть</Button>
+            <Button onClick={onApplyAndClose} variant="primary">Применить и закрыть</Button>
             {/* <Button onClick={onApply} variant="primary">Применить</Button> */}
-            <Button onClick={onClose} variant="secondary">Закрыть</Button>
+            <Button onClick={() => method?.set('close')} variant="secondary">Закрыть</Button>
           </div>
         </div>
         <div className={styles.ModalBody}>

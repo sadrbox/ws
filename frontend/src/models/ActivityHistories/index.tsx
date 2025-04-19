@@ -1,6 +1,6 @@
 import { useState, FC, useEffect, useMemo, useCallback } from "react";
 import columnsJson from "./columns.json";
-import { TDataItem, TypeModelProps, TOrder } from "src/components/Table/types";
+import { TDataItem, TypeModelProps, TOrder, TypeDateRange } from "src/components/Table/types";
 import { getModelColumns, sortGridRows } from "src/components/Grid/services";
 import { checkServerAvailability } from "src/utils/main.module";
 import Table from "src/components/Table";
@@ -48,6 +48,7 @@ const ActivityHistories: FC = () => {
     direction: "desc",
   });
   const [fastSearchQuery, setFastSearchQuery] = useState<string>("");
+  const [searchByDate, setSearchByDate] = useState<TypeDateRange>({ startDate: null, endDate: null })
 
   // Колонки зависят от состояния isLoading
   const columns = useMemo(() => getModelColumns(columnsJson, name), [isLoading]);
@@ -93,9 +94,9 @@ const ActivityHistories: FC = () => {
         totalPages,
       },
       actions: { loadDataGrid },
-      states: { isLoading, setIsLoading, order, setOrder, fastSearchQuery, setFastSearchQuery },
+      states: { isLoading, setIsLoading, order, setOrder, fastSearchQuery, setFastSearchQuery, searchByDate, setSearchByDate },
     }),
-    [rows, columns, currentPage, isLoading, loadDataGrid, order, name]
+    [rows, columns, currentPage, isLoading, loadDataGrid, order, name, searchByDate]
   );
 
   return <Table props={props} />;

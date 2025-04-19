@@ -1,9 +1,9 @@
 import { useState, FC, useEffect, useCallback, useMemo, createContext, SetStateAction, Dispatch, useContext, PropsWithChildren, memo, useDeferredValue } from 'react';
 import styles from './Table.module.scss';
-import { TColumn, TDataItem, TypeModelProps, TypeTableContextProps } from './types';
+import { TColumn, TDataItem, TypeDateRange, TypeModalFormAction, TypeModalFormMethod, TypeModelProps, TypeTableContextProps } from './types';
 import { getTranslateColumn } from 'src/i18';
 import { getFormatColumnValue, getTextAlignByColumnType } from './services';
-import { Divider, SearchField } from '../Field';
+import { Divider, PeriodField, SearchField } from '../Field';
 import Modal from '../Modal';
 import { FieldString, FieldSelect } from '../Field/index';
 import filterImage from '../../assets/filter_16.png';
@@ -28,8 +28,8 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   const [checkedRows, setCheckedRows] = useState<number[]>([]);
   const [isAllChecked, setIsAllChecked] = useState<boolean>(false);
   const [activeRow, setActiveRow] = useState<number | null>(null);
-  const [filterModalFormIsOpen, setFilterModalFormIsOpen] = useState<boolean>(false);
-  const [configModalFormIsOpen, setConfigModalFormIsOpen] = useState<boolean>(false);
+  const [filterModalFormAction, setFilterModalFormAction] = useState<TypeModalFormAction>('');
+  const [configModalFormAction, setConfigModalFormAction] = useState<TypeModalFormAction>('');
 
   // const [currentPage, setCurrentPage] = useState<number>(1);
   // const [totalPages, setTotalPages] = useState<number>(1);
@@ -49,9 +49,12 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   useEffect(() => setIsAllChecked(allChecked), [allChecked]);
   useEffect(() => {
 
-    if (loadDataGrid && !configModalFormIsOpen) loadDataGrid(currentPage)
+    // console.log(configModalFormAction, filterModalFormAction)
+    if (loadDataGrid && (configModalFormAction === 'apply' || filterModalFormAction === 'apply')) {
+      loadDataGrid(currentPage)
+    }
 
-  }, [configModalFormIsOpen])
+  }, [configModalFormAction, filterModalFormAction])
 
   const refreshDataTable = () => loadDataGrid && loadDataGrid(currentPage);
 
@@ -88,8 +91,8 @@ const Table: FC<TypeTableProps> = ({ props }) => {
 
   return (
     <TableContextProvider init={contextProps}>
-      {filterModalFormIsOpen && <TableFilterModalForm isOpen={filterModalFormIsOpen} onClose={() => setFilterModalFormIsOpen(false)} />}
-      {configModalFormIsOpen && <TableConfigModalForm isOpen={configModalFormIsOpen} onClose={() => setConfigModalFormIsOpen(false)} />}
+      {filterModalFormAction === 'open' && <TableFilterModalForm method={{ get: filterModalFormAction, set: setFilterModalFormAction }} />}
+      {configModalFormAction === 'open' && <TableConfigModalForm method={{ get: configModalFormAction, set: setConfigModalFormAction }} />}
       <div className={styles.TableWrapper}>
         <div className={styles.TablePanel}>
           <div className={[styles.colGroup, styles.gap6].join(" ")}>
@@ -143,11 +146,11 @@ const Table: FC<TypeTableProps> = ({ props }) => {
               /> */}
               {/* <span>Обновить</span> */}
             </button>
-            <button onClick={() => setConfigModalFormIsOpen(true)} className={styles.ButtonImage} title="Настройки">
+            <button onClick={() => setConfigModalFormAction('open')} className={styles.ButtonImage} title="Настройки">
               <img src={settingsForm} alt="ten" height={16} width={16} />
               {/* <SlSettings size={16} strokeWidth={5} /> */}
             </button>
-            <button onClick={() => setFilterModalFormIsOpen(true)} className={styles.ButtonImage} title="Фильтр">
+            <button onClick={() => setFilterModalFormAction('open')} className={styles.ButtonImage} title="Фильтр">
               {/* <TbFilter size={17} strokeWidth={2} /> */}
               <img src={filterImage} alt="ten" height={16} width={16} />
             </button>
@@ -366,44 +369,45 @@ export const useTableContextProps = () => {
 };
 
 type TypeModalProps = {
-  isOpen: boolean;
-  onClose: () => void;
+  method: TypeModalFormMethod;
 };
 
-const TableFilterModalForm: FC<TypeModalProps> = ({ isOpen, onClose }) => {
+const TableFilterModalForm: FC<TypeModalProps> = ({ method }) => {
+  const TABLE_CONTEXT_PROPS = useTableContextProps();
+  const { searchByDate, setSearchByDate } = TABLE_CONTEXT_PROPS.states;
+
+  const [searchPeriod, setSearchPeriod] = useState<TypeDateRange>(searchByDate)
+
+  const onApply = () => {
+    setSearchByDate({ ...searchPeriod })
+  }
+
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Настройки фильтра" onApply={() => console.log('Фильтры:')}>
+    <Modal title="Настройки фильтра" method={method} onApply={onApply} >
       <div className={styles.rowGroup}>
+        <PeriodField props={{ searchPeriod, setSearchPeriod }} />
         <FieldString label="Название" name="name" />
         <FieldString label="Название" name="name" />
         <FieldSelect label="Тип" name="type" options={[{ value: 'string', label: 'Строка' }, { value: 'number', label: 'Число' }, { value: 'date', label: 'Дата' }]} />
         <FieldString label="Название" name="name" />
         <FieldString label="Название" name="name" />
       </div>
-
     </Modal>
   );
 };
 
-const TableConfigModalForm: FC<TypeModalProps> = ({ isOpen, onClose }) => {
+const TableConfigModalForm: FC<TypeModalProps> = ({ method }) => {
   const { columns, name } = useTableContextProps()
   const [columnsConfig, setColumnsConfig] = useState<TColumn[]>(columns);
 
-
-  // useEffect(() => {
-  //   // console.log(gridColumns)
-  //   localStorage.setItem(name, JSON.stringify(columnsConfig));
-  // }, [columnsConfig]);
-
-  const handleModalApply = () => {
-    // console.log(columnsConfig)
+  const onApply = () => {
     localStorage.setItem(name, JSON.stringify(columnsConfig));
   }
 
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Настройки таблицы" onApply={handleModalApply}>
+    <Modal title="Настройки таблицы" method={method} onApply={onApply}>
       <TableConfigColumns columns={columnsConfig} setColumns={setColumnsConfig} />
     </Modal>
   );

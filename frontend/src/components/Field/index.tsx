@@ -1,7 +1,9 @@
-import React, { FC, useDeferredValue, useRef } from 'react'
+import React, { Dispatch, FC, SetStateAction, useRef } from 'react'
 
 import styles from "./Field.module.scss"
 import { useTableContextProps } from '../Table'
+import { TypeDateRange } from '../Table/types'
+import { toLocalDatetime } from 'src/utils/main.module'
 
 type TypeFieldStringProps = {
   label: string
@@ -113,11 +115,28 @@ export const SearchField: FC = () => {
   )
 }
 
-export const PeriodField: FC = () => {
+// type TypeFieldPeriodProps = { setSearchPeriod: ({ startDate, endDate }: TypeDateRange) => void };
+type TypeFieldPeriodProps = { props: { searchPeriod: TypeDateRange, setSearchPeriod: Dispatch<SetStateAction<TypeDateRange>> } };
+
+export const PeriodField: FC<TypeFieldPeriodProps> = ({ props: { searchPeriod, setSearchPeriod } }) => {
+
+
   return (
-    <div className={[styles.colGroup, styles.FieldWrapper].join(" ")}>
-      <input type="datetime-local" className={styles.FieldString} />
-      <input type="datetime-local" className={styles.FieldString} />
+    <div className={styles.rowGroup}>
+      <label className={styles.FieldLabel}>Период:</label>
+      <div className={[styles.colGroup, styles.FieldWrapper].join(" ")}>
+        <input
+          type="datetime-local"
+          className={styles.FieldString}
+          value={searchPeriod.startDate ? toLocalDatetime(searchPeriod.startDate) : ''}
+          onChange={(e) => setSearchPeriod((prev) => ({ ...prev, startDate: new Date(e.target.value) }))}
+        />
+        <input
+          type="datetime-local"
+          className={styles.FieldString}
+          value={searchPeriod.endDate ? toLocalDatetime(searchPeriod.endDate) : ''}
+          onChange={(e) => setSearchPeriod((prev) => ({ ...prev, endDate: new Date(e.target.value) }))} />
+      </div>
     </div>
   )
 }

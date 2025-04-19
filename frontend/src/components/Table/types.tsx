@@ -59,6 +59,8 @@ export type TypeModelStates = {
   setColumns?: Dispatch<SetStateAction<TColumn[]>>;
   fastSearchQuery: string;
   setFastSearchQuery: Dispatch<SetStateAction<string>>;
+  searchByDate: TypeDateRange;
+  setSearchByDate: Dispatch<SetStateAction<TypeDateRange>>;
 };
 
 export type TResponseData = TDataItem[] & {
@@ -87,5 +89,15 @@ export enum EActiveTable {
   FILTER,
 }
 
+export type TypeDateRange = {
+  startDate?: Date | null;
+  endDate?: Date | null;
+};
+
 export type TypeModelProps = TypeTableContextProps
 
+export type TypeModalFormAction = 'apply' | 'close' | 'open' | '';
+export type TypeModalFormMethod = {
+  get: TypeModalFormAction;
+  set: Dispatch<SetStateAction<TypeModalFormAction>>;
+};
