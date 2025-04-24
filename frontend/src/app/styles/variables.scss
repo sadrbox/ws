@@ -11,6 +11,12 @@ $color1: #6aa3ff;
 $color2: #bcd6ff;
 $color3: #073989;
 
+$silverLightest: #f5f5f5;
+$silverLight: #dcdcdc;
+$silver: #c0c0c0;
+$silverDark: #a9a9a9;
+$silverDarkest: #808080;
+
 // $color1: #87a2ff;
 // $color2: #c4d7ff;
 $colorPrimaryLight: #2c77ef;
@@ -62,4 +68,13 @@ a {
 }
 .gap6 {
 	gap: 6px;
+}
+.BG_EASY {
+	background: rgba($silver, 0);
+}
+.BG_MEDIUM {
+	background: rgba($silver, 0.2);
+}
+.BG_HARD {
+	background: rgba($silver, 0.3);
 }

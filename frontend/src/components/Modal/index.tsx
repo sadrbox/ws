@@ -1,15 +1,16 @@
-import { FC, useRef, useEffect, createContext, useContext, useState, ReactNode } from 'react';
+import { FC, useRef, useEffect, createContext, useContext, useState, ReactNode, CSSProperties } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './Modal.module.scss';
 import Button from '../Button';
 import { useAppContextProps } from 'src/app/AppContextProvider';
-import { TypeModalFormMethod } from '../Table/types';
+import { TypeFormMethod } from '../Table/types';
 // import { useAppContext } from 'src/app/AppContextProvider';
 
 type ModalProps = {
-  method: TypeModalFormMethod;
+  method: TypeFormMethod;
   onApply: () => void;
   title: string;
+  style?: CSSProperties
   children: ReactNode;
 };
 
@@ -21,7 +22,7 @@ export const useModalContextProps = () => {
   return { ...context };
 };
 
-const Modal: FC<ModalProps> = ({ method, onApply, title, children }) => {
+const Modal: FC<ModalProps> = ({ method, onApply, title, style, children }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const AppContext = useAppContextProps();
   const { screenRef } = AppContext;
@@ -57,13 +58,12 @@ const Modal: FC<ModalProps> = ({ method, onApply, title, children }) => {
 
 
 
-  if (method?.get === 'close') return null;
+  // if (method?.get === 'close') return null;
 
   return ReactDOM.createPortal(
     <div className={styles.ModalBackground} onClick={handleOutsideClick}>
-      <div className={styles.ModalWrapper} ref={modalRef}>
+      <div className={styles.ModalWrapper} ref={modalRef} style={{ ...style }}>
         <div className={styles.ModalHeader}>
-          <div className={styles.ModalTitle}>{title}</div>
           <div className={styles.ModalButtons}>
             <Button onClick={onApplyAndClose} variant="primary">Применить и закрыть</Button>
             {/* <Button onClick={onApply} variant="primary">Применить</Button> */}
@@ -71,6 +71,7 @@ const Modal: FC<ModalProps> = ({ method, onApply, title, children }) => {
           </div>
         </div>
         <div className={styles.ModalBody}>
+          <div className={styles.ModalTitle}>{title}</div>
           <ModalContextInstance.Provider value={{ values, setValues }}>
             {children}
           </ModalContextInstance.Provider>

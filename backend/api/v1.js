@@ -28,6 +28,31 @@ router.get("/activityhistories", async (req, res) => {
 		}
 		// console.log(searchColumnsRaw);
 
+		// Парсинг startDate и endDate
+		const startDate = req.query.startDate
+			? new Date(req.query.startDate)
+			: null;
+		const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
+
+		// Проверка на валидность даты
+		if (startDate && isNaN(startDate.getTime())) {
+			throw new Error(`Invalid startDate: ${req.query.startDate}`);
+		}
+		if (endDate && isNaN(endDate.getTime())) {
+			throw new Error(`Invalid endDate: ${req.query.endDate}`);
+		}
+
+		// Добавим в фильтр по полю createdAt (или другому полю даты)
+		const dateRangeFilter =
+			startDate || endDate
+				? {
+						actionDate: {
+							...(startDate ? { gte: startDate } : {}),
+							...(endDate ? { lte: endDate } : {}),
+						},
+				  }
+				: {};
+
 		const whereClause =
 			words.length && searchColumns.length
 				? {
@@ -81,19 +106,23 @@ router.get("/activityhistories", async (req, res) => {
 				  }
 				: undefined;
 
+		const finalWhereClause = {
+			...whereClause,
+			...dateRangeFilter,
+		};
 		// console.log(JSON.stringify(whereClause, null, 2));
 
 		const [activityHistories, total] = await prisma.$transaction([
 			prisma.activityHistory.findMany({
 				skip,
 				take: limit,
-				where: whereClause,
+				where: finalWhereClause,
 				include: {
 					organization: true,
 				},
 			}),
 			prisma.activityHistory.count({
-				where: whereClause,
+				where: finalWhereClause,
 			}),
 		]);
 		// console.log(activityHistories);

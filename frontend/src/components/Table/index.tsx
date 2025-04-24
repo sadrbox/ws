@@ -1,11 +1,11 @@
 import { useState, FC, useEffect, useCallback, useMemo, createContext, SetStateAction, Dispatch, useContext, PropsWithChildren, memo, useDeferredValue } from 'react';
 import styles from './Table.module.scss';
-import { TColumn, TDataItem, TypeDateRange, TypeModalFormAction, TypeModalFormMethod, TypeModelProps, TypeTableContextProps } from './types';
+import { TColumn, TDataItem, TypeDateRange, TypeFormAction, TypeFormMethod, TypeModelProps, TypeTableContextProps } from './types';
 import { getTranslateColumn } from 'src/i18';
 import { getFormatColumnValue, getTextAlignByColumnType } from './services';
-import { Divider, PeriodField, SearchField } from '../Field';
+import { Divider, FieldAutocomplete, PeriodField, SearchField } from '../Field';
 import Modal from '../Modal';
-import { FieldString, FieldSelect } from '../Field/index';
+import { FieldSelect } from '../Field/index';
 import filterImage from '../../assets/filter_16.png';
 import settingsForm from '../../assets/settingsForm_16.png';
 import reloadImage from '../../assets/reload_16.png';
@@ -15,8 +15,8 @@ import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } 
 import { PiDotsThreeVerticalDuotone } from 'react-icons/pi';
 // import { useAppContext } from 'src/components/app/AppContextProvider';
 import React from 'react';
-
-
+import useUID from 'src/hooks/useUID';
+import { Group, HorizontalLine, OverForm } from 'src/app/DesignSystem';
 
 
 // --------------------- Root component - Table -----------------------------------------
@@ -28,8 +28,16 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   const [checkedRows, setCheckedRows] = useState<number[]>([]);
   const [isAllChecked, setIsAllChecked] = useState<boolean>(false);
   const [activeRow, setActiveRow] = useState<number | null>(null);
-  const [filterModalFormAction, setFilterModalFormAction] = useState<TypeModalFormAction>('');
-  const [configModalFormAction, setConfigModalFormAction] = useState<TypeModalFormAction>('');
+
+  // const [filterSearch, setFilterSearch] = useState<TypeDateRange>({ startDate: null, endDate: null })
+  // const [fastSearchQuery, setFastSearchQuery] = useState<string>("");
+
+  const [dateRange, setDateRange] = useState<TypeDateRange>({ startDate: null, endDate: null });
+
+  const [filterModalFormAction, setFilterModalFormAction] = useState<TypeFormAction>('');
+  const [configModalFormAction, setConfigModalFormAction] = useState<TypeFormAction>('');
+  const [dateRangeSelectorFormAction, setDateRangeSelectorFormAction] = useState<TypeFormAction>('');
+
 
   // const [currentPage, setCurrentPage] = useState<number>(1);
   // const [totalPages, setTotalPages] = useState<number>(1);
@@ -37,10 +45,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   // Используем useDeferredValue для отсрочки обновлений inputValue
   const deferredValueCurrentPage = useDeferredValue(currentPage);
 
-  useEffect(() => {
-    setCheckedRows(isAllChecked ? rows.map(row => row.id as number) : []);
-  }, [isAllChecked, rows]);
-
+  useEffect(() => { setCheckedRows(isAllChecked ? rows.map(row => row.id as number) : []); }, [isAllChecked, rows]);
   const allChecked = useMemo(() => {
     const allIDs = rows.map(row => row.id as number);
     return checkedRows.length === allIDs.length && allIDs.length > 0;
@@ -50,8 +55,12 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   useEffect(() => {
 
     // console.log(configModalFormAction, filterModalFormAction)
-    if (loadDataGrid && (configModalFormAction === 'apply' || filterModalFormAction === 'apply')) {
-      loadDataGrid(currentPage)
+    if (configModalFormAction === 'apply' || filterModalFormAction === 'apply') {
+      if (configModalFormAction === 'apply')
+        loadDataGrid(1)
+      // console.log(configModalFormAction, filterModalFormAction);
+      setFilterModalFormAction('')
+      setConfigModalFormAction('')
     }
 
   }, [configModalFormAction, filterModalFormAction])
@@ -84,86 +93,61 @@ const Table: FC<TypeTableProps> = ({ props }) => {
       setIsAllChecked,
       activeRow,
       setActiveRow,
+      // filterSearch, setFilterSearch
 
     },
   }), [name, rows, columns, states, checkedRows, isAllChecked, activeRow]);
+  return (<TableContextProvider init={contextProps}>
+    {filterModalFormAction === 'open' && <TableFilterModalForm method={{ get: filterModalFormAction, set: setFilterModalFormAction }} />}
+    {configModalFormAction === 'open' && <TableConfigModalForm method={{ get: configModalFormAction, set: setConfigModalFormAction }} />} <div className={styles.TableWrapper}>
+      <div className={styles.TablePanel}>
+        <div className={[styles.colGroup, styles.gap6].join(" ")}>
+          <button className={styles.Button}>
+            <span>Добавить</span>
+          </button>
+          <button className={styles.Button}>
+            <span>Удалить</span>
+          </button>
+          <Divider />
+          <button onClick={refreshDataTable} className={styles.ButtonImage} title='Обновить'>
+            <img src={reloadImage} alt="ten" height={16} width={16} className={(states?.isLoading === true) ? styles.animationLoop : ""} />
+          </button>
+          <button onClick={() => setConfigModalFormAction('open')} className={styles.ButtonImage} title="Настройки">
+            <img src={settingsForm} alt="ten" height={16} width={16} />
+            {/* <SlSettings size={16} strokeWidth={5} /> */}
+          </button>
 
-
-  return (
-    <TableContextProvider init={contextProps}>
-      {filterModalFormAction === 'open' && <TableFilterModalForm method={{ get: filterModalFormAction, set: setFilterModalFormAction }} />}
-      {configModalFormAction === 'open' && <TableConfigModalForm method={{ get: configModalFormAction, set: setConfigModalFormAction }} />}
-      <div className={styles.TableWrapper}>
-        <div className={styles.TablePanel}>
-          <div className={[styles.colGroup, styles.gap6].join(" ")}>
-            <button className={styles.Button}>
-              <span>Добавить</span>
-            </button>
-            <button className={styles.Button}>
-              <span>Удалить</span>
-            </button>
-          </div>
-          <div className={[styles.colGroup, styles.gap6].join(" ")}>
-            <div className={[styles.colGroup, styles.gap6].join(" ")} style={totalPages <= 1 ? { display: "none" } : {}}>
-              <Divider />
-
-              {/* <button
-              className={styles.Button}
-              onClick={() => setCurrentPage((prevPage) => Math.max(prevPage - 1, 1))}
-              disabled={currentPage === 1}>
-              <svg style={{ transform: "rotate(90deg)" }} width="18" height="18" viewBox="8 4 8 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 8V10M12 14L9 11M12 14L15 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button> */}
-              <div className={styles.colGroup} style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "0 0px" }}>Страница:</div>
-              <div className={styles.PaginationPages}>
-                <input type="number"
-                  value={deferredValueCurrentPage}
-                  onChange={handlerChangeCurrentPage}
-                  onBlur={() => goToPage(deferredValueCurrentPage)}
-                  min={1}
-                  max={totalPages}
-
-                />
-              </div>
-              {/* <span>{totalPages}</span> */}
-              {/* <button
-              style={{ marginLeft: "6px" }}
-              className={styles.Button}
-              onClick={() => setCurrentPage((prevPage) => Math.min(prevPage + 1, totalPages))} disabled={currentPage === totalPages}>
-              <svg style={{ transform: "rotate(-90deg)" }} width="18" height="18" viewBox="8 4 8 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 8V10M12 14L9 11M12 14L15 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button> */}
-            </div>
-            <Divider />
-            <button onClick={refreshDataTable} className={styles.ButtonImage} title='Обновить'>
-              <img src={reloadImage} alt="ten" height={16} width={16} className={(states?.isLoading === true) ? styles.animationLoop : ""} />
-              {/* <SlRefresh
-                className={(states?.isLoading === true) ? styles.animationLoop : ""}
-                size={14}
-                strokeWidth={30}
-              /> */}
-              {/* <span>Обновить</span> */}
-            </button>
-            <button onClick={() => setConfigModalFormAction('open')} className={styles.ButtonImage} title="Настройки">
-              <img src={settingsForm} alt="ten" height={16} width={16} />
-              {/* <SlSettings size={16} strokeWidth={5} /> */}
-            </button>
-            <button onClick={() => setFilterModalFormAction('open')} className={styles.ButtonImage} title="Фильтр">
-              {/* <TbFilter size={17} strokeWidth={2} /> */}
-              <img src={filterImage} alt="ten" height={16} width={16} />
-            </button>
-            <Divider />
-            <SearchField />
-
-          </div>
         </div>
-        <div className={styles.TableScrollWrapper}>
-          <TableArea />
+        <div className={[styles.colGroup, styles.gap6].join(" ")}>
+          <div className={[styles.colGroup, styles.gap6].join(" ")} style={totalPages <= 1 ? { display: "none" } : {}}>
+            <Divider />
+
+
+            <div className={styles.colGroup} style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "0 0px" }}>Страница:</div>
+            <div className={styles.PaginationPages}>
+              <input type="number"
+                value={deferredValueCurrentPage}
+                onChange={handlerChangeCurrentPage}
+                onBlur={() => goToPage(deferredValueCurrentPage)}
+                min={1}
+                max={totalPages}
+
+              />
+            </div>
+
+          </div>
+          <Divider />
+          <PeriodField props={{ dateRange, setDateRange }} style={{ margin: "6px 0" }} />
+          <Divider />
+          <SearchField />
+
         </div>
       </div>
-    </TableContextProvider >
+      <div className={styles.TableScrollWrapper}>
+        <TableArea />
+      </div>
+    </div>
+  </TableContextProvider >
   );
 };
 export default Table;
@@ -369,31 +353,34 @@ export const useTableContextProps = () => {
 };
 
 type TypeModalProps = {
-  method: TypeModalFormMethod;
+  method: TypeFormMethod;
 };
+// type Type
 
 const TableFilterModalForm: FC<TypeModalProps> = ({ method }) => {
+  const uid = useUID();
   const TABLE_CONTEXT_PROPS = useTableContextProps();
-  const { searchByDate, setSearchByDate } = TABLE_CONTEXT_PROPS.states;
+  const { filterSearchQuery, setFilterSearchQuery } = TABLE_CONTEXT_PROPS.states;
+  const { columns } = TABLE_CONTEXT_PROPS;
 
-  const [searchPeriod, setSearchPeriod] = useState<TypeDateRange>(searchByDate)
+  // const [searchByColumn, setSearchByColumn] = useState<{ value: string, label: string }>();
+  const [dateRange, setDateRange] = useState<TypeDateRange>(filterSearchQuery)
+
 
   const onApply = () => {
-    setSearchByDate({ ...searchPeriod })
+    setFilterSearchQuery({ ...dateRange })
   }
 
 
   return (
-    <Modal title="Настройки фильтра" method={method} onApply={onApply} >
-      <div className={styles.rowGroup}>
-        <PeriodField props={{ searchPeriod, setSearchPeriod }} />
-        <FieldString label="Название" name="name" />
-        <FieldString label="Название" name="name" />
-        <FieldSelect label="Тип" name="type" options={[{ value: 'string', label: 'Строка' }, { value: 'number', label: 'Число' }, { value: 'date', label: 'Дата' }]} />
-        <FieldString label="Название" name="name" />
-        <FieldString label="Название" name="name" />
-      </div>
-    </Modal>
+    <Modal title="Настройки фильтра" method={method} onApply={onApply} style={{ width: '400px', }}>
+      <Group align='row' type="easy">
+        <PeriodField props={{ dateRange, setDateRange }} style={{ margin: "6px 0" }} />
+        <HorizontalLine />
+        <FieldSelect label="Колонка" name={`searchByColumnName_${uid}`} options={columns.map(col => ({ value: col.identifier, label: getTranslateColumn(col) }))} style={{ margin: "6px 0" }} />
+        <FieldAutocomplete label='Значение' name={`searchByColumnValue_${uid}`} style={{ margin: "6px 0" }} />
+      </Group>
+    </Modal >
   );
 };
 
@@ -407,12 +394,13 @@ const TableConfigModalForm: FC<TypeModalProps> = ({ method }) => {
 
 
   return (
-    <Modal title="Настройки таблицы" method={method} onApply={onApply}>
-      <TableConfigColumns columns={columnsConfig} setColumns={setColumnsConfig} />
+    <Modal title="Настройки таблицы" method={method} onApply={onApply} style={{ width: '400px' }}>
+      <Group align='row' type="easy">
+        <TableConfigColumns columns={columnsConfig} setColumns={setColumnsConfig} />
+      </Group>
     </Modal>
   );
 };
-
 
 type TypeTableConfigColumnsProps = {
   columns: TColumn[];
@@ -477,10 +465,8 @@ type TypeTableConfigColumnsItem = {
   isDragging: boolean;
   toggleVisibility: (identifier: string, visible: boolean) => void;
 };
-
 const TableConfigColumnsItem: FC<TypeTableConfigColumnsItem> = ({ column, isDragging, toggleVisibility }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: column.identifier });
-
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -502,3 +488,18 @@ const TableConfigColumnsItem: FC<TypeTableConfigColumnsItem> = ({ column, isDrag
     </li>
   );
 };
+
+
+const DateRangeSelectorForm: FC<TypeModalProps> = ({ method }) => {
+  const [dateRange, setDateRange] = useState<TypeDateRange>({ startDate: null, endDate: null });
+
+  return (
+    <OverForm>
+      <Group align='row' type="easy">
+        <PeriodField props={{ dateRange, setDateRange }} style={{ margin: "6px 0" }} />
+      </Group>
+    </OverForm>
+  )
+};
+
+

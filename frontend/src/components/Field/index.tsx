@@ -1,9 +1,9 @@
-import React, { Dispatch, FC, SetStateAction, useRef } from 'react'
+import React, { CSSProperties, Dispatch, FC, HTMLAttributes, SetStateAction, useRef } from 'react'
 
 import styles from "./Field.module.scss"
 import { useTableContextProps } from '../Table'
 import { TypeDateRange } from '../Table/types'
-import { toLocalDatetime } from 'src/utils/main.module'
+import { Group } from 'src/app/DesignSystem'
 
 type TypeFieldStringProps = {
   label: string
@@ -19,9 +19,9 @@ export const FieldString: FC<TypeFieldStringProps> = ({ label, name }) => {
       inputRef.current.value = ""
   }
   return (
-    <div className={styles.rowGroup}>
+    <Group align="row" className={styles.FieldWrapper}>
       <label htmlFor={name} className={styles.FieldLabel}>{label}</label>
-      <div className={[styles.colGroup, styles.FieldWrapper].join(" ")}>
+      <Group align="col" className={styles.FieldInputWrapper}>
         <input ref={inputRef} type="text" name={name} id={name} className={styles.FieldString} autoComplete='off' style={{ paddingRight: "52px" }} />
         <div className={styles.FieldActions}>
           <button onClick={() => handlerClearField()}>
@@ -31,8 +31,8 @@ export const FieldString: FC<TypeFieldStringProps> = ({ label, name }) => {
             <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAL0lEQVR4nGNgGEzgLQMDw38GBoY35BrwH42GsXFhDPCGUhdQDN6OhgHDaBgMFAAAbZ4r83tTZCIAAAAASUVORK5CYII=" alt="list" />
           </button>
         </div>
-      </div>
-    </div>
+      </Group>
+    </Group>
   );
 };
 
@@ -40,22 +40,49 @@ type TypeFieldSelectProps = {
   label: string;
   name: string;
   options: { value: string; label: string }[];
+  style?: CSSProperties;
 };
 
-export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options }) => {
+export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, style }) => {
   return (
-    <div className={styles.rowGroup}>
+    <Group align="row" className={styles.FieldWrapper} style={style}>
       <label htmlFor={name} className={styles.FieldLabel}>{label}</label>
-      <div className={[styles.colGroup, styles.FieldWrapper].join(" ")}>
-        <select name={name} id={name} className={styles.FieldSelect}>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
+      <Group align="col" className={styles.FieldSelectWrapper}>
+        <select name={name} id={name} className={styles.FieldSelect} >
+          {
+            options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))
+          }
+        </select >
+      </Group >
+    </Group >
+  );
+};
+
+type TypeFieldAutocompleteProps = {
+  label: string;
+  name: string;
+  style?: CSSProperties;
+  // attributes?: HTMLAttributes<HTMLInputElement>;
+}
+export const FieldAutocomplete: FC<TypeFieldAutocompleteProps> = ({ label, name, style }) => {
+  return (
+    <Group align="row" className={styles.FieldWrapper} style={style}>
+      <label htmlFor={name} className={styles.FieldLabel}>{label}</label>
+      <Group align="col" className={styles.FieldInputWrapper}>
+        <input
+          type="text"
+          id={name}
+          name={name}
+          autoComplete='off'
+          placeholder=""
+          className={styles.FieldString}
+        />
+      </Group>
+    </Group>
   );
 };
 
@@ -63,7 +90,7 @@ export const SearchField: FC = () => {
 
   // const APP_CONTEXT_PROPS = useAppContextProps();
   const TABLE_CONTEXT_PROPS = useTableContextProps();
-  // const { loadDataGrid } = TABLE_CONTEXT_PROPS.actions;
+  // const {loadDataGrid} = TABLE_CONTEXT_PROPS.actions;
   const { setFastSearchQuery } = TABLE_CONTEXT_PROPS.states;
   const inputRef = useRef<HTMLInputElement>(null)
   // const [inputValue, setInputValue] = useState("")
@@ -115,43 +142,33 @@ export const SearchField: FC = () => {
   )
 }
 
-// type TypeFieldPeriodProps = { setSearchPeriod: ({ startDate, endDate }: TypeDateRange) => void };
-type TypeFieldPeriodProps = { props: { searchPeriod: TypeDateRange, setSearchPeriod: Dispatch<SetStateAction<TypeDateRange>> } };
+// type TypeFieldPeriodProps = {setSearchPeriod: ({startDate, endDate}: TypeDateRange) => void };
+type TypeFieldDateRangeProps = { props: { dateRange: TypeDateRange, setDateRange: Dispatch<SetStateAction<TypeDateRange>> }; style?: CSSProperties };
 
-export const PeriodField: FC<TypeFieldPeriodProps> = ({ props: { searchPeriod, setSearchPeriod } }) => {
-
+export const PeriodField: FC<TypeFieldDateRangeProps> = ({ props: { dateRange, setDateRange } }) => {
 
   return (
-    <div className={styles.rowGroup}>
-      <label className={styles.FieldLabel}>Период:</label>
-      <div className={[styles.colGroup, styles.FieldWrapper].join(" ")}>
-        <input
-          type="datetime-local"
-          className={styles.FieldString}
-          value={searchPeriod.startDate ? toLocalDatetime(searchPeriod.startDate) : ''}
-          onChange={(e) => setSearchPeriod((prev) => ({ ...prev, startDate: new Date(e.target.value) }))}
-        />
-        <input
-          type="datetime-local"
-          className={styles.FieldString}
-          value={searchPeriod.endDate ? toLocalDatetime(searchPeriod.endDate) : ''}
-          onChange={(e) => setSearchPeriod((prev) => ({ ...prev, endDate: new Date(e.target.value) }))} />
-      </div>
-    </div>
+    <Group align="col" className={[styles.FieldWrapper, styles.gap6].join(" ")}>
+      <input
+        type="datetime-local"
+        className={styles.FieldString}
+        value={dateRange.startDate ? dateRange.startDate : ''}
+        onChange={(e) => setDateRange((prev) => ({ ...prev, startDate: e.target.value }))}
+      />
+      <input
+        type="datetime-local"
+        className={styles.FieldString}
+        value={dateRange.endDate ? dateRange.endDate : ''}
+        onChange={(e) => setDateRange((prev) => ({ ...prev, endDate: e.target.value }))} />
+    </Group>
   )
 }
 
-export const FieldGroup: FC<{ children: React.ReactNode }> = ({ children }) => {
 
-  return (
-    <div className={[styles.colGroup, styles.FieldGroup].join(" ")}>
-      {children}
-    </div>
-  )
-}
 
 export const Divider = () => {
   return (
     <div style={{ borderLeft: "1px dotted #888", margin: "3px 0" }}></div>
   )
 }
+

@@ -17,7 +17,7 @@
 	border-radius: $radius3;
 	box-shadow: 0 32px 32px rgba($color6, 0.5);
 	width: 100%;
-	max-width: 500px;
+	// max-width: 500px;
 	animation: fadeIn 0.3s ease;
 }
 .ModalHeader {
@@ -31,7 +31,7 @@
 }
 .ModalBody {
 	// margin: 12px;
-	padding: 12px;
+	padding: 6px;
 	// border: 1px solid $color5;
 	border-bottom: 0px;
 	background-color: $color30;
@@ -39,7 +39,11 @@
 }
 
 .ModalTitle {
+	padding: 6px;
+	// border: 1px solid $color5;
+	// margin: 3px 18px;
 	font-size: 18px;
+	// font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 	display: flex;
 	justify-content: left;
 	// background-color: $color3;
@@ -47,7 +51,7 @@
 	// padding: 12px;
 	// color: $color60;
 	font-weight: normal;
-	font-size: 16px;
+	// font-size: 16px;
 	// text-decoration: underline;
 }
 

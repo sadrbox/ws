@@ -47,14 +47,25 @@ export const checkServerAvailability = async (
 	}
 };
 // Преобразование формат даты ///////////////////////////////////////////////////////////////
-export const toLocalDatetime = (date: Date) => {
-	const pad = (n: number) => n.toString().padStart(2, "0");
 
+// export function formatDateForInput(
+// 	date: Date | string | null | undefined
+// ): string {
+// 	const parsedDate = typeof date === "string" ? new Date(date) : date;
+
+// 	if (!(parsedDate instanceof Date) || isNaN(parsedDate.getTime())) {
+// 		return "";
+// 	}
+
+// 	return parsedDate.toISOString().slice(0, 16); // формат: yyyy-MM-ddThh:mm
+// }
+
+export const formatDateForInput = (date: Date) => {
+	const pad = (n: number) => n.toString().padStart(2, "0");
 	const year = date.getFullYear();
 	const month = pad(date.getMonth() + 1);
 	const day = pad(date.getDate());
 	const hours = pad(date.getHours());
 	const minutes = pad(date.getMinutes());
-
 	return `${year}-${month}-${day}T${hours}:${minutes}`;
 };

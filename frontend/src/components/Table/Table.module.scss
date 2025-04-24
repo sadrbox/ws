@@ -173,7 +173,7 @@ thead {
 			.TableHeaderColumn {
 				margin: 1px;
 				display: grid;
-				grid-template-rows: 24px;
+				grid-template-rows: 23px;
 				grid-auto-flow: column;
 				grid-template-columns: 1fr;
 				align-items: center;
@@ -258,7 +258,7 @@ tbody {
 				margin: 1px;
 				display: grid;
 				grid-auto-flow: column;
-				grid-template-rows: 22px;
+				grid-template-rows: 21px;
 				grid-template-columns: 1fr;
 				align-items: center;
 				white-space: nowrap;
