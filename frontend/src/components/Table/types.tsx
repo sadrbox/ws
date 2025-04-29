@@ -44,25 +44,21 @@ export type TColumnSetting = {
   visible: boolean;
 };
 export type TypeModelStates = {
-  activeRow?: number | null;
-  setActiveRow?: Dispatch<SetStateAction<number | null>>;
-  checkedRows?: number[];
-  setCheckedRows?: Dispatch<SetStateAction<number[]>>;
-  order: TOrder;
-  setOrder: Dispatch<SetStateAction<TOrder>>;
-  isAllChecked?: boolean;
-  setIsAllChecked?: Dispatch<SetStateAction<boolean>>;
+
+  // checkedRows?: number[];
+  // setCheckedRows?: Dispatch<SetStateAction<number[]>>;
+
   setActiveGrid?: Dispatch<SetStateAction<EActiveTable>>;
   isLoading: boolean;
   setIsLoading: Dispatch<SetStateAction<boolean>>;
   columns?: TColumn[];
   setColumns?: Dispatch<SetStateAction<TColumn[]>>;
-  // filterSearch?: TypeDateRange;
-  // setFilterSearch?: Dispatch<SetStateAction<TypeDateRange>>;
-  fastSearchQuery: string;
-  setFastSearchQuery: Dispatch<SetStateAction<string>>;
-  filterSearchQuery: TypeDateRange;
-  setFilterSearchQuery: Dispatch<SetStateAction<TypeDateRange>>;
+  activeRow?: number | null;
+  setActiveRow?: Dispatch<SetStateAction<number | null>>;
+  selectedRows: number[];
+  setSelectedRows: Dispatch<SetStateAction<number[]>>;
+  isSelectedRows: boolean;
+  toggleSelectAllRows: Dispatch<SetStateAction<boolean>>;
 };
 
 export type TResponseData = TDataItem[] & {
@@ -77,7 +73,15 @@ export type TypeTableContextProps = {
     currentPage: number;
     setCurrentPage: Dispatch<SetStateAction<number>>;
     totalPages: number;
-  }
+  };
+  query: {
+    orderQuery: TOrder;
+    setOrderQuery: Dispatch<SetStateAction<TOrder>>;
+    fastSearchQuery: string,
+    setFastSearchQuery: Dispatch<SetStateAction<string>>;
+    dateRangeQuery: TypeDateRange,
+    setDateRangeQuery: Dispatch<SetStateAction<TypeDateRange>>;
+  };
   actions: {
     loadDataGrid: (page?: number, limit?: number) => Promise<void>;
   };

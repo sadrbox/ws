@@ -2,7 +2,7 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"column": "ID",
+		"name": "ID",
 		"width": "80px",
 		"alignment": "left",
 		"hint": "Идентификатор записи",
@@ -10,103 +10,73 @@
 		"position": 1
 	},
 	{
-		"identifier": "uuid",
-		"type": "string",
-		"column": "UUID",
-		"width": "250px",
-		"alignment": "left",
-		"hint": "Уникальный идентификатор записи",
-		"visible": true,
-		"position": 2
-	},
-	{
 		"identifier": "shortName",
 		"type": "string",
-		"column": "Short Name",
+		"name": "Short Name",
 		"width": "200px",
 		"alignment": "left",
 		"hint": "Краткое название договора",
 		"visible": true,
-		"position": 3
+		"position": 2
 	},
 	{
 		"identifier": "contractNumber",
 		"type": "string",
-		"column": "Contract Number",
+		"name": "Contract Number",
 		"width": "150px",
 		"alignment": "left",
 		"hint": "Номер договора",
 		"visible": true,
-		"position": 4
+		"position": 3
 	},
 	{
 		"identifier": "contractText",
 		"type": "string",
-		"column": "Contract Text",
+		"name": "Contract Text",
 		"width": "250px",
 		"alignment": "left",
 		"hint": "Текст договора",
 		"visible": false,
-		"position": 5
+		"position": 4
 	},
 	{
 		"identifier": "startDate",
 		"type": "date",
-		"column": "Start Date",
+		"name": "Start Date",
 		"width": "130px",
 		"alignment": "left",
 		"hint": "Дата начала действия договора",
 		"visible": true,
-		"position": 6
+		"position": 5
 	},
 	{
 		"identifier": "endDate",
 		"type": "date",
-		"column": "End Date",
+		"name": "End Date",
 		"width": "130px",
 		"alignment": "left",
 		"hint": "Дата окончания действия договора",
 		"visible": true,
-		"position": 7
-	},
-	{
-		"identifier": "organizationUuid",
-		"type": "string",
-		"column": "Organization UUID",
-		"width": "250px",
-		"alignment": "left",
-		"hint": "UUID организации",
-		"visible": false,
-		"position": 8
-	},
-	{
-		"identifier": "counterpartyUuid",
-		"type": "string",
-		"column": "Counterparty UUID",
-		"width": "250px",
-		"alignment": "left",
-		"hint": "UUID контрагента",
-		"visible": false,
-		"position": 9
+		"position": 6
 	},
 	{
 		"identifier": "Organization.name",
 		"type": "object",
-		"column": "Organization",
+		"name": "Organization",
 		"width": "200px",
 		"alignment": "left",
 		"hint": "Название организации",
 		"visible": true,
-		"position": 10
+		"position": 7
 	},
 	{
 		"identifier": "Counterparty.name",
 		"type": "object",
-		"column": "Counterparty",
+		"name": "Counterparty",
 		"width": "200px",
 		"alignment": "left",
 		"hint": "Название контрагента",
 		"visible": true,
-		"position": 11
+		"position": 8
 	}
 ]

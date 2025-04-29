@@ -48,12 +48,42 @@ const ActivityHistories: FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(0);
-  const [order, setOrder] = useState<TOrder>({
+  const [orderQuery, setOrderQuery] = useState<TOrder>({
     columnID: "actionDate",
     direction: "desc",
   });
+  // const [activeRowQuery, setActiveRowsQuery] = useState<number | null>(null);
+  // const [marked, setCheckedRowsQuery] = useState()
+  const [selectedRows, setSelectedRows] = useState<number[]>([]);
+  // const [isSelectedRows, setIsSelectedRows] = useState<boolean>(false);
   const [fastSearchQuery, setFastSearchQuery] = useState<string>("");
-  const [filterSearchQuery, setFilterSearchQuery] = useState<TypeDateRange>({ startDate: null, endDate: null })
+  const [dateRangeQuery, setDateRangeQuery] = useState<TypeDateRange>({ startDate: null, endDate: null })
+
+  // useEffect(() => {
+  //   if (isSelectedRows) {
+  //     setSelectedRows(rows.map(row => row.id as number))
+  //   } else {
+  //     setSelectedRows([])
+  //   }
+  // }, [isSelectedRows])
+
+  // useEffect(() => {
+  //   if (selectedRows.length === rows.length) {
+  //     setIsSelectedRows(true)
+  //   } else if (selectedRows.length < rows.length) {
+  //     setIsSelectedRows(false)
+  //   }
+  // }, [selectedRows])
+
+
+  const isSelectedRows = rows.length > 0 && selectedRows.length === rows.length;
+  const toggleSelectAllRows = () => {
+    if (isSelectedRows) {
+      setSelectedRows([]);
+    } else {
+      setSelectedRows(rows.map(row => row.id as number));
+    }
+  };
 
   // Колонки зависят от состояния isLoading
   const columns = useMemo(() => getModelColumns(columnsJson, name), [isLoading]);
@@ -69,22 +99,23 @@ const ActivityHistories: FC = () => {
     // console.log(searchColumns)
     try {
 
-      const response = await getResponseData(controller.signal, page, limit, filterSearchQuery, fastSearchQuery, searchColumns);
+      const response = await getResponseData(controller.signal, page, limit, dateRangeQuery, fastSearchQuery, searchColumns);
       if (response) {
         // Сортируем данные сразу после получения
         // console.log(response)
         if (currentPage > response?.totalPages) {
           setCurrentPage(response?.totalPages || 1)
         }
-        setRows(sortGridRows(response?.items, order) || []);
+        setRows(sortGridRows(response?.items, orderQuery) || []);
         setTotalPages(response?.totalPages || 0);
       } else {
         setRows([]);
       }
     } finally {
+      // setActiveRowsQuery(null)
       setIsLoading(false);
     }
-  }, [order, currentPage, fastSearchQuery, filterSearchQuery]); // Зависимость от order для корректной сортировки
+  }, [orderQuery, currentPage, fastSearchQuery, dateRangeQuery]); // Зависимость от order для корректной сортировки
 
   // Загружаем данные при монтировании и изменении порядка сортировки
   // useEffect(() => { setCurrentPage(1) }, [filterSearchQuery, fastSearchQuery])
@@ -102,10 +133,18 @@ const ActivityHistories: FC = () => {
         setCurrentPage,
         totalPages,
       },
+      query: {
+        orderQuery,
+        setOrderQuery,
+        fastSearchQuery,
+        setFastSearchQuery,
+        dateRangeQuery,
+        setDateRangeQuery,
+      },
       actions: { loadDataGrid },
-      states: { isLoading, setIsLoading, order, setOrder, fastSearchQuery, setFastSearchQuery, filterSearchQuery, setFilterSearchQuery },
+      states: { isLoading, setIsLoading, selectedRows, setSelectedRows, isSelectedRows, toggleSelectAllRows },
     }),
-    [rows, columns, currentPage, isLoading, loadDataGrid, order, name, filterSearchQuery, fastSearchQuery]
+    [name, rows, columns, isLoading, loadDataGrid, currentPage, orderQuery, dateRangeQuery, fastSearchQuery, selectedRows]
   );
 
   return <Table props={props} />;

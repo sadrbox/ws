@@ -1,4 +1,4 @@
-import React, { CSSProperties, Dispatch, FC, HTMLAttributes, SetStateAction, useRef } from 'react'
+import React, { CSSProperties, Dispatch, FC, HTMLAttributes, SetStateAction, useDeferredValue, useRef } from 'react'
 
 import styles from "./Field.module.scss"
 import { useTableContextProps } from '../Table'
@@ -86,35 +86,28 @@ export const FieldAutocomplete: FC<TypeFieldAutocompleteProps> = ({ label, name,
   );
 };
 
-export const SearchField: FC = () => {
+export const FieldFastSearch: FC = () => {
 
   // const APP_CONTEXT_PROPS = useAppContextProps();
   const TABLE_CONTEXT_PROPS = useTableContextProps();
-  // const {loadDataGrid} = TABLE_CONTEXT_PROPS.actions;
-  const { setFastSearchQuery } = TABLE_CONTEXT_PROPS.states;
+  const { fastSearchQuery, setFastSearchQuery } = TABLE_CONTEXT_PROPS.query;
   const inputRef = useRef<HTMLInputElement>(null)
-  // const [inputValue, setInputValue] = useState("")
-  // const deferredValue = useDeferredValue(fastSearchQuery) // "медленное" значение
+  const deferredValue = useDeferredValue(fastSearchQuery) // "медленное" значение
 
   const handlerClearField = () => {
     setFastSearchQuery("")
     if (inputRef.current)
       inputRef.current.value = ""
-    // loadDataGrid()
   }
 
   const handlerChangeInputValue = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // if (e.target.value.length > 3)
     setFastSearchQuery(e.target.value);
-    // if (loadDataGrid)
-    //   loadDataGrid()
-
   }
 
   const searchField = "searchField";
 
   return (
-    <div className={[styles.colGroup, styles.FieldWrapper].join(" ")}>
+    <div className={[styles.colGroup, styles.FieldWrapper].join(" ")} style={{ width: "30%" }}>
       <input
         ref={inputRef}
         type="search"
@@ -123,44 +116,39 @@ export const SearchField: FC = () => {
         id={searchField}
         className={styles.FieldString}
         autoComplete='off'
-        style={{ width: "400px" }}
-        // value={fastSearchQuery}
+        style={{ minWidth: "100px" }}
+        value={deferredValue}
         onChange={handlerChangeInputValue}
       />
       <div className={styles.FieldActions}>
         <button onClick={() => handlerClearField()}>
           <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAU0lEQVR4nGNgGExgOgMDgzQR6qShajGAOAMDw0YChkgQUiOORwFBzfgMIVozNg0ka4YBkIatUEyyZooNkKDECxKUBKIEJdEoQYQteBMbxUl5YAAAD8MURVXG8WgAAAAASUVORK5CYII=" alt="delete-sign--v1" />
         </button>
-        <button onClick={() => handlerClearField()}>
-          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAL0lEQVR4nGNgGEzgLQMDw38GBoY35BrwH42GsXFhDPCGUhdQDN6OhgHDaBgMFAAAbZ4r83tTZCIAAAAASUVORK5CYII=" alt="list" />
-        </button>
       </div>
-
-      {/* <input type='search' placeholder='Быстрый поиск'
-        className={styles.FieldString} autoComplete='off' /> */}
     </div>
   )
 }
 
 // type TypeFieldPeriodProps = {setSearchPeriod: ({startDate, endDate}: TypeDateRange) => void };
-type TypeFieldDateRangeProps = { props: { dateRange: TypeDateRange, setDateRange: Dispatch<SetStateAction<TypeDateRange>> }; style?: CSSProperties };
+// type TypeFieldDateRangeProps = { props: { dateRange: TypeDateRange, setDateRange: Dispatch<SetStateAction<TypeDateRange>> }; style?: CSSProperties };
 
-export const PeriodField: FC<TypeFieldDateRangeProps> = ({ props: { dateRange, setDateRange } }) => {
-
+export const FieldDateRange: FC = () => {
+  const TABLE_CONTEXT_PROPS = useTableContextProps();
+  const { dateRangeQuery, setDateRangeQuery } = TABLE_CONTEXT_PROPS.query
   return (
-    <Group align="col" className={[styles.FieldWrapper, styles.gap6].join(" ")}>
+    <div className={styles.FieldDateWrapper}>
       <input
         type="datetime-local"
-        className={styles.FieldString}
-        value={dateRange.startDate ? dateRange.startDate : ''}
-        onChange={(e) => setDateRange((prev) => ({ ...prev, startDate: e.target.value }))}
-      />
+        className={styles.FieldDateInput}
+        value={dateRangeQuery.startDate ? dateRangeQuery.startDate : ''}
+        onChange={(e) => setDateRangeQuery((prev) => ({ ...prev, startDate: e.target.value }))}
+      /><span>-</span>
       <input
         type="datetime-local"
-        className={styles.FieldString}
-        value={dateRange.endDate ? dateRange.endDate : ''}
-        onChange={(e) => setDateRange((prev) => ({ ...prev, endDate: e.target.value }))} />
-    </Group>
+        className={styles.FieldDateInput}
+        value={dateRangeQuery.endDate ? dateRangeQuery.endDate : ''}
+        onChange={(e) => setDateRangeQuery((prev) => ({ ...prev, endDate: e.target.value }))} />
+    </div>
   )
 }
 

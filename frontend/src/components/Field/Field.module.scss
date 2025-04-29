@@ -26,6 +26,26 @@
 .FieldSelect {
 	padding: 0px;
 }
+.FieldDateWrapper {
+	position: relative;
+	display: flex;
+	align-items: center;
+	// justify-content: space-around;
+	border: 1px solid $color10;
+	border-radius: $radius2;
+	background-color: $color60;
+	gap: 10px;
+}
+.FieldDateInput {
+	width: 130px !important;
+	padding: 0px 6px;
+	background-color: transparent;
+	border: 0px;
+	border-radius: $radius3;
+	width: 100%;
+	box-sizing: border-box;
+	outline: none;
+}
 
 .FieldLabel {
 	// height: 28px;

@@ -2,17 +2,17 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"column": "Id",
+		"name": "Id",
 		"width": "80px",
 		"alignment": "left",
-		"hint": "Идентификатор записи",
+		"hint": "Номер",
 		"visible": true,
 		"position": 1
 	},
 	{
 		"identifier": "actionDate",
 		"type": "date",
-		"column": "Action Date",
+		"name": "Action Date",
 		"width": "130px",
 		"alignment": "left",
 		"hint": "Дата действия",
@@ -22,7 +22,7 @@
 	{
 		"identifier": "actionType",
 		"type": "string",
-		"column": "Action Type",
+		"name": "Action Type",
 		"width": "130px",
 		"alignment": "center",
 		"hint": "Тип действия",
@@ -32,7 +32,7 @@
 	{
 		"identifier": "bin",
 		"type": "string",
-		"column": "BIN",
+		"name": "BIN",
 		"width": "120px",
 		"alignment": "left",
 		"hint": "БИН организации",
@@ -42,7 +42,7 @@
 	{
 		"identifier": "userName",
 		"type": "string",
-		"column": "User Name",
+		"name": "User Name",
 		"width": "150px",
 		"alignment": "left",
 		"hint": "Имя пользователя",
@@ -52,7 +52,7 @@
 	{
 		"identifier": "host",
 		"type": "string",
-		"column": "User Host",
+		"name": "User Host",
 		"width": "150px",
 		"alignment": "left",
 		"hint": "Хост пользователя",
@@ -62,7 +62,7 @@
 	{
 		"identifier": "ip",
 		"type": "string",
-		"column": "User IP",
+		"name": "User IP",
 		"width": "120px",
 		"alignment": "left",
 		"hint": "IP пользователя",
@@ -72,7 +72,7 @@
 	{
 		"identifier": "city",
 		"type": "string",
-		"column": "User City",
+		"name": "User City",
 		"width": "100px",
 		"alignment": "left",
 		"hint": "Город пользователя",
@@ -82,7 +82,7 @@
 	{
 		"identifier": "objectId",
 		"type": "string",
-		"column": "Object ID",
+		"name": "Object ID",
 		"width": "100px",
 		"alignment": "left",
 		"hint": "Идентификатор объекта",
@@ -92,7 +92,7 @@
 	{
 		"identifier": "objectType",
 		"type": "string",
-		"column": "Object Type",
+		"name": "Object Type",
 		"width": "150px",
 		"alignment": "left",
 		"hint": "Тип объекта",
@@ -102,7 +102,7 @@
 	{
 		"identifier": "objectName",
 		"type": "string",
-		"column": "Object Name",
+		"name": "Object Name",
 		"width": "200px",
 		"alignment": "left",
 		"hint": "Название объекта",
@@ -112,7 +112,7 @@
 	{
 		"identifier": "organization.shortName",
 		"type": "string",
-		"column": "Organization",
+		"name": "Organization",
 		"width": "199px",
 		"alignment": "left",
 		"hint": "Организация",

@@ -3,7 +3,7 @@ import styles from './Table.module.scss';
 import { TColumn, TDataItem, TypeDateRange, TypeFormAction, TypeFormMethod, TypeModelProps, TypeTableContextProps } from './types';
 import { getTranslateColumn } from 'src/i18';
 import { getFormatColumnValue, getTextAlignByColumnType } from './services';
-import { Divider, FieldAutocomplete, PeriodField, SearchField } from '../Field';
+import { Divider, FieldAutocomplete, FieldDateRange, FieldFastSearch } from '../Field';
 import Modal from '../Modal';
 import { FieldSelect } from '../Field/index';
 import filterImage from '../../assets/filter_16.png';
@@ -24,47 +24,37 @@ type TypeTableProps = {
   props: TypeModelProps;
 };
 const Table: FC<TypeTableProps> = ({ props }) => {
-  const { name, rows, columns, pagination: { currentPage, setCurrentPage, totalPages }, actions: { loadDataGrid }, states } = props;
-  const [checkedRows, setCheckedRows] = useState<number[]>([]);
-  const [isAllChecked, setIsAllChecked] = useState<boolean>(false);
+  const { name, rows, columns, pagination: { currentPage, setCurrentPage, totalPages }, query, actions: { loadDataGrid }, states } = props;
+  // const [checkedRows, setCheckedRows] = useState<number[]>([]);
+  // const [isAllChecked, setIsAllChecked] = useState<boolean>(false);
   const [activeRow, setActiveRow] = useState<number | null>(null);
-
-  // const [filterSearch, setFilterSearch] = useState<TypeDateRange>({ startDate: null, endDate: null })
-  // const [fastSearchQuery, setFastSearchQuery] = useState<string>("");
-
-  const [dateRange, setDateRange] = useState<TypeDateRange>({ startDate: null, endDate: null });
-
-  const [filterModalFormAction, setFilterModalFormAction] = useState<TypeFormAction>('');
+  // const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [configModalFormAction, setConfigModalFormAction] = useState<TypeFormAction>('');
-  const [dateRangeSelectorFormAction, setDateRangeSelectorFormAction] = useState<TypeFormAction>('');
-
-
-  // const [currentPage, setCurrentPage] = useState<number>(1);
-  // const [totalPages, setTotalPages] = useState<number>(1);
-
-  // Используем useDeferredValue для отсрочки обновлений inputValue
+  // const [dateRange, setDateRange] = useState<TypeDateRange>({ startDate: null, endDate: null });
   const deferredValueCurrentPage = useDeferredValue(currentPage);
 
-  useEffect(() => { setCheckedRows(isAllChecked ? rows.map(row => row.id as number) : []); }, [isAllChecked, rows]);
-  const allChecked = useMemo(() => {
-    const allIDs = rows.map(row => row.id as number);
-    return checkedRows.length === allIDs.length && allIDs.length > 0;
-  }, [checkedRows, rows]);
 
-  useEffect(() => setIsAllChecked(allChecked), [allChecked]);
   useEffect(() => {
+    setActiveRow(null)
+  }, [configModalFormAction === 'apply', query?.dateRangeQuery, currentPage, query?.fastSearchQuery])
 
-    // console.log(configModalFormAction, filterModalFormAction)
-    if (configModalFormAction === 'apply' || filterModalFormAction === 'apply') {
-      if (configModalFormAction === 'apply')
-        loadDataGrid(1)
-      // console.log(configModalFormAction, filterModalFormAction);
-      setFilterModalFormAction('')
+  // useEffect(() => { setCheckedRows(isAllChecked ? rows.map(row => row.id as number) : []); }, [isAllChecked, rows]);
+  // const allChecked = useMemo(() => {
+  //   const allIDs = rows.map(row => row.id as number);
+  //   return checkedRows.length === allIDs.length && allIDs.length > 0;
+  // }, [checkedRows, rows]);
+
+  // useEffect(() => setIsAllChecked(allChecked), [allChecked]);
+
+  useEffect(() => {
+    if (configModalFormAction === 'apply') {
+      loadDataGrid(1)
       setConfigModalFormAction('')
     }
+  }, [configModalFormAction])
 
-  }, [configModalFormAction, filterModalFormAction])
-
+  // useEffect(() => { }, [selectedRows])
+  // useEffect(() => states?.setDateRangeQuery(dateRange), [dateRange])
   const refreshDataTable = () => loadDataGrid && loadDataGrid(currentPage);
 
   const handlerChangeCurrentPage = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,21 +74,23 @@ const Table: FC<TypeTableProps> = ({ props }) => {
       setCurrentPage,
       totalPages,
     },
+    query,
     actions: { loadDataGrid },
     states: {
       ...states,
-      checkedRows,
-      setCheckedRows,
-      isAllChecked,
-      setIsAllChecked,
+      // isSelectedRows,
+      // setIsSelectedRows,
+      // selectedRows,
+      // setSelectedRows,
       activeRow,
-      setActiveRow,
+      setActiveRow
+      // setSelectedRowsQuery,
       // filterSearch, setFilterSearch
 
     },
-  }), [name, rows, columns, states, checkedRows, isAllChecked, activeRow]);
+  }), [name, rows, columns, states, activeRow]);
   return (<TableContextProvider init={contextProps}>
-    {filterModalFormAction === 'open' && <TableFilterModalForm method={{ get: filterModalFormAction, set: setFilterModalFormAction }} />}
+    {/* {filterModalFormAction === 'open' && <TableFilterModalForm method={{ get: filterModalFormAction, set: setFilterModalFormAction }} />} */}
     {configModalFormAction === 'open' && <TableConfigModalForm method={{ get: configModalFormAction, set: setConfigModalFormAction }} />} <div className={styles.TableWrapper}>
       <div className={styles.TablePanel}>
         <div className={[styles.colGroup, styles.gap6].join(" ")}>
@@ -118,7 +110,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
           </button>
 
         </div>
-        <div className={[styles.colGroup, styles.gap6].join(" ")}>
+        <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ flex: '1', justifyContent: 'flex-end' }}>
           <div className={[styles.colGroup, styles.gap6].join(" ")} style={totalPages <= 1 ? { display: "none" } : {}}>
             <Divider />
 
@@ -137,9 +129,10 @@ const Table: FC<TypeTableProps> = ({ props }) => {
 
           </div>
           <Divider />
-          <PeriodField props={{ dateRange, setDateRange }} style={{ margin: "6px 0" }} />
+          <div className={styles.colGroup} style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "0 0px" }}>Период:</div>
+          <FieldDateRange />
           <Divider />
-          <SearchField />
+          <FieldFastSearch />
 
         </div>
       </div>
@@ -166,31 +159,38 @@ const TableArea = () => {
   );
 };
 
-// --------------------- Sub component - TableHeader -----------------------------------------
+// --------------------- Sub component - TableHeader ---------------------------------------
 const TableHeader = memo(() => {
-  const tableContext = useTableContextProps();
+  const TABLE_CONTEXT_PROPS = useTableContextProps();
 
   const {
     columns,
-    states: { setOrder, order }
-  } = tableContext;
+    query: { orderQuery, setOrderQuery },
+    states: { isSelectedRows, toggleSelectAllRows }
+  } = TABLE_CONTEXT_PROPS;
 
-  const { columnID, direction } = order;
+  const { columnID, direction } = orderQuery;
+
 
   const handleSorting = useCallback(
     (columnID: string) => {
-      if (!setOrder) return; // Проверяем, что setOrder определен
-      setOrder((prev) => ({
+      if (!setOrderQuery) return; // Проверяем, что setOrder определен
+      setOrderQuery((prev) => ({
         columnID,
         direction: prev.columnID === columnID && prev.direction === "asc" ? "desc" : "asc",
       }));
     },
-    [setOrder]
+    [setOrderQuery]
   );
 
   return (
     <thead>
       <tr>
+        <th style={{ width: '25px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <input type="checkbox" className={styles.TableHeaderColumn} onChange={() => toggleSelectAllRows} checked={isSelectedRows} />
+          </div>
+        </th>
         {columns
           .map((column: TColumn, keyID: number) => {
             const styleWidth = {
@@ -260,10 +260,19 @@ type TypeTableBodyRowProps = {
 }
 
 const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns, row }) => {
-  const tableContext = useTableContextProps();
-  const { states: { activeRow, setActiveRow, isLoading } } = tableContext;
+  const TABLE_CONTEXT_PROPS = useTableContextProps();
+  const { states: { activeRow, setActiveRow, isLoading, selectedRows, setSelectedRows } } = TABLE_CONTEXT_PROPS;
 
-  const handlerSetActiveRow = useCallback((rowID: number) => {
+  const handleChangeSelectedRows = (rowID: number) => {
+    const isSelected = selectedRows.includes(rowID);
+    if (isSelected) {
+      setSelectedRows(prev => prev.filter(id => id !== rowID));
+    } else {
+      setSelectedRows(prev => [...prev, rowID]);
+    }
+  };
+
+  const handleSetActiveRow = useCallback((rowID: number) => {
     if (setActiveRow && !isLoading) {
       setActiveRow(rowID);
     }
@@ -271,12 +280,18 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
 
   const isActiveRow = (rowID: number) => activeRow === rowID;
 
+  // console.log(selectedRows)
   return (
     <tr
       data-count-id={countID}
       data-row-id={rowID}
-      onClick={() => handlerSetActiveRow(rowID)}
+      onClick={() => handleSetActiveRow(rowID)}
     >
+      <td>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <input type="checkbox" className={styles.TableBodyColumn} onChange={() => handleChangeSelectedRows(rowID)} checked={selectedRows.includes(rowID)} />
+        </div>
+      </td>
       {columns.map((column: TColumn, columnIndex: number) => {
         const value = getFormatColumnValue(row, column);
         const cellClass = isActiveRow(rowID) ? styles.TabFieldActive : styles.TableBodyColumn;
@@ -300,14 +315,14 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
           case "object":
           case "date":
             return (
-              <td key={columnIndex} onClick={() => handlerSetActiveRow(rowID)}>
+              <td key={columnIndex} onClick={() => handleSetActiveRow(rowID)}>
                 {content}
               </td>
             );
 
           default:
             return (
-              <td key={columnIndex} onClick={() => handlerSetActiveRow(rowID)}>
+              <td key={columnIndex} onClick={() => handleSetActiveRow(rowID)}>
                 {content}
               </td>
             );
@@ -354,34 +369,6 @@ export const useTableContextProps = () => {
 
 type TypeModalProps = {
   method: TypeFormMethod;
-};
-// type Type
-
-const TableFilterModalForm: FC<TypeModalProps> = ({ method }) => {
-  const uid = useUID();
-  const TABLE_CONTEXT_PROPS = useTableContextProps();
-  const { filterSearchQuery, setFilterSearchQuery } = TABLE_CONTEXT_PROPS.states;
-  const { columns } = TABLE_CONTEXT_PROPS;
-
-  // const [searchByColumn, setSearchByColumn] = useState<{ value: string, label: string }>();
-  const [dateRange, setDateRange] = useState<TypeDateRange>(filterSearchQuery)
-
-
-  const onApply = () => {
-    setFilterSearchQuery({ ...dateRange })
-  }
-
-
-  return (
-    <Modal title="Настройки фильтра" method={method} onApply={onApply} style={{ width: '400px', }}>
-      <Group align='row' type="easy">
-        <PeriodField props={{ dateRange, setDateRange }} style={{ margin: "6px 0" }} />
-        <HorizontalLine />
-        <FieldSelect label="Колонка" name={`searchByColumnName_${uid}`} options={columns.map(col => ({ value: col.identifier, label: getTranslateColumn(col) }))} style={{ margin: "6px 0" }} />
-        <FieldAutocomplete label='Значение' name={`searchByColumnValue_${uid}`} style={{ margin: "6px 0" }} />
-      </Group>
-    </Modal >
-  );
 };
 
 const TableConfigModalForm: FC<TypeModalProps> = ({ method }) => {
@@ -489,17 +476,5 @@ const TableConfigColumnsItem: FC<TypeTableConfigColumnsItem> = ({ column, isDrag
   );
 };
 
-
-const DateRangeSelectorForm: FC<TypeModalProps> = ({ method }) => {
-  const [dateRange, setDateRange] = useState<TypeDateRange>({ startDate: null, endDate: null });
-
-  return (
-    <OverForm>
-      <Group align='row' type="easy">
-        <PeriodField props={{ dateRange, setDateRange }} style={{ margin: "6px 0" }} />
-      </Group>
-    </OverForm>
-  )
-};
 
 
