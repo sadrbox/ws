@@ -1,9 +1,10 @@
 import { FC, useMemo, useState } from 'react';
-import InputField from '../../components/Field/InputField';
+// import InputField from '../../components/Field/InputField';
 import ActivityHistories from '../ActivityHistories';
 import styles from "../../app/styles/main.module.scss"
 import useUID from 'src/hooks/useUID';
-import { FieldString } from 'src/components/Field';
+import { FieldString } from 'src/components/Field/index.tsx';
+// import { FieldString } from 'src/components/Field';
 
 
 const ContractFORM: FC = () => {

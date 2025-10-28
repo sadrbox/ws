@@ -1,4 +1,6 @@
-import { TColumn, TDataItem, TOrder } from "./types";
+// import { TypeTableSort } from "../Table";
+import { TypeTableSort } from "../Table/types";
+import { TColumn, TDataItem } from "./types";
 import { CSSProperties } from "react";
 
 const getNestedValue = <T>(obj: T, path: string): any => {
@@ -8,12 +10,12 @@ const isCompositeKey = (key: string): boolean => key.includes(".");
 
 export function sortGridRows(
 	arr: TDataItem[],
-	order: TOrder,
+	sort: TypeTableSort,
 	locale = "default"
 ): TDataItem[] {
-	if (!order.columnID || !order.direction) return arr || [];
+	if (!sort.columnID || !sort.direction) return arr || arr;
 
-	const { columnID, direction } = order;
+	const { columnID, direction } = sort;
 
 	return [...arr].sort((a, b) => {
 		if (isCompositeKey(columnID)) {

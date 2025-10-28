@@ -14,18 +14,25 @@ body {
 	font-size: 13px;
 	margin: 0;
 	padding: 0;
+	// width: fit-content;
 }
 
 #root {
 	position: relative;
 	padding: 0px;
+	// width: fit-content;
+	// overflow: auto;
 }
 
 .Screen {
 	// container-type: size; // не знаю может надо ??
-	display: grid;
-	grid-template-rows: 4dvh 91dvh 5dvh;
+	display: flex;
+	flex-direction: column;
+	height: 100dvh;
+	// display: grid;
+	// grid-template-rows: 7dvh 85dvh 7dvh;
 
+	min-width: 300px;
 	position: relative;
 }
 
@@ -48,22 +55,34 @@ body {
 }
 .PaneGroupWrapper {
 	border: 0px solid $color10;
-	background-color: $color30;
+	background: #f1f5f9;
 	overflow: hidden;
 	position: relative;
+	height: inherit;
+	// padding: 0px 12px;
+	// display: flex;
 	.Pane {
-		height: 87dvh;
+		// padding-top: 12px;
+		// height:-webkit-fill-available;
+		// min-height: 100vh;
+		height: inherit;
+		flex: 1;
+		overflow-y: auto;
+		// padding: 0px 6px;
+		// margin-bottom: 6px;
 		padding: 12px;
-
+		// overflow-y: auto;
 		display: none;
 	}
 	.ActivePane {
 		display: flex;
+		height: -webkit-fill-available;
 	}
 }
 .PaneTabWrapper {
 	overflow: hidden;
-	padding: 0px 12px;
+	padding: 6px 12px;
+	// height: 50px;
 	display: flex;
 	// border-top: 1px solid $color10; /* Линия под вкладками */
 	position: relative; /* Для корректного позиционирования вкладок */
@@ -72,21 +91,24 @@ body {
 	// background: url("../../assets/bgpane.jpg");
 	// background-size: ;
 	z-index: 1;
+	// flex: 1;
+	// width: fit-content;
 
 	&::before {
 		content: "";
 		position: absolute;
-		background-color: $color10;
-		top: 0;
+		background-color: $color80;
+		top: 0px;
 		left: 0;
 		width: 100%;
-		height: 1px;
+		height: 6px;
 		// margin-top: -1px;
-		// z-index: 9;
+		z-index: 2;
+		border-bottom: 1px solid $color10;
 	}
 	// padding-bottom: 12px;
 	.PaneTab {
-		box-sizing: content-box;
+		// box-sizing: content-box;
 		border-top: 1px solid $color10;
 		border-left: 1px solid $color10;
 		border-right: 1px solid $color10;
@@ -95,19 +117,20 @@ body {
 		border-bottom-left-radius: 3px;
 		border-bottom-right-radius: 3px;
 		// min-width: 100px;
-		height: 32px;
-		font-family: "Segoe UI";
+		// height: 30px;
+		// font-family: "Segoe UI";
+		// line-height: 20px;
 		background: $color33;
 		// background: linear-gradient(-180deg, #eee, #ddd, #bbb);
-		color: $color51;
+		// color: $color51;
 		display: flex;
 		justify-content: left;
 		align-items: center;
 		/* Используем SVG для скошенного угла */
-		padding: 0 12px;
+		padding: 6px 12px;
 		cursor: pointer;
 		margin-right: -1px; /* Наложение краев с учетом границы */
-		font-weight: bold;
+		// font-weight: bold;
 		z-index: 1;
 		// margin: 0px 6px 0px 12px;
 		// box-shadow: 0 0 5px 3px rgba($color5, 0.2);
@@ -121,20 +144,20 @@ body {
 			// border-right: 1px solid $color10;
 			// border-top: transparent;
 			// color: #000;
-			z-index: 10;
+			// z-index: 1;
 		}
 	}
 	.PaneTabActive {
 		border-top: 1px solid transparent;
 		// position: relative;
-		// height: 24px;
+
 		// margin-top: -2px;
-		background-color: $color30;
+		background-color: $color80;
 		// border: 1px solid $color60;
 		// border-top: 1px solid $color3;
 		color: $color6;
 		// font-weight: bold;
-		// z-index: 9;
+		z-index: 9;
 
 		&:hover {
 			// border-color: $color10;
@@ -147,6 +170,7 @@ body {
 }
 
 .FormWrapper {
+	// gap: 6px;
 	width: 100%;
 	display: grid;
 	grid-template-columns: 1fr;
@@ -157,6 +181,9 @@ body {
 	height: auto;
 }
 .FormBody {
+	gap: 12px;
+	flex-direction: column;
+	display: flex;
 	// margin: 3px;
 	// padding: 3px;
 }
@@ -192,7 +219,7 @@ body {
 	border: 1px solid $color10;
 	position: absolute;
 	background: $color30;
-	border-radius: $radius3;
+	border-radius: $radius2;
 	box-shadow: 0px 6px 12px 3px rgba($color6, 0.8);
 	animation: fadeIn 0.3s ease;
 }

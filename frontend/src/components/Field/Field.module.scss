@@ -1,20 +1,23 @@
+$heightFieldInput: 28px;
+.FieldDate,
 .FieldString,
 .FieldSelect {
+	// flex: 1 1 auto;
+	// display: flex;
 	width: 100%;
-	box-sizing: border-box;
-	border: 1px solid $color10;
+	border: none;
 	border-radius: $radius2;
-	height: 28px;
+	height: $heightFieldInput;
 	padding: 0px 6px;
-	box-sizing: border-box;
+	box-sizing: content-box;
 	option {
 		padding: 0px;
 	}
 	&:focus {
-		// border: 1px solid $color51;
+		// border: 1px solid $color2;
 		// outline: 1px solid $color2;
 		outline: 0px;
-		box-shadow: 0px 0px 6px 0px $color2;
+		box-shadow: 0px 0px 3px 0px $color2;
 	}
 	&:not(:last-child) {
 		// margin-right: 6px;
@@ -22,6 +25,12 @@
 }
 .FieldString {
 	padding: 0px 3px;
+	// padding: px;
+	padding-right: 52px; // Перенесено из инлайн-стиля
+	border-radius: $radius2;
+	font-family: "PT Sans", sans-serif;
+	// font-size: 40px;
+	// height: $heightFieldInput;
 }
 .FieldSelect {
 	padding: 0px;
@@ -30,22 +39,22 @@
 	position: relative;
 	display: flex;
 	align-items: center;
+	flex: 1 1 100%;
 	// justify-content: space-around;
 	border: 1px solid $color10;
 	border-radius: $radius2;
 	background-color: $color60;
 	gap: 10px;
 }
-.FieldDateInput {
-	width: 130px !important;
-	padding: 0px 6px;
-	background-color: transparent;
-	border: 0px;
-	border-radius: $radius3;
-	width: 100%;
-	box-sizing: border-box;
-	outline: none;
-}
+// .FieldDateInput {
+// 	width: 140px !important;
+// 	padding: 0px 6px;
+// 	background-color: transparent;
+// 	border: 0px;
+// 	border-radius: $radius2;
+// 	width: 100%;
+// 	outline: none;
+// }
 
 .FieldLabel {
 	// height: 28px;
@@ -54,7 +63,7 @@
 	// flex: 0 0 1;
 	display: flex;
 	align-items: end;
-	box-sizing: border-box;
+	box-sizing: content-box;
 	text-wrap: nowrap;
 	// justify-content: center;
 	// align-self: center;
@@ -63,22 +72,25 @@
 	// background-color: red;
 }
 .FieldWrapper {
-	position: relative;
+	// max-width: 500px;
 	display: flex;
-	// flex-grow: 1;
-	// flex: 1;
-	// flex-direction: column;
-	// gap: 6px; // gap - нужен!!!
-	// justify-content: center;
-	// align-items: flex-start;
-	// &:not(:last-child) {
-	// 	margin-right: 6px;
-	// }
-	margin: 0px 0px 0px 0px;
+	flex-direction: column;
+	// align-items: center;
+	// margin-top: 8px;
+	// gap: 8px;
 }
 .FieldInputWrapper {
+	position: relative;
 	display: flex;
-	gap: 6px;
+	flex-direction: row;
+	align-items: center;
+	gap: 3px;
+
+	border-radius: $radius2;
+	border: 1px solid $color10;
+	// width: max-content;
+	// border: 5px solid $color10;
+	flex: 1 1 100%;
 }
 .FieldSelectWrapper {
 	display: flex;
@@ -92,41 +104,53 @@
 	// padding-right: 6px;
 }
 .FieldActions {
+	box-sizing: content-box;
+	// 	padding: 0px 3px;
+	// padding: 8px;
+	// padding-right: 52px; // Перенесено из инлайн-стиля
+	// border: 1px solid $color10;
+	// border-radius: $radius3;
+	// font-family: "PT Sans", sans-serif;
+	// font-size: 13px;
+
+	position: absolute;
+	right: 3px;
+	// display: flex;
+	// border: 1px solid blue;
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	position: absolute;
-	right: 0px;
-	top: 0px;
-	bottom: 0px;
-	// background-color: red;
-	// padding: 2px;
-	// height: 24px;
-	// gap: 2px;
-	// width: 24px;
+	flex: 0 0 auto;
+	gap: 3px;
+	height: ($heightFieldInput - 6px); // height: 28px;
+	// width: ($heightFieldInput - 6px); // height: 28px;
+	// gap: 4px;
+	// margin-left: -48px; // Смещение для наложения кнопок на input
+	// align-items: center;
 	button {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		// background-color: transparent;
-
-		z-index: 5;
-		border: 1px solid $color34;
 		border-radius: $radius2;
-		height: 24px;
-		width: 24px;
-		margin-right: 1px;
-		&:last-child {
-			margin-right: 2px;
-		}
-		&:hover {
-			background-color: $color33;
-		}
+		display: flex;
+		// align-items: center;
+		// justify-content: center;
+		background: rgba($color81, 0.2);
+
+		width: ($heightFieldInput - 6px);
+		height: 100%;
+		// flex: 1 1 0;
+
+		place-items: center;
+		// flex-direction: column;
+		// height: 100%;
+		border: 0px solid transparent;
+		// background: none;
+		// border: none;
+		cursor: pointer;
+		padding: 3px;
+		color: #000000;
+
 		img {
-			// width: 14px;
-			// height: 14px;
-			object-fit: contain;
-			object-position: center;
+			width: max-content;
+			height: max-content;
 		}
 	}
 }

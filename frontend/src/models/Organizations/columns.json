@@ -1,52 +1,50 @@
 [
 	{
-		"identifier": "mark",
-		"type": "boolean",
-		"column": "Mark",
-		"width": "26px",
-		"alignment": "center",
-		"hint": "Пометка",
-		"visible": true,
-		"position": 1
-	},
-	{
 		"identifier": "id",
 		"type": "number",
-		"column": "Id",
+		"name": "Id",
 		"width": "80px",
 		"alignment": "left",
 		"hint": "Номер",
 		"visible": true,
-		"position": 2
+		"position": 1,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "shortName",
 		"type": "string",
-		"column": "ShortName",
+		"name": "ShortName",
 		"width": "auto",
 		"alignment": "left",
 		"hint": "Наименование",
 		"visible": true,
-		"position": 3
+		"position": 2,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "displayName",
 		"type": "string",
-		"column": "DisplayName",
+		"name": "DisplayName",
 		"width": "auto",
 		"alignment": "left",
 		"hint": "Полное наименование",
 		"visible": true,
-		"position": 4
+		"position": 3,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "bin",
 		"type": "string",
-		"column": "BIN",
+		"name": "BIN",
 		"width": "auto",
 		"alignment": "left",
 		"hint": "БИН",
 		"visible": true,
-		"position": 5
+		"position": 4,
+		"filter": false,
+		"inlist": true
 	}
 ]

@@ -1,4 +1,5 @@
 import { Dispatch, SetStateAction } from "react";
+import { QueryObserverResult } from "@tanstack/react-query";
 
 export type TFieldType =
   | "string"
@@ -25,40 +26,46 @@ export type TColumn = {
   position: number;
   identifier: string;
   type: string;
-  column?: string;
+  name: string;
   width?: string;
+  minWidth?: string;
   hint?: string;
   alignment?: string;
   sortable?: boolean;
   visible: boolean;
+  filter: boolean;
+  inlist: boolean;
 };
 export type TColumnSetting = {
   position: number;
   identifier: string;
   type: string;
-  column?: string;
+  name: string;
   width?: string;
+  minWidth?: string;
   hint?: string;
   alignment?: string;
   sortable?: boolean;
   visible: boolean;
+  filter: boolean;
+  inlist: boolean;
 };
 export type TypeModelStates = {
 
   // checkedRows?: number[];
   // setCheckedRows?: Dispatch<SetStateAction<number[]>>;
 
-  setActiveGrid?: Dispatch<SetStateAction<EActiveTable>>;
-  isLoading: boolean;
-  setIsLoading: Dispatch<SetStateAction<boolean>>;
-  columns?: TColumn[];
-  setColumns?: Dispatch<SetStateAction<TColumn[]>>;
+  // setActiveGrid?: Dispatch<SetStateAction<EActiveTable>>;
+  // isLoading: boolean;
+  // setIsLoading: Dispatch<SetStateAction<boolean>>;
+  // columns?: TColumn[];
+  // setColumns?: Dispatch<SetStateAction<TColumn[]>>;
   activeRow?: number | null;
   setActiveRow?: Dispatch<SetStateAction<number | null>>;
-  selectedRows: number[];
-  setSelectedRows: Dispatch<SetStateAction<number[]>>;
-  isSelectedRows: boolean;
-  toggleSelectAllRows: Dispatch<SetStateAction<boolean>>;
+  selectedRows: Set<number>;
+  setSelectedRows: Dispatch<SetStateAction<Set<number>>>;
+  // isSelectedRows: booleDan;
+  // toggleSelectAllRows: Dispatch<SetStateAction<boolean>>;
 };
 
 export type TResponseData = TDataItem[] & {
@@ -66,24 +73,24 @@ export type TResponseData = TDataItem[] & {
 };
 
 export type TypeTableContextProps = {
-  name: string;
+  model: string;
   rows: TDataItem[];
   columns: TColumn[];
-  pagination: {
-    currentPage: number;
-    setCurrentPage: Dispatch<SetStateAction<number>>;
-    totalPages: number;
-  };
+  totalPages: number;
+  isLoading: boolean;
+  isFetching: boolean;
   query: {
-    orderQuery: TOrder;
-    setOrderQuery: Dispatch<SetStateAction<TOrder>>;
-    fastSearchQuery: string,
-    setFastSearchQuery: Dispatch<SetStateAction<string>>;
-    dateRangeQuery: TypeDateRange,
-    setDateRangeQuery: Dispatch<SetStateAction<TypeDateRange>>;
+    queryParams: TypeTableParams;
+    setQueryParams: (newParams: Partial<TypeTableParams>) => void;
   };
   actions: {
-    loadDataGrid: (page?: number, limit?: number) => Promise<void>;
+    // loadDataGrid: (page?: number, limit?: number) => Promise<void>;
+    setColumns: Dispatch<SetStateAction<TColumn[]>>;
+    refetch: () => Promise<QueryObserverResult<{
+      items: TDataItem[];
+      totalPages: number;
+    } | null, Error>>
+
   };
   states: TypeModelStates;
 };
@@ -106,4 +113,37 @@ export type TypeFormAction = 'apply' | 'close' | 'open' | '';
 export type TypeFormMethod = {
   get: TypeFormAction;
   set: Dispatch<SetStateAction<TypeFormAction>>;
+};
+
+type TypeTableSortDirection = 'asc' | 'desc';
+
+export type TypeTableSort = {
+  columnID: string;
+  direction: TypeTableSortDirection;
+};
+
+export type TypeTableFilter = {
+  searchBy?: {
+    value: string;
+    columns?: {
+      identifier: string;
+      type: string;
+    }[];
+  }
+  dateRange?: TypeDateRange;
+};
+
+
+export type TypeTableParams = {
+  model: string | undefined;
+  page: number;
+  limit: number;
+  // totalPages?: number;
+  sort: TypeTableSort;
+  filter?: TypeTableFilter;
+  selectedIds?: Set<number>;
+};
+
+export type TypeModalFormProps = {
+  method: TypeFormMethod;
 };

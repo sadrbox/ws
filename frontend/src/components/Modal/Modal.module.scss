@@ -14,11 +14,12 @@
 .ModalWrapper {
 	background: $color30;
 	// padding: 6px;
-	border-radius: $radius3;
+	border-radius: $radius2;
 	box-shadow: 0 32px 32px rgba($color6, 0.5);
 	width: 100%;
 	// max-width: 500px;
 	animation: fadeIn 0.3s ease;
+	overflow: auto;
 }
 .ModalHeader {
 	display: flex;
@@ -30,12 +31,12 @@
 	border-radius: 3px 3px 0 0;
 }
 .ModalBody {
-	// margin: 12px;
+	overflow: auto; // margin: 12px;
 	padding: 6px;
 	// border: 1px solid $color5;
 	border-bottom: 0px;
 	background-color: $color30;
-	border-radius: $radius3;
+	border-radius: $radius2;
 }
 
 .ModalTitle {

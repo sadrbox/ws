@@ -1,9 +1,10 @@
 import { FC, useRef, useEffect, createContext, useContext, useState, ReactNode, CSSProperties } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './Modal.module.scss';
-import Button from '../Button';
+// import Button from '../Button';
 import { useAppContextProps } from 'src/app/AppContextProvider';
 import { TypeFormMethod } from '../Table/types';
+import { Button } from '../Button';
 // import { useAppContext } from 'src/app/AppContextProvider';
 
 type ModalProps = {
@@ -53,7 +54,7 @@ const Modal: FC<ModalProps> = ({ method, onApply, title, style, children }) => {
   };
   const onApplyAndClose = () => {
     onApply();
-    method?.set('apply')
+    method?.set('apply') // модальное окно закроется в useEffect родителя, method.set('') вызывает перерисовку таблицы
   }
 
 

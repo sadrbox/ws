@@ -296,33 +296,33 @@ tbody {
 	width: 22px;
 }
 
-input[type="checkbox"] {
-	height: 18px;
-	width: 18px;
-	// border: 9px solid #ccc;
-	// accent-color: $color10;
-	// transform: rotate(45deg);
-	// border-radius: 2px;
-	// appearance: none;
-	cursor: default;
-	margin: 0px;
-	// outline: 1px solid blue;
-	// border: 1px solid red;
-	// transition: all 0.3s ease;
-	&:checked {
-		// background-color: #007bff;
-		// border-color: #007bff;
-		// transform: scale(1.1);
-	}
-	&:focus {
-		outline: none;
-		// box-shadow: 0 0 2px $color6;
-		// border: 1px solid $color1;
-		// box-shadow: 0 1px 3px $color5;
-		// border: 1px solid red;
-		// box-shadow: 0px 0px 3px #262626;
-	}
-}
+// input[type="checkbox"] {
+// 	height: 18px;
+// 	width: 18px;
+// 	// border: 9px solid #ccc;
+// 	// accent-color: $color10;
+// 	// transform: rotate(45deg);
+// 	// border-radius: 2px;
+// 	// appearance: none;
+// 	cursor: default;
+// 	margin: 0px;
+// 	// outline: 1px solid blue;
+// 	// border: 1px solid red;
+// 	// transition: all 0.3s ease;
+// 	&:checked {
+// 		// background-color: #007bff;
+// 		// border-color: #007bff;
+// 		// transform: scale(1.1);
+// 	}
+// 	&:focus {
+// 		outline: none;
+// 		// box-shadow: 0 0 2px $color6;
+// 		// border: 1px solid $color1;
+// 		// box-shadow: 0 1px 3px $color5;
+// 		// border: 1px solid red;
+// 		// box-shadow: 0px 0px 3px #262626;
+// 	}
+// }
 
 .contextMenu {
 	user-select: none;

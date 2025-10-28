@@ -178,7 +178,12 @@ export function getFormatNumerical(n: number): string {
 // Формат даты /////////////////////////////////////////////////////////////////////////
 export function getFormatDate(d: string): string {
 	const date = new Date(d);
-	const localDateString = date.toLocaleString();
 
+	// Проверка на валидность даты и на эпоху Unix (01.01.1970)
+	if (isNaN(date.getTime()) || date.getTime() === 0) {
+		return ""; // Возвращаем пустую строку или другое значение по умолчанию
+	}
+
+	const localDateString = date.toLocaleString();
 	return localDateString;
 }

@@ -3,80 +3,104 @@
 		"identifier": "id",
 		"type": "number",
 		"name": "ID",
-		"width": "80px",
+		"width": "auto",
+		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Идентификатор записи",
 		"visible": true,
-		"position": 1
+		"position": 1,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "shortName",
 		"type": "string",
 		"name": "Short Name",
-		"width": "200px",
+		"width": "auto",
+		"minWidth": "200px",
 		"alignment": "left",
 		"hint": "Краткое название договора",
 		"visible": true,
-		"position": 2
+		"position": 2,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "contractNumber",
 		"type": "string",
 		"name": "Contract Number",
-		"width": "150px",
+		"width": "auto",
+		"minWidth": "200px",
 		"alignment": "left",
 		"hint": "Номер договора",
 		"visible": true,
-		"position": 3
+		"position": 3,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "contractText",
 		"type": "string",
 		"name": "Contract Text",
-		"width": "250px",
+		"width": "auto",
+		"minWidth": "250px",
 		"alignment": "left",
 		"hint": "Текст договора",
 		"visible": false,
-		"position": 4
+		"position": 4,
+		"filter": false,
+		"inlist": false
 	},
 	{
 		"identifier": "startDate",
 		"type": "date",
 		"name": "Start Date",
-		"width": "130px",
+		"width": "auto",
+		"minWidth": "130px",
 		"alignment": "left",
 		"hint": "Дата начала действия договора",
 		"visible": true,
-		"position": 5
+		"position": 5,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "endDate",
 		"type": "date",
 		"name": "End Date",
-		"width": "130px",
+		"width": "auto",
+		"minWidth": "130px",
 		"alignment": "left",
 		"hint": "Дата окончания действия договора",
 		"visible": true,
-		"position": 6
+		"position": 6,
+		"filter": false,
+		"inlist": true
 	},
 	{
-		"identifier": "Organization.name",
+		"identifier": "organization.shortName",
 		"type": "object",
 		"name": "Organization",
-		"width": "200px",
+		"width": "auto",
+		"minWidth": "200px",
 		"alignment": "left",
 		"hint": "Название организации",
 		"visible": true,
-		"position": 7
+		"position": 7,
+		"filter": false,
+		"inlist": true
 	},
 	{
-		"identifier": "Counterparty.name",
+		"identifier": "counterparty.shortName",
 		"type": "object",
 		"name": "Counterparty",
-		"width": "200px",
+		"width": "auto",
+		"minWidth": "200px",
 		"alignment": "left",
 		"hint": "Название контрагента",
 		"visible": true,
-		"position": 8
+		"position": 8,
+		"filter": false,
+		"inlist": true
 	}
 ]

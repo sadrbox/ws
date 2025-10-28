@@ -1,12 +1,12 @@
 import { FC, ButtonHTMLAttributes } from 'react';
-import styles from "./styles.module.scss";
+import styles from "./Button.module.scss";
 
 type TProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'danger';
   onClick?: () => void;
 };
 
-const Button: FC<TProps> = ({ variant = 'primary', children, onClick, ...props }) => {
+export const Button: FC<TProps> = ({ variant = 'primary', children, onClick, ...props }) => {
   return (
     <button
       className={[styles.Button, styles[variant]].join(" ")}
@@ -18,4 +18,15 @@ const Button: FC<TProps> = ({ variant = 'primary', children, onClick, ...props }
   );
 };
 
-export default Button;
+
+export const ButtonImage: FC<TProps> = ({ variant = 'primary', children, onClick, ...props }) => {
+  return (
+    <button
+      className={[styles.ButtonImage, styles[variant]].join(" ")}
+      onClick={onClick}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+};

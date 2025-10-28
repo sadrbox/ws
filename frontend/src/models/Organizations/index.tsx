@@ -1,112 +1,213 @@
-import { useState, FC, useEffect, useMemo, useCallback } from "react";
-import columnsJson from "./columns.json";
-import { TDataItem, TypeModelProps, TOrder, TypeDateRange } from "src/components/Table/types";
-import { getModelColumns, sortGridRows } from "src/components/Grid/services";
-import { checkServerAvailability } from "src/utils/main.module";
-import Table from "src/components/Table";
-// import Organizations from 'src/models/Organizations';
+// Frontend
+import { FC, useEffect, useMemo, useState } from "react";
+import columnsJson from "./columns.json"; // Убедитесь, что путь правильный
+import { TColumn, TDataItem, TypeModelProps, TypeTableParams } from "src/components/Table/types"; // Убедитесь, что путь правильный
+import { getModelColumns, sortTableRows } from "src/components/Table/services"; // Убедитесь, что путь правильный
+import Table from "src/components/Table"; // Убедитесь, что путь правильный
+import { API_BASE_URL } from "src/app/constants"; // Убедитесь, что путь правильный
+import { useQuery } from "@tanstack/react-query";
 
-const getResponseData = async (signal: AbortSignal, page: number, limit: number, filterSearchQuery: TypeDateRange, fastSearchQuery: string, searchColumns: { identifier: string, type: string }[]) => {
+// Удаляем лишний AbortController.abort() в finally, т.к. useQuery управляет сигналом
+const fetchData = async (queryParams: TypeTableParams): Promise<{
+  items: TDataItem[];
+  total: number; // Добавил total в тип возвращаемого значения
+  totalPages: number;
+} | null> => {
+  if (!queryParams?.model) return null;
+
+  // AbortController создается здесь, но его abort() будет вызван React Query
+  // когда запрос устареет или отменится. Нам не нужно вызывать его вручную в finally.
+  const controller = new AbortController();
+  const signal = controller.signal;
+
+
   const params = new URLSearchParams({
-    page: page.toString(), // String(page ?? 1)
-    limit: limit.toString(),
+    page: queryParams.page?.toString() ?? "1",
+    limit: queryParams.limit?.toString() ?? "100",
   });
 
-  if (fastSearchQuery.trim()) {
-    params.append("searchQuery", fastSearchQuery.trim());
-    params.append("searchColumns", JSON.stringify(searchColumns));
+  if (queryParams.sort) {
+    params.append("sort", JSON.stringify(queryParams.sort));
   }
-  if (filterSearchQuery.startDate) {
-    params.append("startDate", filterSearchQuery.startDate);
+  if (queryParams.filter) {
+    params.append("filter", JSON.stringify(queryParams.filter));
   }
-  if (filterSearchQuery.endDate) {
-    params.append("endDate", filterSearchQuery.endDate);
+  // Отправляем selectedIds только если они есть и не пустые
+  if (queryParams.selectedIds && queryParams.selectedIds.size > 0) {
+    params.append("selectedIds", JSON.stringify(Array.from(queryParams.selectedIds)));
   }
-  const url = `http://192.168.1.112:3000/api/v1/organizations?${params.toString()}`;
 
-  // if (!(await checkServerAvailability(url, signal))) {
-  //   console.warn("Сервер недоступен.");
-  //   return null;
-  // }
+  // console.log(params.toString())
+  const url = `${API_BASE_URL}/${queryParams.model.toString()}?${params.toString()}`;
 
   try {
-    const response = await fetch(url, { signal });
-    if (!response.ok) throw new Error(`Ошибка ${response.status}: ${response.statusText}`);
+    const response = await fetch(url, { signal }); // Передаем сигнал в fetch
+    if (!response.ok) {
+      // Попытка прочитать ошибку из тела ответа, если есть
+      let errorDetails = response.statusText;
+      try {
+        const errorJson = await response.json();
+        if (errorJson.message) errorDetails = errorJson.message;
+        else if (errorJson.error) errorDetails = errorJson.error;
+      } catch (e) { /* ignore json parse error */ }
+
+      throw new Error(`Ошибка ${response.status}: ${errorDetails}`);
+    }
     return await response.json();
   } catch (error) {
+    // AbortError игнорируется React Query автоматически при отмене запроса
     if (error instanceof Error && error.name !== "AbortError") {
       console.error("Ошибка загрузки данных:", error);
     }
-    return null;
+    // Важно выбросить ошибку или вернуть null/undefined, чтобы React Query
+    // знал, что запрос не удался
+    throw error; // Перебрасываем ошибку дальше, React Query ее поймает
   }
+  // finally {
+  //     // Удален controller.abort() - это делает React Query
+  // }
+};
+
+const DEFAULT_PARAMS: TypeTableParams = {
+  model: "Organizations",
+  page: 1,
+  limit: 100,
+  sort: { columnID: 'id', direction: 'asc' },
+  filter: { searchBy: { columns: [], value: "" }, dateRange: { startDate: null, endDate: null } }, // Уточняем структуру фильтра по умолчанию
+  selectedIds: new Set(), // Уточняем структуру по умолчанию
+};
+
+export const useQueryParams = (initProps?: Partial<TypeTableParams>) => {
+  const [params, setParams] = useState<TypeTableParams>({
+    ...DEFAULT_PARAMS,
+    ...initProps,
+    // Глубокое слияние для filter и selectedIds, если они переданы в initProps
+    filter: {
+      ...DEFAULT_PARAMS.filter,
+      ...(initProps?.filter ?? {}),
+    },
+    selectedIds: initProps?.selectedIds instanceof Set
+      ? initProps.selectedIds // Используем переданный Set, если это Set
+      : DEFAULT_PARAMS.selectedIds, // Иначе используем дефолтный
+  });
+
+  const setQueryParams = (newParams: Partial<TypeTableParams>) => {
+    setParams(prev => {
+      // Копируем предыдущие параметры
+      const updatedParams = { ...prev };
+
+      // Специальное слияние для filter (т.к. это объект)
+      if (newParams.filter !== undefined) {
+        updatedParams.filter = { ...prev.filter, ...newParams.filter };
+      }
+
+      // Специальное слияние/замена для selectedIds (т.к. это Set)
+      // Если newParams.selectedIds - это Set, используем его
+      // Если undefined, оставляем prev.selectedIds
+      // Если null или другой тип, можно решить как обрабатывать (сейчас оставим prev)
+      if (newParams.selectedIds !== undefined) {
+        // Если передан Set, используем его, иначе игнорируем (или обрабатываем иначе по логике)
+        if (newParams.selectedIds instanceof Set) {
+          updatedParams.selectedIds = newParams.selectedIds;
+        } else {
+          // Здесь можно решить, что делать, если передали не Set
+          // Например, сбросить selectedIds в пустой Set: updatedParams.selectedIds = new Set();
+          console.warn("setQueryParams called with non-Set for selectedIds", newParams.selectedIds);
+        }
+      }
+
+
+      // Слияние всех остальных параметров поверх скопированных
+      // Это перезапишет page, limit, sort, model и т.д., а также filter/selectedIds
+      // если они были простыми значениями, но наши спецобработчики выше более приоритетны для этих полей
+      return {
+        ...updatedParams, // Обновленные filter и selectedIds уже здесь
+        ...newParams, // Остальные параметры (page, limit, sort, model и т.д.)
+        // Гарантируем, что filter и selectedIds остаются объектами/Set из updatedParams
+        filter: updatedParams.filter,
+        selectedIds: updatedParams.selectedIds,
+      };
+    });
+  };
+
+  return [params, setQueryParams] as const;
 };
 
 const Organizations: FC = () => {
-  const name = Organizations.name;
-  const [rows, setRows] = useState<TDataItem[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [totalPages, setTotalPages] = useState<number>(0);
-  const [order, setOrder] = useState<TOrder>({
-    columnID: "actionDate",
-    direction: "desc",
+  // Получаем имя модели из имени компонента
+  const model = "Organizations"; // Лучше явно указать строку, чем полагаться на .name
+  const [columns, setColumns] = useState<TColumn[]>(getModelColumns(columnsJson, model))
+  const [queryParams, setQueryParams] = useQueryParams({ model });
+
+  // useEffect(() => {
+
+  //   setColumns
+  //   // getModelColumns(columnsJson, model),
+  //   // Зависимости useMemo должны быть только от входных данных
+  // },[columns]);
+
+
+  // Удален отладочный useEffect
+
+  const {
+    data,
+    isLoading,
+    isFetching, // Можно использовать isFetching для индикации загрузки при смене параметров
+    error, // Получаем ошибку из React Query
+    refetch,
+  } = useQuery({
+    queryKey: [model, queryParams], // queryKey: [строка модели, объект параметров]
+    queryFn: () => fetchData(queryParams),
+    // Опции React Query
+    // staleTime: 60 * 1000, // Данные считаются "свежими" 1 минуту
+    // keepPreviousData: true, // Позволяет показывать старые данные пока грузятся новые
+    retry: 2, // Повторить запрос 2 раза при ошибке
+    // Включаем автоматическое управление AbortController через useQuery
   });
-  const [fastSearchQuery, setFastSearchQuery] = useState<string>("");
-  const [filterSearchQuery, setFilterSearchQuery] = useState<TypeDateRange>({ startDate: null, endDate: null })
 
-  // Колонки зависят от состояния isLoading
-  const columns = useMemo(() => getModelColumns(columnsJson, name), [isLoading]);
-
-  // Загрузка данных
-  const loadDataGrid = useCallback(async (page: number = 1, limit: number = 100) => {
-    // console.log({ page: page });
-    const controller = new AbortController();
-    setIsLoading(true);
-
-
-    const searchColumns = columns.filter(column => column.visible && (column.type === "string" || column.type === "number" || column.type === "object")).map(column => ({ identifier: column.identifier, type: column.type }))
-    // console.log(searchColumns)
-    try {
-
-      const response = await getResponseData(controller.signal, page, limit, filterSearchQuery, fastSearchQuery, searchColumns);
-      if (response) {
-        // Сортируем данные сразу после получения
-        // console.log(response)
-        if (currentPage > response?.totalPages) {
-          setCurrentPage(response?.totalPages || 1)
-        }
-        setRows(sortGridRows(response?.items, order) || []);
-        setTotalPages(response?.totalPages || 0);
-      } else {
-        setRows([]);
-      }
-    } finally {
-      setIsLoading(false);
+  // Обработка ошибок загрузки
+  useEffect(() => {
+    if (error) {
+      console.error("React Query Error fetching Organizations:", error);
+      // Здесь можно показать уведомление пользователю об ошибке
+      // Например, с помощью какой-либо библиотеки для тостов/уведомлений
+      // alert(`Ошибка загрузки данных: ${error.message}`);
     }
-  }, [order, currentPage, fastSearchQuery, filterSearchQuery]); // Зависимость от order для корректной сортировки
-
-  // Загружаем данные при монтировании и изменении порядка сортировки
-  // useEffect(() => { setCurrentPage(1) }, [filterSearchQuery, fastSearchQuery])
-  useEffect(() => { loadDataGrid(currentPage) }, [loadDataGrid]);
+  }, [error]);
 
 
-  // Мемоизация пропсов для Grid
-  const props = useMemo<TypeModelProps>(
+
+
+  const rows = useMemo(() => {
+    return data?.items ? sortTableRows(data.items, queryParams.sort) : [];
+  }, [data?.items, queryParams.sort]); // Зависим только от items и sort
+
+  const totalPages = data?.totalPages || 0; // И total из ответа
+
+  const props = useMemo<Omit<TypeModelProps, 'states'>>(
     () => ({
-      name,
+      model,
       rows,
       columns,
-      pagination: {
-        currentPage,
-        setCurrentPage,
-        totalPages,
+      totalPages,
+      isLoading,
+      isFetching,
+      query: {
+        queryParams,
+        setQueryParams,
       },
-      actions: { loadDataGrid },
-      states: { isLoading, setIsLoading, order, setOrder, fastSearchQuery, setFastSearchQuery, filterSearchQuery, setFilterSearchQuery },
+      actions: { refetch, setColumns },
+      // states: {
+      //   isLoading: isLoading || isFetching, // Индикация загрузки, включая фоновые выборки
+      //   // setIsLoading: () => {} // Этот пропс больше не нужен с useQuery
+      // },
+      error: error, // Передаем ошибку в Table компонент, если нужно ее там отобразить
     }),
-    [rows, columns, currentPage, isLoading, loadDataGrid, order, name, filterSearchQuery, fastSearchQuery]
+    // Зависимости props: все, что используется внутри
+    [model, rows, columns, totalPages, queryParams, setQueryParams, refetch, isLoading, isFetching, error]
   );
 
   return <Table props={props} />;
-}
+};
+
 export default Organizations;

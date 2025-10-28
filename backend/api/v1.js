@@ -10,39 +10,65 @@ const prisma = new PrismaClient();
 const router = express.Router();
 router.use(cors());
 
+// Backend
 router.get("/activityhistories", async (req, res) => {
 	try {
 		const page = parseInt(req.query.page) || 1;
 		const limit = parseInt(req.query.limit) || 100;
 		const skip = (page - 1) * limit;
 
-		const rawQuery = (req.query.searchQuery || "").trim();
+		// --- Парсинг фильтра с безопасностью ---
+		let filter = {};
+		if (req.query.filter && typeof req.query.filter === "string") {
+			try {
+				filter = JSON.parse(req.query.filter);
+			} catch (jsonError) {
+				console.error("Error parsing filter JSON:", jsonError);
+				// Можно вернуть ошибку клиенту или просто использовать пустой фильтр
+				return res.status(400).json({ message: "Invalid filter JSON format." });
+			}
+		}
+		// --- Конец парсинга фильтра ---
+
+		// --- Поиск ---
+		const searchBy = filter.searchBy ?? { columns: [], value: "" };
+		const rawQuery = (searchBy.value || "").trim();
+		// Разбиваем на слова по пробелам и удаляем пустые строки
 		const words = rawQuery.split(/\s+/).filter(Boolean);
 
-		let searchColumnsRaw = req.query.searchColumns || "[]";
-		let searchColumns;
-		try {
-			searchColumns = JSON.parse(searchColumnsRaw);
-		} catch (e) {
-			searchColumns = [];
-		}
-		// console.log(searchColumnsRaw);
+		// Преобразование колонок в нужный формат { identifier, type }
+		const searchColumns = Array.isArray(searchBy.columns)
+			? searchBy.columns
+			: [];
 
-		// Парсинг startDate и endDate
-		const startDate = req.query.startDate
-			? new Date(req.query.startDate)
-			: null;
-		const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
+		// console.log("Search words:", words); // Лог для отладки
 
-		// Проверка на валидность даты
+		// --- Дата ---
+		const dateRange = filter.dateRange ?? { startDate: null, endDate: null };
+		// Проверяем, что даты являются строками перед созданием Date
+		const startDate =
+			dateRange.startDate && typeof dateRange.startDate === "string"
+				? new Date(dateRange.startDate)
+				: null;
+		const endDate =
+			dateRange.endDate && typeof dateRange.endDate === "string"
+				? new Date(dateRange.endDate)
+				: null;
+
+		// Валидация дат после создания объектов Date
 		if (startDate && isNaN(startDate.getTime())) {
-			throw new Error(`Invalid startDate: ${req.query.startDate}`);
+			// Указываем, какое поле вызвало ошибку
+			console.error(
+				`Invalid startDate string received: ${dateRange.startDate}`
+			);
+			return res.status(400).json({ message: `Invalid startDate value.` });
 		}
 		if (endDate && isNaN(endDate.getTime())) {
-			throw new Error(`Invalid endDate: ${req.query.endDate}`);
+			// Указываем, какое поле вызвало ошибку
+			console.error(`Invalid endDate string received: ${dateRange.endDate}`);
+			return res.status(400).json({ message: `Invalid endDate value.` });
 		}
 
-		// Добавим в фильтр по полю createdAt (или другому полю даты)
 		const dateRangeFilter =
 			startDate || endDate
 				? {
@@ -53,79 +79,104 @@ router.get("/activityhistories", async (req, res) => {
 				  }
 				: {};
 
-		const whereClause =
-			words.length && searchColumns.length
+		// --- Where clause (Поиск) ---
+		// Эта логика УЖЕ делает фильтрацию для каждого слова (AND) по всем колонкам (OR)
+		const searchWhereClause =
+			words.length > 0 && searchColumns.length > 0 // Убедимся, что массивы не пустые
 				? {
-						AND: words.map((word) => {
-							const orConditions = searchColumns
-								.map((column) => {
-									const type = column.type;
-									const [field, subField] = column.identifier.split(".");
+						AND: words
+							.map((word) => {
+								const orConditions = searchColumns
+									.map(({ identifier, type }) => {
+										// не фильтруем по дате - это уже учтено в dateRangeFilter
+										// Если тип - дата, пропускаем создание условия для поиска по тексту
+										if (type === "date") return null;
 
-									// Если тип неизвестен — игнорируем
-									if (!type) return null;
+										// Проверка, что identifier существует и является строкой
+										if (
+											typeof identifier !== "string" ||
+											identifier.length === 0
+										) {
+											console.warn(
+												`Invalid identifier in searchColumns: ${identifier}`
+											);
+											return null;
+										}
 
-									const value =
-										type === "number" && !isNaN(Number(word))
-											? Number(word)
-											: type === "date" && !isNaN(Date.parse(word))
-											? new Date(word)
-											: word;
+										const [field, subField] = identifier.includes(".")
+											? identifier.split(".")
+											: [identifier, null];
 
-									if (type === "string") {
-										const condition = {
-											contains: word,
-											// mode: "insensitive",
-										};
+										let condition = null;
+
+										if (type === "string") {
+											// Можно добавить опцию case-insensitive в зависимости от ORM/БД
+											condition = { contains: word };
+										} else if (
+											type === "number" &&
+											word !== "" &&
+											!isNaN(Number(word))
+										) {
+											// Дополнительная проверка word !== '', т.к. Number('') = 0
+											condition = { equals: Number(word) };
+										} else {
+											// Пропускаем другие типы или нечисловые значения для числовых полей
+											return null;
+										}
+
+										// Проверка, что условие было успешно создано
+										if (!condition) {
+											return null;
+										}
 
 										return subField
 											? { [field]: { [subField]: condition } }
 											: { [field]: condition };
-									}
+									})
+									.filter(Boolean); // Удаляем null условия
 
-									const isNumeric = !isNaN(value) && Number.isInteger(+value);
-
-									if (
-										typeof value === "number" &&
-										type === "number" &&
-										isNumeric
-									) {
-										const condition = { equals: value };
-
-										return subField
-											? { [field]: { [subField]: condition } }
-											: { [field]: condition };
-									}
-
+								// Если для слова не создано ни одного OR условия (например, все колонки были date), пропускаем его
+								if (orConditions.length === 0) {
 									return null;
-								})
-								.filter(Boolean); // убираем null
+								}
 
-							return { OR: orConditions };
-						}),
+								return { OR: orConditions }; // Одно OR условие для каждого слова
+							})
+							.filter(Boolean), // Удаляем null OR условия (если для слова не нашлось подходящих колонок)
 				  }
-				: undefined;
+				: {}; // Пустой объект поиска, если нет слов или колонок
 
+		// Проверяем, что массив AND не пустой, если whereClause был создан
+		// Это нужно, если, например, слова были, но ни одна из searchColumns не подходит
+		const finalSearchWhereClause =
+			(searchWhereClause.AND?.length ?? 0) > 0 ? searchWhereClause : {};
+
+		// Объединяем все условия
 		const finalWhereClause = {
-			...whereClause,
-			...dateRangeFilter,
+			...finalSearchWhereClause, // Условия поиска по тексту/числам
+			...dateRangeFilter, // Условия фильтрации по дате
 		};
-		// console.log(JSON.stringify(whereClause, null, 2));
 
+		console.log(
+			"Final WHERE clause:",
+			JSON.stringify(finalWhereClause, null, 2)
+		); // Лог финального фильтра
+
+		// --- Запрос к базе ---
 		const [activityHistories, total] = await prisma.$transaction([
 			prisma.activityHistory.findMany({
 				skip,
 				take: limit,
-				where: finalWhereClause,
+				where: finalWhereClause, // Используем объединенный фильтр
 				include: {
-					organization: true,
+					organization: true, // Убедитесь, что организация связана
 				},
+				// TODO: Добавить order/orderBy из req.query.sort если необходимо
 			}),
 			prisma.activityHistory.count({
-				where: finalWhereClause,
+				where: finalWhereClause, // Используем объединенный фильтр для подсчета
 			}),
 		]);
-		// console.log(activityHistories);
 
 		res.status(200).json({
 			items: activityHistories,
@@ -134,10 +185,13 @@ router.get("/activityhistories", async (req, res) => {
 			totalPages: Math.ceil(total / limit),
 		});
 	} catch (error) {
-		console.error("Error fetching:", error);
+		console.error("Error fetching ActivityHistories:", error); // Уточняем лог
+		// Проверяем тип ошибки, чтобы не отправлять чувствительную информацию в прод
+		const message =
+			error instanceof Error ? error.message : "An unknown error occurred.";
 		res.status(500).json({
 			message: "Error fetching data.",
-			error: error.message,
+			error: message,
 		});
 	}
 });
@@ -216,10 +270,10 @@ router.get("/contracts", async (req, res) => {
 			prisma.contract.findMany({
 				skip,
 				take: limit,
-				// include: {
-				// 	organization: true,
-				// 	counterparty: true,
-				// },
+				include: {
+					organization: true,
+					contract: true,
+				},
 			}),
 			prisma.contract.count(),
 		]);

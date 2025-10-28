@@ -3,120 +3,156 @@
 		"identifier": "id",
 		"type": "number",
 		"name": "Id",
-		"width": "80px",
+		"width": "auto",
+		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Номер",
 		"visible": true,
-		"position": 1
+		"position": 1,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "actionDate",
 		"type": "date",
 		"name": "Action Date",
-		"width": "130px",
+		"width": "auto",
+		"minWidth": "140px",
 		"alignment": "left",
 		"hint": "Дата действия",
 		"visible": true,
-		"position": 2
+		"position": 2,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "actionType",
 		"type": "string",
 		"name": "Action Type",
-		"width": "130px",
+		"width": "auto",
+		"minWidth": "120px",
 		"alignment": "center",
 		"hint": "Тип действия",
 		"visible": true,
-		"position": 3
+		"position": 3,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "bin",
 		"type": "string",
 		"name": "BIN",
-		"width": "120px",
+		"width": "auto",
+		"minWidth": "120px",
 		"alignment": "left",
 		"hint": "БИН организации",
 		"visible": true,
-		"position": 4
+		"position": 4,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "userName",
 		"type": "string",
 		"name": "User Name",
-		"width": "150px",
+		"width": "auto",
+		"minWidth": "150px",
 		"alignment": "left",
 		"hint": "Имя пользователя",
 		"visible": true,
-		"position": 5
+		"position": 5,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "host",
 		"type": "string",
 		"name": "User Host",
-		"width": "150px",
+		"width": "auto",
+		"minWidth": "150px",
 		"alignment": "left",
 		"hint": "Хост пользователя",
 		"visible": true,
-		"position": 6
+		"position": 6,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "ip",
 		"type": "string",
 		"name": "User IP",
-		"width": "120px",
+		"width": "auto",
+		"minWidth": "120px",
 		"alignment": "left",
 		"hint": "IP пользователя",
 		"visible": true,
-		"position": 7
+		"position": 7,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "city",
 		"type": "string",
 		"name": "User City",
-		"width": "100px",
+		"width": "auto",
+		"minWidth": "100px",
 		"alignment": "left",
 		"hint": "Город пользователя",
 		"visible": true,
-		"position": 8
+		"position": 8,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "objectId",
 		"type": "string",
 		"name": "Object ID",
-		"width": "100px",
+		"width": "auto",
+		"minWidth": "100px",
 		"alignment": "left",
 		"hint": "Идентификатор объекта",
 		"visible": true,
-		"position": 9
+		"position": 9,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "objectType",
 		"type": "string",
 		"name": "Object Type",
-		"width": "150px",
+		"width": "auto",
+		"minWidth": "150px",
 		"alignment": "left",
 		"hint": "Тип объекта",
 		"visible": true,
-		"position": 10
+		"position": 10,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "objectName",
 		"type": "string",
 		"name": "Object Name",
-		"width": "200px",
+		"width": "auto",
+		"minWidth": "200px",
 		"alignment": "left",
 		"hint": "Название объекта",
 		"visible": true,
-		"position": 11
+		"position": 11,
+		"filter": false,
+		"inlist": true
 	},
 	{
 		"identifier": "organization.shortName",
 		"type": "string",
 		"name": "Organization",
-		"width": "199px",
+		"width": "auto",
+		"minWidth": "200px",
 		"alignment": "left",
 		"hint": "Организация",
 		"visible": true,
-		"position": 12
+		"position": 12,
+		"filter": false,
+		"inlist": true
 	}
 ]

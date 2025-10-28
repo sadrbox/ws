@@ -28,7 +28,7 @@ export default function App() {
   const [panes, setPanes] = useState<TypePanes>({
     activeID: 0,
     tabs: [
-      { id: 0, label: "Навигация", content: <NavigationPage /> },
+      { id: 0, label: "Договора", content: <Contracts /> },
     ]
   });
   // const [paneTabs, setPaneTabs] = useState<TypeTabs>([
