@@ -26,3 +26,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+*.zip
+W.zip
+*.exe
+*.bin
