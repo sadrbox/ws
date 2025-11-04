@@ -272,7 +272,7 @@ router.get("/contracts", async (req, res) => {
 				take: limit,
 				include: {
 					organization: true,
-					contract: true,
+					counterparty: true,
 				},
 			}),
 			prisma.contract.count(),

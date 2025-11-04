@@ -3,7 +3,7 @@ import { useAppContextProps } from './AppContextProvider';
 import styles from "./styles/main.module.scss"
 import NavigationPage from './pages/NavigationPage';
 import ActivityHistories from 'src/models/ActivityHistories';
-import ContractFORM from 'src/models/Contracts/form';
+import ContractForm from 'src/models/Contracts/form';
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -60,7 +60,7 @@ export const Navbar: FC = () => {
       <a href="#" className={styles.NavbarItem} onClick={() => openPane(<ActivityHistories />)}>
         История активности
       </a>
-      <a href="#" className={styles.NavbarItem} onClick={() => openPane(<ContractFORM />)}>
+      <a href="#" className={styles.NavbarItem} onClick={() => openPane(<ContractForm />)}>
         Форма
       </a>
     </div>

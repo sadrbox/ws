@@ -29,6 +29,8 @@ import { Button, ButtonImage } from '../Button';
 // import TableFilterModalForm from './TableFilterModalForm'; // Пример
 // import TableConfigModalForm from './TableConfigModalForm'; // Убедитесь, что путь правильный
 import { getTranslation } from '../../i18/index';
+import { useAppContextProps } from 'src/app/AppContextProvider';
+import ContractForm from 'src/models/Contracts/form';
 
 // --------------------- Context Instance -----------------------------------------------
 // Создаем контекст со значением по умолчанию undefined.
@@ -483,6 +485,8 @@ type TypeTableBodyRowProps = {
 
 // Компонент одной строки таблицы. Мемоизирован.
 const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns, row }) => {
+  const context = useAppContextProps();
+  const { openPane } = context?.actions;
   // Получаем необходимые данные и функции из контекста
   const {
     isLoading,
@@ -533,7 +537,7 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
     >
       {/* Ячейка с чекбоксом (фиксированная ширина) */}
       {/* Ширина должна быть задана в CSS стилях для tbody td:first-child */}
-      <td style={{ width: '25px', maxWidth: '25px', minWidth: '25px', whiteSpace: 'nowrap' }}>
+      <td>
         <div className={[styles.TableBodyCell, cellClass].join(" ")} style={{ justifyItems: "center" }}>
           <input
             type="checkbox"
@@ -563,6 +567,7 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
         return (
           <td
             key={column.identifier} // Используем identifier колонки как key для уникальности ячейки в строке
+            onDoubleClickCapture={() => openPane(<ContractForm />)} // Открываем форму контракта по двойному клику <ContractForm {mode="view"} id={rowID} />
             style={{
               // Ширина ячейки (колонки). Должна совпадать с шириной th в thead.
               // Лучше задавать ширину в CSS классах или в tbody td, но инлайн тоже работает.

@@ -149,6 +149,8 @@ body {
 	}
 	.PaneTabActive {
 		border-top: 1px solid transparent;
+		box-shadow: 0px 2px 0px 0px $color3;
+		// border-bottom: 9px solid $color80;
 		// position: relative;
 
 		// margin-top: -2px;

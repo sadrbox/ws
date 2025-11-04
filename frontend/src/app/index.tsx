@@ -1,7 +1,7 @@
 
 import ActivityHistories from "../models/ActivityHistories";
 import React, { JSX, useMemo, useRef, useState, useCallback } from "react";
-import ContractFORM from "../models/Contracts/form";
+import ContractForm from "../models/Contracts/form";
 import styles from "./styles/main.module.scss"
 
 import AppContextProvider from "./AppContextProvider";
@@ -56,7 +56,7 @@ export default function App() {
   // Словарь компонентов
   // const COMPONENTS: Record<string, React.ReactNode> = {
   //   ActivityHistories: <ActivityHistories />,
-  //   ContractFORM: <ContractFORM />,
+  //   ContractForm: <ContractForm />,
   //   NavigationPage: <NavigationPage />,
   //   // Sales: <Sales />,
   //   // Receipts: <Receipts />,

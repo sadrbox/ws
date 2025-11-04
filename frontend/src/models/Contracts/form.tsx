@@ -7,7 +7,7 @@ import { FieldString } from 'src/components/Field/index.tsx';
 // import { FieldString } from 'src/components/Field';
 
 
-const ContractFORM: FC = () => {
+const ContractForm: FC = () => {
 
   const formUid = useUID();
 
@@ -30,4 +30,4 @@ const ContractFORM: FC = () => {
   );
 };
 
-export default ContractFORM;
+export default ContractForm;

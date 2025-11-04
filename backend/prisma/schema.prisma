@@ -57,8 +57,10 @@ model Contract {
   endDate          DateTime?
   organizationUuid String?
   counterpartyUuid String?
-  Organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
-  Counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: Cascade)
+  // Organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  // Counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: Cascade)
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: Cascade)
 }
 
 model Contact {

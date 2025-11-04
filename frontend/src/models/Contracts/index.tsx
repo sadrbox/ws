@@ -6,6 +6,7 @@ import { getModelColumns, sortTableRows } from "src/components/Table/services"; 
 import Table from "src/components/Table"; // Убедитесь, что путь правильный
 import { API_BASE_URL } from "src/app/constants"; // Убедитесь, что путь правильный
 import { useQuery } from "@tanstack/react-query";
+import ContractForm from "./form";
 
 // Удаляем лишний AbortController.abort() в finally, т.к. useQuery управляет сигналом
 const fetchData = async (queryParams: TypeTableParams): Promise<{
@@ -132,6 +133,11 @@ export const useQueryParams = (initProps?: Partial<TypeTableParams>) => {
 
   return [params, setQueryParams] as const;
 };
+
+const openForm = (model: string, id?: number) => {
+  const url = id ? <ContractForm /> : `/contracts/form`;
+  // window.open(url, "_blank");
+}
 
 const Contracts: FC = () => {
   // Получаем имя модели из имени компонента
