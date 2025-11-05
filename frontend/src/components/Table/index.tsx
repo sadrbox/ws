@@ -267,8 +267,19 @@ export default Table;
 const TableArea = memo(() => {
   // Получаем состояние загрузки из контекста, если нужно влиять на рендер TableArea
   // const { states: { isLoading } } = useTableContextProps();
+  const { columns } = useTableContextProps();
+  const visibleColumns = useMemo(() => columns.filter(col => col.visible), [columns]);
   return (
     <table>
+      <colgroup>
+        <col style={{ width: '26px', maxWidth: '26px' }} />
+        {visibleColumns.map((column: TColumn, idx: number) => {
+          const lastColumnMinWidth = (visibleColumns.length) === (idx + 1) ? "auto" : column.minWidth;
+          return (
+            <col key={column.identifier} style={{ width: lastColumnMinWidth, minWidth: column.width }} />
+          );
+        })}
+      </colgroup>
       <TableHeader />
       <TableBody />
     </table>
@@ -344,8 +355,8 @@ const TableHeader = memo(() => {
       <tr style={{ containerType: "size" }}>
         {/* Колонка с чекбоксом (фиксированная ширина) */}
         {/* Ширина должна быть задана в CSS стилях для thead th:first-child или tbody td:first-child */}
-        <th style={{ width: '26px', maxWidth: '26px', minWidth: '26px', whiteSpace: 'nowrap' }}>
-          <div className={styles.TableHeaderCell} style={{ justifyItems: "center" }}>
+        <th style={{ whiteSpace: 'nowrap' }}>
+          <div className={styles.TableHeaderCell} style={{ justifyContent: 'center', padding: '0px' }}>
             <input
               type="checkbox"
               style={{ height: '16px', width: '16px' }}
@@ -357,17 +368,22 @@ const TableHeader = memo(() => {
         </th>
         {/* Рендерим видимые колонки заголовка */}
         {visibleColumns.map((column: TColumn) => {
+          // const autoWidth = (visibleColumns.length) === (idx + 1) ? "auto" : column.width;
           // CSS стили для ширины колонки должны быть в thead и tbody,
           // либо можно попробовать задать их здесь, но tbody.td могут переопределять
-          const styleWidth = {
-            width: column.width, // Пример: задаем ширину из данных колонки
-            minWidth: column.minWidth, // Пример: задаем минимальную ширину
-          };
+          // if ((visibleColumns.length + 1) === column.position) {
+          //   console.log({ 'column.position': column.position, 'visibleColumns.length': visibleColumns.length });
+          // }
+          // const styleWidth = {
+          //   width: column.minWidth, // Пример: задаем ширину из данных колонки
+          //   minWidth: column.minWidth, // Пример: задаем минимальную ширину
+          //   maxWidth: column.minWidth, // Пример: задаем максимальную ширину
+          // };
 
           // Специальный рендеринг для boolean колонок (без сортировки в заголовке)
           if (column.type === "boolean") {
             return (
-              <th key={column.identifier} style={styleWidth}> {/* Используем identifier как key */}
+              <th key={column.identifier}> {/* Используем identifier как key */}
                 {/* Оставляем пустой div или можно добавить иконку/текст, если нужно */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}></div>
               </th>
@@ -375,11 +391,11 @@ const TableHeader = memo(() => {
           }
 
           // Рендеринг сортируемых колонок
-          const isActive = currentSortColumnID === column.identifier; // Активна ли сортировка по этой колонке
+          const isColumnSort = currentSortColumnID === column.identifier; // Активна ли сортировка по этой колонке
           const iconStyle = {
-            justifySelf: "end", // Выравнивание иконки в конце flex-контейнера
-            marginLeft: "10px", // Отступ слева от текста заголовка
-            color: isActive ? "#666" : "transparent", // Цвет иконки активной сортировки, прозрачный для неактивных
+            justifySelf: "start", // Выравнивание иконки в конце flex-контейнера
+            marginLeft: "0px", // Отступ слева от текста заголовка
+            color: isColumnSort ? "#666" : "transparent", // Цвет иконки активной сортировки, прозрачный для неактивных
             transform: currentSortDirection === "asc" ? "none" : "scale(1,-1)", // Поворот иконки для 'desc'
             transition: 'transform 0.2s ease-in-out', // Плавный поворот
             display: 'flex', // Делаем div flex-элементом для justifySelf
@@ -389,25 +405,27 @@ const TableHeader = memo(() => {
           return (
             <th
               key={column.identifier} // Используем identifier как key для уникальности
-              style={{ ...styleWidth, cursor: 'col-resize' }} // Добавляем указатель мыши для кликабельности
+              style={{ cursor: 'col-resize' }} // Добавляем указатель мыши для кликабельности
             >
               {/* Контейнер для текста заголовка и иконки сортировки */}
               <div
                 className={styles.TableHeaderCell}
                 onClick={() => handleSorting(column.identifier)} // Используем мемоизированный обработчик сортировки
               >
-                <span
-
-                >{getTranslateColumn(column)}</span> {/* Текст заголовка */}
-                {/* SVG иконка сортировки */}
-                {/* Используем условный рендеринг, если иконка нужна только для сортируемых колонок */}
-                <svg style={iconStyle} width="18" height="18" viewBox="8 4 8 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 8V10M12 14L9 11M12 14L15 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <span>{getTranslateColumn(column)}</span> {/* Текст заголовка */}
+                {
+                  isColumnSort && (
+                    <svg style={iconStyle} width="18" height="18" viewBox="8 4 8 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 8V10M12 14L9 11M12 14L15 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )
+                }
               </div>
             </th>
           );
         })}
+
+
       </tr>
     </thead>
   );
@@ -571,8 +589,8 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
             style={{
               // Ширина ячейки (колонки). Должна совпадать с шириной th в thead.
               // Лучше задавать ширину в CSS классах или в tbody td, но инлайн тоже работает.
-              width: column.width,
-              maxWidth: column.width,
+              // width: column.width,
+              // minWidth: column.minWidth,
               // Можно добавить правила overflow/text-overflow в CSS для .TableBodyCell
               // overflow: 'hidden',
               // textOverflow: 'ellipsis',

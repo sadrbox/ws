@@ -180,7 +180,7 @@ table {
 	// display: flex;
 	// flex-direction: column;
 	// flex: 1;
-	// table-layout: fixed; // для чего нужен ?
+	table-layout: fixed; // нужен чтобы th и td соответствовали по ширине, без этого колонки прыгают при обновлении таблицы
 	// table-layout: auto;
 	// position: relative;
 }
@@ -222,18 +222,20 @@ thead {
 			&:first-child {
 				border-left: 0px;
 			}
+
 			&:last-child {
 				border-right: 0px;
 			}
 			.TableHeaderCell {
-				padding: 0px 1px 1px 1px;
+				padding: 0px 1px 1px 0px;
 				margin: 1px;
-				display: grid;
-				grid-template-rows: 21px;
-				grid-auto-flow: column;
-				grid-template-columns: auto;
+				// display: grid;
+				// grid-template-rows: 21px;
+				// grid-auto-flow: column;
+				// grid-template-columns: auto;
+				display: flex;
+				flex-direction: row;
 				align-items: center;
-				justify-items: start;
 				overflow: hidden;
 				white-space: nowrap;
 				text-overflow: ellipsis;
@@ -353,6 +355,7 @@ tbody {
 			&:first-child {
 				border-left: 0px;
 			}
+
 			&:last-child {
 				border-right: 0px;
 				// border-bottom: 1px solid $colorPrimaryDark;
