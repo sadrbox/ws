@@ -1,7 +1,7 @@
 import { FC } from 'react';
 import styles from "../../app/styles/main.module.scss"
 
-const AcitvityHistoryForm: FC = () => {
+const FormActivityHistory: FC = () => {
   return (
     <div className={styles.Wrapper}>
       <div className={styles.FormHeader}>
@@ -25,4 +25,4 @@ const AcitvityHistoryForm: FC = () => {
   );
 };
 
-export default AcitvityHistoryForm;
+export default FormActivityHistory;

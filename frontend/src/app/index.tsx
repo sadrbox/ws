@@ -1,17 +1,17 @@
 
-import ActivityHistories from "../models/ActivityHistories";
+// import activityhistories from "../models/activityhistories";
 import React, { JSX, useMemo, useRef, useState, useCallback } from "react";
-import ContractForm from "../models/Contracts/form";
+import ContractForm from "../models/contracts/form";
 import styles from "./styles/main.module.scss"
 
 import AppContextProvider from "./AppContextProvider";
 // import { TAppContext, TPaneTab } from "./types";
 import NavigationPage from "./pages/NavigationPage";
-import Contracts from "src/models/Contracts";
+import Contracts from "src/models/contracts/list";
 import { getTranslation } from "src/i18";
-import Counterparties from "src/models/Counterparties";
-import Organizations from "src/models/Organizations";
-import { Navbar, PaneGroup, PaneTab } from "./DesignSystem";
+import Counterparties from "src/models/counterparties";
+import Organizations from "src/models/organizations";
+import { Navbar, PaneGroup, PaneTab } from "../components/UI";
 import { TypeTabItem, TypeTabs } from "src/components/Tabs/types";
 import { TypeAppContextProps } from "./types";
 import { get } from "lodash";

@@ -1,9 +1,9 @@
 import { CSSProperties, FC, PropsWithChildren, useState } from 'react';
-import { useAppContextProps } from './AppContextProvider';
-import styles from "./styles/main.module.scss"
-import NavigationPage from './pages/NavigationPage';
-import ActivityHistories from 'src/models/ActivityHistories';
-import ContractForm from 'src/models/Contracts/form';
+import { useAppContextProps } from '../../app/AppContextProvider';
+import styles from "../../app/styles/main.module.scss"
+import NavigationPage from '../../app/pages/NavigationPage';
+import ListActivityHistories from 'src/models/activityhistories/list';
+import ContractForm from 'src/models/contracts/form';
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -30,17 +30,32 @@ export const Group: FC<TypeGroupProps> = ({ align, gap, type, className, style, 
     ...({ borderRadius: '2px' }), ...style, ...(gap && { gap }), ...(type && { padding: '3px', margin: '3px' })
   }
   return (
-    <div
-      className={[align === 'row' ? styles.RowGroup : styles.ColGroup, type && visibleType, className].filter(s => s && s).join(" ")}
+    <div className={[align === 'row'
+      ?
+      styles.RowGroup
+      :
+      styles.ColGroup,
+    type
+    &&
+    visibleType,
+      className].filter(s => s && s).join(" ")}
       style={reStyle}>
       {children}
-    </div >
+    </div>
   );
 };
 
 export const HorizontalLine = () => {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '6px 0' }}>
+    <div style={{
+      display: 'flex'
+      ,
+      alignItems: 'center'
+      ,
+      justifyContent: 'center'
+      ,
+      margin: '6px 0'
+    }}>
       <span className={styles.HorizontalLine}></span>
     </div>
   )
@@ -54,13 +69,21 @@ export const Navbar: FC = () => {
 
   return (
     <div className={styles.NavbarWrapper}>
-      <a href="#" className={styles.NavbarItem} onClick={() => openPane(<NavigationPage />)}>
+      <a href="#"
+        className={styles.NavbarItem}
+        onClick={() => openPane(
+          <NavigationPage />)}>
         Навигация
       </a>
-      <a href="#" className={styles.NavbarItem} onClick={() => openPane(<ActivityHistories />)}>
+      <a href="#"
+        className={styles.NavbarItem}
+        onClick={() => openPane(<ListActivityHistories />)}>
         История активности
       </a>
-      <a href="#" className={styles.NavbarItem} onClick={() => openPane(<ContractForm />)}>
+      <a href="#"
+        className={styles.NavbarItem}
+        onClick={() => openPane(
+          <ContractForm />)}>
         Форма
       </a>
     </div>
@@ -77,7 +100,12 @@ export const PaneTab: FC = () => {
   return (
     <div className={styles.PaneTabWrapper}>
       {tabs.map((tab) => (
-        <div className={[styles.PaneTab, tab.id === activeID ? styles.PaneTabActive : ""].filter(s => s && s).join(" ")}
+        <div className={[styles.PaneTab,
+        tab.id === activeID
+          ?
+          styles.PaneTabActive
+          : ""
+        ].filter(s => s && s).join(" ")}
           key={tab.id}
           onClick={() => setActivePaneID(tab.id)}
         >
@@ -93,7 +121,13 @@ export const PaneGroup = () => {
   return (
     <div className={styles.PaneGroupWrapper}>
       {tabs.map((tab) => (
-        <div key={tab.id} className={[styles.Pane, tab.id === activeID ? styles.ActivePane : ""].filter(s => s && s).join(" ")}>
+        <div key={tab.id}
+          className={[styles.Pane,
+          tab.id === activeID
+            ?
+            styles.ActivePane
+            : ""
+          ].filter(s => s && s).join(" ")}>
           {tab.content}
         </div>
       ))}
@@ -105,12 +139,33 @@ export const OverForm: FC<TypeOverFormProps> = ({ children }) => {
   return (
     <div className={styles.OverFormNest}>
       <div className={styles.OverFormTringleIcon}>
-        <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" strokeWidth='2' stroke-linejoin="round" stroke-linecap="round">
-          <polygon points="4,10 12,10 8,4" fill="#eee" />
+        <svg width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          xmlns="http://www.w3.org/2000/svg"
+          strokeWidth='2'
+          stroke-linejoin="round"
+          stroke-linecap="round">
+          <polygon points="4,10 12,10 8,4"
+            fill="#eee" />
 
-          <line x1="4" y1="10" x2="8" y2="4" stroke="#aaa" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" />
+          <line x1="4"
+            y1="10"
+            x2="8"
+            y2="4"
+            stroke="#aaa"
+            stroke-width="1"
+            stroke-linejoin="round"
+            stroke-linecap="round" />
 
-          <line x1="8" y1="4" x2="12" y2="10" stroke="#aaa" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" />
+          <line x1="8"
+            y1="4"
+            x2="12"
+            y2="10"
+            stroke="#aaa"
+            stroke-width="1"
+            stroke-linejoin="round"
+            stroke-linecap="round" />
         </svg>
       </div>
       <div className={styles.OverFormWrapper}>

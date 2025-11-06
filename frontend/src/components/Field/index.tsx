@@ -3,7 +3,7 @@ import React, { CSSProperties, FC, useDeferredValue, useEffect, useRef, useState
 import styles from "./Field.module.scss"
 import { useTableContextProps } from '../Table'
 import { TypeDateRange } from '../Table/types'
-import { Group } from 'src/app/DesignSystem'
+import { Group } from 'src/components/UI'
 import useUID from 'src/hooks/useUID'
 
 type TypeFieldStringProps = {

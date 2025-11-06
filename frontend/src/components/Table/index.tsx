@@ -21,7 +21,7 @@ import { PiDotsThreeVerticalDuotone } from 'react-icons/pi'; // Проверьт
 // import { useAppContext } from 'src/components/app/AppContextProvider'; // Закомментировано, если не используется
 import React from 'react';
 // import useUID from 'src/hooks/useUID'; // Закомментировано, если не используется
-import { Group } from 'src/app/DesignSystem'; // Убедитесь, что путь правильный
+import { Group } from 'src/components/UI'; // Убедитесь, что путь правильный
 import { Button, ButtonImage } from '../Button';
 // import { columns } from 'src/models/Products/config';
 
@@ -30,7 +30,7 @@ import { Button, ButtonImage } from '../Button';
 // import TableConfigModalForm from './TableConfigModalForm'; // Убедитесь, что путь правильный
 import { getTranslation } from '../../i18/index';
 import { useAppContextProps } from 'src/app/AppContextProvider';
-import ContractForm from 'src/models/Contracts/form';
+import ContractForm from 'src/models/contracts/form';
 
 // --------------------- Context Instance -----------------------------------------------
 // Создаем контекст со значением по умолчанию undefined.
@@ -216,7 +216,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
       {configModalFormAction === 'open' && <TableConfigModalForm method={{ get: configModalFormAction, set: setConfigModalFormAction }} />}
 
       <div className={styles.TableWrapper}>
-        <h2 className={styles.TableHeaderLabel}>{getTranslation(props.model)}</h2>
+        <h2 className={styles.TableHeaderLabel}>{getTranslation(props.componentName)}</h2>
         <div className={styles.TablePanel}>
           <div className={styles.TablePanelLeft}>
             <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
@@ -274,7 +274,7 @@ const TableArea = memo(() => {
       <colgroup>
         <col style={{ width: '26px', maxWidth: '26px' }} />
         {visibleColumns.map((column: TColumn, idx: number) => {
-          const lastColumnMinWidth = (visibleColumns.length) === (idx + 1) ? "auto" : column.minWidth;
+          const lastColumnMinWidth = (visibleColumns.length) === (idx + 1) ? "auto" : column.width;
           return (
             <col key={column.identifier} style={{ width: lastColumnMinWidth, minWidth: column.width }} />
           );
@@ -619,7 +619,7 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
 // Принимает props `method` для управления видимостью модалки.
 const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
   // Получаем нужные данные и функции из контекста
-  const { columns, model, actions } = useTableContextProps();
+  const { columns, componentName, actions } = useTableContextProps();
   // Получаем функцию setColumns из actions, проверяем ее наличие.
   const setColumnsAction = actions?.setColumns;
 
@@ -629,13 +629,13 @@ const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
   // Обработчик кнопки "Применить" в модалке. Мемоизирован.
   const onApply = useCallback(() => {
     // Сохраняем конфигурацию в Local Storage (ваш код)
-    localStorage.setItem(model, JSON.stringify(columnsConfig));
+    localStorage.setItem(componentName, JSON.stringify(columnsConfig));
     // Вызываем функцию setColumns из actions, если она существует,
     // чтобы обновить состояние колонок в родительском компоненте (Table).
     if (setColumnsAction) {
       setColumnsAction(columnsConfig);
     }
-  }, [columnsConfig, model, setColumnsAction]); // Зависимости: текущая конфигурация колонок, model (имя таблицы), и функция setColumnsAction.
+  }, [columnsConfig, componentName, setColumnsAction]); // Зависимости: текущая конфигурация колонок, model (имя таблицы), и функция setColumnsAction.
 
 
   // При монтировании модалки, синхронизируем ее внутреннее состояние с текущими колонками из контекста.

@@ -73,7 +73,7 @@ export type TResponseData = TDataItem[] & {
 };
 
 export type TypeTableContextProps = {
-  model: string;
+  componentName: string;
   rows: TDataItem[];
   columns: TColumn[];
   totalPages: number;
@@ -135,7 +135,7 @@ export type TypeTableFilter = {
 
 
 export type TypeTableParams = {
-  model: string | undefined;
+  model: string;
   page: number;
   limit: number;
   // totalPages?: number;
@@ -146,4 +146,9 @@ export type TypeTableParams = {
 
 export type TypeModalFormProps = {
   method: TypeFormMethod;
+};
+export interface FetchDataResult<T> {
+  items: T[];
+  total: number;
+  totalPages: number;
 };

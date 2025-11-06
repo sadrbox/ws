@@ -1,21 +1,22 @@
+import { TColumn } from "src/components/Table/types";
 import translations from "./translations.json" assert { type: "json" };
-import { TColumn } from "src/components/Grid/types";
 
-export function getTranslation(word: string): string {
+export function getTranslation(word: string | undefined | null): string {
+	const normalizedWord = word?.toLowerCase()?.replace(/\s/g, "") || "";
+
 	const translate: [string, string] | undefined = Object.entries(
 		translations
-	).find(([key, value]) =>
-		key.toLowerCase().replace(/\s/g, "") ===
-		word.toLowerCase().replace(/\s/g, "")
-			? value
-			: undefined
-	);
-	return translate !== undefined ? translate?.[1] : word;
+	).find(([value]) => {
+		const normalizedKey = value.toLowerCase().replace(/\s/g, "");
+		return normalizedKey === normalizedWord;
+	});
+
+	return translate !== undefined ? translate[1] : word || "";
 }
 
-export function getTranslateColumn(column: TColumn) {
+export function getTranslateColumn(column: TColumn): string | undefined {
 	if (column.identifier) {
 		return getTranslation(column.identifier.toString());
 	}
-	return column.column || column.identifier;
+	return column.name || column.identifier;
 }
