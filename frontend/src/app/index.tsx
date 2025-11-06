@@ -7,14 +7,15 @@ import styles from "./styles/main.module.scss"
 import AppContextProvider from "./AppContextProvider";
 // import { TAppContext, TPaneTab } from "./types";
 import NavigationPage from "./pages/NavigationPage";
-import Contracts from "src/models/contracts/list";
+// import Contracts from "src/models/contracts/list";
 import { getTranslation } from "src/i18";
-import Counterparties from "src/models/counterparties";
-import Organizations from "src/models/organizations";
+// import Counterparties from "src/models/counterparties";
+// import Organizations from "src/models/organizations";
 import { Navbar, PaneGroup, PaneTab } from "../components/UI";
 import { TypeTabItem, TypeTabs } from "src/components/Tabs/types";
 import { TypeAppContextProps } from "./types";
 import { get } from "lodash";
+import ListContracts from "src/models/contracts/list";
 
 
 type TypePanes = {
@@ -28,7 +29,7 @@ export default function App() {
   const [panes, setPanes] = useState<TypePanes>({
     activeID: 0,
     tabs: [
-      { id: 0, label: "Договора", content: <Contracts /> },
+      { id: 0, label: "Договора", content: <ListContracts /> },
     ]
   });
   // const [paneTabs, setPaneTabs] = useState<TypeTabs>([
