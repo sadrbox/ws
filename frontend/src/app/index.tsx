@@ -1,119 +1,72 @@
-
-// import activityhistories from "../models/activityhistories";
-import React, { JSX, useMemo, useRef, useState, useCallback } from "react";
-import ContractForm from "../models/contracts/form";
+import React, { useMemo, useRef, useState, useCallback } from "react";
 import styles from "./styles/main.module.scss"
-
 import AppContextProvider from "./AppContextProvider";
-// import { TAppContext, TPaneTab } from "./types";
-import NavigationPage from "./pages/NavigationPage";
-// import Contracts from "src/models/contracts/list";
 import { getTranslation } from "src/i18";
-// import Counterparties from "src/models/counterparties";
-// import Organizations from "src/models/organizations";
 import { Navbar, PaneGroup, PaneTab } from "../components/UI";
-import { TypeTabItem, TypeTabs } from "src/components/Tabs/types";
+import { TypeTabItem } from "src/components/Tabs/types";
 import { TypeAppContextProps } from "./types";
-import { get } from "lodash";
-import ListContracts from "src/models/contracts/list";
-
 
 type TypePanes = {
   activeID: number;
   tabs: TypeTabItem[];
 }
 
-
 export default function App() {
   const screenRef = useRef<HTMLDivElement>(null);
   const [panes, setPanes] = useState<TypePanes>({
     activeID: 0,
-    tabs: [
-      { id: 0, label: "Договора", content: <ListContracts /> },
-    ]
+    tabs: []
   });
-  // const [paneTabs, setPaneTabs] = useState<TypeTabs>([
-  //   { id: 0, label: "Навигация", content: <NavigationPage /> },
-  //   // { id: 2, title: "second", component: <ActivityHistories /> }
-  // ]);
-  // const [activePaneID, setActivePaneID] = useState<number>(0);
 
-  function getComponentName(node: React.ReactNode): string {
-    if (
-      React.isValidElement(node) &&
-      typeof node.type === "function"
-    ) {
+  const getComponentName = useCallback((node: React.ReactNode): string => {
+    if (React.isValidElement(node) && typeof node.type === "function") {
       return node.type.name || "AnonymousComponent";
     }
-    if (
-      React.isValidElement(node) &&
-      typeof node.type === "string"
-    ) {
-      return node.type; // например, 'div', 'span'
+    if (React.isValidElement(node) && typeof node.type === "string") {
+      return node.type;
     }
     return "";
-  }
+  }, []);
 
-  // Словарь компонентов
-  // const COMPONENTS: Record<string, React.ReactNode> = {
-  //   ActivityHistories: <ActivityHistories />,
-  //   ContractForm: <ContractForm />,
-  //   NavigationPage: <NavigationPage />,
-  //   // Sales: <Sales />,
-  //   // Receipts: <Receipts />,
-  //   Contracts: <Contracts />,
-  //   Counterparties: <Counterparties />,
-  //   Organizations: <Organizations />
-  // };
+  const setActivePaneID = useCallback((id: number) => {
+    setPanes(prev => ({ ...prev, activeID: id }));
+  }, []);
 
-  const setActivePaneID = (id: number) => {
-    setPanes((prev) => ({ ...prev, activeID: id }));
-  }
+  const openPane = useCallback((content: React.ReactNode, inTab?: boolean) => {
+    // if (!content || !inTab) return;
 
-  const openPane = useCallback((content: React.ReactNode) => {
-    // const currentComponent = COMPONENTS[component];
-    // console.log(getComponentName(content))
-    const componentName: string = getComponentName(content);
-    if (!content) return;
-    // const { activeID, tabs: paneTabs } = panes;
-    // const setActivePaneID = setPanes}
-    const existsPane = panes?.tabs.find(paneTab => {
-      // console.log(getComponentName(paneTab.content))
-      return paneTab.content && getComponentName(paneTab.content) === componentName;
-    });
+    const componentName = getComponentName(content);
+    const existingPane = panes.tabs.find(paneTab =>
+      paneTab.content && getComponentName(paneTab.content) === componentName
+    );
 
-    if (!existsPane) {
-      const label = getTranslation(componentName)
+    if (existingPane) {
+      setActivePaneID(existingPane.id);
+    } else {
+      const label = getTranslation(componentName) || `Вкладка ${panes.tabs.length + 1}`;
       const newTab = {
         id: Date.now(),
-        label: label || `Вкладка ${panes?.tabs.length + 1}`,
+        label,
         content
-        // content: COMPONENTS[component]
       };
-      setPanes((prev) => ({ activeID: newTab.id, tabs: [...prev.tabs, newTab] }));
-      // setActivePaneID(newTab.id);
-    } else {
-      // setPanes((prev) => ({ activeID: existsPane.id, tabs: [...prev.tabs] }));
-      setActivePaneID(existsPane.id)
+      setPanes(prev => ({
+        activeID: newTab.id,
+        tabs: [...prev.tabs, newTab]
+      }));
     }
-  }, [panes]);
+  }, [panes.tabs, getComponentName, setActivePaneID]);
 
-  const init = useMemo<TypeAppContextProps>(() => {
-    return {
-      screenRef,
-      panes: {
-        activeID: panes.activeID,
-        tabs: panes.tabs,
-      },
-      actions: {
-        openPane,
-        setActivePaneID
-      }
+  const contextValue = useMemo<TypeAppContextProps>(() => ({
+    screenRef,
+    panes,
+    actions: {
+      openPane,
+      setActivePaneID
     }
-  }, [panes]);
+  }), [panes, openPane, setActivePaneID]);
 
   return (
-    <AppContextProvider init={init}>
+    <AppContextProvider init={contextValue}>
       <div ref={screenRef} className={styles.Screen}>
         <Navbar />
         <PaneGroup />

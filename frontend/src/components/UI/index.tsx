@@ -1,4 +1,4 @@
-import { CSSProperties, FC, PropsWithChildren, useState } from 'react';
+import { CSSProperties, FC, PropsWithChildren } from 'react';
 import { useAppContextProps } from '../../app/AppContextProvider';
 import styles from "../../app/styles/main.module.scss"
 import NavigationPage from '../../app/pages/NavigationPage';
@@ -72,7 +72,7 @@ export const Navbar: FC = () => {
       <a href="#"
         className={styles.NavbarItem}
         onClick={() => openPane(
-          <NavigationPage />)}>
+          <NavigationPage />, false)}>
         Навигация
       </a>
       <a href="#"

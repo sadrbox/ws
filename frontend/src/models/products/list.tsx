@@ -4,9 +4,9 @@ import { TDataItem } from "src/components/Table/types";
 import Table from "src/components/Table";
 import { useTable } from "src/hooks/useTable";
 
-const ListActivityHistories: FC = () => {
-  const componentName = "ListActivityHistories";
-  const model = "ActivityHistories";
+const ListProducts: FC = () => {
+  const componentName = "ListProducts";
+  const model = "Products";
 
   const { tableProps } = useTable<TDataItem>(
     componentName,
@@ -23,4 +23,4 @@ const ListActivityHistories: FC = () => {
   return <Table props={tableProps} />;
 };
 
-export default ListActivityHistories;
+export default ListProducts;

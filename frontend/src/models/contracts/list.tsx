@@ -1,5 +1,4 @@
-// src/components/ListActivityHistories/index.tsx
-import React, { FC } from "react";
+import { FC } from "react";
 import columnsJson from "./columns.json";
 import { TDataItem } from "src/components/Table/types";
 import Table from "src/components/Table";

@@ -1,4 +1,3 @@
-import { JSX, RefObject } from "react";
 import { TypeTabs } from "src/components/Tabs/types";
 
 export type TypeAppContextProps = {
@@ -8,7 +7,7 @@ export type TypeAppContextProps = {
 		tabs: TypeTabs;
 	};
 	actions: {
-		openPane: (component: React.ReactNode) => void;
+		openPane: (component: React.ReactNode, inTab?: boolean) => void;
 		setActivePaneID: (id: number) => void;
 	};
 };

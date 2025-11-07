@@ -3,7 +3,8 @@ import styles from './styles.module.scss';
 import { useAppContextProps } from '../AppContextProvider';
 import ListContracts from 'src/models/contracts/list';
 import ListActivityHistories from 'src/models/activityhistories/list';
-// import { useAppContext } from '../AppContextProvider';
+import ListOrganizations from 'src/models/organizations/list';
+import ListCounterparties from 'src/models/counterparties/list';
 
 
 const NavigationPage: FC = () => {
@@ -17,8 +18,8 @@ const NavigationPage: FC = () => {
       <h1 className={styles.PageTitle}>Навигация</h1>
       <h3>Документы</h3>
       <ul className={styles.PageList}>
-        {/* <li onClick={() => openPane(<Organizations />)}>Организации</li> */}
-        {/* <li onClick={() => openPane(<Counterparties />)}>Контрагенты</li> */}
+        <li onClick={() => openPane(<ListOrganizations />)}>Организации</li>
+        <li onClick={() => openPane(<ListCounterparties />)}>Контрагенты</li>
         <li onClick={() => openPane(<ListContracts />)}>Договора</li>
         <li onClick={() => openPane(<ListActivityHistories />)}>История активности</li>
         <li>Реализация товара и услуг</li>
