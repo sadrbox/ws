@@ -177,6 +177,7 @@ table {
 	border-collapse: collapse;
 	height: 100%;
 	width: 100%;
+	position: relative;
 	// display: flex;
 	// flex-direction: column;
 	// flex: 1;
@@ -197,7 +198,7 @@ thead {
 	background-color: $color30;
 	position: sticky;
 	top: 0;
-	z-index: 1;
+	// z-index: 1;
 	// table-layout: fixed;
 	// width: 100%;
 	// border-bottom: 1px solid red;
@@ -378,7 +379,7 @@ tfoot {
 	background-color: $color30;
 	position: sticky;
 	bottom: 0;
-	z-index: 1;
+	// z-index: 1;
 
 	border-top: 0px;
 	tr {

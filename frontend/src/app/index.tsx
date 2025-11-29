@@ -1,18 +1,25 @@
-import React, { useMemo, useRef, useState, useCallback } from "react";
-import styles from "./styles/main.module.scss"
 import AppContextProvider from "./AppContextProvider";
 import { getTranslation } from "src/i18";
-import { Navbar, PaneGroup, PaneTab } from "../components/UI";
+import { Navbar, NavbarOverlay, PaneGroup, PaneTab, Portal } from "../components/UI";
 import { TypeTabItem } from "src/components/Tabs/types";
-import { TypeAppContextProps } from "./types";
+import { OverlayProps, TypeAppContextProps } from "./types";
+import ReactDOM from 'react-dom';
+
+import { Screen } from "../components/UI";
+import NavigationPage from "./pages/NavigationPage";
+import { usePortal } from "src/hooks/usePortal";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React from "react";
 
 type TypePanes = {
   activeID: number;
   tabs: TypeTabItem[];
 }
 
+
+
 export default function App() {
-  const screenRef = useRef<HTMLDivElement>(null);
+  const screenRef = useRef<HTMLDivElement | null>(null);
   const [panes, setPanes] = useState<TypePanes>({
     activeID: 0,
     tabs: []
@@ -32,7 +39,7 @@ export default function App() {
     setPanes(prev => ({ ...prev, activeID: id }));
   }, []);
 
-  const openPane = useCallback((content: React.ReactNode, inTab?: boolean) => {
+  const openPane = useCallback((content: React.ReactNode, hideTab?: boolean) => {
     // if (!content || !inTab) return;
 
     const componentName = getComponentName(content);
@@ -56,22 +63,37 @@ export default function App() {
     }
   }, [panes.tabs, getComponentName, setActivePaneID]);
 
+
+  // const portal = usePortal()
+  const [overlayIsVisible, setOverlayIsVisible] = useState(false);
+  const [getOverlay, setOverlay] = useState<OverlayProps>({
+    isVisible: overlayIsVisible,
+    toggleVisibility: () => { (isVisible: boolean) => setOverlayIsVisible(isVisible) },
+    content: <NavigationPage />
+  })
+
+  useEffect(() => { setOverlayIsVisible(getOverlay.isVisible) }, [getOverlay.isVisible])
   const contextValue = useMemo<TypeAppContextProps>(() => ({
     screenRef,
     panes,
+    overlay: { getOverlay, setOverlay },
     actions: {
       openPane,
-      setActivePaneID
-    }
-  }), [panes, openPane, setActivePaneID]);
+      setActivePaneID,
+    },
+  }), [panes, openPane, setActivePaneID, overlayIsVisible]);
+
+
 
   return (
     <AppContextProvider init={contextValue}>
-      <div ref={screenRef} className={styles.Screen}>
+      <Screen ref={screenRef}>
         <Navbar />
         <PaneGroup />
         <PaneTab />
-      </div>
+      </Screen>
+      {/* {overlayIsVisible && getOverlay.content && <Portal content={getOverlay.content} />} */}
     </AppContextProvider>
   );
 }
+

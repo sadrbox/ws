@@ -37,11 +37,14 @@ body {
 }
 
 .NavbarWrapper {
+	// height: 49px;
+	// gap: 12px;
 	padding: 6px;
 	border-bottom: 1px solid $color10;
 	display: flex;
 	align-items: center;
-	background-color: #ddd;
+	background-color: $color33;
+	// position: relative;
 	z-index: 1;
 	.NavbarItem {
 		margin: 6px 6px 6px 6px;
@@ -53,6 +56,20 @@ body {
 		// }
 	}
 }
+.NavbarOverlayWrapper {
+	position: absolute;
+	top: 42px;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	padding: 6px;
+	margin: 6px;
+	// height: ;
+	// width: 100%;
+	background: $color80;
+	z-index: 1;
+}
+
 .PaneGroupWrapper {
 	border: 0px solid $color10;
 	background: #f1f5f9;
@@ -244,4 +261,54 @@ body {
 		top: 10px;
 		left: 4px;
 	}
+}
+
+#RootPortal,
+.RootPortal {
+	position: absolute;
+	z-index: 1;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	flex: 1;
+	// flex-direction: column;
+	place-items: center;
+	place-content: center;
+	// justify-content: center;
+	// align-items: center;
+	// border: 2px solid blue;
+	// place-items: center center;
+	// background: rgba($color10, 0.5);
+	// filter: blur(5px);
+
+	&::before {
+		top: 0;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		content: "";
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		// backdrop-filter: blur(6px) brightness(0.9);
+	}
+}
+.PortalWrapper {
+	z-index: 9;
+	position: relative;
+	// display: flex;
+	// flex-direction: row;
+	// align-items: center;
+	// justify-items: center;
+	// margin: 0 auto;
+
+	height: 90dvh;
+	width: 90dvw;
+	border: 1px solid $color34;
+	border-radius: $radius3;
+	padding: 18px;
+	box-shadow: 2px 2px 12px rgba($color34, 0.8);
+	background-color: $color80;
 }

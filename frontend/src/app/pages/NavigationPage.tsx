@@ -1,4 +1,4 @@
-import { FC } from 'react';
+import { Dispatch, FC, SetStateAction } from 'react';
 import styles from './styles.module.scss';
 import { useAppContextProps } from '../AppContextProvider';
 import ListContracts from 'src/models/contracts/list';
@@ -9,11 +9,12 @@ import ListCounterparties from 'src/models/counterparties/list';
 
 const NavigationPage: FC = () => {
   const context = useAppContextProps();
-  const { openPane } = context?.actions
+  const { openPane } = context?.actions;
 
 
 
   return (
+
     <div className={styles.PageWrapper}>
       <h1 className={styles.PageTitle}>Навигация</h1>
       <h3>Документы</h3>
