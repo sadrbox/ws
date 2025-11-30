@@ -39,15 +39,16 @@ body {
 .NavbarWrapper {
 	// height: 49px;
 	// gap: 12px;
-	padding: 6px;
-	border-bottom: 1px solid $color10;
+	// padding: 6px;
+	border-bottom: 0px solid $color10;
 	display: flex;
 	align-items: center;
 	background-color: $color33;
 	// position: relative;
 	z-index: 1;
 	.NavbarItem {
-		margin: 6px 6px 6px 6px;
+		padding: 12px;
+		// margin: 6px 6px 6px 6px;
 		display: flex;
 		flex-direction: row;
 		align-items: center;
@@ -55,19 +56,24 @@ body {
 		// 	margin-left: 12px;
 		// }
 	}
+	.Active {
+		background: $color80;
+	}
 }
 .NavbarOverlayWrapper {
 	position: absolute;
 	top: 42px;
 	bottom: 0;
-	left: 0;
+	left: 0px;
 	right: 0;
-	padding: 6px;
-	margin: 6px;
-	// height: ;
-	// width: 100%;
+	padding: 12px;
+	// margin: 6px;
+	// height: 50%;
+	// width: 60%;
 	background: $color80;
-	z-index: 1;
+	z-index: 2;
+	// border-bottom: 6px solid rgba($color34, 0.8);
+	// box-shadow: 3px 3px 6px rgba($color3, 0.8);
 }
 
 .PaneGroupWrapper {

@@ -274,7 +274,7 @@ export const Navbar: React.FC = () => {
   // const setOverlay = context?.actions.setOverlay;
   // const onClose = context?.overlay.onClose;
 
-  const { setOverlay } = context.overlay;
+  const { getOverlay, setOverlay } = context.overlay;
 
   const modalForm = () => {
     setOverlay(prev => ({ ...prev, isVisible: true, content: <NavigationPage /> }))
@@ -285,7 +285,7 @@ export const Navbar: React.FC = () => {
       <div className={styles.NavbarWrapper}>
         <a href="#"
           onClick={() => modalForm()}
-          className={styles.NavbarItem}>
+          className={[styles.NavbarItem, styles.Active].join(" ")}>
           Навигация
         </a>
         <a href="#"
@@ -300,7 +300,7 @@ export const Navbar: React.FC = () => {
           Форма
         </a>
       </div>
-      <NavbarOverlay />
+      {getOverlay.isVisible && <NavbarOverlay />}
     </>
   );
 };

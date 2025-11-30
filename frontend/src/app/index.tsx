@@ -24,6 +24,16 @@ export default function App() {
     activeID: 0,
     tabs: []
   });
+  const [overlayIsVisible, setOverlayIsVisible] = useState(false);
+  const [getOverlay, setOverlay] = useState<OverlayProps>({
+    isVisible: overlayIsVisible,
+    toggleVisibility: () => { (isVisible: boolean) => setOverlayIsVisible(isVisible) },
+    content: <NavigationPage />
+  })
+
+  useEffect(() => { setOverlayIsVisible(getOverlay.isVisible) }, [getOverlay.isVisible])
+
+
 
   const getComponentName = useCallback((node: React.ReactNode): string => {
     if (React.isValidElement(node) && typeof node.type === "function") {
@@ -41,7 +51,7 @@ export default function App() {
 
   const openPane = useCallback((content: React.ReactNode, hideTab?: boolean) => {
     // if (!content || !inTab) return;
-
+    setOverlayIsVisible(false);
     const componentName = getComponentName(content);
     const existingPane = panes.tabs.find(paneTab =>
       paneTab.content && getComponentName(paneTab.content) === componentName
@@ -64,15 +74,6 @@ export default function App() {
   }, [panes.tabs, getComponentName, setActivePaneID]);
 
 
-  // const portal = usePortal()
-  const [overlayIsVisible, setOverlayIsVisible] = useState(false);
-  const [getOverlay, setOverlay] = useState<OverlayProps>({
-    isVisible: overlayIsVisible,
-    toggleVisibility: () => { (isVisible: boolean) => setOverlayIsVisible(isVisible) },
-    content: <NavigationPage />
-  })
-
-  useEffect(() => { setOverlayIsVisible(getOverlay.isVisible) }, [getOverlay.isVisible])
   const contextValue = useMemo<TypeAppContextProps>(() => ({
     screenRef,
     panes,
@@ -82,8 +83,6 @@ export default function App() {
       setActivePaneID,
     },
   }), [panes, openPane, setActivePaneID, overlayIsVisible]);
-
-
 
   return (
     <AppContextProvider init={contextValue}>
