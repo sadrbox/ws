@@ -1,4 +1,4 @@
-import { createContext, CSSProperties, FC, PropsWithChildren, useContext, useEffect, useState, forwardRef, useRef, useImperativeHandle, ReactPortal, ReactNode, SetStateAction } from 'react';
+import React, { createContext, CSSProperties, FC, PropsWithChildren, useContext, useEffect, useState, forwardRef, useRef, useImperativeHandle, ReactPortal, ReactNode, SetStateAction } from 'react';
 import { useAppContextProps } from '../../app/AppContextProvider';
 import styles from "../../app/styles/main.module.scss"
 import NavigationPage from '../../app/pages/NavigationPage';
@@ -265,45 +265,100 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(({ children }, ref
   );
 });
 
-export const Navbar: React.FC = () => {
-  const context = useAppContextProps();
+// export const Navbar: React.FC = () => {
+//   const context = useAppContextProps();
 
-  // const portal = usePortal();
-  // const { show, hide, Portal } = usePortal();
-  const openPane = context?.actions.openPane;
-  // const setOverlay = context?.actions.setOverlay;
-  // const onClose = context?.overlay.onClose;
+//   // const portal = usePortal();
+//   // const { show, hide, Portal } = usePortal();
+//   const openPane = context?.actions.openPane;
+//   // const setOverlay = context?.actions.setOverlay;
+//   // const onClose = context?.overlay.onClose;
 
-  const { getOverlay, setOverlay } = context.overlay;
+//   const { getOverlay, setOverlay } = context.overlay;
 
-  const modalForm = () => {
-    setOverlay(prev => ({ ...prev, isVisible: true, content: <NavigationPage /> }))
+//   const modalForm = () => {
+//     setOverlay(prev => ({ ...prev, isVisible: true, content: <NavigationPage /> }))
+//   }
+
+//   return (
+//     <>
+//       <div className={styles.NavbarWrapper}>
+//         <div className={styles.Active}>
+//           <a href="#"
+//             onClick={() => modalForm()}
+//             className={styles.NavbarItem}>
+//             Навигация
+//           </a>
+//         </div>
+//         <div>
+//           <a href="#"
+//             className={styles.NavbarItem}
+//             onClick={() => openPane(<ListActivityHistories />)}>
+//             История активности
+//           </a>
+//         </div>
+//         <div>
+//           <a href="#"
+//             className={styles.NavbarItem}
+//             onClick={() => openPane(
+//               <ContractForm />)}>
+//             Форма
+//           </a>
+//         </div>
+//       </div>
+//       {getOverlay.isVisible && <NavbarOverlay />}
+//     </>
+//   );
+// };
+
+
+
+type TypeNavbarItem = {
+  id: string;
+  isActive: boolean;
+  title: string;
+  component: React.ReactNode;
+}
+
+type TypeNavbarProps = {
+  items: TypeNavbarItem[];
+}
+
+
+
+export const Navbar: React.FC<TypeNavbarProps> = ({ items }) => {
+  const [navs, setNavs] = useState(items);
+  // const [activeNav, setActiveNav] = useState(items[0]);
+
+  const setActive = (id: string) => {
+    setNavs(prev => prev.map(nav => ({ ...nav, isActive: nav.id === id })))
+    // setActiveNav(items.find(nav => nav.id === id) ?? items[0])
   }
+
+  const activeNav = navs.find(nav => nav.isActive);
+
+  // useEffect(() => {
+  //   co
+
+  // }, [navs]);
 
   return (
     <>
       <div className={styles.NavbarWrapper}>
-        <a href="#"
-          onClick={() => modalForm()}
-          className={[styles.NavbarItem, styles.Active].join(" ")}>
-          Навигация
-        </a>
-        <a href="#"
-          className={styles.NavbarItem}
-          onClick={() => openPane(<ListActivityHistories />)}>
-          История активности
-        </a>
-        <a href="#"
-          className={styles.NavbarItem}
-          onClick={() => openPane(
-            <ContractForm />)}>
-          Форма
-        </a>
+        {navs.map(nav => (
+          <div key={nav.id} className={nav.isActive ? styles.Active : ""}>
+            <a href="#"
+              onClick={() => setActive(nav.id)}
+              className={styles.NavbarItem}>
+              {nav.title}
+            </a>
+          </div>
+        ))}
       </div>
-      {getOverlay.isVisible && <NavbarOverlay />}
+      <div className={styles.NavbarOverlayWrapper}>{activeNav?.component}</div>
     </>
-  );
-};
+  )
+}
 
 
 // PaneGroup - управление состоянием панелей

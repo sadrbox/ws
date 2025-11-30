@@ -10,6 +10,8 @@ import NavigationPage from "./pages/NavigationPage";
 import { usePortal } from "src/hooks/usePortal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
+import useUID from "src/hooks/useUID";
+import ListActivityHistories from "src/models/activityhistories/list";
 
 type TypePanes = {
   activeID: number;
@@ -84,10 +86,26 @@ export default function App() {
     },
   }), [panes, openPane, setActivePaneID, overlayIsVisible]);
 
+  // перенести в отдельный файл для настройки topmenu - Navbar
+  const navbarList = [
+    {
+      id: useUID(),
+      isActive: false,
+      title: "Навигация",
+      component: <NavigationPage />
+    },
+    {
+      id: useUID(),
+      isActive: false,
+      title: "Документы",
+      component: <ListActivityHistories />
+    }
+  ]; //--------------//
+
   return (
     <AppContextProvider init={contextValue}>
       <Screen ref={screenRef}>
-        <Navbar />
+        <Navbar items={navbarList} />
         <PaneGroup />
         <PaneTab />
       </Screen>
