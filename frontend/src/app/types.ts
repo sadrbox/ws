@@ -1,32 +1,29 @@
-import { TypeTabs } from "src/components/Tabs/types";
+import { TypePaneItem } from "src/components/Tabs/types";
 import { ReactNode, SetStateAction, Dispatch } from "react";
 // import { OverlayProps } from ".";
 
 export type TypeAppContextProps = {
 	screenRef: React.RefObject<HTMLDivElement | null>;
-	panes: {
-		activeID: number;
-		tabs: TypeTabs;
-	};
+	panes: TypePaneItem[];
 	actions: {
-		openPane: (component: React.ReactNode, inTab?: boolean) => void;
+		addPane: (component: React.ReactNode, inTab?: boolean) => void;
 		setActivePaneID: (id: number) => void;
 		// setOverlay: Dispatch<SetStateAction<OverlayProps>>;
 	};
-	overlay: {
-		getOverlay: OverlayProps;
-		setOverlay: Dispatch<SetStateAction<OverlayProps>>;
+	navbar: {
+		props: TypeNavbarProps;
+		setProps: Dispatch<SetStateAction<TypeNavbarProps>>;
 	};
 };
 
-export interface OverlayProps {
-	isVisible: boolean;
-	toggleVisibility: () => void;
-	content: React.ReactNode;
-}
+export type TypeNavbarProps = {
+	id: string;
+	isActive: boolean;
+	title: string;
+	component: React.ReactNode;
+}[];
 
-// export type TPaneTab = {
-// 	id: number;
-// 	title: string;
-// 	component: JSX.Element;
-// };
+// id: useUID(),
+// isActive: true,
+// title: "Навигация",
+// component: <NavigationPage />

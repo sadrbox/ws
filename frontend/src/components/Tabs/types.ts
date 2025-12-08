@@ -1,7 +1,7 @@
-export type TypeTabItem = {
+export type TypePaneItem = {
 	id: number;
 	label: string;
-	content: React.ReactNode;
-	disabled?: boolean;
+	component: React.ReactNode;
+	isActive: boolean;
 };
-export type TypeTabs = TypeTabItem[];
+// export type TypeTabs = TypeTabItem[];

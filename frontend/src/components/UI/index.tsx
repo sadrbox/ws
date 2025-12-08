@@ -1,12 +1,14 @@
 import React, { createContext, CSSProperties, FC, PropsWithChildren, useContext, useEffect, useState, forwardRef, useRef, useImperativeHandle, ReactPortal, ReactNode, SetStateAction } from 'react';
 import { useAppContextProps } from '../../app/AppContextProvider';
 import styles from "../../app/styles/main.module.scss"
-import NavigationPage from '../../app/pages/NavigationPage';
 import ListActivityHistories from 'src/models/activityhistories/list';
 import ContractForm from 'src/models/contracts/form';
 import ReactDOM, { createPortal } from 'react-dom';
 import { ref } from 'process';
 import { usePortal } from 'src/hooks/usePortal';
+import ListOrganizations from 'src/models/organizations/list';
+import ListCounterparties from 'src/models/counterparties/list';
+import ListContracts from 'src/models/contracts/list';
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -30,7 +32,7 @@ export const Group: FC<TypeGroupProps> = ({ align, gap, type, className, style, 
   }
 
   const reStyle = {
-    ...({ borderRadius: '2px' }), ...style, ...(gap && { gap }), ...(type && { padding: '3px', margin: '3px' })
+    ...({ borderRadius: '2px' }), ...style, ...(gap && { gap: gap }), ...(type && { padding: '3px', margin: '3px' })
   }
   return (
     <div className={[align === 'row'
@@ -64,6 +66,20 @@ export const HorizontalLine = () => {
   )
 }
 
+export const Content = () => {
+
+  const context = useAppContextProps();
+  const isPaneShow = context.panes.length > 0;
+  console.log(isPaneShow);
+
+  return isPaneShow ? (
+    <>
+      <PaneGroup />
+      <PaneTab />
+    </>
+  ) : (<></>);
+
+}
 // export const Navbar: FC = () => {
 
 //   const context = useAppContextProps();
@@ -92,43 +108,34 @@ export const HorizontalLine = () => {
 export const PaneTab: FC = () => {
 
   const context = useAppContextProps();
-  const { tabs, activeID } = context?.panes;
+  const panes = context?.panes;
   const setActivePaneID = context?.actions.setActivePaneID;
 
 
 
   return (
     <div className={styles.PaneTabWrapper}>
-      {tabs.map((tab) => (
-        <div className={[styles.PaneTab,
-        tab.id === activeID
-          ?
-          styles.PaneTabActive
-          : ""
-        ].filter(s => s && s).join(" ")}
-          key={tab.id}
-          onClick={() => setActivePaneID(tab.id)}
-        >
-          {tab.label}
+      {panes.map(p => (
+        <div
+          key={p.id}
+          className={[styles.PaneTab, p.isActive && styles.PaneTabActive].join(" ")}
+          onClick={() => setActivePaneID(p.id)}>
+          {p.label}
         </div>
       ))}
     </div>
   );
 };
+
 export const PaneGroup = () => {
   const context = useAppContextProps();
-  const { tabs, activeID } = context?.panes;
+  const panes = context?.panes;
   return (
     <div className={styles.PaneGroupWrapper}>
-      {tabs.map((tab) => (
-        <div key={tab.id}
-          className={[styles.Pane,
-          tab.id === activeID
-            ?
-            styles.ActivePane
-            : ""
-          ].filter(s => s && s).join(" ")}>
-          {tab.content}
+      {panes.map((p) => (
+        <div key={p.id}
+          className={[styles.Pane, p.isActive && styles.ActivePane].join(" ")}>
+          {p.component}
         </div>
       ))}
     </div>
@@ -176,16 +183,6 @@ export const OverForm: FC<TypeOverFormProps> = ({ children }) => {
 }
 
 
-//-------------------------------------//
-
-
-// Portal для рендера вне основной иерархии
-interface PortalProps {
-  children: React.ReactNode;
-  isOpen: boolean;
-  onClose?: () => void;
-}
-
 export const Portal = ({ content }: { content: React.ReactNode }) => {
   if (!content) return null;
   const RootPortal = document.getElementById("RootPortal")!;
@@ -196,13 +193,6 @@ export const Portal = ({ content }: { content: React.ReactNode }) => {
     RootPortal
   );
 };
-
-// Overlay - только фон и обработка кликов
-interface OverlayProps {
-  isOpen: boolean;
-  onClose: () => void;
-  content: React.ReactNode;
-}
 
 
 // export const Overlay: React.FC<OverlayProps> = ({ isOpen, onClose, children }) => {
@@ -320,46 +310,140 @@ type TypeNavbarItem = {
   component: React.ReactNode;
 }
 
-type TypeNavbarProps = {
-  items: TypeNavbarItem[];
-}
 
 
+export const Navbar: React.FC = () => {
+  const context = useAppContextProps();
 
-export const Navbar: React.FC<TypeNavbarProps> = ({ items }) => {
-  const [navs, setNavs] = useState(items);
+  const { props, setProps } = context?.navbar;
+  const activeNav = props.find(nav => nav.isActive);
+  // const [navs, setNavs] = useState(items);
   // const [activeNav, setActiveNav] = useState(items[0]);
 
   const setActive = (id: string) => {
-    setNavs(prev => prev.map(nav => ({ ...nav, isActive: nav.id === id })))
+    setProps(prev => prev.map(nav => ({ ...nav, isActive: nav.id === id })))
     // setActiveNav(items.find(nav => nav.id === id) ?? items[0])
   }
 
-  const activeNav = navs.find(nav => nav.isActive);
-
-  // useEffect(() => {
-  //   co
-
-  // }, [navs]);
+  const toggleNav = (id: string) => {
+    setProps(prev => prev.map(n =>
+      n.id === id
+        ? { ...n, isActive: !n.isActive }
+        : { ...n, isActive: false }
+    ))
+  }
 
   return (
     <>
       <div className={styles.NavbarWrapper}>
-        {navs.map(nav => (
-          <div key={nav.id} className={nav.isActive ? styles.Active : ""}>
+        {props.map(nav => (
+          <div key={nav.id}>
             <a href="#"
-              onClick={() => setActive(nav.id)}
-              className={styles.NavbarItem}>
+              onClick={() => toggleNav(nav.id)}
+              className={[styles.NavbarItem, nav.isActive && styles.Active].join(" ")}>
               {nav.title}
             </a>
           </div>
         ))}
       </div>
-      <div className={styles.NavbarOverlayWrapper}>{activeNav?.component}</div>
+      {activeNav && <div className={styles.NavbarOverlayWrapper}>{activeNav?.component}</div>}
     </>
   )
 }
+type TypeNavListProps = {
+  lable: string;
+}
 
+export const NavList = ({ lable }: TypeNavListProps) => {
+
+  const context = useAppContextProps();
+  const addPane = context.actions.addPane;
+
+  if (lable.toLocaleLowerCase() === "Operations".toLocaleLowerCase()) {
+    // Торговля
+    return (
+      <div className={styles.NavListWrapper}>
+        <h1>Операционная деятельность</h1>
+        <Group gap='64px'>
+          <div>
+            <h3>Продажи</h3>
+            <ul className={styles.NavList}>
+              <li>Реализация товара и услуг</li>
+              <li>Электронная счет-фактура (исходящие)</li>
+              <li>Счет на оплату</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Закупка</h3>
+            <ul className={styles.NavList}>
+              <li>Поступление товара и услуг</li>
+              <li>Электронная счет-фактура (входящие)</li>
+            </ul>
+          </div>
+        </Group>
+        <Group gap='64px'>
+          <div>
+            <h3>Справочники</h3>
+            <ul className={styles.NavList}>
+              <li>Склады</li>
+              <li onClick={() => addPane(<ListOrganizations />)}>Организации</li>
+              <li onClick={() => addPane(<ListCounterparties />)}>Контрагенты</li>
+              <li onClick={() => addPane(<ListContracts />)}>Договора</li>
+            </ul>
+          </div>
+        </Group >
+      </div >
+    )
+  } else if (lable.toLocaleLowerCase() === "CRM".toLocaleLowerCase()) {
+    // CRM
+    return (
+      <div className={styles.NavListWrapper}>
+        <h1>CRM</h1>
+        <Group gap='64px'>
+          <div>
+            <h3>Управление задачами</h3>
+            <ul className={styles.NavList}>
+              <li>Задачи</li>
+              <li>Регламентные задачи</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Справочники</h3>
+            <ul className={styles.NavList}>
+              {/* <li onClick={() => alert("0")}></li> */}
+              {/* <li onClick={() => addPane(<ListCounterparties />)}>Контрагенты</li> */}
+              {/* <li onClick={() => addPane(<ListContracts />)}>Договора</li> */}
+              {/* <li onClick={() => addPane(<ListActivityHistories />)}>История активности</li> */}
+              <li>Реализация товара и услуг</li>
+              <li>Поступление товара и услуг</li>
+              <li>Перемещение ТМЗ</li>
+              <li>Приходный кассовый ордер</li>
+              <li>Расходный кассовый ордер</li>
+            </ul>
+          </div>
+        </Group>
+      </div>
+    )
+  } else if (lable.toLocaleLowerCase() === "Settings".toLocaleLowerCase()) {
+    // Settings
+    return (
+      <div className={styles.NavListWrapper}>
+        <h1>Настройки</h1>
+        <Group gap='64px'>
+          <div>
+            <h3>Права доступа</h3>
+            <ul className={styles.NavList}>
+              <li onClick={() => addPane(<ListOrganizations />)}>Организации</li>
+              <li onClick={() => addPane(<ListCounterparties />)}>Контрагенты</li>
+              <li onClick={() => addPane(<ListContracts />)}>Договора</li>
+              <li onClick={() => addPane(<ListActivityHistories />)}>История активности</li>
+            </ul>
+          </div>
+        </Group>
+      </div>
+    )
+  }
+}
 
 // PaneGroup - управление состоянием панелей
 // export const PaneGroup: React.FC<{ children: React.ReactNode; defaultPane?: string }> = ({
@@ -434,10 +518,3 @@ const PaneTabs: React.FC = () => {
     </div>
   );
 };
-
-export const NavbarOverlay = () => {
-
-  return (
-    <div className={styles.NavbarOverlayWrapper}><NavigationPage /></div>
-  )
-}

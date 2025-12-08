@@ -1,39 +1,57 @@
 import AppContextProvider from "./AppContextProvider";
 import { getTranslation } from "src/i18";
-import { Navbar, NavbarOverlay, PaneGroup, PaneTab, Portal } from "../components/UI";
-import { TypeTabItem } from "src/components/Tabs/types";
-import { OverlayProps, TypeAppContextProps } from "./types";
-import ReactDOM from 'react-dom';
+import { Content, Navbar, NavList, PaneGroup, PaneTab } from "../components/UI";
+import { TypePaneItem } from "src/components/Tabs/types";
+import { TypeAppContextProps, TypeNavbarProps } from "./types";
 
 import { Screen } from "../components/UI";
-import NavigationPage from "./pages/NavigationPage";
-import { usePortal } from "src/hooks/usePortal";
+
+// import NavigationPage from "./pages/NavigationPage";
+// import { usePortal } from "src/hooks/usePortal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
 import useUID from "src/hooks/useUID";
-import ListActivityHistories from "src/models/activityhistories/list";
-
-type TypePanes = {
-  activeID: number;
-  tabs: TypeTabItem[];
-}
 
 
 
 export default function App() {
-  const screenRef = useRef<HTMLDivElement | null>(null);
-  const [panes, setPanes] = useState<TypePanes>({
-    activeID: 0,
-    tabs: []
-  });
-  const [overlayIsVisible, setOverlayIsVisible] = useState(false);
-  const [getOverlay, setOverlay] = useState<OverlayProps>({
-    isVisible: overlayIsVisible,
-    toggleVisibility: () => { (isVisible: boolean) => setOverlayIsVisible(isVisible) },
-    content: <NavigationPage />
-  })
 
-  useEffect(() => { setOverlayIsVisible(getOverlay.isVisible) }, [getOverlay.isVisible])
+  // перенести в отдельный файл для настройки topmenu - Navbar
+  const navbar = [
+    {
+      id: useUID(),
+      isActive: false,
+      title: "Операционная деятельность",
+      component: <NavList lable="OPErations" />
+    },
+    {
+      id: useUID(),
+      isActive: true,
+      title: "CRM",
+      component: <NavList lable="CRM" />
+    },
+    {
+      id: useUID(),
+      isActive: false,
+      title: "Настройки",
+      component: <NavList lable="settings" />
+    }
+
+  ]; //--------------//
+
+
+  const screenRef = useRef<HTMLDivElement | null>(null);
+  const [panes, setPanes] = useState<TypePaneItem[]>([]);
+  // const [navbarOverlayIsVisible, setNavbarOverlayIsVisible] = useState(false);
+  const [navbarList, setNavbarList] = useState<TypeNavbarProps>(navbar);
+  // const [navbarOverlay, setNavbarOverlay] = useState<TypeNavbarOverlayProps>({
+  //   isVisible: true,
+  //   toggleVisibility: () => setNavbar(prev => !prev),
+  //   component: <NavigationPage />
+  // })
+
+  // const navbarOverlayIsVisible = navbarList.find(n => n.isActive)
+
 
 
 
@@ -47,67 +65,51 @@ export default function App() {
     return "";
   }, []);
 
+
   const setActivePaneID = useCallback((id: number) => {
-    setPanes(prev => ({ ...prev, activeID: id }));
+    setPanes(prev => prev.map(p => (p.id == id ? { ...p, isActive: true } : { ...p, isActive: false })));
   }, []);
 
-  const openPane = useCallback((content: React.ReactNode, hideTab?: boolean) => {
+  const addPane = useCallback((component: React.ReactNode) => {
     // if (!content || !inTab) return;
-    setOverlayIsVisible(false);
-    const componentName = getComponentName(content);
-    const existingPane = panes.tabs.find(paneTab =>
-      paneTab.content && getComponentName(paneTab.content) === componentName
-    );
+    setNavbarList(nav => nav.map(n => ({ ...n, isActive: false })));
+    const componentName = getComponentName(component);
+    const existingPane = panes && panes.find(p => getComponentName(p.component) === componentName);
+    // console.log(existingPane);
 
     if (existingPane) {
+
       setActivePaneID(existingPane.id);
     } else {
-      const label = getTranslation(componentName) || `Вкладка ${panes.tabs.length + 1}`;
+      const label = getTranslation(componentName) || `Вкладка ${panes.length + 1}`;
       const newTab = {
         id: Date.now(),
         label,
-        content
+        component,
+        isActive: true,
       };
-      setPanes(prev => ({
-        activeID: newTab.id,
-        tabs: [...prev.tabs, newTab]
-      }));
+      setPanes(prev => [...prev.map(p => ({ ...p, isActive: false })), newTab]);
     }
-  }, [panes.tabs, getComponentName, setActivePaneID]);
+  }, [panes, getComponentName, setActivePaneID]);
 
 
   const contextValue = useMemo<TypeAppContextProps>(() => ({
     screenRef,
     panes,
-    overlay: { getOverlay, setOverlay },
+    navbar: { props: navbarList, setProps: setNavbarList },
     actions: {
-      openPane,
+      addPane,
       setActivePaneID,
     },
-  }), [panes, openPane, setActivePaneID, overlayIsVisible]);
+  }), [panes, addPane, setActivePaneID, navbarList]);
 
-  // перенести в отдельный файл для настройки topmenu - Navbar
-  const navbarList = [
-    {
-      id: useUID(),
-      isActive: false,
-      title: "Навигация",
-      component: <NavigationPage />
-    },
-    {
-      id: useUID(),
-      isActive: false,
-      title: "Документы",
-      component: <ListActivityHistories />
-    }
-  ]; //--------------//
+
 
   return (
     <AppContextProvider init={contextValue}>
       <Screen ref={screenRef}>
-        <Navbar items={navbarList} />
-        <PaneGroup />
-        <PaneTab />
+        <Navbar />
+        <Content />
       </Screen>
       {/* {overlayIsVisible && getOverlay.content && <Portal content={getOverlay.content} />} */}
     </AppContextProvider>
