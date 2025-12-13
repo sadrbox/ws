@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useState, ReactNode } from "react";
 import {
 	TColumn,
 	TDataItem,
@@ -10,12 +10,11 @@ import { useFetchData } from "./useFetchData";
 import { getModelColumns, sortTableRows } from "../components/Table/services";
 
 // Универсальный хук для работы с таблицей
-export const useTable = <
-	TDataItem extends import("../components/Table/types").TDataItem
->(
+export const useTable = (
 	componentName: string,
 	model: string,
 	columnsJson: any,
+	openForm: (id: string) => void,
 	initProps?: Partial<TypeTableParams>
 ) => {
 	const [columns, setColumns] = useState<TColumn[]>(() =>
@@ -56,7 +55,7 @@ export const useTable = <
 				queryParams,
 				setQueryParams,
 			},
-			actions: { refetch, setColumns },
+			actions: { openForm, refetch, setColumns },
 			error,
 		}),
 		[

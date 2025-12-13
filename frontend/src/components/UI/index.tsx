@@ -7,7 +7,7 @@ import ReactDOM, { createPortal } from 'react-dom';
 import { ref } from 'process';
 import { usePortal } from 'src/hooks/usePortal';
 import ListOrganizations from 'src/models/organizations/list';
-import ListCounterparties from 'src/models/counterparties/list';
+import { ListCounterparties } from 'src/models/counterparties';
 import ListContracts from 'src/models/contracts/list';
 
 type TypeGroupProps = {
@@ -141,6 +141,7 @@ export const PaneGroup = () => {
     </div>
   )
 }
+
 type TypeOverFormProps = PropsWithChildren<{}>;
 export const OverForm: FC<TypeOverFormProps> = ({ children }) => {
   return (
@@ -182,7 +183,6 @@ export const OverForm: FC<TypeOverFormProps> = ({ children }) => {
   )
 }
 
-
 export const Portal = ({ content }: { content: React.ReactNode }) => {
   if (!content) return null;
   const RootPortal = document.getElementById("RootPortal")!;
@@ -193,7 +193,6 @@ export const Portal = ({ content }: { content: React.ReactNode }) => {
     RootPortal
   );
 };
-
 
 // export const Overlay: React.FC<OverlayProps> = ({ isOpen, onClose, children }) => {
 //   if (!isOpen) return null;

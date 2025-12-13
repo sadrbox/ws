@@ -26,7 +26,7 @@ export default function App() {
     },
     {
       id: useUID(),
-      isActive: true,
+      isActive: false,
       title: "CRM",
       component: <NavList lable="CRM" />
     },

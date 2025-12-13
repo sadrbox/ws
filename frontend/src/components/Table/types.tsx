@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction } from "react";
+import { Dispatch, ReactNode, SetStateAction } from "react";
 import { QueryObserverResult } from "@tanstack/react-query";
 
 export type TFieldType =
@@ -79,11 +79,13 @@ export type TypeTableContextProps = {
   totalPages: number;
   isLoading: boolean;
   isFetching: boolean;
+  // openForm: (id: string) => ReactNode;
   query: {
     queryParams: TypeTableParams;
     setQueryParams: (newParams: Partial<TypeTableParams>) => void;
   };
   actions: {
+    openForm: (id: string) => void;
     // loadDataGrid: (page?: number, limit?: number) => Promise<void>;
     setColumns: Dispatch<SetStateAction<TColumn[]>>;
     refetch: () => Promise<QueryObserverResult<{

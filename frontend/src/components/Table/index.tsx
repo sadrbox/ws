@@ -503,15 +503,20 @@ type TypeTableBodyRowProps = {
 
 // Компонент одной строки таблицы. Мемоизирован.
 const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns, row }) => {
-  const context = useAppContextProps();
-  const { openPane } = context?.actions;
+  // const context = useAppContextProps();
+  // const { openForm } = context?.actions;
+  // const { Form } = context?.form;
   // Получаем необходимые данные и функции из контекста
   const {
     isLoading,
     states: { activeRow, setActiveRow, selectedRows, setSelectedRows }, // Состояние выделения, активности и загрузки
+    actions: { openForm }
     // query: { queryParams } // Если нужно access queryParams в строке
   } = useTableContextProps();
 
+  // const openForm = (id: string) => {
+  //   addPane(<Form id={id} />)
+  // }
   // Определяем, является ли текущая строка активной
   const isActiveRow = activeRow === rowID;
   // Определяем, выделена ли текущая строка (проверяем наличие rowID в Set из контекста)
@@ -585,7 +590,7 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
         return (
           <td
             key={column.identifier} // Используем identifier колонки как key для уникальности ячейки в строке
-            onDoubleClickCapture={() => openPane(<ContractForm />)} // Открываем форму контракта по двойному клику <ContractForm {mode="view"} id={rowID} />
+            onDoubleClickCapture={() => openForm(row.id.toString())} // Открываем форму контракта по двойному клику <ContractForm {mode="view"} id={rowID} />
             style={{
               // Ширина ячейки (колонки). Должна совпадать с шириной th в thead.
               // Лучше задавать ширину в CSS классах или в tbody td, но инлайн тоже работает.
