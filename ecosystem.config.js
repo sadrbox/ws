@@ -38,7 +38,7 @@ module.exports = {
 			name: "prisma-studio",
 			cwd: "./backend", // ← папка с prisma/schema.prisma
 			script: "npx",
-			args: "prisma studio", // без открытия браузера
+			args: "prisma studio --port 5555 --browser none", // без открытия браузера
 			watch: false, // не перезапускать при изменениях
 			env: { NODE_ENV: "development" },
 			error_file: "./logs/prisma-err.log",

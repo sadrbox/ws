@@ -1,13 +1,15 @@
 import express from "express";
 import cors from "cors";
 import axios from "axios";
-import { PrismaClient } from "@prisma/client";
+// import { PrismaClient } from "@prisma/client";
+import prisma from "./prisma/prisma-client.js";
 import { parse, formatISO } from "date-fns";
 import { formatIpAddress } from "./utils/format.js";
 import { getLocalIP } from "./utils/module.js";
 import apiv1 from "./api/v1.js";
 
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
 const app = express();
 
 app.use("/api/v1", apiv1);

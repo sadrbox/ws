@@ -4,17 +4,20 @@
 		"dev": "node server.js"
 	},
 	"dependencies": {
+		"@prisma/adapter-mariadb": "^7.2.0",
 		"axios": "^1.7.9",
 		"cors": "^2.8.5",
 		"date-fns": "^4.1.0",
+		"dotenv": "^17.2.3",
 		"edge-js": "^23.1.2",
 		"express": "^4.19.2",
 		"moment": "^2.30.1",
 		"serialport": "^12.0.0"
 	},
 	"devDependencies": {
-		"@prisma/client": "^6.5.0",
+		"@prisma/client": "^7.2.0",
 		"@types/express": "^5.0.0",
-		"prisma": "^6.5.0"
+		"@types/node": "^25.0.3",
+		"prisma": "^7.2.0"
 	}
 }
