@@ -5,15 +5,28 @@ import Table from "src/components/Table";
 import { useTable } from "src/hooks/useTable";
 import { useAppContextProps } from "src/app/AppContextProvider";
 
-export const ListCounterparties: FC = () => {
-  const componentName = "ListCounterparties";
+type TypeForm = {
+  id: string;
+}
+
+type TypeComponent = FC<{ children?: React.ReactNode }> & {
+  List: FC;
+  Form: FC<TypeForm>;
+};
+
+const Counterparties: TypeComponent = ({ children }) => {
+  return <div className="counterparties">{children}</div>;
+};
+
+const List: FC = () => {
+  const componentName = "Counterparties.List";
   const model = "Counterparties";
 
   // const form = (id: string) => <FormCounterparties id={id} />
   const context = useAppContextProps();
   const addPane = context?.actions.addPane;
 
-  const openForm = (id: string) => addPane(<FormCounterparties id={id} />);
+  const openForm = (id: string) => addPane(<Counterparties.Form id={id} />);
 
 
   const { tableProps } = useTable(
@@ -26,10 +39,8 @@ export const ListCounterparties: FC = () => {
   return <Table props={tableProps} />;
 };
 
-type TypeForm = {
-  id: string;
-}
-export const FormCounterparties: React.FC<TypeForm> = ({ id }) => {
+
+const Form: React.FC<TypeForm> = ({ id }) => {
   // const [argState, setArgState] = useState<TArgState | undefined>(undefined)
 
   return (
@@ -40,5 +51,10 @@ export const FormCounterparties: React.FC<TypeForm> = ({ id }) => {
 };
 
 
+// Прикрепляем подкомпоненты к основному
+Counterparties.List = List;
+Counterparties.Form = Form;
+
+export default Counterparties;
 
 
