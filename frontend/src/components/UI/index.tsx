@@ -7,7 +7,7 @@ import ReactDOM, { createPortal } from 'react-dom';
 import { ref } from 'process';
 import { usePortal } from 'src/hooks/usePortal';
 import ListOrganizations from 'src/models/organizations/list';
-import { ListCounterparties } from 'src/models/counterparties';
+import Counterparties from 'src/models/counterparties';
 import ListContracts from 'src/models/contracts/list';
 
 type TypeGroupProps = {
@@ -70,7 +70,7 @@ export const Content = () => {
 
   const context = useAppContextProps();
   const isPaneShow = context.panes.length > 0;
-  console.log(isPaneShow);
+  // console.log(isPaneShow);
 
   return isPaneShow ? (
     <>
@@ -386,7 +386,7 @@ export const NavList = ({ lable }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               <li>Склады</li>
               <li onClick={() => addPane(<ListOrganizations />)}>Организации</li>
-              <li onClick={() => addPane(<ListCounterparties />)}>Контрагенты</li>
+              <li onClick={() => addPane(<Counterparties.List />)}>Контрагенты</li>
               <li onClick={() => addPane(<ListContracts />)}>Договора</li>
             </ul>
           </div>
@@ -433,7 +433,7 @@ export const NavList = ({ lable }: TypeNavListProps) => {
             <h3>Права доступа</h3>
             <ul className={styles.NavList}>
               <li onClick={() => addPane(<ListOrganizations />)}>Организации</li>
-              <li onClick={() => addPane(<ListCounterparties />)}>Контрагенты</li>
+              <li onClick={() => addPane(<Counterparties.List />)}>Контрагенты</li>
               <li onClick={() => addPane(<ListContracts />)}>Договора</li>
               <li onClick={() => addPane(<ListActivityHistories />)}>История активности</li>
             </ul>

@@ -221,7 +221,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
           <div className={styles.TablePanelLeft}>
             <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
               {/* Примеры кнопок */}
-              <Button onClick={() => alert('Add clicked!')}>
+              <Button onClick={() => actions.openForm('new')}>
                 <span>Добавить</span>
               </Button>
               <Button onClick={() => alert('Delete clicked!')}>

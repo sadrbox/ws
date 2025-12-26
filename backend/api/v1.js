@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 // import { PrismaClient } from "@prisma/client";
-import prisma from "../prisma/prisma-client.js";
+import { prisma } from "../prisma/prisma-client.js";
 // import { parse, formatISO } from "date-fns";
 // import { formatIpAddress } from "./utils/format.js";
 // import { getLocalIP } from "./utils/module.js";
