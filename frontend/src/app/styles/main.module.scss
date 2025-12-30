@@ -131,6 +131,7 @@ body {
 		// background-color: red;
 	}
 }
+
 .PaneGroupWrapper {
 	position: relative;
 	z-index: 3;
@@ -295,12 +296,21 @@ body {
 .FormBodyParts {
 	// display: flex;
 	// flex-direction: row;
+	// transition: all 2s ease;
 	gap: 12px;
 	flex: 1;
 	display: grid;
 	grid-template-columns: 600px 1fr;
 	grid-template-rows: 1fr;
 	container-type: size;
+	@container (max-width:800px) {
+		grid-template-columns: 1fr;
+		grid-template-rows: min-content;
+	}
+}
+.Form {
+	display: flex;
+	flex-direction: column;
 }
 
 .FormTable {

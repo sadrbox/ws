@@ -47,7 +47,8 @@
 	container-type: size;
 	flex-direction: column;
 	flex: 1;
-	min-height: 300px;
+	min-height: 350px;
+	min-width: 350px;
 	transition: all 0.5ms ease;
 	border-radius: $radius2;
 }
@@ -83,6 +84,7 @@
 	box-sizing: content-box;
 }
 .TablePanel {
+	overflow: clip;
 	display: flex;
 	flex-direction: row;
 	gap: 6px;
@@ -93,7 +95,7 @@
 	/* Add transition for animatable properties */
 	transition: all 1s ease;
 
-	@media (max-width: 800px) {
+	@container (max-width: 800px) {
 		flex-direction: row;
 		align-items: stretch;
 		flex-wrap: wrap;
@@ -112,7 +114,7 @@
 		justify-content: space-between;
 		/* justify-content: flex-start; */
 		flex: 1 1 100%;
-		@media (max-width: 600px) {
+		@container (max-width: 600px) {
 			flex-direction: column;
 			align-items: stretch;
 			flex-wrap: wrap;
@@ -121,12 +123,12 @@
 	.TablePanelRight {
 		justify-content: flex-end;
 		flex: 0 1 500px;
-		@media (max-width: 600px) {
+		@container (max-width: 600px) {
 			flex-direction: row;
 			align-items: stretch;
 			flex-wrap: wrap;
 		}
-		@media (max-width: 1000px) {
+		@container (max-width: 1000px) {
 			flex: 1 1 100%;
 		}
 	}

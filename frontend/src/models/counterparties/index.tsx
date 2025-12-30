@@ -91,7 +91,7 @@ const Form: React.FC<TypeForm> = ({ id }) => {
           </div>
           <div className={styles.FormTable}>
             <div className={styles.GroupLabel}>Договора</div>
-            <div className={styles.BG_HARD} style={{ containerType: 'size', flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div className={styles.BG_HARD} style={{ containerType: 'size', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'clip' }}>
               <ListActivityHistories />
             </div>
           </div>
