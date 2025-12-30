@@ -8,7 +8,7 @@ const ListActivityHistories: FC = () => {
   const componentName = "ListActivityHistories";
   const model = "ActivityHistories";
 
-  const { tableProps } = useTable<TDataItem>(
+  const { tableProps } = useTable(
     componentName,
     model,
     columnsJson

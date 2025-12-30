@@ -9,6 +9,7 @@ import useUID from 'src/hooks/useUID'
 type TypeFieldStringProps = {
   label: string
   name: string
+  width?: string | number
 }
 export type TypeFieldActions = {
   img?: string;
@@ -30,6 +31,7 @@ type TypeFieldGroupProps = {
   label: string;
   inputRef?: React.RefObject<HTMLInputElement | null>;
   actions?: TypeFieldActions;
+  style?: CSSProperties;
 }
 
 export const imgActions = {
@@ -61,16 +63,43 @@ export const imgActions = {
   }
 }
 
+export const Field: FC<TypeFieldStringProps> = ({ label, name, width }) => {
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  const handleClear = () => {
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const handleList = () => {
+    console.log("List action");
+  };
 
 
-export const FieldGroup: FC<TypeFieldGroupProps> = ({ name, label, inputRef, actions }) => {
+  const actions: TypeFieldActions = [
+    { type: "clear", onClick: handleClear },
+    { type: "list", onClick: handleList },
+    { type: "open", onClick: () => { console.log("Open action"); } },
+  ];
 
 
   return (
-    <div className={styles.FieldWrapper}>
+    <FieldGroup
+      name={name}
+      label={label}
+      inputRef={inputRef}
+      style={{ width: width ?? 'auto' }}
+    // actions={actions}
+    />
+  );
+};
+
+export const FieldGroup: FC<TypeFieldGroupProps> = ({ name, label, inputRef, actions, style }) => {
+
+  return (
+    <div className={styles.FieldWrapper} style={style ? { ...style, width: style?.width } : style}>
       <label htmlFor={name} className={styles.FieldLabel}>{label}</label>
       <div className={styles.FieldInputWrapper}>
-        <input ref={inputRef} type="text" name={name} id={name} className={styles.FieldString} autoComplete='off' style={actions && { paddingRight: `${actions.length * 30}px` }} />
+        <input ref={inputRef} type="text" name={name} id={name} className={styles.FieldString} autoComplete='off' style={{ ...(actions && { paddingRight: `${actions.length * 30}px` }) }} />
         <div className={styles.FieldActions}>
           {
             actions && actions.map((action, index) => (

@@ -6,7 +6,7 @@ $heightFieldInput: 26px;
 	// display: flex;
 	width: 100%;
 	border: none;
-	border-radius: $radius2;
+	border-radius: $radius1;
 	height: $heightFieldInput;
 	padding: 0px 6px;
 	box-sizing: content-box;
@@ -14,10 +14,10 @@ $heightFieldInput: 26px;
 		padding: 0px;
 	}
 	&:focus {
-		// border: 1px solid $color2;
+		// border: 1px solid transparent;
 		// outline: 1px solid $color2;
 		outline: 0px;
-		box-shadow: 0px 0px 3px 0px $color2;
+		// box-shadow: 0px 0px 3px 3px red;
 	}
 	&:not(:last-child) {
 		// margin-right: 6px;
@@ -27,7 +27,7 @@ $heightFieldInput: 26px;
 	padding: 0px 3px;
 	// padding: px;
 	padding-right: 52px; // Перенесено из инлайн-стиля
-	border-radius: $radius2;
+	// border-radius: $radius2;
 	font-family: "PT Sans", sans-serif;
 	// font-size: 40px;
 	// height: $heightFieldInput;
@@ -42,19 +42,10 @@ $heightFieldInput: 26px;
 	flex: 1 1 100%;
 	// justify-content: space-around;
 	border: 1px solid $color10;
-	border-radius: $radius2;
+	// border-radius: $radius2;
 	background-color: $color60;
 	gap: 10px;
 }
-// .FieldDateInput {
-// 	width: 140px !important;
-// 	padding: 0px 6px;
-// 	background-color: transparent;
-// 	border: 0px;
-// 	border-radius: $radius2;
-// 	width: 100%;
-// 	outline: none;
-// }
 
 .FieldLabel {
 	// height: 28px;
@@ -65,6 +56,8 @@ $heightFieldInput: 26px;
 	align-items: end;
 	box-sizing: content-box;
 	text-wrap: nowrap;
+	// font-size: 110%;
+	margin-bottom: 3px;
 	// justify-content: center;
 	// align-self: center;
 	// text-align: center;
@@ -87,10 +80,15 @@ $heightFieldInput: 26px;
 	gap: 3px;
 
 	border-radius: $radius2;
-	border: 1px solid $color10;
+	border: 1px solid $color5;
+	outline: none;
 	// width: max-content;
 	// border: 5px solid $color10;
 	flex: 1 1 100%;
+	&:focus-within {
+		border: 1px solid $color3;
+		// box-shadow: 0px 0px 2px 0px rgba($color3, 0.3);
+	}
 }
 .FieldSelectWrapper {
 	display: flex;

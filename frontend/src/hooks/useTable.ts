@@ -14,7 +14,7 @@ export const useTable = (
 	componentName: string,
 	model: string,
 	columnsJson: any,
-	openForm: (id: string) => void,
+	openForm?: (id: string) => void,
 	initProps?: Partial<TypeTableParams>
 ) => {
 	const [columns, setColumns] = useState<TColumn[]>(() =>
@@ -73,7 +73,7 @@ export const useTable = (
 	);
 
 	return {
-		tableProps,
+		tableProps, // только пропсы таблицы используются снаружи
 		columns,
 		setColumns,
 		queryParams,

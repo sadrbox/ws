@@ -11,7 +11,9 @@
 	// padding: 6px 6px; /* Увеличен размер кнопки */
 	// font-size: 13px;
 	text-align: center;
+	// border: 1px solid #7d7d64;
 	border: 1px solid $color5;
+	outline: none;
 	padding: 0px 6px;
 	// border: 1px solid $color10;
 	// background: linear-gradient(180deg, $color30, $color33, $color34);
@@ -23,7 +25,25 @@
 	// min-width: 60px;
 	// transition: all 1000ms ease; /* Плавные переходы */
 	// Цвет текста по умолчанию
-
+	cursor: pointer;
+	color: $color6;
+	// background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+	background: linear-gradient(180deg, #fff, #aaa);
+	transition: all 200ms ease;
+	// box-shadow: 1px 1px 1px 0px rgba(#eeeeee, 1);
+	// box-shadow: 0px 2px px 1px rgba(0, 0, 0, 0.2) !important;
+	&:hover {
+		// outline: 2px solid #fff;
+		box-shadow: 0px 0px 5px 0px rgba(0, 0, 0, 0.2) !important;
+	}
+	&:active {
+		// background: linear-gradient(180deg, $color34, $color33, $color30);
+		// outline: 1px solid $color6 // border: 1px solid $color6;
+		// background-color: $color2;
+		// box-shadow: inset 0px 1px 3px $color60;
+		// border: 1px solid $color10;
+		border: 1px solid #3d3400;
+	}
 	&:not(:last-child) {
 		// margin-right: 6px;
 	}
@@ -39,24 +59,6 @@
 	}
 
 	&:enabled {
-		cursor: pointer;
-		color: $color6;
-		// background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
-		background: linear-gradient(180deg, #fff, $color33, $color34);
-
-		box-shadow: 1px 1px 1px 0px rgba(#eeeeee, 1);
-		&:hover {
-			// outline: 1px solid $color2;
-			border: 1px solid $color6;
-		}
-		&:active {
-			// background: linear-gradient(180deg, $color34, $color33, $color30);
-			// outline: 1px solid $color6 // border: 1px solid $color6;
-			// background-color: $color2;
-			// box-shadow: inset 0px 1px 3px $color60;
-			// border: 1px solid $color10;
-			box-shadow: 0px 0px 1px 2px rgba($color6, 0.2);
-		}
 	}
 }
 

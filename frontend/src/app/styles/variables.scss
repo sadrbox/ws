@@ -24,6 +24,7 @@ $colorPrimaryDark: #1c5fcb;
 $color80: #f1f5f9;
 $color81: #9aa7b6;
 
+$radius1: 1px;
 $radius2: 2px;
 $radius3: 3px;
 $radius4: 4px;
@@ -73,10 +74,46 @@ a {
 }
 .BG_EASY {
 	background: rgba($silver, 0);
+	padding: 12px;
 }
 .BG_MEDIUM {
 	background: rgba($silver, 0.2);
+	padding: 12px;
 }
 .BG_HARD {
 	background: rgba($silver, 0.3);
+	padding: 12px;
+}
+
+.primary {
+	background: linear-gradient(180deg, #ffe240, #caac00) !important;
+	// color: rgb(39, 39, 39) !important;
+}
+.primary:hover {
+}
+
+.secondary {
+	background: linear-gradient(180deg, #fff, #aaa);
+	// color: $color6 !important;
+	// border: 1px solid #7d7d64;
+}
+.secondary:hover {
+	// border: 1px solid #3d3400;
+}
+
+.danger {
+	background-color: #dc3545 !important;
+	color: white !important;
+}
+.danger:hover {
+	background-color: #b02a37 !important;
+}
+
+.outline {
+	background-color: transparent !important;
+	border: 2px solid #007bff !important;
+	color: #007bff !important;
+}
+.outline:hover {
+	background-color: rgba(0, 123, 255, 0.1) !important;
 }

@@ -6,7 +6,7 @@ type TProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   onClick?: () => void;
 };
 
-export const Button: FC<TProps> = ({ variant = 'primary', children, onClick, ...props }) => {
+export const Button: FC<TProps> = ({ variant = 'secondary', children, onClick, ...props }) => {
   return (
     <button
       className={[styles.Button, styles[variant]].join(" ")}
@@ -19,7 +19,7 @@ export const Button: FC<TProps> = ({ variant = 'primary', children, onClick, ...
 };
 
 
-export const ButtonImage: FC<TProps> = ({ variant = 'primary', children, onClick, ...props }) => {
+export const ButtonImage: FC<TProps> = ({ variant = 'secondary', children, onClick, ...props }) => {
   return (
     <button
       className={[styles.ButtonImage, styles[variant]].join(" ")}

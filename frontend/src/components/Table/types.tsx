@@ -85,7 +85,7 @@ export type TypeTableContextProps = {
     setQueryParams: (newParams: Partial<TypeTableParams>) => void;
   };
   actions: {
-    openForm: (id: string) => void;
+    openForm?: (id: string) => void;
     // loadDataGrid: (page?: number, limit?: number) => Promise<void>;
     setColumns: Dispatch<SetStateAction<TColumn[]>>;
     refetch: () => Promise<QueryObserverResult<{

@@ -8,9 +8,11 @@ import { Screen } from "../components/UI";
 
 // import NavigationPage from "./pages/NavigationPage";
 // import { usePortal } from "src/hooks/usePortal";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
 import useUID from "src/hooks/useUID";
+import { add } from "lodash";
+import Counterparties from "src/models/counterparties";
 
 
 
@@ -52,12 +54,16 @@ export default function App() {
 
   // const navbarOverlayIsVisible = navbarList.find(n => n.isActive)
 
-
+  useEffect(() => {
+    addPane(<Counterparties.Form id={"initial"} />);
+    // console.log("activeNav", activeNav);
+  }, []);
 
 
   const getComponentName = useCallback((node: React.ReactNode): string => {
+    // console.log(node);
     if (React.isValidElement(node) && typeof node.type === "function") {
-      return node.type.name || "AnonymousComponent";
+      return (node.type as React.FunctionComponent).displayName || "AnonymousComponent";
     }
     if (React.isValidElement(node) && typeof node.type === "string") {
       return node.type;
@@ -74,8 +80,10 @@ export default function App() {
     // if (!content || !inTab) return;
     setNavbarList(nav => nav.map(n => ({ ...n, isActive: false })));
     const componentName = getComponentName(component);
+    // const componentName = React.isValidElement(component) && typeof component.type === "function" ? (component.type as React.FunctionComponent).displayName || "AnonymousComponent" : undefined;
+
     const existingPane = panes && panes.find(p => getComponentName(p.component) === componentName);
-    // console.log(existingPane);
+    console.log(componentName);
 
     if (existingPane) {
 

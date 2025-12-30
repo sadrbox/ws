@@ -186,6 +186,9 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   //   setQueryParams({ page: newPage });
   // }, [setQueryParams, totalPages]); // Зависимости: функция setQueryParams и общее количество страниц.
 
+  const handleClickRow = (rowID: string) => {
+    return actions?.openForm ? actions.openForm(rowID.toString()) : null;
+  };
 
   // --- Значение контекста ---
   // Мемоизируем объект, передаваемый в контекст, чтобы он не менялся при каждом ре-рендере Table,
@@ -221,7 +224,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
           <div className={styles.TablePanelLeft}>
             <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
               {/* Примеры кнопок */}
-              <Button onClick={() => actions.openForm('new')}>
+              <Button onClick={() => handleClickRow('new')}>
                 <span>Добавить</span>
               </Button>
               <Button onClick={() => alert('Delete clicked!')}>
@@ -511,9 +514,14 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
     isLoading,
     states: { activeRow, setActiveRow, selectedRows, setSelectedRows }, // Состояние выделения, активности и загрузки
     actions: { openForm }
+
+
     // query: { queryParams } // Если нужно access queryParams в строке
   } = useTableContextProps();
 
+  const handleClkickRow = (rowID: string) => {
+    return openForm ? openForm(rowID.toString()) : null;
+  }
   // const openForm = (id: string) => {
   //   addPane(<Form id={id} />)
   // }
@@ -590,7 +598,7 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
         return (
           <td
             key={column.identifier} // Используем identifier колонки как key для уникальности ячейки в строке
-            onDoubleClickCapture={() => openForm(row.id.toString())} // Открываем форму контракта по двойному клику <ContractForm {mode="view"} id={rowID} />
+            onDoubleClickCapture={() => handleClkickRow(row.id.toString())} // Открываем форму контракта по двойному клику <ContractForm {mode="view"} id={rowID} />
             style={{
               // Ширина ячейки (колонки). Должна совпадать с шириной th в thead.
               // Лучше задавать ширину в CSS классах или в tbody td, но инлайн тоже работает.

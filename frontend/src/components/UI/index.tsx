@@ -13,12 +13,13 @@ import ListContracts from 'src/models/contracts/list';
 type TypeGroupProps = {
   align?: 'row' | 'col';
   type?: 'easy' | 'medium' | 'hard';
+  label?: string;
   gap?: string;
   className?: string | string[];
   style?: CSSProperties;
 } & PropsWithChildren;
 
-export const Group: FC<TypeGroupProps> = ({ align, gap, type, className, style, children }) => {
+export const Group: FC<TypeGroupProps> = ({ align, gap, type, label, className, style, children }) => {
 
   let visibleType: string;
   if (type === 'easy') {
@@ -32,21 +33,24 @@ export const Group: FC<TypeGroupProps> = ({ align, gap, type, className, style, 
   }
 
   const reStyle = {
-    ...({ borderRadius: '2px' }), ...style, ...(gap && { gap: gap }), ...(type && { padding: '3px', margin: '3px' })
+    ...({ borderRadius: '2px' }), ...style
   }
   return (
-    <div className={[align === 'row'
-      ?
-      styles.RowGroup
-      :
-      styles.ColGroup,
-    type
-    &&
-    visibleType,
-      className].filter(s => s && s).join(" ")}
-      style={reStyle}>
-      {children}
-    </div>
+    <div style={{
+      display: 'flex', flexDirection: 'column'
+    }}>
+      {label && <div className={styles.GroupLabel}>{label}</div>}
+      <div className={[align === 'row'
+        ?
+        styles.RowGroup
+        :
+        styles.ColGroup,
+        className, (visibleType && visibleType)].filter(s => s && s).join(" ")}
+        style={{ ...reStyle, ...({ gap: gap ? gap : undefined }) }}
+      >
+        {children}
+      </div>
+    </div >
   );
 };
 
