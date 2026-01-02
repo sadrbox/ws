@@ -10,6 +10,7 @@ type TypeFieldStringProps = {
   label: string
   name: string
   width?: string | number
+  maxWidth?: string | number
 }
 export type TypeFieldActions = {
   img?: string;
@@ -63,7 +64,7 @@ export const imgActions = {
   }
 }
 
-export const Field: FC<TypeFieldStringProps> = ({ label, name, width }) => {
+export const Field: FC<TypeFieldStringProps> = ({ label, name, width, maxWidth }) => {
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const handleClear = () => {
@@ -87,7 +88,7 @@ export const Field: FC<TypeFieldStringProps> = ({ label, name, width }) => {
       name={name}
       label={label}
       inputRef={inputRef}
-      style={{ width: width ?? 'auto' }}
+      style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', }}
     // actions={actions}
     />
   );
@@ -305,6 +306,6 @@ export const FieldDateRange: FC = () => {
 
 export const Divider = () => {
   return (
-    <div style={{ borderLeft: "1px dotted #888", margin: "3px 0" }}></div>
+    <div style={{ borderLeft: "1px dotted #888", display: "flex", height: "auto" }}></div>
   )
 };

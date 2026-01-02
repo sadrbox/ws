@@ -219,7 +219,6 @@ const Table: FC<TypeTableProps> = ({ props }) => {
       {configModalFormAction === 'open' && <TableConfigModalForm method={{ get: configModalFormAction, set: setConfigModalFormAction }} />}
 
       <div className={styles.TableWrapper}>
-        <h2 className={styles.TableHeaderLabel}>{getTranslation(props.componentName)}</h2>
         <div className={styles.TablePanel}>
           <div className={styles.TablePanelLeft}>
             <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
@@ -251,6 +250,10 @@ const Table: FC<TypeTableProps> = ({ props }) => {
             <FieldFastSearch />
 
           </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'row' }}>
+          <Divider />
+          <h2 className={styles.TableHeaderLabel}>{getTranslation(props.componentName)}</h2>
         </div>
         {/* Обертка для области таблицы, управляющая прокруткой */}
         <div className={styles.TableScrollWrapper}>
@@ -359,7 +362,7 @@ const TableHeader = memo(() => {
         {/* Колонка с чекбоксом (фиксированная ширина) */}
         {/* Ширина должна быть задана в CSS стилях для thead th:first-child или tbody td:first-child */}
         <th style={{ whiteSpace: 'nowrap' }}>
-          <div className={styles.TableHeaderCell} style={{ justifyContent: 'center', padding: '0px' }}>
+          <div className={styles.TableHeaderCell} style={{ justifyContent: 'center' }}>
             <input
               type="checkbox"
               style={{ height: '16px', width: '16px' }}

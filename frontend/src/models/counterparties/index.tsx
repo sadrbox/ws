@@ -54,8 +54,7 @@ const Form: React.FC<TypeForm> = ({ id }) => {
 
   return (
     <div className={styles.FormWrapper}>
-      <h2 className={styles.FormHeaderLabel}>{getTranslation(displayName)}: ТОО СтройМонтажСервис</h2>
-      <div className={styles.TablePanel}>
+      <div className={styles.FormPanel}>
         <div className={styles.TablePanelLeft}>
           <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
             <Button variant="primary" onClick={() => alert('Add clicked!')}>
@@ -75,29 +74,37 @@ const Form: React.FC<TypeForm> = ({ id }) => {
         </div>
         <div className={styles.TablePanelRight}></div>
       </div>
+      <div className={styles.FormHeader} >
+        <Divider />
+        <h2 className={styles.FormHeaderLabel}>{getTranslation(displayName)}: ТОО СтройМонтажСервис</h2>
+        <div className={styles.FormIdentifier}>ID: 12 </div>
+      </div>
       <div className={styles.FormBody}>
+
         <div className={styles.FormBodyParts}>
           <div className={styles.Form}>
-            <Group label="Реквизиты" type="hard" align="row" gap="12px" >
-              <Group align="col" gap="12px" style={{ justifyContent: "space-between" }}>
-                <Field label="Наименование" name={`${formUid}_name`} width="400px" />
-                <Field label="Номер" name={`${formUid}_id`} width="120px" />
-              </Group>
-              <Group align="col" gap="12px">
-                <Field label="ИНН" name={`${formUid}_inn`} width="193px" />
-                <Field label="КБЕ" name={`${formUid}_kpp`} width="193px" />
-              </Group>
-            </Group>
+            {/* <Group label="Реквизиты" align="row" gap="12px" > */}
+            <div style={{ gap: '12px', display: 'flex', flexDirection: 'column' }}>
+              {/* <Field label="Номер" name={`${formUid}_id`} width="120px" /> */}
+              <Field label="Наименование" name={`${formUid}_name`} maxWidth="430px" />
+            </div>
+            <div style={{ gap: '12px', display: 'flex', flexDirection: 'row' }}>
+              <Field label="ИНН" name={`${formUid}_inn`} width="auto" />
+              <Field label="КБЕ" name={`${formUid}_kpp`} width="auto" />
+            </div>
+            {/* </Group> */}
           </div>
+          <Divider />
           <div className={styles.FormTable}>
-            <div className={styles.GroupLabel}>Договора</div>
-            <div className={styles.BG_HARD} style={{ containerType: 'size', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'clip' }}>
+            {/* <div className={styles.GroupLabel}>Договора</div> */}
+
+            <div style={{ containerType: 'size', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'clip' }}>
               <ListActivityHistories />
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </div >
   )
 };
 
