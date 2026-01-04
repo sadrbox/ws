@@ -15,7 +15,7 @@ type TypeGroupProps = {
   type?: 'easy' | 'medium' | 'hard';
   label?: string;
   gap?: string;
-  className?: string | string[];
+  className?: string;
   style?: CSSProperties;
 } & PropsWithChildren;
 
@@ -36,8 +36,8 @@ export const Group: FC<TypeGroupProps> = ({ align, gap, type, label, className, 
     ...({ borderRadius: '2px' }), ...style
   }
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column'
+    <div className={className || ""} style={{
+      display: 'flex', flexDirection: 'column', marginTop: '12px', position: 'relative'
     }}>
       {label && <div className={styles.GroupLabel}>{label}</div>}
       <div className={[align === 'row'
@@ -45,7 +45,7 @@ export const Group: FC<TypeGroupProps> = ({ align, gap, type, label, className, 
         styles.RowGroup
         :
         styles.ColGroup,
-        className, (visibleType && visibleType)].filter(s => s && s).join(" ")}
+        , (visibleType && visibleType)].filter(s => s && s).join(" ")}
         style={{ ...reStyle, ...({ gap: gap ? gap : undefined }) }}
       >
         {children}
@@ -53,6 +53,8 @@ export const Group: FC<TypeGroupProps> = ({ align, gap, type, label, className, 
     </div >
   );
 };
+
+
 
 export const HorizontalLine = () => {
   return (
@@ -120,12 +122,12 @@ export const PaneTab: FC = () => {
   return (
     <div className={styles.PaneTabWrapper}>
       {panes.map(p => (
-        <div
+        <a href='#'
           key={p.id}
           className={[styles.PaneTab, p.isActive && styles.PaneTabActive].join(" ")}
           onClick={() => setActivePaneID(p.id)}>
           {p.label}
-        </div>
+        </a>
       ))}
     </div>
   );
@@ -353,6 +355,7 @@ export const Navbar: React.FC = () => {
     </>
   )
 }
+
 type TypeNavListProps = {
   lable: string;
 }

@@ -1,4 +1,4 @@
-$heightFieldInput: 26px;
+// $heightFieldInput: 26px;
 .FieldDate,
 .FieldString,
 .FieldSelect {
@@ -26,7 +26,7 @@ $heightFieldInput: 26px;
 .FieldString {
 	padding: 0px 3px;
 	// padding: px;
-	padding-right: 52px; // Перенесено из инлайн-стиля
+	// padding-right: 52px; // Перенесено из инлайн-стиля
 	// border-radius: $radius2;
 	font-family: "PT Sans", sans-serif;
 	// font-size: 40px;
@@ -41,10 +41,14 @@ $heightFieldInput: 26px;
 	align-items: center;
 	flex: 1 1 100%;
 	// justify-content: space-around;
-	border: 1px solid $color10;
+	border: 1px solid $color5;
 	border-radius: $radius2;
 	background-color: $color60;
 	gap: 10px;
+	&:focus-within {
+		border: 1px solid $color3;
+		// box-shadow: 0px 0px 2px 0px rgba($color3, 0.3);
+	}
 }
 
 .FieldLabel {
@@ -68,6 +72,7 @@ $heightFieldInput: 26px;
 	// max-width: 500px;
 	display: flex;
 	flex-direction: column;
+	flex-grow: 1;
 	// align-items: center;
 	// margin-top: 8px;
 	// gap: 8px;

@@ -11,7 +11,7 @@ const ListActivityHistories: FC = () => {
   const { tableProps } = useTable(
     componentName,
     model,
-    columnsJson
+    columnsJson,
     // Можно передать дополнительные параметры:
     // {
     //   page: 1,

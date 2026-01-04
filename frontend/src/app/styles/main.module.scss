@@ -54,11 +54,12 @@ body {
 	// gap: 6px;
 	// z-index: 1;
 	.NavbarItem {
+		user-select: none;
 		// background-color: rgba($color3, 0.8);
 		// font-weight: bold;
 		color: $color3;
 		border-radius: $radius3;
-		font-size: 14px;
+		// font-size: 110%;
 		// text-decoration: underline;
 		font-weight: 500;
 		// text-shadow: 0px 0px 1px 1px #000;
@@ -82,7 +83,7 @@ body {
 	position: absolute;
 	display: flex; //!!!
 	flex: 1; //!!!
-	top: 42px;
+	top: 40px;
 	bottom: 0;
 	left: 0px;
 	right: 0;
@@ -180,7 +181,7 @@ body {
 	&::before {
 		content: "";
 		position: absolute;
-		background-color: #fff;
+		background-color: $color30;
 		top: 0px;
 		left: 0;
 		width: 100%;
@@ -203,7 +204,8 @@ body {
 		// height: 30px;
 		// font-family: "Segoe UI";
 		// line-height: 20px;
-		background: $color33;
+		background: #fff;
+		color: $color51;
 		// background: linear-gradient(-180deg, #eee, #ddd, #bbb);
 		// color: $color51;
 		display: flex;
@@ -215,8 +217,10 @@ body {
 		margin-right: -1px; /* Наложение краев с учетом границы */
 		// font-weight: bold;
 		z-index: 1;
+		user-select: none;
 		// margin: 0px 6px 0px 12px;
 		// box-shadow: 0 0 5px 3px rgba($color5, 0.2);
+		text-decoration: none;
 
 		&:hover {
 			// background-color: $color2;
@@ -237,7 +241,7 @@ body {
 		// position: relative;
 
 		// margin-top: -2px;
-		background-color: #fff;
+		background-color: $color30;
 		// border: 1px solid $color60;
 		// border-top: 1px solid $color3;
 		color: $color6;
@@ -259,6 +263,7 @@ body {
 	// display: grid;
 	// grid-template-columns: 1fr;
 	// grid-template-rows: min-content auto;
+	margin-top: 6px;
 	gap: 6px;
 	display: flex;
 	container-type: size;
@@ -356,11 +361,15 @@ body {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	// padding-top: 12px;
-	min-width: 400px;
+	padding-top: 12px;
+	// margin-top: 12px;
+	min-width: 300px;
+	max-width: 400px;
+	border-top: 1px dotted $color5;
+	// border-bottom: 1px dotted $color5;
 }
 .FormPanel {
-	margin: 12px 0 0 0;
+	margin: 0px 0 0 0;
 	width: auto;
 	// margin-top: 20px;
 	// container-type: size;
@@ -381,22 +390,27 @@ body {
 	// height: 50cqi;
 }
 .GroupLabel {
+	position: absolute;
+	top: -15px;
+	line-height: 27px;
 	// display: inline;
 	width: fit-content;
-	// border: 1px solid red;
+	// border-left: 1px dotted $color5;
+	border-radius: $radius2;
 	margin: 0 0 0px 6px;
-	padding: 6px 12px;
-	font-weight: 400;
-	font-size: 110%;
+	padding: 0px 3px;
+	font-weight: normal;
+	font-size: 13px;
 	text-shadow: none;
 	// text-transform: uppercase;
 	color: $color51;
 	user-select: none;
 	// text-decoration: underline;
 	// border-bottom: 1px solid $color10;
-	border-top-left-radius: $radius4;
-	border-top-right-radius: $radius4;
+	// border-top-left-radius: $radius4;
+	// border-top-right-radius: $radius4;
 	background: $color30;
+	// background: red;
 }
 .HorizontalLine {
 	border-radius: 2px;

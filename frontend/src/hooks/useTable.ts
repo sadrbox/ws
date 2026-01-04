@@ -15,7 +15,8 @@ export const useTable = (
 	model: string,
 	columnsJson: any,
 	openForm?: (id: string) => void,
-	initProps?: Partial<TypeTableParams>
+	initProps?: Partial<TypeTableParams>,
+	type?: string
 ) => {
 	const [columns, setColumns] = useState<TColumn[]>(() =>
 		getModelColumns(columnsJson, componentName)

@@ -1,0 +1,113 @@
+/* Tabs.module.css */
+
+.TabsWrapper {
+	width: 100%;
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	// font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+	// Ubuntu, sans-serif;
+}
+
+.TabsHeader {
+	position: relative;
+	display: flex;
+	gap: 12px;
+	margin-bottom: 6px;
+	// border-bottom: 1px dotted $color51;
+	background-color: $color30;
+	overflow-x: auto;
+	scrollbar-width: none; /* Firefox */
+	-ms-overflow-style: none; /* IE and Edge */
+}
+
+.TabsHeader::-webkit-scrollbar {
+	display: none; /* Chrome, Safari, Opera */
+}
+
+.TabsLabel {
+	user-select: none;
+	// padding: 12px 24px;
+	font-size: 14px;
+	color: #6b7280;
+	text-decoration: underline;
+	cursor: pointer;
+	border: none;
+	background: transparent;
+	// position: relative;
+	// transition: all 0.2s ease;
+	white-space: nowrap;
+	justify-content: center;
+	// border-bottom: 3px solid transparent;
+	outline: none;
+	color: $color3;
+	border-radius: $radius3;
+	font-weight: 500;
+	margin: 0px 0px 0px 0px;
+	padding: 6px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.TabsLabel:hover {
+	// color: #374151;
+	background-color: #fff;
+}
+
+.TabsLabel:focus-visible {
+	// outline: 2px solid $color3;
+	// outline-offset: -2px;
+	// border-radius: 4px;
+}
+
+/* Активный таб */
+.TabsLabel[aria-selected="true"],
+.TabsLabel.active {
+	color: #ffffff;
+	background-color: $color3;
+	text-decoration: none;
+}
+
+/* Индикатор для скринридеров */
+
+.TabsBody {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	// padding: 24px;
+	background-color: $color30;
+	// min-height: 200px;
+	// border: 1px solid #e5e7eb;
+	// border-top: none;
+	// border-radius: 0 0 8px 8px;
+}
+
+/* Стили для контента табов */
+.TabsBody > div {
+	display: none;
+	// animation: fadeIn 0.3s ease;
+}
+
+.TabsBody > div[aria-selected="true"],
+.TabsBody > div.active {
+	display: flex;
+}
+.TabsBodyWrapper {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	overflow: auto;
+}
+
+/* Анимация появления контента */
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}

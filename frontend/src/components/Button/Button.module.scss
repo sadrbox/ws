@@ -1,6 +1,7 @@
 .Button {
 	// background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
 
+	user-select: none;
 	display: flex;
 	align-items: center;
 	// background-color: #fc0;
@@ -9,7 +10,7 @@
 	outline: none;
 	margin: 0;
 	// padding: 6px 6px; /* Увеличен размер кнопки */
-	// font-size: 13px;
+	font-size: 100%;
 	text-align: center;
 	// border: 1px solid #7d7d64;
 	border: 1px solid $color5;
@@ -21,7 +22,7 @@
 	border-radius: $radius3; /* Увеличен радиус скругления */
 	// box-shadow: 0px 1px 0px 0px rgba($color6, 0.7);
 	// box-shadow: inset 0px 0px 1px $color30, inset 0px 0px 1px $color1;
-	height: 26px; // $heightFieldInput: 24px;
+	height: $heightFieldInput;
 	// min-width: 60px;
 	// transition: all 1000ms ease; /* Плавные переходы */
 	// Цвет текста по умолчанию
@@ -63,6 +64,7 @@
 }
 
 .ButtonImage {
+	user-select: none;
 	display: flex;
 	align-items: center;
 	justify-content: center;

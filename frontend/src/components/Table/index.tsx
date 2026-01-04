@@ -219,6 +219,10 @@ const Table: FC<TypeTableProps> = ({ props }) => {
       {configModalFormAction === 'open' && <TableConfigModalForm method={{ get: configModalFormAction, set: setConfigModalFormAction }} />}
 
       <div className={styles.TableWrapper}>
+        {/* <div style={{ display: 'flex', flexDirection: 'row' }}>
+          <Divider />
+          <h2 className={styles.TableHeaderLabel}>{getTranslation(props.componentName)}</h2>
+        </div> */}
         <div className={styles.TablePanel}>
           <div className={styles.TablePanelLeft}>
             <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
@@ -251,10 +255,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
 
           </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'row' }}>
-          <Divider />
-          <h2 className={styles.TableHeaderLabel}>{getTranslation(props.componentName)}</h2>
-        </div>
+
         {/* Обертка для области таблицы, управляющая прокруткой */}
         <div className={styles.TableScrollWrapper}>
           {/* Компонент TableArea, содержащий саму таблицу (thead и tbody) */}
@@ -278,7 +279,7 @@ const TableArea = memo(() => {
   return (
     <table>
       <colgroup>
-        <col style={{ width: '26px', maxWidth: '26px' }} />
+        <col style={{ width: '30px', maxWidth: '30px' }} />
         {visibleColumns.map((column: TColumn, idx: number) => {
           const lastColumnMinWidth = (visibleColumns.length) === (idx + 1) ? "auto" : column.width;
           return (
@@ -362,7 +363,7 @@ const TableHeader = memo(() => {
         {/* Колонка с чекбоксом (фиксированная ширина) */}
         {/* Ширина должна быть задана в CSS стилях для thead th:first-child или tbody td:first-child */}
         <th style={{ whiteSpace: 'nowrap' }}>
-          <div className={styles.TableHeaderCell} style={{ justifyContent: 'center' }}>
+          <div className={styles.TableHeaderCell} style={{ placeContent: 'center' }}>
             <input
               type="checkbox"
               style={{ height: '16px', width: '16px' }}
@@ -572,7 +573,7 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
       {/* Ячейка с чекбоксом (фиксированная ширина) */}
       {/* Ширина должна быть задана в CSS стилях для tbody td:first-child */}
       <td>
-        <div className={[styles.TableBodyCell, cellClass].join(" ")} style={{ justifyItems: "center" }}>
+        <div className={[styles.TableBodyCell, cellClass].join(" ")} style={{ placeContent: "center" }}>
           <input
             type="checkbox"
             style={{ height: "16px", width: "16px" }}

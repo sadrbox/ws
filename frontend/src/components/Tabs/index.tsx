@@ -1,46 +1,90 @@
 
-import React, { useEffect, useState } from "react";
-import styles from "./styles.module.scss";
-// import { useAppContext } from "src/components/app/AppContextProvider";
-import { TypeTabs } from "./types";
-import { IoMdClose } from "react-icons/io";
-import { getMockTabs } from "./dev";
-import { useAppContextProps } from "src/app/AppContextProvider";
-// import { useAppContext } from "src/app/AppContextProvider";
+import React, { useState } from "react";
+import styles from "./Tabs.module.scss";
 
 
 
-const Tabs: React.FC = () => {
-  const context = useAppContextProps()
+interface Tab {
+  id: string;
+  label: string;
+  component: React.ReactNode;
+}
 
+interface TypeTabs {
+  tabs: Tab[];
+  defaultActiveTab?: string;
+}
 
-  // console.log(context?.context.tabs)
-  let tabs: TypeTabs;
-  if (!context?.panes?.tabs) { return }
-  else {
-    tabs = context?.panes?.tabs;
+const Tabs: React.FC<TypeTabs> = ({
+  tabs,
+  defaultActiveTab,
+}) => {
+  const [activeTab, setActiveTab] = useState<string>(
+    defaultActiveTab || tabs[0]?.id || ''
+  );
+
+  // Если нет табов или массив пустой
+  if (!tabs || tabs.length === 0) {
+    return (
+      <div className={styles.emptyState}>
+        No tabs available
+      </div>
+    );
   }
-  return (
-    <div className={styles.colGroup} style={{ padding: "0px 4px" }}>
-      {tabs && tabs.map((tab, keyID) => {
-        let active = false;
-        if (++keyID === tabs.length) {
-          // console.log(tabs.length, keyID)
-          active = true; // tab.active
-        }
-        const wrapperClasses = [styles.item, (active === true ? styles.itemActive : "")].join(' ')
-        return (
-          <div key={keyID} area-id={tab.id} className={wrapperClasses}>
-            <div className={styles.rowGroup}>
-              <div className={styles.label}>{tab.label}</div>
-              {/* <div className={styles.desc}>{tab.description}</div> */}
-            </div>
 
-            <button className={styles.closeTabBtn} type="button">
-              <IoMdClose size={16} color="white" style={{ position: "absolute", top: "17px", left: "2px", transform: "rotate(44deg)", }} />
+  const handleTabClick = (tabId: string) => {
+    setActiveTab(tabId);
+  };
+
+  // const activeTabContent = tabs.find(tab => tab.id === activeTab)?.component || null;
+
+  return (
+    <div
+      className={styles.TabsWrapper}
+      role="tablist"
+    >
+      {/* Tab Headers */}
+      <div className={styles.TabsHeader}>
+        {tabs.map((tab, mapID) => {
+          const isActive = activeTab === tab.id;
+
+          return (
+            <button
+              key={tab.id}
+              id={`tab-${tab.id}`}
+              className={`${styles.TabsLabel} ${isActive ? styles.active : ''} `}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`panel - ${tab.id} `}
+              tabIndex={isActive ? 0 : -1}
+              onClick={() => handleTabClick(tab.id)}
+            >
+              <span className={styles.labelText}>{tab.label}</span>
             </button>
-          </div>)
-      })}
+          );
+        })}
+      </div>
+
+      {/* Tab Content */}
+      <div className={styles.TabsBody}>
+        {tabs.map((tab, mapID) => {
+          const isActive = activeTab === tab.id;
+
+          return (
+            <div
+              key={tab.id}
+              // id={`panel - ${tab.id} `}
+              className={`${styles.TabsBodyWrapper} ${isActive ? styles.active : styles.hidden} `}
+              role="tabpanel"
+              aria-labelledby={`tab - ${tab.id} `}
+              hidden={!isActive}
+              tabIndex={mapID}
+            >
+              {isActive && tab.component}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };

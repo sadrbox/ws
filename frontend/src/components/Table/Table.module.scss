@@ -42,6 +42,7 @@
 }
 
 .TableWrapper {
+	margin-top: 6px;
 	gap: 6px;
 	display: flex;
 	container-type: size;
@@ -90,7 +91,7 @@
 	display: flex;
 	flex-direction: row;
 	gap: 6px;
-	margin: 12px 0 0 0;
+	margin: 0px 0 0 0;
 	flex: 0;
 	justify-content: space-between;
 	box-sizing: content-box;
@@ -184,6 +185,7 @@ table {
 	height: 100%;
 	width: 100%;
 	position: relative;
+	border-spacing: 20px;
 	// display: flex;
 	// flex-direction: column;
 	// flex: 1;
@@ -218,8 +220,8 @@ thead {
 			user-select: none;
 			// cursor: default;
 			// white-space: nowrap;
-			// border-right: 0px solid $color10;
-			border-left: 1px solid $color10; // need
+			border-right: 1px solid $color10;
+			// border-left: 1px solid $color10; // need
 			border-bottom: 0px;
 			// overflow: hidden;
 			// background-color: $color30;
@@ -234,12 +236,14 @@ thead {
 				border-right: 0px;
 			}
 			.TableHeaderCell {
-				padding: 0px 1px 1px 1px;
+				padding: 1px 1px 1px 1px;
 				margin: 1px;
 				// display: grid;
 				// grid-template-rows: 21px;
 				// grid-auto-flow: column;
 				// grid-template-columns: auto;
+				place-items: center;
+				// place-content: center;
 				display: flex;
 				flex-direction: row;
 				align-items: center;
@@ -248,7 +252,8 @@ thead {
 				text-overflow: ellipsis;
 				border: 1px solid transparent;
 				// align-items: center;
-
+				height: $heightFieldInput - 4px;
+				// min-width: 30px;
 				// border-top: 1px solid $color34;
 				// grid-template-columns: 1fr auto; /* Делаем элемент гибким */
 				// max-width: 100%;
@@ -297,7 +302,7 @@ thead {
 		left: 0; /* Сдвиг от левого края */
 		right: 0; /* Сдвиг от правого края, если нужно заполнить */
 		// box-shadow: 0 0 1px 1px $color10;
-		// border-bottom: 22x solid $color10;
+		// border-bottom: 1px solid $color10;
 		height: 1px;
 		background: $color5;
 		// transition: box-shadow 1s ease-out;
@@ -322,13 +327,14 @@ tbody {
 			// border-bottom: 1px solid $color10;
 			// border-top: 1px solid $color10;
 			.TableBodyCell {
-				padding: 0px 1px 1px 1px;
+				user-select: none;
+				padding: 1px 1px 1px 1px;
 				margin: 1px;
 				// margin: 1px;
-				display: grid;
-				grid-auto-flow: column;
-				grid-template-rows: 21px;
-				grid-template-columns: 1fr;
+				// display: grid;
+				// grid-auto-flow: column;
+				// grid-template-rows: $heightFieldInput;
+				// grid-template-columns: 1fr;
 				align-items: center;
 				white-space: nowrap;
 				text-overflow: ellipsis;
@@ -338,7 +344,12 @@ tbody {
 				// max-width: 100%;
 				// justify-content: center;
 				// align-items: stretch;
+				display: flex;
+				place-items: center;
+				// place-content: center;
 
+				flex-direction: row;
+				height: $heightFieldInput - 4px;
 				// align-items: center;
 				border: 1px solid transparent;
 				// max-width: 150px;
@@ -348,7 +359,7 @@ tbody {
 					// line-height: 20px;
 					// align-self: center;
 					// vertical-align: top;
-					// line-height: normal;
+					line-height: 17px;
 					// display: grid;
 					overflow: hidden;
 					// background-color: red;
