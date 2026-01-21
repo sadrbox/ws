@@ -12,7 +12,9 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
 import useUID from "src/hooks/useUID";
 import { add } from "lodash";
-import Counterparties from "src/models/counterparties";
+import Counterparties from "src/models/Counterparties";
+import { ListActivityHistories } from "src/models/ActivityHistories";
+
 
 
 
@@ -55,7 +57,7 @@ export default function App() {
   // const navbarOverlayIsVisible = navbarList.find(n => n.isActive)
 
   useEffect(() => {
-    addPane(<Counterparties.Form id={"initial"} />);
+    addPane(<ListActivityHistories />);
     // console.log("activeNav", activeNav);
   }, []);
 
@@ -83,7 +85,7 @@ export default function App() {
     // const componentName = React.isValidElement(component) && typeof component.type === "function" ? (component.type as React.FunctionComponent).displayName || "AnonymousComponent" : undefined;
 
     const existingPane = panes && panes.find(p => getComponentName(p.component) === componentName);
-    console.log(componentName);
+    // console.log(componentName);
 
     if (existingPane) {
 

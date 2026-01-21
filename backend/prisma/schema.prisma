@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
@@ -11,94 +5,180 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // url               = env("DATABASE_URL")
+  // url      = env("DATABASE_URL")
 }
 
 model User {
-  id         Int     @id @default(autoincrement())
-  uuid       String  @unique @default(uuid())
-  username   String?
-  password   String?
-  email      String?
-  firstname  String?
-  lastname   String?
-  middlename String?
-  fullname   String?
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  username String?
+  email    String?
+  password String? // Хранить только хэш!
+
+  firstName  String?
+  lastName   String?
+  middleName String?
+  fullName   String? // лучше вычислять на уровне приложения
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
 }
 
 model Organization {
-  id                Int               @id @default(autoincrement())
-  uuid              String            @unique @default(uuid())
-  shortName         String?
-  displayName       String?
-  bin               String            @unique @db.VarChar(12)
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  bin         String  @unique @db.VarChar(12)
+  shortName   String?
+  displayName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   contracts         Contract[]
   contacts          Contact[]
+  bankAccounts      BankAccount[]
   activityHistories ActivityHistory[]
+
+  @@map("organizations")
 }
 
 model Counterparty {
-  id          Int        @id @default(autoincrement())
-  uuid        String     @unique @default(uuid())
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  bin         String  @unique @db.VarChar(12)
   shortName   String?
   displayName String?
-  bin         String     @unique @db.VarChar(12)
-  contracts   Contract[]
-  contacts    Contact[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contracts    Contract[]
+  contacts     Contact[]
+  bankAccounts BankAccount[]
+
+  @@map("counterparties")
 }
 
 model Contract {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
-  shortName        String
-  contractNumber   String?
-  contractText     String?       @db.Text
-  startDate        DateTime?
-  endDate          DateTime?
-  organizationUuid String?
-  counterpartyUuid String?
-  // Organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
-  // Counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: Cascade)
-  organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
-  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: Cascade)
-}
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
 
-model Contact {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
-  value            String
-  contactTypes     ContactType   @relation(fields: [contactTypeUuid], references: [uuid], onDelete: Cascade)
-  contactTypeUuid  String
-  ownerId          String
-  ownerType        String
+  shortName      String
+  contractNumber String?
+  contractText   String? @db.Text
+
+  startDate DateTime?
+  endDate   DateTime?
+
   organizationUuid String?
   counterpartyUuid String?
-  Organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
-  Counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: Cascade)
+
+  organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+  counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@map("contracts")
 }
 
 model ContactType {
-  id        Int       @id @default(autoincrement())
-  uuid      String    @unique @default(uuid())
-  shortName String
-  contacts  Contact[]
+  id        Int    @id @default(autoincrement())
+  uuid      String @unique @default(uuid())
+  shortName String @unique
+
+  contacts Contact[]
+
+  @@map("contact_types")
+}
+
+model Contact {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  value String
+
+  contactType     ContactType @relation(fields: [contactTypeUuid], references: [uuid], onDelete: Restrict)
+  contactTypeUuid String
+
+  organizationUuid String?
+  counterpartyUuid String?
+
+  organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+  counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([contactTypeUuid])
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@map("contacts")
+}
+
+model BankAccount {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  organizationUuid String?
+  counterpartyUuid String?
+
+  iban        String
+  bik         String? // БИК / SWIFT-BIC
+  bankName    String? // денормализация
+  currency    String? // KZT, USD, EUR...
+  accountType String? // current, savings, deposit, card...
+
+  ownerName String? // для быстрого отображения без join'ов
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+  counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+
+  @@unique([organizationUuid, iban], name: "bankacc_org_iban_unique")
+  @@unique([counterpartyUuid, iban], name: "bankacc_cp_iban_unique")
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@index([iban])
+  @@index([bik])
+  @@map("bank_accounts")
 }
 
 model ActivityHistory {
-  id                    Int          @id @default(autoincrement())
-  uuid                  String       @unique @default(uuid())
-  actionDate            DateTime     @default(now())
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  actionDate DateTime @default(now())
+
   actionType            String
-  organization          Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
   organizationUuid      String
   organizationShortName String
   bin                   String
-  userName              String
-  host                  String
-  ip                    String?
-  city                  String?
-  objectId              String
-  objectType            String
-  objectName            String
-  props                 Json?
+
+  userName String
+  host     String
+  ip       String?
+  city     String?
+
+  objectId   String
+  objectType String
+  objectName String
+
+  props Json?
+
+  organization Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([actionDate])
+  @@index([organizationUuid])
+  @@index([objectType, objectId])
+  @@map("activity_history")
 }

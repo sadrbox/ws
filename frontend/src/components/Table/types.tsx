@@ -1,4 +1,4 @@
-import { Dispatch, ReactNode, SetStateAction } from "react";
+import { Dispatch, SetStateAction } from "react";
 import { QueryObserverResult } from "@tanstack/react-query";
 
 export type TFieldType =
@@ -72,7 +72,10 @@ export type TResponseData = TDataItem[] & {
   [key: string]: string | number | boolean;
 };
 
+export type TypeTableTypes = "part" | "list" | undefined;
+
 export type TypeTableContextProps = {
+  type: TypeTableTypes;
   componentName: string;
   rows: TDataItem[];
   columns: TColumn[];
@@ -125,6 +128,7 @@ export type TypeTableSort = {
 };
 
 export type TypeTableFilter = {
+  ownerUID?: string;
   searchBy?: {
     value: string;
     columns?: {

@@ -12,8 +12,8 @@
 .TabsHeader {
 	position: relative;
 	display: flex;
-	gap: 12px;
-	margin-bottom: 6px;
+	gap: 6px;
+	// margin-bottom: 6px;
 	// border-bottom: 1px dotted $color51;
 	background-color: $color30;
 	overflow-x: auto;
@@ -28,7 +28,7 @@
 .TabsLabel {
 	user-select: none;
 	// padding: 12px 24px;
-	font-size: 14px;
+	// font-size: 14px;
 	color: #6b7280;
 	text-decoration: underline;
 	cursor: pointer;
@@ -44,7 +44,7 @@
 	border-radius: $radius3;
 	font-weight: 500;
 	margin: 0px 0px 0px 0px;
-	padding: 6px;
+	padding: 6px 12px;
 	display: flex;
 	flex-direction: row;
 	align-items: center;
@@ -52,7 +52,7 @@
 
 .TabsLabel:hover {
 	// color: #374151;
-	background-color: #fff;
+	background-color: rgba($color3, 0.1);
 }
 
 .TabsLabel:focus-visible {
@@ -72,6 +72,7 @@
 /* Индикатор для скринридеров */
 
 .TabsBody {
+	padding-top: 9px;
 	display: flex;
 	flex: 1;
 	flex-direction: column;

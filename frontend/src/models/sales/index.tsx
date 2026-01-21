@@ -1,45 +1,45 @@
 import { FC, useState } from 'react';
 import styles from '../styles.module.scss';
 import InputField from 'src/components/Field/InputField';
-import ActivityHistories from '../activityhistories';
+import ActivityHistories from '../ActivityHistories';
 
 import { crypto } from 'src/utils/main.module';
 
 const Sales: FC = () => {
 
 
-const initialFormID = crypto.randomUUID()
-const [formID, setFormID] = useState<string>(initialFormID);
+  const initialFormID = crypto.randomUUID()
+  const [formID, setFormID] = useState<string>(initialFormID);
 
 
 
 
   return (
-  <div className={styles.FormWrapper}>
-    <div className={styles.FormBody}>
-      <InputField label="Наименование"
-        name={formID
-        + "_name"
-        } />
-      <InputField label="БИН"
-        name={formID
-        + "_bin"
-        } />
-      <InputField label="Комментарии"
-        name={formID
-        + "_comment"
-        } />
-      {/*
+    <div className={styles.FormWrapper}>
+      <div className={styles.FormBody}>
+        <InputField label="Наименование"
+          name={formID
+            + "_name"
+          } />
+        <InputField label="БИН"
+          name={formID
+            + "_bin"
+          } />
+        <InputField label="Комментарии"
+          name={formID
+            + "_comment"
+          } />
+        {/*
       <hr style={{
         height: '20px'
         }} /> */}
-    </div>
-    <div className={styles.FormTable}>
-      <ActivityHistories />
-    </div>
+      </div>
+      <div className={styles.FormTable}>
+        <ActivityHistories />
+      </div>
 
-  </div>
+    </div>
   );
-  };
+};
 
-  export default Sales;
+export default Sales;

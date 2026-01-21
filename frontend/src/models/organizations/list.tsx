@@ -8,10 +8,11 @@ const ListOrganizations: FC = () => {
   const componentName = "ListOrganizations";
   const model = "Organizations";
 
-  const { tableProps } = useTable<TDataItem>(
+  const { tableProps } = useTable({
     componentName,
     model,
     columnsJson
+  }
     // Можно передать дополнительные параметры:
     // {
     //   page: 1,

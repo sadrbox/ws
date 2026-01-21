@@ -28,6 +28,7 @@
 		"noFallthroughCasesInSwitch": true,
 		"noUncheckedSideEffectImports": true
 	},
-	"include": ["src/*", "**/*.js", "**/*.ts", "**/*.tsx"] // нужно для корректного импорта компонентов
+	"include": ["src/**/*", "**/*.js", "**/*.ts", "src/**/*.tsx"]
+	//	корректного импорта компонентов
 	// "include": ["src"]
 }

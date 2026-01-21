@@ -37,7 +37,7 @@ export const useQueryParams = (initProps?: Partial<TypeTableParams>) => {
 				} else {
 					console.warn(
 						"setQueryParams called with non-Set for selectedIds",
-						newParams.selectedIds
+						newParams.selectedIds,
 					);
 				}
 			}

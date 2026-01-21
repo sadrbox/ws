@@ -4,12 +4,14 @@ import styles from "./Button.module.scss";
 type TProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'danger';
   onClick?: () => void;
+  active?: boolean;
 };
 
-export const Button: FC<TProps> = ({ variant = 'secondary', children, onClick, ...props }) => {
+export const Button: FC<TProps> = ({ variant = 'secondary', children, onClick, active, ...props }) => {
+  const classActive = active && styles.Active;
   return (
     <button
-      className={[styles.Button, styles[variant]].join(" ")}
+      className={[styles.Button, styles[variant], classActive].join(" ")}
       onClick={onClick}
       {...props}
     >
@@ -19,10 +21,11 @@ export const Button: FC<TProps> = ({ variant = 'secondary', children, onClick, .
 };
 
 
-export const ButtonImage: FC<TProps> = ({ variant = 'secondary', children, onClick, ...props }) => {
+export const ButtonImage: FC<TProps> = ({ variant = 'secondary', children, onClick, active, ...props }) => {
+  const classActive = active && styles.Active;
   return (
     <button
-      className={[styles.ButtonImage, styles[variant]].join(" ")}
+      className={[styles.ButtonImage, styles[variant], classActive].join(" ")}
       onClick={onClick}
       {...props}
     >

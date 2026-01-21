@@ -5,7 +5,7 @@ export function getTranslation(word: string | undefined | null): string {
 	const normalizedWord = word?.toLowerCase()?.replace(/\s/g, "") || "";
 
 	const translate: [string, string] | undefined = Object.entries(
-		translations
+		translations,
 	).find(([value]) => {
 		const normalizedKey = value.toLowerCase().replace(/\s/g, "");
 		return normalizedKey === normalizedWord;

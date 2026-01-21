@@ -6,18 +6,20 @@ import { TypeDateRange } from '../Table/types'
 import { Group } from 'src/components/UI'
 import useUID from 'src/hooks/useUID'
 
-type TypeFieldStringProps = {
-  label: string
-  name: string
-  width?: string | number
-  maxWidth?: string | number
-}
-export type TypeFieldActions = {
-  img?: string;
-  alt?: string;
-  type: 'clear' | 'list' | 'open';
-  onClick: () => void;
-}[];
+// type TypeFieldStringProps = {
+//   label: string
+//   name: string
+//   value?: string
+//   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void
+//   width?: string | number
+//   maxWidth?: string | number
+// }
+// export type TypeFieldActions = {
+//   img?: string;
+//   alt?: string;
+//   type: 'clear' | 'list' | 'open';
+//   onClick: () => void;
+// }[];
 
 
 type TypeFieldFilterProps = {
@@ -27,13 +29,15 @@ type TypeFieldFilterProps = {
   inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
-type TypeFieldGroupProps = {
-  name: string;
-  label: string;
-  inputRef?: React.RefObject<HTMLInputElement | null>;
-  actions?: TypeFieldActions;
-  style?: CSSProperties;
-}
+// type TypeFieldGroupProps = {
+//   name: string;
+//   label: string;
+//   value?: string;
+//   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+//   inputRef?: React.RefObject<HTMLInputElement | null>;
+//   actions?: TypeFieldActions;
+//   style?: CSSProperties;
+// }
 
 export const imgActions = {
   clear: {
@@ -64,57 +68,212 @@ export const imgActions = {
   }
 }
 
-export const Field: FC<TypeFieldStringProps> = ({ label, name, width, maxWidth }) => {
-  const inputRef = useRef<HTMLInputElement | null>(null)
+// Типы для действий
+type FieldActionType = 'clear' | 'list' | 'open';
 
+interface FieldAction {
+  type: FieldActionType;
+  onClick: () => void;
+}
+
+type TypeFieldActions = FieldAction[];
+
+// Пропсы для Field
+interface TypeFieldStringProps {
+  label: string;
+  name: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  width?: string;
+  maxWidth?: string;
+  disabled?: boolean;
+  placeholder?: string;
+  required?: boolean;
+  actions?: TypeFieldActions;
+}
+
+// Пропсы для FieldGroup
+interface TypeFieldGroupProps {
+  name: string;
+  label: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  actions?: TypeFieldActions;
+  style?: CSSProperties;
+  disabled?: boolean;
+  placeholder?: string;
+  required?: boolean;
+}
+
+// // Иконки для действий (можно заменить на ваши SVG)
+// const imgActions: Record<FieldActionType, { img: React.ReactNode; alt: string }> = {
+//   clear: {
+//     img: (
+//       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+//         <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+//       </svg>
+//     ),
+//     alt: 'Очистить'
+//   },
+//   list: {
+//     img: (
+//       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+//         <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+//       </svg>
+//     ),
+//     alt: 'Список'
+//   },
+//   open: {
+//     img: (
+//       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+//         <path d="M6 2L12 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+//       </svg>
+//     ),
+//     alt: 'Открыть'
+//   }
+// };
+
+// Компонент Field
+export const Field: FC<TypeFieldStringProps> = ({
+  label,
+  name,
+  value = '',
+  onChange,
+  width,
+  maxWidth,
+  disabled = false,
+  placeholder,
+  required = false,
+  actions
+}) => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Обработчик очистки поля
   const handleClear = () => {
-    if (inputRef.current) inputRef.current.value = "";
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      // Триггерим событие onChange с пустым значением
+      if (onChange) {
+        const event = new Event('input', { bubbles: true });
+        Object.defineProperty(event, 'target', {
+          writable: false,
+          value: inputRef.current
+        });
+        onChange(event as any);
+      }
+    }
   };
 
   const handleList = () => {
-    console.log("List action");
+    console.log("List action for field:", name);
   };
 
+  const handleOpen = () => {
+    console.log("Open action for field:", name);
+  };
 
-  const actions: TypeFieldActions = [
+  // Дефолтные действия (можно переопределить через props)
+  const defaultActions: TypeFieldActions = actions || [
     { type: "clear", onClick: handleClear },
-    { type: "list", onClick: handleList },
-    { type: "open", onClick: () => { console.log("Open action"); } },
+    // { type: "list", onClick: handleList },
+    // { type: "open", onClick: handleOpen },
   ];
 
+  // Показываем кнопку очистки только если поле не disabled и есть значение
+  const visibleActions = disabled
+    ? []
+    : defaultActions.filter(action => {
+      if (action.type === 'clear' && !value) return false;
+      return true;
+    });
 
   return (
     <FieldGroup
       name={name}
       label={label}
+      value={value}
+      onChange={onChange}
       inputRef={inputRef}
-      style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', }}
-    // actions={actions}
+      style={{
+        width: width ?? 'auto',
+        maxWidth: maxWidth ?? 'none',
+      }}
+      actions={visibleActions.length > 0 ? visibleActions : undefined}
+      disabled={disabled}
+      placeholder={placeholder}
+      required={required}
     />
   );
 };
 
-export const FieldGroup: FC<TypeFieldGroupProps> = ({ name, label, inputRef, actions, style }) => {
-
+// Компонент FieldGroup
+export const FieldGroup: FC<TypeFieldGroupProps> = ({
+  name,
+  label,
+  value = '',
+  onChange,
+  inputRef,
+  actions,
+  style,
+  disabled = false,
+  placeholder,
+  required = false
+}) => {
   return (
-    <div className={styles.FieldWrapper} style={style ? { ...style, width: style?.width } : style}>
-      <label htmlFor={name} className={styles.FieldLabel}>{label}</label>
+    <div
+      className={styles.FieldWrapper}
+      style={style ? { ...style, width: style?.width } : style}
+    >
+      <label
+        htmlFor={name}
+        className={styles.FieldLabel}
+      >
+        {label}
+        {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
+      </label>
+
       <div className={styles.FieldInputWrapper}>
-        <input ref={inputRef} type="text" name={name} id={name} className={styles.FieldString} autoComplete='off' style={{ ...(actions && { paddingRight: `${actions.length * 30}px` }) }} />
-        <div className={styles.FieldActions}>
-          {
-            actions && actions.map((action, index) => (
-              <button key={index} onClick={action.onClick} type='button'>
-                {/* <img src={imgActions[action.type].img} alt={imgActions[action.type].alt} /> */}
+        <input
+          ref={inputRef}
+          type="text"
+          id={name}
+          name={name}
+          value={value}
+          onChange={onChange}
+          className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
+          autoComplete='off'
+          disabled={disabled}
+          placeholder={placeholder}
+          style={{
+            ...(actions && actions.length > 0 && {
+              paddingRight: `${actions.length * 32 + 8}px`
+            })
+          }}
+        />
+
+        {actions && actions.length > 0 && (
+          <div className={styles.FieldActions}>
+            {actions.map((action, index) => (
+              <button
+                key={index}
+                onClick={action.onClick}
+                type='button'
+                className={styles.FieldActionButton}
+                title={imgActions[action.type].alt}
+                tabIndex={-1}
+              >
                 {imgActions[action.type].img}
               </button>
-            ))
-          }
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+
 
 export const FieldFilter: FC<TypeFieldFilterProps> = ({ label, name, actions }) => {
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -221,7 +380,7 @@ export const FieldFastSearch: FC = () => {
 
   useEffect(() => {
     if (setQueryParams)
-      setQueryParams({ page: 1, filter: { searchBy: { value: deferredValue, columns: visibleColumns } } })
+      setQueryParams({ ...queryParams, filter: { searchBy: { value: deferredValue, columns: visibleColumns } } })
   }, [deferredValue])
 
   const handlerClearField = () => {
@@ -281,7 +440,7 @@ export const FieldDateRange: FC = () => {
   // const endDate = queryParams.filter?.dateRange?.endDate;
   useEffect(() => {
     if (setQueryParams)
-      setQueryParams({ page: 1, filter: { dateRange } })
+      setQueryParams({ ...queryParams, filter: { dateRange } })
   }, [dateRange])
 
   return (

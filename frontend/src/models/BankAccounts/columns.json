@@ -1,0 +1,105 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"name": "Id",
+		"width": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"position": 1,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "ownerUID",
+		"type": "string",
+		"visible": false,
+		"filter": false,
+		"inlist": false
+	},
+	{
+		"identifier": "ownerName",
+		"type": "string",
+		"name": "Владелец",
+		"width": "200px",
+		"alignment": "left",
+		"hint": "Владелец счёта",
+		"visible": true,
+		"position": 2,
+		"filter": true,
+		"inlist": true
+	},
+	{
+		"identifier": "iban",
+		"type": "string",
+		"name": "IBAN",
+		"width": "240px",
+		"alignment": "left",
+		"hint": "Номер счёта",
+		"visible": true,
+		"position": 3,
+		"filter": true,
+		"inlist": true
+	},
+	{
+		"identifier": "bankUID",
+		"type": "string",
+		"visible": false,
+		"filter": false,
+		"inlist": false
+	},
+	{
+		"identifier": "bankName",
+		"type": "string",
+		"name": "Банк",
+		"width": "220px",
+		"alignment": "left",
+		"hint": "Наименование банка",
+		"visible": true,
+		"position": 4,
+		"filter": true,
+		"inlist": true
+	},
+	{
+		"identifier": "bik",
+		"type": "string",
+		"alignment": "center",
+		"hint": "Банковский идентификационный код",
+		"visible": true,
+		"position": 5,
+		"filter": true,
+		"inlist": true
+	},
+	{
+		"identifier": "currencyUID",
+		"type": "string",
+		"visible": false,
+		"filter": false,
+		"inlist": false
+	},
+	{
+		"identifier": "currency",
+		"type": "string",
+		"name": "Валюта",
+		"width": "90px",
+		"alignment": "center",
+		"hint": "Валюта счёта",
+		"visible": true,
+		"position": 6,
+		"filter": true,
+		"inlist": true
+	},
+	{
+		"identifier": "accountType",
+		"type": "string",
+		"name": "Тип счёта",
+		"width": "140px",
+		"alignment": "left",
+		"hint": "Тип банковского счёта",
+		"visible": true,
+		"position": 7,
+		"filter": true,
+		"inlist": true
+	}
+]

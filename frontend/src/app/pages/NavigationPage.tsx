@@ -1,8 +1,8 @@
 import { Dispatch, FC, SetStateAction, useId } from 'react';
 import styles from './styles.module.scss';
 import { useAppContextProps } from '../AppContextProvider';
-import ListContracts from 'src/models/contracts/list';
-import ListActivityHistories from 'src/models/activityhistories/list';
+import ListContracts from 'src/models/Contracts';
+import ListActivityHistories from 'src/models/ActivityHistories/list';
 import ListOrganizations from 'src/models/organizations/list';
 import ListCounterparties from 'src/models/counterparties/list';
 import { Group } from '../../components/UI/index';

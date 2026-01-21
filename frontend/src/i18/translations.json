@@ -129,5 +129,15 @@
 	"objectname": "Имя объекта",
 	"organization": "Организация",
 	"organization.shortName": "Организация",
-	"props": "Реквизиты"
+	"props": "Реквизиты",
+
+	"ownerUID": "UID владельца",
+	"ownerName": "Владелец",
+	"iban": "IBAN",
+	"bankUID": "UID банка",
+	"bankName": "Банк",
+	"bik": "БИК",
+	"currencyUID": "UID валюты",
+	"currency": "Валюта",
+	"accountType": "Тип счёта"
 }

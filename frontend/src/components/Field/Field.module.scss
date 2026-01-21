@@ -38,8 +38,9 @@
 .FieldDateWrapper {
 	position: relative;
 	display: flex;
+	flex-direction: row;
 	align-items: center;
-	flex: 1 1 100%;
+	flex: 0 0 340px;
 	// justify-content: space-around;
 	border: 1px solid $color5;
 	border-radius: $radius2;

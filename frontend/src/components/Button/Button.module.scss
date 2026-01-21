@@ -6,7 +6,7 @@
 	align-items: center;
 	// background-color: #fc0;
 
-	box-sizing: content-box;
+	box-sizing: border-box;
 	outline: none;
 	margin: 0;
 	// padding: 6px 6px; /* Увеличен размер кнопки */
@@ -22,7 +22,7 @@
 	border-radius: $radius3; /* Увеличен радиус скругления */
 	// box-shadow: 0px 1px 0px 0px rgba($color6, 0.7);
 	// box-shadow: inset 0px 0px 1px $color30, inset 0px 0px 1px $color1;
-	height: $heightFieldInput;
+	height: $heightFieldInput + 2px;
 	// min-width: 60px;
 	// transition: all 1000ms ease; /* Плавные переходы */
 	// Цвет текста по умолчанию
@@ -51,9 +51,9 @@
 
 	// Оформление для текста в кнопке
 	span {
-		padding: 0 3px;
+		padding: 0 6px;
 		font-weight: normal;
-		line-height: normal;
+		line-height: 18px;
 		white-space: nowrap;
 		display: flex;
 		align-items: center;
@@ -73,6 +73,12 @@
 	border-radius: $radius2;
 	background: none;
 
+	&.Active {
+		background-color: rgba($color3, 1);
+		img {
+			filter: brightness(0) saturate(100%) invert(1);
+		}
+	}
 	&:not(:last-child) {
 		// margin-right: 6px;
 	}
@@ -81,7 +87,7 @@
 		cursor: pointer;
 		color: $color6;
 	}
-	&:hover {
-		background-color: rgba($color81, 0.3);
+	&:hover:not(.Active) {
+		background-color: rgba($color3, 0.1);
 	}
 }

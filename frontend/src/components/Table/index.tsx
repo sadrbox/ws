@@ -1,6 +1,6 @@
 // Table.tsx
 
-import { useState, FC, useEffect, useCallback, useMemo, createContext, SetStateAction, Dispatch, useContext, PropsWithChildren, memo, useDeferredValue } from 'react';
+import { useState, FC, useEffect, useCallback, useMemo, createContext, SetStateAction, Dispatch, useContext, PropsWithChildren, memo } from 'react';
 import styles from './Table.module.scss'; // Убедитесь, что путь к стилям правильный
 // Импортируйте ваши типы, включая TypeModelProps и TypeTableContextProps
 // Убедитесь, что путь к файлу с типами правильный
@@ -8,12 +8,14 @@ import { TColumn, TDataItem, TypeFormAction, TypeModalFormProps, TypeModelProps,
 import { getTranslateColumn } from 'src/i18'; // Убедитесь, что путь правильный
 import { getFormatColumnValue, getTextAlignByColumnType } from './services'; // Убедитесь, что путь правильный
 // Убедитесь, что пути к компонентам форм и утилитам правильные
-import { Divider, FieldDateRange, FieldFastSearch, FieldGroup } from '../Field'; // Проверьте экспорт FieldDateRange и FieldFastSearch
+import { Divider, FieldDateRange, FieldFastSearch } from '../Field'; // Проверьте экспорт FieldDateRange и FieldFastSearch
 import Modal from '../Modal'; // Проверьте путь к компоненту Modal
 // import { FieldSelect } from '../Field/index'; // Закомментировано, если не используется
 // import filterImage from '../../assets/filter_16.png'; // Закомментировано, если не используется
-import settingsForm from '../../assets/settingsForm_16.png'; // Убедитесь, что путь правильный
-import reloadImage from '../../assets/reload_16.png'; // Убедитесь, что путь правильный
+import settingsForm_16 from '../../assets/form-setting_16.png'; // Убедитесь, что путь правильный
+import reloadImage_16 from '../../assets/reload_16.png'; // Убедитесь, что путь правильный
+import calendar_16 from '../../assets/calendar_16.png'; // Закомментировано, если не используется
+import searchField_16 from '../../assets/search-field_16.png'; // Закомментировано, если не используется
 import { CSS } from "@dnd-kit/utilities";
 import { DndContext, closestCenter } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -28,9 +30,9 @@ import { Button, ButtonImage } from '../Button';
 // Импортируйте компоненты модальных форм, если они определены в отдельных файлах
 // import TableFilterModalForm from './TableFilterModalForm'; // Пример
 // import TableConfigModalForm from './TableConfigModalForm'; // Убедитесь, что путь правильный
-import { getTranslation } from '../../i18/index';
-import { useAppContextProps } from 'src/app/AppContextProvider';
-import ContractForm from 'src/models/contracts/form';
+// import { getTranslation } from '../../i18/index';
+// import { useAppContextProps } from 'src/app/AppContextProvider';
+// import ContractForm from 'src/models/contracts/form';
 
 // --------------------- Context Instance -----------------------------------------------
 // Создаем контекст со значением по умолчанию undefined.
@@ -95,7 +97,7 @@ type TypeTableProps = {
 
 const Table: FC<TypeTableProps> = ({ props }) => {
   // Деструктурируем основные части пропсов
-  const { isLoading, totalPages, query, actions } = props;
+  const { isLoading, query, actions } = props;
   // Деструктурируем queryParams и функцию его обновления
   const { queryParams, setQueryParams } = query;
   // Деструктурируем состояния загрузки
@@ -109,6 +111,8 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set(queryParams?.selectedIds ?? []));
   // Состояние действия для модального окна конфигурации
   const [configModalFormAction, setConfigModalFormAction] = useState<TypeFormAction>('');
+  const [visibleFieldSearchByPeriod, setVisibleFieldSearchByPeriod] = useState<boolean>(false);
+  const [visibleFastSearchField, setVisibleFastSearchField] = useState<boolean>(false);
 
   // Отложенное значение страницы для плавного ввода в поле пагинации
   // const deferredValueCurrentPage = useDeferredValue(queryParams?.page);
@@ -162,6 +166,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
     }
   }, [configModalFormAction, setQueryParams]); // Зависимости: действие модалки и функция обновления queryParams.
 
+
   // Обработчик для кнопки "Обновить"
   const refreshDataTable = useCallback(() => {
     // Если есть функция refetch в actions (например, от useQuery/useSWR), используем ее.
@@ -186,7 +191,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   //   setQueryParams({ page: newPage });
   // }, [setQueryParams, totalPages]); // Зависимости: функция setQueryParams и общее количество страниц.
 
-  const handleClickRow = (rowID: string) => {
+  const handleButtonCreateElement = (rowID: string) => {
     return actions?.openForm ? actions.openForm(rowID.toString()) : null;
   };
 
@@ -206,9 +211,10 @@ const Table: FC<TypeTableProps> = ({ props }) => {
     // Остальные поля (model, rows, columns, totalPages, query, actions) уже скопированы из props
   }), [props, selectedRows, activeRow]); // Зависимости: исходные пропсы и состояния, управляемые в Table.
 
-
+  // console.log(props?.rows)
 
   // --- Рендер корневого компонента Table ---
+
   return (
     // Оборачиваем все содержимое таблицы в Context Provider.
     // Передаем сформированное и мемоизированное значение контекста.
@@ -219,15 +225,11 @@ const Table: FC<TypeTableProps> = ({ props }) => {
       {configModalFormAction === 'open' && <TableConfigModalForm method={{ get: configModalFormAction, set: setConfigModalFormAction }} />}
 
       <div className={styles.TableWrapper}>
-        {/* <div style={{ display: 'flex', flexDirection: 'row' }}>
-          <Divider />
-          <h2 className={styles.TableHeaderLabel}>{getTranslation(props.componentName)}</h2>
-        </div> */}
         <div className={styles.TablePanel}>
           <div className={styles.TablePanelLeft}>
             <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
               {/* Примеры кнопок */}
-              <Button onClick={() => handleClickRow('new')}>
+              <Button onClick={() => handleButtonCreateElement('new')}>
                 <span>Добавить</span>
               </Button>
               <Button onClick={() => alert('Delete clicked!')}>
@@ -237,23 +239,34 @@ const Table: FC<TypeTableProps> = ({ props }) => {
               {/* Кнопка обновления с индикацией загрузки */}
               <ButtonImage onClick={refreshDataTable} title='Обновить'>
                 {/* Применяем анимацию, если isLoading или isFetching (если isFetching есть в states) */}
-                <img src={reloadImage} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} />
+                <img src={reloadImage_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} />
               </ButtonImage>
               {/* Кнопка открытия модалки настроек */}
               <ButtonImage onClick={() => setConfigModalFormAction('open')} title="Настройки">
-                <img src={settingsForm} alt="Settings" height={16} width={16} />
+                <img src={settingsForm_16} alt="Settings" height={16} width={16} />
+              </ButtonImage>
+              <Divider />
+              <ButtonImage onClick={() => setVisibleFieldSearchByPeriod(!visibleFieldSearchByPeriod)} active={visibleFieldSearchByPeriod} title="Календарь">
+                <img src={calendar_16} alt="Calendar" height={16} width={16} />
+              </ButtonImage>
+              <ButtonImage onClick={() => setVisibleFastSearchField(!visibleFastSearchField)} active={visibleFastSearchField} title="Поиск">
+                <img src={searchField_16} alt="Search" height={16} width={16} />
               </ButtonImage>
               <Divider />
             </div>
-            <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-end' }}>
-              <FieldDateRange /> {/* Убедитесь, что FieldDateRange получает или берет из контекста queryParams и setQueryParams */}
+
+          </div>
+          {(visibleFastSearchField || visibleFieldSearchByPeriod) &&
+            <div className={styles.TablePanelRight}>
+              {visibleFieldSearchByPeriod &&
+                <FieldDateRange />
+              }
+              {visibleFastSearchField &&
+                <FieldFastSearch />
+              }
             </div>
-          </div>
-          <div className={styles.TablePanelRight}>
+          }
 
-            <FieldFastSearch />
-
-          </div>
         </div>
 
         {/* Обертка для области таблицы, управляющая прокруткой */}
@@ -266,7 +279,7 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   );
 };
 
-export default Table;
+
 
 // --------------------- Sub component - TableArea -----------------------------------------
 
@@ -281,9 +294,9 @@ const TableArea = memo(() => {
       <colgroup>
         <col style={{ width: '30px', maxWidth: '30px' }} />
         {visibleColumns.map((column: TColumn, idx: number) => {
-          const lastColumnMinWidth = (visibleColumns.length) === (idx + 1) ? "auto" : column.width;
+          const columnWidth = (visibleColumns.length - 1) === idx ? "auto" : column.width;
           return (
-            <col key={column.identifier} style={{ width: lastColumnMinWidth, minWidth: column.width }} />
+            <col key={column.identifier} style={{ width: columnWidth, minWidth: column.width }} />
           );
         })}
       </colgroup>
@@ -826,3 +839,4 @@ const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ colu
 
 // --------------------- END Modal Components ---------------------------------------------
 
+export default Table; 

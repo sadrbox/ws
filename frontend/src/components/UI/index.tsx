@@ -1,14 +1,15 @@
 import React, { createContext, CSSProperties, FC, PropsWithChildren, useContext, useEffect, useState, forwardRef, useRef, useImperativeHandle, ReactPortal, ReactNode, SetStateAction } from 'react';
 import { useAppContextProps } from '../../app/AppContextProvider';
 import styles from "../../app/styles/main.module.scss"
-import ListActivityHistories from 'src/models/activityhistories/list';
-import ContractForm from 'src/models/contracts/form';
 import ReactDOM, { createPortal } from 'react-dom';
 import { ref } from 'process';
 import { usePortal } from 'src/hooks/usePortal';
+import Counterparties from 'src/models/Counterparties';
+import ListContracts from 'src/models/Contracts';
+import { Divider } from '../Field';
+import { getTranslation } from 'src/i18';
 import ListOrganizations from 'src/models/organizations/list';
-import Counterparties from 'src/models/counterparties';
-import ListContracts from 'src/models/contracts/list';
+import { ListActivityHistories } from 'src/models/ActivityHistories';
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -37,7 +38,7 @@ export const Group: FC<TypeGroupProps> = ({ align, gap, type, label, className, 
   }
   return (
     <div className={className || ""} style={{
-      display: 'flex', flexDirection: 'column', marginTop: '12px', position: 'relative'
+      display: 'flex', flexDirection: 'column', marginTop: '13px', position: 'relative'
     }}>
       {label && <div className={styles.GroupLabel}>{label}</div>}
       <div className={[align === 'row'
@@ -122,12 +123,12 @@ export const PaneTab: FC = () => {
   return (
     <div className={styles.PaneTabWrapper}>
       {panes.map(p => (
-        <a href='#'
+        <button
           key={p.id}
           className={[styles.PaneTab, p.isActive && styles.PaneTabActive].join(" ")}
           onClick={() => setActivePaneID(p.id)}>
           {p.label}
-        </a>
+        </button>
       ))}
     </div>
   );
@@ -141,6 +142,9 @@ export const PaneGroup = () => {
       {panes.map((p) => (
         <div key={p.id}
           className={[styles.Pane, p.isActive && styles.ActivePane].join(" ")}>
+          <div>
+            <h2 className={styles.PaneHeaderLabel}>{p.label}</h2>
+          </div>
           {p.component}
         </div>
       ))}
@@ -235,13 +239,6 @@ interface PaneContextType {
   panes: { id: string; title: string }[];
 }
 
-const PaneContext = createContext<PaneContextType | undefined>(undefined);
-
-const usePane = () => {
-  const context = useContext(PaneContext);
-  if (!context) throw new Error('usePane only in PaneGroup');
-  return context;
-};
 
 interface ScreenProps {
   children: React.ReactNode;
@@ -259,61 +256,6 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(({ children }, ref
     </div>
   );
 });
-
-// export const Navbar: React.FC = () => {
-//   const context = useAppContextProps();
-
-//   // const portal = usePortal();
-//   // const { show, hide, Portal } = usePortal();
-//   const openPane = context?.actions.openPane;
-//   // const setOverlay = context?.actions.setOverlay;
-//   // const onClose = context?.overlay.onClose;
-
-//   const { getOverlay, setOverlay } = context.overlay;
-
-//   const modalForm = () => {
-//     setOverlay(prev => ({ ...prev, isVisible: true, content: <NavigationPage /> }))
-//   }
-
-//   return (
-//     <>
-//       <div className={styles.NavbarWrapper}>
-//         <div className={styles.Active}>
-//           <a href="#"
-//             onClick={() => modalForm()}
-//             className={styles.NavbarItem}>
-//             Навигация
-//           </a>
-//         </div>
-//         <div>
-//           <a href="#"
-//             className={styles.NavbarItem}
-//             onClick={() => openPane(<ListActivityHistories />)}>
-//             История активности
-//           </a>
-//         </div>
-//         <div>
-//           <a href="#"
-//             className={styles.NavbarItem}
-//             onClick={() => openPane(
-//               <ContractForm />)}>
-//             Форма
-//           </a>
-//         </div>
-//       </div>
-//       {getOverlay.isVisible && <NavbarOverlay />}
-//     </>
-//   );
-// };
-
-
-
-type TypeNavbarItem = {
-  id: string;
-  isActive: boolean;
-  title: string;
-  component: React.ReactNode;
-}
 
 
 
@@ -451,76 +393,3 @@ export const NavList = ({ lable }: TypeNavListProps) => {
   }
 }
 
-// PaneGroup - управление состоянием панелей
-// export const PaneGroup: React.FC<{ children: React.ReactNode; defaultPane?: string }> = ({
-//   children,
-//   defaultPane
-// }) => {
-//   const [activePane, setActivePane] = useState<string | null>(defaultPane || null);
-//   const [panes, setPanes] = useState<{ id: string; title: string }[]>([]);
-
-//   const registerPane = (id: string, title: string) => {
-//     setPanes(prev => prev.find(p => p.id === id) ? prev : [...prev, { id, title }]);
-//   };
-
-//   useEffect(() => {
-//     if (!activePane && panes.length > 0) {
-//       setActivePane(panes[0].id);
-//     }
-//   }, [panes, activePane]);
-
-//   return (
-//     <PaneContext.Provider value={{ activePane, setActivePane, registerPane, panes }}>
-//       <div style={{ display: 'flex', flex: 1 }}>
-//         {children}
-//       </div>
-//     </PaneContext.Provider>
-//   );
-// };
-
-// Pane - условный рендеринг по активности
-interface PaneProps {
-  id: string;
-  title: string;
-  children: React.ReactNode;
-}
-
-const Pane: React.FC<PaneProps> = ({ id, title, children }) => {
-  const { activePane, registerPane } = usePane();
-
-  useEffect(() => {
-    registerPane(id, title);
-  }, [id, title, registerPane]);
-
-  if (activePane !== id) return null;
-
-  return (
-    <div style={{ flex: 1, padding: '10px' }}>
-      {children}
-    </div>
-  );
-};
-
-// PaneTabs - навигация между панелями
-const PaneTabs: React.FC = () => {
-  const { panes, activePane, setActivePane } = usePane();
-
-  return (
-    <div style={{ display: 'flex', background: '#e0e0e0' }}>
-      {panes.map(pane => (
-        <button
-          key={pane.id}
-          onClick={() => setActivePane(pane.id)}
-          style={{
-            padding: '8px 16px',
-            background: activePane === pane.id ? 'white' : 'transparent',
-            border: 'none',
-            borderBottom: activePane === pane.id ? '2px solid blue' : 'none'
-          }}
-        >
-          {pane.title}
-        </button>
-      ))}
-    </div>
-  );
-};

@@ -4,6 +4,7 @@ export const DEFAULT_TABLE_PARAMS = {
 	limit: 100,
 	sort: { columnID: "id", direction: "asc" },
 	filter: {
+		ownerUID: "",
 		searchBy: { columns: [], value: "" },
 		dateRange: { startDate: null, endDate: null },
 	},

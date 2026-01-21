@@ -4,22 +4,32 @@ import {
 	TDataItem,
 	TypeModelProps,
 	TypeTableParams,
+	TypeTableTypes,
 } from "../components/Table/types";
 import { useQueryParams } from "./useQueryParams";
 import { useFetchData } from "./useFetchData";
 import { getModelColumns, sortTableRows } from "../components/Table/services";
 
+type TypeUseTableReturn = {
+	componentName: string; // mostly for logging/debugging
+	model: string; // entity name: 'users', 'products', etc.
+	columnsJson: any; // usually ColumnDef<TData>[] from @tanstack/react-table
+	openForm?: (id: string) => void; // callback to open edit/create form
+	initProps?: Partial<TypeTableParams>;
+	type?: TypeTableTypes;
+};
+
 // Универсальный хук для работы с таблицей
-export const useTable = (
-	componentName: string,
-	model: string,
-	columnsJson: any,
-	openForm?: (id: string) => void,
-	initProps?: Partial<TypeTableParams>,
-	type?: string
-) => {
+export const useTable = ({
+	componentName,
+	model,
+	columnsJson,
+	openForm,
+	initProps,
+	type,
+}: TypeUseTableReturn) => {
 	const [columns, setColumns] = useState<TColumn[]>(() =>
-		getModelColumns(columnsJson, componentName)
+		getModelColumns(columnsJson, componentName, type),
 	);
 	const [queryParams, setQueryParams] = useQueryParams({
 		model,
@@ -46,6 +56,7 @@ export const useTable = (
 	// Пропсы для таблицы
 	const tableProps = useMemo<Omit<TypeModelProps, "states">>(
 		() => ({
+			type,
 			componentName,
 			rows,
 			columns,
@@ -70,7 +81,7 @@ export const useTable = (
 			isFetching,
 			error,
 			componentName,
-		]
+		],
 	);
 
 	return {

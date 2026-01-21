@@ -4,7 +4,7 @@ import { FC, useMemo, useState } from 'react';
 import styles from "../../app/styles/main.module.scss"
 import useUID from 'src/hooks/useUID';
 import { FieldString } from 'src/components/Field/index.tsx';
-import ListActivityHistories from '../activityhistories/list';
+import ListActivityHistories from '../ActivityHistories/list';
 // import { FieldString } from 'src/components/Field';
 
 

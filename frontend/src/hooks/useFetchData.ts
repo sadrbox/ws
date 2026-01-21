@@ -5,7 +5,7 @@ import { FetchDataResult } from "../components/Table/types";
 
 // Универсальная функция для загрузки данных
 export const fetchData = async <TDataItem>(
-	queryParams: TypeTableParams
+	queryParams: TypeTableParams,
 ): Promise<FetchDataResult<TDataItem> | null> => {
 	if (!queryParams?.model) return null;
 
@@ -26,12 +26,11 @@ export const fetchData = async <TDataItem>(
 	if (queryParams.selectedIds && queryParams.selectedIds.size > 0) {
 		params.append(
 			"selectedIds",
-			JSON.stringify(Array.from(queryParams.selectedIds))
+			JSON.stringify(Array.from(queryParams.selectedIds)),
 		);
 	}
 
 	const url = `${API_BASE_URL}/${queryParams.model}?${params.toString()}`;
-
 	try {
 		const response = await fetch(url, { signal });
 		if (!response.ok) {
@@ -61,7 +60,7 @@ export const useFetchData = <TDataItem>(
 	options?: Omit<
 		UseQueryOptions<FetchDataResult<TDataItem> | null, Error>,
 		"queryKey" | "queryFn"
-	>
+	>,
 ) => {
 	return useQuery({
 		queryKey: [queryParams.model, queryParams],

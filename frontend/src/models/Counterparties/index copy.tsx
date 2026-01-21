@@ -1,24 +1,22 @@
 import { FC, ReactNode } from "react";
 import columnsJson from "./columns.json";
-import { TDataItem } from "src/components/Table/types";
-import Table from "src/components/Table";
+import TableList from "src/components/Table";
 import { useTable } from "src/hooks/useTable";
 import { useAppContextProps } from "src/app/AppContextProvider";
 import mainstyle from "../../app/styles/main.module.scss"
 import useUID from 'src/hooks/useUID';
 import { Divider, Field, FieldString } from 'src/components/Field/index.tsx';
-import ListActivityHistories from '../activityhistories/list';
-import { getTranslation } from "src/i18";
 import { Button } from "src/components/Button";
 import { Group } from "src/components/UI";
 import tabstyles from "src/components/Tabs/Tabs.module.scss";
 import Tabs from "src/components/Tabs";
 import ListOrganizations from "../organizations/list";
-import ListContracts from "../contracts/list";
+import ListContracts from "../Contracts";
+import { TableBankAccounts } from "../BankAccounts";
 
 const styles = { ...tabstyles, ...mainstyle };
 type TypeForm = {
-  id: string;
+  uid: string;
 }
 
 type TypeComponent = FC<{ children?: React.ReactNode }> & {
@@ -38,38 +36,38 @@ const List: FC = () => {
   const context = useAppContextProps();
   const addPane = context?.actions.addPane;
 
-  const openForm = (id: string) => addPane(<Counterparties.Form id={id} />);
+  const openForm = (uid: string) => addPane(<Counterparties.Form uid={uid} />);
 
 
-  const { tableProps } = useTable(
-    displayName,
+  const { tableProps } = useTable({
+    componentName: displayName,
     model,
     columnsJson,
     openForm
-  );
+  });
 
-  return <Table props={tableProps} />;
+  return <TableList props={tableProps} />;
 };
 
 
-const Form: React.FC<TypeForm> = ({ id }) => {
+const Form: React.FC<TypeForm> = ({ uid = "asdf2i3yt9bhweru" }: { uid: string }) => {
   // const [argState, setArgState] = useState<TArgState | undefined>(undefined)
   const formUid = useUID();
-  const displayName = "Counterparties.Form";
+  // const displayName = "Counterparties.Form";
 
   const tabs = [
-    { id: "tab1", label: "Банковские счета", component: <ListActivityHistories /> },
+    { id: "tab1", label: "Банковские счета", component: <ListOrganizations /> },
     { id: "tab2", label: "Договора", component: <ListOrganizations /> },
     { id: "tab3", label: "Контакты", component: <ListContracts /> },
     // { id: "tab3", label: "Контакты", component: <ListContracts /> },
   ]
   return (
     <div className={styles.FormWrapper}>
-      <div className={styles.FormHeader}>
+      {/* <div className={styles.FormHeader}>
         <Divider />
         <h2 className={styles.FormHeaderLabel}>{getTranslation(displayName)}: ТОО СтройМонтажСервис</h2>
         <div className={styles.FormIdentifier}>ID: 12 </div>
-      </div>
+      </div> */}
       <div className={styles.FormPanel}>
         <div className={styles.TablePanelLeft}>
           <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
@@ -106,12 +104,7 @@ const Form: React.FC<TypeForm> = ({ id }) => {
           </Group>
           <Divider />
           <div className={styles.FormTable}>
-
             <Tabs tabs={tabs} />
-
-            {/* <div style={{ containerType: 'size', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'clip' }}>
-              <ListActivityHistories />
-            </div> */}
           </div>
         </div>
       </div>

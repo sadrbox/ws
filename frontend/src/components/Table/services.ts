@@ -1,4 +1,4 @@
-import { TColumn, TDataItem, TOrder } from "./types";
+import { TColumn, TDataItem, TOrder, TypeTableTypes } from "./types";
 import { CSSProperties } from "react";
 
 const getNestedValue = <T>(obj: T, path: string): any => {
@@ -9,7 +9,7 @@ const isCompositeKey = (key: string): boolean => key.includes(".");
 export function sortTableRows(
 	arr: TDataItem[],
 	order: TOrder,
-	locale = "default"
+	locale = "default",
 ): TDataItem[] {
 	if (!order.columnID || !order.direction) return arr || [];
 
@@ -46,21 +46,25 @@ export function sortTableRows(
 
 export function getModelColumns(
 	initColumns: TColumn[],
-	modelName: string
+	modelName: string,
+	type: TypeTableTypes,
 ): TColumn[] {
+	let columns = initColumns;
 	const storageColumns = localStorage.getItem(modelName);
 	if (storageColumns !== null) {
-		const columns = JSON.parse(storageColumns);
-		// console.log(columns);
-		return columns;
+		columns = JSON.parse(storageColumns);
 	}
-	return initColumns;
+
+	if (type === "part") {
+		columns = columns.filter((col) => col.identifier !== "ownerName");
+	}
+	return columns;
 }
 
 // Функция для поиска ширины колонки по id
 export function getColumnWidthById(
 	columns: TColumn[],
-	columnId: string
+	columnId: string,
 ): string {
 	// console.log(tableParams);
 	const column = columns.find((col) => col.identifier === columnId);
@@ -70,7 +74,7 @@ export function getColumnWidthById(
 // Функция для поиска ширины колонки по id модификация
 export function getColumnWidthSetting(
 	columns: TColumn[],
-	columnID: string
+	columnID: string,
 ): string | undefined {
 	const column = columns.find((col) => col.identifier === columnID);
 	return column ? column.width : "auto"; // Возвращает ширину или undefined, если не найдено
@@ -78,7 +82,7 @@ export function getColumnWidthSetting(
 
 export function getColumnSettings<T extends TColumn>(
 	columns: T[],
-	columnID: string
+	columnID: string,
 ): T | undefined {
 	return columns.find((column) => {
 		if (column.identifier === columnID) {
@@ -89,7 +93,7 @@ export function getColumnSettings<T extends TColumn>(
 
 export function getColumnWidth<T extends TColumn>(
 	columns: T[],
-	columnID: keyof T | string
+	columnID: keyof T | string,
 ): T | undefined {
 	return columns.find((column) => {
 		if (column.identifier === columnID) {
@@ -112,7 +116,7 @@ export function getTextAlignByColumnType(column: TColumn): CSSProperties {
 }
 export function getColumnSettingValue(
 	rowSettingColumn: TColumn,
-	column: TColumn
+	column: TColumn,
 ): string {
 	if (column.type === "string") {
 		return rowSettingColumn[column.identifier as keyof TColumn] + "";
@@ -124,7 +128,7 @@ export function getColumnSettingValue(
 
 export function getFormatColumnValue(
 	row: TDataItem,
-	column: TColumn
+	column: TColumn,
 ): string | number {
 	if (column.identifier === "id" && column.type === "number") {
 		return getFormatNumericalID(+row.id);

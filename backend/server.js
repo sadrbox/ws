@@ -7,15 +7,54 @@ import { parse, formatISO } from "date-fns";
 import { formatIpAddress } from "./utils/format.js";
 import { getLocalIP } from "./utils/module.js";
 import apiv1 from "./api/v1.js";
+import counterpartiesRouter from "./api/router/counterparties.js";
 
 // const prisma = new PrismaClient();
 // const prisma = new PrismaClient();
 const app = express();
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/v1", apiv1);
-app.use(cors());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use("/api/v1", counterpartiesRouter);
+// app.use(cors());
+// app.use(express.urlencoded({ extended: true }));
+// app.use(express.json());
+
+// Логирование запросов (опционально)
+app.use((req, res, next) => {
+	console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+	next();
+});
+
+app.get("/api/health", (req, res) => {
+	res.json({
+		status: "ok",
+		timestamp: new Date().toISOString(),
+		version: "1.0.0",
+	});
+});
+
+// Обработка 404
+app.use((req, res) => {
+	res.status(404).json({
+		success: false,
+		message: "Endpoint не найден",
+		path: req.path,
+	});
+});
+
+// Глобальный обработчик ошибок
+app.use((err, req, res, next) => {
+	console.error("Global error handler:", err);
+	res.status(err.status || 500).json({
+		success: false,
+		message: err.message || "Внутренняя ошибка сервера",
+		...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+	});
+});
 
 app.get("/users", async (req, res) => {
 	const users = await prisma.user.findMany();
@@ -43,36 +82,42 @@ app.get("/", (req, res) => {
 });
 
 app.post("/json", async (req, res) => {
-	const {
-		actionDate,
-		actionType,
-		organization: { shortName, bin },
-		user: { userName, host, ip },
-		object: { id: objectId, name: objectName, type: objectType },
-		props,
-	} = req.body;
-
-	// console.log(req.body);
-
-	const clientIp = ip || formatIpAddress(req.ip);
-	const formattedActionDate = formatISO(
-		parse(actionDate, "dd.MM.yyyy HH:mm:ss", new Date())
-	);
-
-	let city = "";
 	try {
-		const { data } = await axios.get(`https://json.geoiplookup.io/${clientIp}`);
-		city = data.success ? data.city : "";
-	} catch (e) {}
+		const body = req.body || {};
 
-	try {
-		console.log("Запуск!");
+		console.log(body?.actionDate);
+		// Достаём с безопасной вложенностью
+		const actionDate = body.actionDate;
+		const actionType = body.actionType;
+		const organization = body.organization || {};
+		const user = body.user || {};
+		const object = body.object || {};
+		const props = body.props || {};
 
-		let isOrganization = false;
+		const shortName = organization.shortName;
+		const bin = organization.bin;
+		const userName = user.userName;
+		const host = user.host;
+		const ip = user.ip;
+		const objectId = object.id;
+		const objectName = object.name;
+		const objectType = object.type;
 
-		if (props?.objectName === "Организации") {
-			isOrganization = true;
-		}
+		const clientIp = ip || req.ip ? formatIpAddress(req.ip) : "unknown";
+
+		let city = "";
+		try {
+			const { data } = await axios.get(
+				`https://json.geoiplookup.io/${clientIp}`,
+			);
+			city = data?.city || "";
+		} catch {}
+
+		const formattedActionDate = formatISO(
+			parse(actionDate || "", "dd.MM.yyyy HH:mm:ss", new Date()),
+		);
+
+		let isOrganization = props.objectName === "Организации";
 
 		let existingOrganization = await prisma.organization.findUnique({
 			where: { bin },
@@ -82,13 +127,13 @@ app.post("/json", async (req, res) => {
 			if (
 				existingOrganization.shortName !== shortName ||
 				(isOrganization &&
-					existingOrganization.displayName !== props?.НаименованиеПолное)
+					existingOrganization.displayName !== props.НаименованиеПолное)
 			) {
 				await prisma.organization.update({
 					where: { bin },
 					data: {
 						shortName,
-						displayName: isOrganization ? props?.НаименованиеПолное : shortName,
+						displayName: isOrganization ? props.НаименованиеПолное : shortName,
 					},
 				});
 			}
@@ -97,35 +142,42 @@ app.post("/json", async (req, res) => {
 				data: {
 					bin,
 					shortName,
-					displayName: isOrganization ? props?.НаименованиеПолное : shortName,
+					displayName: isOrganization ? props.НаименованиеПолное : shortName,
 				},
 			});
 		}
 
-		if (existingOrganization) {
-			const transaction = await prisma.activityHistory.create({
-				data: {
-					actionDate: formattedActionDate,
-					actionType,
-					organization: { connect: { bin: existingOrganization.bin } },
-					organizationShortName: existingOrganization.shortName,
-					bin: existingOrganization.bin,
-					userName,
-					host,
-					ip: clientIp,
-					city,
-					objectId,
-					objectType,
-					objectName,
-					props,
-				},
-			});
-			console.log({ transaction });
+		// Самое важное — проверяем, что организация существует и есть ключевые поля
+		if (!existingOrganization?.bin) {
+			return res
+				.status(400)
+				.json({ error: "Не удалось определить организацию (BIN отсутствует)" });
 		}
-		res.status(200).json({ success: true });
+
+		const transaction = await prisma.activityHistory.create({
+			data: {
+				actionDate: formattedActionDate,
+				actionType,
+				organization: { connect: { bin: existingOrganization.bin } },
+				organizationShortName: existingOrganization.shortName,
+				bin: existingOrganization.bin,
+				userName: userName || "anonymous",
+				host: host || "unknown",
+				ip: clientIp,
+				city,
+				objectId: objectId || null,
+				objectType: objectType || null,
+				objectName: objectName || null,
+				props,
+			},
+		});
+
+		console.log("Создана запись:", transaction.id);
+
+		return res.status(200).json({ success: true });
 	} catch (error) {
-		console.error("Ошибка при создании данных:", error);
-		res.status(500).json({ error: "Ошибка сервера" });
+		console.error("Ошибка при обработке /json:", error);
+		return res.status(500).json({ error: "Ошибка сервера" });
 	}
 });
 
@@ -192,4 +244,13 @@ const ip = getLocalIP();
 const port = 3000;
 app.listen(port, () => {
 	console.log(`Server is running on http://${ip}:${port}`);
+});
+
+// Graceful shutdown
+process.on("SIGTERM", () => {
+	console.log("SIGTERM signal received: closing HTTP server");
+	server.close(() => {
+		console.log("HTTP server closed");
+		process.exit(0);
+	});
 });
