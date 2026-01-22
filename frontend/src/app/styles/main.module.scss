@@ -173,7 +173,7 @@ body {
 	font-size: 120%;
 	color: $color6;
 	display: flex;
-	flex: 1;
+	// flex: 1;
 	line-height: 27px;
 	// border-top: 1px dotted $color5;
 	// border-bottom: 1px dotted $color5;
@@ -284,6 +284,7 @@ body {
 	// grid-template-columns: 1fr;
 	// grid-template-rows: min-content auto;
 	// margin-top: 6px;
+	overflow: clip;
 	gap: 6px;
 	display: flex;
 	container-type: size;

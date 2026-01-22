@@ -1,6 +1,7 @@
 
 import React, { useState } from "react";
 import styles from "./Tabs.module.scss";
+import { Divider } from "../Field";
 
 
 
@@ -45,6 +46,7 @@ const Tabs: React.FC<TypeTabs> = ({
     >
       {/* Tab Headers */}
       <div className={styles.TabsHeader}>
+        <Divider />
         {tabs.map((tab, mapID) => {
           const isActive = activeTab === tab.id;
 

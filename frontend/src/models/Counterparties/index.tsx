@@ -14,20 +14,27 @@ import ListOrganizations from "../organizations/list";
 import ListContracts from "../Contracts";
 import { TableBankAccounts } from "../BankAccounts";
 import { LOCAL_API_URL } from "src/app/constants";
-
+import { TFormProps, TOpenForm } from "src/components/Table/types";
 const styles = { ...tabstyles, ...mainstyle };
-type TypeForm = {
-  uid: string;
-}
+// type TForm = {
+//   onSave: () => void;
+//   onClose: () => void;
+//   id?: number;
+// }
+
+
 
 type TypeComponent = FC<{ children?: React.ReactNode }> & {
   List: FC;
-  Form: FC<TypeForm>;
+  Form: FC<TFormProps>;
 };
 
 const Counterparties: TypeComponent = ({ children }) => {
   return <div className="counterparties">{children}</div>;
 };
+
+
+
 
 const List: FC = () => {
   const displayName = "Counterparties.List";
@@ -37,7 +44,10 @@ const List: FC = () => {
   const context = useAppContextProps();
   const addPane = context?.actions.addPane;
 
-  const openForm = (uid: string) => addPane(<Counterparties.Form uid={uid} />);
+  const openForm: TOpenForm = (props: TFormProps) => addPane(
+    <Counterparties.Form {...props} />,
+    props.uuid
+  );
 
 
   const { tableProps } = useTable({
@@ -50,6 +60,8 @@ const List: FC = () => {
   return <TableList props={tableProps} />;
 };
 
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 // Интерфейс для данных формы (все поля из Prisma схемы)
@@ -64,10 +76,9 @@ interface CounterpartyFormData {
   updatedAt?: string;
 }
 
-const Form: React.FC<{ uid?: string; counterpartyId?: number }> = ({
-  uid = "asdf2i3yt9bhweru",
-  counterpartyId // для режима редактирования
-}) => {
+const Form: React.FC<TFormProps> = ({ onSave, onClose, uuid }) => {
+  // const { id, onSave, onClose } = props;
+  // const { onSave, onClose, id } = props;
   const formUid = useUID();
 
   // Состояние формы
@@ -79,7 +90,7 @@ const Form: React.FC<{ uid?: string; counterpartyId?: number }> = ({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(!!counterpartyId);
+  const [isEditMode, setIsEditMode] = useState(!!uuid);
 
   const tabs = [
     { id: "tab1", label: "Банковские счета", component: <ListOrganizations /> },
@@ -89,17 +100,18 @@ const Form: React.FC<{ uid?: string; counterpartyId?: number }> = ({
 
   // Загрузка данных при редактировании
   useEffect(() => {
-    if (counterpartyId) {
-      loadCounterparty(counterpartyId);
+    if (uuid) {
+      loadFormData(uuid);
     }
-  }, [counterpartyId]);
+  }, [uuid]);
 
-  const loadCounterparty = async (id: number) => {
+  const loadFormData = async (uuid: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`${LOCAL_API_URL}/counterparties/${id}`);
+      const response = await fetch(`${LOCAL_API_URL}/counterparties/${uuid}`);
       const result = await response.json();
 
+      // console.log({ result })
       if (response.ok) {
         setFormData({
           bin: result.bin || '',
@@ -193,7 +205,8 @@ const Form: React.FC<{ uid?: string; counterpartyId?: number }> = ({
 
       if (shouldClose) {
         console.log('→ Закрываем форму');
-        // onClose?.();
+        onSave();
+        onClose();
       } else if (!isEditMode) {
         // Переключаемся в режим редактирования после создания
         setIsEditMode(true);
@@ -233,6 +246,7 @@ const Form: React.FC<{ uid?: string; counterpartyId?: number }> = ({
       <div className={styles.FormPanel}>
         <div className={styles.TablePanelLeft}>
           <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
+            <Divider />
             <Button
               variant="primary"
               onClick={() => handleSubmit(true)}
@@ -274,7 +288,7 @@ const Form: React.FC<{ uid?: string; counterpartyId?: number }> = ({
               <Field
                 label="БИН / ИНН *"
                 name={`${formUid}_bin`}
-                width="300px"
+                minWidth="339px"
                 value={formData.bin}
                 onChange={(e) => handleFieldChange('bin', e.target.value)}
                 disabled={isEditMode} // БИН нельзя менять после создания
@@ -284,7 +298,7 @@ const Form: React.FC<{ uid?: string; counterpartyId?: number }> = ({
               <Field
                 label="Короткое наименование"
                 name={`${formUid}_shortName`}
-                maxWidth="500px"
+                minWidth="339px"
                 value={formData.shortName || ''}
                 onChange={(e) => handleFieldChange('shortName', e.target.value)}
               />
@@ -293,7 +307,7 @@ const Form: React.FC<{ uid?: string; counterpartyId?: number }> = ({
               <Field
                 label="Полное наименование"
                 name={`${formUid}_displayName`}
-                maxWidth="600px"
+                minWidth="339px"
                 value={formData.displayName || ''}
                 onChange={(e) => handleFieldChange('displayName', e.target.value)}
               />
@@ -362,10 +376,13 @@ const Form: React.FC<{ uid?: string; counterpartyId?: number }> = ({
 
 List.displayName = "Counterparties.List";
 Form.displayName = "Counterparties.Form";
-// Прикрепляем подкомпоненты к основному
+// // Прикрепляем подкомпоненты к основному
 Counterparties.List = List;
 Counterparties.Form = Form;
-
+// const Counterparties = {
+//   List,
+//   Form
+// };
 export default Counterparties;
 
 

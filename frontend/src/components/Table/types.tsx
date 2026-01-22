@@ -1,5 +1,6 @@
 import { Dispatch, SetStateAction } from "react";
 import { QueryObserverResult } from "@tanstack/react-query";
+// import { TypeOpenForm } from 'src/components/Table/types';
 
 export type TFieldType =
   | "string"
@@ -20,7 +21,10 @@ export type TOrder = {
 export type TDataRow = { [key: string | number]: string | number | boolean };
 export type TDataItem = {
   id: number;
-  [key: string | number]: string | number | boolean;
+  uuid: string;
+  createdAt: Date;
+  updatedAt: Date;
+  [key: string | number]: unknown;
 };
 export type TColumn = {
   position: number;
@@ -82,13 +86,12 @@ export type TypeTableContextProps = {
   totalPages: number;
   isLoading: boolean;
   isFetching: boolean;
-  // openForm: (id: string) => ReactNode;
   query: {
     queryParams: TypeTableParams;
     setQueryParams: (newParams: Partial<TypeTableParams>) => void;
   };
   actions: {
-    openForm?: (id: string) => void;
+    openForm?: TOpenForm;
     // loadDataGrid: (page?: number, limit?: number) => Promise<void>;
     setColumns: Dispatch<SetStateAction<TColumn[]>>;
     refetch: () => Promise<QueryObserverResult<{
@@ -99,6 +102,13 @@ export type TypeTableContextProps = {
   };
   states: TypeModelStates;
 };
+export type TFormProps = {
+  onSave: () => void; // Коллбек после сохранения
+  onClose: () => void; // Коллбек при закрытии без сохранения
+  uuid?: string; // ID контрагента для редактирования
+};
+
+export type TOpenForm = (props: TFormProps) => void;
 
 
 export enum EActiveTable {

@@ -33,6 +33,7 @@ import { Button, ButtonImage } from '../Button';
 // import { getTranslation } from '../../i18/index';
 // import { useAppContextProps } from 'src/app/AppContextProvider';
 // import ContractForm from 'src/models/contracts/form';
+import { ref } from 'process';
 
 // --------------------- Context Instance -----------------------------------------------
 // Создаем контекст со значением по умолчанию undefined.
@@ -191,8 +192,8 @@ const Table: FC<TypeTableProps> = ({ props }) => {
   //   setQueryParams({ page: newPage });
   // }, [setQueryParams, totalPages]); // Зависимости: функция setQueryParams и общее количество страниц.
 
-  const handleButtonCreateElement = (rowID: string) => {
-    return actions?.openForm ? actions.openForm(rowID.toString()) : null;
+  const handleButtonCreateElement = () => {
+    return actions?.openForm ? actions.openForm({ onSave: actions?.refetch, onClose: () => alert("onClose") }) : null; // Replace null with a default number like 0
   };
 
   // --- Значение контекста ---
@@ -229,7 +230,9 @@ const Table: FC<TypeTableProps> = ({ props }) => {
           <div className={styles.TablePanelLeft}>
             <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
               {/* Примеры кнопок */}
-              <Button onClick={() => handleButtonCreateElement('new')}>
+
+              <Divider />
+              <Button onClick={() => handleButtonCreateElement()}>
                 <span>Добавить</span>
               </Button>
               <Button onClick={() => alert('Delete clicked!')}>
@@ -523,21 +526,19 @@ type TypeTableBodyRowProps = {
 
 // Компонент одной строки таблицы. Мемоизирован.
 const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns, row }) => {
-  // const context = useAppContextProps();
-  // const { openForm } = context?.actions;
-  // const { Form } = context?.form;
   // Получаем необходимые данные и функции из контекста
   const {
     isLoading,
     states: { activeRow, setActiveRow, selectedRows, setSelectedRows }, // Состояние выделения, активности и загрузки
-    actions: { openForm }
+    actions: { openForm, refetch }, // Функции действий
 
 
     // query: { queryParams } // Если нужно access queryParams в строке
   } = useTableContextProps();
 
-  const handleClkickRow = (rowID: string) => {
-    return openForm ? openForm(rowID.toString()) : null;
+  const handleClkickRow = (uuid: string) => {
+
+    return openForm ? openForm({ uuid, onSave: () => refetch(), onClose: () => alert("onClose") }) : null;
   }
   // const openForm = (id: string) => {
   //   addPane(<Form id={id} />)
@@ -615,7 +616,7 @@ const TableBodyRow: FC<TypeTableBodyRowProps> = memo(({ countID, rowID, columns,
         return (
           <td
             key={column.identifier} // Используем identifier колонки как key для уникальности ячейки в строке
-            onDoubleClickCapture={() => handleClkickRow(row.id.toString())} // Открываем форму контракта по двойному клику <ContractForm {mode="view"} id={rowID} />
+            onDoubleClickCapture={() => handleClkickRow(row.uuid)} // Открываем форму контракта по двойному клику <ContractForm {mode="view"} id={rowID} />
             style={{
               // Ширина ячейки (колонки). Должна совпадать с шириной th в thead.
               // Лучше задавать ширину в CSS классах или в tbody td, но инлайн тоже работает.

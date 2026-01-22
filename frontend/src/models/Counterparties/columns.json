@@ -50,5 +50,18 @@
 		"position": 4,
 		"filter": false,
 		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"type": "string",
+		"name": "UUID",
+		"width": "120px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"hint": "UUID",
+		"visible": true,
+		"position": 4,
+		"filter": false,
+		"inlist": true
 	}
 ]

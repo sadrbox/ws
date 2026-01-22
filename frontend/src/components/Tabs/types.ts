@@ -1,5 +1,5 @@
 export type TypePaneItem = {
-	id: number;
+	uniqId: string;
 	label: string;
 	component: React.ReactNode;
 	isActive: boolean;

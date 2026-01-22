@@ -34,11 +34,11 @@ export const Group: FC<TypeGroupProps> = ({ align, gap, type, label, className, 
   }
 
   const reStyle = {
-    ...({ borderRadius: '2px' }), ...style
+    ...({ borderRadius: '2px', paddingTop: "6px" }), ...style
   }
   return (
     <div className={className || ""} style={{
-      display: 'flex', flexDirection: 'column', marginTop: '13px', position: 'relative'
+      display: 'flex', flexDirection: 'column', marginTop: '16px', position: 'relative'
     }}>
       {label && <div className={styles.GroupLabel}>{label}</div>}
       <div className={[align === 'row'
@@ -124,9 +124,9 @@ export const PaneTab: FC = () => {
     <div className={styles.PaneTabWrapper}>
       {panes.map(p => (
         <button
-          key={p.id}
+          key={p.uniqId}
           className={[styles.PaneTab, p.isActive && styles.PaneTabActive].join(" ")}
-          onClick={() => setActivePaneID(p.id)}>
+          onClick={() => setActivePaneID(p.uniqId)}>
           {p.label}
         </button>
       ))}
@@ -140,9 +140,10 @@ export const PaneGroup = () => {
   return (
     <div className={styles.PaneGroupWrapper}>
       {panes.map((p) => (
-        <div key={p.id}
+        <div key={p.uniqId}
           className={[styles.Pane, p.isActive && styles.ActivePane].join(" ")}>
-          <div>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <Divider />
             <h2 className={styles.PaneHeaderLabel}>{p.label}</h2>
           </div>
           {p.component}

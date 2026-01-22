@@ -3,6 +3,7 @@ import {
 	TColumn,
 	TDataItem,
 	TypeModelProps,
+	TOpenForm,
 	TypeTableParams,
 	TypeTableTypes,
 } from "../components/Table/types";
@@ -14,7 +15,7 @@ type TypeUseTableReturn = {
 	componentName: string; // mostly for logging/debugging
 	model: string; // entity name: 'users', 'products', etc.
 	columnsJson: any; // usually ColumnDef<TData>[] from @tanstack/react-table
-	openForm?: (id: string) => void; // callback to open edit/create form
+	openForm?: TOpenForm;
 	initProps?: Partial<TypeTableParams>;
 	type?: TypeTableTypes;
 };
@@ -41,6 +42,7 @@ export const useTable = ({
 
 	// Логирование ошибок
 	useEffect(() => {
+		// if (!!rows) console.log(rows);
 		if (error) {
 			console.error(`React Query Error fetching ${model}:`, error);
 		}
@@ -48,6 +50,7 @@ export const useTable = ({
 
 	// Мемоизированные данные
 	const rows = useMemo(() => {
+		// console.log(data?.items);
 		return data?.items ? sortTableRows(data.items, queryParams.sort) : [];
 	}, [data?.items, queryParams.sort]);
 

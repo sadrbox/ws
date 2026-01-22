@@ -6,8 +6,8 @@ export type TypeAppContextProps = {
 	screenRef: React.RefObject<HTMLDivElement | null>;
 	panes: TypePaneItem[];
 	actions: {
-		addPane: (component: React.ReactNode, inTab?: boolean) => void;
-		setActivePaneID: (id: number) => void;
+		addPane: (component: React.ReactNode, uuid?: string) => void;
+		setActivePaneID: (uniqId: string) => void;
 		// setOverlay: Dispatch<SetStateAction<OverlayProps>>;
 	};
 	navbar: {

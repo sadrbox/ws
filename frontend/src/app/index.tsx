@@ -11,7 +11,7 @@ import { Screen } from "../components/UI";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
 import useUID from "src/hooks/useUID";
-import { add } from "lodash";
+import { add, uniqueId } from "lodash";
 import Counterparties from "src/models/Counterparties";
 import { ListActivityHistories } from "src/models/ActivityHistories";
 
@@ -57,7 +57,7 @@ export default function App() {
   // const navbarOverlayIsVisible = navbarList.find(n => n.isActive)
 
   useEffect(() => {
-    addPane(<ListActivityHistories />);
+    addPane(<Counterparties.List />);
     // console.log("activeNav", activeNav);
   }, []);
 
@@ -74,26 +74,28 @@ export default function App() {
   }, []);
 
 
-  const setActivePaneID = useCallback((id: number) => {
-    setPanes(prev => prev.map(p => (p.id == id ? { ...p, isActive: true } : { ...p, isActive: false })));
+  const setActivePaneID = useCallback((uniqId: string) => {
+    setPanes(prev => prev.map(p => (p.uniqId == uniqId ? { ...p, isActive: true } : { ...p, isActive: false })));
   }, []);
 
-  const addPane = useCallback((component: React.ReactNode) => {
+  const addPane = useCallback((component: React.ReactNode, uuid?: string) => {
     // if (!content || !inTab) return;
     setNavbarList(nav => nav.map(n => ({ ...n, isActive: false })));
     const componentName = getComponentName(component);
+    const uniqId: string = `${componentName}-${uuid}`;
     // const componentName = React.isValidElement(component) && typeof component.type === "function" ? (component.type as React.FunctionComponent).displayName || "AnonymousComponent" : undefined;
 
-    const existingPane = panes && panes.find(p => getComponentName(p.component) === componentName);
+    // const existingPane = panes && panes.find(p => getComponentName(p.component) === componentName);
+    const existingPane = panes && panes.find(p => uniqId === p.uniqId);
     // console.log(componentName);
 
     if (existingPane) {
 
-      setActivePaneID(existingPane.id);
+      setActivePaneID(existingPane.uniqId);
     } else {
       const label = getTranslation(componentName) || `Вкладка ${panes.length + 1}`;
       const newTab = {
-        id: Date.now(),
+        uniqId,
         label,
         component,
         isActive: true,

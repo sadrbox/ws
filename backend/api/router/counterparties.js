@@ -251,47 +251,49 @@ router.get("/counterparties", async (req, res) => {
 // ============================================
 // READ - Получение контрагента по ID
 // ============================================
-router.get("/counterparties/:id", async (req, res) => {
+router.get("/counterparties/:uuid", async (req, res) => {
 	try {
-		const { id } = req.params;
-		const counterpartyId = parseInt(id);
+		const { uuid } = req.params;
 
-		if (isNaN(counterpartyId)) {
+		// Простая проверка: строка длиной 36 символов и содержит хотя бы 3 дефиса
+		if (
+			typeof uuid !== "string" ||
+			uuid.length !== 36 ||
+			(uuid.match(/-/g) || []).length !== 4
+		) {
 			return res.status(400).json({
-				message: "Некорректный ID контрагента",
+				message: "Некорректный формат UUID контрагента",
 			});
 		}
 
 		const counterparty = await prisma.counterparty.findUnique({
-			where: { id: counterpartyId },
+			where: { uuid },
 			include: {
 				contracts: {
 					select: {
 						id: true,
 						contractNumber: true,
-						contractDate: true,
-						status: true,
+						contractText: true,
+						startDate: true,
+						endDate: true,
 					},
-					orderBy: { contractDate: "desc" },
+					// orderBy: { contractDate: "desc" },
 				},
 				contacts: {
 					select: {
 						id: true,
-						name: true,
-						position: true,
-						phone: true,
-						email: true,
+						value: true,
 					},
-					orderBy: { name: "asc" },
+					// orderBy: { name: "asc" },
 				},
 				bankAccounts: {
 					select: {
 						id: true,
-						accountNumber: true,
+						iban: true,
 						bankName: true,
 						bik: true,
 					},
-					orderBy: { bankName: "asc" },
+					// orderBy: { bankName: "asc" },
 				},
 			},
 		});

@@ -86,6 +86,7 @@ interface TypeFieldStringProps {
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   width?: string;
   maxWidth?: string;
+  minWidth?: string;
   disabled?: boolean;
   placeholder?: string;
   required?: boolean;
@@ -142,6 +143,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   onChange,
   width,
   maxWidth,
+  minWidth,
   disabled = false,
   placeholder,
   required = false,
@@ -198,6 +200,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       style={{
         width: width ?? 'auto',
         maxWidth: maxWidth ?? 'none',
+        minWidth: minWidth ?? 'none'
       }}
       actions={visibleActions.length > 0 ? visibleActions : undefined}
       disabled={disabled}

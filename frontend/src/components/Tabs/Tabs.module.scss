@@ -30,7 +30,7 @@
 	// padding: 12px 24px;
 	// font-size: 14px;
 	color: #6b7280;
-	text-decoration: underline;
+	// text-decoration: underline;
 	cursor: pointer;
 	border: none;
 	background: transparent;
@@ -41,6 +41,8 @@
 	// border-bottom: 3px solid transparent;
 	outline: none;
 	color: $color3;
+	// border-top-right-radius: $radius3;
+	// border-top-left-radius: $radius3;
 	border-radius: $radius3;
 	font-weight: 500;
 	margin: 0px 0px 0px 0px;
@@ -48,6 +50,7 @@
 	display: flex;
 	flex-direction: row;
 	align-items: center;
+	background-color: #fff;
 }
 
 .TabsLabel:hover {
@@ -72,7 +75,7 @@
 /* Индикатор для скринридеров */
 
 .TabsBody {
-	padding-top: 9px;
+	padding-top: 12px;
 	display: flex;
 	flex: 1;
 	flex-direction: column;
