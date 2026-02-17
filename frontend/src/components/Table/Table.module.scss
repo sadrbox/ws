@@ -137,37 +137,61 @@ thead {
 	top: 0;
 	z-index: 2;
 
-	tr th {
-		padding: 0;
-		font-weight: 500;
-		user-select: none;
-		border-right: 1px solid $color10;
-		border-bottom: 0;
+	tr {
+		th {
+			padding: 0;
+			font-weight: 500;
+			user-select: none;
+			border-right: 1px solid transparent !important;
+			// box-shadow: inset 1px 0 0 $color34;
+			position: relative;
+			border-bottom: 0;
+			// border-top: 1px solid $color10;
+			// border-bottom: 1px solid $color10;
+			// border-right: 1px solid red;
+			// border-left: 1px solid red;
 
-		&:first-child {
-			border-left: 0;
-		}
-		&:last-child {
-			border-right: 0;
-		}
+			// &:not(:last-child) &:not(:first-child) {
+			// border-right: 1px solid red;
+			// border-left: 1px solid red;
 
-		.TableHeaderCell {
-			display: flex;
-			align-items: center;
-			height: $heightFieldInput - 4px;
-			padding: 1px;
-			margin: 1px;
-			overflow: hidden;
-			white-space: nowrap;
-			text-overflow: ellipsis;
-			cursor: default;
-			justify-content: space-between;
-			border: 1px solid transparent;
-			span {
-				padding: 0 5px;
+			&::after {
+				content: "";
+				position: absolute;
+				top: 0;
+				right: -1px;
+				bottom: 0;
+				// left: 0;
+				height: 100%;
+				width: 1px;
+				border-right: 1px solid $color34;
+			}
+			// }
+			&:first-child {
+				border-left: 0;
+			}
+			&:last-child {
+				border-right: 0;
+			}
+
+			.TableHeaderCell {
+				display: flex;
+				align-items: center;
+				height: $heightFieldInput - 4px;
+				padding: 1px;
+				margin: 1px;
 				overflow: hidden;
 				white-space: nowrap;
 				text-overflow: ellipsis;
+				cursor: default;
+				justify-content: space-between;
+				border: 1px solid transparent;
+				span {
+					padding: 0 5px;
+					overflow: hidden;
+					white-space: nowrap;
+					text-overflow: ellipsis;
+				}
 			}
 		}
 	}
@@ -180,7 +204,7 @@ thead {
 		bottom: 0;
 		height: 1px;
 		background: $color5;
-		box-shadow: 0 1px 5px $color6;
+		box-shadow: 0 1px 3px 1px rgba($color6, 0.3);
 	}
 }
 

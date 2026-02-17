@@ -123,13 +123,61 @@ const ActivityHistoriesList: FC = () => {
   // при каждой новой порции данных
   const cachedRowsRef = useRef<TDataItem[]>([]);
   const [cacheVersion, setCacheVersion] = useState<number>(0);  // ← State вместо ref!
+  const [isFetchingAllForSort, setIsFetchingAllForSort] = useState(false);
 
   // Обновляем кэш при получении новых данных
   useEffect(() => {
     cachedRowsRef.current = allItems;
-    setCacheVersion(v => v + 1);  // ← Увеличиваем версию
-    console.log(`[ActivityHistories] cachedRowsRef updated: allItems.length=${allItems.length}, cache.length=${cachedRowsRef.current.length}, version=${cacheVersion + 1}`);
+    setCacheVersion(v => v + 1);
+    setIsFetchingAllForSort(false);  // Завершили загрузку
   }, [allItems]);
+
+  // ── Перед сортировкой: подгрузить все данные если нужно ──────────────────
+  const handleSortChangeInternal = useCallback(
+    (newSort: typeof sort) => {
+      // Если sort === default или пусто, не нужно загружать все
+      const isDefaultSort = !newSort || (Object.keys(newSort).length === 1 && newSort.id === "asc");
+
+      // Если это не дефолтная сортировка И загружены не все строки
+      if (!isDefaultSort && allItems.length < total && !isFetchingAllForSort) {
+        // Сохраняем pending sort - будет применен после загрузки всех данных
+        pendingSortRef.current = newSort ?? { id: "asc" };
+
+        // Запускаем загрузку ВСЕ данные
+        setIsFetchingAllForSort(true);
+
+        // Устанавливаем очень большой лимит чтобы загрузить всё за один раз
+        updateAdaptiveLimit(999999);
+
+        // Получаем остаток данных
+        setTimeout(() => {
+          fetchNextPage();
+        }, 0);
+      } else {
+        // Если уже загружены все или это дефолтная сортировка - сразу меняем
+        setSort(newSort ?? { id: "asc" });
+      }
+    },
+    [allItems.length, total, isFetchingAllForSort, updateAdaptiveLimit, fetchNextPage]
+  );  // ── Отслеживание завершения загрузки всех данных для сортировки ────────
+  useEffect(() => {
+    // Если мы в процессе загрузки всех данных
+    if (isFetchingAllForSort && !isAnythingLoading) {
+      // Загрузка завершилась
+      setIsFetchingAllForSort(false);
+    }
+  }, [isFetchingAllForSort, isAnythingLoading, allItems.length, total]);
+
+  // ── Ref для отслеживания pending sort ────────────────────────────────────
+  const pendingSortRef = useRef<typeof sort | null>(null);
+
+  // Если была pending сортировка и теперь все данные загружены - применяем sort
+  useEffect(() => {
+    if (pendingSortRef.current && !isFetchingAllForSort && allItems.length === total) {
+      setSort(pendingSortRef.current);
+      pendingSortRef.current = null;
+    }
+  }, [isFetchingAllForSort, allItems.length, total]);
 
   // ── Сортировка кэша ─────────────────────────────────────────────────────────
   // Используем useMemo с зависимостью от версии кэша
@@ -137,17 +185,16 @@ const ActivityHistoriesList: FC = () => {
   const rows: TDataItem[] = useMemo(() => {
     // Сортируем все строки в кэше
     const sorted = sortTableRows(cachedRowsRef.current, sort ?? {}, "ru");
-    console.log(`[ActivityHistories] rows useMemo computed: sort=${JSON.stringify(sort)}, cache.length=${cachedRowsRef.current.length}, sorted.length=${sorted.length}, cacheVersion=${cacheVersion}`);
     return sorted;
   }, [sort, cacheVersion]);  // ⚠️ cacheVersion как зависимость!
 
   // ── Обработчики ──────────────────────────────────────────────────────────
+  // Используем handleSortChangeInternal вместо старого handleSortChange
   const handleSortChange = useCallback(
     (newSort: typeof sort) => {
-      // Клиентская сортировка - просто меняем sort
-      setSort(newSort ?? { id: "asc" });
+      handleSortChangeInternal(newSort);
     },
-    [setSort]
+    [handleSortChangeInternal]
   );
 
   const handleFilterChange = useCallback(

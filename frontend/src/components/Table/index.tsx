@@ -35,6 +35,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -136,7 +137,7 @@ export interface TableProps {
   isFetchingNextPage?: boolean;
 }
 
-const ROW_HEIGHT = 28;
+const ROW_HEIGHT = 30;  // ← ИСПРАВИЛ: было 28, должно быть 30
 const OVERSCAN = 8;
 
 // ────────────────────────────────────────────────
@@ -221,7 +222,6 @@ TableControlPanel.displayName = 'TableControlPanel';
 // ────────────────────────────────────────────────
 
 const Table: FC<TableProps> = memo((props) => {
-  console.log(`[Table] render: rows.length=${props.rows?.length ?? 0}`);
   const {
     componentName, rows, columns, total, totalPages,
     isLoading, error,
@@ -442,6 +442,7 @@ const TableBody = memo(() => {
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(scrollRef.current?.clientHeight ?? 0);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const scrollTopRef = useRef<number>(0);  // ← Фиксируем scrollTop
   // ⚠️ Отслеживаем последний установленный лимит чтобы не вызывать setAdaptiveLimit без необходимости
   // Это предотвращает отмену запросов при быстром скроле
   const lastAdaptiveLimitRef = useRef<number>(500);
@@ -461,91 +462,64 @@ const TableBody = memo(() => {
   // ── Единая функция проверки необходимости подгрузки ──
   const checkAndFetch = useCallback(() => {
     const el = scrollRef.current;
-    // console.log(`[checkAndFetch] el=${!!el}, hasNextPage=${hasNextPage}, isFetchingNextPage=${isFetchingNextPage}`);
     if (!el || !hasNextPage || isFetchingNextPage) return;
 
-    // Вычисляем какой диапазон строк видно в viewport
     const currentViewEnd = Math.ceil((el.scrollTop + el.clientHeight) / ROW_HEIGHT);
     const loadedRowsCount = rows.length;
-    const currentScrollDistanceInRows = Math.floor(el.scrollTop / ROW_HEIGHT);
-    const scrollDeltaInRows = Math.abs(currentScrollDistanceInRows - previousScrollDistanceRef.current);
 
-    // ⚠️ ДИНАМИЧЕСКАЯ ЗАГРУЗКА НА ОСНОВЕ РАЗНИЦЫ СКРОЛЛА:
-    // Стандартная загрузка: 500 строк
-    // При прыжке: используем высоту прыжка как лимит
-    // Триггер: при достижении первых 50 строк каждой новой порции
-    const LOAD_SIZE_NORMAL = 500;  // Стандартная загрузка: 500 строк
-    const SCROLL_JUMP_THRESHOLD = 500;  // Порог прыжка скролла (в строках)
-    const FETCH_TRIGGER_ROW = 50;  // Триггер подгрузки при достижении строки 50 каждой порции
+    // ⚠️ ИСПРАВЛЕНО: Правильный расчет прыжка скролла в пиксели
+    const scrollDeltaInPixels = Math.abs(el.scrollTop - previousScrollDistanceRef.current);
+    const scrollDeltaInRows = Math.ceil(scrollDeltaInPixels / ROW_HEIGHT);
 
-    // Вычисляем позицию триггера для текущей порции
-    // Каждая порция по 500 строк, триггер срабатывает при первых 50 строках порции
-    // Начальная порция: строки 0-500 → триггер при 50
-    // Вторая порция: строки 500-1000 → триггер при 550 (500+50)
-    // Третья порция: строки 1000-1500 → триггер при 1050 (1000+50)
+    const LOAD_SIZE_NORMAL = 500;
+    const SCROLL_JUMP_THRESHOLD = 500;  // Если прыжок > 500 строк
+    const FETCH_TRIGGER_ROW = 50;
+
     const portionsCount = Math.ceil(loadedRowsCount / LOAD_SIZE_NORMAL);
     const currentPortionStartRow = (portionsCount - 1) * LOAD_SIZE_NORMAL;
     const fetchTriggerRow = currentPortionStartRow + FETCH_TRIGGER_ROW;
 
-    // Условие для загрузки: если видимая строка >= позиция триггера текущей порции
     if (currentViewEnd >= fetchTriggerRow && hasNextPage) {
       const fetchNextPage = actions.fetchNextPage;
       if (fetchNextPage) {
-        // ⚠️ Если уже был запрос для текущего количества строк, пропускаем
-        // Это предотвращает повторные запросы при быстром скроле одной и той же области
         if (loadedRowsCount === lastFetchedAtRowCountRef.current) {
           return;
         }
 
-        // ⚠️ Проверяем: нужно ли нам загружать дополнительные данные?
-        // Если последний запрос охватил нужный диапазон, пропускаем
-        // Курсор обычно = loadedRowsCount (начало новой порции)
         const nextCursor = loadedRowsCount;
-
-        // Если последний запрос покрывал этот диапазон, не запрашиваем заново
-        // lastRequestedCursor + lastRequestedLimit = конец последнего запроса
-        // Если nextCursor < конец последнего запроса, значит данные уже в кэше
         if (nextCursor < lastRequestedCursorRef.current + lastRequestedLimitRef.current) {
           return;
         }
 
-        // ⚠️ Отметим, что уже выполняем запрос для текущего количества строк
         lastFetchedAtRowCountRef.current = loadedRowsCount;
 
-        // Определяем размер загрузки на основе разницы скролла
-        let newAdaptiveLimit = LOAD_SIZE_NORMAL;  // По умолчанию 500
+        // ⚠️ ИСПРАВЛЕНО: Правильный расчет лимита при прыжке
+        let newAdaptiveLimit = LOAD_SIZE_NORMAL;
 
-        // Если разница скролла > порога → используем эту разницу как лимит
         if (scrollDeltaInRows > SCROLL_JUMP_THRESHOLD) {
-          newAdaptiveLimit = scrollDeltaInRows;
+          // При прыжке используем эту разницу как лимит, но минимум 500
+          newAdaptiveLimit = Math.max(LOAD_SIZE_NORMAL, scrollDeltaInRows);
         }
 
-        // ⚠️ КРИТИЧНО: Установим лимит ДО вызова fetchNextPage
-        // Это гарантирует, что запрос будет с правильным лимитом с первой попытки
         if (newAdaptiveLimit !== lastAdaptiveLimitRef.current) {
           lastAdaptiveLimitRef.current = newAdaptiveLimit;
-
-          // Обновляем адаптивный лимит в контексте ПЕРЕД fetchNextPage
           if (actions.setAdaptiveLimit) {
             actions.setAdaptiveLimit(newAdaptiveLimit);
           }
         }
 
-        // ⚠️ Сохраняем курсор и лимит текущего запроса для проверки кэша
         lastRequestedCursorRef.current = nextCursor;
         lastRequestedLimitRef.current = newAdaptiveLimit;
 
-        // ⚠️ Обновляем предыдущую позицию скролла ПОСЛЕ вычисления разницы
-        previousScrollDistanceRef.current = currentScrollDistanceInRows;
+        // ⚠️ Обновляем предыдущую позицию скролла ПОСЛЕ расчета
+        previousScrollDistanceRef.current = el.scrollTop;
 
-        // Вызываем fetchNextPage с установленным лимитом
-        // Лимит уже установлен выше через setAdaptiveLimit
         setTimeout(() => {
           fetchNextPage();
         }, 0);
       }
     }
-  }, [hasNextPage, isFetchingNextPage, actions, scrollRef, rows.length]);  // ── Дебаунсированная версия checkAndFetch
+  }, [hasNextPage, isFetchingNextPage, actions, scrollRef, rows.length]);
   const debouncedCheckAndFetch = useCallback(() => {
     // Отменяем предыдущий таймер если есть
     if (debounceTimerRef.current) {
@@ -591,39 +565,57 @@ const TableBody = memo(() => {
     checkAndFetch();
   }, [rows.length, checkAndFetch]);
 
-  // ── Расчет виртуализации НА ОСНОВЕ ВСЕХ СТРОК В БД ──
-  // total = количество всех строк в БД
+  // ⚠️ ИСПРАВЛЕНО: Фиксируем scrollTop когда приходят новые данные
+  // Это предотвращает смещение скролла при загрузке новых строк
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // Синхронно восстанавливаем scrollTop ПЕРЕД рендером
+    el.scrollTop = scrollTopRef.current;
+  }, [deferredRowsForRender.length]);
+
+  // ── Отслеживаем изменение scrollTop ──
+  useEffect(() => {
+    scrollTopRef.current = scrollTop;
+  }, [scrollTop]);
+
   // ── Расчет виртуализации ──
-  // Используем deferredRowsForRender для определения видимых строк
   const loadedCount = deferredRowsForRender.length;
 
   // Рассчитываем окно просмотра на основе высоты контейнера
-  // ⚠️ Защита: если containerHeight еще не инициализирована, используем fallback
   const effectiveContainerHeight = containerHeight > 0 ? containerHeight : 600;
 
-  const startIndexVirtual = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
-  const endIndexVirtual = Math.min(
-    loadedCount,
-    Math.ceil((scrollTop + effectiveContainerHeight) / ROW_HEIGHT) + OVERSCAN
-  );
+  // ⚠️ ИСПРАВЛЕНО: Вычисляем padding на основе АБСОЛЮТНОЙ позиции scrollTop в пиксельных координатах
+  // Это обеспечивает что padding остается корректным даже при загрузке новых данных
+
+  // Какой индекс первой видимой строки в пиксельных координатах
+  // (не зависит от того сколько строк загружено)
+  const firstVisibleIndexByPixels = Math.ceil(scrollTop / ROW_HEIGHT) - OVERSCAN;
+
+  // Какой индекс последней видимой строки
+  const lastVisibleIndexByPixels = Math.ceil((scrollTop + effectiveContainerHeight) / ROW_HEIGHT) + OVERSCAN;
+
+  // ⚠️ Padding вычисляем на основе ПИКСЕЛЬНЫХ координат, не меняя при загрузке
+  const topPaddingAllByPixels = Math.max(0, firstVisibleIndexByPixels * ROW_HEIGHT);
+  const bottomPaddingAllByPixels = Math.max(0, (total - lastVisibleIndexByPixels) * ROW_HEIGHT);
+
+  // ⚠️ Для видимых строк используем только загруженные данные
+  // startIndexVirtual и endIndexVirtual ОГРАНИЧЕНЫ loadedCount
+  const startIndexVirtual = Math.max(0, Math.min(firstVisibleIndexByPixels, loadedCount - 1));
+  const endIndexVirtual = Math.min(loadedCount, Math.max(lastVisibleIndexByPixels, 0));
 
   // Видимые строки в контексте дефёрредного рендера
   const visibleRows = useMemo(() => {
     return deferredRowsForRender.slice(startIndexVirtual, endIndexVirtual);
   }, [deferredRowsForRender, startIndexVirtual, endIndexVirtual]);
 
-  // Padding для правильного скроллинга
-  // ⚠️ topPadding: сколько строк ПЕРЕД окном (в контексте загруженных)
-  // ⚠️ bottomPadding: сколько строк ПОСЛЕ окна в контексте ВСЕХ строк в БД!
-  const topPaddingAll = startIndexVirtual * ROW_HEIGHT;
-  const bottomPaddingAll = Math.max(0, (total - endIndexVirtual) * ROW_HEIGHT);
-
-  // DEBUG
-  console.log(`[TableBody] render: loadedCount=${loadedCount}, startIdx=${startIndexVirtual}, endIdx=${endIndexVirtual}, visibleRows=${visibleRows.length}, containerHeight=${containerHeight}, effectiveHeight=${effectiveContainerHeight}`);
+  // ⚠️ Используем padding вычисленные в пиксельных координатах
+  const topPaddingAll = topPaddingAllByPixels;
+  const bottomPaddingAll = bottomPaddingAllByPixels;
 
   // ── Рендер ──
   if (!isLoading && rows.length === 0) {
-    console.log(`[TableBody] "Нет данных" condition: isLoading=${isLoading}, rows.length=${rows.length}`);
     return (
       <tbody>
         <tr>

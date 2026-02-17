@@ -208,7 +208,7 @@ router.get("/activityhistories", async (req, res) => {
 
 		// Парсим limit: если не приходит — используем 500, максимум 10000
 		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 100000);
+		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0)) {

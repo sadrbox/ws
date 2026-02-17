@@ -30,7 +30,6 @@ type InfiniteQueryKey = readonly [
 	string,
 	"infinite",
 	{
-		sort?: Record<string, "desc" | "asc"> | null;
 		search?: string;
 		filter?: Record<string, { value: unknown; operator: string }> | undefined;
 	},
@@ -76,14 +75,14 @@ export function useInfiniteModelList<TData = unknown>({
 	const paramsRef = useRef(params);
 	paramsRef.current = params;
 
-	// ⚠️ КРИТИЧНО: Мемоизируем ТОЛЬКО sort/search/filter для queryKey БЕЗ limit
+	// ⚠️ КРИТИЧНО: Мемоизируем ТОЛЬКО search/filter для queryKey БЕЗ sort и limit
+	// sort обрабатывается ТОЛЬКО на клиенте, не отправляется на сервер
 	const memoizedQueryParams = useMemo(
 		() => ({
-			sort: params.sort,
 			search: params.search,
 			filter: params.filter,
 		}),
-		[JSON.stringify(params.sort), params.search, JSON.stringify(params.filter)],
+		[params.search, JSON.stringify(params.filter)],
 	);
 
 	const queryKey: InfiniteQueryKey = [model, "infinite", memoizedQueryParams];
@@ -109,13 +108,14 @@ export function useInfiniteModelList<TData = unknown>({
 				query.search = currentParams.search;
 			}
 
-			if (currentParams.sort && Object.keys(currentParams.sort).length > 0) {
-				const sortParts: string[] = [];
-				for (const [field, dir] of Object.entries(currentParams.sort)) {
-					sortParts.push(dir === "desc" ? `-${field}` : field);
-				}
-				query.sort = sortParts.join(",");
-			}
+			// ⚠️ НЕ отправляем sort на сервер - только локальная сортировка на клиенте
+			// if (currentParams.sort && Object.keys(currentParams.sort).length > 0) {
+			// 	const sortParts: string[] = [];
+			// 	for (const [field, dir] of Object.entries(currentParams.sort)) {
+			// 		sortParts.push(dir === "desc" ? `-${field}` : field);
+			// 	}
+			// 	query.sort = sortParts.join(",");
+			// }
 
 			if (currentParams.filter) {
 				for (const [field, cond] of Object.entries(currentParams.filter)) {
