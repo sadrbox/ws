@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback, memo, useState, useEffect } from "react";
+import { FC, useMemo, useCallback, memo, useState, useEffect, useRef } from "react";
 import { useAppContext } from "src/app";
 import { getModelColumns, sortTableRows } from "src/components/Table/services";
 import { translate } from "src/app/i18";
@@ -118,38 +118,36 @@ const ActivityHistoriesList: FC = () => {
     [addPane, t, refetch, componentName]
   );
 
-  // ── Клиентская или серверная сортировка ────────────────────────────────────
-  // Если total > 200 - сортировка на сервере через API
-  // Если total ≤ 200 - сортируем клиентски на загруженных данных
+  // ── Кэш-контейнер всех загруженных строк ──────────────────────────────────
+  // КРИТИЧНО: используем useRef для стабильного кэша, который НЕ пересоздается
+  // при каждой новой порции данных
+  const cachedRowsRef = useRef<TDataItem[]>([]);
+  const [cacheVersion, setCacheVersion] = useState<number>(0);  // ← State вместо ref!
+
+  // Обновляем кэш при получении новых данных
+  useEffect(() => {
+    cachedRowsRef.current = allItems;
+    setCacheVersion(v => v + 1);  // ← Увеличиваем версию
+    console.log(`[ActivityHistories] cachedRowsRef updated: allItems.length=${allItems.length}, cache.length=${cachedRowsRef.current.length}, version=${cacheVersion + 1}`);
+  }, [allItems]);
+
+  // ── Сортировка кэша ─────────────────────────────────────────────────────────
+  // Используем useMemo с зависимостью от версии кэша
+  // Данные берем из кэша, а не из allItems
   const rows: TDataItem[] = useMemo(() => {
-    if (total > 200) {
-      // Серверная сортировка - используем данные как есть
-      console.log(`[ActivityHistories] Using server-sorted data (total=${total})`);
-      return allItems;
-    } else {
-      // Клиентская сортировка
-      return sortTableRows(allItems, sort ?? {}, "ru");
-    }
-  }, [allItems, sort, total]);
+    // Сортируем все строки в кэше
+    const sorted = sortTableRows(cachedRowsRef.current, sort ?? {}, "ru");
+    console.log(`[ActivityHistories] rows useMemo computed: sort=${JSON.stringify(sort)}, cache.length=${cachedRowsRef.current.length}, sorted.length=${sorted.length}, cacheVersion=${cacheVersion}`);
+    return sorted;
+  }, [sort, cacheVersion]);  // ⚠️ cacheVersion как зависимость!
 
   // ── Обработчики ──────────────────────────────────────────────────────────
   const handleSortChange = useCallback(
     (newSort: typeof sort) => {
-      // ⚠️ Если в БД больше 200 строк - используем серверную сортировку
-      // Иначе клиентскую на загруженных данных
-      if (total > 200) {
-        // Серверная сортировка через API
-        console.log(`[ActivityHistories] Sorting on server (total=${total}):`, newSort);
-        setSort(newSort ?? { id: "asc" });
-        // Сбросим загруженные данные чтобы перезагрузить с новой сортировкой
-        refetch();
-      } else {
-        // Клиентская сортировка
-        console.log(`[ActivityHistories] Sorting on client (total=${total}):`, newSort);
-        setSort(newSort ?? { id: "asc" });
-      }
+      // Клиентская сортировка - просто меняем sort
+      setSort(newSort ?? { id: "asc" });
     },
-    [setSort, total, refetch]
+    [setSort]
   );
 
   const handleFilterChange = useCallback(
@@ -179,44 +177,47 @@ const ActivityHistoriesList: FC = () => {
 
   // ── Пропсы для <Table /> ─────────────────────────────────────────────────
   const tableProps = useMemo(
-    () => ({
-      componentName,
-      rows,
-      columns,
-      total,
-      totalPages: Math.ceil(total / adaptiveLimit), // Используем adaptiveLimit вместо limit
-      isLoading: isAnythingLoading,
-      isFetching: isAnythingLoading,
-      error,
-      hasNextPage,
-      isFetchingNextPage,
-      pagination: {
-        page: 1,
-        limit: adaptiveLimit, // Используем adaptiveLimit вместо limit
-        onPageChange: () => { },
-        onLimitChange: () => { },
-      },
-      sorting: {
-        sort,
-        onSortChange: handleSortChange,
-      },
-      filtering: {
-        filters: filter,
-        onFilterChange: handleFilterChange,
-        onClearAll: clearFilters,
-      },
-      search: {
-        value: search,
-        onChange: handleSearch,
-      },
-      actions: {
-        openModelForm,
-        refetch,
-        setColumns,
-        fetchNextPage,
-        setAdaptiveLimit: updateAdaptiveLimit, // Используем новую функцию с ref
-      },
-    }),
+    () => {
+      console.log(`[ActivityHistories] tableProps computed: rows.length=${rows.length}`);
+      return {
+        componentName,
+        rows,
+        columns,
+        total,
+        totalPages: Math.ceil(total / adaptiveLimit), // Используем adaptiveLimit вместо limit
+        isLoading: isAnythingLoading,
+        isFetching: isAnythingLoading,
+        error,
+        hasNextPage,
+        isFetchingNextPage,
+        pagination: {
+          page: 1,
+          limit: adaptiveLimit, // Используем adaptiveLimit вместо limit
+          onPageChange: () => { },
+          onLimitChange: () => { },
+        },
+        sorting: {
+          sort,
+          onSortChange: handleSortChange,
+        },
+        filtering: {
+          filters: filter,
+          onFilterChange: handleFilterChange,
+          onClearAll: clearFilters,
+        },
+        search: {
+          value: search,
+          onChange: handleSearch,
+        },
+        actions: {
+          openModelForm,
+          refetch,
+          setColumns,
+          fetchNextPage,
+          setAdaptiveLimit: updateAdaptiveLimit, // Используем новую функцию с ref
+        },
+      };
+    },
     [
       componentName, rows, columns, total, adaptiveLimit,
       isAnythingLoading, error,

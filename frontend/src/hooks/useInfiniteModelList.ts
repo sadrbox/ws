@@ -178,7 +178,7 @@ export function useInfiniteModelList<TData = unknown>({
 		...restQueryOptions,
 	});
 
-	const allItems: TData[] = (() => {
+	const allItems: TData[] = useMemo(() => {
 		const flat = result.data?.pages.flatMap((p) => p.items) ?? [];
 		const seen = new Set<unknown>();
 		return flat.filter((item) => {
@@ -188,7 +188,7 @@ export function useInfiniteModelList<TData = unknown>({
 			seen.add(id);
 			return true;
 		});
-	})();
+	}, [result.data]);
 
 	const total = result.data?.pages[0]?.total ?? allItems.length;
 

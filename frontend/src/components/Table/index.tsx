@@ -34,7 +34,6 @@ import {
   SetStateAction,
   useCallback,
   useContext,
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -222,6 +221,7 @@ TableControlPanel.displayName = 'TableControlPanel';
 // ────────────────────────────────────────────────
 
 const Table: FC<TableProps> = memo((props) => {
+  console.log(`[Table] render: rows.length=${props.rows?.length ?? 0}`);
   const {
     componentName, rows, columns, total, totalPages,
     isLoading, error,
@@ -239,10 +239,6 @@ const Table: FC<TableProps> = memo((props) => {
   const [visibleDateRange, setVisibleDateRange] = useState(false);
   const [visibleFastSearch, setVisibleFastSearch] = useState(false);
 
-  // Отложенное обновление rows для оптимизации перерисовки
-  // Пока пользователь печатает/сортирует, UI остаётся отзывчивым
-  const deferredRows = useDeferredValue(rows);
-
   // extendedActions уже включают setAdaptiveLimit от родителя
   const extendedActions = useMemo(
     () => ({
@@ -253,7 +249,7 @@ const Table: FC<TableProps> = memo((props) => {
 
   const contextValue = useMemo<TableContextProps>(
     () => ({
-      componentName, rows, deferredRowsForRender: deferredRows, columns, total, totalPages,
+      componentName, rows, deferredRowsForRender: rows, columns, total, totalPages,
       isLoading, error,
       pagination, sorting, filtering, search,
       actions: extendedActions,
@@ -262,7 +258,7 @@ const Table: FC<TableProps> = memo((props) => {
       states: { selectedRows, setSelectedRows, activeRow, setActiveRow },
     }),
     [
-      componentName, rows, deferredRows, columns, total, totalPages,
+      componentName, rows, columns, total, totalPages,
       isLoading, error,
       pagination, sorting, filtering, search, extendedActions,
       hasNextPage, isFetchingNextPage,
@@ -374,15 +370,24 @@ const TableHeader = memo(() => {
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
 
   const isAllSelected = useMemo(
-    () => rows.length > 0 && rows.every(r => selectedRows.has(r.id as number)),
+    () => {
+      // Проверяем, все ли ЗАГРУЖЕННЫЕ строки выбраны
+      // (не все возможные, а только те что загружены в текущий момент)
+      return rows.length > 0 && rows.every(r => selectedRows.has(r.id as number));
+    },
     [rows, selectedRows]
   );
 
   const toggleAll = useCallback(() => {
     setSelectedRows(prev => {
       const next = new Set(prev);
-      if (isAllSelected) rows.forEach(r => next.delete(r.id as number));
-      else rows.forEach(r => next.add(r.id as number));
+      if (isAllSelected) {
+        // Снимаем выделение со всех загруженных строк
+        rows.forEach(r => next.delete(r.id as number));
+      } else {
+        // Выделяем все загруженные строки
+        rows.forEach(r => next.add(r.id as number));
+      }
       return next;
     });
   }, [isAllSelected, rows, setSelectedRows]);
@@ -588,41 +593,37 @@ const TableBody = memo(() => {
 
   // ── Расчет виртуализации НА ОСНОВЕ ВСЕХ СТРОК В БД ──
   // total = количество всех строк в БД
-  // rows = загруженные строки
-  // Расчитываем позицию относительно общего количества
+  // ── Расчет виртуализации ──
+  // Используем deferredRowsForRender для определения видимых строк
+  const loadedCount = deferredRowsForRender.length;
+
+  // Рассчитываем окно просмотра на основе высоты контейнера
+  // ⚠️ Защита: если containerHeight еще не инициализирована, используем fallback
+  const effectiveContainerHeight = containerHeight > 0 ? containerHeight : 600;
+
   const startIndexVirtual = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
   const endIndexVirtual = Math.min(
-    total,
-    Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + OVERSCAN
+    loadedCount,
+    Math.ceil((scrollTop + effectiveContainerHeight) / ROW_HEIGHT) + OVERSCAN
   );
 
-  // Какие из загруженных rows попадают в виртуальное окно?
-  // ВАЖНО: rows это только загруженные (0 до rows.length)
-  // Нужно пересчитать индексы в контексте загруженных
+  // Видимые строки в контексте дефёрредного рендера
   const visibleRows = useMemo(() => {
-    // Если мы скроллим за пределы загруженных строк, возвращаем пусто
-    // (это нормально, другой код отработает и подгрузит)
-    if (startIndexVirtual >= deferredRowsForRender.length) {
-      return [];
-    }
-
-    // Берем только те строки из загруженных, что в viewport
-    const visibleStart = Math.max(0, startIndexVirtual);
-    const visibleEnd = Math.min(deferredRowsForRender.length, endIndexVirtual);
-
-    return deferredRowsForRender.slice(visibleStart, visibleEnd);
+    return deferredRowsForRender.slice(startIndexVirtual, endIndexVirtual);
   }, [deferredRowsForRender, startIndexVirtual, endIndexVirtual]);
 
-  // Padding для строк ПЕРЕД первой загруженной
-  // (все невидимые строки до первой загруженной)
+  // Padding для правильного скроллинга
+  // ⚠️ topPadding: сколько строк ПЕРЕД окном (в контексте загруженных)
+  // ⚠️ bottomPadding: сколько строк ПОСЛЕ окна в контексте ВСЕХ строк в БД!
   const topPaddingAll = startIndexVirtual * ROW_HEIGHT;
-
-  // Padding для строк ПОСЛЕ последней видимой
-  // (все невидимые строки после конца виртуального окна)
   const bottomPaddingAll = Math.max(0, (total - endIndexVirtual) * ROW_HEIGHT);
+
+  // DEBUG
+  console.log(`[TableBody] render: loadedCount=${loadedCount}, startIdx=${startIndexVirtual}, endIdx=${endIndexVirtual}, visibleRows=${visibleRows.length}, containerHeight=${containerHeight}, effectiveHeight=${effectiveContainerHeight}`);
 
   // ── Рендер ──
   if (!isLoading && rows.length === 0) {
+    console.log(`[TableBody] "Нет данных" condition: isLoading=${isLoading}, rows.length=${rows.length}`);
     return (
       <tbody>
         <tr>
@@ -648,12 +649,12 @@ const TableBody = memo(() => {
         </tr>
       )}
 
-      {visibleRows.map((row) => (
+      {visibleRows.map((row, visibleIndex) => (
         <TableBodyRow
           key={row.id ?? `row-${row.id}`}
           row={row}
           columns={visibleColumns}
-          rowIndex={rows.indexOf(row)}
+          rowIndex={startIndexVirtual + visibleIndex}
         />
       ))}
 

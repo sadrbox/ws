@@ -203,14 +203,12 @@ router.get("/activityhistories", async (req, res) => {
 		// ── Разбор и валидация query-параметров вручную ───────────────────────
 		const rawLimit = req.query.limit;
 		const rawCursor = req.query.cursor;
-		const sortParam =
-			typeof req.query.sort === "string" ? req.query.sort.trim() : "";
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-		// Парсим limit: если не приходит — используем 100, максимум 500
+		// Парсим limit: если не приходит — используем 500, максимум 10000
 		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 10000);
+		const limitNumber = Math.min(Math.max(parsedLimit, 1), 100000);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0)) {
@@ -232,39 +230,9 @@ router.get("/activityhistories", async (req, res) => {
 			`[GET /activityhistories] limit=${limitNumber}, cursor=${cursorNumber}, search=${search}`,
 		);
 
-		// ── Сортировка ────────────────────────────────────────────────────────
-		// Формат от клиента: "-createdAt,name"  →  [{ createdAt: "desc" }, { name: "asc" }]
-		const ALLOWED_SORT_FIELDS = [
-			"id",
-			"actionDate",
-			"actionType",
-			"bin",
-			"userName",
-			"host",
-			"ip",
-			"city",
-			"objectId",
-			"objectType",
-			"objectName",
-		];
-
-		const orderBy = [];
-		if (sortParam) {
-			for (const part of sortParam.split(",")) {
-				const trimmed = part.trim();
-				if (!trimmed) continue;
-				const isDesc = trimmed.startsWith("-");
-				const field = isDesc ? trimmed.slice(1) : trimmed;
-				if (ALLOWED_SORT_FIELDS.includes(field)) {
-					orderBy.push({ [field]: isDesc ? "desc" : "asc" });
-				}
-			}
-		}
-
-		// Сортировка по умолчанию — id asc (обязательна для курсорной пагинации)
-		if (orderBy.length === 0) {
-			orderBy.push({ id: "asc" });
-		}
+		// ⚠️ СОРТИРОВКА ОТКЛЮЧЕНА НА СЕРВЕРЕ - ДЕЛАЕТСЯ НА КЛИЕНТЕ
+		// Сервер возвращает данные в порядке возрастания ID (для курсорной пагинации)
+		const orderBy = [{ id: "asc" }];
 
 		// ── Поиск (search=строка) ─────────────────────────────────────────────
 		const TEXT_FIELDS = [
