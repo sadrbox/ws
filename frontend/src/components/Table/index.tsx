@@ -436,7 +436,7 @@ const TableBody = memo(() => {
   const {
     rows, deferredRowsForRender, columns, isLoading, total,
     isFetchingNextPage, hasNextPage,
-    actions, scrollRef,
+    actions, scrollRef, states,
   } = useTableContext();
 
   const [scrollTop, setScrollTop] = useState(0);
@@ -464,8 +464,14 @@ const TableBody = memo(() => {
     const el = scrollRef.current;
     if (!el || !hasNextPage || isFetchingNextPage) return;
 
-    const currentViewEnd = Math.ceil((el.scrollTop + el.clientHeight) / ROW_HEIGHT);
     const loadedRowsCount = rows.length;
+
+    // ⚠️ ФИЧА #2: Если загружено столько же строк сколько всего существует - не загружаем больше
+    if (loadedRowsCount === total) {
+      return;
+    }
+
+    const currentViewEnd = Math.ceil((el.scrollTop + el.clientHeight) / ROW_HEIGHT);
 
     // ⚠️ ИСПРАВЛЕНО: Правильный расчет прыжка скролла в пиксели
     const scrollDeltaInPixels = Math.abs(el.scrollTop - previousScrollDistanceRef.current);
@@ -580,7 +586,30 @@ const TableBody = memo(() => {
     scrollTopRef.current = scrollTop;
   }, [scrollTop]);
 
-  // ── Расчет виртуализации ──
+  // ── Автоматический выбор новых строк если включен "выбрать всё" ──
+  const lastRowCountRef = useRef<number>(0);
+  useEffect(() => {
+    const { selectedRows, setSelectedRows } = states;
+
+    // Проверяем если строк стало больше
+    if (deferredRowsForRender.length > lastRowCountRef.current) {
+      // Вычисляем все ли ЗАГРУЖЕННЫЕ строки были выбраны
+      const previousRows = deferredRowsForRender.slice(0, lastRowCountRef.current);
+      const wasAllSelected = previousRows.length > 0 && previousRows.every(r => selectedRows.has(r.id as number));
+
+      if (wasAllSelected) {
+        // Выбираем все новые строки
+        const newRows = deferredRowsForRender.slice(lastRowCountRef.current);
+        setSelectedRows((prev: Set<number>) => {
+          const next = new Set(prev);
+          newRows.forEach(r => next.add(r.id as number));
+          return next;
+        });
+      }
+    }
+
+    lastRowCountRef.current = deferredRowsForRender.length;
+  }, [deferredRowsForRender, states]);  // ── Расчет виртуализации ──
   const loadedCount = deferredRowsForRender.length;
 
   // Рассчитываем окно просмотра на основе высоты контейнера

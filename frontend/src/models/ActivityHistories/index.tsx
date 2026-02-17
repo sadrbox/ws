@@ -7,6 +7,7 @@ import Table, { TOpenModelFormProps } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import useQueryParams from "src/hooks/useQueryParams";
+import { useQueryClient } from "@tanstack/react-query";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Хелпер для сериализации объектов в строку URL-параметра
@@ -26,6 +27,7 @@ const ActivityHistoriesList: FC = () => {
   const model = "activityhistories";
 
   const { addPane } = useAppContext().windows;
+  const queryClient = useQueryClient();
   const t = (key: string) => translate(key) || key;
 
   const [columns, setColumns] = useState<TColumn[]>(() =>
@@ -222,10 +224,23 @@ const ActivityHistoriesList: FC = () => {
     setFilter(undefined);
   }, [setSearch, setFilter]);
 
+  // Чистый refresh без аргументов - сбрасываем все параметры
+  const handleCleanRefresh = useCallback(() => {
+    // 1️⃣ Сбрасываем все параметры на дефолт
+    setSearch("");
+    setFilter(undefined);
+    // ⚠️ Устанавливаем дефолтную сортировку по ID asc, а не пустой объект
+    setSort(prev => ({ ...prev }));
+
+    // 2️⃣ Инвалидируем query чтобы пересчитались параметры
+    queryClient.invalidateQueries({
+      queryKey: ["activityhistories"],
+    });
+  }, [queryClient, setSearch, setFilter, setSort]);
+
   // ── Пропсы для <Table /> ─────────────────────────────────────────────────
   const tableProps = useMemo(
     () => {
-      console.log(`[ActivityHistories] tableProps computed: rows.length=${rows.length}`);
       return {
         componentName,
         rows,
@@ -258,7 +273,7 @@ const ActivityHistoriesList: FC = () => {
         },
         actions: {
           openModelForm,
-          refetch,
+          refetch: handleCleanRefresh,  // ← ИСПОЛЬЗУЕМ НОВУЮ ФУНКЦИЮ
           setColumns,
           fetchNextPage,
           setAdaptiveLimit: updateAdaptiveLimit, // Используем новую функцию с ref
@@ -272,6 +287,7 @@ const ActivityHistoriesList: FC = () => {
       handleSortChange, handleFilterChange, handleSearch, clearFilters,
       openModelForm, refetch, setColumns,
       hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
+      handleCleanRefresh,  // ← ДОБАВЛЯЕМ В ЗАВИСИМОСТИ
     ]
   );
 
