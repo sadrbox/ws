@@ -2,7 +2,7 @@ import { FC, useRef, useEffect, createContext, useContext, useState, ReactNode, 
 import ReactDOM from 'react-dom';
 import styles from './Modal.module.scss';
 // import Button from '../Button';
-import { useAppContextProps } from 'src/app/AppContextProvider';
+import { useAppContext } from 'src/app/index';
 import { TypeFormMethod } from '../Table/types';
 import { Button } from '../Button';
 // import { useAppContext } from 'src/app/AppContextProvider';
@@ -25,7 +25,7 @@ export const useModalContextProps = () => {
 
 const Modal: FC<ModalProps> = ({ method, onApply, title, style, children }) => {
   const modalRef = useRef<HTMLDivElement>(null);
-  const AppContext = useAppContextProps();
+  const AppContext = useAppContext();
   const { screenRef } = AppContext;
   const [values, setValues] = useState<Record<string, any>>({});
 

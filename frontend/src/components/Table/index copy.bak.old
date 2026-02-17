@@ -1,0 +1,744 @@
+import styles from './Table.module.scss';
+
+import {
+  TColumn,
+  TDataItem,
+  TypeFormAction,
+  TypeModalFormProps,
+} from './types';
+
+import { getTranslateColumn } from 'src/app/i18';
+import { getFormatColumnValue, getTextAlignByColumnType } from './services';
+
+import { Divider, FieldDateRange, FieldFastSearch } from '../Field';
+import Modal from '../Modal';
+import { Group } from 'src/components/UI';
+import { Button, ButtonImage } from '../Button';
+
+import settingsForm_16 from '../../assets/form-setting_16.png';
+import reloadImage_16 from '../../assets/reload_16.png';
+import calendar_16 from '../../assets/calendar_16.png';
+import searchField_16 from '../../assets/search-field_16.png';
+
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { PiDotsThreeVerticalDuotone } from 'react-icons/pi';
+
+// import { TOpenModelFormProps } from 'src/app/types';
+import { createContext, Dispatch, FC, memo, PropsWithChildren, SetStateAction, use, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { TPane } from 'src/app/types';
+
+// ────────────────────────────────────────────────
+// Context
+// ────────────────────────────────────────────────
+
+export type TOpenModelFormProps = Partial<TPane>
+
+export type TypeModelProps = TableContextProps;
+
+// ────────────────────────────────────────────────
+// Context
+// ────────────────────────────────────────────────
+
+export interface TableContextProps {
+  componentName: string;
+  rows: TDataItem[];
+  columns: TColumn[];
+  total: number;
+  totalPages: number;
+  isLoading: boolean;
+  isFetching: boolean;
+  error: Error | null;
+
+  pagination: {
+    page: number;
+    limit: number;
+    onPageChange: (page: number) => void;
+    onLimitChange: (limit: number) => void;
+  };
+
+  sorting: {
+    sort: Record<string, 'asc' | 'desc'>;
+    onSortChange: (sort: Record<string, 'asc' | 'desc'>) => void;
+  };
+
+  filtering: {
+    filters: Record<string, { value: unknown; operator: string }> | undefined;
+    onFilterChange: (field: string, value: unknown, operator?: string) => void;
+    onClearAll: () => void;
+  };
+
+  search: {
+    value: string;
+    onChange: (value: string) => void;
+  };
+
+  actions: {
+    openModelForm?: (props: TOpenModelFormProps) => void;
+    refetch: () => void;
+    setColumns: (columns: TColumn[]) => void;
+  };
+
+  states: {
+    selectedRows: Set<number>;
+    setSelectedRows: Dispatch<SetStateAction<Set<number>>>;
+    activeRow: number | null;
+    setActiveRow: Dispatch<SetStateAction<number | null>>;
+  };
+}
+
+const TableContext = createContext<TableContextProps | undefined>(undefined);
+
+export const useTableContext = () => {
+  const context = useContext(TableContext);
+  if (!context) {
+    throw new Error('useTableContext must be used within TableContextProvider');
+  }
+  return context;
+};
+
+const TableContextProvider: FC<PropsWithChildren<{ value: TableContextProps }>> = ({ children, value }) => (
+  <TableContext.Provider value={value}>{children}</TableContext.Provider>
+);
+
+// ────────────────────────────────────────────────
+// Props для Table
+// ────────────────────────────────────────────────
+
+export interface TableProps {
+  componentName: string;
+  rows: TDataItem[];
+  columns: TColumn[];
+  total: number;
+  totalPages: number;
+  isLoading: boolean;
+  isFetching: boolean;
+  error: Error | null;
+  pagination: TableContextProps['pagination'];
+  sorting: TableContextProps['sorting'];
+  filtering: TableContextProps['filtering'];
+  search: TableContextProps['search'];
+  actions: TableContextProps['actions'];
+}
+
+// ────────────────────────────────────────────────
+// Основной компонент Table
+// ────────────────────────────────────────────────
+
+const Table: FC<TableProps> = (props) => {
+  const {
+    componentName,
+    rows,
+    columns,
+    total,
+    totalPages,
+    isLoading,
+    isFetching,
+    error,
+    pagination,
+    sorting,
+    filtering,
+    search,
+    actions,
+  } = props;
+
+  const { openModelForm, refetch, setColumns } = actions;
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const scrollWrapper = scrollRef.current;
+    scrollWrapper?.addEventListener('scroll', (e) => {
+      const el = e.target as HTMLDivElement;
+
+      const scrolled = el.scrollTop;                    // сколько уже прокручено сверху
+      const totalScrollable = el.scrollHeight - el.clientHeight;  // вся длина прокрутки
+
+      const scrollPercentage = scrolled / totalScrollable;   // 0 → 1 (0% → 100%)
+
+      console.log(scrollPercentage);
+      // Посередине — примерно 45–55% (с запасом на погрешность)
+      if (scrollPercentage >= 0.45 && scrollPercentage <= 0.55) {
+        console.log('Сейчас примерно посередине', scrollPercentage.toFixed(2));
+      }
+
+      // Или строже — только очень близко к 50%
+      if (Math.abs(scrollPercentage - 0.5) < 0.02) {
+        console.log('Почти ровно посередине!', scrollPercentage);
+      }
+    });
+  }, [rows]);
+
+  const [activeRow, setActiveRow] = useState<number | null>(null);
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+
+  const [configModalAction, setConfigModalAction] = useState<TypeFormAction>('');
+  const [visibleDateRange, setVisibleDateRange] = useState(false);
+  const [visibleFastSearch, setVisibleFastSearch] = useState(false);
+
+  // ── Значение контекста ────────────────────────────────────────
+  const contextValue = useMemo<TableContextProps>(
+    () => ({
+      componentName,
+      rows,
+      columns,
+      total,
+      totalPages,
+      isLoading,
+      isFetching,
+      error,
+      pagination,
+      sorting,
+      filtering,
+      search,
+      actions,
+      states: {
+        selectedRows,
+        setSelectedRows,
+        activeRow,
+        setActiveRow,
+      },
+    }),
+    [
+      componentName,
+      rows,
+      columns,
+      total,
+      totalPages,
+      isLoading,
+      isFetching,
+      error,
+      pagination,
+      sorting,
+      filtering,
+      search,
+      actions,
+      selectedRows,
+      activeRow,
+    ]
+  );
+
+  // ── Обработчики ───────────────────────────────────────────────
+  const handleCreate = useCallback(() => {
+    if (openModelForm) {
+      openModelForm({
+        onSave: refetch,
+        onClose: () => { },
+      });
+    }
+  }, [openModelForm, refetch]);
+
+  const handleRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  // ── Рендер ────────────────────────────────────────────────────
+  return (
+    <TableContextProvider value={contextValue}>
+      {configModalAction === 'open' && (
+        <TableConfigModalForm
+          method={{ get: configModalAction, set: setConfigModalAction }}
+        />
+      )}
+
+      <div className={styles.TableWrapper}>
+        <div className={styles.TablePanel}>
+          <div className={styles.TablePanelLeft}>
+            <div className={[styles.colGroup, styles.gap6].join(' ')} style={{ justifyContent: 'flex-start' }}>
+              <Divider />
+              <Button onClick={handleCreate}>
+                <span>Добавить</span>
+              </Button>
+              <Button onClick={() => alert('Удалить выбранные')}>
+                <span>Удалить</span>
+              </Button>
+              <Divider />
+              <ButtonImage onClick={handleRefresh} title="Обновить">
+                <img
+                  src={reloadImage_16}
+                  alt="Reload"
+                  height={16}
+                  width={16}
+                  className={isLoading || isFetching ? styles.animationLoop : ''}
+                />
+              </ButtonImage>
+              <ButtonImage
+                onClick={() => setConfigModalAction('open')}
+                title="Настройки колонок"
+              >
+                <img src={settingsForm_16} alt="Settings" height={16} width={16} />
+              </ButtonImage>
+              <Divider />
+              <ButtonImage
+                onClick={() => setVisibleDateRange(!visibleDateRange)}
+                active={visibleDateRange}
+                title="Период"
+              >
+                <img src={calendar_16} alt="Calendar" height={16} width={16} />
+              </ButtonImage>
+              <ButtonImage
+                onClick={() => setVisibleFastSearch(!visibleFastSearch)}
+                active={visibleFastSearch}
+                title="Поиск"
+              >
+                <img src={searchField_16} alt="Search" height={16} width={16} />
+              </ButtonImage>
+              <Divider />
+            </div>
+          </div>
+
+          {(visibleDateRange || visibleFastSearch) && (
+            <div className={styles.TablePanelRight}>
+              {visibleDateRange && <FieldDateRange />}
+              {visibleFastSearch && <FieldFastSearch />}
+            </div>
+          )}
+        </div>
+
+        <div ref={scrollRef} className={styles.TableScrollWrapper}>
+          <TableArea />
+        </div>
+      </div>
+    </TableContextProvider>
+  );
+};
+
+// ────────────────────────────────────────────────
+// Подкомпоненты (Area, Header, Body, Row, Config Modal)
+// ────────────────────────────────────────────────
+
+const TableArea = memo(() => {
+  const { columns } = useTableContext();
+  const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
+
+  return (
+    <table>
+      <colgroup>
+        <col style={{ width: '30px', maxWidth: '30px', minWidth: '30px' }} />
+        {visibleColumns.slice(0, -1).map(col => (
+          <col
+            key={col.identifier}
+            style={{ width: col.width ?? 'auto', minWidth: col.minWidth ?? '150px' }}
+          />
+        ))}
+        {/* Последний всегда auto */}
+        {visibleColumns.length > 0 && (
+          <col
+            key={visibleColumns[visibleColumns.length - 1].identifier + '-last'}
+            style={{ minWidth: '150px', width: 'auto' }}
+          />
+        )}
+      </colgroup>
+      <TableHeader />
+      <TableBody />
+    </table>
+  );
+});
+
+const TableHeader = memo(() => {
+  const {
+    columns,
+    rows,
+    sorting: { sort, onSortChange },
+    states: { selectedRows, setSelectedRows },
+    isLoading,
+  } = useTableContext();
+
+  // console.log(sort)
+
+  const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
+
+  const isAllSelected = useMemo(
+    () => rows.length > 0 && rows.every(r => selectedRows.has(r.id as number)),
+    [rows, selectedRows]
+  );
+
+  const toggleAll = useCallback(() => {
+    setSelectedRows(prev => {
+      const next = new Set(prev);
+      if (isAllSelected) {
+        rows.forEach(r => next.delete(r.id as number));
+      } else {
+        rows.forEach(r => next.add(r.id as number));
+      }
+      return next;
+    });
+  }, [isAllSelected, rows, setSelectedRows]);
+
+  const handleSort = useCallback(
+    (field: string) => {
+      // console.log(sort, field, sort ? sort[field] : sort?.[field]);
+      const currentDir = sort[field];
+      // console.log(field, currentDir);
+      const newDir = currentDir === 'asc' ? 'desc' : 'asc';
+      // console.log({ [field]: newDir })
+      onSortChange({ [field]: newDir });
+    },
+    [sort, onSortChange]
+  );
+
+  return (
+    <thead>
+      <tr>
+        <th style={{ width: '30px', textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+            <input
+              type="checkbox"
+              checked={isAllSelected}
+              onChange={toggleAll}
+              disabled={isLoading || rows.length === 0}
+            />
+          </div>
+        </th>
+        {visibleColumns.map(col => {
+          const isSorting = sort && sort[col.identifier];
+          const dir = isSorting ? sort[col.identifier] : null;
+
+          // console.log(isSorting);
+          return (
+            <th key={col.identifier} style={{ cursor: 'pointer' }} onClick={() => handleSort(col.identifier)}>
+              <div className={styles.TableHeaderCell}>
+                <span>{getTranslateColumn(col)}</span>
+                {isSorting && (
+
+                  <svg style={{
+                    alignContent: 'center',
+                    transform: dir === 'desc' ? 'scaleY(-1)' : 'none',
+                    // marginLeft: '6px',
+                    opacity: isSorting ? 1 : 0.3,
+                  }}
+                    width="24px" height="24px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <g>
+                      <path fill="none" d="M0 0h24v24H0z" />
+                      <path d="M12 14l-4-4h8z" />
+                    </g>
+                  </svg>
+
+                )}
+              </div>
+            </th>
+          );
+        })}
+      </tr>
+    </thead>
+  );
+});
+
+const TableBody = memo(() => {
+  const { rows, columns, isLoading } = useTableContext();
+  const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
+
+  const visibleRows = useMemo(() => (++rows.length * 29), [rows]);
+
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
+
+  // console.log(visibleRows, rows)
+  if (!isLoading && rows.length === 0) {
+    return (
+      <tbody>
+        <tr>
+          <td colSpan={visibleColumns.length + 1} style={{ textAlign: 'center', padding: '40px 20px' }}>
+            Нет данных
+          </td>
+        </tr>
+      </tbody>
+    );
+  }
+
+  // console.log(rows)
+  return (
+    <tbody ref={tbodyRef} className={isLoading ? styles.blur5 : ''}>
+      <tr style={{ height: `${visibleRows}px` }}>
+        <td style={{ border: "0px" }} colSpan={visibleColumns.length + 1} />
+      </tr>
+      {rows.map((row, idx) => (
+        <TableBodyRow
+          key={row.id ?? `row-${idx}`}
+          row={row}
+          columns={visibleColumns}
+          rowIndex={idx}
+        />
+      ))}
+      <tr style={{ height: `${visibleRows}px` }}>
+        <td style={{ border: "0px" }} colSpan={visibleColumns.length + 1} />
+      </tr>
+    </tbody>
+  );
+});
+
+interface TableBodyRowProps {
+  row: TDataItem;
+  columns: TColumn[];
+  rowIndex: number;
+}
+
+const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, rowIndex }) => {
+  const {
+    states: { activeRow, setActiveRow, selectedRows, setSelectedRows },
+    actions: { openModelForm, refetch },
+    isLoading,
+  } = useTableContext();
+
+  const isActive = activeRow === (row.id as number);
+  const isSelected = selectedRows.has(row.id as number);
+
+  const toggleSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      e.stopPropagation();
+      setSelectedRows(prev => {
+        const next = new Set(prev);
+        if (e.target.checked) next.add(row.id as number);
+        else next.delete(row.id as number);
+        return next;
+      });
+    },
+    [row.id, setSelectedRows]
+  );
+
+  const handleRowClick = useCallback(() => {
+    // console.log(row.id)
+    setActiveRow?.(row.id as number);
+  }, [isLoading, setActiveRow, row.id]);
+
+  const handleDoubleClick = useCallback(() => {
+    if (openModelForm) {
+      openModelForm({
+        data: row,
+        onSave: refetch,
+        onClose: () => { },
+      });
+    }
+  }, [openModelForm, row, refetch]);
+
+  return (
+    <tr
+      onClick={handleRowClick}
+      onDoubleClick={handleDoubleClick}
+      className={`${isActive ? styles.activeRow : ''} ${isLoading ? styles.loadingRow : ''}`}
+      style={isLoading ? { opacity: 0.6, pointerEvents: 'none' } : {}}
+    >
+      <td style={{ textAlign: 'center' }}>
+        <div className={styles.TableBodyCell} style={{ justifyContent: 'center' }}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={toggleSelect}
+            disabled={isLoading}
+          />
+        </div>
+      </td>
+      {columns.map(col => {
+        const value = getFormatColumnValue(row, col);
+        const align = getTextAlignByColumnType(col);
+
+        return (
+          <td key={col.identifier}>
+            <div style={align} className={styles.TableBodyCell}>
+              <span>{value}</span>
+            </div>
+          </td>
+        );
+      })}
+    </tr>
+  );
+});
+
+// ────────────────────────────────────────────────
+// Модалка настроек колонок (оставлена как была, но с типами)
+// ────────────────────────────────────────────────
+// --------------------- Modal Components -----------------------------------------
+
+
+// Компонент модального окна для конфигурации колонок таблицы.
+// Принимает props `method` для управления видимостью модалки.
+const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
+  // Получаем нужные данные и функции из контекста
+  const { columns, componentName, actions } = useTableContext();
+  // Получаем функцию setColumns из actions, проверяем ее наличие.
+  const setColumnsAction = actions?.setColumns;
+
+  // Внутреннее состояние модалки для управления порядком и видимостью колонок ПЕРЕД сохранением.
+  const [columnsConfig, setColumnsConfig] = useState<TColumn[]>(columns);
+
+  // Обработчик кнопки "Применить" в модалке. Мемоизирован.
+  const onApply = useCallback(() => {
+    // Сохраняем конфигурацию в Local Storage (ваш код)
+    localStorage.setItem(componentName, JSON.stringify(columnsConfig));
+    // Вызываем функцию setColumns из actions, если она существует,
+    // чтобы обновить состояние колонок в родительском компоненте (Table).
+    if (setColumnsAction) {
+      setColumnsAction(columnsConfig);
+    }
+  }, [columnsConfig, componentName, setColumnsAction]); // Зависимости: текущая конфигурация колонок, model (имя таблицы), и функция setColumnsAction.
+
+
+  // При монтировании модалки, синхронизируем ее внутреннее состояние с текущими колонками из контекста.
+  // Это гарантирует, что при повторном открытии модалки отображаются актуальные настройки.
+  useEffect(() => {
+    setColumnsConfig(columns);
+  }, [columns]); // Зависимость от columns из контекста.
+
+
+  return (
+    // Компонент Modal (убедитесь, что он правильно обрабатывает пропс method)
+    <Modal title="Настройки таблицы" method={method} onApply={onApply} style={{ width: '400px' }}>
+      {/* Группа или контейнер для списка колонок */}
+      <Group align='row' type="easy"> {/* Используйте ваш компонент Group */}
+        {/* Компонент для отображения и управления списком колонок */}
+        <TableConfigColumns columns={columnsConfig} setColumns={setColumnsConfig} />
+      </Group>
+    </Modal>
+  );
+};
+
+// Типы пропсов для компонента TableConfigColumns
+type TypeTableConfigColumnsProps = {
+  columns: TColumn[]; // Текущая конфигурация колонок (внутреннее состояние модалки)
+  setColumns: Dispatch<SetStateAction<TColumn[]>>; // Функция для обновления этой конфигурации
+};
+// Компонент для отображения списка колонок и их перетаскивания/видимости.
+const TableConfigColumns: FC<TypeTableConfigColumnsProps> = ({ columns, setColumns }) => {
+  // Состояние для отслеживания ID перетаскиваемого элемента (для стилей)
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  // Обработчик изменения видимости колонки. Мемоизирован.
+  const updateColumnVisibility = useCallback((identifier: string, visible: boolean) => {
+    // Обновляем массив колонок, меняя свойство visible для колонки с заданным identifier.
+    // Используем функциональное обновление setColumns для доступа к предыдущему состоянию.
+    setColumns(prev =>
+      prev.map(col => col.identifier === identifier ? { ...col, visible } : col)
+    );
+  }, [setColumns]); // Зависимость от setColumns (функция обновления состояния).
+  // Обработчик изменения фильтрации колонки. Мемоизирован.
+  // const updateColumnFilter = useCallback((identifier: string, filter: boolean) => {
+  //   // Обновляем массив колонок, меняя свойство filter для колонки с заданным identifier.
+  //   setColumns(prev =>
+  //     prev.map(col => col.identifier === identifier ? { ...col, filter } : col)
+  //   );
+  // }, [setColumns]); // Зависимость от setColumns (функция обновления состояния).
+
+  // Обработчик начала перетаскивания. Мемоизирован.
+  const onDragStart = useCallback((event: any) => { // event: Active object из dnd-kit
+    setDraggingId(String(event.active.id)); // Устанавливаем ID перетаскиваемого элемента (преобразуем в строку)
+  }, []); // Нет зависимостей, так как не использует внешние переменные.
+
+  // Обработчик окончания перетаскивания. Мемоизирован.
+  const onDragEnd = useCallback((event: any) => { // event: DragEndEvent object из dnd-kit
+    const { active, over } = event; // active - перетаскиваемый элемент, over - элемент под ним
+
+    setDraggingId(null); // Сбрасываем состояние перетаскивания
+
+    // Если элемент был перетащен на другое место (over существует и id отличается)
+    if (active.id !== over?.id) {
+      setColumns((prev) => {
+        // Находим индексы перетаскиваемого и целевого элементов
+        const oldIndex = prev.findIndex((col) => col.identifier === active.id);
+        const newIndex = prev.findIndex((col) => col.identifier === over?.id);
+        // Используем утилиту arrayMove из dnd-kit/sortable для перестановки элементов в массиве
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    }
+  }, [setColumns]); // Зависимость от setColumns (функция обновления состояния).
+
+  // Создаем массив ID колонок для SortableContext. Мемоизируем.
+  // Dnd-kit использует эти ID для отслеживания элементов.
+  const dndItems = useMemo(() => columns.map(col => col.identifier), [columns]);
+
+
+  return (
+    <>
+      <div className={styles.TableConfigListHeader}>
+        <div className={styles.TableConfigListHeaderTitle}>Видимость</div>
+        {/* <div className={styles.TableConfigListHeaderTitle}>Фильтр</div> */}
+      </div>
+      {/* Обертка DndContext для включения функциональности перетаскивания */}
+      <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd} onDragStart={onDragStart}>
+        {/* SortableContext для указания элементов, которые можно сортировать */}
+        {/* items - массив ID элементов, strategy - стратегия сортировки */}
+        <SortableContext items={dndItems} strategy={verticalListSortingStrategy}>
+          {/* Список элементов (колонки) */}
+          <ul className={styles.CheckboxList}>
+            {/* Итерируемся по колонкам для рендеринга сортируемых элементов */}
+            {columns.filter(column => column.inlist).map((column) => (
+              <TableConfigColumnsItem
+                key={column.identifier} // key для React list рендеринга
+                column={column} // Данные колонки
+                isDragging={column.identifier === draggingId} // Передается для применения стилей перетаскивания
+                toggleVisibility={updateColumnVisibility} // Передается обработчик изменения видимости
+              // toggleFilter={updateColumnFilter}
+              />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
+    </>
+  );
+};
+
+// Типы пропсов для компонента TableConfigColumnsItem
+type TypeTableConfigColumnsItemProps = {
+  column: TColumn; // Данные текущей колонки
+  isDragging: boolean; // Флаг: перетаскивается ли эта колонка сейчас
+  toggleVisibility: (identifier: string, visible: boolean) => void; // Функция для изменения видимости
+  // toggleFilter: (identifier: string, filter: boolean) => void;
+};
+// Компонент одного элемента списка колонки в модалке. Мемоизирован.
+const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ column, isDragging, toggleVisibility }) => {
+  // Хук useSortable из dnd-kit предоставляет свойства и рефы для сортируемого элемента.
+  // id должен совпадать с элементом в массиве items в SortableContext.
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: column.identifier });
+
+  // Применяем стили для перетаскивания (положение и анимация)
+  const style = {
+    transform: CSS.Transform.toString(transform), // Преобразуем объект transform в строку CSS
+    transition, // Применяем transition
+  };
+
+  // Обработчик изменения чекбокса видимости. Мемоизирован.
+  const handleVisibilityChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    // Вызываем функцию из пропсов для обновления видимости колонки.
+    toggleVisibility(column.identifier, e.target.checked);
+  }, [column.identifier, toggleVisibility]); // Зависимости: identifier колонки и функция toggleVisibility из пропсов.
+
+  // Обработчик изменения чекбокса фильтрации. Мемоизирован.
+  // const handleFilterChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  //   // Вызываем функцию из пропсов для обновления фильтрации колонки.
+  //   toggleFilter(column.identifier, e.target.checked);
+  // }, [column.identifier, toggleFilter]); // Зависимости: identifier колонки и функция toggleFilter из пропсов.
+
+  return (
+    // Привязываем setNodeRef к корневому элементу списка (<li>)
+    // Применяем стили перетаскивания
+    // Добавляем класс 'dragging', если элемент перетаскивается
+    <li ref={setNodeRef} style={style} className={`${styles.ListItem} ${isDragging ? styles.dragging : ''}`}>
+      {/* Элемент для захвата мышью (draggable handle).
+          listener из useSortable привязывается сюда.
+          attributes также привязываются сюда для доступности. */}
+      <div {...listeners} {...attributes} className={styles.DragAndDrop} title="Переместить">
+        {/* Иконка для перетаскивания */}
+        <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
+      </div>
+      {/* Чекбокс видимости колонки */}
+      <div className={styles.CheckboxWrapper}>
+        <input
+          type="checkbox"
+          id={`column-visibility-${column.identifier}`} // Уникальный ID для чекбокса
+          checked={column.visible} // Состояние чекбокса
+          onChange={handleVisibilityChange} // Обработчик изменения
+        />
+        {/* Метка для чекбокса (для доступности и возможности клика по тексту) */}
+        <label htmlFor={`column-visibility-${column.identifier}`}>{getTranslateColumn(column)}</label>
+      </div>
+      {/* <div className={styles.CheckboxWrapper} style={{ width: "fit-content", marginRight: "6px" }}>
+        <input
+          type="checkbox"
+          id={`column-visibility1-${column.identifier}`} // Уникальный ID для чекбокса
+          checked={column.filter} // Состояние чекбокса
+        // onChange={handleFilterChange} // Обработчик изменения
+        />
+      </div> */}
+    </li>
+  );
+});
+
+export default Table;

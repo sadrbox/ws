@@ -1,130 +1,219 @@
-import AppContextProvider from "./AppContextProvider";
-import { getTranslation } from "src/i18";
-import { Content, Navbar, NavList, PaneGroup, PaneTab } from "../components/UI";
-import { TypePaneItem } from "src/components/Tabs/types";
-import { TypeAppContextProps, TypeNavbarProps } from "./types";
+import React, {
+  createContext,
+  Dispatch,
+  isValidElement,
+  PropsWithChildren,
+  ReactElement,
+  SetStateAction,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
-import { Screen } from "../components/UI";
-
-// import NavigationPage from "./pages/NavigationPage";
-// import { usePortal } from "src/hooks/usePortal";
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import React from "react";
+import { getTranslation } from "src/app/i18";
+import { Content, Navbar, NavList, ErrorBoundary, LoadingFallback, Screen } from "../components/UI";
+import { TComponentNode, TPane, TypeAppContextProps, TypeNavbarProps } from "./types";
 import useUID from "src/hooks/useUID";
-import { add, uniqueId } from "lodash";
-import Counterparties from "src/models/Counterparties";
-import { ListActivityHistories } from "src/models/ActivityHistories";
+import { TDataItem } from "src/components/Table/types";
+// import { OrganizationsList } from "src/models/Organizations";
+import CounterpartiesList from 'src/models/Counterparties/list';
+
+import ActivityHistoriesList from "src/models/ActivityHistories";
+
+export const getComponentName = (node: TComponentNode): string => {
+  if (node == null) return "Unknown";
+
+  if (isValidElement(node)) {
+    const type = (node as ReactElement).type;
+    if (typeof type === "string") return type;
+    if (typeof type === "function") {
+      return (type as any).displayName || (type as any).name || "AnonymousComponent";
+    }
+    return "UnknownElement";
+  }
+
+  if (typeof node === "function") {
+    return (node as any).displayName || (node as any).name || "AnonymousComponent";
+  }
+
+  if (typeof node === "object" && (node as any).type && (node as any).type.displayName) {
+    return (node as any).type.displayName;
+  }
+  return "NonComponent";
+};
+
+export const getUniqId = (component: TComponentNode, data?: TDataItem): string => {
+  const name = getComponentName(component);
+  const idPart = data?.uuid ?? data?.id ?? Date.now().toString(36);
+  return `${name}-${idPart}`;
+};
+
+const AppContext = createContext<TypeAppContextProps | undefined>(undefined);
+
+export const useAppContext = (): TypeAppContextProps => {
+  const ctx = useContext(AppContext);
+  if (!ctx) {
+    throw new Error("useAppContext must be used within AppContextProvider");
+  }
+  return ctx;
+};
+
+const AppContextProvider: React.FC<PropsWithChildren<{ value: TypeAppContextProps }>> = ({
+  children,
+  value,
+}) => <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+
+// ────────────────────────────────────────────────
+// Главный компонент приложения
+// ────────────────────────────────────────────────
+
+const App: React.FC = () => {
+  const queryClient = new QueryClient();
+
+  const screenRef = useRef<HTMLDivElement>(null);
+
+  const [panes, setPanes] = useState<TPane[]>([]);
+  const [activePaneId, setActivePaneId] = useState<string>("");
+
+  // Навбар (можно вынести в отдельный хук / компонент позже)
+  const initialNavbar: TypeNavbarProps[] =
+    [
+      { id: useUID(), isActive: false, title: "Операционная деятельность", component: <NavList label="Operations" /> },
+      { id: useUID(), isActive: false, title: "CRM", component: <NavList label="CRM" /> },
+      { id: useUID(), isActive: false, title: "Настройки", component: <NavList label="Settings" /> },
+    ]
 
 
+  const [navbarItems, setNavbarItems] = useState<TypeNavbarProps[]>(initialNavbar);
 
+  // ────────────────────────────────────────────────
+  // Управление панелями
+  // ────────────────────────────────────────────────
 
-export default function App() {
-
-  // перенести в отдельный файл для настройки topmenu - Navbar
-  const navbar = [
-    {
-      id: useUID(),
-      isActive: false,
-      title: "Операционная деятельность",
-      component: <NavList lable="OPErations" />
-    },
-    {
-      id: useUID(),
-      isActive: false,
-      title: "CRM",
-      component: <NavList lable="CRM" />
-    },
-    {
-      id: useUID(),
-      isActive: false,
-      title: "Настройки",
-      component: <NavList lable="settings" />
+  const addPane = useCallback((pane: Partial<TPane>): string => {
+    if (!pane.component) {
+      console.warn("[addPane] Component is required");
+      return "";
     }
 
-  ]; //--------------//
+    const uniqId = getUniqId(pane.component, pane?.data as TDataItem | undefined);
 
+    // Проверяем, существует ли уже такая панель
+    const existing = panes.find((p) => p.uniqId === uniqId);
+    if (existing) {
+      setActivePaneId(uniqId);
+      return uniqId;
+    }
 
-  const screenRef = useRef<HTMLDivElement | null>(null);
-  const [panes, setPanes] = useState<TypePaneItem[]>([]);
-  // const [navbarOverlayIsVisible, setNavbarOverlayIsVisible] = useState(false);
-  const [navbarList, setNavbarList] = useState<TypeNavbarProps>(navbar);
-  // const [navbarOverlay, setNavbarOverlay] = useState<TypeNavbarOverlayProps>({
-  //   isVisible: true,
-  //   toggleVisibility: () => setNavbar(prev => !prev),
-  //   component: <NavigationPage />
-  // })
+    // Формируем заголовок, если не передан
+    let label = pane.label;
+    if (!label) {
+      const compName = getComponentName(pane.component);
+      label = getTranslation(compName) || compName;
+      // console.log(compName, label)
+    }
 
-  // const navbarOverlayIsVisible = navbarList.find(n => n.isActive)
+    const newPane: TPane = {
+      ...pane,
+      uniqId,
+      label,
+      component: pane.component, // важно сохранить ссылку на компонент
+    };
+
+    setPanes((prev) => [...prev, newPane]);
+    setActivePaneId(uniqId);
+
+    // Скрываем навбар после открытия панели
+    setNavbarItems((prev) => prev.map((n) => ({ ...n, isActive: false })));
+
+    return uniqId;
+  }, [panes]);
+
+  const removePane = useCallback((uniqId: string) => {
+    setPanes((prev) => {
+      const index = prev.findIndex((p) => p.uniqId === uniqId);
+      if (index === -1) return prev;
+
+      const next = prev.filter((_, i) => i !== index);
+
+      // Если закрываем активную панель → переключаемся на предыдущую или очищаем
+      if (activePaneId === uniqId) {
+        const newActive = next.length > 0 ? next[Math.max(0, index - 1)].uniqId : "";
+        setActivePaneId(newActive);
+      }
+
+      return next;
+    });
+  }, [activePaneId]);
+
+  // const openPane = useCallback((pane: Partial<TOpenPaneProps>) => {
+  //   addPane(pane);
+  // }, [addPane]);
+
+  const setActivePane = useCallback((uniqId: string) => {
+    if (panes.some((p) => p.uniqId === uniqId)) {
+      setActivePaneId(uniqId);
+    }
+  }, [panes]);
+
+  // ────────────────────────────────────────────────
+  // Автоматическое открытие начальной панели
+  // ────────────────────────────────────────────────
 
   useEffect(() => {
-    addPane(<Counterparties.List />);
-    // console.log("activeNav", activeNav);
+    // Открываем OrganizationsList при монтировании приложения
+    addPane({
+      component: ActivityHistoriesList,
+      label: getTranslation("ActivityHistoriesList") || "ActivityHistoriesList",
+    });
   }, []);
 
+  // ────────────────────────────────────────────────
+  // Контекстное значение (мемоизировано)
+  // ────────────────────────────────────────────────
 
-  const getComponentName = useCallback((node: React.ReactNode): string => {
-    // console.log(node);
-    if (React.isValidElement(node) && typeof node.type === "function") {
-      return (node.type as React.FunctionComponent).displayName || "AnonymousComponent";
-    }
-    if (React.isValidElement(node) && typeof node.type === "string") {
-      return node.type;
-    }
-    return "";
-  }, []);
-
-
-  const setActivePaneID = useCallback((uniqId: string) => {
-    setPanes(prev => prev.map(p => (p.uniqId == uniqId ? { ...p, isActive: true } : { ...p, isActive: false })));
-  }, []);
-
-  const addPane = useCallback((component: React.ReactNode, uuid?: string) => {
-    // if (!content || !inTab) return;
-    setNavbarList(nav => nav.map(n => ({ ...n, isActive: false })));
-    const componentName = getComponentName(component);
-    const uniqId: string = `${componentName}-${uuid}`;
-    // const componentName = React.isValidElement(component) && typeof component.type === "function" ? (component.type as React.FunctionComponent).displayName || "AnonymousComponent" : undefined;
-
-    // const existingPane = panes && panes.find(p => getComponentName(p.component) === componentName);
-    const existingPane = panes && panes.find(p => uniqId === p.uniqId);
-    // console.log(componentName);
-
-    if (existingPane) {
-
-      setActivePaneID(existingPane.uniqId);
-    } else {
-      const label = getTranslation(componentName) || `Вкладка ${panes.length + 1}`;
-      const newTab = {
-        uniqId,
-        label,
-        component,
-        isActive: true,
-      };
-      setPanes(prev => [...prev.map(p => ({ ...p, isActive: false })), newTab]);
-    }
-  }, [panes, getComponentName, setActivePaneID]);
-
-
-  const contextValue = useMemo<TypeAppContextProps>(() => ({
-    screenRef,
-    panes,
-    navbar: { props: navbarList, setProps: setNavbarList },
-    actions: {
-      addPane,
-      setActivePaneID,
-    },
-  }), [panes, addPane, setActivePaneID, navbarList]);
-
-
+  const contextValue = useMemo<TypeAppContextProps>(
+    () => ({
+      screenRef,
+      windows: {
+        panes,
+        activePane: activePaneId,
+        addPane,
+        removePane,
+        setActivePane,
+      },
+      navbar: {
+        props: navbarItems,
+        setProps: setNavbarItems,
+      },
+      actions: {
+        // можно расширить при необходимости
+      },
+    }),
+    [panes, activePaneId, addPane, removePane, setActivePane, navbarItems]
+  );
 
   return (
-    <AppContextProvider init={contextValue}>
-      <Screen ref={screenRef}>
-        <Navbar />
-        <Content />
-      </Screen>
-      {/* {overlayIsVisible && getOverlay.content && <Portal content={getOverlay.content} />} */}
+    <AppContextProvider value={contextValue}>
+      <QueryClientProvider client={queryClient}>
+        <ErrorBoundary fallback={<div>Что-то пошло не так</div>}>
+          <React.Suspense fallback={<LoadingFallback />}>
+            <Screen ref={screenRef}>
+              <Navbar />
+              <Content />
+            </Screen>
+          </React.Suspense>
+        </ErrorBoundary>
+
+        {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+      </QueryClientProvider>
     </AppContextProvider>
   );
-}
+};
 
+export default App;

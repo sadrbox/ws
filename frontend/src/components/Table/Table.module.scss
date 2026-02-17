@@ -1,751 +1,469 @@
+/* Scrollbar */
 * {
 	&::-webkit-scrollbar {
 		width: 10px;
 		height: 10px;
 	}
 
-	/* Track */
 	&::-webkit-scrollbar-track {
-		// padding-top: 30px;
 		background: $color30;
 	}
 
-	/* Handle */
 	&::-webkit-scrollbar-thumb {
-		// margin-top: 30px;
 		background: $color10;
 		border-radius: $radius2;
 	}
 
-	/* Handle on hover */
 	&::-webkit-scrollbar-thumb:hover {
 		background: $color10;
 	}
 }
 
-.animationLoop {
-	animation: spin 3s linear infinite;
-}
-
-@keyframes spin {
-	100% {
-		transform: rotate(360deg);
-	}
-}
-
+/* Animations */
 .animationLoop {
 	animation: spin 1s linear infinite;
 }
 
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Blur utility */
 .blur5 {
 	filter: blur(5px);
 }
 
+/* Table layout containers */
 .TableWrapper {
-	// margin-top: 6px;
-	gap: 6px;
 	display: flex;
-	container-type: size;
 	flex-direction: column;
 	flex: 1;
+	gap: 6px;
+	height: 100%;
+	overflow: hidden;
 	min-height: 350px;
 	min-width: 300px;
-	transition: all 0.5ms ease;
 	border-radius: $radius2;
+	transition: all 0.3s ease;
 }
 
-.TableHeaderLabel {
-	margin: 0 0 0px 0px;
-	padding: 0px 0 0 9px;
-	font-weight: bold;
-	font-size: 120%;
-	color: $color6;
-	line-height: 27px;
-	// background-color: red;
-	// user-select: none;
-	//////	// font-family: "Segoe UI";
-	// letter-spacing: 1px;
+.TableScrollWrapper {
+	flex: 1;
+	min-height: 0;
+	margin: 0;
+	background: #fff;
+	border: 1px solid $color10;
+	border-radius: $radius2;
+	box-shadow: inset 0 0 4px $color30;
+	overflow: auto;
+	scroll-behavior: smooth;
+
+	// Оптимизация для производительности
+	will-change: scroll-position;
+	transform: translate3d(0, 0, 0);
+
+	// Быстрый скролл на мобильных
+	-webkit-overflow-scrolling: touch;
+
+	// Ускорение переотрисовки
+	contain: layout style paint;
 }
 
 .TableFilter {
-	// margin: 6px 0px;
 	display: flex;
-	flex-direction: row;
-	flex: 1;
 	flex-wrap: wrap;
-	// align-items: ;
-	// justify-content: space-between;
 	gap: 12px;
 }
 
 .TabHeader {
 	display: flex;
-	flex-direction: row;
 	gap: 6px;
-	margin: 3px 0px;
-	flex: 1 1 0%;
-	box-sizing: content-box;
+	margin: 3px 0;
 }
+
 .TablePanel {
-	overflow: clip;
 	display: flex;
-	// flex-direction: row;
 	gap: 6px;
-	margin: 0px 0 0 0;
-	// flex: 1;
+	margin: 0;
 	justify-content: space-between;
-	box-sizing: content-box;
-	/* Add transition for animatable properties */
-	transition: all 1s ease;
+	transition: all 0.4s ease;
 
 	@container (max-width: 800px) {
-		flex-direction: row;
-		align-items: stretch;
 		flex-wrap: wrap;
+		align-items: stretch;
 	}
+}
 
-	/* Child elements */
-	.TablePanelLeft,
-	.TablePanelRight {
-		display: flex;
-		flex-direction: row;
-		align-items: center;
-		gap: 6px;
-		/* Add transition for animatable properties */
-		transition: all 1s ease;
-	}
-	.TablePanelLeft {
-		justify-content: space-between;
-	}
-	.TablePanelRight {
+.TablePanelLeft,
+.TablePanelRight {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	transition: all 0.4s ease;
+}
+
+.TablePanelLeft {
+	justify-content: space-between;
+}
+
+.TablePanelRight {
+	flex: 1 1 100%;
+	justify-content: flex-start;
+
+	@container (max-width: 600px) {
+		flex-wrap: wrap;
 		justify-content: flex-start;
+	}
+
+	@container (max-width: 1000px) {
 		flex: 1 1 100%;
-		@container (max-width: 600px) {
-			flex-direction: row;
-			align-items: stretch;
-			flex-wrap: wrap;
-			justify-content: flex-start;
-		}
-		@container (max-width: 1000px) {
-			flex: 1 1 100%;
-		}
 	}
 }
 
-.TableScrollWrapper {
-	height: 100%;
-	// container-type: size;
-	// display: flex;
-	// flex-direction: column;
-	// grid-template-rows: auto;
-
-	// position: static;
-	// left: 0;
-	// right: 0;
-	// top: 0;
-	// bottom: 0;
-	// display: flex;
-	// flex-grow: 1;
-	// height: 100px;
-	// min-height: 0;
-	// flex: 1;min-height: 0;
-	// margin: 3px 0px;
-	margin: 0px;
-	// height: calc(100vh - 70px);
-	// height: auto;
-	// display: grid;
-	// grid-template-rows: repeat(auto-fill, minmax(100px, 1fr));
-	background-color: #fff;
-	// margin: 4px 4px 4px 4px;
-	// width: auto;
-	// background-color: red;
-	// padding: 4px;
-	// border: 1px solid $color30;
-	scroll-behavior: smooth;
-	// max-width: 100vw;
-	// max-height: 90vh; /* Высота контейнера */
-	overflow: scroll; /* Прокрутка по вертикали */
-	// border-top: 1px solid $color10;
-	// border-bottom: 1px solid $color10;
-	// border-right: 1px solid $color10;
-	border: 1px solid $color10;
-	// border-bottom: 0px;
-	// box-shadow: 0px 0px 2px $color6;
-	box-shadow: inset 0 0 4px $color30;
-	border-radius: $radius2;
-}
-
+/* Table itself */
 table {
 	border-collapse: collapse;
-	height: 100%;
+	// border-spacing: 0;
 	width: 100%;
-	position: relative;
-	border-spacing: 20px;
-	// display: flex;
-	// flex-direction: column;
-	// flex: 1;
-	table-layout: fixed; // нужен чтобы th и td соответствовали по ширине, без этого колонки прыгают при обновлении таблицы
-	// table-layout: auto;
-	// position: relative;
-}
-
-.onScrollTab {
-	box-shadow: 0px 1px 10px $color6;
-	// box-shadow: 0px 0px 0px red;
-	// border: 3px solid red;
-	transition: box-shadow 1s ease-out;
+	// height: 100%;
+	table-layout: fixed;
 }
 
 thead {
-	// display: inline;
-	background-color: $color30;
+	background: $color30;
 	position: sticky;
 	top: 0;
-	// z-index: 1;
-	// table-layout: fixed;
-	// width: 100%;
-	// border-bottom: 1px solid red;
-	// flex-grow: 1;
+	z-index: 2;
 
-	tr {
-		th {
-			padding: 0px;
-			font-weight: 500;
-			// padding: 2px 0 3px 0;
-			user-select: none;
-			// cursor: default;
-			// white-space: nowrap;
-			border-right: 1px solid $color10;
-			// border-left: 1px solid $color10; // need
-			border-bottom: 0px;
-			// overflow: hidden;
-			// background-color: $color30;
-			// width: max-content;
-			// display: grid;
-			// justify-content: center;
-			&:first-child {
-				border-left: 0px;
-			}
+	tr th {
+		padding: 0;
+		font-weight: 500;
+		user-select: none;
+		border-right: 1px solid $color10;
+		border-bottom: 0;
 
-			&:last-child {
-				border-right: 0px;
-			}
-			.TableHeaderCell {
-				padding: 0px 1px 1px 1px;
-				margin: 1px;
-				// display: grid;
-				// grid-template-rows: 21px;
-				// grid-auto-flow: column;
-				// grid-template-columns: auto;
-				place-items: center;
-				// place-content: center;
-				display: flex;
-				flex-direction: row;
-				align-items: center;
+		&:first-child {
+			border-left: 0;
+		}
+		&:last-child {
+			border-right: 0;
+		}
+
+		.TableHeaderCell {
+			display: flex;
+			align-items: center;
+			height: $heightFieldInput - 4px;
+			padding: 1px;
+			margin: 1px;
+			overflow: hidden;
+			white-space: nowrap;
+			text-overflow: ellipsis;
+			cursor: default;
+			justify-content: space-between;
+			border: 1px solid transparent;
+			span {
+				padding: 0 5px;
 				overflow: hidden;
 				white-space: nowrap;
 				text-overflow: ellipsis;
-				border: 1px solid transparent;
-				// align-items: center;
-				height: $heightFieldInput - 4px;
-				// min-width: 30px;
-				// border-top: 1px solid $color34;
-				// grid-template-columns: 1fr auto; /* Делаем элемент гибким */
-				// max-width: 100%;
-				// justify-content: center;
-				// align-items: stretch;
-
-				// align-items: center;
-				// border: 1px solid transparent;
-				cursor: default;
-				// max-width: 150px;
-				// text-overflow: ellipsis;
-				span {
-					padding: 0px 5px;
-					// z-index: -999;
-					// position: absolute;
-					// align-self: center;
-					// vertical-align: top;
-					line-height: 20px;
-					// display: grid;
-					overflow: hidden;
-					// background-color: red;
-					white-space: nowrap;
-					text-overflow: ellipsis;
-					// font-size: 14px;
-					// margin: auto 0;
-				}
-			} // .TableHeaderColumn
-
-			// div {
-			// 	// height: 27px;
-			// 	display: grid;
-			// 	grid-auto-flow: column;
-			// 	align-items: center;
-			// 	text-align: left;
-			// 	padding: 4px 7px;
-			// }
+			}
 		}
 	}
+
 	&::after {
-		margin-bottom: 0px;
-		content: " "; /* Псевдоэлемент нуждается в содержимом */
-		// padding: 2px; /* Отступы */
-		display: block; /* Отображение блока, чтобы отступы работали */
-		position: absolute; /* Позиционирование относительно родителя */
-		bottom: 0; /* Например, расположение внизу */
-		left: 0; /* Сдвиг от левого края */
-		right: 0; /* Сдвиг от правого края, если нужно заполнить */
-		// box-shadow: 0 0 1px 1px $color10;
-		// border-bottom: 1px solid $color10;
+		content: "";
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
 		height: 1px;
 		background: $color5;
-		// transition: box-shadow 1s ease-out;
-		box-shadow: 0px 1px 5px $color6;
+		box-shadow: 0 1px 5px $color6;
 	}
 }
 
+tr:has(+ tr.activeRow) {
+	td {
+		border-bottom: 1px solid $color1 !important;
+	}
+}
 tbody {
-	// flex-grow: 1;
-	// flex: 1;
-	// background-color: $color60;
+	// position: relative;
+	// Оптимизация для производительности при виртуализации
+	will-change: transform;
+	transform: translate3d(0, 0, 0);
+	contain: layout style paint;
+	// will-change: contents;
+	// contain: content;
+
 	tr {
-		border-bottom: 1px solid $color34;
-		// &:last-child {
-		//   height: 50px;
-		//   border: 0px !important;
-		// }
+		&.activeRow {
+			// position: static;
+			z-index: 5;
+			// Оптимизируем активную строку
+			will-change: background-color, box-shadow;
+
+			td {
+				div {
+					background: $color2;
+				}
+				border-top: 1px solid $color1;
+				border-bottom: 1px solid $color1;
+				border-right: 1px solid $color1;
+				border-left: 0px solid $color1;
+				&:last-child {
+					border-right: 0px;
+				}
+			}
+		}
+
+		// Оптимизация для каждой строки
+		will-change: auto;
+		transform: translate3d(0, 0, 0);
+
 		td {
-			padding: 0px;
-			// width: min-content;
+			padding: 0;
+			border-top: 1px solid $color34;
+			border-bottom: 1px solid $color34;
 			border-right: 1px solid $color34;
-			// border-bottom: 1px solid $color10;
-			// border-top: 1px solid $color10;
+			border-left: 0px solid $color34;
+
 			.TableBodyCell {
-				user-select: none;
-				padding: 1px 1px 1px 1px;
-				margin: 1px;
-				// margin: 1px;
-				// display: grid;
-				// grid-auto-flow: column;
-				// grid-template-rows: $heightFieldInput;
-				// grid-template-columns: 1fr;
+				display: flex;
 				align-items: center;
+				height: $heightFieldInput - 4px;
+				padding: 1px;
+				margin: 1px;
 				white-space: nowrap;
 				text-overflow: ellipsis;
-				// white-space: nowrap;
-				// text-overflow: ellipsis;
-				// grid-template-columns: 1fr auto; /* Делаем элемент гибким */
-				// max-width: 100%;
-				// justify-content: center;
-				// align-items: stretch;
-				display: flex;
-				place-items: center;
-				// place-content: center;
-
-				flex-direction: row;
-				height: $heightFieldInput - 4px;
-				// align-items: center;
+				overflow: hidden;
+				user-select: none;
 				border: 1px solid transparent;
-				// max-width: 150px;
-				// text-overflow: ellipsis;
+
+				// Оптимизация ячеек
+				// will-change: contents;
+				// contain: content;
+
 				span {
-					padding: 0px 5px;
-					// line-height: 20px;
-					// align-self: center;
-					// vertical-align: top;
+					padding: 0 5px;
 					line-height: 17px;
-					// display: grid;
 					overflow: hidden;
-					// background-color: red;
 					white-space: nowrap;
 					text-overflow: ellipsis;
-					// font-size: 14px;
-					// margin: auto 0;
 				}
-			} // .TableBodyColumn
-
+			}
 			&:first-child {
-				border-left: 0px;
+				border-left: 0;
 			}
-
 			&:last-child {
-				border-right: 0px;
-				// border-bottom: 1px solid $colorPrimaryDark;
+				border-right: 0;
 			}
-			// div {
-			// 	display: flex;
-
-			// 	// min-width: 10px;
-			// 	align-items: center;
-			// 	user-select: none;
-			// }
 		}
+
 		&:last-child {
-			border: 0px solid transparent;
+			border: 0 solid transparent;
 		}
 	}
 }
+
 tfoot {
-	// display: inline;
-	background-color: $color30;
+	background: $color30;
 	position: sticky;
 	bottom: 0;
-	// z-index: 1;
+	z-index: 2;
 
-	border-top: 0px;
-	tr {
-		td {
-			padding: 0px;
-			font-weight: 500;
-			// padding: 2px 0 3px 0;
-			user-select: none;
-			cursor: default;
-			// white-space: nowrap;
-			// border-right: 0px solid $color10;
-			border-left: 1px solid $color10; // need
-			border-top: 0px;
-			border-bottom: 0px;
-			// border-bottom: 4px solid red;
-			// overflow: hidden;
-			// background-color: $color30;
-			// width: max-content;
-			// display: grid;
-			// justify-content: center;
-			&:first-child {
-				border-left: 0px;
-			}
-			&:last-child {
-				border-right: 0px;
-			}
-			.TableFooterColumn {
-				margin: 1px;
-				display: grid;
-				grid-template-rows: 28px;
-				grid-auto-flow: column;
-				grid-template-columns: 1fr;
-				align-items: center;
-				justify-items: start;
-				// overflow: hidden;
-				// white-space: nowrap;
-				// text-overflow: ellipsis;
-				border: 1px solid transparent;
-				border-top: 0px;
-				// grid-template-columns: 1fr auto; /* Делаем элемент гибким */
-				// max-width: 100%;
-				// justify-content: center;
-				// align-items: center;
+	tr td {
+		padding: 0;
+		font-weight: 500;
+		user-select: none;
+		cursor: default;
+		border-left: 1px solid $color10;
+		border-top: 0;
+		border-bottom: 0;
 
-				// align-items: center;
-				// border: 1px solid transparent;
-				cursor: default;
-				// max-width: 150px;
-				// text-overflow: ellipsis;
-				.FieldSearch {
-					width: 100%;
-					box-sizing: content-box;
-					border: 1px solid $color34;
-					border-radius: $radius2;
-					height: 25px;
-					padding: 0px 3px;
-					// line-height: 11px;
+		&:first-child {
+			border-left: 0;
+		}
+		&:last-child {
+			border-right: 0;
+		}
 
-					&:focus {
-						// outline: none;
-						outline: 2px solid $color2;
-						// box-shadow: 0 0 5px 1px $color2;
-					}
+		.TableFooterColumn {
+			margin: 1px;
+			display: grid;
+			grid-template-rows: 28px;
+			align-items: center;
+			justify-items: start;
+			border: 1px solid transparent;
+			border-top: 0;
+
+			.FieldSearch {
+				width: 100%;
+				height: 25px;
+				padding: 0 3px;
+				border: 1px solid $color34;
+				border-radius: $radius2;
+				box-sizing: content-box;
+
+				&:focus {
+					outline: 2px solid $color2;
 				}
-			} // .TableHeaderColumn
-
-			// div {
-			// 	// height: 27px;
-			// 	display: grid;
-			// 	grid-auto-flow: column;
-			// 	align-items: center;
-			// 	text-align: left;
-			// 	padding: 4px 7px;
-			// }
+			}
 		}
 	}
-	&::before {
-		// margin-bottom: 0px;
-		content: " "; /* Псевдоэлемент нуждается в содержимом */
-		// padding: 2px; /* Отступы */
-		display: block; /* Отображение блока, чтобы отступы работали */
-		position: absolute; /* Позиционирование относительно родителя */
-		top: 0; /* Например, расположение внизу */
-		left: 0; /* Сдвиг от левого края */
-		right: 0; /* Сдвиг от правого края, если нужно заполнить */
-		// box-shadow: 0 0 1px 1px $color10;
-		// border-bottom: 22x solid $color10;
+
+	&::before,
+	&::after {
+		content: "";
+		position: absolute;
+		left: 0;
+		right: 0;
 		height: 1px;
 		background: $color10;
-		// transition: box-shadow 1s ease-out;
-		// box-shadow: 0px -1px 5px 0px $color6;
+	}
+
+	&::before {
+		top: 0;
 	}
 	&::after {
-		// margin-bottom: 0px;
-		content: " "; /* Псевдоэлемент нуждается в содержимом */
-		// padding: 2px; /* Отступы */
-		display: block; /* Отображение блока, чтобы отступы работали */
-		position: absolute; /* Позиционирование относительно родителя */
-		bottom: 0; /* Например, расположение внизу */
-		left: 0; /* Сдвиг от левого края */
-		right: 0; /* Сдвиг от правого края, если нужно заполнить */
-		// box-shadow: 0 0 1px 1px $color10;
-		// border-bottom: 22x solid $color10;
-		height: 1px;
-		background: $color10;
-		// transition: box-shadow 1s ease-out;
-		// box-shadow: 0px 1px 5px 0px $color6;
+		bottom: 0;
 	}
 }
 
-.TabFieldActive {
-	@extend .TableBodyCell;
-	border: 1px solid $color1 !important;
-	background: $color2;
-}
+/* Active / focused states */
 
-.LabelForCheckbox {
-	display: flex;
-	justify-content: center;
-	align-items: center;
-	margin: 0px;
-	// background: red;
-	// height: 42px;
-	// width: 22px;
-}
-
+/* Checkbox styling */
 input[type="checkbox"] {
-	/* необходимо для чекбоксов в таблице */
-	height: 18px;
-	width: 18px;
+	height: 16px;
+	width: 16px;
+	margin: 0;
 	accent-color: $colorPrimaryDark;
-	// border: 9px solid #ccc;
-	// accent-color: $color10;
-	// transform: rotate(45deg);
-	// appearance: none;
 	cursor: default;
-	margin: 0px;
-	// outline: 1px solid blue;
-	// border: 1px solid red;
-	// transition: all 0.3s ease;
-	&:checked {
-		// background-color: #007bff;
-		// border-color: #007bff;
-		// transform: scale(1.1);
-	}
+
 	&:focus {
 		outline: none;
-		// box-shadow: 0 0 2px $color6;
-		// border: 1px solid $color1;
-		// box-shadow: 0 1px 3px $color5;
-		// border: 1px solid red;
-		// box-shadow: 0px 0px 3px #262626;
 	}
 }
 
+/* Context menu */
 .contextMenu {
-	user-select: none;
-	z-index: 9999;
 	position: absolute;
+	z-index: 9999;
 	width: 200px;
-	padding: 0px;
-	// outline: 1px solid $colorTheme;
-
-	background-color: $color60;
+	padding: 0;
+	background: $color60;
 	border: 1px solid $color10;
 	border-radius: $radius2;
-	box-shadow: 0px 0px 3px 0px $color10;
-}
-.contextMenu_list {
-	display: flex;
-	flex-direction: column;
-	// justify-content: space-around;
-	padding: 0px;
+	box-shadow: 0 0 3px $color10;
+	user-select: none;
 
-	li {
+	.contextMenu_list {
 		display: flex;
-		flex-direction: row;
-		align-items: center;
-		justify-content: left;
-		padding: 5px;
+		flex-direction: column;
+		padding: 0;
+		margin: 0;
+		list-style: none;
 
-		&:not(:last-child) {
-			border-bottom: 1px solid $color30;
-		}
-		&:first-child {
-		}
-		a {
-			display: grid;
-			grid-template-columns: 22px 1fr;
+		li {
+			display: flex;
 			align-items: center;
+			padding: 5px;
 
-			font-size: 12px;
+			&:not(:last-child) {
+				border-bottom: 1px solid $color30;
+			}
 
-			&:hover {
-				color: $colorTheme;
+			a {
+				display: grid;
+				grid-template-columns: 22px 1fr;
+				align-items: center;
+				font-size: 12px;
+
+				&:hover {
+					color: $colorTheme;
+				}
 			}
 		}
 	}
 }
 
-hr {
-	padding: 0px;
-	margin: 0px;
-
-	outline: none;
-	border: 0px;
-	border-bottom: 1px solid $color33;
-}
-
+/* Headers & wrappers */
 .HeaderName {
 	font-size: 110%;
 	user-select: none;
-	// font-weight: bold;
-	// box-shadow: inset 0 0 3px $color30;
 	background: #fff;
-	border-top: 1px solid $color10;
-	border-left: 1px solid $color10;
-	border-right: 1px solid $color10;
-	border-bottom: 1px solid transparent;
-	padding: 6px 12px 6px 12px;
+	border: 1px solid $color10;
+	border-bottom: none;
+	border-radius: $radius2 $radius2 0 0;
+	padding: 6px 12px;
 	margin: 6px 6px -1px 18px;
-	border-top-left-radius: $radius2;
-	border-top-right-radius: $radius2;
-	// position: static;
-	z-index: 2;
-	// clip-path: 2px -5px -10px -20px round 5px;
 }
 
-.FormWrapper {
+.FormWrapper,
+.ScrollWrapper {
 	flex: 1;
-	// height: 100%;
 	padding: 6px;
 	margin: 6px;
-	background-color: #fff;
-	scroll-behavior: smooth;
-	overflow: auto; /* Прокрутка по вертикали */
+	background: #fff;
 	border: 1px solid $color10;
+	border-radius: $radius2;
 	box-shadow: inset 0 0 3px $color30;
-	border-radius: $radius2;
-}
-
-.ScrollWrapper {
-	// height: calc(100vh - 30px);
-	// max-height: 100vh;
-	z-index: 1;
-	// display: grid;
-	flex: 1;
-	// width: min-content;
-	// grid-gap: 6px;
-	margin: 0px 6px 6px 6px;
-	padding: 6px;
-	background-color: #fff;
+	overflow: auto;
 	scroll-behavior: smooth;
-	// overflow: scroll;
-	overflow: auto; /* Прокрутка по вертикали */
-	border: 1px solid $color10;
-	// box-shadow: inset 0px 0px 6px 5px $color6;
-	border-radius: $radius2;
 }
 
+/* Drag & drop */
 .dragging {
-	// background-color: $color2 !important;
-	opacity: 0.6; /* Пример стиля, меняющий прозрачность во время перетаскивания */
-	// transform: scale(1) !important; /* Увеличение размера элемента */
-	// box-shadow: 0 0 3px $color3 !important;	&:hover {
-	// border: 1px solid $color1;
-	// background-color: $color2;
-	// box-shadow: inset 0px 1px 3px $color60;
+	opacity: 0.6;
 }
 
+/* Checkbox list (drag & drop variant) */
 .CheckboxWrapper {
-	width: inherit;
-	// max-width: 350px;
-	// min-width: 200px;
-	// background-color: red;
-	// padding: 6px;
-	// border: 1px solid $color10;
-	// border-radius: $radius2;
-	// box-shadow: 0px 0px 3px $color10;
-	// margin: 6px;
 	display: flex;
-	// flex-direction: column;
 	align-items: center;
 }
+
 .CheckboxList {
 	padding: 0;
-	margin: 0px;
-	// width: 333px;
-	// list-style: none;
-	transition: transform 0.2s ease;
+	margin: 0;
+	list-style: none;
 	display: flex;
-	accent-color: $colorPrimaryDark;
 	flex-direction: column;
-	// flex: 1 1;
 }
-li.ListItem {
-	width: 100%;
-	// z-index: 1;
+
+.ListItem {
 	display: flex;
-	// justify-content: flex-start;
-	border: 1px solid $color34;
-	// box-shadow: 0 0 0px 1px $color5;
-	// flex: 1 1 100px;
-	user-select: none;
-	// cursor: grab;
-	margin: 6px 0px;
-	padding: 2px 0px;
 	align-items: center;
-	// justify-content: space-between;
-	background-color: $color30;
+	width: 100%;
+	margin: 6px 0;
+	padding: 2px 0;
+	background: $color30;
+	border: 1px solid $color34;
 	border-radius: $radius2;
+	user-select: none;
 
 	.DragAndDrop {
-		// cursor: pointer;
 		cursor: grab;
-		// flex: 0 0;
 		display: flex;
 		align-items: center;
-		border-radius: $radius2;
-		margin-right: 6px;
 		padding: 3px;
-		// justify-items: end;
-		// flex-direction: row;
+		margin-right: 6px;
+		border-radius: $radius2;
+
 		&:hover {
-			// background-color: $color2;
+			background: $color2;
 		}
 	}
+
 	input[type="checkbox"] {
-		// display: flex;
 		height: 16px;
 		width: 16px;
-		// justify-self: center;
-		// align-self: center;
-		// border: 9px solid #ccc;
+		margin: 0;
 		accent-color: $colorPrimaryDark;
-		// transform: rotate(45deg);
-		// appearance: none;
-		cursor: default;
-		margin: 0px;
-		// outline: 1px solid blue;
-		// border: 1px solid red;
-		// transition: all 0.3s ease;
-		&:checked {
-			// background-color: #007bff;
-			// border-color: #007bff;
-			// transform: scale(1.1);
-		}
-		&:focus ~ label {
-			// height: 16px;
-			// width: 16px;
-			// font-weight: bold;
-			text-decoration: underline;
-		}
 	}
+
 	label {
 		margin-left: 6px;
 		overflow: hidden;
@@ -754,37 +472,193 @@ li.ListItem {
 	}
 }
 
+/* Pagination */
 .PaginationPages {
-	// width: 80px;
-	// display: flex;
-	flex-direction: row;
-	flex-grow: 1;
-
-	background: $color60;
-	border: 1px solid $color10;
-	border-radius: $radius2;
-	padding: 0px 6px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	// font-weight: bold;
+	flex-grow: 1;
+	background: $color60;
+	border: 1px solid $color10;
+	border-radius: $radius2;
+	padding: 0 6px;
 	font-size: 120%;
 
 	input[type="number"] {
-		border: 0px;
-		outline: 0px;
-		width: 100%; /* Растягиваем на доступную ширину родительского элемента */
-		width: 30px; /* Ограничиваем максимальную ширину */
-		// min-width: 50px; /* Минимальная ширина для сжатия */
-		flex-grow: 1; /* Элемент может расширяться, если нужно */
-		flex-shrink: 1; /* Элемент может сжиматься */
-		flex-basis: 0; /* Использование стандартного поведения */
+		width: 30px;
+		border: 0;
+		outline: 0;
+		text-align: center;
 	}
 }
 
-.TableConfigListHeader {
-	justify-content: space-between;
-	margin: 1px;
+/* Infinite scroll sentinel & loader */
+.InfiniteScrollSentinel {
+	// Невидимый элемент в конце tbody — цель для IntersectionObserver
+	display: block;
+	height: 1px;
+	pointer-events: none;
+}
+
+.InfiniteScrollLoader {
 	display: flex;
-	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 6px 0;
+	font-size: 12px;
+	color: $color10;
+
+	.spinnerIcon {
+		width: 14px;
+		height: 14px;
+		border: 2px solid $color30;
+		border-top-color: $color10;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+		flex-shrink: 0;
+	}
+}
+
+/* Table loading spinner */
+.table-loading-spinner {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	gap: 10px;
+	background: rgba(255, 255, 255, 0.9);
+	border-top: 1px solid #e0e0e0;
+}
+
+.spinner {
+	width: 20px;
+	height: 20px;
+	border: 3px solid #f3f3f3;
+	border-top: 3px solid #3498db;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+.table-loading-spinner {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	gap: 10px;
+	background: rgba(255, 255, 255, 0.95);
+	border-top: 1px solid #e0e0e0;
+	font-size: 14px;
+	color: #666;
+}
+
+/* Filter components */
+.FilterGroup {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 12px;
+
+	label {
+		font-weight: 500;
+		color: #333;
+		white-space: nowrap;
+		min-width: 50px;
+	}
+}
+
+.DateRangeContainer {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1;
+	min-width: 250px;
+}
+
+.DateInput {
+	padding: 6px 10px;
+	border: 1px solid #ddd;
+	border-radius: $radius2;
+	font-size: 13px;
+	background: #fff;
+	transition: border-color 0.2s ease;
+
+	&:focus {
+		outline: none;
+		border-color: #3498db;
+		box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+	}
+
+	&::placeholder {
+		color: #999;
+	}
+}
+
+.DateRangeSeparator {
+	color: #999;
+	padding: 0 4px;
+}
+
+.SearchContainer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+	min-width: 200px;
+	position: relative;
+}
+
+.SearchInput {
+	padding: 6px 10px;
+	border: 1px solid #ddd;
+	border-radius: $radius2;
+	font-size: 13px;
+	background: #fff;
+	flex: 1;
+	transition: border-color 0.2s ease;
+
+	&:focus {
+		outline: none;
+		border-color: #3498db;
+		box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+	}
+
+	&::placeholder {
+		color: #999;
+	}
+}
+
+.ClearButton {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 1px solid #ddd;
+	border-radius: $radius2;
+	background: #fff;
+	color: #999;
+	font-size: 16px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+
+	&:hover {
+		color: #333;
+		border-color: #bbb;
+		background: #f5f5f5;
+	}
+
+	&:active {
+		transform: scale(0.95);
+	}
 }

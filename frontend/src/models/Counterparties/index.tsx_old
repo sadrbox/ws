@@ -1,0 +1,423 @@
+import { FC, ReactNode, useEffect, useMemo, useState } from "react";
+import reloadImage_16 from "src/assets/reload_16.png"; // Adjust the path to the actual location of the image
+import columnsJson from "./columns.json";
+import Table from "src/components/Table";
+import { useTable } from "src/hooks/useTable";
+// import AppContextProvider, { useAppContextProps } from "src/app/AppContextProvider";
+import mainstyle from "../../app/styles/main.module.scss"
+import useUID from 'src/hooks/useUID';
+import { Divider, Field, FieldString } from 'src/components/Field/index.tsx';
+import { Button, ButtonImage } from "src/components/Button";
+import { Group } from "src/components/UI";
+import tabstyles from "src/components/Tabs/Tabs.module.scss";
+import Tabs from "src/components/Tabs";
+import ListContracts from "../Contracts";
+import { TableBankAccounts } from "../BankAccounts";
+// import { LOCAL_API_URL } from "src/app/constants";
+import { uniqueId } from 'lodash';
+import { TFormProps, TOpenModelFormProps, TPane } from "src/app/types";
+import { ActivityHistoriesList } from "../ActivityHistories";
+import { getComponentName, getUniqId, useAppContextProps } from "src/app";
+import { TColumn, TDataItem, TypeTableTypes } from "src/components/Table/types";
+import { apiRequest, EHttpMethod, getElementByUuid } from "src/utils/api_old";
+// import { useModelList } from "src/hooks/useModel";
+import { useQueryParams } from "src/hooks/useQueryParams";
+import { getModelColumns } from "src/components/Table/services";
+import { OrganizationsList } from "../Organizations";
+import { getFormatDate } from "src/utils/main.module";
+import { getTranslateColumn, getTranslation } from "src/app/i18";
+// import { TOpenPane } from "src/components/Table/types";
+const styles = { ...tabstyles, ...mainstyle };
+// type TForm = {
+//   onSave: () => void;
+//   onClose: () => void;
+//   id?: number;
+// }
+
+
+
+
+
+
+
+
+
+
+const CounterpartiesList: FC = () => {
+  const componentName = "CounterpartiesList";
+  const model = "Counterparties"; // ← lowercase, как принято в REST API
+
+  const context = useAppContextProps();
+  const { openPane } = context.windows;
+  const [columns, setColumns] = useState<TColumn[]>(() =>
+    getModelColumns(columnsJson, componentName),
+  );
+  const [queryParams, setQueryParams] = useQueryParams({
+    // model,
+    // page: 1, 
+    // limit: 20,
+  });
+
+  const openModelForm = (form: TOpenModelFormProps) => {
+    const translated = getTranslation(componentName);
+    const label = `${translated}${form.data?.uuid ? `: ${form.data?.shortName} ● ID: ${form.data?.id}` : "Новый"}`;
+    openPane({ ...form, label, component: CounterpartiesForm });
+  }
+
+
+  // ← здесь основной запрос списка
+  const {
+    data,           // { items, totalPages, total, ... }
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useModelList<any>(
+    model,
+    queryParams
+    // {
+    //   page: 1,        // можно взять из состояния пагинации
+    //   limit: 20,
+    //   // sort: { createdAt: "desc" },
+    //   // filter: { bin: { contains: searchValue } },
+    // }
+  );
+  // console.log(data?.items)
+
+  const tableProps = useMemo(() => ({
+    componentName,
+    rows: data?.items ?? [],
+    columns,           // или преобразуйте через getModelColumns, если нужно
+    totalPages: data?.totalPages ?? 0,
+    isLoading,
+    isFetching,
+    // error,
+    query: {
+      queryParams,
+      setQueryParams,
+    },
+    actions: {
+      openModelForm,
+      refetch,
+      setColumns,
+    },
+  }),
+    [componentName, data?.items, data?.totalPages, isLoading, isFetching, queryParams, setQueryParams, openModelForm, refetch, columns]);
+
+  return <Table props={tableProps} />;
+}
+
+
+
+
+// Интерфейс для данных формы (все поля из Prisma схемы)
+interface TFormData extends Partial<TDataItem> {
+  bin: string;
+  shortName: string;
+  displayName: string;
+  // // Поля только для чтения (генерируются автоматически)
+  // id?: number;
+  // uuid?: string;
+  // createdAt?: string;
+  // updatedAt?: string;
+}
+
+const CounterpartiesForm: FC<TFormProps> = ({ props: formProps, data, uniqId }) => {
+  // const uniqId = "";
+  const { uuid } = data ?? {};
+  // console.log(uuid)
+  const { onSave, onClose } = formProps ?? {};
+  const formUid = useUID();
+  const { windows: { closePane } } = useAppContextProps();
+  const [modelName] = useState("counterparties");
+  // Состояние формы
+  const [formData, setFormData] = useState<TFormData>({
+    bin: '',
+    shortName: '',
+    displayName: '',
+  });
+
+  const [isLoading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(!!uuid);
+
+  const tabs = [
+    { id: "tab1", label: "Банковские счета", component: <OrganizationsList /> },
+    { id: "tab2", label: "Договора", component: <OrganizationsList /> },
+    { id: "tab3", label: "Контакты", component: <ListContracts /> },
+  ];
+
+
+  // Загрузка данных при редактировании
+  useEffect(() => {
+    if (uuid) {
+      loadFormData(uuid);
+    }
+  }, [uuid]);
+
+
+  // в компоненте
+  const loadFormData = async (uuid: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data: TDataItem = await getElementByUuid(modelName, uuid);
+      console.log(data)
+      setFormData({ ...data } as TFormData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить данные контрагента');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Обработчик изменения полей
+  const handleFieldChange = (field: keyof TFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Отправка на сервер
+  const submit = async () => {
+    setLoading(true);
+    setError(null);
+
+    // Подготовка данных (соответствие модели Prisma)
+    const payload = {
+      bin: formData.bin?.trim() || '',
+      shortName: formData.shortName?.trim() || null,
+      displayName: formData.displayName?.trim() || null,
+    };
+
+    // Валидация на клиенте
+    if (!payload.bin || payload.bin.length !== 12 || !/^\d{12}$/.test(payload.bin)) {
+      setError("БИН должен состоять ровно из 12 цифр");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // const url = isEditMode
+      //   ? `${LOCAL_API_URL}/${modelName}/${formData.uuid}`
+      //   : `${LOCAL_API_URL}/${modelName}`;
+
+      const method = isEditMode ? EHttpMethod.PUT : EHttpMethod.POST;
+
+      // ← здесь основной вызов переиспользуемой функции
+      const params = { model: modelName, method, body: payload };
+      const result = useApiRequest<TFormData>(params);
+
+      // Успех
+      if (!isEditMode) {
+        // Переключаемся в режим редактирования после создания
+        setIsEditMode(true);
+        setFormData((prev) => ({
+          ...prev,
+          ...result?.data,
+          // id: result.data?.id,
+          // uuid: result.data?.uuid,
+          // createdAt: result.createdAt,
+          // updatedAt: result.updatedAt,
+        }));
+      }
+
+      // можно добавить toast / alert здесь
+      // toast.success(isEditMode ? "Контрагент обновлён" : "Контрагент создан");
+
+    } catch (err: any) {
+      let errorMessage = 'Не удалось сохранить контрагента';
+
+      if (err.status === 409) {
+        errorMessage = 'Контрагент с таким БИН уже существует';
+      } else if (err.status === 400) {
+        errorMessage = err.message || 'Ошибка валидации на сервере';
+      } else {
+        errorMessage = err.message || `Ошибка сервера (${err.status || 'неизвестно'})`;
+      }
+
+      setError(errorMessage);
+      console.error('Ошибка сохранения контрагента:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+
+  const handleSave = () => {
+    submit().then(() => {
+      if (error === null) !!onSave && onSave();
+    });
+  }
+
+  const handleSaveAndClose = () => {
+    submit().then(() => {
+      if (error === null) {
+        !!onSave && onSave();
+        !!onClose && onClose();
+        if (uniqId) {
+          closePane(uniqId);
+        } else {
+          console.error("uniqId is undefined");
+        }
+      }
+    });
+  }
+
+  const handleClose = () => {
+    !!onClose && onClose();
+    if (uniqId) {
+      closePane(uniqId);
+    } else {
+      console.error("uniqId is undefined");
+    }
+  }
+
+  return (
+    <div className={styles.FormWrapper}>
+      <div className={styles.FormPanel}>
+        <div className={styles.TablePanelLeft}>
+          <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: 'flex-start' }}>
+            <Divider />
+            <Button
+              variant="primary"
+              onClick={() => handleSaveAndClose()}
+              disabled={isLoading}
+            >
+              <span>Сохранить и закрыть</span>
+            </Button>
+
+            <Divider />
+
+            <Button
+              onClick={() => handleSave()}
+              disabled={isLoading}
+            >
+              <span>Сохранить</span>
+            </Button>
+
+            <Button onClick={() => handleClose()}>
+              <span>Закрыть</span>
+            </Button>
+
+            <Divider />
+            {!!formData.uuid && (
+              <ButtonImage onClick={() => (formData.uuid && loadFormData(formData.uuid))} title='Обновить'>
+                <img src={reloadImage_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} />
+              </ButtonImage>
+            )}
+          </div>
+        </div>
+        <div className={styles.TablePanelRight}></div>
+      </div>
+
+      {error && (
+        <div style={{ color: 'red', padding: '8px', margin: '8px 0' }}>
+          {error}
+        </div>
+      )}
+
+      <div className={styles.FormBody}>
+        <div className={styles.FormBodyParts}>
+          <div>
+            <Group label="Основная информация" align="row" gap="12px" className={styles.Form}>
+              <div style={{ gap: '12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <Field
+                  label="Наименование"
+                  name={`${formUid}_shortName`}
+                  minWidth="339px"
+                  value={formData.shortName || ''}
+                  onChange={(e) => handleFieldChange('shortName', e.target.value)}
+                />
+                <Field
+                  label="Полное наименование"
+                  name={`${formUid}_displayName`}
+                  minWidth="339px"
+                  value={formData.displayName || ''}
+                  onChange={(e) => handleFieldChange('displayName', e.target.value)}
+                />
+                <Field
+                  label="БИН / ИНН *"
+                  name={`${formUid}_bin`}
+                  minWidth="339px"
+                  value={formData.bin}
+                  onChange={(e) => handleFieldChange('bin', e.target.value)}
+                // disabled={isEditMode} // БИН нельзя менять после создания
+                />
+
+
+              </div>
+            </Group>
+
+            {/* Системные поля (только для чтения) */}
+            {isEditMode && (
+              <>
+                <Divider />
+                <Group label="Системная информация" align="row" gap="12px" className={styles.Form}>
+                  <div style={{ gap: '12px', display: 'flex', flexDirection: 'row', flexWrap: 'wrap' }}>
+                    <Field
+                      label="ID"
+                      name={`${formUid}_id`}
+                      width="100px"
+                      value={formData.id?.toString() || ''}
+                      onChange={() => { }} // read-only
+                      disabled={true}
+                    />
+
+                    <Field
+                      label="UUID"
+                      name={`${formUid}_uuid`}
+                      width="300px"
+                      value={formData.uuid || ''}
+                      onChange={() => { }} // read-only
+                      disabled={true}
+                    />
+
+                    <Field
+                      label="Дата создания"
+                      name={`${formUid}_createdAt`}
+                      width="200px"
+                      value={getFormatDate(formData.createdAt)}
+                      onChange={() => { }} // read-only
+                      disabled={true}
+                    />
+
+                    <Field
+                      label="Дата обновления"
+                      name={`${formUid}_updatedAt`}
+                      width="200px"
+                      value={getFormatDate(formData.updatedAt)}
+                      onChange={() => { }} // read-only
+                      disabled={true}
+                    />
+                  </div>
+                </Group>
+              </>
+            )}
+          </div>
+          <Divider />
+
+          {/* Табы с связанными данными */}
+          <div className={styles.FormTable}>
+            <Tabs tabs={tabs} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+
+// List.displayName = "Counterparties.List";
+// Form.displayName = "Counterparties.Form";
+// // Прикрепляем подкомпоненты к основному
+CounterpartiesList.displayName = "CounterpartiesList";
+CounterpartiesForm.displayName = "CounterpartiesForm";
+// const Counterparties = {
+//   List,
+//   Form
+// };
+export { CounterpartiesList, CounterpartiesForm };
+
+

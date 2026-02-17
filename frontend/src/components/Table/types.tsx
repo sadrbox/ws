@@ -1,6 +1,6 @@
 import { Dispatch, SetStateAction } from "react";
-import { QueryObserverResult } from "@tanstack/react-query";
 // import { TypeOpenForm } from 'src/components/Table/types';
+import { TOpenModelFormProps, TPane } from "src/app/types";
 
 export type TFieldType =
   | "string"
@@ -22,8 +22,9 @@ export type TDataRow = { [key: string | number]: string | number | boolean };
 export type TDataItem = {
   id: number;
   uuid: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
+  // shortName?: string;
   [key: string | number]: unknown;
 };
 export type TColumn = {
@@ -55,21 +56,10 @@ export type TColumnSetting = {
   inlist: boolean;
 };
 export type TypeModelStates = {
-
-  // checkedRows?: number[];
-  // setCheckedRows?: Dispatch<SetStateAction<number[]>>;
-
-  // setActiveGrid?: Dispatch<SetStateAction<EActiveTable>>;
-  // isLoading: boolean;
-  // setIsLoading: Dispatch<SetStateAction<boolean>>;
-  // columns?: TColumn[];
-  // setColumns?: Dispatch<SetStateAction<TColumn[]>>;
   activeRow?: number | null;
   setActiveRow?: Dispatch<SetStateAction<number | null>>;
   selectedRows: Set<number>;
   setSelectedRows: Dispatch<SetStateAction<Set<number>>>;
-  // isSelectedRows: booleDan;
-  // toggleSelectAllRows: Dispatch<SetStateAction<boolean>>;
 };
 
 export type TResponseData = TDataItem[] & {
@@ -78,37 +68,7 @@ export type TResponseData = TDataItem[] & {
 
 export type TypeTableTypes = "part" | "list" | undefined;
 
-export type TypeTableContextProps = {
-  type: TypeTableTypes;
-  componentName: string;
-  rows: TDataItem[];
-  columns: TColumn[];
-  totalPages: number;
-  isLoading: boolean;
-  isFetching: boolean;
-  query: {
-    queryParams: TypeTableParams;
-    setQueryParams: (newParams: Partial<TypeTableParams>) => void;
-  };
-  actions: {
-    openForm?: TOpenForm;
-    // loadDataGrid: (page?: number, limit?: number) => Promise<void>;
-    setColumns: Dispatch<SetStateAction<TColumn[]>>;
-    refetch: () => Promise<QueryObserverResult<{
-      items: TDataItem[];
-      totalPages: number;
-    } | null, Error>>
-
-  };
-  states: TypeModelStates;
-};
-export type TFormProps = {
-  onSave: () => void; // Коллбек после сохранения
-  onClose: () => void; // Коллбек при закрытии без сохранения
-  uuid?: string; // ID контрагента для редактирования
-};
-
-export type TOpenForm = (props: TFormProps) => void;
+export type TOpenModelForm = (form: TOpenModelFormProps) => void;
 
 
 export enum EActiveTable {
@@ -122,7 +82,6 @@ export type TypeDateRange = {
   endDate?: string | null;
 };
 
-export type TypeModelProps = TypeTableContextProps
 
 export type TypeFormAction = 'apply' | 'close' | 'open' | '';
 export type TypeFormMethod = {
@@ -130,11 +89,14 @@ export type TypeFormMethod = {
   set: Dispatch<SetStateAction<TypeFormAction>>;
 };
 
-type TypeTableSortDirection = 'asc' | 'desc';
-
-export type TypeTableSort = {
-  columnID: string;
-  direction: TypeTableSortDirection;
+// export type TypeTableSort = {
+//   columnID: string;
+//   direction: TypeTableSortDirection;
+// };
+export type TSortDirectionTable = 'asc' | 'desc';
+export type TSortTable = {
+  [key: string]: TSortDirectionTable,
+  // createdAt?: TSortDirectionTable;
 };
 
 export type TypeTableFilter = {
@@ -149,16 +111,6 @@ export type TypeTableFilter = {
   dateRange?: TypeDateRange;
 };
 
-
-export type TypeTableParams = {
-  model: string;
-  page: number;
-  limit: number;
-  // totalPages?: number;
-  sort: TypeTableSort;
-  filter?: TypeTableFilter;
-  selectedIds?: Set<number>;
-};
 
 export type TypeModalFormProps = {
   method: TypeFormMethod;

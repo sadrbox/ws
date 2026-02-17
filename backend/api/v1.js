@@ -8,142 +8,265 @@ router.use(cors());
 
 // Backend
 
-router.get("/activityhistories", async (req, res) => {
-	try {
-		// 1. Валидация
-		const parsed = querySchema.safeParse(req.query);
+// router.get("/activityhistories", async (req, res) => {
+// 	try {
+// 		const parsed = querySchema.safeParse(req.query);
+// 		if (!parsed.success) {
+// 			return res.status(400).json({
+// 				success: false,
+// 				message: "Некорректные параметры запроса",
+// 				errors: parsed.error.flatten().fieldErrors,
+// 			});
+// 		}
 
-		if (!parsed.success) {
-			return res.status(400).json({
-				success: false,
-				message: "Некорректные параметры запроса",
-				errors: parsed.error.flatten().fieldErrors,
-			});
-		}
+// 		const { limit, cursor, filter } = parsed.data;
 
-		const { page = 1, limit = 100, filter } = parsed.data;
+// 		// ── Поиск ────────────────────────────────────────────────────────
+// 		const searchBy = filter?.searchBy ?? { columns: [], value: "" };
+// 		const rawQuery = (searchBy.value || "").trim();
+// 		const words = rawQuery.split(/\s+/).filter(Boolean);
+// 		const searchColumns = Array.isArray(searchBy.columns)
+// 			? searchBy.columns
+// 			: [];
 
-		const skip = (page - 1) * limit;
+// 		const { startDate, endDate } = filter?.dateRange ?? {};
+// 		const dateRangeFilter =
+// 			startDate || endDate
+// 				? {
+// 						actionDate: {
+// 							...(startDate ? { gte: startDate } : {}),
+// 							...(endDate ? { lte: endDate } : {}),
+// 						},
+// 					}
+// 				: {};
 
-		// 2. Подготовка поискового запроса
-		const searchBy = filter?.searchBy ?? { columns: [], value: "" };
-		const rawQuery = (searchBy.value || "").trim();
-		const words = rawQuery.split(/\s+/).filter(Boolean);
-		const searchColumns = Array.isArray(searchBy.columns)
-			? searchBy.columns
-			: [];
+// 		let searchWhereClause = {};
+// 		if (words.length > 0 && searchColumns.length > 0) {
+// 			const andConditions = words
+// 				.map((word) => {
+// 					const orConditions = searchColumns
+// 						.map(({ identifier, type }) => {
+// 							if (type === "date") return null;
+// 							if (typeof identifier !== "string" || !identifier.trim())
+// 								return null;
 
-		// 3. Подготовка диапазона дат
-		const { startDate, endDate } = filter?.dateRange ?? {};
+// 							const [field, subField] = identifier.includes(".")
+// 								? identifier.split(".")
+// 								: [identifier, null];
 
-		const dateRangeFilter =
-			startDate || endDate
-				? {
-						actionDate: {
-							...(startDate ? { gte: startDate } : {}),
-							...(endDate ? { lte: endDate } : {}),
-						},
-					}
-				: {};
+// 							let condition = null;
+// 							if (type === "string") {
+// 								condition = { contains: word, mode: "insensitive" };
+// 							} else if (
+// 								type === "number" &&
+// 								word !== "" &&
+// 								!isNaN(Number(word))
+// 							) {
+// 								condition = { equals: Number(word) };
+// 							}
 
-		// 4. Построение условия поиска по словам
-		let searchWhereClause = {};
+// 							if (!condition) return null;
+// 							return subField
+// 								? { [field]: { [subField]: condition } }
+// 								: { [field]: condition };
+// 						})
+// 						.filter(Boolean);
 
-		if (words.length > 0 && searchColumns.length > 0) {
-			const andConditions = words
-				.map((word) => {
-					const orConditions = searchColumns
-						.map(({ identifier, type }) => {
-							if (type === "date") return null;
-							if (typeof identifier !== "string" || !identifier.trim())
-								return null;
+// 					return orConditions.length > 0 ? { OR: orConditions } : null;
+// 				})
+// 				.filter(Boolean);
 
-							const [field, subField] = identifier.includes(".")
-								? identifier.split(".")
-								: [identifier, null];
+// 			if (andConditions.length > 0) {
+// 				searchWhereClause = { AND: andConditions };
+// 			}
+// 		}
 
-							let condition = null;
+// 		const baseWhere = {
+// 			...searchWhereClause,
+// 			...dateRangeFilter,
+// 		};
 
-							if (type === "string") {
-								condition = { contains: word, mode: "insensitive" };
-							} else if (
-								type === "number" &&
-								word !== "" &&
-								!isNaN(Number(word))
-							) {
-								condition = { equals: Number(word) };
-							}
+// 		// ── Курсорная логика ─────────────────────────────────────────────
+// 		// ИСПРАВЛЕНО: используем id ASC + WHERE id > cursor (было: id < cursor для DESC)
+// 		// Правило: направление cursor ДОЛЖНО совпадать с направлением сортировки:
+// 		//   ASC  → следующая страница имеет id БОЛЬШЕ последнего → { gt: cursorId }
+// 		//   DESC → следующая страница имеет id МЕНЬШЕ последнего → { lt: cursorId }
+// 		// let where = { ...baseWhere };
+// 		const limitNumber = Number(limit) || 80;
+// 		let queryOptions = {
+// 			take: limitNumber,
+// 			where: baseWhere, // Ваши фильтры поиска/дат
+// 			include: { organization: true },
+// 			orderBy: { id: "asc" },
+// 		};
 
-							if (!condition) return null;
+// 		if (cursor) {
+// 			const cursorId = Number(cursor);
+// 			if (!isNaN(cursorId)) {
+// 				// Стандарт Prisma для пагинации:
+// 				queryOptions.cursor = { id: cursorId };
+// 				queryOptions.skip = 1; // Пропускаем сам элемент-курсор
+// 			}
+// 		}
 
-							return subField
-								? { [field]: { [subField]: condition } }
-								: { [field]: condition };
-						})
-						.filter(Boolean);
+// 		const items = await prisma.activityHistory.findMany(queryOptions);
+// 		// Если вернулось столько же, сколько просили — потенциально есть еще данные
+// 		const hasMore = items.length === limitNumber;
+// 		// Берем ID ПОСЛЕДНЕГО элемента в массиве для следующего запроса
+// 		const nextCursor = hasMore ? items[items.length - 1].id : null;
 
-					return orConditions.length > 0 ? { OR: orConditions } : null;
-				})
-				.filter(Boolean);
+// 		return res.status(200).json({
+// 			success: true,
+// 			items,
+// 			nextCursor,
+// 			hasMore,
+// 		});
+// 	} catch (error) {
+// 		console.error("GET /activityhistories error:", error);
+// 		return res.status(500).json({
+// 			success: false,
+// 			message: "Ошибка сервера при получении истории активностей",
+// 		});
+// 	}
+// });
+// router.get("/activityhistories", async (req, res) => {
+// 	try {
+// 		const parsed = querySchema.safeParse(req.query);
+// 		if (!parsed.success) {
+// 			return res.status(400).json({
+// 				success: false,
+// 				message: "Некорректные параметры запроса",
+// 				errors: parsed.error.flatten().fieldErrors,
+// 			});
+// 		}
 
-			if (andConditions.length > 0) {
-				searchWhereClause = { AND: andConditions };
-			}
-		}
+// 		const { limit, cursor, filter } = parsed.data;
 
-		// 5. Итоговое условие where
-		const where = {
-			...searchWhereClause,
-			...dateRangeFilter,
-		};
+// 		// ── Поиск ────────────────────────────────────────────────────────
+// 		const searchBy = filter?.searchBy ?? { columns: [], value: "" };
+// 		const rawQuery = (searchBy.value || "").trim();
+// 		const words = rawQuery.split(/\s+/).filter(Boolean);
+// 		const searchColumns = Array.isArray(searchBy.columns)
+// 			? searchBy.columns
+// 			: [];
 
-		// 6. Запросы к базе
-		const [items, total] = await prisma.$transaction([
-			prisma.activityHistory.findMany({
-				skip,
-				take: limit,
-				where,
-				include: {
-					organization: true,
-				},
-				orderBy: {
-					actionDate: "desc",
-				},
-			}),
-			prisma.activityHistory.count({ where }),
-		]);
+// 		const { startDate, endDate } = filter?.dateRange ?? {};
+// 		const dateRangeFilter =
+// 			startDate || endDate
+// 				? {
+// 						actionDate: {
+// 							...(startDate ? { gte: startDate } : {}),
+// 							...(endDate ? { lte: endDate } : {}),
+// 						},
+// 					}
+// 				: {};
 
-		// 7. Ответ клиенту
-		// return res.status(200).json({
-		// 	success: true,
-		// 	data: {
-		// 		items,
-		// 		total,
-		// 		page,
-		// 		limit,
-		// 		totalPages: Math.ceil(total / limit),
-		// 	},
-		// });
+// 		let searchWhereClause = {};
+// 		if (words.length > 0 && searchColumns.length > 0) {
+// 			const andConditions = words
+// 				.map((word) => {
+// 					const orConditions = searchColumns
+// 						.map(({ identifier, type }) => {
+// 							if (type === "date") return null;
+// 							if (typeof identifier !== "string" || !identifier.trim())
+// 								return null;
 
-		return res.status(200).json({
-			success: true,
-			items,
-			total,
-			page,
-			totalPages: Math.ceil(total / limit),
-		});
-	} catch (error) {
-		console.error("GET /activityhistories error:", error);
+// 							const [field, subField] = identifier.includes(".")
+// 								? identifier.split(".")
+// 								: [identifier, null];
 
-		return res.status(500).json({
-			success: false,
-			message: "Ошибка сервера при получении истории активностей",
-		});
-	} finally {
-		// Если хотите закрывать соединение при завершении процесса (не обязательно в большинстве случаев)
-		// await prisma.$disconnect();
-	}
-});
+// 							let condition = null;
+// 							if (type === "string") {
+// 								condition = { contains: word, mode: "insensitive" };
+// 							} else if (
+// 								type === "number" &&
+// 								word !== "" &&
+// 								!isNaN(Number(word))
+// 							) {
+// 								condition = { equals: Number(word) };
+// 							}
+
+// 							if (!condition) return null;
+// 							return subField
+// 								? { [field]: { [subField]: condition } }
+// 								: { [field]: condition };
+// 						})
+// 						.filter(Boolean);
+
+// 					return orConditions.length > 0 ? { OR: orConditions } : null;
+// 				})
+// 				.filter(Boolean);
+
+// 			if (andConditions.length > 0) {
+// 				searchWhereClause = { AND: andConditions };
+// 			}
+// 		}
+
+// 		const baseWhere = {
+// 			...searchWhereClause,
+// 			...dateRangeFilter,
+// 		};
+
+// 		// ── Курсорная логика ─────────────────────────────────────────────
+// 		// ИСПРАВЛЕНО: используем id ASC + WHERE id > cursor (было: id < cursor для DESC)
+// 		// Правило: направление cursor ДОЛЖНО совпадать с направлением сортировки:
+// 		//   ASC  → следующая страница имеет id БОЛЬШЕ последнего → { gt: cursorId }
+// 		//   DESC → следующая страница имеет id МЕНЬШЕ последнего → { lt: cursorId }
+// 		let where = { ...baseWhere };
+// 		let cursorObj = undefined;
+
+// 		if (cursor) {
+// 			const cursorId = Number(cursor);
+// 			if (!isNaN(cursorId)) {
+// 				where = {
+// 					...baseWhere,
+// 					id: { gt: cursorId }, // ← gt (БОЛЬШЕ) для ASC-сортировки
+// 				};
+// 				cursorObj = { id: cursorId };
+// 			}
+// 		}
+
+// 		// ── Запрос ───────────────────────────────────────────────────────
+// 		const items = await prisma.activityHistory.findMany({
+// 			take: limit,
+// 			// cursor + skip:1 используется Prisma для исключения самого курсора.
+// 			// При наличии WHERE id > cursorId курсор уже исключён условием,
+// 			// поэтому передаём cursor только для оптимизации индекса Prisma,
+// 			// skip:1 при этом НЕ нужен (иначе пропустим первую валидную запись).
+// 			...(cursorObj ? { cursor: cursorObj } : {}),
+// 			where,
+// 			include: {
+// 				organization: true,
+// 			},
+// 			orderBy: {
+// 				id: "asc", // ИСПРАВЛЕНО: сортируем по id для стабильной курсорной пагинации.
+// 				// actionDate может иметь дубли (несколько записей в одну секунду),
+// 				// что делает курсор по actionDate ненадёжным.
+// 				// id всегда уникален и монотонно возрастает → идеален для курсора.
+// 			},
+// 		});
+
+// 		// ── hasMore и nextCursor ──────────────────────────────────────────
+// 		const hasMore = items.length === limit;
+
+// 		// nextCursor = id последней записи текущей страницы.
+// 		// Следующий запрос: WHERE id > nextCursor → получит записи после текущей страницы.
+// 		const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+// 		return res.status(200).json({
+// 			success: true,
+// 			items,
+// 			nextCursor,
+// 			hasMore,
+// 		});
+// 	} catch (error) {
+// 		console.error("GET /activityhistories error:", error);
+// 		return res.status(500).json({
+// 			success: false,
+// 			message: "Ошибка сервера при получении истории активностей",
+// 		});
+// 	}
+// });
 
 // router.get("/counterparties", async (req, res) => {
 // 	try {

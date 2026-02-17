@@ -1,0 +1,144 @@
+// import { ListParams } from "./api";
+import { useQuery, UseQueryOptions } from "@tanstack/react-query";
+import { API_BASE_URL, LOCAL_API_URL } from "src/app/constants";
+import { TListSearchParams } from "src/components/Table/types";
+// import { TDataItem } from "src/components/Table/types";
+
+export const getElementByUuid = async <T>(
+	model: string,
+	uuid: string,
+): Promise<T> => {
+	// const params = { model, query: { uuid } } as ApiRequestParams;
+	return api.get<T>(model, { uuid });
+};
+
+// export type THttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+export enum EHttpMethod {
+	GET = "GET",
+	POST = "POST",
+	PUT = "PUT",
+	PATCH = "PATCH",
+	DELETE = "DELETE",
+}
+export interface ApiRequestParams {
+	model: string; // "users", "products", "orders/123/items" и т.д.
+	query?:
+		| Record<string, string | number | boolean | null | undefined>
+		| string
+		| URLSearchParams;
+	method?: EHttpMethod;
+	body?: unknown;
+	init?: RequestInit;
+	baseUrl?: string; // можно переопределить для тестов / mock-серверов
+}
+
+export interface ApiError extends Error {
+	status?: number;
+	details?: unknown;
+	code?: string;
+}
+
+export type ListParams = {
+	page?: number;
+	limit?: number;
+	sort?: Record<string, "asc" | "desc"> | null;
+	filter?: Record<string, unknown> | null;
+	// можно добавить search, q, etc.
+};
+
+export type ListResponse<T> = {
+	items: T[];
+	total: number;
+	totalPages: number;
+	// другие поля пагинации, если есть
+};
+
+export async function apiRequest<T>(params: ApiRequestParams): Promise<T> {
+	const {
+		model,
+		query, // например: "/123" или "?page=2&limit=20"
+		method = EHttpMethod.GET,
+		body,
+		init = {},
+	} = params;
+
+	// const url = `${API_BASE_URL}/${model}?${query.toString()}`;
+
+	// console.log(new URLSearchParams(query).toString());
+	const endpoint = `/${model}${!!query && `?${query.toString()}`}`;
+	console.log(endpoint);
+	const url = `${API_BASE_URL}${endpoint}`;
+
+	const headers = new Headers({
+		"Content-Type": "application/json",
+		...(init.headers as Record<string, string>),
+	});
+
+	const config: RequestInit = { method, headers, ...init };
+
+	if (body !== undefined && !["GET", "HEAD"].includes(method)) {
+		config.body = JSON.stringify(body);
+	}
+	const res = await fetch(url, config);
+
+	let data: unknown;
+	try {
+		console.log(data);
+		data = await res.json();
+	} catch {
+		data = null;
+	}
+
+	if (!res.ok) {
+		const msg =
+			(data as any)?.message ??
+			(data as any)?.error ??
+			(Array.isArray((data as any)?.errors)
+				? (data as any).errors.join(", ")
+				: null) ??
+			res.statusText ??
+			`HTTP ${res.status}`;
+
+		const err = new Error(msg) as ApiError;
+		err.status = res.status;
+		err.details = data;
+		throw err;
+	}
+
+	return data as T;
+}
+export const api = {
+	get: <T>(
+		model: string,
+		query?: ApiRequestParams["query"],
+		init?: RequestInit,
+	) => apiRequest<T>({ model, query, method: EHttpMethod.GET, init }),
+
+	post: <T>(
+		model: string,
+		body?: unknown,
+		query?: ApiRequestParams["query"],
+		init?: RequestInit,
+	) => apiRequest<T>({ model, query, method: EHttpMethod.POST, body, init }),
+
+	put: <T>(
+		model: string,
+		body?: unknown,
+		query?: ApiRequestParams["query"],
+		init?: RequestInit,
+	) => apiRequest<T>({ model, query, method: EHttpMethod.PUT, body, init }),
+
+	patch: <T>(
+		model: string,
+		body?: unknown,
+		query?: ApiRequestParams["query"],
+		init?: RequestInit,
+	) => apiRequest<T>({ model, query, method: EHttpMethod.PATCH, body, init }),
+
+	del: <T>(
+		model: string,
+		query?: ApiRequestParams["query"],
+		init?: RequestInit,
+	) => apiRequest<T>({ model, query, method: EHttpMethod.DELETE, init }),
+};

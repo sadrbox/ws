@@ -1,10 +1,11 @@
-import React, { CSSProperties, FC, useDeferredValue, useEffect, useRef, useState } from 'react'
+import React, { CSSProperties, FC, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 
 import styles from "./Field.module.scss"
-import { useTableContextProps } from '../Table'
-import { TypeDateRange } from '../Table/types'
+import { useTableContext } from '../Table'
+// import { TypeDateRange } from '../Table/types'
 import { Group } from 'src/components/UI'
 import useUID from 'src/hooks/useUID'
+import { useDebounceValue } from 'src/hooks/useDebounceValue'
 
 // type TypeFieldStringProps = {
 //   label: string
@@ -350,6 +351,7 @@ type TypeFieldAutocompleteProps = {
   style?: CSSProperties;
   // attributes?: HTMLAttributes<HTMLInputElement>;
 }
+
 export const FieldAutocomplete: FC<TypeFieldAutocompleteProps> = ({ label, name, style }) => {
   return (
     <Group align="row" className={styles.FieldWrapper} style={style}>
@@ -369,105 +371,202 @@ export const FieldAutocomplete: FC<TypeFieldAutocompleteProps> = ({ label, name,
 };
 
 export const FieldFastSearch: FC = () => {
+  const { search, filtering, columns } = useTableContext();
 
-  // const APP_CONTEXT_PROPS = useAppContextProps();
-  const TABLE_CONTEXT_PROPS = useTableContextProps();
-  const { queryParams, setQueryParams } = TABLE_CONTEXT_PROPS.query;
-  const [queryValue, setQueryValue] = useState<string>(queryParams.filter?.searchBy?.value ?? "");
-  const inputRef = useRef<HTMLInputElement>(null)
-  const deferredValue = useDeferredValue(queryValue) // "медленное" значение
+  // Глобальное значение поиска из контекста
+  const { value: globalSearchValue, onChange: setGlobalSearch } = search;
 
+  // Локальное значение инпута (управляемое состояние)
+  const [localValue, setLocalValue] = useState<string>(globalSearchValue);
 
-  const visibleColumns = TABLE_CONTEXT_PROPS.columns.filter(col => col.visible === true).map(col => ({ identifier: col.identifier, type: col.type })) ?? [];
+  // Дебаунс — отправляем в глобальный фильтр не чаще чем раз в 400 мс
+  const debouncedValue = useDebounceValue(localValue, 400);
 
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  // Видимые колонки для поиска (только те, где visible === true)
+  const visibleColumns = useMemo(
+    () =>
+      columns
+        .filter(col => col.visible === true)
+        .map(col => ({ identifier: col.identifier, type: col.type })),
+    [columns]
+  );
+
+  // Синхронизация локального значения с глобальным (если изменилось извне)
   useEffect(() => {
-    if (setQueryParams)
-      setQueryParams({ ...queryParams, filter: { searchBy: { value: deferredValue, columns: visibleColumns } } })
-  }, [deferredValue])
+    setLocalValue(globalSearchValue);
+  }, [globalSearchValue]);
 
-  const handlerClearField = () => {
-    setQueryValue("")
-    // setQueryParams(prev => ({ ...prev, filter: { searchBy: { value: "", columns: [] }, dateRange: { ...prev.filter?.dateRange } } }))
-    if (inputRef.current)
-      inputRef.current.value = ""
-  }
+  // Отправка debounced значения в глобальный фильтр
+  useEffect(() => {
+    const trimmed: string = typeof debouncedValue === 'string' ? debouncedValue.trim() : '';
 
-  const handlerChangeInputValue = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // console.log(queryParams)
-    setQueryValue(e.target.value)
-    // setQueryParams(prev => ({ ...prev, filter: { searchBy: { value: e.target.value, columns: visibleColumns }, dateRange: { ...prev.filter?.dateRange } } }))
-  }
+    if (!trimmed) {
+      // Если пусто — убираем searchBy полностью
+      filtering.onFilterChange('searchBy', undefined);
+      return;
+    }
 
-  // const action = {
-  //   img: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAU0lEQVR4nGNgGExgOgMDgzQR6qShajGAOAMDw0YChkgQUiOORwFBzfgMIVozNg0ka4YBkIatUEyyZooNkKDECxKUBKIEJdEoQYQteBMbxUl5YAAAD8MURVXG8WgAAAAASUVORK5CYII=",
-  //   alt: "delete-sign--v1",
-  // }
+    // Формируем объект searchBy
+    const searchByValue = {
+      value: trimmed,
+      columns: visibleColumns,
+    };
 
-  const UID = useUID();
-  const fieldUID = `FIELD_${UID}`;
-  // const searchField = "searchField";
+    filtering.onFilterChange('searchBy', searchByValue);
+  }, [debouncedValue, visibleColumns, filtering.onFilterChange]);
+
+  // Очистка поля и фильтра
+  const handleClear = useCallback(() => {
+    setLocalValue('');
+    if (inputRef.current) {
+      inputRef.current.value = '';
+      inputRef.current.focus?.();
+    }
+    // Немедленно очищаем searchBy
+    filtering.onFilterChange('searchBy', undefined);
+  }, [filtering.onFilterChange]);
+
+  // Обработчик ввода
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalValue(e.target.value);
+  }, []);
 
   return (
-    <div className={styles.FieldInputWrapper} >
+    <div className={styles.FieldInputWrapper}>
       <input
         ref={inputRef}
         type="text"
         placeholder="Поиск..."
-        name={fieldUID}
-        id={fieldUID}
         className={styles.FieldString}
-        autoComplete='off'
-        style={{ paddingRight: "30px" }}
-        value={deferredValue}
-        onChange={handlerChangeInputValue}
+        autoComplete="off"
+        style={{ paddingRight: '40px' }}
+        value={localValue}
+        onChange={handleChange}
       />
-      <div className={styles.FieldActions}>
-        <button onClick={() => handlerClearField()}>
-          {imgActions.clear.img}
-        </button>
-      </div>
+
+      {localValue && (
+        <div className={styles.FieldActions}>
+          <button
+            type="button"
+            onClick={handleClear}
+            title="Очистить поиск"
+            aria-label="Очистить поиск"
+          >
+            {/* Замените на вашу иконку (например, SVG или Heroicons) */}
+            <span style={{ fontSize: '20px', lineHeight: 1 }}>×</span>
+            {/* или: <XMarkIcon width={18} height={18} /> */}
+          </button>
+        </div>
+      )}
     </div>
-  )
-}
+  );
+};
 
 // type TypeFieldPeriodProps = {setSearchPeriod: ({startDate, endDate}: TypeDateRange) => void };
 // type TypeFieldDateRangeProps = { props: { dateRange: TypeDateRange, setDateRange: Dispatch<SetStateAction<TypeDateRange>> }; style?: CSSProperties };
 
-export const FieldDateRange: FC = () => {
-  const TABLE_CONTEXT_PROPS = useTableContextProps();
-  const { queryParams, setQueryParams } = TABLE_CONTEXT_PROPS.query;
-  const [dateRange, setDateRange] = useState<TypeDateRange | undefined>(queryParams.filter?.dateRange);
+export interface TypeDateRange {
+  startDate: string | null; // ISO-строка или пустая строка / null
+  endDate: string | null;
+}
 
-  // const startDate = queryParams.filter?.dateRange?.startDate;
-  // const endDate = queryParams.filter?.dateRange?.endDate;
+export const FieldDateRange: FC = () => {
+  const { filtering } = useTableContext();
+  const { filters, onFilterChange } = filtering;
+
+  // Текущее значение диапазона дат из глобальных фильтров
+  const currentDateRange = filters?.dateRange as TypeDateRange | undefined;
+
+  // Локальное состояние для управления вводом
+  const [localRange, setLocalRange] = useState<TypeDateRange>(
+    currentDateRange ?? { startDate: null, endDate: null }
+  );
+
+  // Синхронизация: если глобальный фильтр изменился извне — обновляем локальное состояние
   useEffect(() => {
-    if (setQueryParams)
-      setQueryParams({ ...queryParams, filter: { dateRange } })
-  }, [dateRange])
+    if (currentDateRange) {
+      setLocalRange(currentDateRange);
+    } else {
+      setLocalRange({ startDate: null, endDate: null });
+    }
+  }, [currentDateRange]);
+
+  // Отправка изменений в глобальные фильтры
+  // Можно добавить debounce, если сервер не любит частые запросы
+  const updateGlobalFilter = useCallback(() => {
+    // Если оба поля пустые → очищаем фильтр
+    if (!localRange.startDate && !localRange.endDate) {
+      onFilterChange('dateRange', undefined);
+      return;
+    }
+
+    // Иначе передаём объект
+    onFilterChange('dateRange', localRange);
+  }, [localRange, onFilterChange]);
+
+  // Обновляем глобальный фильтр при изменении локального состояния
+  useEffect(() => {
+    updateGlobalFilter();
+  }, [localRange, updateGlobalFilter]);
+
+  // Обработчики для инпутов
+  const handleStartChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value || null;
+    setLocalRange(prev => ({ ...prev, startDate: value }));
+  }, []);
+
+  const handleEndChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value || null;
+    setLocalRange(prev => ({ ...prev, endDate: value }));
+  }, []);
+
+  // Очистка диапазона
+  const handleClear = useCallback(() => {
+    setLocalRange({ startDate: null, endDate: null });
+    onFilterChange('dateRange', undefined);
+  }, [onFilterChange]);
 
   return (
-    <div className={styles.FieldDateWrapper} >
+    <div className={styles.FieldDateWrapper}>
       <input
         type="datetime-local"
         className={styles.FieldDate}
-        value={dateRange?.startDate ? dateRange.startDate : ''}
-        onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-      // name="startDate"
-      /><span>-</span>
-      <input
-        type="datetime-local"
-        className={styles.FieldDate}
-        value={dateRange?.endDate ? dateRange.endDate : ''}
-        onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-      // name="endDate"
+        value={localRange.startDate ?? ''}
+        onChange={handleStartChange}
+        placeholder="Начало"
       />
+      <span className={styles.DateSeparator}>—</span>
+      <input
+        type="datetime-local"
+        className={styles.FieldDate}
+        value={localRange.endDate ?? ''}
+        onChange={handleEndChange}
+        placeholder="Конец"
+      />
+
+      {(localRange.startDate || localRange.endDate) && (
+        <button
+          type="button"
+          className={styles.ClearButton}
+          onClick={handleClear}
+          title="Сбросить диапазон"
+          aria-label="Сбросить диапазон дат"
+        >
+          ×
+        </button>
+      )}
     </div>
-  )
-}
+  );
+};
 
 export const Divider = () => {
   return (
     <div style={{ borderLeft: "1px dotted #888", display: "flex", height: "auto" }}></div>
   )
 };
+
+function useDebounce(localValue: string, arg1: number) {
+  throw new Error('Function not implemented.')
+}

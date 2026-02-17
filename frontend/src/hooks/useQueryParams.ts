@@ -1,55 +1,68 @@
-import { useState } from "react";
-import { TypeTableParams } from "../components/Table/types";
-import { DEFAULT_TABLE_PARAMS } from "../app/configs/table";
+import { useState, useEffect, useCallback } from "react";
 
-// Универсальный хук для управления параметрами таблицы
-export const useQueryParams = (initProps?: Partial<TypeTableParams>) => {
-	const [params, setParams] = useState<TypeTableParams>(() => {
-		const mergedParams = {
-			...DEFAULT_TABLE_PARAMS,
-			...(initProps as Partial<TypeTableParams>),
-			filter: {
-				...DEFAULT_TABLE_PARAMS.filter,
-				...(initProps?.filter ?? {}),
-			},
-			selectedIds:
-				initProps?.selectedIds instanceof Set
-					? initProps.selectedIds
-					: DEFAULT_TABLE_PARAMS.selectedIds,
-		};
+type Updater<T> = T | ((prev: T) => T);
 
-		return mergedParams as TypeTableParams;
-	});
+const useQueryParams = <T>(
+	name: string,
+	defaultValue: T,
+	initialFromApi?: T,
+	options: {
+		/** Как превратить значение в строку для URL (по умолчанию String) */
+		stringify?: (value: T) => string;
+		/** Нужно ли удалять параметр из URL при значении === defaultValue */
+		removeOnDefault?: boolean;
+	} = {},
+) => {
+	const { stringify = String, removeOnDefault = true } = options;
 
-	const setQueryParams = (newParams: Partial<TypeTableParams>) => {
-		setParams((prev) => {
-			const updatedParams = { ...prev };
+	// Начальное значение берём ТОЛЬКО из API или defaultValue
+	// То, что уже лежит в URL на момент монтирования — игнорируем
+	const [value, setValue] = useState<T>(initialFromApi ?? defaultValue);
 
-			// Специальное слияние для filter
-			if (newParams.filter !== undefined) {
-				updatedParams.filter = { ...prev.filter, ...newParams.filter };
-			}
+	const syncToUrl = useCallback(
+		(newValue: T) => {
+			const params = new URLSearchParams(window.location.search);
 
-			// Специальное слияние для selectedIds
-			if (newParams.selectedIds !== undefined) {
-				if (newParams.selectedIds instanceof Set) {
-					updatedParams.selectedIds = newParams.selectedIds;
+			if ((newValue === defaultValue || newValue == null) && removeOnDefault) {
+				params.delete(name);
+			} else {
+				const serialized = stringify(newValue);
+				if (serialized) {
+					params.set(name, serialized);
 				} else {
-					console.warn(
-						"setQueryParams called with non-Set for selectedIds",
-						newParams.selectedIds,
-					);
+					params.delete(name);
 				}
 			}
 
-			return {
-				...updatedParams,
-				...newParams,
-				filter: updatedParams.filter,
-				selectedIds: updatedParams.selectedIds,
-			};
-		});
-	};
+			const newSearch = params.toString();
+			const newUrl = newSearch ? `?${newSearch}` : window.location.pathname;
 
-	return [params, setQueryParams] as const;
+			// Обновляем URL без создания новой записи в истории
+			window.history.replaceState(null, "", newUrl);
+		},
+		[name, defaultValue, stringify, removeOnDefault],
+	);
+
+	// Синхронизируем URL при изменении значения
+	useEffect(() => {
+		// Можно добавить условие, если не хотите обновлять URL при каждом рендере
+		// например: если значение === defaultValue → не трогаем URL
+		syncToUrl(value);
+	}, [value, syncToUrl]);
+
+	// Удобная обёртка для setValue, совместимая с useState
+	const setQueryParam = useCallback((updater: Updater<T>) => {
+		setValue((prev) => {
+			const nextValue =
+				typeof updater === "function"
+					? (updater as (prev: T) => T)(prev)
+					: updater;
+
+			return nextValue;
+		});
+	}, []);
+
+	return [value, setQueryParam] as const;
 };
+
+export default useQueryParams;

@@ -8,6 +8,7 @@ import { formatIpAddress } from "./utils/format.js";
 import { getLocalIP } from "./utils/module.js";
 import apiv1 from "./api/v1.js";
 import counterpartiesRouter from "./api/router/counterparties.js";
+import activityHistoriesRouter from "./api/router/activityhistories.js";
 
 // const prisma = new PrismaClient();
 // const prisma = new PrismaClient();
@@ -19,13 +20,11 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);
-// app.use(cors());
-// app.use(express.urlencoded({ extended: true }));
-// app.use(express.json());
+app.use("/api/v1", activityHistoriesRouter);
 
 // Логирование запросов (опционально)
 app.use((req, res, next) => {
-	console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+	console.log(req.method, req.path);
 	next();
 });
 
@@ -38,13 +37,13 @@ app.get("/api/health", (req, res) => {
 });
 
 // Обработка 404
-app.use((req, res) => {
-	res.status(404).json({
-		success: false,
-		message: "Endpoint не найден",
-		path: req.path,
-	});
-});
+// app.use((req, res) => {
+// 	res.status(404).json({
+// 		success: false,
+// 		message: "Endpoint не найден",
+// 		path: req.path,
+// 	});
+// });
 
 // Глобальный обработчик ошибок
 app.use((err, req, res, next) => {
@@ -82,10 +81,11 @@ app.get("/", (req, res) => {
 });
 
 app.post("/json", async (req, res) => {
+	// console.log("first");
 	try {
 		const body = req.body || {};
 
-		console.log(body?.actionDate);
+		// console.log(body?.actionDate);
 		// Достаём с безопасной вложенностью
 		const actionDate = body.actionDate;
 		const actionType = body.actionType;
@@ -146,7 +146,7 @@ app.post("/json", async (req, res) => {
 				},
 			});
 		}
-
+		// console.log(data?.bin);
 		// Самое важное — проверяем, что организация существует и есть ключевые поля
 		if (!existingOrganization?.bin) {
 			return res

@@ -355,21 +355,29 @@ router.get("/counterparties/uuid/:uuid", async (req, res) => {
 // ============================================
 // UPDATE - Обновление контрагента
 // ============================================
-router.put("/counterparties/:id", async (req, res) => {
+router.put("/counterparties/:uuid", async (req, res) => {
 	try {
-		const { id } = req.params;
-		const { shortName, displayName } = req.body;
-		const counterpartyId = parseInt(id);
+		const { uuid } = req.params;
+		const { bin, shortName, displayName } = req.body;
 
-		if (isNaN(counterpartyId)) {
+		if (
+			typeof uuid !== "string" ||
+			uuid.length !== 36 ||
+			(uuid.match(/-/g) || []).length !== 4
+		) {
 			return res.status(400).json({
-				message: "Некорректный ID контрагента",
+				message: "Некорректный формат UUID контрагента",
 			});
 		}
+		// if (isNaN(uuid)) {
+		// 	return res.status(400).json({
+		// 		message: "Некорректный UUID контрагента",
+		// 	});
+		// }
 
 		// Проверка существования контрагента
 		const existingCounterparty = await prisma.counterparty.findUnique({
-			where: { id: counterpartyId },
+			where: { uuid },
 		});
 
 		if (!existingCounterparty) {
@@ -412,10 +420,13 @@ router.put("/counterparties/:id", async (req, res) => {
 		if (displayName !== undefined) {
 			updateData.displayName = displayName?.trim() || null;
 		}
+		if (bin !== undefined) {
+			updateData.bin = bin?.trim() || null;
+		}
 
 		// Обновление контрагента
 		const updatedCounterparty = await prisma.counterparty.update({
-			where: { id: counterpartyId },
+			where: { uuid },
 			data: updateData,
 		});
 
@@ -432,12 +443,21 @@ router.put("/counterparties/:id", async (req, res) => {
 // ============================================
 // PATCH - Частичное обновление контрагента
 // ============================================
-router.patch("/counterparties/:id", async (req, res) => {
+router.patch("/counterparties/:uuid", async (req, res) => {
 	try {
-		const { id } = req.params;
-		const counterpartyId = parseInt(id);
+		const { uuid } = req.params;
 
-		if (isNaN(counterpartyId)) {
+		if (
+			typeof uuid !== "string" ||
+			uuid.length !== 36 ||
+			(uuid.match(/-/g) || []).length !== 4
+		) {
+			return res.status(400).json({
+				message: "Некорректный формат UUID контрагента",
+			});
+		}
+
+		if (isNaN(uuid)) {
 			return res.status(400).json({
 				message: "Некорректный ID контрагента",
 			});
@@ -445,7 +465,7 @@ router.patch("/counterparties/:id", async (req, res) => {
 
 		// Проверка существования
 		const existingCounterparty = await prisma.counterparty.findUnique({
-			where: { id: counterpartyId },
+			where: { uuid },
 		});
 
 		if (!existingCounterparty) {
@@ -471,7 +491,7 @@ router.patch("/counterparties/:id", async (req, res) => {
 		}
 
 		const updatedCounterparty = await prisma.counterparty.update({
-			where: { id: counterpartyId },
+			where: { uuid },
 			data: updateData,
 		});
 
@@ -488,12 +508,21 @@ router.patch("/counterparties/:id", async (req, res) => {
 // ============================================
 // DELETE - Удаление контрагента
 // ============================================
-router.delete("/counterparties/:id", async (req, res) => {
+router.delete("/counterparties/:uuid", async (req, res) => {
 	try {
-		const { id } = req.params;
-		const counterpartyId = parseInt(id);
+		const { uuid } = req.params;
 
-		if (isNaN(counterpartyId)) {
+		if (
+			typeof uuid !== "string" ||
+			uuid.length !== 36 ||
+			(uuid.match(/-/g) || []).length !== 4
+		) {
+			return res.status(400).json({
+				message: "Некорректный формат UUID контрагента",
+			});
+		}
+
+		if (isNaN(uuid)) {
 			return res.status(400).json({
 				message: "Некорректный ID контрагента",
 			});
@@ -501,7 +530,7 @@ router.delete("/counterparties/:id", async (req, res) => {
 
 		// Проверка существования и связанных данных
 		const existingCounterparty = await prisma.counterparty.findUnique({
-			where: { id: counterpartyId },
+			where: { uuid },
 			include: {
 				_count: {
 					select: {
@@ -539,12 +568,12 @@ router.delete("/counterparties/:id", async (req, res) => {
 
 		// Удаление контрагента
 		await prisma.counterparty.delete({
-			where: { id: counterpartyId },
+			where: { uuid },
 		});
 
 		res.status(200).json({
 			message: "Контрагент успешно удален",
-			id: counterpartyId,
+			uuid: uuid,
 		});
 	} catch (error) {
 		console.error("Error deleting counterparty:", error);

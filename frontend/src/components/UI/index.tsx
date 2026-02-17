@@ -1,15 +1,14 @@
-import React, { createContext, CSSProperties, FC, PropsWithChildren, useContext, useEffect, useState, forwardRef, useRef, useImperativeHandle, ReactPortal, ReactNode, SetStateAction } from 'react';
-import { useAppContextProps } from '../../app/AppContextProvider';
-import styles from "../../app/styles/main.module.scss"
-import ReactDOM, { createPortal } from 'react-dom';
-import { ref } from 'process';
-import { usePortal } from 'src/hooks/usePortal';
-import Counterparties from 'src/models/Counterparties';
+import React, { CSSProperties, FC, PropsWithChildren, useContext, useEffect, useState, forwardRef, useRef, useImperativeHandle, ReactNode, ReactElement, ComponentType, Component, isValidElement, JSX, ErrorInfo } from 'react';
+import styles from "../../styles/main.module.scss"
+import { createPortal } from 'react-dom';
 import ListContracts from 'src/models/Contracts';
 import { Divider } from '../Field';
-import { getTranslation } from 'src/i18';
-import ListOrganizations from 'src/models/organizations/list';
-import { ListActivityHistories } from 'src/models/ActivityHistories';
+// import { getTranslation } from 'src/i18';
+// import { CounterpartiesList } from 'src/models/Organizations';
+import ActivityHistoriesList from 'src/models/ActivityHistories';
+// import { TComponentNode, TPane } from 'src/app/types';
+import { useAppContext } from 'src/app';
+import CounterpartiesList from 'src/models/Counterparties/list';
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -74,49 +73,21 @@ export const HorizontalLine = () => {
 }
 
 export const Content = () => {
+  const context = useAppContext();
+  const isPaneShow = context.windows.panes.length > 0;
 
-  const context = useAppContextProps();
-  const isPaneShow = context.panes.length > 0;
-  // console.log(isPaneShow);
-
-  return isPaneShow ? (
+  return (
     <>
-      <PaneGroup />
-      <PaneTab />
+      {isPaneShow && <><PaneGroup /><PaneTab /></>}
     </>
-  ) : (<></>);
-
+  );
 }
-// export const Navbar: FC = () => {
 
-//   const context = useAppContextProps();
-
-//   const openPane = context?.actions.openPane;
-
-//   return (
-//     <div className={styles.NavbarWrapper}>
-//       <a href="#"
-//         Навигация
-//       </a>
-//       <a href="#"
-//         className={styles.NavbarItem}
-//         onClick={() => openPane(<ListActivityHistories />)}>
-//         История активности
-//       </a>
-//       <a href="#"
-//         className={styles.NavbarItem}
-//         onClick={() => openPane(
-//           <ContractForm />)}>
-//         Форма
-//       </a>
-//     </div>
-//   );
-// };
 export const PaneTab: FC = () => {
 
-  const context = useAppContextProps();
-  const panes = context?.panes;
-  const setActivePaneID = context?.actions.setActivePaneID;
+  const context = useAppContext();
+  const panes = context?.windows.panes;
+  const { activePane, setActivePane } = context?.windows;
 
 
 
@@ -124,9 +95,9 @@ export const PaneTab: FC = () => {
     <div className={styles.PaneTabWrapper}>
       {panes.map(p => (
         <button
-          key={p.uniqId}
-          className={[styles.PaneTab, p.isActive && styles.PaneTabActive].join(" ")}
-          onClick={() => setActivePaneID(p.uniqId)}>
+          key={`PaneTab-${p.uniqId}`}
+          className={[styles.PaneTab, (p.uniqId === activePane) && styles.PaneTabActive].join(" ")}
+          onClick={() => setActivePane(p.uniqId)}>
           {p.label}
         </button>
       ))}
@@ -135,20 +106,28 @@ export const PaneTab: FC = () => {
 };
 
 export const PaneGroup = () => {
-  const context = useAppContextProps();
-  const panes = context?.panes;
+  const context = useAppContext();
+  const { panes, activePane } = context?.windows;
+
+
+
+
   return (
     <div className={styles.PaneGroupWrapper}>
-      {panes.map((p) => (
-        <div key={p.uniqId}
-          className={[styles.Pane, p.isActive && styles.ActivePane].join(" ")}>
-          <div style={{ display: "flex", gap: "6px" }}>
-            <Divider />
-            <h2 className={styles.PaneHeaderLabel}>{p.label}</h2>
+      {panes.map(p => {
+        const Component = p.component as FC<any>;
+        // console.log(p.uniqId)
+        return (
+          <div key={`PaneGroup-${p.uniqId}`}
+            className={[styles.Pane, (p.uniqId === activePane) && styles.ActivePane].join(" ")}>
+            <div style={{ display: "flex", gap: "6px" }}>
+              <Divider />
+              <h2 className={styles.PaneHeaderLabel}>{p.label}</h2>
+            </div>
+            <Component {...p} />
           </div>
-          {p.component}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -205,41 +184,6 @@ export const Portal = ({ content }: { content: React.ReactNode }) => {
   );
 };
 
-// export const Overlay: React.FC<OverlayProps> = ({ isOpen, onClose, children }) => {
-//   if (!isOpen) return null;
-
-//   return (
-//     <Portal>
-//       <div
-//         style={{
-//           position: 'fixed',
-//           top: 0, left: 0, right: 0, bottom: 0,
-//           backgroundColor: 'rgba(245, 0, 0, 0.5)',
-//           display: 'flex',
-//           alignItems: 'center',
-//           justifyContent: 'center',
-//           zIndex: 1000
-//         }}
-//         onClick={onClose}
-//       >
-//         {children}
-//       </div>
-//     </Portal>
-//   );
-// };
-
-
-
-
-
-// Контекст для системы панелей
-interface PaneContextType {
-  activePane: string | null;
-  setActivePane: (id: string) => void;
-  registerPane: (id: string, title: string) => void;
-  panes: { id: string; title: string }[];
-}
-
 
 interface ScreenProps {
   children: React.ReactNode;
@@ -261,17 +205,17 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(({ children }, ref
 
 
 export const Navbar: React.FC = () => {
-  const context = useAppContextProps();
+  const context = useAppContext();
 
   const { props, setProps } = context?.navbar;
   const activeNav = props.find(nav => nav.isActive);
   // const [navs, setNavs] = useState(items);
   // const [activeNav, setActiveNav] = useState(items[0]);
 
-  const setActive = (id: string) => {
-    setProps(prev => prev.map(nav => ({ ...nav, isActive: nav.id === id })))
-    // setActiveNav(items.find(nav => nav.id === id) ?? items[0])
-  }
+  // const setActive = (id: string) => {
+  //   setProps(prev => prev.map(nav => ({ ...nav, isActive: nav.id === id })))
+  //   // setActiveNav(items.find(nav => nav.id === id) ?? items[0])
+  // }
 
   const toggleNav = (id: string) => {
     setProps(prev => prev.map(n =>
@@ -300,15 +244,16 @@ export const Navbar: React.FC = () => {
 }
 
 type TypeNavListProps = {
-  lable: string;
+  label: string;
 }
 
-export const NavList = ({ lable }: TypeNavListProps) => {
+export const NavList = ({ label }: TypeNavListProps) => {
 
-  const context = useAppContextProps();
-  const addPane = context.actions.addPane;
+  const context = useAppContext();
+  const addPane = context.windows.addPane;
 
-  if (lable.toLocaleLowerCase() === "Operations".toLocaleLowerCase()) {
+
+  if (label.toLocaleLowerCase() === "Operations".toLocaleLowerCase()) {
     // Торговля
     return (
       <div className={styles.NavListWrapper}>
@@ -335,15 +280,15 @@ export const NavList = ({ lable }: TypeNavListProps) => {
             <h3>Справочники</h3>
             <ul className={styles.NavList}>
               <li>Склады</li>
-              <li onClick={() => addPane(<ListOrganizations />)}>Организации</li>
-              <li onClick={() => addPane(<Counterparties.List />)}>Контрагенты</li>
-              <li onClick={() => addPane(<ListContracts />)}>Договора</li>
+              <li onClick={() => addPane({ component: CounterpartiesList })}>Организации</li>
+              <li onClick={() => addPane({ component: CounterpartiesList })}>Контрагенты</li>
+              <li onClick={() => addPane({ component: ListContracts })}>Договора</li>
             </ul>
           </div>
         </Group >
       </div >
     )
-  } else if (lable.toLocaleLowerCase() === "CRM".toLocaleLowerCase()) {
+  } else if (label.toLocaleLowerCase() === "CRM".toLocaleLowerCase()) {
     // CRM
     return (
       <div className={styles.NavListWrapper}>
@@ -373,7 +318,7 @@ export const NavList = ({ lable }: TypeNavListProps) => {
         </Group>
       </div>
     )
-  } else if (lable.toLocaleLowerCase() === "Settings".toLocaleLowerCase()) {
+  } else if (label.toLocaleLowerCase() === "Settings".toLocaleLowerCase()) {
     // Settings
     return (
       <div className={styles.NavListWrapper}>
@@ -382,15 +327,56 @@ export const NavList = ({ lable }: TypeNavListProps) => {
           <div>
             <h3>Права доступа</h3>
             <ul className={styles.NavList}>
-              <li onClick={() => addPane(<ListOrganizations />)}>Организации</li>
-              <li onClick={() => addPane(<Counterparties.List />)}>Контрагенты</li>
-              <li onClick={() => addPane(<ListContracts />)}>Договора</li>
-              <li onClick={() => addPane(<ListActivityHistories />)}>История активности</li>
+              <li onClick={() => addPane({ component: CounterpartiesList })}>Организации</li>
+              <li onClick={() => addPane({ component: CounterpartiesList })}>Контрагенты</li>
+              <li onClick={() => addPane({ component: ListContracts })}>Договора</li>
+              <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>
             </ul>
           </div>
-        </Group>
-      </div>
+        </Group >
+      </div >
     )
   }
 }
 
+interface Props {
+  children: ReactNode;
+  fallback: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error?: Error;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Error caught by ErrorBoundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+
+    return this.props.children;
+  }
+}
+
+export const LoadingFallback: React.FC = () => {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <span className="ml-3 text-lg">Загрузка...</span>
+    </div>
+  );
+};

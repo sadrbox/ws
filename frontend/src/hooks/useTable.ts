@@ -2,21 +2,22 @@ import { useMemo, useEffect, useState, ReactNode } from "react";
 import {
 	TColumn,
 	TDataItem,
+	TOpenModelForm,
 	TypeModelProps,
-	TOpenForm,
-	TypeTableParams,
+	TQueryParams,
 	TypeTableTypes,
 } from "../components/Table/types";
-import { useQueryParams } from "./useQueryParams";
+// import { useQueryParams } from "./useQueryParams.ts_old";
 import { useFetchData } from "./useFetchData";
 import { getModelColumns, sortTableRows } from "../components/Table/services";
+import { TOpenModelFormProps } from "src/app/types";
 
 type TypeUseTableReturn = {
 	componentName: string; // mostly for logging/debugging
 	model: string; // entity name: 'users', 'products', etc.
 	columnsJson: any; // usually ColumnDef<TData>[] from @tanstack/react-table
-	openForm?: TOpenForm;
-	initProps?: Partial<TypeTableParams>;
+	openModelForm?: TOpenModelForm;
+	initProps?: Partial<TQueryParams>;
 	type?: TypeTableTypes;
 };
 
@@ -25,7 +26,7 @@ export const useTable = ({
 	componentName,
 	model,
 	columnsJson,
-	openForm,
+	openModelForm,
 	initProps,
 	type,
 }: TypeUseTableReturn) => {
@@ -33,7 +34,7 @@ export const useTable = ({
 		getModelColumns(columnsJson, componentName, type),
 	);
 	const [queryParams, setQueryParams] = useQueryParams({
-		model,
+		// model,
 		...initProps,
 	});
 
@@ -70,7 +71,7 @@ export const useTable = ({
 				queryParams,
 				setQueryParams,
 			},
-			actions: { openForm, refetch, setColumns },
+			actions: { openModelForm, refetch, setColumns },
 			error,
 		}),
 		[

@@ -1,5 +1,5 @@
 import { useQuery, UseQueryOptions } from "@tanstack/react-query";
-import { API_BASE_URL } from "../app/constants";
+import { API_BASE_URL } from "../utils/main.module";
 import { TypeTableParams } from "../components/Table/types";
 import { FetchDataResult } from "../components/Table/types";
 
