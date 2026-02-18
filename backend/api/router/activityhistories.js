@@ -226,13 +226,54 @@ router.get("/activityhistories", async (req, res) => {
 				: {};
 
 		// Логируем для отладки
-		console.log(
-			`[GET /activityhistories] limit=${limitNumber}, cursor=${cursorNumber}, search=${search}`,
-		);
+		// console.log(
+		// 	`[GET /activityhistories] limit=${limitNumber}, cursor=${cursorNumber}, search=${search}`,
+		// );
 
-		// ⚠️ СОРТИРОВКА ОТКЛЮЧЕНА НА СЕРВЕРЕ - ДЕЛАЕТСЯ НА КЛИЕНТЕ
-		// Сервер возвращает данные в порядке возрастания ID (для курсорной пагинации)
-		const orderBy = [{ id: "asc" }];
+		// ── Сортировка ────────────────────────────────────────────────────────
+		// Клиент шлёт sort как JSON-строку: { "field": "asc"|"desc" }
+		// Поддерживается точечная нотация для связей: "organization.shortName"
+		// → преобразуется в { organization: { shortName: "asc" } } для Prisma
+		const orderBy = [];
+		const sortParam =
+			typeof req.query.sort === "string" ? req.query.sort : null;
+
+		if (sortParam) {
+			try {
+				const sortObj = JSON.parse(sortParam);
+				if (sortObj && typeof sortObj === "object") {
+					for (const [field, dir] of Object.entries(sortObj)) {
+						if (dir !== "asc" && dir !== "desc") continue;
+
+						// Точечная нотация: "organization.shortName" → { organization: { shortName: dir } }
+						if (field.includes(".")) {
+							const parts = field.split(".");
+							// Строим вложенный объект справа налево
+							let nested = { [parts[parts.length - 1]]: dir };
+							for (let i = parts.length - 2; i >= 0; i--) {
+								nested = { [parts[i]]: nested };
+							}
+							orderBy.push(nested);
+						} else {
+							orderBy.push({ [field]: dir });
+						}
+					}
+				}
+			} catch {
+				// Некорректный JSON — игнорируем
+			}
+		}
+
+		// Сортировка по умолчанию — id asc (обязательна для курсорной пагинации)
+		if (orderBy.length === 0) {
+			orderBy.push({ id: "asc" });
+		} else {
+			// Всегда добавляем id как вторичный ключ сортировки для стабильности курсора
+			const hasId = orderBy.some((o) => "id" in o);
+			if (!hasId) {
+				orderBy.push({ id: "asc" });
+			}
+		}
 
 		// ── Поиск (search=строка) ─────────────────────────────────────────────
 		const TEXT_FIELDS = [

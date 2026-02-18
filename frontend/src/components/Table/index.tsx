@@ -1,4 +1,5 @@
 import styles from './Table.module.scss';
+import { GLOBAL_ADAPTIVE_LIMIT_REF } from 'src/hooks/useInfiniteModelList';
 
 import {
   TColumn,
@@ -97,6 +98,13 @@ export interface TableContextProps {
   states: {
     selectedRows: Set<number>;
     setSelectedRows: Dispatch<SetStateAction<Set<number>>>;
+    // ── Режим "выбрать всё" ───────────────────────────────────────────────
+    // true = выбраны ВСЕ строки в БД (кроме excludedRows)
+    isAllSelectedMode: boolean;
+    setIsAllSelectedMode: Dispatch<SetStateAction<boolean>>;
+    // Строки исключённые из режима "выбрать всё"
+    excludedRows: Set<number>;
+    setExcludedRows: Dispatch<SetStateAction<Set<number>>>;
     activeRow: number | null;
     setActiveRow: Dispatch<SetStateAction<number | null>>;
   };
@@ -235,6 +243,8 @@ const Table: FC<TableProps> = memo((props) => {
 
   const [activeRow, setActiveRow] = useState<number | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [isAllSelectedMode, setIsAllSelectedMode] = useState<boolean>(false);
+  const [excludedRows, setExcludedRows] = useState<Set<number>>(new Set());
   const [configModalAction, setConfigModalAction] = useState<TypeFormAction>('');
   const [visibleDateRange, setVisibleDateRange] = useState(false);
   const [visibleFastSearch, setVisibleFastSearch] = useState(false);
@@ -255,21 +265,32 @@ const Table: FC<TableProps> = memo((props) => {
       actions: extendedActions,
       hasNextPage, isFetchingNextPage,
       scrollRef,
-      states: { selectedRows, setSelectedRows, activeRow, setActiveRow },
+      states: {
+        selectedRows, setSelectedRows,
+        isAllSelectedMode, setIsAllSelectedMode,
+        excludedRows, setExcludedRows,
+        activeRow, setActiveRow,
+      },
     }),
     [
       componentName, rows, columns, total, totalPages,
       isLoading, error,
       pagination, sorting, filtering, search, extendedActions,
       hasNextPage, isFetchingNextPage,
-      selectedRows, activeRow,
+      selectedRows, isAllSelectedMode, excludedRows, activeRow,
     ]
   );
-  // console.log(isLoading, isFetching)
 
   const handleCreate = useCallback(() => {
     if (openModelForm) openModelForm({ onSave: refetch, onClose: () => { } });
   }, [openModelForm, refetch]);
+
+  // onRefresh — обновляет данные.
+  // isAllSelectedMode, selectedRows и excludedRows НЕ сбрасываем:
+  // строки с теми же ID после перезагрузки сохранят своё состояние выделения.
+  const handleRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   const handleDeleteClick = useCallback(() => {
     alert('Удалить выбранные');
@@ -301,16 +322,24 @@ const Table: FC<TableProps> = memo((props) => {
           onConfigOpen={handleConfigOpen}
           onDateRangeToggle={handleDateRangeToggle}
           onSearchToggle={handleSearchToggle}
-          onRefresh={refetch}
+          onRefresh={handleRefresh}
           onAddClick={handleCreate}
           onDeleteClick={handleDeleteClick}
           filtering={filtering}
           search={search}
         />
 
-        <div ref={scrollRef} className={styles.TableScrollWrapper}>
-          <TableArea />
+        <div className={styles.TableScrollContainer}>
+          <div ref={scrollRef} className={styles.TableScrollWrapper} style={{ overflowAnchor: 'none' }}>
+            <TableArea />
+          </div>
+          {(isLoading || isFetchingNextPage) && (
+            <div className={styles.TableLoadingOverlay}>
+              <div className={styles.TableSpinner} />
+            </div>
+          )}
         </div>
+        {/* <TableStatusBar /> */}
       </div>
     </TableContextProvider>
   );
@@ -325,7 +354,6 @@ Table.displayName = 'Table';
 const TableArea = memo(() => {
   const { columns } = useTableContext();
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
-  // console.log(isFetchi`ngNextPage)
   return (
     <>
       <table>
@@ -344,16 +372,101 @@ const TableArea = memo(() => {
         </colgroup>
         <TableHeader />
         <TableBody />
+        <TableFooter />
       </table>
-      {/* {isLoading && (
-        <div className={styles["table-loading-spinner"]}>
-          <div className={styles.spinner}></div>
-          <span>Загрузка...</span>
-        </div>
-      )} */}
     </>
   );
 });
+
+// ────────────────────────────────────────────────
+// TableFooter — tfoot с итогами колонок (sticky bottom внутри скролла)
+// ────────────────────────────────────────────────
+
+const TableFooter = memo(() => {
+  const { columns, rows } = useTableContext();
+  const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
+
+  // Проверяем есть ли хоть одна колонка с footer-итогом
+  const hasFooter = visibleColumns.some(c => c.footer && c.footer !== 'none');
+  if (!hasFooter) return null;
+
+  return (
+    <tfoot>
+      <tr>
+        {/* Колонка чекбокса */}
+        <td />
+        {visibleColumns.map(col => {
+          const value = computeFooterValue(col, rows);
+          return (
+            <td key={col.identifier}>
+              <div className={styles.TableFooterCell}>
+                {value !== null && <span>{value}</span>}
+              </div>
+            </td>
+          );
+        })}
+      </tr>
+    </tfoot>
+  );
+});
+
+TableFooter.displayName = 'TableFooter';
+
+// Вычисляет итоговое значение колонки по загруженным строкам
+function computeFooterValue(col: TColumn, rows: TDataItem[]): string | null {
+  if (!col.footer || col.footer === 'none') return null;
+  const vals = rows
+    .map(r => {
+      const v = r[col.identifier];
+      return typeof v === 'number' ? v : parseFloat(String(v));
+    })
+    .filter(v => !isNaN(v));
+
+  if (vals.length === 0) return null;
+
+  switch (col.footer) {
+    case 'sum': return vals.reduce((a, b) => a + b, 0).toLocaleString('ru-RU');
+    case 'avg': return (vals.reduce((a, b) => a + b, 0) / vals.length).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+    case 'min': return Math.min(...vals).toLocaleString('ru-RU');
+    case 'max': return Math.max(...vals).toLocaleString('ru-RU');
+    case 'count': return vals.length.toLocaleString('ru-RU');
+    default: return null;
+  }
+}
+
+// ────────────────────────────────────────────────
+// TableStatusBar — строка состояния (снаружи скролла, всегда внизу)
+// ────────────────────────────────────────────────
+
+const TableStatusBar = memo(() => {
+  const {
+    total,
+    states: { selectedRows, isAllSelectedMode, excludedRows },
+  } = useTableContext();
+
+  const selectedCount = isAllSelectedMode
+    ? total - excludedRows.size
+    : selectedRows.size;
+
+  if (selectedCount === 0) return null;
+
+  return (
+    <div className={styles.TableStatusBar}>
+      <div className={styles.TableStatusCell}>
+        <span>
+          Выбрано:{' '}
+          <span className={styles.TableStatusSelected}>
+            {selectedCount.toLocaleString('ru-RU')}
+          </span>
+          {' из '}
+          {total.toLocaleString('ru-RU')}
+        </span>
+      </div>
+    </div>
+  );
+});
+
+TableStatusBar.displayName = 'TableStatusBar';
 
 // ────────────────────────────────────────────────
 // TableHeader
@@ -363,54 +476,74 @@ const TableHeader = memo(() => {
   const {
     columns, rows,
     sorting: { sort, onSortChange },
-    states: { selectedRows, setSelectedRows },
+    states: {
+      selectedRows, setSelectedRows,
+      isAllSelectedMode, setIsAllSelectedMode,
+      excludedRows, setExcludedRows,
+    },
     isLoading,
   } = useTableContext();
 
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
 
-  const isAllSelected = useMemo(
-    () => {
-      // Проверяем, все ли ЗАГРУЖЕННЫЕ строки выбраны
-      // (не все возможные, а только те что загружены в текущий момент)
-      return rows.length > 0 && rows.every(r => selectedRows.has(r.id as number));
-    },
-    [rows, selectedRows]
-  );
+  // isAllSelected = true если режим "все" без исключений
+  const isAllSelected = useMemo(() => {
+    if (isAllSelectedMode) return excludedRows.size === 0;
+    return rows.length > 0 && rows.every(r => selectedRows.has(r.id as number));
+  }, [isAllSelectedMode, excludedRows, rows, selectedRows]);
+
+  // indeterminate = частичный выбор
+  const isIndeterminate = useMemo(() => {
+    if (isAllSelectedMode) return excludedRows.size > 0;
+    return selectedRows.size > 0 && !isAllSelected;
+  }, [isAllSelectedMode, excludedRows, isAllSelected, selectedRows]);
 
   const toggleAll = useCallback(() => {
-    setSelectedRows(prev => {
-      const next = new Set(prev);
-      if (isAllSelected) {
-        // Снимаем выделение со всех загруженных строк
-        rows.forEach(r => next.delete(r.id as number));
-      } else {
-        // Выделяем все загруженные строки
-        rows.forEach(r => next.add(r.id as number));
-      }
-      return next;
-    });
-  }, [isAllSelected, rows, setSelectedRows]);
+    if (isAllSelected || isIndeterminate) {
+      // Есть хоть что-то выбранное (или всё) — сбрасываем всё
+      setIsAllSelectedMode(false);
+      setExcludedRows(new Set());
+      setSelectedRows(new Set());
+    } else {
+      // Ничего не выбрано → включаем режим "все"
+      setIsAllSelectedMode(true);
+      setExcludedRows(new Set());
+      setSelectedRows(new Set());
+    }
+  }, [isAllSelected, isIndeterminate, setIsAllSelectedMode, setExcludedRows, setSelectedRows]);
 
   const handleSort = useCallback((field: string) => {
     const newDir = sort[field] === 'asc' ? 'desc' : 'asc';
     onSortChange({ [field]: newDir });
   }, [sort, onSortChange]);
 
+  // Устанавливаем indeterminate напрямую через DOM (React не поддерживает этот атрибут)
+  const checkboxRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (checkboxRef.current) {
+      checkboxRef.current.indeterminate = isIndeterminate;
+    }
+  }, [isIndeterminate]);
+
   return (
     <thead>
       <tr>
         <th style={{ width: '30px', textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            <input type="checkbox" checked={isAllSelected} onChange={toggleAll}
-              disabled={isLoading || rows.length === 0} />
+            <input
+              ref={checkboxRef}
+              type="checkbox"
+              checked={isAllSelected}
+              onChange={toggleAll}
+              disabled={isLoading || rows.length === 0}
+            />
           </div>
         </th>
         {visibleColumns.map(col => {
           const isSorting = !!(sort && sort[col.identifier]);
           const dir = isSorting ? sort[col.identifier] : null;
           return (
-            <th key={col.identifier} style={{ cursor: 'pointer' }} onClick={() => handleSort(col.identifier)}>
+            <th key={col.identifier} style={{ cursor: `${isLoading ? 'default' : 'pointer'}` }} onClick={!isLoading ? () => handleSort(col.identifier) : undefined}>
               <div className={styles.TableHeaderCell}>
                 <span>{getTranslateColumn(col)}</span>
                 {isSorting && (
@@ -436,117 +569,40 @@ const TableBody = memo(() => {
   const {
     rows, deferredRowsForRender, columns, isLoading, total,
     isFetchingNextPage, hasNextPage,
-    actions, scrollRef, states,
+    actions, scrollRef,
   } = useTableContext();
 
-  const [scrollTop, setScrollTop] = useState(0);
+  // scrollRenderTick используется ТОЛЬКО как триггер ре-рендера при скролле.
+  // Реальное значение scrollTop читается синхронно из scrollTopRef.
+  const [, forceScrollRender] = useState(0);
+  // Ref для синхронного чтения scrollTop при расчёте padding (без задержки state)
+  const scrollTopRef = useRef<number>(0);
   const [containerHeight, setContainerHeight] = useState(scrollRef.current?.clientHeight ?? 0);
+
+  // Таймер для дебаунса скролла
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const scrollTopRef = useRef<number>(0);  // ← Фиксируем scrollTop
-  // ⚠️ Отслеживаем последний установленный лимит чтобы не вызывать setAdaptiveLimit без необходимости
-  // Это предотвращает отмену запросов при быстром скроле
-  const lastAdaptiveLimitRef = useRef<number>(500);
-  // ⚠️ Отслеживаем, для скольких строк уже был выполнен запрос на подгрузку
-  // Предотвращает повторные запросы при одном и том же триггере
-  const lastFetchedAtRowCountRef = useRef<number>(0);
-  // ⚠️ Отслеживаем предыдущую позицию скролла для вычисления разницы
-  // Нужно для определения размера прыжка скролла
-  const previousScrollDistanceRef = useRef<number>(0);
-  // ⚠️ Отслеживаем последний запрошенный курсор и лимит
-  // Если запросили с большим лимитом, не запрашиваем снова для того же диапазона
-  const lastRequestedCursorRef = useRef<number>(0);
-  const lastRequestedLimitRef = useRef<number>(0);
+  // Курсор последнего отправленного запроса (rows.length на момент запроса).
+  // -1 означает "ещё ничего не запрашивали" — позволяет запустить первый батч.
+  const lastRequestedCursorRef = useRef<number>(-1);
 
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
 
-  // ── Единая функция проверки необходимости подгрузки ──
-  const checkAndFetch = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el || !hasNextPage || isFetchingNextPage) return;
-
-    const loadedRowsCount = rows.length;
-
-    // ⚠️ ФИЧА #2: Если загружено столько же строк сколько всего существует - не загружаем больше
-    if (loadedRowsCount === total) {
-      return;
-    }
-
-    const currentViewEnd = Math.ceil((el.scrollTop + el.clientHeight) / ROW_HEIGHT);
-
-    // ⚠️ ИСПРАВЛЕНО: Правильный расчет прыжка скролла в пиксели
-    const scrollDeltaInPixels = Math.abs(el.scrollTop - previousScrollDistanceRef.current);
-    const scrollDeltaInRows = Math.ceil(scrollDeltaInPixels / ROW_HEIGHT);
-
-    const LOAD_SIZE_NORMAL = 500;
-    const SCROLL_JUMP_THRESHOLD = 500;  // Если прыжок > 500 строк
-    const FETCH_TRIGGER_ROW = 50;
-
-    const portionsCount = Math.ceil(loadedRowsCount / LOAD_SIZE_NORMAL);
-    const currentPortionStartRow = (portionsCount - 1) * LOAD_SIZE_NORMAL;
-    const fetchTriggerRow = currentPortionStartRow + FETCH_TRIGGER_ROW;
-
-    if (currentViewEnd >= fetchTriggerRow && hasNextPage) {
-      const fetchNextPage = actions.fetchNextPage;
-      if (fetchNextPage) {
-        if (loadedRowsCount === lastFetchedAtRowCountRef.current) {
-          return;
-        }
-
-        const nextCursor = loadedRowsCount;
-        if (nextCursor < lastRequestedCursorRef.current + lastRequestedLimitRef.current) {
-          return;
-        }
-
-        lastFetchedAtRowCountRef.current = loadedRowsCount;
-
-        // ⚠️ ИСПРАВЛЕНО: Правильный расчет лимита при прыжке
-        let newAdaptiveLimit = LOAD_SIZE_NORMAL;
-
-        if (scrollDeltaInRows > SCROLL_JUMP_THRESHOLD) {
-          // При прыжке используем эту разницу как лимит, но минимум 500
-          newAdaptiveLimit = Math.max(LOAD_SIZE_NORMAL, scrollDeltaInRows);
-        }
-
-        if (newAdaptiveLimit !== lastAdaptiveLimitRef.current) {
-          lastAdaptiveLimitRef.current = newAdaptiveLimit;
-          if (actions.setAdaptiveLimit) {
-            actions.setAdaptiveLimit(newAdaptiveLimit);
-          }
-        }
-
-        lastRequestedCursorRef.current = nextCursor;
-        lastRequestedLimitRef.current = newAdaptiveLimit;
-
-        // ⚠️ Обновляем предыдущую позицию скролла ПОСЛЕ расчета
-        previousScrollDistanceRef.current = el.scrollTop;
-
-        setTimeout(() => {
-          fetchNextPage();
-        }, 0);
-      }
-    }
-  }, [hasNextPage, isFetchingNextPage, actions, scrollRef, rows.length]);
-  const debouncedCheckAndFetch = useCallback(() => {
-    // Отменяем предыдущий таймер если есть
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    // Устанавливаем новый таймер с задержкой
-    debounceTimerRef.current = setTimeout(() => {
-      checkAndFetch();
-      debounceTimerRef.current = null;
-    }, 150); // 150ms задержка - оптимальный баланс
-  }, [checkAndFetch]);
-
-  // ── Подписка на события ──
+  // ── Подписка на скролл и resize ──
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
 
     const onScroll = () => {
-      setScrollTop(el.scrollTop);
-      debouncedCheckAndFetch();
+      // Обновляем scrollTop синхронно в ref и асинхронно тригерим ре-рендер
+      scrollTopRef.current = el.scrollTop;
+      forceScrollRender(v => v + 1);
+
+      // Сбрасываем таймер — запрос выполняется только после остановки скролла
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        tryFetch(el);
+      }, 200);
     };
 
     const ro = new ResizeObserver(() => {
@@ -560,88 +616,134 @@ const TableBody = memo(() => {
     return () => {
       el.removeEventListener('scroll', onScroll);
       ro.disconnect();
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [scrollRef, debouncedCheckAndFetch]);
+    // tryFetch намеренно не в deps — используем ref-версию ниже
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollRef]);
 
-  // Проверка при изменении количества строк (когда пришла новая порция)
+  // Держим актуальные значения в ref, чтобы tryFetch внутри setTimeout не устарел
+  const fetchStateRef = useRef({ hasNextPage, isFetchingNextPage, rows, total, actions });
   useEffect(() => {
-    checkAndFetch();
-  }, [rows.length, checkAndFetch]);
+    fetchStateRef.current = { hasNextPage, isFetchingNextPage, rows, total, actions };
+  });
 
-  // ⚠️ ИСПРАВЛЕНО: Фиксируем scrollTop когда приходят новые данные
-  // Это предотвращает смещение скролла при загрузке новых строк
+  const tryFetch = useCallback((el: HTMLDivElement) => {
+    const { hasNextPage, isFetchingNextPage, rows, total, actions } = fetchStateRef.current;
+
+    if (!hasNextPage || isFetchingNextPage) return;
+    if (rows.length >= total) return;
+    if (!actions.fetchNextPage) return;
+
+    const BATCH_SIZE = 500;
+    const TRIGGER_OFFSET = 50; // триггер на 50-й строке каждой новой порции
+    const JUMP_BUFFER = 500;
+
+    const viewTopRow = Math.floor(el.scrollTop / ROW_HEIGHT);
+    const viewBottomRow = Math.ceil((el.scrollTop + el.clientHeight) / ROW_HEIGHT);
+
+    // ── Случай 1: Прыжок — видимая область ушла ЗА загруженные строки ────
+    if (viewTopRow >= rows.length) {
+      // Защита от повторного запроса для того же курсора
+      if (rows.length === lastRequestedCursorRef.current) return;
+      lastRequestedCursorRef.current = rows.length;
+
+      // Грузим до нижней границы видимой области + буфер
+      const limit = Math.max(BATCH_SIZE, viewBottomRow - rows.length + JUMP_BUFFER);
+      GLOBAL_ADAPTIVE_LIMIT_REF.current = limit;
+      if (actions.setAdaptiveLimit) actions.setAdaptiveLimit(limit);
+      actions.fetchNextPage();
+      return;
+    }
+
+    // ── Случай 2: Обычный скролл или прыжок внутри загруженных данных ────
+    // triggerRow = начало последней порции + TRIGGER_OFFSET (50 строк)
+    // rows=500  → lastBatchStart=0   → triggerRow=50
+    // rows=1000 → lastBatchStart=500 → triggerRow=550
+    // rows=1500 → lastBatchStart=1000 → triggerRow=1050
+    const lastBatchStartRow = Math.max(0, rows.length - BATCH_SIZE);
+    const triggerRow = lastBatchStartRow + TRIGGER_OFFSET;
+
+    if (viewBottomRow < triggerRow) return;
+
+    // Защита от повторного запроса для того же курсора
+    if (rows.length === lastRequestedCursorRef.current) return;
+    lastRequestedCursorRef.current = rows.length;
+
+    GLOBAL_ADAPTIVE_LIMIT_REF.current = BATCH_SIZE;
+    if (actions.setAdaptiveLimit) actions.setAdaptiveLimit(BATCH_SIZE);
+    actions.fetchNextPage();
+  }, []);
+
+  // При сбросе rows до 0 (сортировка/refresh) — сбрасываем курсор,
+  // чтобы первый батч новой загрузки не был заблокирован старым значением.
+  const prevRowsLengthRef = useRef<number>(0);
+  useEffect(() => {
+    if (rows.length === 0 && prevRowsLengthRef.current > 0) {
+      lastRequestedCursorRef.current = -1;
+    }
+    prevRowsLengthRef.current = rows.length;
+  }, [rows.length]);
+
+  // После загрузки новой порции данных — проверяем, нужно ли грузить следующую.
+  // Это нужно когда пользователь не скроллит: данные пришли, viewport уже в зоне триггера.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || rows.length === 0) return;
+    tryFetch(el);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.length]);
+
+  // ── Сохранение выделения при сбросе строк ──
+  // При сортировке/refresh rows сбрасываются до 0, затем загружаются заново.
+  // selectedRows и excludedRows НЕ очищаем — строки с теми же ID сохранят
+  // своё состояние. isAllSelectedMode тоже сохраняется.
+  const lastRowCountRef = useRef<number>(0);
+  useEffect(() => {
+    lastRowCountRef.current = deferredRowsForRender.length;
+  }, [deferredRowsForRender.length]);
+
+  // ── Фиксируем scrollTop при добавлении строк ──
+  // useLayoutEffect срабатывает синхронно ПЕРЕД отрисовкой браузера.
+  // Если DOM изменился (добавились строки) и scrollTop сдвинулся — восстанавливаем его.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-
-    // Синхронно восстанавливаем scrollTop ПЕРЕД рендером
-    el.scrollTop = scrollTopRef.current;
-  }, [deferredRowsForRender.length]);
-
-  // ── Отслеживаем изменение scrollTop ──
-  useEffect(() => {
-    scrollTopRef.current = scrollTop;
-  }, [scrollTop]);
-
-  // ── Автоматический выбор новых строк если включен "выбрать всё" ──
-  const lastRowCountRef = useRef<number>(0);
-  useEffect(() => {
-    const { selectedRows, setSelectedRows } = states;
-
-    // Проверяем если строк стало больше
-    if (deferredRowsForRender.length > lastRowCountRef.current) {
-      // Вычисляем все ли ЗАГРУЖЕННЫЕ строки были выбраны
-      const previousRows = deferredRowsForRender.slice(0, lastRowCountRef.current);
-      const wasAllSelected = previousRows.length > 0 && previousRows.every(r => selectedRows.has(r.id as number));
-
-      if (wasAllSelected) {
-        // Выбираем все новые строки
-        const newRows = deferredRowsForRender.slice(lastRowCountRef.current);
-        setSelectedRows((prev: Set<number>) => {
-          const next = new Set(prev);
-          newRows.forEach(r => next.add(r.id as number));
-          return next;
-        });
-      }
+    // Восстанавливаем позицию скролла из ref — она не должна меняться при добавлении строк
+    if (el.scrollTop !== scrollTopRef.current) {
+      el.scrollTop = scrollTopRef.current;
     }
+  }, [deferredRowsForRender.length, scrollRef]);
 
-    lastRowCountRef.current = deferredRowsForRender.length;
-  }, [deferredRowsForRender, states]);  // ── Расчет виртуализации ──
+  // ── Расчёт виртуализации ──
   const loadedCount = deferredRowsForRender.length;
-
-  // Рассчитываем окно просмотра на основе высоты контейнера
   const effectiveContainerHeight = containerHeight > 0 ? containerHeight : 600;
 
-  // ⚠️ ИСПРАВЛЕНО: Вычисляем padding на основе АБСОЛЮТНОЙ позиции scrollTop в пиксельных координатах
-  // Это обеспечивает что padding остается корректным даже при загрузке новых данных
+  // Используем ref для расчёта padding — он всегда актуален, без задержки state.
+  // Это предотвращает скачок полосы прокрутки при добавлении новых строк.
+  const currentScrollTop = scrollTopRef.current;
 
-  // Какой индекс первой видимой строки в пиксельных координатах
-  // (не зависит от того сколько строк загружено)
-  const firstVisibleIndexByPixels = Math.ceil(scrollTop / ROW_HEIGHT) - OVERSCAN;
+  // Первая и последняя строка в пикельных координатах (с учётом overscan)
+  const firstVisibleIndex = Math.max(0, Math.floor(currentScrollTop / ROW_HEIGHT) - OVERSCAN);
+  const lastVisibleIndex = Math.ceil((currentScrollTop + effectiveContainerHeight) / ROW_HEIGHT) + OVERSCAN;
 
-  // Какой индекс последней видимой строки
-  const lastVisibleIndexByPixels = Math.ceil((scrollTop + effectiveContainerHeight) / ROW_HEIGHT) + OVERSCAN;
+  // startIndexVirtual и endIndexVirtual — индексы ВНУТРИ загруженного массива
+  const startIndexVirtual = Math.min(firstVisibleIndex, loadedCount);
+  const endIndexVirtual = Math.min(loadedCount, lastVisibleIndex);
+  const renderedRowsCount = endIndexVirtual - startIndexVirtual;
 
-  // ⚠️ Padding вычисляем на основе ПИКСЕЛЬНЫХ координат, не меняя при загрузке
-  const topPaddingAllByPixels = Math.max(0, firstVisibleIndexByPixels * ROW_HEIGHT);
-  const bottomPaddingAllByPixels = Math.max(0, (total - lastVisibleIndexByPixels) * ROW_HEIGHT);
+  // topPadding = высота строк до первой отрендеренной
+  const topPaddingAll = startIndexVirtual * ROW_HEIGHT;
 
-  // ⚠️ Для видимых строк используем только загруженные данные
-  // startIndexVirtual и endIndexVirtual ОГРАНИЧЕНЫ loadedCount
-  const startIndexVirtual = Math.max(0, Math.min(firstVisibleIndexByPixels, loadedCount - 1));
-  const endIndexVirtual = Math.min(loadedCount, Math.max(lastVisibleIndexByPixels, 0));
+  // bottomPadding вычисляется так, чтобы СУММА всегда равнялась total * ROW_HEIGHT.
+  // Это гарантирует стабильную высоту таблицы и неподвижный ползунок скролла.
+  const totalTableHeight = total * ROW_HEIGHT;
+  const bottomPaddingAll = Math.max(0, totalTableHeight - topPaddingAll - renderedRowsCount * ROW_HEIGHT);
 
-  // Видимые строки в контексте дефёрредного рендера
-  const visibleRows = useMemo(() => {
-    return deferredRowsForRender.slice(startIndexVirtual, endIndexVirtual);
-  }, [deferredRowsForRender, startIndexVirtual, endIndexVirtual]);
-
-  // ⚠️ Используем padding вычисленные в пиксельных координатах
-  const topPaddingAll = topPaddingAllByPixels;
-  const bottomPaddingAll = bottomPaddingAllByPixels;
+  const visibleRows = useMemo(
+    () => deferredRowsForRender.slice(startIndexVirtual, endIndexVirtual),
+    [deferredRowsForRender, startIndexVirtual, endIndexVirtual]
+  );
 
   // ── Рендер ──
   if (!isLoading && rows.length === 0) {
@@ -681,7 +783,9 @@ const TableBody = memo(() => {
 
       {bottomPaddingAll > 0 && (
         <tr style={{ height: `${bottomPaddingAll}px`, border: '0px' }}>
-          <td colSpan={visibleColumns.length + 1} />
+          <td colSpan={visibleColumns.length + 1} >
+
+          </td>
         </tr>
       )}
     </tbody>
@@ -700,23 +804,68 @@ interface TableBodyRowProps {
 
 const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   const {
-    states: { activeRow, setActiveRow, selectedRows, setSelectedRows },
+    rows,
+    states: {
+      activeRow, setActiveRow,
+      selectedRows, setSelectedRows,
+      isAllSelectedMode, setIsAllSelectedMode,
+      excludedRows, setExcludedRows,
+    },
     actions: { openModelForm, refetch },
     isLoading,
   } = useTableContext();
 
   const isActive = activeRow === (row.id as number);
-  const isSelected = selectedRows.has(row.id as number);
+
+  // Строка выбрана если:
+  // 1. Режим "все" И строка НЕ в исключениях
+  // 2. Или обычный режим И строка в selectedRows
+  const isSelected = isAllSelectedMode
+    ? !excludedRows.has(row.id as number)
+    : selectedRows.has(row.id as number);
 
   const toggleSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
-    setSelectedRows(prev => {
-      const next = new Set(prev);
-      if (e.target.checked) next.add(row.id as number);
-      else next.delete(row.id as number);
-      return next;
-    });
-  }, [row.id, setSelectedRows]);
+    const id = row.id as number;
+    if (isAllSelectedMode) {
+      // В режиме "все" управляем исключениями
+      setExcludedRows(prev => {
+        const next = new Set(prev);
+        if (!e.target.checked) {
+          next.add(id);     // Снимаем → добавляем в исключения
+        } else {
+          next.delete(id);  // Ставим → убираем из исключений
+        }
+        // Если исключены ВСЕ загруженные строки — выключаем режим "все"
+        if (next.size >= rows.length) {
+          setIsAllSelectedMode(false);
+          setExcludedRows(new Set());
+          setSelectedRows(new Set());
+          return new Set(); // не используется, но нужен для типа
+        }
+        return next;
+      });
+    } else {
+      // Обычный режим — управляем selectedRows
+      setSelectedRows(prev => {
+        const next = new Set(prev);
+        if (e.target.checked) {
+          next.add(id);
+        } else {
+          next.delete(id);
+        }
+        // Если выбраны ВСЕ загруженные строки — переключаемся в режим "все"
+        const allLoadedIds = rows.map(r => r.id as number);
+        if (allLoadedIds.every(rid => next.has(rid))) {
+          setIsAllSelectedMode(true);
+          setExcludedRows(new Set());
+          setSelectedRows(new Set());
+          return new Set(); // не используется, но нужен для типа
+        }
+        return next;
+      });
+    }
+  }, [row.id, rows, isAllSelectedMode, setIsAllSelectedMode, setSelectedRows, setExcludedRows]);
 
   const handleRowClick = useCallback(() => {
     setActiveRow?.(row.id as number);

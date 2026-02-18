@@ -27,6 +27,8 @@ export type TDataItem = {
   // shortName?: string;
   [key: string | number]: unknown;
 };
+export type TColumnFooter = 'sum' | 'avg' | 'min' | 'max' | 'count' | 'none';
+
 export type TColumn = {
   position: number;
   identifier: string;
@@ -40,6 +42,7 @@ export type TColumn = {
   visible: boolean;
   filter: boolean;
   inlist: boolean;
+  footer?: TColumnFooter; // итог колонки в tfoot
 };
 export type TColumnSetting = {
   position: number;

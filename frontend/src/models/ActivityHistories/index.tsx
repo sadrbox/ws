@@ -1,6 +1,6 @@
 import { FC, useMemo, useCallback, memo, useState, useEffect, useRef } from "react";
 import { useAppContext } from "src/app";
-import { getModelColumns, sortTableRows } from "src/components/Table/services";
+import { getModelColumns } from "src/components/Table/services";
 import { translate } from "src/app/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import Table, { TOpenModelFormProps } from "src/components/Table";
@@ -90,14 +90,8 @@ const ActivityHistoriesList: FC = () => {
     model,
     // ⚠️ Передаём мемоизированный params чтобы queryKey был стабилен
     params,
-    queryOptions: {
-      onError: (err: Error) => console.error("[ActivityHistoriesList] error:", err),
-    },
+    queryOptions: {},
   });
-
-  // DEBUG: логируем какой limit передали
-  // console.log(`[ActivityHistories] adaptiveLimit state=${adaptiveLimit}`);
-
 
   // ── Открытие формы ───────────────────────────────────────────────────────
   const openModelForm = useCallback(
@@ -124,79 +118,36 @@ const ActivityHistoriesList: FC = () => {
   // КРИТИЧНО: используем useRef для стабильного кэша, который НЕ пересоздается
   // при каждой новой порции данных
   const cachedRowsRef = useRef<TDataItem[]>([]);
-  const [cacheVersion, setCacheVersion] = useState<number>(0);  // ← State вместо ref!
-  const [isFetchingAllForSort, setIsFetchingAllForSort] = useState(false);
+  const [cacheVersion, setCacheVersion] = useState<number>(0);
 
   // Обновляем кэш при получении новых данных
   useEffect(() => {
     cachedRowsRef.current = allItems;
     setCacheVersion(v => v + 1);
-    setIsFetchingAllForSort(false);  // Завершили загрузку
   }, [allItems]);
 
-  // ── Перед сортировкой: подгрузить все данные если нужно ──────────────────
-  const handleSortChangeInternal = useCallback(
-    (newSort: typeof sort) => {
-      // Если sort === default или пусто, не нужно загружать все
-      const isDefaultSort = !newSort || (Object.keys(newSort).length === 1 && newSort.id === "asc");
-
-      // Если это не дефолтная сортировка И загружены не все строки
-      if (!isDefaultSort && allItems.length < total && !isFetchingAllForSort) {
-        // Сохраняем pending sort - будет применен после загрузки всех данных
-        pendingSortRef.current = newSort ?? { id: "asc" };
-
-        // Запускаем загрузку ВСЕ данные
-        setIsFetchingAllForSort(true);
-
-        // Устанавливаем очень большой лимит чтобы загрузить всё за один раз
-        updateAdaptiveLimit(999999);
-
-        // Получаем остаток данных
-        setTimeout(() => {
-          fetchNextPage();
-        }, 0);
-      } else {
-        // Если уже загружены все или это дефолтная сортировка - сразу меняем
-        setSort(newSort ?? { id: "asc" });
-      }
-    },
-    [allItems.length, total, isFetchingAllForSort, updateAdaptiveLimit, fetchNextPage]
-  );  // ── Отслеживание завершения загрузки всех данных для сортировки ────────
-  useEffect(() => {
-    // Если мы в процессе загрузки всех данных
-    if (isFetchingAllForSort && !isAnythingLoading) {
-      // Загрузка завершилась
-      setIsFetchingAllForSort(false);
-    }
-  }, [isFetchingAllForSort, isAnythingLoading, allItems.length, total]);
-
-  // ── Ref для отслеживания pending sort ────────────────────────────────────
-  const pendingSortRef = useRef<typeof sort | null>(null);
-
-  // Если была pending сортировка и теперь все данные загружены - применяем sort
-  useEffect(() => {
-    if (pendingSortRef.current && !isFetchingAllForSort && allItems.length === total) {
-      setSort(pendingSortRef.current);
-      pendingSortRef.current = null;
-    }
-  }, [isFetchingAllForSort, allItems.length, total]);
-
-  // ── Сортировка кэша ─────────────────────────────────────────────────────────
-  // Используем useMemo с зависимостью от версии кэша
-  // Данные берем из кэша, а не из allItems
+  // ── Строки для таблицы — прямо из кэша, без клиентской сортировки ──────
+  // Сортировка выполняется сервером, кэш уже отсортирован
   const rows: TDataItem[] = useMemo(() => {
-    // Сортируем все строки в кэше
-    const sorted = sortTableRows(cachedRowsRef.current, sort ?? {}, "ru");
-    return sorted;
-  }, [sort, cacheVersion]);  // ⚠️ cacheVersion как зависимость!
+    return cachedRowsRef.current;
+  }, [cacheVersion]);  // ⚠️ cacheVersion как зависимость!
 
-  // ── Обработчики ──────────────────────────────────────────────────────────
-  // Используем handleSortChangeInternal вместо старого handleSortChange
+  // ── Обработчик смены сортировки ──────────────────────────────────────────
   const handleSortChange = useCallback(
     (newSort: typeof sort) => {
-      handleSortChangeInternal(newSort);
+      // 1️⃣ Сбрасываем локальный кэш — сервер вернёт данные в новом порядке
+      cachedRowsRef.current = [];
+      setCacheVersion(0);
+
+      // 2️⃣ Сбрасываем адаптивный лимит на стандартный
+      updateAdaptiveLimit(500);
+
+      // 3️⃣ Меняем sort → sort входит в queryKey → React Query автоматически
+      //    делает новый запрос с первой страницы (cursor=null) для нового ключа.
+      //    resetQueries НЕ нужен — он мешает, вызывая гонку состояний.
+      setSort(newSort ?? { id: "asc" });
     },
-    [handleSortChangeInternal]
+    [setSort, updateAdaptiveLimit]
   );
 
   const handleFilterChange = useCallback(
@@ -226,17 +177,23 @@ const ActivityHistoriesList: FC = () => {
 
   // Чистый refresh без аргументов - сбрасываем все параметры
   const handleCleanRefresh = useCallback(() => {
-    // 1️⃣ Сбрасываем все параметры на дефолт
+    // 1️⃣ Сбрасываем локальный кэш строк — таблица покажет 0 строк пока грузится
+    cachedRowsRef.current = [];
+    setCacheVersion(0);
+
+    // 2️⃣ Сбрасываем параметры на дефолт
     setSearch("");
     setFilter(undefined);
-    // ⚠️ Устанавливаем дефолтную сортировку по ID asc, а не пустой объект
-    setSort(prev => ({ ...prev }));
+    setSort({ id: "asc" });
 
-    // 2️⃣ Инвалидируем query чтобы пересчитались параметры
-    queryClient.invalidateQueries({
+    // 3️⃣ Сбрасываем адаптивный лимит на стандартный
+    updateAdaptiveLimit(500);
+
+    // 4️⃣ Полностью сбрасываем React Query кэш — загрузка начнётся с нуля
+    queryClient.resetQueries({
       queryKey: ["activityhistories"],
     });
-  }, [queryClient, setSearch, setFilter, setSort]);
+  }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   // ── Пропсы для <Table /> ─────────────────────────────────────────────────
   const tableProps = useMemo(
@@ -285,13 +242,11 @@ const ActivityHistoriesList: FC = () => {
       isAnythingLoading, error,
       sort, search, filter,
       handleSortChange, handleFilterChange, handleSearch, clearFilters,
-      openModelForm, refetch, setColumns,
+      openModelForm, setColumns,
       hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
-      handleCleanRefresh,  // ← ДОБАВЛЯЕМ В ЗАВИСИМОСТИ
+      handleCleanRefresh,
     ]
   );
-
-  // console.log(`[ActivityHistories tableProps] setAdaptiveLimit=${typeof tableProps.actions.setAdaptiveLimit}`); 
 
   if (error) {
     return (

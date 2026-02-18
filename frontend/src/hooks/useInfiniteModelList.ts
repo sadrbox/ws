@@ -11,6 +11,9 @@ import { useRequestQueue } from "./useRequestQueue";
 // ⚠️ ГЛОБАЛЬНЫЙ REF для хранения adaptiveLimit
 export const GLOBAL_ADAPTIVE_LIMIT_REF = { current: 200 };
 
+// ⚠️ ГЛОБАЛЬНЫЙ REF для прыжка скролла — если задан, следующий запрос начнёт с этого курсора
+export const GLOBAL_JUMP_CURSOR_REF = { current: null as number | null };
+
 export interface InfiniteModelPage<T> {
 	items: T[];
 	nextCursor: number | null;
@@ -30,6 +33,7 @@ type InfiniteQueryKey = readonly [
 	string,
 	"infinite",
 	{
+		sort?: Record<string, "asc" | "desc"> | null;
 		search?: string;
 		filter?: Record<string, { value: unknown; operator: string }> | undefined;
 	},
@@ -75,14 +79,15 @@ export function useInfiniteModelList<TData = unknown>({
 	const paramsRef = useRef(params);
 	paramsRef.current = params;
 
-	// ⚠️ КРИТИЧНО: Мемоизируем ТОЛЬКО search/filter для queryKey БЕЗ sort и limit
-	// sort обрабатывается ТОЛЬКО на клиенте, не отправляется на сервер
+	// ⚠️ КРИТИЧНО: Мемоизируем search/filter/sort для queryKey
+	// sort теперь отправляется на сервер — смена сортировки вызывает новый запрос
 	const memoizedQueryParams = useMemo(
 		() => ({
+			sort: params.sort,
 			search: params.search,
 			filter: params.filter,
 		}),
-		[params.search, JSON.stringify(params.filter)],
+		[JSON.stringify(params.sort), params.search, JSON.stringify(params.filter)],
 	);
 
 	const queryKey: InfiniteQueryKey = [model, "infinite", memoizedQueryParams];
@@ -106,6 +111,11 @@ export function useInfiniteModelList<TData = unknown>({
 
 			if (currentParams.search) {
 				query.search = currentParams.search;
+			}
+
+			// ⚠️ Отправляем sort на сервер как JSON-строку: { "field": "asc"|"desc" }
+			if (currentParams.sort && Object.keys(currentParams.sort).length > 0) {
+				query.sort = JSON.stringify(currentParams.sort);
 			}
 
 			// ⚠️ НЕ отправляем sort на сервер - только локальная сортировка на клиенте
@@ -166,6 +176,12 @@ export function useInfiniteModelList<TData = unknown>({
 		queryKey,
 		initialPageParam: null,
 		getNextPageParam: (lastPage) => {
+			// Если задан jump cursor — используем его и сбрасываем
+			if (GLOBAL_JUMP_CURSOR_REF.current !== null) {
+				const jumpCursor = GLOBAL_JUMP_CURSOR_REF.current;
+				GLOBAL_JUMP_CURSOR_REF.current = null;
+				return jumpCursor;
+			}
 			if (!lastPage.hasMore || lastPage.nextCursor === null) return undefined;
 			return lastPage.nextCursor;
 		},
