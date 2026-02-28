@@ -1,5 +1,4 @@
 import { FC, useCallback, useMemo } from "react";
-import styles from "./Field.module.scss";
 import LookupField from "./LookupField";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -29,11 +28,13 @@ export interface OwnerLookupFieldProps {
   minWidth?: string;
   /** Тип зафиксирован (при создании из владельца или при редактировании) */
   typeLocked?: boolean;
+  /** Допустимые типы владельца (по умолчанию все) */
+  allowedTypes?: OwnerType[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 
-const OWNER_TYPE_OPTIONS: { value: OwnerType; label: string }[] = [
+const ALL_OWNER_TYPES: { value: OwnerType; label: string }[] = [
   { value: "organization", label: "Организация" },
   { value: "counterparty", label: "Контрагент" },
   { value: "contactperson", label: "Контактное лицо" },
@@ -64,12 +65,16 @@ const OwnerLookupField: FC<OwnerLookupFieldProps> = ({
   name,
   minWidth = "339px",
   typeLocked = false,
+  allowedTypes,
 }) => {
-  // Если тип не выбран и не заблокирован — показываем селектор типа
-  const showTypeSelector = !ownerType && !typeLocked;
+  const typeOptions = useMemo(() => {
+    if (!allowedTypes || allowedTypes.length === 0) return ALL_OWNER_TYPES;
+    return ALL_OWNER_TYPES.filter(o => allowedTypes.includes(o.value));
+  }, [allowedTypes]);
 
-  const handleTypeSelect = useCallback((type: OwnerType) => {
-    onOwnerChange({ ownerType: type, ownerUuid: "", ownerName: "" });
+  const handleTypeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newType = e.target.value as OwnerType;
+    onOwnerChange({ ownerType: newType, ownerUuid: "", ownerName: "" });
   }, [onOwnerChange]);
 
   const handleOwnerSelect = useCallback((uuid: string, display: string) => {
@@ -78,67 +83,91 @@ const OwnerLookupField: FC<OwnerLookupFieldProps> = ({
 
   const handleClear = useCallback(() => {
     if (typeLocked) {
-      // При заблокированном типе — только очистить выбранного владельца
       onOwnerChange({ ownerType, ownerUuid: "", ownerName: "" });
     } else {
-      // Полная очистка: сбросить и тип, и выбранное значение
       onOwnerChange({ ownerType: "", ownerUuid: "", ownerName: "" });
     }
   }, [onOwnerChange, ownerType, typeLocked]);
 
-  const typeLabel = useMemo(() => OWNER_TYPE_LABEL_MAP[ownerType] || "Владелец", [ownerType]);
+  const currentType = ownerType || (typeOptions.length === 1 ? typeOptions[0].value : "");
+  const typeLabel = OWNER_TYPE_LABEL_MAP[currentType] || "Владелец";
 
-  if (showTypeSelector) {
+  // Определяем label: если тип зафиксирован или выбран — "Владелец (Тип)", иначе select в label
+  const labelContent = useMemo(() => {
+    if (typeLocked && ownerType) {
+      return `Владелец (${typeLabel})`;
+    }
+    return null; // будет рендериться кастомный label с select
+  }, [typeLocked, ownerType, typeLabel]);
+
+  const endpoint = OWNER_ENDPOINT_MAP[currentType] || "organizations";
+  const displayField = currentType === "contactperson" ? "fullName" : "shortName";
+  const columns = currentType === "contactperson"
+    ? [{ key: "fullName", label: "ФИО" }]
+    : [{ key: "shortName", label: "Наименование" }, { key: "bin", label: "БИН" }];
+
+  // Если тип зафиксирован — простой LookupField
+  if (labelContent) {
     return (
-      <div
-        className={styles.FieldWrapper}
-        style={{ minWidth }}
-      >
-        <label className={styles.FieldLabel}>Владелец</label>
-        <div style={{ display: "flex", gap: "6px" }}>
-          {OWNER_TYPE_OPTIONS.map(opt => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => handleTypeSelect(opt.value)}
-              disabled={disabled}
-              style={{
-                padding: "4px 12px",
-                border: "1px solid #ccc",
-                borderRadius: "3px",
-                background: "#fff",
-                cursor: disabled ? "default" : "pointer",
-                fontSize: "13px",
-                color: "#333",
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <LookupField
+        label={labelContent}
+        name={name}
+        minWidth={minWidth}
+        value={ownerUuid}
+        displayValue={ownerName}
+        endpoint={endpoint}
+        displayField={displayField}
+        columns={columns}
+        onSelect={handleOwnerSelect}
+        onClear={handleClear}
+        disabled={disabled}
+      />
     );
   }
 
-  const endpoint = OWNER_ENDPOINT_MAP[ownerType] || "organizations";
-  const displayField = ownerType === "contactperson" ? "fullName" : "shortName";
-  const columns = ownerType === "contactperson"
-    ? [{ key: "fullName", label: "ФИО" }, { key: "position", label: "Должность" }]
-    : [{ key: "shortName", label: "Наименование" }, { key: "bin", label: "БИН" }];
+  // Иначе — комбинированное поле: select типа в лэйбле + LookupField
+  const selectLabel = (
+    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <span>Владелец</span>
+      {typeOptions.length > 1 && (
+        <select
+          value={currentType}
+          onChange={handleTypeChange}
+          disabled={disabled}
+          style={{
+            border: "none",
+            background: "transparent",
+            fontSize: "inherit",
+            fontFamily: "inherit",
+            color: "#555",
+            cursor: disabled ? "default" : "pointer",
+            padding: "0 2px",
+            outline: "none",
+          }}
+        >
+          <option value="">— тип —</option>
+          {typeOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      )}
+    </span>
+  );
 
   return (
     <LookupField
-      label={`Владелец (${typeLabel})`}
+      label={selectLabel}
       name={name}
       minWidth={minWidth}
-      value={ownerUuid}
-      displayValue={ownerName}
-      endpoint={endpoint}
+      value={currentType ? ownerUuid : ""}
+      displayValue={currentType ? ownerName : ""}
+      endpoint={currentType ? endpoint : "organizations"}
       displayField={displayField}
       columns={columns}
       onSelect={handleOwnerSelect}
       onClear={handleClear}
-      disabled={disabled}
+      disabled={disabled || !currentType}
+      placeholder={currentType ? "Выберите..." : "Выберите тип владельца..."}
     />
   );
 };

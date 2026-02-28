@@ -148,9 +148,6 @@ model ContactPerson {
   lastName   String?
   middleName String?
   fullName   String? @db.VarChar(255)
-  position   String?
-  phone      String?
-  email      String?
 
   organizationUuid String?
   counterpartyUuid String?

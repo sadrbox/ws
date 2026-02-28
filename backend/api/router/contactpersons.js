@@ -44,7 +44,7 @@ router.get("/contactpersons", async (req, res) => {
 		}
 		if (orderBy.length === 0) orderBy.push({ id: "asc" });
 
-		const TEXT_FIELDS = ["fullName", "position", "phone", "email", "ownerName"];
+		const TEXT_FIELDS = ["fullName", "ownerName"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 		if (searchWords.length > 0) {
@@ -85,7 +85,10 @@ router.get("/contactpersons", async (req, res) => {
 			queryOptions.skip = 1;
 		}
 
-		const items = await prisma.contactPerson.findMany(queryOptions);
+		const items = await prisma.contactPerson.findMany({
+			...queryOptions,
+			include: { organization: true, counterparty: true },
+		});
 		const hasMore = items.length === limitNumber;
 		const nextCursor = hasMore ? items[items.length - 1].id : null;
 
@@ -93,15 +96,13 @@ router.get("/contactpersons", async (req, res) => {
 		if (cursorNumber === null)
 			total = await prisma.contactPerson.count({ where: baseWhere });
 
-		return res
-			.status(200)
-			.json({
-				success: true,
-				items,
-				nextCursor,
-				hasMore,
-				...(total !== undefined ? { total } : {}),
-			});
+		return res.status(200).json({
+			success: true,
+			items,
+			nextCursor,
+			hasMore,
+			...(total !== undefined ? { total } : {}),
+		});
 	} catch (error) {
 		console.error("GET /contactpersons error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -118,11 +119,11 @@ router.get("/contactpersons/:id", async (req, res) => {
 		const item = isNumeric
 			? await prisma.contactPerson.findUnique({
 					where: { id: numId },
-					include: { contacts: true },
+					include: { contacts: true, organization: true, counterparty: true },
 				})
 			: await prisma.contactPerson.findUnique({
 					where: { uuid: param },
-					include: { contacts: true },
+					include: { contacts: true, organization: true, counterparty: true },
 				});
 
 		if (!item)
@@ -144,9 +145,6 @@ router.post("/contactpersons", async (req, res) => {
 			lastName,
 			middleName,
 			fullName,
-			position,
-			phone,
-			email,
 			ownerName,
 			organizationUuid,
 			counterpartyUuid,
@@ -161,9 +159,6 @@ router.post("/contactpersons", async (req, res) => {
 				lastName: lastName?.trim() || null,
 				middleName: middleName?.trim() || null,
 				fullName: nameFinal,
-				position: position?.trim() || null,
-				phone: phone?.trim() || null,
-				email: email?.trim() || null,
 				ownerName: ownerName?.trim() || null,
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
@@ -187,9 +182,6 @@ router.put("/contactpersons/:id", async (req, res) => {
 			lastName,
 			middleName,
 			fullName,
-			position,
-			phone,
-			email,
 			ownerName,
 			organizationUuid,
 			counterpartyUuid,
@@ -199,9 +191,6 @@ router.put("/contactpersons/:id", async (req, res) => {
 		if (lastName !== undefined) data.lastName = lastName?.trim() || null;
 		if (middleName !== undefined) data.middleName = middleName?.trim() || null;
 		if (fullName !== undefined) data.fullName = fullName?.trim() || null;
-		if (position !== undefined) data.position = position?.trim() || null;
-		if (phone !== undefined) data.phone = phone?.trim() || null;
-		if (email !== undefined) data.email = email?.trim() || null;
 		if (ownerName !== undefined) data.ownerName = ownerName?.trim() || null;
 		if (organizationUuid !== undefined)
 			data.organizationUuid = organizationUuid || null;

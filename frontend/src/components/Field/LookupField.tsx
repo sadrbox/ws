@@ -8,7 +8,7 @@ import Modal from "../Modal";
 
 export interface LookupFieldProps {
   /** Заголовок поля */
-  label: string;
+  label: React.ReactNode;
   /** Имя поля для id/name */
   name: string;
   /** Текущий UUID (значение для хранения) */
@@ -75,7 +75,7 @@ const listComponentNameMap: Record<string, string> = {
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface LookupSelectModalProps {
-  title: string;
+  title: React.ReactNode;
   endpoint: string;
   listComponent?: FC<any>;
   onSelect: (item: Record<string, any>) => void;
