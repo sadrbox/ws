@@ -1,7 +1,6 @@
 
 import React, { useState } from "react";
 import styles from "./Tabs.module.scss";
-import { Divider } from "../Field";
 
 
 
@@ -46,18 +45,18 @@ const Tabs: React.FC<TypeTabs> = ({
     >
       {/* Tab Headers */}
       <div className={styles.TabsHeader}>
-        <Divider />
-        {tabs.map((tab, mapID) => {
+        {/* <Divider /> */}
+        {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
 
           return (
             <button
               key={tab.id}
               id={`tab-${tab.id}`}
-              className={`${styles.TabsLabel} ${isActive ? styles.active : ''} `}
+              className={`${styles.TabsLabel} ${isActive ? styles.active : ''}`}
               role="tab"
               aria-selected={isActive}
-              aria-controls={`panel - ${tab.id} `}
+              aria-controls={`panel-${tab.id}`}
               tabIndex={isActive ? 0 : -1}
               onClick={() => handleTabClick(tab.id)}
             >
@@ -69,18 +68,15 @@ const Tabs: React.FC<TypeTabs> = ({
 
       {/* Tab Content */}
       <div className={styles.TabsBody}>
-        {tabs.map((tab, mapID) => {
+        {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
 
           return (
             <div
               key={tab.id}
-              // id={`panel - ${tab.id} `}
-              className={`${styles.TabsBodyWrapper} ${isActive ? styles.active : styles.hidden} `}
+              className={`${styles.TabsBodyWrapper} ${isActive ? styles.active : ''}`}
               role="tabpanel"
-              aria-labelledby={`tab - ${tab.id} `}
-              hidden={!isActive}
-              tabIndex={mapID}
+              aria-labelledby={`tab-${tab.id}`}
             >
               {isActive && tab.component}
             </div>

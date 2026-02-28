@@ -13,6 +13,19 @@
 		"inlist": true
 	},
 	{
+		"identifier": "uuid",
+		"type": "string",
+		"name": "UUID",
+		"width": "300px",
+		"minWidth": "200px",
+		"alignment": "left",
+		"hint": "Уникальный идентификатор",
+		"visible": false,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
 		"identifier": "shortName",
 		"type": "string",
 		"name": "Short Name",
@@ -78,29 +91,16 @@
 		"inlist": true
 	},
 	{
-		"identifier": "organization.shortName",
+		"identifier": "ownerName",
 		"type": "string",
-		"name": "Organization",
+		"name": "Owner Name",
 		"width": "400px",
-		"minWidth": "400px",
+		"minWidth": "200px",
 		"alignment": "left",
-		"hint": "Организация",
+		"hint": "Владелец договора",
 		"visible": true,
 		"position": 7,
-		"filter": false,
-		"inlist": true
-	},
-	{
-		"identifier": "counterparty.shortName",
-		"type": "string",
-		"name": "Counterparty",
-		"width": "400px",
-		"minWidth": "400px",
-		"alignment": "left",
-		"hint": "Контрагент",
-		"visible": true,
-		"position": 8,
-		"filter": false,
+		"filter": true,
 		"inlist": true
 	}
 ]

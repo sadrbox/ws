@@ -1,0 +1,41 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"name": "Id",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"position": 1,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"type": "string",
+		"name": "UUID",
+		"width": "300px",
+		"minWidth": "200px",
+		"alignment": "left",
+		"hint": "Уникальный идентификатор",
+		"visible": false,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "shortName",
+		"type": "string",
+		"name": "Наименование",
+		"width": "300px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Краткое наименование",
+		"visible": true,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	}
+]

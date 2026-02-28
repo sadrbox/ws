@@ -6,6 +6,10 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
 	server: {
 		allowedHosts: ["buhprof.ddns.me"],
+		watch: {
+			usePolling: true,
+			interval: 300,
+		},
 	},
 	plugins: [react()],
 	resolve: {

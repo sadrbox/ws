@@ -1,0 +1,54 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"name": "Id",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"position": 1,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "shortName",
+		"type": "string",
+		"name": "Short Name",
+		"width": "300px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Наименование",
+		"visible": true,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "address",
+		"type": "string",
+		"name": "Address",
+		"width": "300px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Адрес",
+		"visible": true,
+		"position": 3,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "organization.shortName",
+		"type": "string",
+		"name": "Organization",
+		"width": "250px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Организация",
+		"visible": true,
+		"position": 4,
+		"filter": false,
+		"inlist": true
+	}
+]

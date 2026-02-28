@@ -1,0 +1,93 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"name": "ID",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"position": 1,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"type": "string",
+		"name": "UUID",
+		"width": "300px",
+		"minWidth": "200px",
+		"alignment": "left",
+		"hint": "Уникальный идентификатор",
+		"visible": false,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "title",
+		"type": "string",
+		"name": "Title",
+		"width": "250px",
+		"minWidth": "180px",
+		"alignment": "left",
+		"hint": "Заголовок",
+		"visible": true,
+		"position": 3,
+		"filter": true,
+		"inlist": true
+	},
+	{
+		"identifier": "message",
+		"type": "string",
+		"name": "Message",
+		"width": "350px",
+		"minWidth": "200px",
+		"alignment": "left",
+		"hint": "Сообщение",
+		"visible": true,
+		"position": 4,
+		"filter": true,
+		"inlist": true
+	},
+	{
+		"identifier": "isRead",
+		"type": "string",
+		"name": "Is Read",
+		"width": "110px",
+		"minWidth": "80px",
+		"alignment": "center",
+		"hint": "Прочитано",
+		"visible": true,
+		"position": 5,
+		"filter": true,
+		"inlist": true
+	},
+	{
+		"identifier": "todo.shortName",
+		"type": "string",
+		"name": "Todo",
+		"width": "200px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Задача",
+		"visible": true,
+		"position": 6,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "createdAt",
+		"type": "date",
+		"name": "Created At",
+		"width": "160px",
+		"minWidth": "130px",
+		"alignment": "center",
+		"hint": "Дата",
+		"visible": true,
+		"position": 7,
+		"filter": true,
+		"inlist": true
+	}
+]

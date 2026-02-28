@@ -115,135 +115,168 @@ router.post("/counterparties", async (req, res) => {
 });
 
 // ============================================
-// READ - Получение списка контрагентов с поиском и фильтрацией
+// READ - Получение списка контрагентов (курсорная пагинация)
 // ============================================
 router.get("/counterparties", async (req, res) => {
 	try {
-		// Пагинация
-		const page = parseInt(req.query.page) || 1;
-		const limit = parseInt(req.query.limit) || 100;
-		const skip = (page - 1) * limit;
+		const rawLimit = req.query.limit;
+		const rawCursor = req.query.cursor;
+		const search =
+			typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-		// Параметры поиска и фильтрации
-		const search = req.query.search || "";
-		const sortBy = req.query.sortBy || "createdAt";
-		const sortOrder = req.query.sortOrder || "desc";
+		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
+		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 
-		// Фильтры
-		const filterBin = req.query.bin || "";
-		const filterShortName = req.query.shortName || "";
-		const filterDisplayName = req.query.displayName || "";
-
-		// Даты (для фильтрации по диапазону)
-		const dateFrom = req.query.dateFrom;
-		const dateTo = req.query.dateTo;
-
-		// Построение условий WHERE
-		const where = {};
-
-		// Общий поиск по всем текстовым полям
-		if (search) {
-			where.OR = [
-				{ bin: { contains: search } },
-				{ shortName: { contains: search, mode: "insensitive" } },
-				{ displayName: { contains: search, mode: "insensitive" } },
-			];
-		}
-
-		// Специфичные фильтры (работают вместе с общим поиском через AND)
-		const andConditions = [];
-
-		if (filterBin) {
-			andConditions.push({ bin: { contains: filterBin } });
-		}
-
-		if (filterShortName) {
-			andConditions.push({
-				shortName: { contains: filterShortName, mode: "insensitive" },
+		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0)) {
+			return res.status(400).json({
+				success: false,
+				message: "Некорректный параметр cursor",
 			});
 		}
 
-		if (filterDisplayName) {
-			andConditions.push({
-				displayName: { contains: filterDisplayName, mode: "insensitive" },
-			});
-		}
+		const filter =
+			req.query.filter && typeof req.query.filter === "object"
+				? req.query.filter
+				: {};
 
-		// Фильтр по диапазону дат
-		if (dateFrom || dateTo) {
-			const dateFilter = {};
-			if (dateFrom) {
-				dateFilter.gte = new Date(dateFrom);
+		// ── Сортировка ────────────────────────────────────────────────────────
+		const orderBy = [];
+		const sortParam =
+			typeof req.query.sort === "string" ? req.query.sort : null;
+
+		if (sortParam) {
+			try {
+				const sortObj = JSON.parse(sortParam);
+				if (sortObj && typeof sortObj === "object") {
+					for (const [field, dir] of Object.entries(sortObj)) {
+						if (dir !== "asc" && dir !== "desc") continue;
+						if (field.includes(".")) {
+							const parts = field.split(".");
+							let nested = { [parts[parts.length - 1]]: dir };
+							for (let i = parts.length - 2; i >= 0; i--) {
+								nested = { [parts[i]]: nested };
+							}
+							orderBy.push(nested);
+						} else {
+							orderBy.push({ [field]: dir });
+						}
+					}
+				}
+			} catch {
+				// Некорректный JSON — игнорируем
 			}
-			if (dateTo) {
-				dateFilter.lte = new Date(dateTo);
+		}
+
+		if (orderBy.length === 0) {
+			orderBy.push({ id: "asc" });
+		} else {
+			const hasId = orderBy.some((o) => "id" in o);
+			if (!hasId) orderBy.push({ id: "asc" });
+		}
+
+		// ── Поиск ─────────────────────────────────────────────────────────────
+		const TEXT_FIELDS = ["bin", "shortName", "displayName"];
+		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
+		let searchWhereClause = {};
+
+		if (searchWords.length > 0) {
+			searchWhereClause = {
+				AND: searchWords.map((word) => ({
+					OR: TEXT_FIELDS.map((field) => ({
+						[field]: { contains: word, mode: "insensitive" },
+					})),
+				})),
+			};
+		}
+
+		// ── Фильтр по дате ────────────────────────────────────────────────────
+		const dateRange =
+			filter.dateRange && typeof filter.dateRange === "object"
+				? filter.dateRange
+				: {};
+		const startDate =
+			typeof dateRange.startDate === "string" ? dateRange.startDate : null;
+		const endDate =
+			typeof dateRange.endDate === "string" ? dateRange.endDate : null;
+
+		const dateRangeFilter = {};
+
+		// ── Произвольные фильтры ──────────────────────────────────────────────
+		const ALLOWED_OPERATORS = ["contains", "equals", "gte", "lte", "gt", "lt"];
+		const SKIP_KEYS = ["searchBy", "dateRange"];
+		const filterWhereClause = {};
+
+		for (const [field, conditions] of Object.entries(filter)) {
+			if (SKIP_KEYS.includes(field)) continue;
+			if (!conditions || typeof conditions !== "object") continue;
+
+			for (const [operator, value] of Object.entries(conditions)) {
+				if (!ALLOWED_OPERATORS.includes(operator)) continue;
+
+				if (!filterWhereClause[field]) filterWhereClause[field] = {};
+
+				if (operator === "contains") {
+					filterWhereClause[field] = {
+						contains: String(value),
+						mode: "insensitive",
+					};
+				} else {
+					filterWhereClause[field][operator] = value;
+				}
 			}
-			andConditions.push({ createdAt: dateFilter });
 		}
 
-		// Объединяем условия
-		if (andConditions.length > 0) {
-			where.AND = andConditions;
-		}
+		// ── Итоговый where ────────────────────────────────────────────────────
+		const baseWhere = {
+			...searchWhereClause,
+			...dateRangeFilter,
+			...filterWhereClause,
+		};
 
-		// Валидация поля сортировки
-		const allowedSortFields = [
-			"id",
-			"bin",
-			"shortName",
-			"displayName",
-			"createdAt",
-			"updatedAt",
-		];
-		const orderByField = allowedSortFields.includes(sortBy)
-			? sortBy
-			: "createdAt";
-		const orderByDirection = sortOrder === "asc" ? "asc" : "desc";
-
-		// Выполнение запроса в транзакции
-		const [counterparties, total] = await prisma.$transaction([
-			prisma.counterparty.findMany({
-				where,
-				skip,
-				take: limit,
-				orderBy: { [orderByField]: orderByDirection },
-				include: {
-					_count: {
-						select: {
-							contracts: true,
-							contacts: true,
-							bankAccounts: true,
-						},
+		// ── Курсорная пагинация ───────────────────────────────────────────────
+		const queryOptions = {
+			take: limitNumber,
+			where: baseWhere,
+			include: {
+				_count: {
+					select: {
+						contracts: true,
+						contacts: true,
+						bankAccounts: true,
 					},
 				},
-			}),
-			prisma.counterparty.count({ where }),
-		]);
+			},
+			orderBy,
+		};
 
-		res.status(200).json({
-			items: counterparties,
-			total,
-			page,
-			limit,
-			totalPages: Math.ceil(total / limit),
-			filters: {
-				search,
-				bin: filterBin,
-				shortName: filterShortName,
-				displayName: filterDisplayName,
-				dateFrom,
-				dateTo,
-			},
-			sort: {
-				field: orderByField,
-				order: orderByDirection,
-			},
+		if (cursorNumber !== null) {
+			queryOptions.cursor = { id: cursorNumber };
+			queryOptions.skip = 1;
+		}
+
+		const items = await prisma.counterparty.findMany(queryOptions);
+
+		const hasMore = items.length === limitNumber;
+		const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+		let total;
+		if (cursorNumber === null) {
+			total = await prisma.counterparty.count({ where: baseWhere });
+		}
+
+		return res.status(200).json({
+			success: true,
+			items,
+			nextCursor,
+			hasMore,
+			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error("Error fetching counterparties:", error);
-		res.status(500).json({
-			message: "Error fetching data.",
-			error: error.message,
+		console.error("GET /counterparties error:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Ошибка сервера при получении контрагентов",
 		});
 	}
 });
@@ -727,32 +760,16 @@ router.get("/counterparties/export/list", async (req, res) => {
 				bin: true,
 				shortName: true,
 				displayName: true,
-				createdAt: true,
-				updatedAt: true,
 			},
 		});
 
 		if (format === "csv") {
 			// Генерация CSV
-			const headers = [
-				"ID",
-				"БИН",
-				"Краткое название",
-				"Полное название",
-				"Дата создания",
-				"Дата обновления",
-			];
+			const headers = ["ID", "БИН", "Краткое название", "Полное название"];
 			const csvRows = [headers.join(",")];
 
 			counterparties.forEach((cp) => {
-				const row = [
-					cp.id,
-					cp.bin,
-					cp.shortName || "",
-					cp.displayName || "",
-					cp.createdAt.toISOString(),
-					cp.updatedAt.toISOString(),
-				];
+				const row = [cp.id, cp.bin, cp.shortName || "", cp.displayName || ""];
 				csvRows.push(row.map((val) => `"${val}"`).join(","));
 			});
 

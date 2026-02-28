@@ -5,10 +5,11 @@ import {
   TColumn,
   TDataItem,
   TypeFormAction,
+  TypeFormMethod,
   TypeModalFormProps,
 } from './types';
 
-import { getTranslateColumn } from 'src/app/i18';
+import { getTranslateColumn } from 'src/i18';
 import { getFormatColumnValue, getTextAlignByColumnType } from './services';
 
 import { Divider } from '../Field';
@@ -46,11 +47,15 @@ import { TPane } from 'src/app/types';
 export type TOpenModelFormProps = Partial<TPane>;
 export type TypeModelProps = TableContextProps;
 
+export type TTableVariant = 'default' | 'select' | 'embedded';
+
 // ────────────────────────────────────────────────
 // Context
 // ────────────────────────────────────────────────
 
 export interface TableContextProps {
+  variant: TTableVariant;
+  onSelectItem?: (item: TDataItem) => void;
   componentName: string;
   rows: TDataItem[];  // Реальные строки для логики подгрузки
   deferredRowsForRender: TDataItem[];  // Отложенные строки для рендера (не блокируют скролл)
@@ -129,6 +134,9 @@ const TableContextProvider: FC<PropsWithChildren<{ value: TableContextProps }>> 
 // ────────────────────────────────────────────────
 
 export interface TableProps {
+  variant?: TTableVariant;
+  onSelectItem?: (item: TDataItem) => void;
+  enableDateRange?: boolean;
   componentName: string;
   rows: TDataItem[];
   columns: TColumn[];
@@ -153,6 +161,8 @@ const OVERSCAN = 8;
 // ────────────────────────────────────────────────
 
 interface TableControlPanelProps {
+  variant: TTableVariant;
+  enableDateRange: boolean;
   isLoading: boolean;
   visibleDateRange: boolean;
   visibleFastSearch: boolean;
@@ -162,11 +172,12 @@ interface TableControlPanelProps {
   onRefresh: () => void;
   onAddClick: () => void;
   onDeleteClick: () => void;
-  filtering: { filters?: Record<string, { value: unknown; operator: string }>; onFilterChange: (field: string, value: unknown, operator?: string) => void };
   search: { value: string; onChange: (value: string) => void };
 }
 
 const TableControlPanel = memo(({
+  variant,
+  enableDateRange,
   isLoading,
   visibleDateRange,
   visibleFastSearch,
@@ -176,17 +187,17 @@ const TableControlPanel = memo(({
   onRefresh,
   onAddClick,
   onDeleteClick,
-  filtering,
   search,
 }: TableControlPanelProps) => {
+  const isSelect = variant === 'select';
   return (
     <div className={styles.TablePanel}>
       <div className={styles.TablePanelLeft}>
         <div className={[styles.colGroup, styles.gap6].join(' ')} style={{ justifyContent: 'flex-start' }}>
-          <Divider />
-          <Button onClick={onAddClick}><span>Добавить</span></Button>
-          <Button onClick={onDeleteClick}><span>Удалить</span></Button>
-          <Divider />
+          {/* <Divider /> */}
+          {!isSelect && <Button onClick={onAddClick}><span>Добавить</span></Button>}
+          {!isSelect && <Button onClick={onDeleteClick}><span>Удалить</span></Button>}
+          {!isSelect && <Divider />}
           <ButtonImage onClick={onRefresh} title="Обновить">
             <img src={reloadImage_16} alt="Reload" height={16} width={16}
               className={isLoading ? styles.animationLoop : ''} />
@@ -195,30 +206,31 @@ const TableControlPanel = memo(({
             <img src={settingsForm_16} alt="Settings" height={16} width={16} />
           </ButtonImage>
           <Divider />
-          <ButtonImage onClick={onDateRangeToggle} active={visibleDateRange} title="Период">
-            <img src={calendar_16} alt="Calendar" height={16} width={16} />
-          </ButtonImage>
+          {enableDateRange && (
+            <ButtonImage onClick={onDateRangeToggle} active={visibleDateRange} title="Период">
+              <img src={calendar_16} alt="Calendar" height={16} width={16} />
+            </ButtonImage>
+          )}
           <ButtonImage onClick={onSearchToggle} active={visibleFastSearch} title="Поиск">
             <img src={searchField_16} alt="Search" height={16} width={16} />
           </ButtonImage>
           <Divider />
         </div>
       </div>
-      {(visibleDateRange || visibleFastSearch) && (
+      {visibleFastSearch && (
         <div className={styles.TablePanelRight}>
-          {visibleDateRange && <FieldDateRangeInternal filters={filtering.filters} onFilterChange={filtering.onFilterChange} />}
-          {visibleFastSearch && <FieldFastSearchInternal value={search.value} onChange={search.onChange} />}
+          <FieldFastSearchInternal value={search.value} onChange={search.onChange} />
         </div>
       )}
     </div>
   );
 }, (prevProps, nextProps) => {
-  // Custom comparison - пересоздавать только если изменились важные свойства
   return (
+    prevProps.variant === nextProps.variant &&
+    prevProps.enableDateRange === nextProps.enableDateRange &&
     prevProps.isLoading === nextProps.isLoading &&
     prevProps.visibleDateRange === nextProps.visibleDateRange &&
     prevProps.visibleFastSearch === nextProps.visibleFastSearch &&
-    prevProps.filtering === nextProps.filtering &&
     prevProps.search === nextProps.search
   );
 });
@@ -231,6 +243,9 @@ TableControlPanel.displayName = 'TableControlPanel';
 
 const Table: FC<TableProps> = memo((props) => {
   const {
+    variant = 'default',
+    onSelectItem,
+    enableDateRange = true,
     componentName, rows, columns, total, totalPages,
     isLoading, error,
     pagination, sorting, filtering, search, actions,
@@ -246,8 +261,13 @@ const Table: FC<TableProps> = memo((props) => {
   const [isAllSelectedMode, setIsAllSelectedMode] = useState<boolean>(false);
   const [excludedRows, setExcludedRows] = useState<Set<number>>(new Set());
   const [configModalAction, setConfigModalAction] = useState<TypeFormAction>('');
-  const [visibleDateRange, setVisibleDateRange] = useState(false);
+  const [dateRangeModalAction, setDateRangeModalAction] = useState<TypeFormAction>('');
   const [visibleFastSearch, setVisibleFastSearch] = useState(false);
+
+  // Текущие значения dateRange из фильтров
+  const currentStartDate = (filtering.filters?.dateRange as any)?.startDate as string || '';
+  const currentEndDate = (filtering.filters?.dateRange as any)?.endDate as string || '';
+  const hasDateRange = !!(currentStartDate || currentEndDate);
 
   // extendedActions уже включают setAdaptiveLimit от родителя
   const extendedActions = useMemo(
@@ -259,6 +279,7 @@ const Table: FC<TableProps> = memo((props) => {
 
   const contextValue = useMemo<TableContextProps>(
     () => ({
+      variant, onSelectItem,
       componentName, rows, deferredRowsForRender: rows, columns, total, totalPages,
       isLoading, error,
       pagination, sorting, filtering, search,
@@ -273,6 +294,7 @@ const Table: FC<TableProps> = memo((props) => {
       },
     }),
     [
+      variant, onSelectItem,
       componentName, rows, columns, total, totalPages,
       isLoading, error,
       pagination, sorting, filtering, search, extendedActions,
@@ -301,11 +323,35 @@ const Table: FC<TableProps> = memo((props) => {
   }, []);
 
   const handleDateRangeToggle = useCallback(() => {
-    setVisibleDateRange(v => !v);
+    // Кнопка "Период" в панели открывает модальное окно
+    setDateRangeModalAction('open');
   }, []);
 
   const handleSearchToggle = useCallback(() => {
     setVisibleFastSearch(v => !v);
+  }, []);
+
+  // Применить период из модалки → отправить фильтр dateRange
+  const handleDateRangeApply = useCallback((start: string, end: string) => {
+    // Отправляем как единый объект dateRange — бэкенд ожидает filter[dateRange][startDate] / filter[dateRange][endDate]
+    const dateRangeValue: Record<string, string> = {};
+    if (start) dateRangeValue.startDate = start;
+    if (end) dateRangeValue.endDate = end;
+    if (Object.keys(dateRangeValue).length > 0) {
+      filtering.onFilterChange('dateRange', dateRangeValue);
+    } else {
+      filtering.onFilterChange('dateRange', undefined);
+    }
+  }, [filtering]);
+
+  // Очистить период
+  const handleDateRangeClear = useCallback(() => {
+    filtering.onFilterChange('dateRange', undefined);
+  }, [filtering]);
+
+  // Открыть модалку периода (по клику на ссылку)
+  const handleDateRangeBarClick = useCallback(() => {
+    setDateRangeModalAction('open');
   }, []);
 
   return (
@@ -313,11 +359,21 @@ const Table: FC<TableProps> = memo((props) => {
       {configModalAction === 'open' && (
         <TableConfigModalForm method={{ get: configModalAction, set: setConfigModalAction }} />
       )}
+      {dateRangeModalAction === 'open' && (
+        <FieldDateRangeModal
+          method={{ get: dateRangeModalAction, set: setDateRangeModalAction }}
+          startDate={currentStartDate}
+          endDate={currentEndDate}
+          onApply={handleDateRangeApply}
+        />
+      )}
 
       <div className={styles.TableWrapper}>
         <TableControlPanel
+          variant={variant}
+          enableDateRange={enableDateRange}
           isLoading={isLoading}
-          visibleDateRange={visibleDateRange}
+          visibleDateRange={hasDateRange}
           visibleFastSearch={visibleFastSearch}
           onConfigOpen={handleConfigOpen}
           onDateRangeToggle={handleDateRangeToggle}
@@ -325,9 +381,17 @@ const Table: FC<TableProps> = memo((props) => {
           onRefresh={handleRefresh}
           onAddClick={handleCreate}
           onDeleteClick={handleDeleteClick}
-          filtering={filtering}
           search={search}
         />
+
+        {enableDateRange && hasDateRange && (
+          <DateRangeBar
+            startDate={currentStartDate}
+            endDate={currentEndDate}
+            onClick={handleDateRangeBarClick}
+            onClear={handleDateRangeClear}
+          />
+        )}
 
         <div className={styles.TableScrollContainer}>
           <div ref={scrollRef} className={styles.TableScrollWrapper} style={{ overflowAnchor: 'none' }}>
@@ -352,13 +416,14 @@ Table.displayName = 'Table';
 // ────────────────────────────────────────────────
 
 const TableArea = memo(() => {
-  const { columns } = useTableContext();
+  const { variant, columns } = useTableContext();
+  const isSelect = variant === 'select';
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
   return (
     <>
       <table>
         <colgroup>
-          <col style={{ width: '30px', maxWidth: '30px', minWidth: '30px' }} />
+          {!isSelect && <col style={{ width: '30px', maxWidth: '30px', minWidth: '30px' }} />}
           {visibleColumns.slice(0, -1).map(col => (
             <col key={col.identifier}
               style={{ width: col.width ?? 'auto', minWidth: col.minWidth ?? '150px' }} />
@@ -474,7 +539,8 @@ TableStatusBar.displayName = 'TableStatusBar';
 
 const TableHeader = memo(() => {
   const {
-    columns, rows,
+    variant,
+    columns, rows, componentName,
     sorting: { sort, onSortChange },
     states: {
       selectedRows, setSelectedRows,
@@ -483,6 +549,8 @@ const TableHeader = memo(() => {
     },
     isLoading,
   } = useTableContext();
+
+  const isSelect = variant === 'select';
 
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
 
@@ -512,7 +580,10 @@ const TableHeader = memo(() => {
     }
   }, [isAllSelected, isIndeterminate, setIsAllSelectedMode, setExcludedRows, setSelectedRows]);
 
+  const isResizingRef = useRef(false);
+
   const handleSort = useCallback((field: string) => {
+    if (isResizingRef.current) return; // Не сортировать во время ресайза
     const newDir = sort[field] === 'asc' ? 'desc' : 'asc';
     onSortChange({ [field]: newDir });
   }, [sort, onSortChange]);
@@ -525,23 +596,91 @@ const TableHeader = memo(() => {
     }
   }, [isIndeterminate]);
 
+  // ── Column Resize ──────────────────────────────────────────────────────
+  const { actions } = useTableContext();
+  const resizingRef = useRef<{
+    colIndex: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent, colIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const th = (e.target as HTMLElement).closest('th');
+    if (!th) return;
+    const startWidth = th.getBoundingClientRect().width;
+
+    resizingRef.current = { colIndex, startX: e.clientX, startWidth };
+    isResizingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const delta = ev.clientX - resizingRef.current.startX;
+      const col = visibleColumns[resizingRef.current.colIndex];
+      const minW = parseInt(col.minWidth ?? '50', 10);
+      const newWidth = Math.max(minW, resizingRef.current.startWidth + delta);
+      // Прямо обновляем DOM для плавности
+      if (th) th.style.width = newWidth + 'px';
+      // Также обновляем colgroup через соседний col элемент
+      const table = th.closest('table');
+      if (table) {
+        // +1 только если есть чекбокс-колонка (не select-вариант)
+        const colOffset = isSelect ? 0 : 1;
+        const colEl = table.querySelector(`colgroup`)?.children[resizingRef.current.colIndex + colOffset] as HTMLElement;
+        if (colEl) colEl.style.width = newWidth + 'px';
+      }
+    };
+
+    const onMouseUp = (ev: MouseEvent) => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      if (!resizingRef.current) return;
+      const delta = ev.clientX - resizingRef.current.startX;
+      const col = visibleColumns[resizingRef.current.colIndex];
+      const minW = parseInt(col.minWidth ?? '50', 10);
+      const newWidth = Math.max(minW, resizingRef.current.startWidth + delta);
+      // Коммитим новую ширину в стейт
+      const updatedColumns = columns.map(c =>
+        c.identifier === col.identifier ? { ...c, width: newWidth + 'px' } : c
+      );
+      actions.setColumns(updatedColumns);
+      // Сохраняем ширины колонок в localStorage
+      localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(updatedColumns));
+      resizingRef.current = null;
+      // Сбрасываем флаг через setTimeout, чтобы click (который идёт после mouseup) был заблокирован
+      setTimeout(() => { isResizingRef.current = false; }, 0);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [visibleColumns, columns, actions, componentName, isSelect]);
+
   return (
     <thead>
       <tr>
-        <th style={{ width: '30px', textAlign: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            <input
-              ref={checkboxRef}
-              type="checkbox"
-              checked={isAllSelected}
-              onChange={toggleAll}
-              disabled={isLoading || rows.length === 0}
-            />
-          </div>
-        </th>
-        {visibleColumns.map(col => {
+        {!isSelect && (
+          <th style={{ width: '30px', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+              <input
+                ref={checkboxRef}
+                type="checkbox"
+                checked={isAllSelected}
+                onChange={toggleAll}
+                disabled={isLoading || rows.length === 0}
+              />
+            </div>
+          </th>
+        )}
+        {visibleColumns.map((col, idx) => {
           const isSorting = !!(sort && sort[col.identifier]);
           const dir = isSorting ? sort[col.identifier] : null;
+          const isLast = idx === visibleColumns.length - 1;
           return (
             <th key={col.identifier} style={{ cursor: `${isLoading ? 'default' : 'pointer'}` }} onClick={!isLoading ? () => handleSort(col.identifier) : undefined}>
               <div className={styles.TableHeaderCell}>
@@ -553,6 +692,12 @@ const TableHeader = memo(() => {
                   </svg>
                 )}
               </div>
+              {!isLast && (
+                <div
+                  className={styles.ResizeHandle}
+                  onMouseDown={(e) => handleResizeMouseDown(e, idx)}
+                />
+              )}
             </th>
           );
         })}
@@ -567,6 +712,7 @@ const TableHeader = memo(() => {
 
 const TableBody = memo(() => {
   const {
+    variant,
     rows, deferredRowsForRender, columns, isLoading, total,
     isFetchingNextPage, hasNextPage,
     actions, scrollRef,
@@ -750,9 +896,7 @@ const TableBody = memo(() => {
     return (
       <tbody>
         <tr>
-          <td colSpan={visibleColumns.length + 1} style={{ textAlign: 'center', padding: '40px' }}>
-            Нет данных
-          </td>
+          <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
         </tr>
       </tbody>
     );
@@ -768,7 +912,7 @@ const TableBody = memo(() => {
     >
       {topPaddingAll > 0 && (
         <tr style={{ height: `${topPaddingAll}px`, border: '0px' }}>
-          <td colSpan={visibleColumns.length + 1} />
+          <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
         </tr>
       )}
 
@@ -783,7 +927,7 @@ const TableBody = memo(() => {
 
       {bottomPaddingAll > 0 && (
         <tr style={{ height: `${bottomPaddingAll}px`, border: '0px' }}>
-          <td colSpan={visibleColumns.length + 1} >
+          <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} >
 
           </td>
         </tr>
@@ -802,8 +946,11 @@ interface TableBodyRowProps {
   rowIndex: number;
 }
 
+
 const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   const {
+    variant,
+    onSelectItem,
     rows,
     states: {
       activeRow, setActiveRow,
@@ -872,8 +1019,12 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   }, [setActiveRow, row.id]);
 
   const handleDoubleClick = useCallback(() => {
-    if (openModelForm) openModelForm({ data: row, onSave: refetch, onClose: () => { } });
-  }, [openModelForm, row, refetch]);
+    if (variant === 'select' && onSelectItem) {
+      onSelectItem(row);
+    } else if (openModelForm) {
+      openModelForm({ data: row, onSave: refetch, onClose: () => { } });
+    }
+  }, [variant, onSelectItem, openModelForm, row, refetch]);
 
   return (
     <tr
@@ -887,11 +1038,13 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         pointerEvents: isLoading ? 'none' : 'auto',
       }}
     >
-      <td style={{ textAlign: 'center' }}>
-        <div className={styles.TableBodyCell} style={{ justifyContent: 'center' }}>
-          <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading} />
-        </div>
-      </td>
+      {variant !== 'select' && (
+        <td style={{ textAlign: 'center' }}>
+          <div className={styles.TableBodyCell} style={{ justifyContent: 'center' }}>
+            <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading} />
+          </div>
+        </td>
+      )}
       {columns.map(col => {
         const value = getFormatColumnValue(row, col);
         const align = getTextAlignByColumnType(col);
@@ -923,17 +1076,15 @@ const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
   const [columnsConfig, setColumnsConfig] = useState<TColumn[]>(columns);
 
   const onApply = useCallback(() => {
-    localStorage.setItem(componentName, JSON.stringify(columnsConfig));
+    localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(columnsConfig));
     actions?.setColumns?.(columnsConfig);
   }, [columnsConfig, componentName, actions]);
 
   useEffect(() => { setColumnsConfig(columns); }, [columns]);
 
   return (
-    <Modal title="Настройки таблицы" method={method} onApply={onApply} style={{ width: '400px' }}>
-      <Group align='row' type="easy">
-        <TableConfigColumns columns={columnsConfig} setColumns={setColumnsConfig} />
-      </Group>
+    <Modal title="Колонки таблицы" method={method} onApply={onApply} style={{ width: '400px' }}>
+      <TableConfigColumns columns={columnsConfig} setColumns={setColumnsConfig} />
     </Modal>
   );
 };
@@ -974,9 +1125,9 @@ const TableConfigColumns: FC<TypeTableConfigColumnsProps> = ({ columns, setColum
 
   return (
     <>
-      <div className={styles.TableConfigListHeader}>
+      {/* <div className={styles.TableConfigListHeader}>
         <div className={styles.TableConfigListHeaderTitle}>Видимость</div>
-      </div>
+      </div> */}
       <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd} onDragStart={onDragStart}>
         <SortableContext items={dndItems} strategy={verticalListSortingStrategy}>
           <ul className={styles.CheckboxList}>
@@ -1035,68 +1186,128 @@ const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ colu
 });
 
 // ────────────────────────────────────────────────
-// FieldDateRange - встроенный компонент фильтра по датам
+// FieldDateRange - модальный компонент фильтра по датам
 // ────────────────────────────────────────────────
 
-const FieldDateRangeInternal = memo(({ filters, onFilterChange }: {
-  filters?: Record<string, { value: unknown; operator: string }>;
-  onFilterChange: (field: string, value: unknown, operator?: string) => void;
+// Форматирование datetime-local строки в читаемый вид (DD.MM.YYYY HH:MM)
+function formatDateTimeRu(dateStr: string): string {
+  if (!dateStr) return '';
+  // Поддерживаем оба формата: "YYYY-MM-DD" и "YYYY-MM-DDTHH:MM"
+  const [datePart, timePart] = dateStr.split('T');
+  const [y, m, d] = datePart.split('-');
+  const date = `${d}.${m}.${y}`;
+  return timePart ? `${date} ${timePart}` : date;
+}
+
+// Строка активного периода — ссылка между панелью и таблицей
+const DateRangeBar = memo(({ startDate, endDate, onClick, onClear }: {
+  startDate?: string;
+  endDate?: string;
+  onClick: () => void;
+  onClear: () => void;
 }) => {
-  const startDate = filters?.startDate?.value as string | undefined;
-  const endDate = filters?.endDate?.value as string | undefined;
+  if (!startDate && !endDate) return null;
 
-  const handleStartDateChange = useCallback((value: string) => {
-    onFilterChange('startDate', value || undefined, 'gte');
-  }, [onFilterChange]);
-
-  const handleEndDateChange = useCallback((value: string) => {
-    onFilterChange('endDate', value || undefined, 'lte');
-  }, [onFilterChange]);
+  const label = startDate && endDate
+    ? `${formatDateTimeRu(startDate)} — ${formatDateTimeRu(endDate)}`
+    : startDate
+      ? `с ${formatDateTimeRu(startDate)}`
+      : `по ${formatDateTimeRu(endDate!)}`;
 
   return (
-    <div className={styles.FilterGroup}>
-      <label>Период:</label>
-      <div className={styles.DateRangeContainer}>
-        <input
-          type="date"
-          value={startDate || ''}
-          onChange={(e) => handleStartDateChange(e.target.value)}
-          placeholder="От"
-          className={styles.DateInput}
-          title="Дата начала"
-        />
-        <span className={styles.DateRangeSeparator}>—</span>
-        <input
-          type="date"
-          value={endDate || ''}
-          onChange={(e) => handleEndDateChange(e.target.value)}
-          placeholder="До"
-          className={styles.DateInput}
-          title="Дата окончания"
-        />
-        <button
-          onClick={() => {
-            handleStartDateChange('');
-            handleEndDateChange('');
-          }}
-          className={styles.ClearButton}
-          title="Очистить период"
-        >
-          ✕
-        </button>
-      </div>
+    <div className={styles.DateRangeBar}>
+      <span className={styles.DateRangeBarLabel}>Период:</span>
+      <a className={styles.DateRangeLink} onClick={onClick} title="Изменить период">{label}</a>
+      <button className={styles.ClearButton} onClick={onClear} title="Сбросить период">✕</button>
     </div>
-  );
-}, (prevProps, nextProps) => {
-  // Custom comparison для memo
-  return (
-    prevProps.filters?.startDate?.value === nextProps.filters?.startDate?.value &&
-    prevProps.filters?.endDate?.value === nextProps.filters?.endDate?.value &&
-    prevProps.onFilterChange === nextProps.onFilterChange
   );
 });
 
-FieldDateRangeInternal.displayName = 'FieldDateRange';
+DateRangeBar.displayName = 'DateRangeBar';
+
+// Модальная форма выбора периода
+const FieldDateRangeModal = memo(({ method, startDate, endDate, onApply }: {
+  method: TypeFormMethod;
+  startDate: string;
+  endDate: string;
+  onApply: (start: string, end: string) => void;
+}) => {
+  // Добавляет время по умолчанию к дате (только если дата непустая)
+  const withDefaultTime = (val: string, defaultTime: string) => {
+    if (!val) return '';
+    return val.includes('T') ? val : `${val}T${defaultTime}`;
+  };
+
+  // Извлекает только дату из datetime-local строки
+  const getDatePart = (val: string) => val ? val.split('T')[0] : '';
+
+  const [localStart, setLocalStart] = useState(() => withDefaultTime(startDate, '00:00'));
+  const [localEnd, setLocalEnd] = useState(() => withDefaultTime(endDate, '23:59'));
+
+  // Синхронизация при открытии
+  useEffect(() => {
+    setLocalStart(withDefaultTime(startDate, '00:00'));
+    setLocalEnd(withDefaultTime(endDate, '23:59'));
+  }, [startDate, endDate]);
+
+  // При выборе даты «С» — если дата новая или была пустой, подставляем 00:00
+  const handleStartChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (!val) { setLocalStart(''); return; }
+    setLocalStart(prev => {
+      if (!prev) return `${getDatePart(val)}T00:00`; // первый выбор — ставим 00:00
+      const prevDate = getDatePart(prev);
+      const newDate = getDatePart(val);
+      if (prevDate !== newDate) return `${newDate}T00:00`; // дата изменилась — ставим 00:00
+      return val; // дата та же — пользователь менял время
+    });
+  }, []);
+
+  // При выборе даты «По» — если дата новая или была пустой, подставляем 23:59
+  const handleEndChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (!val) { setLocalEnd(''); return; }
+    setLocalEnd(prev => {
+      if (!prev) return `${getDatePart(val)}T23:59`; // первый выбор — ставим 23:59
+      const prevDate = getDatePart(prev);
+      const newDate = getDatePart(val);
+      if (prevDate !== newDate) return `${newDate}T23:59`; // дата изменилась — ставим 23:59
+      return val;
+    });
+  }, []);
+
+  const handleApply = useCallback(() => {
+    onApply(localStart, localEnd);
+  }, [onApply, localStart, localEnd]);
+
+  return (
+    <Modal
+      method={method}
+      onApply={handleApply}
+      title="Период"
+      style={{ maxWidth: 400 }}
+    >
+      <div className={styles.FilterGroup} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+        <div className={styles.SearchContainer}>
+          <input
+            type="datetime-local"
+            value={localStart}
+            onChange={handleStartChange}
+            className={styles.SearchInput}
+          />
+          <input
+            type="datetime-local"
+            value={localEnd}
+            onChange={handleEndChange}
+            className={styles.SearchInput}
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+});
+
+FieldDateRangeModal.displayName = 'FieldDateRangeModal';
 
 // ────────────────────────────────────────────────
 // FieldFastSearch - встроенный компонент быстрого поиска
@@ -1147,25 +1358,22 @@ const FieldFastSearchInternal = memo(({ value, onChange }: {
 
   return (
     <div className={styles.FilterGroup}>
-      <label>Поиск:</label>
       <div className={styles.SearchContainer}>
         <input
           type="text"
           value={inputValue}
           onChange={(e) => handleChange(e.target.value)}
-          placeholder="Введите текст для поиска..."
+          placeholder="Быстрый поиск по всем полям"
           className={styles.SearchInput}
-          title="Быстрый поиск по всем полям"
+        // title="Быстрый поиск по всем полям"
         />
-        {inputValue && (
-          <button
-            onClick={handleClear}
-            className={styles.ClearButton}
-            title="Очистить поиск"
-          >
-            ✕
-          </button>
-        )}
+        <button
+          onClick={handleClear}
+          className={styles.ClearButton}
+        // title="Очистить поиск"
+        >
+          ✕
+        </button>
       </div>
     </div>
   );

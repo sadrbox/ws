@@ -1,14 +1,33 @@
 import React, { CSSProperties, FC, PropsWithChildren, useContext, useEffect, useState, forwardRef, useRef, useImperativeHandle, ReactNode, ReactElement, ComponentType, Component, isValidElement, JSX, ErrorInfo } from 'react';
 import styles from "../../styles/main.module.scss"
 import { createPortal } from 'react-dom';
-import ListContracts from 'src/models/Contracts';
+import { ContractsList } from 'src/models/Contracts';
 import { Divider } from '../Field';
 // import { getTranslation } from 'src/i18';
 // import { CounterpartiesList } from 'src/models/Organizations';
-import ActivityHistoriesList from 'src/models/ActivityHistories';
+import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app';
-import CounterpartiesList from 'src/models/Counterparties/list';
+import { OrganizationsList } from 'src/models/Organizations';
+import { BankAccountsList } from 'src/models/BankAccounts';
+import { CounterpartiesList } from 'src/models/Counterparties';
+import { ContactTypesList } from 'src/models/ContactTypes';
+import { ContactsList } from 'src/models/Contacts';
+import { ContactPersonsList } from 'src/models/ContactPersons';
+import { UsersList } from 'src/models/Users';
+import { TodosList } from 'src/models/Todos';
+import { NotificationsList } from 'src/models/Notifications';
+import { WarehousesList } from 'src/models/Warehouses';
+import { SalesList } from 'src/models/Sales';
+import { PurchasesList } from 'src/models/Purchases';
+import { OutgoingInvoicesList } from 'src/models/OutgoingInvoices';
+import { IncomingInvoicesList } from 'src/models/IncomingInvoices';
+import { PaymentInvoicesList } from 'src/models/PaymentInvoices';
+import { ScheduledTasksList } from 'src/models/ScheduledTasks';
+import { InventoryTransfersList } from 'src/models/InventoryTransfers';
+import { CashReceiptOrdersList } from 'src/models/CashReceiptOrders';
+import { CashExpenseOrdersList } from 'src/models/CashExpenseOrders';
+import NotificationToast from 'src/components/NotificationToast';
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -19,7 +38,7 @@ type TypeGroupProps = {
   style?: CSSProperties;
 } & PropsWithChildren;
 
-export const Group: FC<TypeGroupProps> = ({ align, gap, type, label, className, style, children }) => {
+export const Group: FC<TypeGroupProps> = ({ align, gap, type, className, style, children }) => {
 
   let visibleType: string;
   if (type === 'easy') {
@@ -37,9 +56,8 @@ export const Group: FC<TypeGroupProps> = ({ align, gap, type, label, className, 
   }
   return (
     <div className={className || ""} style={{
-      display: 'flex', flexDirection: 'column', marginTop: '16px', position: 'relative'
+      display: 'flex', flexDirection: 'column', position: 'relative'
     }}>
-      {label && <div className={styles.GroupLabel}>{label}</div>}
       <div className={[align === 'row'
         ?
         styles.RowGroup
@@ -87,19 +105,26 @@ export const PaneTab: FC = () => {
 
   const context = useAppContext();
   const panes = context?.windows.panes;
-  const { activePane, setActivePane } = context?.windows;
-
-
+  const { activePane, setActivePane, removePane } = context?.windows;
 
   return (
     <div className={styles.PaneTabWrapper}>
       {panes.map(p => (
-        <button
+        <div
           key={`PaneTab-${p.uniqId}`}
           className={[styles.PaneTab, (p.uniqId === activePane) && styles.PaneTabActive].join(" ")}
-          onClick={() => setActivePane(p.uniqId)}>
-          {p.label}
-        </button>
+          onClick={() => setActivePane(p.uniqId)}
+          title={p.label}
+          role="tab"
+          tabIndex={0}>
+          <button
+            className={styles.PaneTabClose}
+            onClick={(e) => { e.stopPropagation(); removePane(p.uniqId); }}
+            title="Закрыть"
+            type="button"
+          >✕</button>
+          <span className={styles.PaneTabLabel}>{p.label}</span>
+        </div>
       ))}
     </div>
   );
@@ -107,7 +132,7 @@ export const PaneTab: FC = () => {
 
 export const PaneGroup = () => {
   const context = useAppContext();
-  const { panes, activePane } = context?.windows;
+  const { panes, activePane, removePane } = context?.windows;
 
 
 
@@ -120,9 +145,15 @@ export const PaneGroup = () => {
         return (
           <div key={`PaneGroup-${p.uniqId}`}
             className={[styles.Pane, (p.uniqId === activePane) && styles.ActivePane].join(" ")}>
-            <div style={{ display: "flex", gap: "6px" }}>
-              <Divider />
+            <div style={{ display: "flex", gap: "6px", alignItems: "center", justifyContent: "space-between" }}>
+              {/* <Divider /> */}
               <h2 className={styles.PaneHeaderLabel}>{p.label}</h2>
+              <button
+                className={styles.PaneHeaderClose}
+                onClick={() => removePane(p.uniqId)}
+                title="Закрыть"
+                type="button"
+              >✕</button>
             </div>
             <Component {...p} />
           </div>
@@ -237,6 +268,9 @@ export const Navbar: React.FC = () => {
             </a>
           </div>
         ))}
+        <div style={{ marginLeft: "auto", marginRight: "12px" }}>
+          <NotificationToast />
+        </div>
       </div>
       {activeNav && <div className={styles.NavbarOverlayWrapper}>{activeNav?.component}</div>}
     </>
@@ -254,87 +288,91 @@ export const NavList = ({ label }: TypeNavListProps) => {
 
 
   if (label.toLocaleLowerCase() === "Operations".toLocaleLowerCase()) {
-    // Торговля
     return (
       <div className={styles.NavListWrapper}>
         <h1>Операционная деятельность</h1>
-        <Group gap='64px'>
-          <div>
+        <div className={styles.NavSection}>
+          <div className={styles.NavGroup}>
             <h3>Продажи</h3>
             <ul className={styles.NavList}>
-              <li>Реализация товара и услуг</li>
-              <li>Электронная счет-фактура (исходящие)</li>
-              <li>Счет на оплату</li>
+              <li onClick={() => addPane({ component: SalesList })}>Реализация товара и услуг</li>
+              <li onClick={() => addPane({ component: OutgoingInvoicesList })}>Электронная счет-фактура (исходящие)</li>
+              <li onClick={() => addPane({ component: PaymentInvoicesList })}>Счет на оплату</li>
             </ul>
           </div>
-          <div>
+          <div className={styles.NavGroup}>
             <h3>Закупка</h3>
             <ul className={styles.NavList}>
-              <li>Поступление товара и услуг</li>
-              <li>Электронная счет-фактура (входящие)</li>
+              <li onClick={() => addPane({ component: PurchasesList })}>Поступление товара и услуг</li>
+              <li onClick={() => addPane({ component: IncomingInvoicesList })}>Электронная счет-фактура (входящие)</li>
             </ul>
           </div>
-        </Group>
-        <Group gap='64px'>
-          <div>
+          <div className={styles.NavGroup}>
             <h3>Справочники</h3>
             <ul className={styles.NavList}>
-              <li>Склады</li>
-              <li onClick={() => addPane({ component: CounterpartiesList })}>Организации</li>
+              <li onClick={() => addPane({ component: WarehousesList })}>Склады</li>
+              <li onClick={() => addPane({ component: OrganizationsList })}>Организации</li>
               <li onClick={() => addPane({ component: CounterpartiesList })}>Контрагенты</li>
-              <li onClick={() => addPane({ component: ListContracts })}>Договора</li>
+              <li onClick={() => addPane({ component: ContractsList })}>Договора</li>
+              <li onClick={() => addPane({ component: BankAccountsList })}>Банковские счета</li>
+              <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>
             </ul>
           </div>
-        </Group >
-      </div >
+        </div>
+      </div>
     )
   } else if (label.toLocaleLowerCase() === "CRM".toLocaleLowerCase()) {
-    // CRM
     return (
       <div className={styles.NavListWrapper}>
         <h1>CRM</h1>
-        <Group gap='64px'>
-          <div>
+        <div className={styles.NavSection}>
+          <div className={styles.NavGroup}>
             <h3>Управление задачами</h3>
             <ul className={styles.NavList}>
-              <li>Задачи</li>
-              <li>Регламентные задачи</li>
+              <li onClick={() => addPane({ component: TodosList })}>Задачи</li>
+              <li onClick={() => addPane({ component: ScheduledTasksList })}>Регламентные задачи</li>
             </ul>
           </div>
-          <div>
+          <div className={styles.NavGroup}>
             <h3>Справочники</h3>
             <ul className={styles.NavList}>
-              {/* <li onClick={() => alert("0")}></li> */}
-              {/* <li onClick={() => addPane(<ListCounterparties />)}>Контрагенты</li> */}
-              {/* <li onClick={() => addPane(<ListContracts />)}>Договора</li> */}
-              {/* <li onClick={() => addPane(<ListActivityHistories />)}>История активности</li> */}
-              <li>Реализация товара и услуг</li>
-              <li>Поступление товара и услуг</li>
-              <li>Перемещение ТМЗ</li>
-              <li>Приходный кассовый ордер</li>
-              <li>Расходный кассовый ордер</li>
+              <li onClick={() => addPane({ component: SalesList })}>Реализация товара и услуг</li>
+              <li onClick={() => addPane({ component: PurchasesList })}>Поступление товара и услуг</li>
+              <li onClick={() => addPane({ component: InventoryTransfersList })}>Перемещение ТМЗ</li>
+              <li onClick={() => addPane({ component: CashReceiptOrdersList })}>Приходный кассовый ордер</li>
+              <li onClick={() => addPane({ component: CashExpenseOrdersList })}>Расходный кассовый ордер</li>
             </ul>
           </div>
-        </Group>
+        </div>
       </div>
     )
   } else if (label.toLocaleLowerCase() === "Settings".toLocaleLowerCase()) {
-    // Settings
     return (
       <div className={styles.NavListWrapper}>
         <h1>Настройки</h1>
-        <Group gap='64px'>
-          <div>
-            <h3>Права доступа</h3>
+        <div className={styles.NavSection}>
+          <div className={styles.NavGroup}>
+            <h3>Справочники</h3>
             <ul className={styles.NavList}>
-              <li onClick={() => addPane({ component: CounterpartiesList })}>Организации</li>
+              <li onClick={() => addPane({ component: OrganizationsList })}>Организации</li>
               <li onClick={() => addPane({ component: CounterpartiesList })}>Контрагенты</li>
-              <li onClick={() => addPane({ component: ListContracts })}>Договора</li>
-              <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>
+              <li onClick={() => addPane({ component: ContractsList })}>Договора</li>
+              <li onClick={() => addPane({ component: BankAccountsList })}>Банковские счета</li>
+              <li onClick={() => addPane({ component: ContactTypesList })}>Типы контактов</li>
+              <li onClick={() => addPane({ component: ContactsList })}>Контакты</li>
+              <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>
             </ul>
           </div>
-        </Group >
-      </div >
+          <div className={styles.NavGroup}>
+            <h3>Администрирование</h3>
+            <ul className={styles.NavList}>
+              <li onClick={() => addPane({ component: UsersList })}>Пользователи</li>
+              <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>
+              <li onClick={() => addPane({ component: NotificationsList })}>Уведомления</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     )
   }
 }

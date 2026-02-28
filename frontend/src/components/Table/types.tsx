@@ -22,8 +22,6 @@ export type TDataRow = { [key: string | number]: string | number | boolean };
 export type TDataItem = {
   id: number;
   uuid: string;
-  createdAt: string;
-  updatedAt: string;
   // shortName?: string;
   [key: string | number]: unknown;
 };

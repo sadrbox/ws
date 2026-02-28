@@ -20,6 +20,7 @@ export type TypeAppContextProps = {
 		addPane: (pane: Partial<TPane>) => void;
 		removePane: (uniqId: string) => void;
 		setActivePane: (uniqId: string) => void;
+		updatePaneLabel: (uniqId: string, label: string) => void;
 	};
 	actions: {};
 	navbar: {

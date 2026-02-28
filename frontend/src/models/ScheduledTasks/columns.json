@@ -1,0 +1,93 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"name": "Id",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"position": 1,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "shortName",
+		"type": "string",
+		"name": "Наименование",
+		"width": "250px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Наименование задачи",
+		"visible": true,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "status",
+		"type": "string",
+		"name": "Статус",
+		"width": "120px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Статус задачи",
+		"visible": true,
+		"position": 3,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "cronExpr",
+		"type": "string",
+		"name": "Cron выражение",
+		"width": "150px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Cron выражение",
+		"visible": true,
+		"position": 4,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "lastRunAt",
+		"type": "date",
+		"name": "Последний запуск",
+		"width": "170px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Дата последнего запуска",
+		"visible": true,
+		"position": 5,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "nextRunAt",
+		"type": "date",
+		"name": "Следующий запуск",
+		"width": "170px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Дата следующего запуска",
+		"visible": true,
+		"position": 6,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "organization.shortName",
+		"type": "string",
+		"name": "Организация",
+		"width": "200px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Организация",
+		"visible": true,
+		"position": 7,
+		"filter": false,
+		"inlist": true
+	}
+]

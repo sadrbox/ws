@@ -9,10 +9,45 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0" />
   <title>Vite + React + TS</title>
+  <link rel="preconnect"
+    href="https://fonts.googleapis.com" />
+  <link rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+    rel="stylesheet" />
 </head>
+<style>
+  .spinnerapp {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+  }
+</style>
 
 <body>
-  <div id="root"></div>
+  <div id="root"
+    style="transition: opacity 0.1s ease-in;">
+    <div class="spinnerapp">
+      <div
+        style="width:36px;height:36px;border:3px solid #e0e0e0;border-top-color:#1c5fcb;border-radius:50%;animation:spin .7s linear infinite;">
+      </div>
+    </div>
+    <style>
+      @keyframes spin {
+        to {
+          transform: rotate(360deg)
+        }
+      }
+    </style>
+  </div>
 
   <div id="RootPortal"></div>
   <script type="module"

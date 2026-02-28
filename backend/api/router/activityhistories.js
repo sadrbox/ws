@@ -198,6 +198,49 @@ router.use(cors());
 // 	}
 // });
 
+// ============================================
+// READ - Получение записи истории по UUID
+// ============================================
+router.get("/activityhistories/:uuid", async (req, res) => {
+	try {
+		const { uuid } = req.params;
+
+		if (
+			typeof uuid !== "string" ||
+			uuid.length !== 36 ||
+			(uuid.match(/-/g) || []).length !== 4
+		) {
+			return res.status(400).json({
+				success: false,
+				message: "Некорректный формат UUID",
+			});
+		}
+
+		const item = await prisma.activityHistory.findUnique({
+			where: { uuid },
+			include: { organization: true },
+		});
+
+		if (!item) {
+			return res.status(404).json({
+				success: false,
+				message: "Запись не найдена",
+			});
+		}
+
+		return res.status(200).json({ success: true, item });
+	} catch (error) {
+		console.error("GET /activityhistories/:uuid error:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Ошибка сервера при получении записи",
+		});
+	}
+});
+
+// ============================================
+// READ - Список записей истории (курсорная пагинация)
+// ============================================
 router.get("/activityhistories", async (req, res) => {
 	try {
 		// ── Разбор и валидация query-параметров вручную ───────────────────────

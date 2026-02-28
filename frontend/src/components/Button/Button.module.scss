@@ -72,6 +72,7 @@
 	border-width: 0px;
 	border-radius: $radius2;
 	background: none;
+	height: $heightFieldInput + 2px;
 
 	&.Active {
 		background-color: rgba($color3, 1);

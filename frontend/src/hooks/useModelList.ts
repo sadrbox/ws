@@ -3,7 +3,7 @@ import {
 	type UseQueryOptions,
 	type UseQueryResult,
 } from "@tanstack/react-query";
-import apiClient from "src/app/services/api/client";
+import apiClient from "src/services/api/client";
 
 export interface ModelListResponse<T> {
 	items: T[];

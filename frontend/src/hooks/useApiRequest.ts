@@ -7,7 +7,7 @@ import {
 	DependencyList,
 	useMemo,
 } from "react";
-import { apiClient, ApiError } from "src/app/services/api/client";
+import { apiClient, ApiError } from "src/services/api/client";
 
 /**
  * Типы HTTP методов

@@ -13,6 +13,19 @@
 		"inlist": true
 	},
 	{
+		"identifier": "uuid",
+		"type": "string",
+		"name": "UUID",
+		"width": "300px",
+		"minWidth": "200px",
+		"alignment": "left",
+		"hint": "Уникальный идентификатор",
+		"visible": false,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
 		"identifier": "actionDate",
 		"type": "date",
 		"name": "Action Date",

@@ -5,7 +5,7 @@ import {
 	type InfiniteData,
 } from "@tanstack/react-query";
 import { useRef, useMemo, useCallback, useEffect } from "react";
-import apiClient from "src/app/services/api/client";
+import apiClient from "src/services/api/client";
 import { useRequestQueue } from "./useRequestQueue";
 
 // ⚠️ ГЛОБАЛЬНЫЙ REF для хранения adaptiveLimit

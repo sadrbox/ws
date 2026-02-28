@@ -37,6 +37,7 @@
 
 /* Table layout containers */
 .TableWrapper {
+	container-type: size;
 	display: flex;
 	flex-direction: column;
 	flex: 1;
@@ -223,6 +224,19 @@ thead {
 					overflow: hidden;
 					white-space: nowrap;
 					text-overflow: ellipsis;
+				}
+			}
+
+			.ResizeHandle {
+				position: absolute;
+				right: -3px;
+				top: 0;
+				bottom: 0;
+				width: 5px;
+				cursor: col-resize;
+				z-index: 3;
+				&:hover {
+					background: rgba(#4a90d9, 0.35);
 				}
 			}
 		}
@@ -549,7 +563,8 @@ input[type="checkbox"] {
 .ListItem {
 	display: flex;
 	align-items: center;
-	width: 100%;
+	flex: 1;
+	// width: 100%;
 	margin: 6px 0;
 	padding: 2px 0;
 	background: $color30;
@@ -678,8 +693,9 @@ input[type="checkbox"] {
 .FilterGroup {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	padding: 0 12px;
+	gap: 6px;
+	flex: 1;
+	// padding: 0 12px;
 
 	label {
 		font-weight: 500;
@@ -724,29 +740,34 @@ input[type="checkbox"] {
 .SearchContainer {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	border: 1px solid #ccc;
+	border-radius: $radius2;
+	overflow: hidden;
+	background: #fff;
+	padding: 0;
 	flex: 1;
-	min-width: 200px;
-	position: relative;
+	// margin: 3px;
+	// height: 22px;
+
+	&:focus-within {
+		border-color: $color3;
+	}
 }
 
 .SearchInput {
-	padding: 6px 10px;
-	border: 1px solid #ddd;
-	border-radius: $radius2;
-	font-size: 13px;
-	background: #fff;
 	flex: 1;
-	transition: border-color 0.2s ease;
-
-	&:focus {
-		outline: none;
-		border-color: #3498db;
-		box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
-	}
+	border: none;
+	outline: none;
+	background: transparent;
+	padding: 0px 3px;
+	font-size: 12px;
+	// line-height: 1;
+	min-width: 120px;
+	height: $heightFieldInput;
 
 	&::placeholder {
-		color: #999;
+		color: #aaa;
+		font-size: 12px;
 	}
 }
 
@@ -754,24 +775,58 @@ input[type="checkbox"] {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 28px;
-	height: 28px;
-	padding: 0;
-	border: 1px solid #ddd;
-	border-radius: $radius2;
-	background: #fff;
-	color: #999;
-	font-size: 16px;
+	border: none;
+	// border-left: 1px solid #e0e0e0;
+	background: transparent;
 	cursor: pointer;
-	transition: all 0.2s ease;
+	margin: 2px;
+	// padding: 1px 4px;
+	color: $color51;
+	font-size: 11px;
+	// line-height: 1;
+	width: $heightFieldInput - 4px;
+	height: $heightFieldInput - 4px;
+	flex-shrink: 0;
+	border-radius: $radius2;
 
 	&:hover {
+		background: rgba($color3, 0.1);
 		color: #333;
-		border-color: #bbb;
-		background: #f5f5f5;
-	}
-
-	&:active {
-		transform: scale(0.95);
 	}
 }
+
+// ────────────────────────────────────────────────
+// DateRangeBar — строка активного периода между панелью и таблицей
+// ────────────────────────────────────────────────
+
+.DateRangeBar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 8px;
+	background: rgba($color3, 0.06);
+	border-bottom: 1px solid #e0e0e0;
+	font-size: 12px;
+	min-height: 22px;
+}
+
+.DateRangeBarLabel {
+	color: #666;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.DateRangeLink {
+	color: $color3;
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+
+	&:hover {
+		text-decoration: underline;
+	}
+}
+
+// ────────────────────────────────────────────────
+// DateRange Modal — использует FilterGroup / SearchContainer / SearchInput
+// ────────────────────────────────────────────────

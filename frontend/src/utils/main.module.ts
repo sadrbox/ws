@@ -105,7 +105,7 @@ export const API_BASE_URL = getApiUrl();
 
 import moment from "moment";
 
-import { getTranslation } from "src/app/i18";
+import { getTranslation } from "src/i18";
 
 export function getDateFromISO(dateString: string): string {
 	const date = moment(dateString);

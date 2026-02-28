@@ -10,7 +10,7 @@ const isCompositeKey = (key: string): boolean => key.includes(".");
 /**
  * Сортирует массив строк таблицы по указанной конфигурации сортировки
  * @param arr - массив элементов для сортировки
- * @param sort - объект вида { "createdAt": "desc", "name": "asc" } или пустой объект
+ * @param sort - объект вида { "name": "asc", "id": "desc" } или пустой объект
  * @param locale - локаль для строкового сравнения (по умолчанию "default")
  * @returns новый отсортированный массив (оригинал не меняется)
  */
@@ -98,15 +98,38 @@ export function getModelColumns(
 	modelName: string,
 	type?: TypeTableTypes,
 ): TColumn[] {
-	let columns = initColumns;
-	const storageColumns = localStorage.getItem(modelName);
-	if (storageColumns !== null) {
-		columns = JSON.parse(storageColumns);
+	const storageKey = `table_columns_${modelName}`;
+
+	// Для подчинённых таблиц ownerName скрыт по умолчанию
+	let defaults = initColumns;
+	if (type === "part") {
+		defaults = initColumns.map((col) =>
+			col.identifier === "ownerName" ? { ...col, visible: false } : col,
+		);
 	}
 
-	if (!!type && type === "part") {
-		columns = columns.filter((col) => col.identifier !== "ownerName");
+	let columns = defaults;
+	const storageColumns = localStorage.getItem(storageKey);
+	if (storageColumns !== null) {
+		try {
+			const cached: TColumn[] = JSON.parse(storageColumns);
+			// Проверяем актуальность кэша: набор identifier-ов должен совпадать
+			const initIds = new Set(defaults.map((c) => c.identifier));
+			const cachedIds = new Set(cached.map((c) => c.identifier));
+			const isValid =
+				initIds.size === cachedIds.size &&
+				[...initIds].every((id) => cachedIds.has(id));
+			if (isValid) {
+				columns = cached;
+			} else {
+				// Столбцы изменились — сбрасываем устаревший кэш
+				localStorage.removeItem(storageKey);
+			}
+		} catch {
+			localStorage.removeItem(storageKey);
+		}
 	}
+
 	return columns;
 }
 
@@ -197,8 +220,9 @@ export function getFormatColumnValue(
 	} else if (column.type === "string") {
 		const [field, subField]: string[] = column.identifier.split(".");
 
-		if (typeof row[field] === "object" && row[field] !== null) {
-			return (row[field] as Record<string, any>)[subField];
+		if (subField && typeof row[field] === "object" && row[field] !== null) {
+			const val = (row[field] as Record<string, any>)[subField];
+			return val != null ? val + "" : "";
 		} else {
 			// console.log(row);
 			return row[column.identifier] !== undefined

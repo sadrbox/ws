@@ -1,0 +1,67 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"name": "Id",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"position": 1,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"type": "string",
+		"name": "UUID",
+		"width": "300px",
+		"minWidth": "200px",
+		"alignment": "left",
+		"hint": "Уникальный идентификатор",
+		"visible": false,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "value",
+		"type": "string",
+		"name": "Значение",
+		"width": "300px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Значение контакта",
+		"visible": true,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "contactType.shortName",
+		"type": "string",
+		"name": "Тип контакта",
+		"width": "250px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Тип контакта",
+		"visible": true,
+		"position": 3,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "ownerName",
+		"type": "string",
+		"name": "Owner Name",
+		"width": "250px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Владелец контакта",
+		"visible": true,
+		"position": 4,
+		"filter": true,
+		"inlist": true
+	}
+]

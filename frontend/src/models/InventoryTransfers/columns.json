@@ -1,0 +1,93 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"name": "Id",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"position": 1,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "documentNumber",
+		"type": "string",
+		"name": "Номер документа",
+		"width": "130px",
+		"minWidth": "90px",
+		"alignment": "left",
+		"hint": "Номер документа",
+		"visible": true,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "documentDate",
+		"type": "date",
+		"name": "Дата",
+		"width": "150px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Дата документа",
+		"visible": true,
+		"position": 3,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "status",
+		"type": "string",
+		"name": "Статус",
+		"width": "120px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Статус документа",
+		"visible": true,
+		"position": 4,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "fromWarehouse.shortName",
+		"type": "string",
+		"name": "Со склада",
+		"width": "200px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Склад-источник",
+		"visible": true,
+		"position": 5,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "toWarehouse.shortName",
+		"type": "string",
+		"name": "На склад",
+		"width": "200px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Склад-получатель",
+		"visible": true,
+		"position": 6,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "organization.shortName",
+		"type": "string",
+		"name": "Организация",
+		"width": "200px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Организация",
+		"visible": true,
+		"position": 7,
+		"filter": false,
+		"inlist": true
+	}
+]

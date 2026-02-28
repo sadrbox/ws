@@ -227,7 +227,7 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
   return (
     <div
       className={styles.FieldWrapper}
-      style={style ? { ...style, width: style?.width } : style}
+      style={style && style}
     >
       <label
         htmlFor={name}
@@ -277,7 +277,53 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
   );
 };
 
+// Компонент FieldDateTime — поле выбора даты/времени (datetime-local)
+interface TypeFieldDateTimeProps {
+  label: string;
+  name: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  width?: string;
+  minWidth?: string;
+  maxWidth?: string;
+  disabled?: boolean;
+  required?: boolean;
+}
 
+export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
+  label,
+  name,
+  value = '',
+  onChange,
+  width,
+  minWidth,
+  maxWidth,
+  disabled = false,
+  required = false,
+}) => {
+  return (
+    <div
+      className={styles.FieldWrapper}
+      style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}
+    >
+      <label htmlFor={name} className={styles.FieldLabel}>
+        {label}
+        {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
+      </label>
+      <div className={styles.FieldInputWrapper}>
+        <input
+          type="datetime-local"
+          id={name}
+          name={name}
+          value={value}
+          onChange={onChange}
+          className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+};
 
 export const FieldFilter: FC<TypeFieldFilterProps> = ({ label, name, actions }) => {
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -323,15 +369,18 @@ type TypeFieldSelectProps = {
   label: string;
   name: string;
   options: { value: string; label: string }[];
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  disabled?: boolean;
   style?: CSSProperties;
 };
 
-export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, style }) => {
+export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value, onChange, disabled = false, style }) => {
   return (
     <Group align="row" className={styles.FieldWrapper} style={style}>
       <label htmlFor={name} className={styles.FieldLabel}>{label}</label>
       <Group align="col" className={styles.FieldSelectWrapper}>
-        <select name={name} id={name} className={styles.FieldSelect} >
+        <select name={name} id={name} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled}>
           {
             options.map((option) => (
               <option key={option.value} value={option.value}>

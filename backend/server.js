@@ -9,6 +9,26 @@ import { getLocalIP } from "./utils/module.js";
 import apiv1 from "./api/v1.js";
 import counterpartiesRouter from "./api/router/counterparties.js";
 import activityHistoriesRouter from "./api/router/activityhistories.js";
+import organizationsRouter from "./api/router/organizations.js";
+import contractsRouter from "./api/router/contracts.js";
+import bankAccountsRouter from "./api/router/bankaccounts.js";
+import contactTypesRouter from "./api/router/contacttypes.js";
+import contactsRouter from "./api/router/contacts.js";
+import contactPersonsRouter from "./api/router/contactpersons.js";
+import usersRouter from "./api/router/users.js";
+import todosRouter from "./api/router/todos.js";
+import todofilesRouter from "./api/router/todofiles.js";
+import notificationsRouter from "./api/router/notifications.js";
+import warehousesRouter from "./api/router/warehouses.js";
+import salesRouter from "./api/router/sales.js";
+import purchasesRouter from "./api/router/purchases.js";
+import outgoingInvoicesRouter from "./api/router/outgoinginvoices.js";
+import incomingInvoicesRouter from "./api/router/incominginvoices.js";
+import paymentInvoicesRouter from "./api/router/paymentinvoices.js";
+import scheduledTasksRouter from "./api/router/scheduledtasks.js";
+import inventoryTransfersRouter from "./api/router/inventorytransfers.js";
+import cashReceiptOrdersRouter from "./api/router/cashreceiptorders.js";
+import cashExpenseOrdersRouter from "./api/router/cashexpenseorders.js";
 
 // const prisma = new PrismaClient();
 // const prisma = new PrismaClient();
@@ -21,6 +41,26 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);
 app.use("/api/v1", activityHistoriesRouter);
+app.use("/api/v1", organizationsRouter);
+app.use("/api/v1", contractsRouter);
+app.use("/api/v1", bankAccountsRouter);
+app.use("/api/v1", contactTypesRouter);
+app.use("/api/v1", contactsRouter);
+app.use("/api/v1", contactPersonsRouter);
+app.use("/api/v1", usersRouter);
+app.use("/api/v1", todosRouter);
+app.use("/api/v1", todofilesRouter);
+app.use("/api/v1", notificationsRouter);
+app.use("/api/v1", warehousesRouter);
+app.use("/api/v1", salesRouter);
+app.use("/api/v1", purchasesRouter);
+app.use("/api/v1", outgoingInvoicesRouter);
+app.use("/api/v1", incomingInvoicesRouter);
+app.use("/api/v1", paymentInvoicesRouter);
+app.use("/api/v1", scheduledTasksRouter);
+app.use("/api/v1", inventoryTransfersRouter);
+app.use("/api/v1", cashReceiptOrdersRouter);
+app.use("/api/v1", cashExpenseOrdersRouter);
 
 // Логирование запросов (опционально)
 app.use((req, res, next) => {
@@ -152,6 +192,22 @@ app.post("/json", async (req, res) => {
 			return res
 				.status(400)
 				.json({ error: "Не удалось определить организацию (BIN отсутствует)" });
+		}
+
+		// ── User: найти или создать ────────────────────────────────────────
+		let existingUser = null;
+		if (userName) {
+			existingUser = await prisma.user.findFirst({
+				where: { username: userName },
+			});
+			if (!existingUser) {
+				existingUser = await prisma.user.create({
+					data: {
+						username: userName,
+						fullName: userName,
+					},
+				});
+			}
 		}
 
 		const transaction = await prisma.activityHistory.create({

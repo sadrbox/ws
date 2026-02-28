@@ -3,7 +3,7 @@
 .TabsWrapper {
 	width: 100%;
 	display: flex;
-	flex: 1;
+	flex: 0 0 auto;
 	flex-direction: column;
 	// font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
 	// Ubuntu, sans-serif;
@@ -88,20 +88,15 @@
 }
 
 /* Стили для контента табов */
-.TabsBody > div {
-	display: none;
-	// animation: fadeIn 0.3s ease;
-}
-
-.TabsBody > div[aria-selected="true"],
-.TabsBody > div.active {
-	display: flex;
-}
 .TabsBodyWrapper {
 	flex: 1;
-	display: flex;
+	display: none;
 	flex-direction: column;
 	overflow: auto;
+}
+
+.TabsBodyWrapper.active {
+	display: flex;
 }
 
 /* Анимация появления контента */

@@ -1,10 +1,8 @@
 import React, {
   createContext,
-  Dispatch,
   isValidElement,
   PropsWithChildren,
   ReactElement,
-  SetStateAction,
   useCallback,
   useContext,
   useEffect,
@@ -15,15 +13,17 @@ import React, {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
-import { getTranslation } from "src/app/i18";
+import { getTranslation } from "src/i18";
 import { Content, Navbar, NavList, ErrorBoundary, LoadingFallback, Screen } from "../components/UI";
 import { TComponentNode, TPane, TypeAppContextProps, TypeNavbarProps } from "./types";
 import useUID from "src/hooks/useUID";
 import { TDataItem } from "src/components/Table/types";
 // import { OrganizationsList } from "src/models/Organizations";
-import CounterpartiesList from 'src/models/Counterparties/list';
+// import { CounterpartiesList } from 'src/models/Counterparties';
 
-import ActivityHistoriesList from "src/models/ActivityHistories";
+import { ActivityHistoriesList } from "src/models/ActivityHistories";
+import { CounterpartiesList } from "src/models/Counterparties";
+import { uniqueId } from 'lodash';
 
 export const getComponentName = (node: TComponentNode): string => {
   if (node == null) return "Unknown";
@@ -49,6 +49,9 @@ export const getComponentName = (node: TComponentNode): string => {
 
 export const getUniqId = (component: TComponentNode, data?: TDataItem): string => {
   const name = getComponentName(component);
+  // *List компоненты — один экземпляр панели, id = имя компонента
+  if (name.endsWith("List")) return name;
+  // *Form компоненты — уникальный id на основе данных
   const idPart = data?.uuid ?? data?.id ?? Date.now().toString(36);
   return `${name}-${idPart}`;
 };
@@ -78,7 +81,22 @@ const App: React.FC = () => {
   const screenRef = useRef<HTMLDivElement>(null);
 
   const [panes, setPanes] = useState<TPane[]>([]);
-  const [activePaneId, setActivePaneId] = useState<string>("");
+  const [activePaneId, _setActivePaneId] = useState<string>("");
+
+  // Стек истории активных панелей (для возврата к предыдущей при закрытии)
+  const paneHistoryRef = useRef<string[]>([]);
+
+  const setActivePaneId = useCallback((id: string) => {
+    _setActivePaneId((prev) => {
+      if (prev && prev !== id) {
+        // Убираем id из стека, если он уже есть (чтобы не дублировать)
+        const history = paneHistoryRef.current.filter((h) => h !== prev);
+        history.push(prev);
+        paneHistoryRef.current = history;
+      }
+      return id;
+    });
+  }, []);
 
   // Навбар (можно вынести в отдельный хук / компонент позже)
   const initialNavbar: TypeNavbarProps[] =
@@ -95,34 +113,34 @@ const App: React.FC = () => {
   // Управление панелями
   // ────────────────────────────────────────────────
 
-  const addPane = useCallback((pane: Partial<TPane>): string => {
-    if (!pane.component) {
+  const addPane = useCallback((options: Partial<TPane>) => {
+    if (!options.component) {
       console.warn("[addPane] Component is required");
       return "";
     }
 
-    const uniqId = getUniqId(pane.component, pane?.data as TDataItem | undefined);
+    const uniqId = getUniqId(options.component, options.data);
 
-    // Проверяем, существует ли уже такая панель
-    const existing = panes.find((p) => p.uniqId === uniqId);
+    // Если *List панель уже открыта — просто активируем её
+    const existing = panes.find(p => p.uniqId === uniqId);
     if (existing) {
       setActivePaneId(uniqId);
+      setNavbarItems((prev) => prev.map((n) => ({ ...n, isActive: false })));
       return uniqId;
     }
 
     // Формируем заголовок, если не передан
-    let label = pane.label;
+    let label = options.label;
     if (!label) {
-      const compName = getComponentName(pane.component);
+      const compName = getComponentName(options.component);
       label = getTranslation(compName) || compName;
-      // console.log(compName, label)
     }
 
     const newPane: TPane = {
-      ...pane,
+      ...options,
       uniqId,
       label,
-      component: pane.component, // важно сохранить ссылку на компонент
+      component: options.component, // важно сохранить ссылку на компонент
     };
 
     setPanes((prev) => [...prev, newPane]);
@@ -140,16 +158,30 @@ const App: React.FC = () => {
       if (index === -1) return prev;
 
       const next = prev.filter((_, i) => i !== index);
+      const remainingIds = new Set(next.map((p) => p.uniqId));
 
-      // Если закрываем активную панель → переключаемся на предыдущую или очищаем
-      if (activePaneId === uniqId) {
-        const newActive = next.length > 0 ? next[Math.max(0, index - 1)].uniqId : "";
-        setActivePaneId(newActive);
-      }
+      // Убираем закрываемую панель из истории
+      paneHistoryRef.current = paneHistoryRef.current.filter(
+        (h) => h !== uniqId && remainingIds.has(h)
+      );
+
+      // Если закрываем активную панель → переключаемся на предыдущую из истории
+      _setActivePaneId((currentActive) => {
+        if (currentActive !== uniqId) return currentActive;
+        if (next.length === 0) return "";
+        // Ищем последнюю панель из истории, которая ещё существует
+        const history = paneHistoryRef.current;
+        if (history.length > 0) {
+          return history.pop()!;
+        }
+        // Если истории нет — fallback на предыдущую по индексу
+        const newIndex = index > 0 ? index - 1 : 0;
+        return next[Math.min(newIndex, next.length - 1)].uniqId;
+      });
 
       return next;
     });
-  }, [activePaneId]);
+  }, []);
 
   // const openPane = useCallback((pane: Partial<TOpenPaneProps>) => {
   //   addPane(pane);
@@ -161,15 +193,19 @@ const App: React.FC = () => {
     }
   }, [panes]);
 
+  const updatePaneLabel = useCallback((uniqId: string, label: string) => {
+    setPanes(prev => prev.map(p => p.uniqId === uniqId ? { ...p, label } : p));
+  }, []);
+
   // ────────────────────────────────────────────────
   // Автоматическое открытие начальной панели
   // ────────────────────────────────────────────────
 
   useEffect(() => {
-    // Открываем OrganizationsList при монтировании приложения
+    // Открываем CounterpartiesList при монтировании приложения
     addPane({
-      component: ActivityHistoriesList,
-      label: getTranslation("ActivityHistoriesList") || "ActivityHistoriesList",
+      component: CounterpartiesList,
+      label: getTranslation("CounterpartiesList") || "CounterpartiesList",
     });
   }, []);
 
@@ -186,6 +222,7 @@ const App: React.FC = () => {
         addPane,
         removePane,
         setActivePane,
+        updatePaneLabel,
       },
       navbar: {
         props: navbarItems,
@@ -195,7 +232,7 @@ const App: React.FC = () => {
         // можно расширить при необходимости
       },
     }),
-    [panes, activePaneId, addPane, removePane, setActivePane, navbarItems]
+    [panes, activePaneId, addPane, removePane, setActivePane, updatePaneLabel, navbarItems]
   );
 
   return (
@@ -210,7 +247,7 @@ const App: React.FC = () => {
           </React.Suspense>
         </ErrorBoundary>
 
-        {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+        {/* {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />} */}
       </QueryClientProvider>
     </AppContextProvider>
   );
