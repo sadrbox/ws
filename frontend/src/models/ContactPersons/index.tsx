@@ -165,7 +165,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-              <Field label="ФИО" name={`${formUid}_fullName`} minWidth="339px" value={formData.fullName} onChange={e => handleFieldChange("fullName", e.target.value)} disabled={isLoading} />
+              <Field label="ФИО" name={`${formUid}_fullName`} value={formData.fullName} onChange={e => handleFieldChange("fullName", e.target.value)} disabled={isLoading} />
               <OwnerLookupField
                 name={`${formUid}_owner`}
                 ownerType={formData.ownerType}
@@ -176,7 +176,6 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
                 }
                 disabled={isLoading}
                 typeLocked={!!formData.ownerType && (!!data?.organizationUuid || !!data?.counterpartyUuid)}
-                minWidth="339px"
                 allowedTypes={["organization", "counterparty"]}
               />
 
@@ -187,19 +186,19 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
               <Divider />
               <Group align="row" gap="12px" className={styles.Form}>
                 <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                  <Field label="ID" name={`${formUid}_id`} width="80px" value={String(formData.id ?? "-")} disabled />
+                  <Field label="UUID" name={`${formUid}_uuid`} width="260px" value={String(formData.uuid ?? "-")} disabled />
                 </div>
               </Group>
             </>
           )}
         </div>
+        {isEditMode && formData.uuid && (
+          <div className={styles.FormTable}>
+            <Tabs tabs={tabs} />
+          </div>
+        )}
       </div>
-      {isEditMode && formData.uuid && (
-        <div className={styles.FormTable}>
-          <Tabs tabs={tabs} />
-        </div>
-      )}
     </div>
   );
 };

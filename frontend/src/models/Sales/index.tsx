@@ -18,6 +18,8 @@ import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
+import Tabs from "src/components/Tabs";
+import SaleItemsTable from "./SaleItemsTable";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
@@ -54,6 +56,18 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
+
+  const handleTotalChange = useCallback((total: number) => {
+    setFormData(prev => ({ ...prev, amount: String(total) }));
+  }, []);
+
+  const tabs = useMemo(() => [
+    {
+      id: "saleItems",
+      label: "Товары",
+      component: <SaleItemsTable saleUuid={formData.uuid || ""} disabled={isLoading} onTotalChange={handleTotalChange} />,
+    },
+  ], [formData.uuid, isLoading, handleTotalChange]);
 
   const loadFormData = useCallback(async (entityUuid: string) => {
     setIsLoading(true); setError(null);
@@ -121,7 +135,18 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
           <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
           <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
         </div></Group></>}
-      </div></div>
+      </div>
+        {/* Табличная часть — Товары */}
+        {isEditMode && formData.uuid ? (
+          <div className={styles.FormTable}>
+            <Tabs tabs={tabs} />
+          </div>
+        ) : (
+          <div style={{ padding: "16px 0", color: "#999", fontSize: 13, borderTop: "1px dotted #ccc", marginTop: 4 }}>
+            Сохраните документ для добавления товаров
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -24,6 +24,7 @@ import { TDataItem } from "src/components/Table/types";
 import { ActivityHistoriesList } from "src/models/ActivityHistories";
 import { CounterpartiesList } from "src/models/Counterparties";
 import { uniqueId } from 'lodash';
+import { ContactPersonsList } from "src/models/ContactPersons";
 
 export const getComponentName = (node: TComponentNode): string => {
   if (node == null) return "Unknown";
@@ -202,10 +203,10 @@ const App: React.FC = () => {
   // ────────────────────────────────────────────────
 
   useEffect(() => {
-    // Открываем CounterpartiesList при монтировании приложения
+    // Открываем ActivityHistoriesList при монтировании приложения
     addPane({
-      component: CounterpartiesList,
-      label: getTranslation("CounterpartiesList") || "CounterpartiesList",
+      component: ActivityHistoriesList,
+      label: getTranslation("ActivityHistoriesList") || "ActivityHistoriesList",
     });
   }, []);
 

@@ -216,6 +216,11 @@
 	"CashExpenseOrdersList": "РКО",
 	"CashExpenseOrdersList_part": "РКО",
 
+	"BrandsList": "Бренды",
+	"BrandsList_part": "Бренды",
+	"ProductsList": "Номенклатура",
+	"ProductsList_part": "Номенклатура",
+
 	"documentNumber": "Номер документа",
 	"documentDate": "Дата документа",
 	"amount": "Сумма",

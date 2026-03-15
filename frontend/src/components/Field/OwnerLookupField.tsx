@@ -63,7 +63,7 @@ const OwnerLookupField: FC<OwnerLookupFieldProps> = ({
   onOwnerChange,
   disabled = false,
   name,
-  minWidth = "339px",
+  minWidth = "300px",
   typeLocked = false,
   allowedTypes,
 }) => {

@@ -343,6 +343,7 @@ model Sale {
 
   organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+  saleItems    SaleItem[]
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -570,4 +571,63 @@ model CashExpenseOrder {
   @@index([counterpartyUuid])
   @@index([documentDate])
   @@map("cash_expense_orders")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Справочник Бренды
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Brand {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  shortName String
+
+  products Product[]
+
+  @@map("brands")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Справочник Номенклатура (Товары)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Product {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  shortName String
+  sku       String? // артикул
+
+  brandUuid String?
+  brand     Brand?  @relation(fields: [brandUuid], references: [uuid], onDelete: SetNull)
+
+  saleItems SaleItem[]
+
+  @@index([brandUuid])
+  @@map("products")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Строки реализации товара (табличная часть Sale)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model SaleItem {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  lineNumber Int     @default(0) // порядковый номер строки
+  quantity   Decimal @default(0) @db.Decimal(18, 4)
+  price      Decimal @default(0) @db.Decimal(18, 2)
+  amount     Decimal @default(0) @db.Decimal(18, 2) // кол-во × цена
+
+  productUuid String?
+  product     Product? @relation(fields: [productUuid], references: [uuid], onDelete: SetNull)
+
+  saleUuid String
+  sale     Sale   @relation(fields: [saleUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([saleUuid])
+  @@index([productUuid])
+  @@map("sale_items")
 }

@@ -27,6 +27,8 @@ import { ScheduledTasksList } from 'src/models/ScheduledTasks';
 import { InventoryTransfersList } from 'src/models/InventoryTransfers';
 import { CashReceiptOrdersList } from 'src/models/CashReceiptOrders';
 import { CashExpenseOrdersList } from 'src/models/CashExpenseOrders';
+import { BrandsList } from 'src/models/Brands';
+import { ProductsList } from 'src/models/Products';
 import NotificationToast from 'src/components/NotificationToast';
 
 type TypeGroupProps = {
@@ -260,13 +262,11 @@ export const Navbar: React.FC = () => {
     <>
       <div className={styles.NavbarWrapper}>
         {props.map(nav => (
-          <div key={nav.id}>
-            <a href="#"
-              onClick={() => toggleNav(nav.id)}
-              className={[styles.NavbarItem, nav.isActive && styles.Active].join(" ")}>
-              {nav.title}
-            </a>
-          </div>
+          <a key={nav.id} href="#"
+            onClick={() => toggleNav(nav.id)}
+            className={[styles.NavbarItem, nav.isActive && styles.Active].join(" ")}>
+            {nav.title}
+          </a>
         ))}
         <div style={{ marginLeft: "auto", marginRight: "12px" }}>
           <NotificationToast />
@@ -316,6 +316,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
               <li onClick={() => addPane({ component: ContractsList })}>Договора</li>
               <li onClick={() => addPane({ component: BankAccountsList })}>Банковские счета</li>
               <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>
+              <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>
+              <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>
             </ul>
           </div>
         </div>

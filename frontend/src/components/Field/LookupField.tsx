@@ -54,6 +54,8 @@ const listComponentRegistry: Record<string, () => Promise<Record<string, any>>> 
   activityhistories: () => import("src/models/ActivityHistories"),
   todos: () => import("src/models/Todos"),
   notifications: () => import("src/models/Notifications"),
+  brands: () => import("src/models/Brands"),
+  products: () => import("src/models/Products"),
 };
 
 const listComponentNameMap: Record<string, string> = {
@@ -68,6 +70,8 @@ const listComponentNameMap: Record<string, string> = {
   activityhistories: "ActivityHistoriesList",
   todos: "TodosList",
   notifications: "NotificationsList",
+  brands: "BrandsList",
+  products: "ProductsList",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -40,6 +40,8 @@ body {
 }
 
 .NavbarWrapper {
+	// gap: 12px;
+	// padding-left: 6px;
 	position: sticky;
 	top: 0px;
 	z-index: 4;
@@ -54,24 +56,27 @@ body {
 	// position: relative;
 	// gap: 6px;
 	// z-index: 1;
+	height: $heightFieldInput + 21px;
 	.NavbarItem {
+		height: 100%;
 		user-select: none;
 		// background-color: rgba($color3, 0.8);
 		// font-weight: bold;
 		color: $color3;
-		border-radius: $radius3;
+		// border-radius: $radius3;
 		// font-size: 110%;
 		// text-decoration: underline;
 		font-weight: 500;
 		// text-shadow: 0px 0px 1px 1px #000;
-		margin: 6px;
-		padding: 6px;
+		margin: 0px;
+		padding: 0 12px;
 		display: flex;
 		flex-direction: row;
 		align-items: center;
 		// &:not(:last-child) {
 		// 	margin-left: 12px;
 		// }
+		// background-color: rgba($color3, 0.1);
 	}
 	.Active {
 		background-color: rgba($color3, 0.8);
@@ -88,7 +93,7 @@ body {
 	bottom: 0;
 	left: 0px;
 	right: 0;
-	padding: 12px;
+	padding: 6px;
 	// margin: 6px;
 	// height: 50%;
 	// width: 60%;
@@ -106,8 +111,15 @@ body {
 	overflow-y: auto;
 
 	h1 {
-		margin: 0;
-		padding: 0 0 8px 0;
+		margin: 0px 0 0px 0px;
+		padding: 0px;
+		font-weight: bold;
+		// font-family: Arial, Helvetica, sans-serif;
+		font-size: 120%;
+		color: $color6;
+		display: flex;
+		// flex: 1;
+		line-height: $heightFieldInput + 2;
 		font-weight: 600;
 		font-size: 15px;
 		color: $color6;
@@ -192,7 +204,7 @@ body {
 		overflow-y: auto;
 		// padding: 0px 6px;
 		// margin-bottom: 6px;
-		padding: 6px 12px 0px 12px;
+		padding: 6px 6px 0px 6px;
 		// overflow-y: auto;
 		display: none;
 		gap: 6px;
@@ -244,7 +256,7 @@ body {
 .PaneTabWrapper {
 	overflow-x: auto;
 	overflow-y: hidden;
-	padding: 6px 12px;
+	padding: 6px 6px;
 	// height: 50px;
 	display: flex;
 	// border-top: 1px solid $color10; /* Линия под вкладками */
@@ -464,8 +476,9 @@ body {
 	gap: 6px;
 	flex-direction: column;
 	display: flex;
-	// container-type: size;
-	// flex: 1;
+	container-type: size;
+	flex: 1;
+	// max-width: 280px;
 	// min-width: 400px;
 	// margin: 3px;
 	// padding: 3px;
@@ -477,14 +490,20 @@ body {
 	// flex: 1;
 	flex-direction: row;
 	// transition: all 2s ease;
-	gap: 12px;
+
 	// display: grid;
 	// grid-template-columns: min-content 1fr;
 	// grid-template-rows: 1fr;
 	// container-type: size;
 	margin-bottom: 6px;
 	border-bottom: 1px dotted $color5;
-	@container (max-width:900px) {
+	@container (min-width: 900px) {
+		flex-direction: row;
+		gap: 12px;
+		// grid-template-columns: min-content 1fr;
+		// grid-template-rows: 1fr;
+	}
+	@container (max-width: 900px) {
 		flex-direction: column;
 		// grid-template-columns: 1fr;
 		// grid-template-rows: min-content;
@@ -496,8 +515,8 @@ body {
 	gap: 12px;
 	padding: 12px 0;
 	// margin-top: 12px;
-	min-width: 380px;
-	max-width: 400px;
+	min-width: 315px;
+	// max-width: 300px;
 	// border-top: 1px dotted $color5;
 	// border-bottom: 1px dotted $color5;
 }
@@ -510,6 +529,11 @@ body {
 	// flex: 1;
 	display: flex; // border: 1px solid red;
 	// height: 50cqi;
+	// position: sticky;
+	// top: 0;
+	// background: $color33;
+	// box-shadow: 1px 1px 3px rgba($color6, 0.8);
+	// padding-bottom: 12px;
 }
 
 .FormTable {

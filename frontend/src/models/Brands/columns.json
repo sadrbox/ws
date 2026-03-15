@@ -1,0 +1,41 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"name": "Id",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"position": 1,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"type": "string",
+		"name": "UUID",
+		"width": "0px",
+		"minWidth": "0px",
+		"alignment": "left",
+		"hint": "UUID",
+		"visible": false,
+		"position": 2,
+		"filter": false,
+		"inlist": false
+	},
+	{
+		"identifier": "shortName",
+		"type": "string",
+		"name": "Наименование",
+		"width": "300px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Наименование бренда",
+		"visible": true,
+		"position": 3,
+		"filter": false,
+		"inlist": true
+	}
+]

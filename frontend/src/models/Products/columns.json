@@ -1,0 +1,67 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"name": "Id",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"position": 1,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"type": "string",
+		"name": "UUID",
+		"width": "0px",
+		"minWidth": "0px",
+		"alignment": "left",
+		"hint": "UUID",
+		"visible": false,
+		"position": 2,
+		"filter": false,
+		"inlist": false
+	},
+	{
+		"identifier": "shortName",
+		"type": "string",
+		"name": "Наименование",
+		"width": "250px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Наименование номенклатуры",
+		"visible": true,
+		"position": 3,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "sku",
+		"type": "string",
+		"name": "Артикул",
+		"width": "130px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Артикул",
+		"visible": true,
+		"position": 4,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "brand.shortName",
+		"type": "string",
+		"name": "Бренд",
+		"width": "180px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Бренд",
+		"visible": true,
+		"position": 5,
+		"filter": false,
+		"inlist": true
+	}
+]

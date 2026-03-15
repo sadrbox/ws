@@ -29,6 +29,9 @@ import scheduledTasksRouter from "./api/router/scheduledtasks.js";
 import inventoryTransfersRouter from "./api/router/inventorytransfers.js";
 import cashReceiptOrdersRouter from "./api/router/cashreceiptorders.js";
 import cashExpenseOrdersRouter from "./api/router/cashexpenseorders.js";
+import brandsRouter from "./api/router/brands.js";
+import productsRouter from "./api/router/products.js";
+import saleItemsRouter from "./api/router/saleitems.js";
 
 // const prisma = new PrismaClient();
 // const prisma = new PrismaClient();
@@ -61,6 +64,9 @@ app.use("/api/v1", scheduledTasksRouter);
 app.use("/api/v1", inventoryTransfersRouter);
 app.use("/api/v1", cashReceiptOrdersRouter);
 app.use("/api/v1", cashExpenseOrdersRouter);
+app.use("/api/v1", brandsRouter);
+app.use("/api/v1", productsRouter);
+app.use("/api/v1", saleItemsRouter);
 
 // Логирование запросов (опционально)
 app.use((req, res, next) => {
