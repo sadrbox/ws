@@ -12,7 +12,6 @@ const INCLUDE = {
 	counterparty: true,
 	curator: true,
 	executor: true,
-	files: true,
 };
 
 // ============================================

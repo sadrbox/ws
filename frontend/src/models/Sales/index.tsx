@@ -11,15 +11,15 @@ import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useIn
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
 import { Divider, Field, FieldDateTime, FieldSelect } from "src/components/Field";
-import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
 import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
-import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
-import Tabs from "src/components/Tabs";
+import LookupField from "src/components/Field/LookupField";
 import SaleItemsTable from "./SaleItemsTable";
+import { Group } from "src/components/UI";
+import Tabs from "src/components/Tabs";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
@@ -34,9 +34,10 @@ const STATUS_OPTIONS = [
 interface TFormData {
   id?: number; uuid?: string;
   documentNumber: string; documentDate: string; description: string; amount: string; status: string;
-  ownerType: OwnerType; ownerUuid: string; ownerName: string;
+  organizationUuid: string; organizationName: string;
+  counterpartyUuid: string; counterpartyName: string;
 }
-const EMPTY_FORM: TFormData = { documentNumber: "", documentDate: "", description: "", amount: "", status: "draft", ownerType: "", ownerUuid: "", ownerName: "" };
+const EMPTY_FORM: TFormData = { documentNumber: "", documentDate: "", description: "", amount: "", status: "draft", organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "" };
 
 const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
@@ -46,9 +47,8 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const buildInitialForm = useCallback((): TFormData => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
-    const name = (data.ownerName as string) || "";
-    if (data.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = data.organizationUuid as string; init.ownerName = name; }
-    else if (data.counterpartyUuid) { init.ownerType = "counterparty"; init.ownerUuid = data.counterpartyUuid as string; init.ownerName = name; }
+    if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; init.organizationName = (data.ownerName as string) || ""; }
+    if (data.counterpartyUuid) { init.counterpartyUuid = data.counterpartyUuid as string; init.counterpartyName = (data.ownerName as string) || ""; }
     return init;
   }, [data]);
 
@@ -57,49 +57,100 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
 
+  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => { setFormData(prev => ({ ...prev, [field]: value })); }, []);
+
   const handleTotalChange = useCallback((total: number) => {
     setFormData(prev => ({ ...prev, amount: String(total) }));
   }, []);
 
   const tabs = useMemo(() => [
     {
-      id: "saleItems",
-      label: "Товары",
-      component: <SaleItemsTable saleUuid={formData.uuid || ""} disabled={isLoading} onTotalChange={handleTotalChange} />,
+      id: "tab-details",
+      label: translate("general") || "Общие сведения",
+      component: (
+        <div className={styles.FormBodyParts}>
+          <Group align="row" gap="12px" className={styles.Form}>
+            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "16px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: 300 }}>
+                <Field label="Номер" name={`${formUid}_docNum`} value={formData.documentNumber} onChange={e => handleFieldChange("documentNumber", e.target.value)} disabled={isLoading} />
+                <FieldDateTime label="Дата" name={`${formUid}_docDate`} value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} />
+                <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
+                <Field label="Сумма" name={`${formUid}_amount`} value={formData.amount} onChange={e => handleFieldChange("amount", e.target.value)} disabled={isLoading} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: 300 }}>
+                <LookupField label="Организация" name={`${formUid}_org`} value={formData.organizationUuid} displayValue={formData.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))} onClear={() => setFormData(prev => ({ ...prev, organizationUuid: "", organizationName: "" }))} disabled={isLoading} />
+                <LookupField label="Контрагент" name={`${formUid}_cpty`} value={formData.counterpartyUuid} displayValue={formData.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, counterpartyUuid: u, counterpartyName: d }))} onClear={() => setFormData(prev => ({ ...prev, counterpartyUuid: "", counterpartyName: "" }))} disabled={isLoading} />
+                <Field label="Описание" name={`${formUid}_desc`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} />
+              </div>
+            </div>
+          </Group>
+          {isEditMode && (
+            <>
+              <Divider />
+              <Group align="row" gap="12px" className={styles.Form}>
+                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                </div>
+              </Group>
+            </>
+          )}
+        </div>
+      ),
     },
-  ], [formData.uuid, isLoading, handleTotalChange]);
+    {
+      id: "tab-items",
+      label: "Товары",
+      component: isEditMode && formData.uuid ? (
+        <SaleItemsTable saleUuid={formData.uuid} disabled={isLoading} onTotalChange={handleTotalChange} />
+      ) : (
+        <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
+          Сохраните документ для добавления товаров
+        </div>
+      ),
+    },
+  ], [formUid, formData, isLoading, isEditMode, handleFieldChange, handleTotalChange, data]);
 
   const loadFormData = useCallback(async (entityUuid: string) => {
     setIsLoading(true); setError(null);
     try {
       const res = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
       const d = res.data?.item ?? res.data;
-      let oType: OwnerType = "", oUuid = "", oName = "";
-      if (d.organizationUuid) { oType = "organization"; oUuid = d.organizationUuid; oName = d.organization?.shortName ?? ""; }
-      else if (d.counterpartyUuid) { oType = "counterparty"; oUuid = d.counterpartyUuid; oName = d.counterparty?.shortName ?? ""; }
-      setFormData({ documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 16) ?? "", description: d.description ?? "", amount: d.amount != null ? String(d.amount) : "", status: d.status ?? "draft", ownerType: oType, ownerUuid: oUuid, ownerName: oName, id: d.id, uuid: d.uuid });
+      setFormData({
+        documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 16) ?? "",
+        description: d.description ?? "", amount: d.amount != null ? String(d.amount) : "", status: d.status ?? "draft",
+        organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? "",
+        counterpartyUuid: d.counterpartyUuid ?? "", counterpartyName: d.counterparty?.shortName ?? "",
+        id: d.id, uuid: d.uuid,
+      });
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); } finally { setIsLoading(false); }
   }, []);
 
   useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
-  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => { setFormData(prev => ({ ...prev, [field]: value })); }, []);
 
   const submit = useCallback(async (): Promise<boolean> => {
     setIsLoading(true); setError(null);
     const payload: Record<string, unknown> = {
       documentNumber: formData.documentNumber?.trim() || null, documentDate: formData.documentDate || null,
       description: formData.description?.trim() || null, amount: formData.amount ? parseFloat(formData.amount) : null,
-      status: formData.status || "draft", ownerName: formData.ownerName?.trim() || null,
-      organizationUuid: formData.ownerType === "organization" ? (formData.ownerUuid || null) : null,
-      counterpartyUuid: formData.ownerType === "counterparty" ? (formData.ownerUuid || null) : null,
+      status: formData.status || "draft",
+      organizationUuid: formData.organizationUuid || null,
+      counterpartyUuid: formData.counterpartyUuid || null,
     };
     try {
-      const res = isEditMode && uuid ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid}`, payload) : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
+      const res = isEditMode && (uuid || formData.uuid) ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload) : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = res.data?.item ?? res.data;
-      let oType: OwnerType = formData.ownerType, oUuid = formData.ownerUuid, oName = formData.ownerName;
-      if (saved.organizationUuid) { oType = "organization"; oUuid = saved.organizationUuid; oName = saved.organization?.shortName ?? oName; }
-      else if (saved.counterpartyUuid) { oType = "counterparty"; oUuid = saved.counterpartyUuid; oName = saved.counterparty?.shortName ?? oName; }
-      setFormData(prev => ({ ...prev, ...saved, documentNumber: saved.documentNumber ?? "", documentDate: saved.documentDate?.slice(0, 16) ?? "", description: saved.description ?? "", amount: saved.amount != null ? String(saved.amount) : "", status: saved.status ?? "draft", ownerType: oType, ownerUuid: oUuid, ownerName: oName }));
+      setFormData(prev => ({
+        ...prev,
+        documentNumber: saved.documentNumber ?? "", documentDate: saved.documentDate?.slice(0, 16) ?? "",
+        description: saved.description ?? "", amount: saved.amount != null ? String(saved.amount) : "",
+        status: saved.status ?? "draft",
+        organizationUuid: saved.organizationUuid ?? prev.organizationUuid,
+        organizationName: saved.organization?.shortName ?? prev.organizationName,
+        counterpartyUuid: saved.counterpartyUuid ?? prev.counterpartyUuid,
+        counterpartyName: saved.counterparty?.shortName ?? prev.counterpartyName,
+        id: saved.id, uuid: saved.uuid,
+      }));
       setIsEditMode(true);
       if (uniqId) updatePaneLabel(uniqId, `${translate(LIST_NAME) || FORM_LABEL}: ${saved.documentNumber || "?"} • ${saved.id ?? "?"}`);
       onSave?.(); return true;
@@ -112,40 +163,18 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
 
   return (
     <div className={styles.FormWrapper}>
+      {/* ═══ Панель кнопок ═══ */}
       <div className={styles.FormPanel}><div className={styles.TablePanelLeft}><div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
         <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button><Divider />
         <Button onClick={handleSave} disabled={isLoading}><span>Сохранить</span></Button>
         <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button><Divider />
         {isEditMode && <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}><img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} /></ButtonImage>}
       </div></div><div className={styles.TablePanelRight} /></div>
-      {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><div className={styles.FormBodyParts}>
-        <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-          <Field label="Номер документа" name={`${formUid}_docNum`} minWidth="339px" value={formData.documentNumber} onChange={e => handleFieldChange("documentNumber", e.target.value)} disabled={isLoading} />
-          <FieldDateTime label="Дата документа" name={`${formUid}_docDate`} minWidth="200px" value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} />
-          <Field label="Сумма" name={`${formUid}_amount`} minWidth="200px" value={formData.amount} onChange={e => handleFieldChange("amount", e.target.value)} disabled={isLoading} />
-          <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
-          <OwnerLookupField name={`${formUid}_owner`} ownerType={formData.ownerType} ownerUuid={formData.ownerUuid} ownerName={formData.ownerName} onOwnerChange={({ ownerType, ownerUuid, ownerName }) => setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))} disabled={isLoading} typeLocked={!!formData.ownerType && (isEditMode || !!data?.organizationUuid || !!data?.counterpartyUuid)} minWidth="339px" />
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 339 }}>
-            <label style={{ fontSize: 13, color: "#222" }} htmlFor={`${formUid}_desc`}>Описание</label>
-            <textarea id={`${formUid}_desc`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} style={{ minWidth: 339, minHeight: 80, padding: 8, borderRadius: 4 }} />
-          </div>
-        </div></Group>
-        {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-          <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-          <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-        </div></Group></>}
-      </div>
-        {/* Табличная часть — Товары */}
-        {isEditMode && formData.uuid ? (
-          <div className={styles.FormTable}>
-            <Tabs tabs={tabs} />
-          </div>
-        ) : (
-          <div style={{ padding: "16px 0", color: "#999", fontSize: 13, borderTop: "1px dotted #ccc", marginTop: 4 }}>
-            Сохраните документ для добавления товаров
-          </div>
-        )}
+
+      {error && <div style={{ color: "red", padding: "4px 12px", background: "#ffebee", borderRadius: 4, fontSize: 13 }}>{error}</div>}
+
+      <div className={styles.FormBody}>
+        <Tabs tabs={tabs} />
       </div>
     </div>
   );

@@ -29,6 +29,8 @@ import { CashReceiptOrdersList } from 'src/models/CashReceiptOrders';
 import { CashExpenseOrdersList } from 'src/models/CashExpenseOrders';
 import { BrandsList } from 'src/models/Brands';
 import { ProductsList } from 'src/models/Products';
+import { CurrenciesList } from 'src/models/Currencies';
+import { EmployeesList } from 'src/models/Employees';
 import NotificationToast from 'src/components/NotificationToast';
 
 type TypeGroupProps = {
@@ -268,8 +270,23 @@ export const Navbar: React.FC = () => {
             {nav.title}
           </a>
         ))}
-        <div style={{ marginLeft: "auto", marginRight: "12px" }}>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "12px", marginRight: "12px" }}>
           <NotificationToast />
+          {context.auth?.user && (
+            <span style={{ fontSize: "12px", color: "#666", whiteSpace: "nowrap" }}>
+              {context.auth.user.employee?.fullName || context.auth.user.username}
+            </span>
+          )}
+          {context.auth?.logout && (
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); context.auth.logout(); }}
+              style={{ fontSize: "12px", color: "#888", whiteSpace: "nowrap", textDecoration: "none" }}
+              title="Выйти из системы"
+            >
+              Выход
+            </a>
+          )}
         </div>
       </div>
       {activeNav && <div className={styles.NavbarOverlayWrapper}>{activeNav?.component}</div>}
@@ -318,6 +335,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
               <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>
               <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>
               <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>
+              <li onClick={() => addPane({ component: CurrenciesList })}>Валюты</li>
+              <li onClick={() => addPane({ component: EmployeesList })}>Сотрудники</li>
             </ul>
           </div>
         </div>

@@ -27,6 +27,20 @@ export type TypeAppContextProps = {
 		props: TypeNavbarProps[];
 		setProps: Dispatch<SetStateAction<TypeNavbarProps[]>>;
 	};
+	auth: {
+		user: {
+			uuid: string;
+			username: string;
+			email?: string | null;
+			employee?: {
+				uuid: string;
+				fullName: string | null;
+				iin?: string | null;
+				position?: string | null;
+			} | null;
+		} | null;
+		logout: () => void;
+	};
 };
 
 export type TypeNavbarProps = {

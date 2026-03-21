@@ -5,6 +5,9 @@ import { prisma } from "../../prisma/prisma-client.js";
 const router = express.Router();
 router.use(cors());
 
+// Текстовые поля для полнотекстового поиска
+const TEXT_FIELDS = ["shortName", "iban", "bik", "bankName", "ownerName"];
+
 // ============================================
 // GET /bankaccounts — курсорная пагинация
 // ============================================
@@ -67,15 +70,6 @@ router.get("/bankaccounts", async (req, res) => {
 		}
 
 		// ── Поиск ─────────────────────────────────────────────────────────────
-		const TEXT_FIELDS = [
-			"shortName",
-			"iban",
-			"bik",
-			"bankName",
-			"currency",
-			"accountType",
-			"ownerName",
-		];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 
@@ -140,6 +134,7 @@ router.get("/bankaccounts", async (req, res) => {
 			include: {
 				organization: true,
 				counterparty: true,
+				currency: true,
 			},
 			orderBy,
 		};
@@ -190,6 +185,7 @@ router.get("/bankaccounts/:id", async (req, res) => {
 			include: {
 				organization: true,
 				counterparty: true,
+				currency: true,
 			},
 		});
 
@@ -216,8 +212,7 @@ router.post("/bankaccounts", async (req, res) => {
 			iban,
 			bik,
 			bankName,
-			currency,
-			accountType,
+			currencyUuid,
 			ownerName,
 			organizationUuid,
 			counterpartyUuid,
@@ -230,14 +225,22 @@ router.post("/bankaccounts", async (req, res) => {
 			});
 		}
 
+		// Банковский счёт может принадлежать только одному владельцу
+		if (organizationUuid && counterpartyUuid) {
+			return res.status(400).json({
+				success: false,
+				message:
+					"Банковский счёт может принадлежать только Организации или Контрагенту, но не обоим одновременно",
+			});
+		}
+
 		const item = await prisma.bankAccount.create({
 			data: {
 				shortName: shortName?.trim() ?? null,
 				iban: iban.trim(),
 				bik: bik?.trim() ?? null,
 				bankName: bankName?.trim() ?? null,
-				currency: currency?.trim() ?? null,
-				accountType: accountType?.trim() ?? null,
+				currencyUuid: currencyUuid ?? null,
 				ownerName: ownerName?.trim() ?? null,
 				organizationUuid: organizationUuid ?? null,
 				counterpartyUuid: counterpartyUuid ?? null,
@@ -245,6 +248,7 @@ router.post("/bankaccounts", async (req, res) => {
 			include: {
 				organization: true,
 				counterparty: true,
+				currency: true,
 			},
 		});
 
@@ -276,21 +280,31 @@ router.put("/bankaccounts/:id", async (req, res) => {
 			iban,
 			bik,
 			bankName,
-			currency,
-			accountType,
+			currencyUuid,
 			ownerName,
 			organizationUuid,
 			counterpartyUuid,
 		} = req.body;
 		const data = {};
 
+		// Банковский счёт может принадлежать только одному владельцу
+		const effectiveOrgUuid =
+			organizationUuid !== undefined ? organizationUuid : undefined;
+		const effectiveCpUuid =
+			counterpartyUuid !== undefined ? counterpartyUuid : undefined;
+		if (effectiveOrgUuid && effectiveCpUuid) {
+			return res.status(400).json({
+				success: false,
+				message:
+					"Банковский счёт может принадлежать только Организации или Контрагенту, но не обоим одновременно",
+			});
+		}
+
 		if (shortName !== undefined) data.shortName = shortName?.trim() ?? null;
 		if (iban !== undefined) data.iban = iban.trim();
 		if (bik !== undefined) data.bik = bik?.trim() ?? null;
 		if (bankName !== undefined) data.bankName = bankName?.trim() ?? null;
-		if (currency !== undefined) data.currency = currency?.trim() ?? null;
-		if (accountType !== undefined)
-			data.accountType = accountType?.trim() ?? null;
+		if (currencyUuid !== undefined) data.currencyUuid = currencyUuid ?? null;
 		if (ownerName !== undefined) data.ownerName = ownerName?.trim() ?? null;
 		if (organizationUuid !== undefined)
 			data.organizationUuid = organizationUuid ?? null;
@@ -303,6 +317,7 @@ router.put("/bankaccounts/:id", async (req, res) => {
 			include: {
 				organization: true,
 				counterparty: true,
+				currency: true,
 			},
 		});
 

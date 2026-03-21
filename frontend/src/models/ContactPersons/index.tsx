@@ -30,13 +30,14 @@ interface TFormData {
   firstName: string;
   lastName: string;
   middleName: string;
+  comment: string;
   ownerType: OwnerType;
   ownerUuid: string;
   ownerName: string;
 }
 
 const EMPTY_FORM: TFormData = {
-  fullName: "", firstName: "", lastName: "", middleName: "",
+  fullName: "", firstName: "", lastName: "", middleName: "", comment: "",
   ownerType: "", ownerUuid: "", ownerName: "",
 };
 
@@ -66,9 +67,51 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
 
-  const tabs = useMemo(() => [
-    { id: 'contacts', label: 'Контакты', component: <ContactsList ownerUuid={formData.uuid} ownerField="contactPersonUuid" ownerName={formData.fullName} /> },
-  ], [formData.uuid, formData.fullName]);
+  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => setFormData(prev => ({ ...prev, [field]: value })), []);
+
+  const tabs = useMemo(() => {
+    const t: { id: string; label: string; component: React.ReactNode }[] = [
+      {
+        id: 'general', label: translate("general") || 'Общие сведения', component: (
+          <div className={styles.FormBodyParts}>
+            <Group align="row" gap="12px" className={styles.Form}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                <Field label="ФИО" name={`${formUid}_fullName`} value={formData.fullName} onChange={e => handleFieldChange("fullName", e.target.value)} disabled={isLoading} />
+                <OwnerLookupField
+                  name={`${formUid}_owner`}
+                  ownerType={formData.ownerType}
+                  ownerUuid={formData.ownerUuid}
+                  ownerName={formData.ownerName}
+                  onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
+                    setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))
+                  }
+                  disabled={isLoading}
+                  typeLocked={!uuid && (!!data?.organizationUuid || !!data?.counterpartyUuid)}
+                  allowedTypes={["organization", "counterparty"]}
+                />
+                <Field label="Комментарий" name={`${formUid}_comment`} value={formData.comment} onChange={e => handleFieldChange("comment", e.target.value)} disabled={isLoading} />
+              </div>
+            </Group>
+            {isEditMode && (
+              <>
+                <Divider />
+                <Group align="row" gap="12px" className={styles.Form}>
+                  <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                    <Field label="ID" name={`${formUid}_id`} width="80px" value={String(formData.id ?? "-")} disabled />
+                    <Field label="UUID" name={`${formUid}_uuid`} width="260px" value={String(formData.uuid ?? "-")} disabled />
+                  </div>
+                </Group>
+              </>
+            )}
+          </div>
+        ),
+      },
+    ];
+    if (isEditMode && formData.uuid) {
+      t.push({ id: 'contacts', label: 'Контакты', component: <ContactsList ownerUuid={formData.uuid} ownerField="contactPersonUuid" ownerName={formData.fullName} /> });
+    }
+    return t;
+  }, [formData, formUid, isLoading, isEditMode, handleFieldChange, data]);
 
   const loadFormData = useCallback(async (entityUuid: string) => {
     setIsLoading(true); setError(null);
@@ -86,6 +129,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
       setFormData({
         fullName: d.fullName ?? `${d.lastName || ""} ${d.firstName || ""}`.trim(),
         firstName: d.firstName ?? "", lastName: d.lastName ?? "", middleName: d.middleName ?? "",
+        comment: d.comment ?? "",
         ownerType: oType, ownerUuid: oUuid, ownerName: oName,
         id: d.id, uuid: d.uuid,
       });
@@ -95,8 +139,6 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
 
   useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
 
-  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => setFormData(prev => ({ ...prev, [field]: value })), []);
-
   const submit = useCallback(async (): Promise<boolean> => {
     setIsLoading(true); setError(null);
     const payload: Record<string, unknown> = {
@@ -104,13 +146,14 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
       lastName: formData.lastName || null,
       middleName: formData.middleName || null,
       fullName: formData.fullName?.trim() || null,
+      comment: formData.comment?.trim() || null,
       ownerName: formData.ownerName?.trim() || null,
       organizationUuid: formData.ownerType === "organization" ? (formData.ownerUuid || null) : null,
       counterpartyUuid: formData.ownerType === "counterparty" ? (formData.ownerUuid || null) : null,
     };
     try {
-      const response = isEditMode && uuid
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid}`, payload)
+      const response = isEditMode && (uuid || formData.uuid)
+        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = response.data?.item ?? response.data;
       let oType: OwnerType = formData.ownerType;
@@ -125,6 +168,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
         ...prev, ...saved,
         fullName: saved.fullName ?? prev.fullName,
         firstName: saved.firstName ?? "", lastName: saved.lastName ?? "", middleName: saved.middleName ?? "",
+        comment: saved.comment ?? "",
         ownerType: oType, ownerUuid: oUuid, ownerName: oName,
       }));
       setIsEditMode(true);
@@ -162,42 +206,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
       </div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
       <div className={styles.FormBody}>
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-              <Field label="ФИО" name={`${formUid}_fullName`} value={formData.fullName} onChange={e => handleFieldChange("fullName", e.target.value)} disabled={isLoading} />
-              <OwnerLookupField
-                name={`${formUid}_owner`}
-                ownerType={formData.ownerType}
-                ownerUuid={formData.ownerUuid}
-                ownerName={formData.ownerName}
-                onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
-                  setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))
-                }
-                disabled={isLoading}
-                typeLocked={!!formData.ownerType && (!!data?.organizationUuid || !!data?.counterpartyUuid)}
-                allowedTypes={["organization", "counterparty"]}
-              />
-
-            </div>
-          </Group>
-          {isEditMode && (
-            <>
-              <Divider />
-              <Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-                  <Field label="ID" name={`${formUid}_id`} width="80px" value={String(formData.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${formUid}_uuid`} width="260px" value={String(formData.uuid ?? "-")} disabled />
-                </div>
-              </Group>
-            </>
-          )}
-        </div>
-        {isEditMode && formData.uuid && (
-          <div className={styles.FormTable}>
-            <Tabs tabs={tabs} />
-          </div>
-        )}
+        <Tabs tabs={tabs} />
       </div>
     </div>
   );

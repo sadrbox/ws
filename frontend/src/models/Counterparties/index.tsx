@@ -48,11 +48,39 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
 
+  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
   const tabs = useMemo(() => [
+    {
+      id: 'tab0', label: translate("general") || 'Общие сведения', component: (
+        <div className={styles.FormBodyParts}>
+          <Group align="row" gap="12px" className={styles.Form}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+              <Field label="Наименование" name={`${formUid}_shortName`} minWidth="339px" value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
+              <Field label="Полное наименование" name={`${formUid}_displayName`} minWidth="339px" value={formData.displayName} onChange={e => handleFieldChange("displayName", e.target.value)} disabled={isLoading} />
+              <Field label="БИН / ИНН *" name={`${formUid}_bin`} minWidth="339px" value={formData.bin} onChange={e => handleFieldChange("bin", e.target.value)} disabled={isLoading || isEditMode} />
+            </div>
+          </Group>
+          {isEditMode && (
+            <>
+              <Divider />
+              <Group align="row" gap="12px" className={styles.Form}>
+                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                </div>
+              </Group>
+            </>
+          )}
+        </div>
+      ),
+    },
     { id: 'tab1', label: 'Банковские счета', component: <BankAccountsList ownerUuid={formData.uuid} ownerField="counterpartyUuid" ownerName={formData.shortName} /> },
     { id: 'tab2', label: 'Договора', component: <ContractsList ownerUuid={formData.uuid} ownerField="counterpartyUuid" ownerName={formData.shortName} /> },
     { id: 'tab3', label: 'Контакты', component: <ContactsList ownerUuid={formData.uuid} ownerField="counterpartyUuid" ownerName={formData.shortName} /> },
-  ], [formData.uuid, formData.shortName]);
+  ], [formData, formUid, isLoading, isEditMode, handleFieldChange]);
 
 
   // ── Загрузка ──────────────────────────────────────────────────────────
@@ -75,10 +103,6 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
 
   useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
 
-  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  }, []);
-
   // ── Сохранение ────────────────────────────────────────────────────────
   const submit = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
@@ -98,8 +122,8 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
     };
 
     try {
-      const response = isEditMode && uuid
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid}`, payload)
+      const response = isEditMode && (uuid || formData.uuid)
+        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
 
       const saved = response.data?.item ?? response.data;
@@ -150,38 +174,8 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
       </div>
 
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-
       <div className={styles.FormBody}>
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}>
-            <Field label="БИН / ИНН *" name={`${formUid}_bin`} width="150px"
-              value={formData.bin} onChange={e => handleFieldChange("bin", e.target.value)} disabled={isLoading || isEditMode} />
-            <Field label="Наименование" name={`${formUid}_shortName`}
-              value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
-            <Field label="Полное наименование" name={`${formUid}_displayName`}
-              value={formData.displayName} onChange={e => handleFieldChange("displayName", e.target.value)} disabled={isLoading} />
-
-          </Group>
-
-          {isEditMode && (
-            <>
-              <Divider />
-              <Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                  <Field label="ID" name={`${formUid}_id`} width="60px" value={String(formData.id ?? "-")} disabled />
-                </div>
-                <Field label="UUID" name={`${formUid}_uuid`} minWidth="200px" value={String(formData.uuid ?? "-")} disabled />
-              </Group>
-            </>
-          )}
-        </div>
-
-        {/* Табы с подтаблицами */}
-        {isEditMode && formData.uuid && (
-          <div className={styles.FormTable}>
-            <Tabs tabs={tabs} />
-          </div>
-        )}
+        <Tabs tabs={tabs} />
       </div>
     </div>
   );

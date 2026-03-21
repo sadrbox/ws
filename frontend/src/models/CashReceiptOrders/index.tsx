@@ -18,6 +18,7 @@ import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
+import Tabs from "src/components/Tabs";
 
 const MODEL_ENDPOINT = "cash-receipt-orders";
 const LIST_NAME = "CashReceiptOrdersList";
@@ -78,7 +79,7 @@ const CashReceiptOrdersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniq
       counterpartyUuid: formData.ownerType === "counterparty" ? (formData.ownerUuid || null) : null,
     };
     try {
-      const res = isEditMode && uuid ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid}`, payload) : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
+      const res = isEditMode && (uuid || formData.uuid) ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload) : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = res.data?.item ?? res.data;
       let oType: OwnerType = formData.ownerType, oUuid = formData.ownerUuid, oName = formData.ownerName;
       if (saved.organizationUuid) { oType = "organization"; oUuid = saved.organizationUuid; oName = saved.organization?.shortName ?? oName; }
@@ -103,23 +104,29 @@ const CashReceiptOrdersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniq
         {isEditMode && <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}><img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} /></ButtonImage>}
       </div></div><div className={styles.TablePanelRight} /></div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><div className={styles.FormBodyParts}>
-        <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-          <Field label="Номер документа" name={`${formUid}_docNum`} minWidth="339px" value={formData.documentNumber} onChange={e => handleFieldChange("documentNumber", e.target.value)} disabled={isLoading} />
-          <FieldDateTime label="Дата документа" name={`${formUid}_docDate`} minWidth="200px" value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} />
-          <Field label="Сумма" name={`${formUid}_amount`} minWidth="200px" value={formData.amount} onChange={e => handleFieldChange("amount", e.target.value)} disabled={isLoading} />
-          <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
-          <OwnerLookupField name={`${formUid}_owner`} ownerType={formData.ownerType} ownerUuid={formData.ownerUuid} ownerName={formData.ownerName} onOwnerChange={({ ownerType, ownerUuid, ownerName }) => setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))} disabled={isLoading} typeLocked={!!formData.ownerType && (isEditMode || !!data?.organizationUuid || !!data?.counterpartyUuid)} minWidth="339px" />
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 339 }}>
-            <label style={{ fontSize: 13, color: "#222" }} htmlFor={`${formUid}_desc`}>Описание</label>
-            <textarea id={`${formUid}_desc`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} style={{ minWidth: 339, minHeight: 80, padding: 8, borderRadius: 4 }} />
-          </div>
-        </div></Group>
-        {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-          <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-          <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-        </div></Group></>}
-      </div></div>
+      <div className={styles.FormBody}><Tabs tabs={[
+        {
+          id: "general", label: translate("general") || "Общие сведения", component: (
+            <div className={styles.FormBodyParts}>
+              <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                <Field label="Номер документа" name={`${formUid}_docNum`} minWidth="339px" value={formData.documentNumber} onChange={e => handleFieldChange("documentNumber", e.target.value)} disabled={isLoading} />
+                <FieldDateTime label="Дата документа" name={`${formUid}_docDate`} minWidth="200px" value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} />
+                <Field label="Сумма" name={`${formUid}_amount`} minWidth="200px" value={formData.amount} onChange={e => handleFieldChange("amount", e.target.value)} disabled={isLoading} />
+                <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
+                <OwnerLookupField name={`${formUid}_owner`} ownerType={formData.ownerType} ownerUuid={formData.ownerUuid} ownerName={formData.ownerName} onOwnerChange={({ ownerType, ownerUuid, ownerName }) => setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))} disabled={isLoading} typeLocked={!uuid && (!!data?.organizationUuid || !!data?.counterpartyUuid)} minWidth="339px" />
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 339 }}>
+                  <label style={{ fontSize: 13, color: "#222" }} htmlFor={`${formUid}_desc`}>Описание</label>
+                  <textarea id={`${formUid}_desc`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} style={{ minWidth: 339, minHeight: 80, padding: 8, borderRadius: 4 }} />
+                </div>
+              </div></Group>
+              {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+              </div></Group></>}
+            </div>
+          )
+        },
+      ]} /></div>
     </div>
   );
 };

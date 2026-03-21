@@ -14,7 +14,7 @@ type ModalProps = {
   onApply?: () => void;
   /** Простой колбэк закрытия (альтернатива method). */
   onClose?: () => void;
-  title: string;
+  title: ReactNode;
   style?: CSSProperties;
   children: ReactNode;
 };

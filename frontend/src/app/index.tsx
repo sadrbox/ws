@@ -25,6 +25,8 @@ import { ActivityHistoriesList } from "src/models/ActivityHistories";
 import { CounterpartiesList } from "src/models/Counterparties";
 import { uniqueId } from 'lodash';
 import { ContactPersonsList } from "src/models/ContactPersons";
+import LoginForm from "src/components/LoginForm";
+import { isAuthenticated, verifyToken, logout, getCurrentUser, type AuthUser } from "src/services/auth";
 
 export const getComponentName = (node: TComponentNode): string => {
   if (node == null) return "Unknown";
@@ -80,6 +82,49 @@ const App: React.FC = () => {
   const queryClient = new QueryClient();
 
   const screenRef = useRef<HTMLDivElement>(null);
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(isAuthenticated());
+  const [authChecked, setAuthChecked] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(getCurrentUser());
+
+  // Проверяем токен при первом монтировании
+  useEffect(() => {
+    if (isAuthenticated()) {
+      verifyToken().then((user) => {
+        if (user) {
+          setIsLoggedIn(true);
+          setCurrentUser(user);
+        } else {
+          setIsLoggedIn(false);
+          setCurrentUser(null);
+        }
+        setAuthChecked(true);
+      });
+    } else {
+      setAuthChecked(true);
+    }
+  }, []);
+
+  // Слушаем событие logout (от interceptor при 401)
+  useEffect(() => {
+    const handleLogout = () => {
+      setIsLoggedIn(false);
+      setCurrentUser(null);
+    };
+    window.addEventListener("auth_logout", handleLogout);
+    return () => window.removeEventListener("auth_logout", handleLogout);
+  }, []);
+
+  const handleLoginSuccess = useCallback(() => {
+    setIsLoggedIn(true);
+    setCurrentUser(getCurrentUser());
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    logout();
+    setIsLoggedIn(false);
+    setCurrentUser(null);
+  }, []);
 
   const [panes, setPanes] = useState<TPane[]>([]);
   const [activePaneId, _setActivePaneId] = useState<string>("");
@@ -232,8 +277,12 @@ const App: React.FC = () => {
       actions: {
         // можно расширить при необходимости
       },
+      auth: {
+        user: currentUser,
+        logout: handleLogout,
+      },
     }),
-    [panes, activePaneId, addPane, removePane, setActivePane, updatePaneLabel, navbarItems]
+    [panes, activePaneId, addPane, removePane, setActivePane, updatePaneLabel, navbarItems, currentUser, handleLogout]
   );
 
   return (
@@ -241,10 +290,16 @@ const App: React.FC = () => {
       <QueryClientProvider client={queryClient}>
         <ErrorBoundary fallback={<div>Что-то пошло не так</div>}>
           <React.Suspense fallback={<LoadingFallback />}>
-            <Screen ref={screenRef}>
-              <Navbar />
-              <Content />
-            </Screen>
+            {!authChecked ? (
+              <LoadingFallback />
+            ) : !isLoggedIn ? (
+              <LoginForm onLoginSuccess={handleLoginSuccess} />
+            ) : (
+              <Screen ref={screenRef}>
+                <Navbar />
+                <Content />
+              </Screen>
+            )}
           </React.Suspense>
         </ErrorBoundary>
 

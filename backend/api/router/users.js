@@ -56,14 +56,7 @@ router.get("/users", async (req, res) => {
 		}
 
 		// ── Поиск ─────────────────────────────────────────────────────────────
-		const TEXT_FIELDS = [
-			"username",
-			"email",
-			"firstName",
-			"lastName",
-			"middleName",
-			"fullName",
-		];
+		const TEXT_FIELDS = ["username"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 
@@ -127,11 +120,8 @@ router.get("/users", async (req, res) => {
 				id: true,
 				uuid: true,
 				username: true,
-				email: true,
-				firstName: true,
-				lastName: true,
-				middleName: true,
-				fullName: true,
+				employeeUuid: true,
+				employee: true,
 				// password excluded from list queries
 			},
 		};
@@ -177,11 +167,8 @@ router.get("/users/:id", async (req, res) => {
 			id: true,
 			uuid: true,
 			username: true,
-			email: true,
-			firstName: true,
-			lastName: true,
-			middleName: true,
-			fullName: true,
+			employeeUuid: true,
+			employee: true,
 		};
 
 		const item = isNumeric
@@ -212,15 +199,7 @@ router.get("/users/:id", async (req, res) => {
 // ============================================
 router.post("/users", async (req, res) => {
 	try {
-		const {
-			username,
-			email,
-			password,
-			firstName,
-			lastName,
-			middleName,
-			fullName,
-		} = req.body;
+		const { username, password, employeeUuid } = req.body;
 
 		if (!username || typeof username !== "string" || !username.trim()) {
 			return res
@@ -231,22 +210,15 @@ router.post("/users", async (req, res) => {
 		const item = await prisma.user.create({
 			data: {
 				username: username.trim(),
-				email: email?.trim() || null,
 				password: password?.trim() || "",
-				firstName: firstName?.trim() || null,
-				lastName: lastName?.trim() || null,
-				middleName: middleName?.trim() || null,
-				fullName: fullName?.trim() || null,
+				employeeUuid: employeeUuid || null,
 			},
 			select: {
 				id: true,
 				uuid: true,
 				username: true,
-				email: true,
-				firstName: true,
-				lastName: true,
-				middleName: true,
-				fullName: true,
+				employeeUuid: true,
+				employee: true,
 			},
 		});
 
@@ -272,24 +244,12 @@ router.put("/users/:id", async (req, res) => {
 		const numId = Number(param);
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 
-		const {
-			username,
-			email,
-			password,
-			firstName,
-			lastName,
-			middleName,
-			fullName,
-		} = req.body;
+		const { username, password, employeeUuid } = req.body;
 		const data = {};
 		if (username !== undefined) data.username = username?.trim() ?? null;
-		if (email !== undefined) data.email = email?.trim() || null;
 		if (password !== undefined && password.trim())
 			data.password = password.trim();
-		if (firstName !== undefined) data.firstName = firstName?.trim() || null;
-		if (lastName !== undefined) data.lastName = lastName?.trim() || null;
-		if (middleName !== undefined) data.middleName = middleName?.trim() || null;
-		if (fullName !== undefined) data.fullName = fullName?.trim() || null;
+		if (employeeUuid !== undefined) data.employeeUuid = employeeUuid || null;
 
 		const item = await prisma.user.update({
 			where: isNumeric ? { id: numId } : { uuid: param },
@@ -298,11 +258,8 @@ router.put("/users/:id", async (req, res) => {
 				id: true,
 				uuid: true,
 				username: true,
-				email: true,
-				firstName: true,
-				lastName: true,
-				middleName: true,
-				fullName: true,
+				employeeUuid: true,
+				employee: true,
 			},
 		});
 

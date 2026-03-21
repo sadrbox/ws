@@ -220,6 +220,11 @@
 	"BrandsList_part": "Бренды",
 	"ProductsList": "Номенклатура",
 	"ProductsList_part": "Номенклатура",
+	"CurrenciesList": "Валюты",
+	"CurrenciesList_part": "Валюты",
+
+	"EmployeesList": "Сотрудники",
+	"EmployeesList_part": "Сотрудники",
 
 	"documentNumber": "Номер документа",
 	"documentDate": "Дата документа",
@@ -229,5 +234,13 @@
 	"nextRunAt": "Следующий запуск",
 	"fromWarehouse.shortName": "Со склада",
 	"toWarehouse.shortName": "На склад",
-	"address": "Адрес"
+	"address": "Адрес",
+	"general": "Общие сведения",
+	"fileName": "Имя файла",
+	"fileSize": "Размер",
+	"mimeType": "Тип файла",
+	"uploadedAt": "Дата загрузки",
+
+	"symbol": "Символ",
+	"code": "Код"
 }

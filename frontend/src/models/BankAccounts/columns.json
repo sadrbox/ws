@@ -89,31 +89,5 @@
 		"position": 7,
 		"filter": true,
 		"inlist": true
-	},
-	{
-		"identifier": "currency",
-		"type": "string",
-		"name": "Currency",
-		"width": "90px",
-		"minWidth": "80px",
-		"alignment": "center",
-		"hint": "Валюта счёта",
-		"visible": true,
-		"position": 8,
-		"filter": true,
-		"inlist": true
-	},
-	{
-		"identifier": "accountType",
-		"type": "string",
-		"name": "Account Type",
-		"width": "140px",
-		"minWidth": "100px",
-		"alignment": "left",
-		"hint": "Тип банковского счёта",
-		"visible": true,
-		"position": 9,
-		"filter": true,
-		"inlist": true
 	}
 ]

@@ -176,7 +176,9 @@ thead {
 			padding: 0;
 			font-weight: 500;
 			user-select: none;
-			border-right: 1px solid transparent !important;
+			&:not(:last-child) {
+				border-right: 1px solid transparent !important;
+			}
 			// box-shadow: inset 1px 0 0 $color34;
 			position: relative;
 			border-bottom: 0;
@@ -317,6 +319,10 @@ tbody {
 				// will-change: contents;
 				// contain: content;
 
+				& > input[type="text"] {
+					width: 100%;
+					border: 0px transparent;
+				}
 				span {
 					padding: 0 5px;
 					line-height: 17px;
@@ -546,6 +552,60 @@ input[type="checkbox"] {
 	opacity: 0.6;
 }
 
+/* ── Borderless fields inside table cells ── */
+.borderlessCell {
+	// Stretch self to fill the td completely
+	height: 100% !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	overflow: visible !important;
+
+	// Kill borders/shadows on ANY nested element
+	*,
+	*::before,
+	*::after {
+		border-color: transparent !important;
+		box-shadow: none !important;
+	}
+
+	// Field wrappers — stretch to fill height, remove borders
+	div[class*="FieldWrapper"] {
+		height: 100%;
+		margin: 0;
+	}
+	div[class*="FieldInputWrapper"],
+	div[class*="FieldDateWrapper"],
+	div[class*="FieldSelectWrapper"] {
+		border: none !important;
+		box-shadow: none !important;
+		background: transparent !important;
+		height: 100%;
+		border-radius: 0 !important;
+		&:focus-within {
+			border: none !important;
+			box-shadow: none !important;
+		}
+	}
+	// Raw inputs inside table cells
+	input[type="text"],
+	input[type="number"],
+	select {
+		border: none !important;
+		box-shadow: none !important;
+		background: transparent !important;
+		outline: none !important;
+		height: 100%;
+		&:focus {
+			border: none !important;
+			box-shadow: none !important;
+		}
+	}
+	// Hide label in lookup fields inside cells
+	label[class*="FieldLabel"] {
+		display: none !important;
+	}
+}
+
 /* Checkbox list (drag & drop variant) */
 .CheckboxWrapper {
 	display: flex;
@@ -760,7 +820,7 @@ input[type="checkbox"] {
 	outline: none;
 	background: transparent;
 	padding: 0px 3px;
-	font-size: 12px;
+	// font-size: 12px;
 	// line-height: 1;
 	min-width: 120px;
 	height: $heightFieldInput;
@@ -779,10 +839,10 @@ input[type="checkbox"] {
 	// border-left: 1px solid #e0e0e0;
 	background: transparent;
 	cursor: pointer;
-	margin: 2px;
+	// margin: 2px;
 	// padding: 1px 4px;
 	color: $color51;
-	font-size: 11px;
+	// font-size: 11px;
 	// line-height: 1;
 	width: $heightFieldInput - 4px;
 	height: $heightFieldInput - 4px;
@@ -803,11 +863,12 @@ input[type="checkbox"] {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 2px 8px;
+	padding: 3px;
 	background: rgba($color3, 0.06);
 	border-bottom: 1px solid #e0e0e0;
-	font-size: 12px;
-	min-height: 22px;
+	width: min-content;
+	// font-size: 12px;
+	// min-height: 22px;
 }
 
 .DateRangeBarLabel {

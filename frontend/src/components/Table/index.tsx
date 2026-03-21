@@ -27,6 +27,24 @@ import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } 
 import { CSS } from '@dnd-kit/utilities';
 import { PiDotsThreeVerticalDuotone } from 'react-icons/pi';
 
+/**
+ * Гарантирует, что последняя видимая колонка имеет width: 'auto',
+ * чтобы она растягивалась на оставшееся место.
+ */
+function normalizeLastColumnWidth(cols: TColumn[]): TColumn[] {
+  const visibleIds = cols.filter(c => c.visible).map(c => c.identifier);
+  if (visibleIds.length === 0) return cols;
+  const lastVisibleId = visibleIds[visibleIds.length - 1];
+  return cols.map(c => {
+    if (c.identifier === lastVisibleId) {
+      return { ...c, width: 'auto' };
+    }
+    // Сбрасываем 'auto' у не-последних видимых колонок на их minWidth
+    if (c.visible && c.width === 'auto') return { ...c, width: c.minWidth ?? '150px' };
+    return c;
+  });
+}
+
 import {
   createContext,
   Dispatch,
@@ -43,6 +61,7 @@ import {
   useState,
 } from 'react';
 import { TPane } from 'src/app/types';
+import { last } from 'lodash';
 
 export type TOpenModelFormProps = Partial<TPane>;
 export type TypeModelProps = TableContextProps;
@@ -151,6 +170,8 @@ export interface TableProps {
   actions: TableContextProps['actions'];
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
+  extraButtons?: React.ReactNode;
+  onDelete?: (selectedRows: Set<number>, rows: TDataItem[]) => void;
 }
 
 const ROW_HEIGHT = 30;  // ← ИСПРАВИЛ: было 28, должно быть 30
@@ -173,6 +194,7 @@ interface TableControlPanelProps {
   onAddClick: () => void;
   onDeleteClick: () => void;
   search: { value: string; onChange: (value: string) => void };
+  extraButtons?: React.ReactNode;
 }
 
 const TableControlPanel = memo(({
@@ -188,6 +210,7 @@ const TableControlPanel = memo(({
   onAddClick,
   onDeleteClick,
   search,
+  extraButtons,
 }: TableControlPanelProps) => {
   const isSelect = variant === 'select';
   return (
@@ -197,6 +220,7 @@ const TableControlPanel = memo(({
           {/* <Divider /> */}
           {!isSelect && <Button onClick={onAddClick}><span>Добавить</span></Button>}
           {!isSelect && <Button onClick={onDeleteClick}><span>Удалить</span></Button>}
+          {!isSelect && extraButtons}
           {!isSelect && <Divider />}
           <ButtonImage onClick={onRefresh} title="Обновить">
             <img src={reloadImage_16} alt="Reload" height={16} width={16}
@@ -231,7 +255,10 @@ const TableControlPanel = memo(({
     prevProps.isLoading === nextProps.isLoading &&
     prevProps.visibleDateRange === nextProps.visibleDateRange &&
     prevProps.visibleFastSearch === nextProps.visibleFastSearch &&
-    prevProps.search === nextProps.search
+    prevProps.search === nextProps.search &&
+    prevProps.extraButtons === nextProps.extraButtons &&
+    prevProps.onDeleteClick === nextProps.onDeleteClick &&
+    prevProps.onAddClick === nextProps.onAddClick
   );
 });
 
@@ -250,6 +277,8 @@ const Table: FC<TableProps> = memo((props) => {
     isLoading, error,
     pagination, sorting, filtering, search, actions,
     hasNextPage, isFetchingNextPage,
+    extraButtons,
+    onDelete,
   } = props;
 
 
@@ -315,8 +344,30 @@ const Table: FC<TableProps> = memo((props) => {
   }, [refetch]);
 
   const handleDeleteClick = useCallback(() => {
-    alert('Удалить выбранные');
-  }, []);
+    // Собираем реальный набор id выбранных строк
+    let effectiveIds: Set<number>;
+    if (isAllSelectedMode) {
+      // Все строки выбраны, кроме excludedRows
+      effectiveIds = new Set(
+        rows.map(r => r.id as number).filter(id => !excludedRows.has(id)),
+      );
+    } else if (selectedRows.size > 0) {
+      effectiveIds = selectedRows;
+    } else if (activeRow !== null) {
+      // Ничего не выбрано чекбоксом — берём активную строку
+      effectiveIds = new Set([activeRow]);
+    } else {
+      effectiveIds = new Set();
+    }
+
+    if (effectiveIds.size === 0) return;
+
+    if (onDelete) {
+      onDelete(effectiveIds, rows);
+    } else {
+      alert('Удалить выбранные');
+    }
+  }, [onDelete, selectedRows, rows, isAllSelectedMode, excludedRows, activeRow]);
 
   const handleConfigOpen = useCallback(() => {
     setConfigModalAction('open');
@@ -382,6 +433,7 @@ const Table: FC<TableProps> = memo((props) => {
           onAddClick={handleCreate}
           onDeleteClick={handleDeleteClick}
           search={search}
+          extraButtons={extraButtons}
         />
 
         {enableDateRange && hasDateRange && (
@@ -419,21 +471,27 @@ const TableArea = memo(() => {
   const { variant, columns } = useTableContext();
   const isSelect = variant === 'select';
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
+  // console.log({ visibleColumns: visibleColumns.slice(0, -1), visibleColumnsLast: visibleColumns[visibleColumns.length - 1] });
+  const lastVisibleColumn = visibleColumns[visibleColumns.length - 1];
+  // console.log(lastVisibleColumn.identifier);
   return (
     <>
       <table>
         <colgroup>
           {!isSelect && <col style={{ width: '30px', maxWidth: '30px', minWidth: '30px' }} />}
-          {visibleColumns.slice(0, -1).map(col => (
-            <col key={col.identifier}
-              style={{ width: col.width ?? 'auto', minWidth: col.minWidth ?? '150px' }} />
-          ))}
-          {visibleColumns.length > 0 && (
-            <col
-              key={visibleColumns[visibleColumns.length - 1].identifier + '-last'}
-              style={{ minWidth: '150px', width: 'auto' }}
-            />
-          )}
+          {visibleColumns.slice(0, -1).map(col => {
+            // console.log(col.identifier);
+            return (
+              <col key={col.identifier}
+                style={{ width: col.width && col.width !== 'auto' ? col.width : (col.minWidth ?? '150px'), minWidth: col.minWidth ?? '150px' }} />
+            );
+          })}
+          {  /* {visibleColumns.length > 30 && ( */}
+          <col
+            key={lastVisibleColumn.identifier + '-last'}
+            style={{ minWidth: lastVisibleColumn.minWidth ?? '150px', width: 'auto' }}
+          />
+          {/* )} */}
         </colgroup>
         <TableHeader />
         <TableBody />
@@ -646,9 +704,9 @@ const TableHeader = memo(() => {
       const minW = parseInt(col.minWidth ?? '50', 10);
       const newWidth = Math.max(minW, resizingRef.current.startWidth + delta);
       // Коммитим новую ширину в стейт
-      const updatedColumns = columns.map(c =>
+      const updatedColumns = normalizeLastColumnWidth(columns.map(c =>
         c.identifier === col.identifier ? { ...c, width: newWidth + 'px' } : c
-      );
+      ));
       actions.setColumns(updatedColumns);
       // Сохраняем ширины колонок в localStorage
       localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(updatedColumns));
@@ -682,7 +740,14 @@ const TableHeader = memo(() => {
           const dir = isSorting ? sort[col.identifier] : null;
           const isLast = idx === visibleColumns.length - 1;
           return (
-            <th key={col.identifier} style={{ cursor: `${isLoading ? 'default' : 'pointer'}` }} onClick={!isLoading ? () => handleSort(col.identifier) : undefined}>
+            <th
+              key={col.identifier}
+              style={{
+                cursor: `${isLoading ? 'default' : 'pointer'}`,
+                width: isLast ? 'auto' : (col.width && col.width !== 'auto' ? col.width : undefined),
+              }}
+              onClick={!isLoading ? () => handleSort(col.identifier) : undefined}
+            >
               <div className={styles.TableHeaderCell}>
                 <span>{getTranslateColumn(col)}</span>
                 {isSorting && (
@@ -1076,8 +1141,9 @@ const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
   const [columnsConfig, setColumnsConfig] = useState<TColumn[]>(columns);
 
   const onApply = useCallback(() => {
-    localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(columnsConfig));
-    actions?.setColumns?.(columnsConfig);
+    const normalized = normalizeLastColumnWidth(columnsConfig);
+    localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(normalized));
+    actions?.setColumns?.(normalized);
   }, [columnsConfig, componentName, actions]);
 
   useEffect(() => { setColumnsConfig(columns); }, [columns]);

@@ -18,6 +18,7 @@ import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
+import Tabs from "src/components/Tabs";
 
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
@@ -77,8 +78,8 @@ const ProductsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
       brandUuid: formData.brandUuid || null,
     };
     try {
-      const res = isEditMode && uuid
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid}`, payload)
+      const res = isEditMode && (uuid || formData.uuid)
+        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = res.data?.item ?? res.data;
       setFormData(prev => ({
@@ -106,35 +107,41 @@ const ProductsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
         {isEditMode && <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}><img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} /></ButtonImage>}
       </div></div><div className={styles.TablePanelRight} /></div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><div className={styles.FormBodyParts}>
-        <Group align="row" gap="12px" className={styles.Form}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-            <Field label="Наименование *" name={`${formUid}_shortName`} minWidth="339px"
-              value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
-            <Field label="Артикул" name={`${formUid}_sku`} minWidth="200px"
-              value={formData.sku} onChange={e => handleFieldChange("sku", e.target.value)} disabled={isLoading} />
-            <LookupField
-              label="Бренд"
-              name={`${formUid}_brand`}
-              minWidth="339px"
-              value={formData.brandUuid}
-              displayValue={formData.brandName}
-              endpoint="brands"
-              displayField="shortName"
-              columns={[{ key: "shortName", label: "Наименование" }]}
-              onSelect={(uuid, display) => setFormData(prev => ({ ...prev, brandUuid: uuid, brandName: display }))}
-              onClear={() => setFormData(prev => ({ ...prev, brandUuid: "", brandName: "" }))}
-              disabled={isLoading}
-            />
-          </div>
-        </Group>
-        {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}>
-          <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-            <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-            <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-          </div>
-        </Group></>}
-      </div></div>
+      <div className={styles.FormBody}><Tabs tabs={[
+        {
+          id: "general", label: translate("general") || "Общие сведения", component: (
+            <div className={styles.FormBodyParts}>
+              <Group align="row" gap="12px" className={styles.Form}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                  <Field label="Наименование *" name={`${formUid}_shortName`} minWidth="339px"
+                    value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
+                  <Field label="Артикул" name={`${formUid}_sku`} minWidth="200px"
+                    value={formData.sku} onChange={e => handleFieldChange("sku", e.target.value)} disabled={isLoading} />
+                  <LookupField
+                    label="Бренд"
+                    name={`${formUid}_brand`}
+                    minWidth="339px"
+                    value={formData.brandUuid}
+                    displayValue={formData.brandName}
+                    endpoint="brands"
+                    displayField="shortName"
+                    columns={[{ key: "shortName", label: "Наименование" }]}
+                    onSelect={(uuid, display) => setFormData(prev => ({ ...prev, brandUuid: uuid, brandName: display }))}
+                    onClear={() => setFormData(prev => ({ ...prev, brandUuid: "", brandName: "" }))}
+                    disabled={isLoading}
+                  />
+                </div>
+              </Group>
+              {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}>
+                <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                </div>
+              </Group></>}
+            </div>
+          )
+        },
+      ]} /></div>
     </div>
   );
 };

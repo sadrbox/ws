@@ -377,9 +377,9 @@ type TypeFieldSelectProps = {
 
 export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value, onChange, disabled = false, style }) => {
   return (
-    <Group align="row" className={styles.FieldWrapper} style={style}>
+    <div className={styles.FieldWrapper} style={style}>
       <label htmlFor={name} className={styles.FieldLabel}>{label}</label>
-      <Group align="col" className={styles.FieldSelectWrapper}>
+      <div className={styles.FieldSelectWrapper}>
         <select name={name} id={name} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled}>
           {
             options.map((option) => (
@@ -389,8 +389,8 @@ export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, va
             ))
           }
         </select >
-      </Group >
-    </Group >
+      </div>
+    </div>
   );
 };
 
@@ -606,6 +606,129 @@ export const FieldDateRange: FC = () => {
           ×
         </button>
       )}
+    </div>
+  );
+};
+
+// ────────────────────────────────────────────────
+// FieldNumber — числовое поле (input type="number")
+// ────────────────────────────────────────────────
+
+interface TypeFieldNumberProps {
+  label?: string;
+  name: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  width?: string;
+  maxWidth?: string;
+  minWidth?: string;
+  disabled?: boolean;
+  placeholder?: string;
+  required?: boolean;
+  step?: string;
+  min?: string;
+  max?: string;
+  textAlign?: 'left' | 'right' | 'center';
+  actions?: TypeFieldActions;
+}
+
+export const FieldNumber: FC<TypeFieldNumberProps> = ({
+  label,
+  name,
+  value = '',
+  onChange,
+  width,
+  maxWidth,
+  minWidth,
+  disabled = false,
+  placeholder,
+  required = false,
+  step,
+  min,
+  max,
+  textAlign = 'right',
+  actions,
+}) => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleClear = () => {
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      if (onChange) {
+        const event = new Event('input', { bubbles: true });
+        Object.defineProperty(event, 'target', { writable: false, value: inputRef.current });
+        onChange(event as any);
+      }
+    }
+  };
+
+  const defaultActions: TypeFieldActions = actions || [
+    { type: "clear", onClick: handleClear },
+  ];
+
+  const visibleActions = disabled
+    ? []
+    : defaultActions.filter(action => {
+      if (action.type === 'clear' && !value) return false;
+      return true;
+    });
+
+  return (
+    <div
+      className={styles.FieldWrapper}
+      style={{
+        width: width ?? 'auto',
+        maxWidth: maxWidth ?? 'none',
+        minWidth: minWidth ?? 'none',
+      }}
+    >
+      {label && (
+        <label htmlFor={name} className={styles.FieldLabel}>
+          {label}
+          {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
+        </label>
+      )}
+
+      <div className={styles.FieldInputWrapper}>
+        <input
+          ref={inputRef}
+          type="number"
+          id={name}
+          name={name}
+          value={value}
+          onChange={onChange}
+          className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
+          autoComplete="off"
+          disabled={disabled}
+          placeholder={placeholder}
+          step={step}
+          min={min}
+          max={max}
+          style={{
+            textAlign,
+            ...(visibleActions.length > 0 && {
+              paddingRight: `${visibleActions.length * 32 + 8}px`,
+            }),
+          }}
+        />
+
+        {visibleActions.length > 0 && (
+          <div className={styles.FieldActions}>
+            {visibleActions.map((action, index) => (
+              <button
+                key={index}
+                onClick={action.onClick}
+                type="button"
+                className={styles.FieldActionButton}
+                title={imgActions[action.type].alt}
+                tabIndex={-1}
+              >
+                {imgActions[action.type].img}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

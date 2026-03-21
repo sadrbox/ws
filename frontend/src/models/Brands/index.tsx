@@ -17,6 +17,7 @@ import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
+import Tabs from "src/components/Tabs";
 
 const MODEL_ENDPOINT = "brands";
 const LIST_NAME = "BrandsList";
@@ -65,8 +66,8 @@ const BrandsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
     if (!formData.shortName?.trim()) { setError("Наименование обязательно"); setIsLoading(false); return false; }
     const payload = { shortName: formData.shortName.trim() };
     try {
-      const res = isEditMode && uuid
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid}`, payload)
+      const res = isEditMode && (uuid || formData.uuid)
+        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = res.data?.item ?? res.data;
       setFormData(prev => ({ ...prev, ...saved, shortName: saved.shortName ?? "" }));
@@ -90,18 +91,24 @@ const BrandsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         {isEditMode && <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}><img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} /></ButtonImage>}
       </div></div><div className={styles.TablePanelRight} /></div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><div className={styles.FormBodyParts}>
-        <Group align="row" gap="12px" className={styles.Form}>
-          <Field label="Наименование *" name={`${formUid}_shortName`} minWidth="339px"
-            value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
-        </Group>
-        {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}>
-          <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-            <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-            <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-          </div>
-        </Group></>}
-      </div></div>
+      <div className={styles.FormBody}><Tabs tabs={[
+        {
+          id: "general", label: translate("general") || "Общие сведения", component: (
+            <div className={styles.FormBodyParts}>
+              <Group align="row" gap="12px" className={styles.Form}>
+                <Field label="Наименование *" name={`${formUid}_shortName`} minWidth="339px"
+                  value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
+              </Group>
+              {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}>
+                <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                </div>
+              </Group></>}
+            </div>
+          )
+        },
+      ]} /></div>
     </div>
   );
 };

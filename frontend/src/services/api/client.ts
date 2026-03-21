@@ -28,12 +28,37 @@ export const apiClient: AxiosInstance = axios.create({
 
 // Interceptor: при отправке FormData удаляем Content-Type,
 // чтобы браузер сам выставил multipart/form-data с правильным boundary
+// + добавляем JWT-токен из localStorage
 apiClient.interceptors.request.use((config) => {
 	if (config.data instanceof FormData) {
 		delete config.headers["Content-Type"];
 	}
+
+	const token = localStorage.getItem("auth_token");
+	if (token) {
+		config.headers.Authorization = `Bearer ${token}`;
+	}
+
 	return config;
 });
+
+// Interceptor: при 401 ответе — очищаем токен и перенаправляем на логин
+apiClient.interceptors.response.use(
+	(response) => response,
+	(error) => {
+		if (error.response?.status === 401) {
+			// Не обрабатываем 401 при самом запросе логина
+			const url = error.config?.url || "";
+			if (!url.includes("/auth/login")) {
+				localStorage.removeItem("auth_token");
+				localStorage.removeItem("auth_user");
+				// Диспатчим событие чтобы App перерисовался
+				window.dispatchEvent(new Event("auth_logout"));
+			}
+		}
+		return Promise.reject(error);
+	},
+);
 
 /** Типизированные сокращения для удобства */
 export const api = {

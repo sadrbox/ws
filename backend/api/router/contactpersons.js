@@ -44,7 +44,7 @@ router.get("/contactpersons", async (req, res) => {
 		}
 		if (orderBy.length === 0) orderBy.push({ id: "asc" });
 
-		const TEXT_FIELDS = ["fullName", "ownerName"];
+		const TEXT_FIELDS = ["fullName", "ownerName", "comment"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 		if (searchWords.length > 0) {
@@ -148,6 +148,7 @@ router.post("/contactpersons", async (req, res) => {
 			ownerName,
 			organizationUuid,
 			counterpartyUuid,
+			comment,
 		} = req.body;
 		const nameFinal =
 			fullName?.trim() ||
@@ -162,6 +163,7 @@ router.post("/contactpersons", async (req, res) => {
 				ownerName: ownerName?.trim() || null,
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
+				comment: comment?.trim() || null,
 			},
 		});
 		return res.status(201).json({ success: true, item });
@@ -185,6 +187,7 @@ router.put("/contactpersons/:id", async (req, res) => {
 			ownerName,
 			organizationUuid,
 			counterpartyUuid,
+			comment,
 		} = req.body;
 		const data = {};
 		if (firstName !== undefined) data.firstName = firstName?.trim() || null;
@@ -196,6 +199,7 @@ router.put("/contactpersons/:id", async (req, res) => {
 			data.organizationUuid = organizationUuid || null;
 		if (counterpartyUuid !== undefined)
 			data.counterpartyUuid = counterpartyUuid || null;
+		if (comment !== undefined) data.comment = comment?.trim() || null;
 
 		const item = await prisma.contactPerson.update({
 			where: isNumeric ? { id: numId } : { uuid: param },

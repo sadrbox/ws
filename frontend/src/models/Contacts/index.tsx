@@ -19,6 +19,7 @@ import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import LookupField from "src/components/Field/LookupField";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
+import Tabs from "src/components/Tabs";
 
 const MODEL_ENDPOINT = "contacts";
 // ═══════════════════════════════════════════════════════════════════════════
@@ -60,6 +61,10 @@ const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
       init.ownerType = "contactperson";
       init.ownerUuid = data.contactPersonUuid as string;
       init.ownerName = name;
+    } else if (data.employeeUuid) {
+      init.ownerType = "employee";
+      init.ownerUuid = data.employeeUuid as string;
+      init.ownerName = name;
     }
     return init;
   }, [data]);
@@ -75,9 +80,9 @@ const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
     try {
       const response = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
       const d = response.data?.item ?? response.data;
-      const ot: OwnerType = d.organizationUuid ? "organization" : d.counterpartyUuid ? "counterparty" : d.contactPersonUuid ? "contactperson" : "";
-      const ou = d.organizationUuid || d.counterpartyUuid || d.contactPersonUuid || "";
-      const on = d.organization?.shortName || d.counterparty?.shortName || d.contactPerson?.fullName || d.ownerName || "";
+      const ot: OwnerType = d.organizationUuid ? "organization" : d.counterpartyUuid ? "counterparty" : d.contactPersonUuid ? "contactperson" : d.employeeUuid ? "employee" : "";
+      const ou = d.organizationUuid || d.counterpartyUuid || d.contactPersonUuid || d.employeeUuid || "";
+      const on = d.organization?.shortName || d.counterparty?.shortName || d.contactPerson?.fullName || d.employee?.fullName || d.ownerName || "";
       setFormData({
         value: d.value ?? "", contactTypeUuid: d.contactTypeUuid ?? "",
         contactTypeName: d.contactType?.shortName ?? d.contactType?.name ?? "",
@@ -108,15 +113,16 @@ const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
       organizationUuid: formData.ownerType === "organization" ? formData.ownerUuid || null : null,
       counterpartyUuid: formData.ownerType === "counterparty" ? formData.ownerUuid || null : null,
       contactPersonUuid: formData.ownerType === "contactperson" ? formData.ownerUuid || null : null,
+      employeeUuid: formData.ownerType === "employee" ? formData.ownerUuid || null : null,
     };
     try {
-      const response = isEditMode && uuid
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid}`, payload)
+      const response = isEditMode && (uuid || formData.uuid)
+        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = response.data?.item ?? response.data;
-      const sot: OwnerType = saved.organizationUuid ? "organization" : saved.counterpartyUuid ? "counterparty" : saved.contactPersonUuid ? "contactperson" : "";
-      const sou = saved.organizationUuid || saved.counterpartyUuid || saved.contactPersonUuid || "";
-      const son = saved.organization?.shortName || saved.counterparty?.shortName || saved.contactPerson?.fullName || "";
+      const sot: OwnerType = saved.organizationUuid ? "organization" : saved.counterpartyUuid ? "counterparty" : saved.contactPersonUuid ? "contactperson" : saved.employeeUuid ? "employee" : "";
+      const sou = saved.organizationUuid || saved.counterpartyUuid || saved.contactPersonUuid || saved.employeeUuid || "";
+      const son = saved.organization?.shortName || saved.counterparty?.shortName || saved.contactPerson?.fullName || saved.employee?.fullName || "";
       setFormData(prev => ({
         ...prev, ...saved, value: saved.value ?? "",
         contactTypeUuid: saved.contactTypeUuid ?? "",
@@ -166,42 +172,46 @@ const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
         <div className={styles.TablePanelRight} />
       </div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}>
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-              <Field label="Значение *" name={`${formUid}_value`} minWidth="339px" value={formData.value} onChange={e => handleFieldChange("value", e.target.value)} disabled={isLoading} />
-              <LookupField
-                label="Тип контакта" name={`${formUid}_contactTypeUuid`} minWidth="339px"
-                value={formData.contactTypeUuid} displayValue={formData.contactTypeName}
-                endpoint="contacttypes" displayField="shortName"
-                columns={[{ key: "shortName", label: "Наименование" }]}
-                onSelect={(uuid: string, display: string) => setFormData(prev => ({ ...prev, contactTypeUuid: uuid, contactTypeName: display }))}
-                disabled={isLoading}
-              />
-              <OwnerLookupField
-                ownerType={formData.ownerType} ownerUuid={formData.ownerUuid} ownerName={formData.ownerName}
-                name={`${formUid}_owner`}
-                onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
-                  setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))}
-                typeLocked={!!formData.ownerType && (isEditMode || !!data?.organizationUuid || !!data?.counterpartyUuid || !!data?.contactPersonUuid)}
-                disabled={isLoading}
-              />
-            </div>
-          </Group>
-          {isEditMode && (
-            <>
-              <Divider />
+      <div className={styles.FormBody}><Tabs tabs={[
+        {
+          id: "general", label: translate("general") || "Общие сведения", component: (
+            <div className={styles.FormBodyParts}>
               <Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                  <Field label="Значение *" name={`${formUid}_value`} minWidth="339px" value={formData.value} onChange={e => handleFieldChange("value", e.target.value)} disabled={isLoading} />
+                  <LookupField
+                    label="Тип контакта" name={`${formUid}_contactTypeUuid`} minWidth="339px"
+                    value={formData.contactTypeUuid} displayValue={formData.contactTypeName}
+                    endpoint="contacttypes" displayField="shortName"
+                    columns={[{ key: "shortName", label: "Наименование" }]}
+                    onSelect={(uuid: string, display: string) => setFormData(prev => ({ ...prev, contactTypeUuid: uuid, contactTypeName: display }))}
+                    disabled={isLoading}
+                  />
+                  <OwnerLookupField
+                    ownerType={formData.ownerType} ownerUuid={formData.ownerUuid} ownerName={formData.ownerName}
+                    name={`${formUid}_owner`}
+                    onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
+                      setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))}
+                    typeLocked={!uuid && (!!data?.organizationUuid || !!data?.counterpartyUuid || !!data?.contactPersonUuid || !!data?.employeeUuid)}
+                    disabled={isLoading}
+                  />
                 </div>
               </Group>
-            </>
-          )}
-        </div>
-      </div>
+              {isEditMode && (
+                <>
+                  <Divider />
+                  <Group align="row" gap="12px" className={styles.Form}>
+                    <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                      <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                      <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                    </div>
+                  </Group>
+                </>
+              )}
+            </div>
+          )
+        },
+      ]} /></div>
     </div>
   );
 };

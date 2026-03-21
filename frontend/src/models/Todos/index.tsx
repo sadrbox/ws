@@ -8,6 +8,7 @@ import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
+import FilesPanel from "src/models/Files";
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
 import { Divider, Field, FieldDateTime, FieldSelect } from "src/components/Field";
@@ -18,7 +19,6 @@ import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
-import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import Tabs from "src/components/Tabs";
 
 const MODEL_ENDPOINT = "todos";
@@ -41,9 +41,8 @@ interface TFormData {
   uuid?: string;
   description: string;
   status: string;
-  ownerType: OwnerType;
-  ownerUuid: string;
-  ownerName: string;
+  organizationUuid: string;
+  organizationName: string;
   curatorUuid: string;
   curatorName: string;
   executorUuid: string;
@@ -55,7 +54,7 @@ interface TFormData {
 
 const EMPTY_FORM: TFormData = {
   description: "", status: "new",
-  ownerType: "", ownerUuid: "", ownerName: "",
+  organizationUuid: "", organizationName: "",
   curatorUuid: "", curatorName: "",
   executorUuid: "", executorName: "",
   createdAt: "", deadline: "", deadlineDays: "",
@@ -69,15 +68,9 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const buildInitialForm = useCallback((): TFormData => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
-    const name = (data.ownerName as string) || "";
     if (data.organizationUuid) {
-      init.ownerType = "organization";
-      init.ownerUuid = data.organizationUuid as string;
-      init.ownerName = name;
-    } else if (data.counterpartyUuid) {
-      init.ownerType = "counterparty";
-      init.ownerUuid = data.counterpartyUuid as string;
-      init.ownerName = name;
+      init.organizationUuid = data.organizationUuid as string;
+      init.organizationName = (data.ownerName as string) || "";
     }
     return init;
   }, [data]);
@@ -93,20 +86,11 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
     try {
       const response = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
       const d = response.data?.item ?? response.data;
-      let oType: OwnerType = "";
-      let oUuid = "";
-      let oName = d.ownerName ?? "";
-      if (d.organizationUuid) {
-        oType = "organization"; oUuid = d.organizationUuid;
-        oName = d.organization?.shortName ?? oName;
-      } else if (d.counterpartyUuid) {
-        oType = "counterparty"; oUuid = d.counterpartyUuid;
-        oName = d.counterparty?.shortName ?? oName;
-      }
       setFormData({
         description: d.description ?? "",
         status: d.status ?? "new",
-        ownerType: oType, ownerUuid: oUuid, ownerName: oName,
+        organizationUuid: d.organizationUuid ?? "",
+        organizationName: d.organization?.shortName ?? "",
         curatorUuid: d.curatorUuid ?? "",
         curatorName: d.curator?.fullName || d.curator?.username || "",
         executorUuid: d.executorUuid ?? "",
@@ -147,34 +131,25 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
     const payload: Record<string, unknown> = {
       description: formData.description?.trim() || null,
       status: formData.status || "new",
-      ownerName: formData.ownerName?.trim() || null,
-      organizationUuid: formData.ownerType === "organization" ? (formData.ownerUuid || null) : null,
-      counterpartyUuid: formData.ownerType === "counterparty" ? (formData.ownerUuid || null) : null,
+      ownerName: formData.organizationName?.trim() || null,
+      organizationUuid: formData.organizationUuid || null,
+      counterpartyUuid: null,
       curatorUuid: formData.curatorUuid || null,
       executorUuid: formData.executorUuid || null,
       deadline: formData.deadline || null,
       deadlineDays: formData.deadlineDays || null,
     };
     try {
-      const response = isEditMode && uuid
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid}`, payload)
+      const response = isEditMode && (uuid || formData.uuid)
+        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = response.data?.item ?? response.data;
-      let oType: OwnerType = formData.ownerType;
-      let oUuid = formData.ownerUuid;
-      let oName = formData.ownerName;
-      if (saved.organizationUuid) {
-        oType = "organization"; oUuid = saved.organizationUuid;
-        oName = saved.organization?.shortName ?? oName;
-      } else if (saved.counterpartyUuid) {
-        oType = "counterparty"; oUuid = saved.counterpartyUuid;
-        oName = saved.counterparty?.shortName ?? oName;
-      }
       setFormData(prev => ({
         ...prev, ...saved,
         description: saved.description ?? "",
         status: saved.status ?? "new",
-        ownerType: oType, ownerUuid: oUuid, ownerName: oName,
+        organizationUuid: saved.organizationUuid ?? "",
+        organizationName: saved.organization?.shortName ?? prev.organizationName,
         curatorUuid: saved.curatorUuid ?? "",
         curatorName: saved.curator?.fullName || saved.curator?.username || prev.curatorName,
         executorUuid: saved.executorUuid ?? "",
@@ -206,13 +181,94 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
   const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
 
-  // ── Табы (файлы) ────────────────────────────────────────────────────────
+  // ── Табы ────────────────────────────────────────────────────────────────
+  const generalTab = useMemo(() => (
+    <div className={styles.FormBodyParts}>
+      <Group align="row" gap="12px" className={styles.Form}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+          <FieldSelect label="Статус" name={`${formUid}_status`} options={STATUS_OPTIONS} value={formData.status} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} style={{ minWidth: 200 }} />
+          <LookupField
+            label="Организация"
+            name={`${formUid}_organization`}
+            value={formData.organizationUuid}
+            displayValue={formData.organizationName}
+            endpoint="organizations"
+            displayField="shortName"
+            onSelect={(uuid, display) =>
+              setFormData(prev => ({ ...prev, organizationUuid: uuid, organizationName: display }))
+            }
+            onClear={() =>
+              setFormData(prev => ({ ...prev, organizationUuid: "", organizationName: "" }))
+            }
+            minWidth="339px"
+            disabled={isLoading}
+          />
+          <LookupField
+            label="Куратор"
+            name={`${formUid}_curator`}
+            value={formData.curatorUuid}
+            displayValue={formData.curatorName}
+            endpoint="users"
+            displayField="fullName"
+            onSelect={(uuid, display) =>
+              setFormData(prev => ({ ...prev, curatorUuid: uuid, curatorName: display }))
+            }
+            minWidth="339px"
+            disabled={isLoading}
+          />
+          <LookupField
+            label="Исполнитель"
+            name={`${formUid}_executor`}
+            value={formData.executorUuid}
+            displayValue={formData.executorName}
+            endpoint="users"
+            displayField="fullName"
+            onSelect={(uuid, display) =>
+              setFormData(prev => ({ ...prev, executorUuid: uuid, executorName: display }))
+            }
+            minWidth="339px"
+            disabled={isLoading}
+          />
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <FieldDateTime label="Дата создания" name={`${formUid}_createdAt`} width="200px" value={formData.createdAt} disabled />
+            <Field label="Дней" name={`${formUid}_deadlineDays`} width="100px" value={formData.deadlineDays} onChange={e => handleDeadlineDaysChange(e.target.value)} disabled={isLoading} />
+            <FieldDateTime label="Дедлайн" name={`${formUid}_deadline`} width="200px" value={formData.deadline} onChange={e => handleFieldChange("deadline", e.target.value)} disabled={isLoading} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 339 }}>
+            <label style={{ fontSize: 13, color: "#222" }} htmlFor={`${formUid}_description`}>Описание задачи</label>
+            <textarea
+              id={`${formUid}_description`}
+              value={formData.description}
+              onChange={e => handleFieldChange("description", e.target.value)}
+              disabled={isLoading}
+              style={{ minWidth: 339, minHeight: 120, padding: 8, borderRadius: 4 }}
+            />
+          </div>
+        </div>
+      </Group>
+      {isEditMode && (
+        <>
+          <Divider />
+          <Group align="row" gap="12px" className={styles.Form}>
+            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+              <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+              <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+            </div>
+          </Group>
+        </>
+      )}
+    </div>
+  ), [formData, isLoading, isEditMode, formUid, handleFieldChange, handleDeadlineDaysChange]);
+
   const tabs = useMemo<{ id: string; label: string; component: React.ReactNode }[]>(() => {
-    if (!isEditMode || !formData.uuid) return [];
-    return [
-      { id: "files", label: translate("files") || "Файлы", component: <TodoFilesPanel todoUuid={formData.uuid} /> },
+    const t: { id: string; label: string; component: React.ReactNode }[] = [
+      { id: "general", label: translate("general") || "Общие сведения", component: generalTab },
     ];
-  }, [isEditMode, formData.uuid]);
+    if (isEditMode && formData.uuid) {
+      t.push({ id: "files", label: translate("files") || "Файлы", component: <FilesPanel ownerType="todo" ownerUuid={formData.uuid} /> });
+    }
+    return t;
+  }, [generalTab, isEditMode, formData.uuid]);
 
   return (
     <div className={styles.FormWrapper}>
@@ -235,195 +291,12 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
       </div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
       <div className={styles.FormBody}>
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-              <FieldSelect label="Статус" name={`${formUid}_status`} options={STATUS_OPTIONS} value={formData.status} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} style={{ minWidth: 200 }} />
-              <OwnerLookupField
-                name={`${formUid}_owner`}
-                ownerType={formData.ownerType}
-                ownerUuid={formData.ownerUuid}
-                ownerName={formData.ownerName}
-                onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
-                  setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))
-                }
-                disabled={isLoading}
-                // allow switching owner type when the form is opened WITHOUT subordination
-                typeLocked={Boolean(isEditMode && (data?.organizationUuid || data?.counterpartyUuid))}
-                minWidth="339px"
-              />
-              <LookupField
-                label="Куратор"
-                name={`${formUid}_curator`}
-                value={formData.curatorUuid}
-                displayValue={formData.curatorName}
-                endpoint="users"
-                displayField="fullName"
-                onSelect={(uuid, display) =>
-                  setFormData(prev => ({ ...prev, curatorUuid: uuid, curatorName: display }))
-                }
-                minWidth="339px"
-                disabled={isLoading}
-              />
-              <LookupField
-                label="Исполнитель"
-                name={`${formUid}_executor`}
-                value={formData.executorUuid}
-                displayValue={formData.executorName}
-                endpoint="users"
-                displayField="fullName"
-                onSelect={(uuid, display) =>
-                  setFormData(prev => ({ ...prev, executorUuid: uuid, executorName: display }))
-                }
-                minWidth="339px"
-                disabled={isLoading}
-              />
-              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                <FieldDateTime label="Дата создания" name={`${formUid}_createdAt`} width="200px" value={formData.createdAt} disabled />
-                <Field label="Дней" name={`${formUid}_deadlineDays`} width="100px" value={formData.deadlineDays} onChange={e => handleDeadlineDaysChange(e.target.value)} disabled={isLoading} />
-                <FieldDateTime label="Дедлайн" name={`${formUid}_deadline`} width="200px" value={formData.deadline} onChange={e => handleFieldChange("deadline", e.target.value)} disabled={isLoading} />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 339 }}>
-                <label style={{ fontSize: 13, color: "#222" }} htmlFor={`${formUid}_description`}>Описание задачи</label>
-                <textarea
-                  id={`${formUid}_description`}
-                  value={formData.description}
-                  onChange={e => handleFieldChange("description", e.target.value)}
-                  disabled={isLoading}
-                  style={{ minWidth: 339, minHeight: 120, padding: 8, borderRadius: 4 }}
-                />
-              </div>
-            </div>
-          </Group>
-          {isEditMode && (
-            <>
-              <Divider />
-              <Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-                </div>
-              </Group>
-            </>
-          )}
-        </div>
+        <Tabs tabs={tabs} />
       </div>
-      {isEditMode && formData.uuid && tabs.length > 0 && <Tabs tabs={tabs} />}
     </div>
   );
 };
 TodosForm.displayName = "TodosForm";
-
-// ═══════════════════════════════════════════════════════════════════════════
-// FILES PANEL
-// ═══════════════════════════════════════════════════════════════════════════
-
-interface TodoFilesPanelProps {
-  todoUuid: string;
-}
-
-const TodoFilesPanel: FC<TodoFilesPanelProps> = ({ todoUuid }) => {
-  const [files, setFiles] = useState<any[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const loadFiles = useCallback(async () => {
-    try {
-      const res = await apiClient.get(`/todofiles?todoUuid=${todoUuid}`);
-      setFiles(res.data?.items ?? []);
-    } catch (e) {
-      console.error("loadFiles error:", e);
-    }
-  }, [todoUuid]);
-
-  useEffect(() => { loadFiles(); }, [loadFiles]);
-
-  const handleUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("todoUuid", todoUuid);
-      await apiClient.post("/todofiles", fd);
-      loadFiles();
-    } catch (err) {
-      console.error("upload error:", err);
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }, [todoUuid, loadFiles]);
-
-  const handleDownload = useCallback(async (fileUuid: string, fileName: string) => {
-    try {
-      const res = await apiClient.get(`/todofiles/download/${fileUuid}`, { responseType: "blob" });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("download error:", err);
-    }
-  }, []);
-
-  const handleDelete = useCallback(async (fileUuid: string) => {
-    try {
-      await apiClient.delete(`/todofiles/${fileUuid}`);
-      loadFiles();
-    } catch (err) {
-      console.error("delete error:", err);
-    }
-  }, [loadFiles]);
-
-  const formatSize = (bytes: number | null) => {
-    if (!bytes) return "—";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1048576).toFixed(1)} MB`;
-  };
-
-  return (
-    <div style={{ padding: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
-      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-        <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-          <span>{isUploading ? "Загрузка..." : "Прикрепить файл"}</span>
-        </Button>
-        <input ref={fileInputRef} type="file" style={{ display: "none" }} onChange={handleUpload} />
-      </div>
-      {files.length === 0 && (
-        <div style={{ color: "#888", fontSize: "13px", padding: "12px", textAlign: "center" }}>
-          Нет прикреплённых файлов
-        </div>
-      )}
-      {files.map((f: any) => (
-        <div key={f.uuid} style={{
-          display: "flex", alignItems: "center", gap: "12px",
-          padding: "6px 8px", borderRadius: "4px",
-          transition: "background 0.15s",
-        }}>
-          <span
-            style={{ flex: 1, fontSize: "13px", color: "#073989", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-            onClick={() => handleDownload(f.uuid, f.fileName)}
-            title={f.fileName}
-          >
-            {f.fileName}
-          </span>
-          <span style={{ fontSize: "12px", color: "#666", whiteSpace: "nowrap" }}>{formatSize(f.fileSize)}</span>
-          <button
-            type="button"
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#666", fontSize: "14px", padding: "2px 6px", borderRadius: "4px" }}
-            onClick={() => handleDelete(f.uuid)}
-            title="Удалить файл"
-          >✕</button>
-        </div>
-      ))}
-    </div>
-  );
-};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LIST

@@ -50,5 +50,18 @@
 		"position": 4,
 		"filter": true,
 		"inlist": true
+	},
+	{
+		"identifier": "comment",
+		"type": "string",
+		"name": "Комментарий",
+		"width": "300px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Комментарий",
+		"visible": true,
+		"position": 5,
+		"filter": false,
+		"inlist": true
 	}
 ]

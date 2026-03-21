@@ -6,18 +6,20 @@ import { prisma } from "./prisma/prisma-client.js";
 import { parse, formatISO } from "date-fns";
 import { formatIpAddress } from "./utils/format.js";
 import { getLocalIP } from "./utils/module.js";
+import { authMiddleware } from "./utils/auth.js";
+import authRouter from "./api/router/auth.js";
 import apiv1 from "./api/v1.js";
 import counterpartiesRouter from "./api/router/counterparties.js";
 import activityHistoriesRouter from "./api/router/activityhistories.js";
 import organizationsRouter from "./api/router/organizations.js";
 import contractsRouter from "./api/router/contracts.js";
+import filesRouter from "./api/router/files.js";
 import bankAccountsRouter from "./api/router/bankaccounts.js";
 import contactTypesRouter from "./api/router/contacttypes.js";
 import contactsRouter from "./api/router/contacts.js";
 import contactPersonsRouter from "./api/router/contactpersons.js";
 import usersRouter from "./api/router/users.js";
 import todosRouter from "./api/router/todos.js";
-import todofilesRouter from "./api/router/todofiles.js";
 import notificationsRouter from "./api/router/notifications.js";
 import warehousesRouter from "./api/router/warehouses.js";
 import salesRouter from "./api/router/sales.js";
@@ -32,6 +34,8 @@ import cashExpenseOrdersRouter from "./api/router/cashexpenseorders.js";
 import brandsRouter from "./api/router/brands.js";
 import productsRouter from "./api/router/products.js";
 import saleItemsRouter from "./api/router/saleitems.js";
+import currenciesRouter from "./api/router/currencies.js";
+import employeesRouter from "./api/router/employees.js";
 
 // const prisma = new PrismaClient();
 // const prisma = new PrismaClient();
@@ -41,18 +45,24 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ── Открытые маршруты (без авторизации) ─────────────────────────────────
+app.use("/api/v1", authRouter);
+
+// ── Защищённые маршруты (требуют JWT) ───────────────────────────────────
+app.use("/api/v1", authMiddleware);
+
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);
 app.use("/api/v1", activityHistoriesRouter);
 app.use("/api/v1", organizationsRouter);
 app.use("/api/v1", contractsRouter);
+app.use("/api/v1", filesRouter);
 app.use("/api/v1", bankAccountsRouter);
 app.use("/api/v1", contactTypesRouter);
 app.use("/api/v1", contactsRouter);
 app.use("/api/v1", contactPersonsRouter);
 app.use("/api/v1", usersRouter);
 app.use("/api/v1", todosRouter);
-app.use("/api/v1", todofilesRouter);
 app.use("/api/v1", notificationsRouter);
 app.use("/api/v1", warehousesRouter);
 app.use("/api/v1", salesRouter);
@@ -67,6 +77,8 @@ app.use("/api/v1", cashExpenseOrdersRouter);
 app.use("/api/v1", brandsRouter);
 app.use("/api/v1", productsRouter);
 app.use("/api/v1", saleItemsRouter);
+app.use("/api/v1", currenciesRouter);
+app.use("/api/v1", employeesRouter);
 
 // Логирование запросов (опционально)
 app.use((req, res, next) => {

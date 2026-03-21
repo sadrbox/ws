@@ -11,13 +11,15 @@ import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useIn
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
 import { Divider, Field } from "src/components/Field";
+import LookupField from "src/components/Field/LookupField";
+import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
 import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
-import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
+import Tabs from "src/components/Tabs";
 
 const MODEL_ENDPOINT = "bankaccounts";
 
@@ -32,15 +34,16 @@ interface TFormData {
   iban: string;
   bik: string;
   bankName: string;
-  currency: string;
-  accountType: string;
+  currencyUuid: string;
+  currencyName: string;
   ownerType: OwnerType;
   ownerUuid: string;
   ownerName: string;
 }
 
 const EMPTY_FORM: TFormData = {
-  shortName: "", iban: "", bik: "", bankName: "", currency: "", accountType: "",
+  shortName: "", iban: "", bik: "", bankName: "",
+  currencyUuid: "", currencyName: "",
   ownerType: "", ownerUuid: "", ownerName: "",
 };
 
@@ -51,7 +54,6 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
 
   const buildInitialForm = useCallback((): TFormData => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
-    // Предзаполнение от владельца при создании нового
     const init = { ...EMPTY_FORM };
     const name = (data.ownerName as string) || "";
     if (data.organizationUuid) {
@@ -77,22 +79,14 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
     try {
       const response = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
       const d = response.data?.item ?? response.data;
-      let oType: OwnerType = "";
-      let oUuid = "";
-      let oName = d.ownerName ?? "";
-      if (d.organizationUuid) {
-        oType = "organization";
-        oUuid = d.organizationUuid;
-        oName = d.organization?.shortName ?? oName;
-      } else if (d.counterpartyUuid) {
-        oType = "counterparty";
-        oUuid = d.counterpartyUuid;
-        oName = d.counterparty?.shortName ?? oName;
-      }
+      const ot: OwnerType = d.organizationUuid ? "organization" : d.counterpartyUuid ? "counterparty" : "";
+      const ou = d.organizationUuid || d.counterpartyUuid || "";
+      const on = d.organization?.shortName || d.counterparty?.shortName || d.ownerName || "";
       setFormData({
         shortName: d.shortName ?? "", iban: d.iban ?? "", bik: d.bik ?? "", bankName: d.bankName ?? "",
-        currency: d.currency ?? "", accountType: d.accountType ?? "",
-        ownerType: oType, ownerUuid: oUuid, ownerName: oName,
+        currencyUuid: d.currencyUuid ?? "",
+        currencyName: d.currency ? `${d.currency.code} — ${d.currency.shortName}` : "",
+        ownerType: ot, ownerUuid: ou, ownerName: on,
         id: d.id, uuid: d.uuid,
       });
     } catch (err: any) {
@@ -117,34 +111,27 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
       iban: formData.iban.trim(),
       bik: formData.bik?.trim() || null,
       bankName: formData.bankName?.trim() || null,
-      currency: formData.currency?.trim() || null,
-      accountType: formData.accountType?.trim() || null,
+      currencyUuid: formData.currencyUuid || null,
+      organizationUuid: formData.ownerType === "organization" ? formData.ownerUuid || null : null,
+      counterpartyUuid: formData.ownerType === "counterparty" ? formData.ownerUuid || null : null,
       ownerName: formData.ownerName?.trim() || null,
-      organizationUuid: formData.ownerType === "organization" ? (formData.ownerUuid || null) : null,
-      counterpartyUuid: formData.ownerType === "counterparty" ? (formData.ownerUuid || null) : null,
     };
     try {
-      const response = isEditMode && uuid
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid}`, payload)
+      const response = isEditMode && (uuid || formData.uuid)
+        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = response.data?.item ?? response.data;
-      let oType: OwnerType = formData.ownerType;
-      let oUuid = formData.ownerUuid;
-      let oName = saved.ownerName ?? formData.ownerName;
-      if (saved.organizationUuid) {
-        oType = "organization";
-        oUuid = saved.organizationUuid;
-        oName = saved.organization?.shortName ?? oName;
-      } else if (saved.counterpartyUuid) {
-        oType = "counterparty";
-        oUuid = saved.counterpartyUuid;
-        oName = saved.counterparty?.shortName ?? oName;
-      }
+      const sot: OwnerType = saved.organizationUuid ? "organization" : saved.counterpartyUuid ? "counterparty" : "";
+      const sou = saved.organizationUuid || saved.counterpartyUuid || "";
+      const son = saved.organization?.shortName || saved.counterparty?.shortName || "";
       setFormData(prev => ({
-        ...prev, ...saved, shortName: saved.shortName ?? "", iban: saved.iban ?? "", bik: saved.bik ?? "",
-        bankName: saved.bankName ?? "", currency: saved.currency ?? "",
-        accountType: saved.accountType ?? "",
-        ownerType: oType, ownerUuid: oUuid, ownerName: oName,
+        ...prev, ...saved,
+        shortName: saved.shortName ?? "", iban: saved.iban ?? "", bik: saved.bik ?? "",
+        bankName: saved.bankName ?? "",
+        currencyUuid: saved.currencyUuid ?? prev.currencyUuid,
+        currencyName: saved.currency ? `${saved.currency.code} — ${saved.currency.shortName}` : prev.currencyName,
+        ownerType: sot || prev.ownerType, ownerUuid: sou || prev.ownerUuid,
+        ownerName: son || prev.ownerName,
       }));
       setIsEditMode(true);
       if (uniqId) {
@@ -188,43 +175,58 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
         <div className={styles.TablePanelRight} />
       </div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}>
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-              <Field label="Наименование" name={`${formUid}_shortName`} minWidth="339px" value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
-              <Field label="IBAN *" name={`${formUid}_iban`} minWidth="339px" value={formData.iban} onChange={e => handleFieldChange("iban", e.target.value)} disabled={isLoading} />
-              <Field label="БИК" name={`${formUid}_bik`} minWidth="200px" value={formData.bik} onChange={e => handleFieldChange("bik", e.target.value)} disabled={isLoading} />
-              <Field label="Название банка" name={`${formUid}_bankName`} minWidth="339px" value={formData.bankName} onChange={e => handleFieldChange("bankName", e.target.value)} disabled={isLoading} />
-              <Field label="Валюта" name={`${formUid}_currency`} minWidth="150px" value={formData.currency} onChange={e => handleFieldChange("currency", e.target.value)} disabled={isLoading} />
-              <Field label="Тип счёта" name={`${formUid}_accountType`} minWidth="200px" value={formData.accountType} onChange={e => handleFieldChange("accountType", e.target.value)} disabled={isLoading} />
-              <OwnerLookupField
-                name={`${formUid}_owner`}
-                ownerType={formData.ownerType}
-                ownerUuid={formData.ownerUuid}
-                ownerName={formData.ownerName}
-                onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
-                  setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))
-                }
-                disabled={isLoading}
-                typeLocked={!!formData.ownerType && (isEditMode || !!data?.organizationUuid || !!data?.counterpartyUuid)}
-                minWidth="339px"
-              />
-            </div>
-          </Group>
-          {isEditMode && (
-            <>
-              <Divider />
+      <div className={styles.FormBody}><Tabs tabs={[
+        {
+          id: "general", label: translate("general") || "Общие сведения", component: (
+            <div className={styles.FormBodyParts}>
               <Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                  <Field label="Наименование" name={`${formUid}_shortName`} minWidth="339px" value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
+                  <Field label="IBAN *" name={`${formUid}_iban`} minWidth="339px" value={formData.iban} onChange={e => handleFieldChange("iban", e.target.value)} disabled={isLoading} />
+                  <Field label="БИК" name={`${formUid}_bik`} minWidth="200px" value={formData.bik} onChange={e => handleFieldChange("bik", e.target.value)} disabled={isLoading} />
+                  <Field label="Название банка" name={`${formUid}_bankName`} minWidth="339px" value={formData.bankName} onChange={e => handleFieldChange("bankName", e.target.value)} disabled={isLoading} />
+                  <LookupField
+                    label="Валюта"
+                    name={`${formUid}_currency`}
+                    value={formData.currencyUuid}
+                    displayValue={formData.currencyName}
+                    endpoint="currencies"
+                    displayField="code"
+                    onSelect={(uuid, _display, item) =>
+                      setFormData(prev => ({ ...prev, currencyUuid: uuid, currencyName: `${item.code} — ${item.shortName}` }))
+                    }
+                    onClear={() =>
+                      setFormData(prev => ({ ...prev, currencyUuid: "", currencyName: "" }))
+                    }
+                    minWidth="250px"
+                    disabled={isLoading}
+                  />
+                  <OwnerLookupField
+                    ownerType={formData.ownerType} ownerUuid={formData.ownerUuid} ownerName={formData.ownerName}
+                    name={`${formUid}_owner`}
+                    onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
+                      setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))}
+                    typeLocked={!uuid && (!!data?.organizationUuid || !!data?.counterpartyUuid)}
+                    allowedTypes={["organization", "counterparty"]}
+                    disabled={isLoading}
+                  />
                 </div>
               </Group>
-            </>
-          )}
-        </div>
-      </div>
+              {isEditMode && (
+                <>
+                  <Divider />
+                  <Group align="row" gap="12px" className={styles.Form}>
+                    <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                      <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                      <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                    </div>
+                  </Group>
+                </>
+              )}
+            </div>
+          )
+        },
+      ]} /></div>
     </div>
   );
 };

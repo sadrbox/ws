@@ -18,6 +18,7 @@ import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
+import Tabs from "src/components/Tabs";
 
 const MODEL_ENDPOINT = "activityhistories";
 
@@ -105,68 +106,72 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = ({ onClose, data, uniqId }) =>
 
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
 
-      <div className={styles.FormBody}>
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-              <Field label="Тип действия" name={`${formUid}_actionType`} minWidth="200px"
-                value={formData.actionType} disabled />
-              <Field label="Дата действия" name={`${formUid}_actionDate`} minWidth="200px"
-                value={getFormatDate(formData.actionDate)} disabled />
-            </div>
-            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-              <Field label="Тип объекта" name={`${formUid}_objectType`} minWidth="200px"
-                value={formData.objectType} disabled />
-              <Field label="Название объекта" name={`${formUid}_objectName`} minWidth="200px"
-                value={formData.objectName} disabled />
-              <Field label="ID объекта" name={`${formUid}_objectId`} minWidth="120px"
-                value={formData.objectId} disabled />
-            </div>
-          </Group>
-
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-              <Field label="Организация" name={`${formUid}_organizationShortName`} minWidth="200px"
-                value={formData.organizationShortName} disabled />
-              <Field label="БИН" name={`${formUid}_bin`} minWidth="150px"
-                value={formData.bin} disabled />
-            </div>
-            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-              <Field label="Пользователь" name={`${formUid}_userName`} minWidth="200px"
-                value={formData.userName} disabled />
-              <Field label="Хост" name={`${formUid}_host`} minWidth="200px"
-                value={formData.host} disabled />
-              <Field label="IP" name={`${formUid}_ip`} minWidth="120px"
-                value={formData.ip || ""} disabled />
-              <Field label="Город" name={`${formUid}_city`} minWidth="120px"
-                value={formData.city || ""} disabled />
-            </div>
-
-            {isEditMode && (
-              <>
-                <Divider />
+      <div className={styles.FormBody}><Tabs tabs={[
+        {
+          id: "general", label: translate("general") || "Общие сведения", component: (
+            <div className={styles.FormBodyParts}>
+              <Group align="row" gap="12px" className={styles.Form}>
                 <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                  <Field label="ID" name={`${formUid}_id`} width="80px" value={String(formData.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                  <Field label="Тип действия" name={`${formUid}_actionType`} minWidth="200px"
+                    value={formData.actionType} disabled />
+                  <Field label="Дата действия" name={`${formUid}_actionDate`} minWidth="200px"
+                    value={getFormatDate(formData.actionDate)} disabled />
                 </div>
-              </>
-            )}
-          </Group>
-        </div>
+                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                  <Field label="Тип объекта" name={`${formUid}_objectType`} minWidth="200px"
+                    value={formData.objectType} disabled />
+                  <Field label="Название объекта" name={`${formUid}_objectName`} minWidth="200px"
+                    value={formData.objectName} disabled />
+                  <Field label="ID объекта" name={`${formUid}_objectId`} minWidth="120px"
+                    value={formData.objectId} disabled />
+                </div>
+              </Group>
 
-        {formData.props && (
-          <div style={{ padding: "0 0 12px 0" }}>
-            <details style={{ position: "relative", zIndex: 1 }}>
-              <summary style={{ cursor: "pointer", fontSize: "13px", color: "#666", userSelect: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                Данные (props)
-              </summary>
-              <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: "12px", background: "#f5f5f5", padding: "8px", borderRadius: "4px", marginTop: "6px" }}>
-                {JSON.stringify(formData.props, null, 2)}
-              </pre>
-            </details>
-          </div>
-        )}
-      </div>
+              <Group align="row" gap="12px" className={styles.Form}>
+                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                  <Field label="Организация" name={`${formUid}_organizationShortName`} minWidth="200px"
+                    value={formData.organizationShortName} disabled />
+                  <Field label="БИН" name={`${formUid}_bin`} minWidth="150px"
+                    value={formData.bin} disabled />
+                </div>
+                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                  <Field label="Пользователь" name={`${formUid}_userName`} minWidth="200px"
+                    value={formData.userName} disabled />
+                  <Field label="Хост" name={`${formUid}_host`} minWidth="200px"
+                    value={formData.host} disabled />
+                  <Field label="IP" name={`${formUid}_ip`} minWidth="120px"
+                    value={formData.ip || ""} disabled />
+                  <Field label="Город" name={`${formUid}_city`} minWidth="120px"
+                    value={formData.city || ""} disabled />
+                </div>
+
+                {isEditMode && (
+                  <>
+                    <Divider />
+                    <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                      <Field label="ID" name={`${formUid}_id`} width="80px" value={String(formData.id ?? "-")} disabled />
+                      <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                    </div>
+                  </>
+                )}
+              </Group>
+
+              {formData.props && (
+                <div style={{ padding: "0 0 12px 0" }}>
+                  <details style={{ position: "relative", zIndex: 1 }}>
+                    <summary style={{ cursor: "pointer", fontSize: "13px", color: "#666", userSelect: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      Данные (props)
+                    </summary>
+                    <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: "12px", background: "#f5f5f5", padding: "8px", borderRadius: "4px", marginTop: "6px" }}>
+                      {JSON.stringify(formData.props, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              )}
+            </div>
+          )
+        },
+      ]} /></div>
     </div>
   );
 };

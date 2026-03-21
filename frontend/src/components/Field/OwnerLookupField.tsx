@@ -5,7 +5,7 @@ import LookupField from "./LookupField";
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type OwnerType = "organization" | "counterparty" | "contactperson" | "";
+export type OwnerType = "organization" | "counterparty" | "contactperson" | "employee" | "";
 
 export interface OwnerData {
   ownerType: OwnerType;
@@ -38,18 +38,21 @@ const ALL_OWNER_TYPES: { value: OwnerType; label: string }[] = [
   { value: "organization", label: "Организация" },
   { value: "counterparty", label: "Контрагент" },
   { value: "contactperson", label: "Контактное лицо" },
+  { value: "employee", label: "Сотрудник" },
 ];
 
 const OWNER_ENDPOINT_MAP: Record<string, string> = {
   organization: "organizations",
   counterparty: "counterparties",
   contactperson: "contactpersons",
+  employee: "employees",
 };
 
 const OWNER_TYPE_LABEL_MAP: Record<string, string> = {
   organization: "Организация",
   counterparty: "Контрагент",
   contactperson: "Контактное лицо",
+  employee: "Сотрудник",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -101,8 +104,8 @@ const OwnerLookupField: FC<OwnerLookupFieldProps> = ({
   }, [typeLocked, ownerType, typeLabel]);
 
   const endpoint = OWNER_ENDPOINT_MAP[currentType] || "organizations";
-  const displayField = currentType === "contactperson" ? "fullName" : "shortName";
-  const columns = currentType === "contactperson"
+  const displayField = (currentType === "contactperson" || currentType === "employee") ? "fullName" : "shortName";
+  const columns = (currentType === "contactperson" || currentType === "employee")
     ? [{ key: "fullName", label: "ФИО" }]
     : [{ key: "shortName", label: "Наименование" }, { key: "bin", label: "БИН" }];
 

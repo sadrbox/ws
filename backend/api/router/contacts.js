@@ -121,6 +121,7 @@ router.get("/contacts", async (req, res) => {
 				organization: true,
 				counterparty: true,
 				contactPerson: true,
+				employee: true,
 			},
 		};
 
@@ -169,6 +170,7 @@ router.get("/contacts/:id", async (req, res) => {
 						organization: true,
 						counterparty: true,
 						contactPerson: true,
+						employee: true,
 					},
 				})
 			: await prisma.contact.findUnique({
@@ -178,6 +180,7 @@ router.get("/contacts/:id", async (req, res) => {
 						organization: true,
 						counterparty: true,
 						contactPerson: true,
+						employee: true,
 					},
 				});
 
@@ -206,6 +209,7 @@ router.post("/contacts", async (req, res) => {
 			organizationUuid,
 			counterpartyUuid,
 			contactPersonUuid,
+			employeeUuid,
 		} = req.body;
 
 		if (!value || typeof value !== "string" || !value.trim()) {
@@ -222,12 +226,14 @@ router.post("/contacts", async (req, res) => {
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contactPersonUuid: contactPersonUuid || null,
+				employeeUuid: employeeUuid || null,
 			},
 			include: {
 				contactType: true,
 				organization: true,
 				counterparty: true,
 				contactPerson: true,
+				employee: true,
 			},
 		});
 
@@ -254,6 +260,7 @@ router.put("/contacts/:id", async (req, res) => {
 			organizationUuid,
 			counterpartyUuid,
 			contactPersonUuid,
+			employeeUuid,
 		} = req.body;
 		const data = {};
 		if (value !== undefined) data.value = value?.trim() ?? null;
@@ -266,6 +273,7 @@ router.put("/contacts/:id", async (req, res) => {
 			data.counterpartyUuid = counterpartyUuid || null;
 		if (contactPersonUuid !== undefined)
 			data.contactPersonUuid = contactPersonUuid || null;
+		if (employeeUuid !== undefined) data.employeeUuid = employeeUuid || null;
 
 		const item = await prisma.contact.update({
 			where: isNumeric ? { id: numId } : { uuid: param },
@@ -275,6 +283,7 @@ router.put("/contacts/:id", async (req, res) => {
 				organization: true,
 				counterparty: true,
 				contactPerson: true,
+				employee: true,
 			},
 		});
 

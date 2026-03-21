@@ -1,6 +1,8 @@
-import { FC, useCallback, useEffect, useMemo, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./Field.module.scss";
 import Modal from "../Modal";
+import { apiClient } from "src/services/api/client";
+import { useDebounceValue } from "src/hooks/useDebounceValue";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -56,6 +58,8 @@ const listComponentRegistry: Record<string, () => Promise<Record<string, any>>> 
   notifications: () => import("src/models/Notifications"),
   brands: () => import("src/models/Brands"),
   products: () => import("src/models/Products"),
+  currencies: () => import("src/models/Currencies"),
+  employees: () => import("src/models/Employees"),
 };
 
 const listComponentNameMap: Record<string, string> = {
@@ -72,6 +76,8 @@ const listComponentNameMap: Record<string, string> = {
   notifications: "NotificationsList",
   brands: "BrandsList",
   products: "ProductsList",
+  currencies: "CurrenciesList",
+  employees: "EmployeesList",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -124,7 +130,7 @@ const LookupSelectModal: FC<LookupSelectModalProps> = ({ title, endpoint, listCo
 
   return (
     <Modal
-      title={`Выбор: ${title}`}
+      title={<>Выбор: {title}</>}
       onClose={onClose}
       style={{
         maxWidth: "900px",
@@ -176,6 +182,67 @@ const LookupField: FC<LookupFieldProps> = ({
 
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // ── Autocomplete state ──────────────────────────────────────────────────
+  const [inputText, setInputText] = useState(displayValue || "");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<Record<string, any>[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debouncedText = useDebounceValue(inputText, 300);
+
+  // Синхронизация inputText с displayValue (при выборе или внешнем изменении)
+  useEffect(() => {
+    setInputText(displayValue || "");
+  }, [displayValue]);
+
+  // Запрос подсказок при изменении debounced текста
+  useEffect(() => {
+    // Не ищем если текст совпадает с уже выбранным значением
+    if (!debouncedText || debouncedText === displayValue) {
+      setSuggestions([]);
+      setIsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setIsLoading(true);
+    apiClient
+      .get(`/${endpoint}`, { params: { search: debouncedText, limit: 10 } })
+      .then((res) => {
+        if (cancelled) return;
+        const items = res.data?.items ?? res.data?.data ?? res.data ?? [];
+        setSuggestions(Array.isArray(items) ? items : []);
+        setIsDropdownOpen(true);
+        setActiveIndex(-1);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [debouncedText, endpoint, displayValue]);
+
+  // Click-outside: закрытие dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+        // Если значение не выбрано — восстановить displayValue
+        if (!value) {
+          setInputText("");
+        } else {
+          setInputText(displayValue || "");
+        }
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [value, displayValue]);
+
   const handleOpenModal = useCallback(() => {
     if (!disabled) setIsModalOpen(true);
   }, [disabled]);
@@ -189,23 +256,104 @@ const LookupField: FC<LookupFieldProps> = ({
     const display = String(item[displayField] ?? item.shortName ?? item.value ?? item.name ?? uuid);
     onSelect(uuid, display, item);
     setIsModalOpen(false);
+    setIsDropdownOpen(false);
+    setInputText(display);
   }, [onSelect, displayField]);
 
   const handleClear = useCallback(() => {
     onSelect("", "", {});
     onClear?.();
+    setInputText("");
+    setSuggestions([]);
+    setIsDropdownOpen(false);
   }, [onSelect, onClear]);
+
+  // Выбор элемента из dropdown
+  const handleSuggestionClick = useCallback((item: Record<string, any>) => {
+    handleSelectItem(item);
+  }, [handleSelectItem]);
+
+  // Обработка ввода текста
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputText(val);
+    // Если пользователь стирает текст — очистить выбранное значение
+    if (!val && value) {
+      onSelect("", "", {});
+      onClear?.();
+    }
+    if (val) {
+      setIsDropdownOpen(true);
+    } else {
+      setIsDropdownOpen(false);
+      setSuggestions([]);
+    }
+  }, [value, onSelect, onClear]);
+
+  // Навигация клавишами в dropdown
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isDropdownOpen || suggestions.length === 0) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        // При нажатии стрелки вниз без текста — открыть модалку
+        if (!inputText && !disabled) {
+          handleOpenModal();
+        }
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (activeIndex >= 0 && activeIndex < suggestions.length) {
+        handleSuggestionClick(suggestions[activeIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setIsDropdownOpen(false);
+    }
+  }, [isDropdownOpen, suggestions, activeIndex, inputText, disabled, handleOpenModal, handleSuggestionClick]);
+
+  // Скроллинг активного элемента в видимую область dropdown
+  useEffect(() => {
+    if (activeIndex >= 0 && dropdownRef.current) {
+      const items = dropdownRef.current.querySelectorAll(`.${styles.LookupDropdownItem}`);
+      items[activeIndex]?.scrollIntoView({ block: "nearest" });
+    }
+  }, [activeIndex]);
 
   // Действия для кнопок
   const fieldActions = useMemo(() => {
     if (disabled) return [];
     const acts: { type: "clear" | "list" | "open"; onClick: () => void }[] = [];
-    if (value) {
+    if (value || inputText) {
       acts.push({ type: "clear", onClick: handleClear });
     }
     acts.push({ type: "list", onClick: handleOpenModal });
     return acts;
-  }, [disabled, value, handleClear, handleOpenModal]);
+  }, [disabled, value, inputText, handleClear, handleOpenModal]);
+
+  // Получить отображаемое поле элемента
+  const getItemDisplay = useCallback((item: Record<string, any>) => {
+    return String(item[displayField] ?? item.shortName ?? item.value ?? item.name ?? item.uuid ?? "");
+  }, [displayField]);
+
+  // Получить вторичные поля (bin, iin, code, sku, email, iban, displayName и т.п.)
+  // Показывает все значимые текстовые поля, кроме основного displayField
+  const getItemSecondary = useCallback((item: Record<string, any>) => {
+    const FIELDS = ["bin", "iin", "code", "sku", "symbol", "email", "iban", "bik", "displayName", "fullName", "contractNumber", "documentNumber", "ownerName", "bankName", "description", "cronExpr"];
+    const skip = new Set(["uuid", "id", "createdAt", "updatedAt", "deletedAt", displayField]);
+    const parts: string[] = [];
+    for (const f of FIELDS) {
+      if (skip.has(f)) continue;
+      const v = item[f];
+      if (v && typeof v === "string") parts.push(v);
+    }
+    return parts.join(" · ");
+  }, [displayField]);
 
   return (
     <>
@@ -216,6 +364,7 @@ const LookupField: FC<LookupFieldProps> = ({
           maxWidth: maxWidth ?? "none",
           minWidth: minWidth ?? "none",
         }}
+        ref={wrapperRef}
       >
         <label htmlFor={name} className={styles.FieldLabel}>
           {label}
@@ -223,18 +372,26 @@ const LookupField: FC<LookupFieldProps> = ({
 
         <div className={styles.FieldInputWrapper}>
           <input
+            ref={inputRef}
             type="text"
             id={name}
             name={name}
-            value={displayValue || value}
-            readOnly
+            value={inputText}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onFocus={() => {
+              // При фокусе — если есть текст и нет выбранного значения, открыть dropdown
+              if (inputText && !value && suggestions.length > 0) {
+                setIsDropdownOpen(true);
+              }
+            }}
             className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ""}`}
             autoComplete="off"
             disabled={disabled}
-            placeholder={placeholder ?? "Выберите..."}
+            placeholder={placeholder ?? "Введите для поиска..."}
             onDoubleClick={handleOpenModal}
             style={{
-              cursor: disabled ? "default" : "pointer",
+              cursor: disabled ? "default" : "text",
               ...(fieldActions.length > 0 && {
                 paddingRight: `${fieldActions.length * 32 + 8}px`,
               }),
@@ -293,6 +450,36 @@ const LookupField: FC<LookupFieldProps> = ({
             </div>
           )}
         </div>
+
+        {/* ── Autocomplete dropdown ───────────────────────────────────── */}
+        {isDropdownOpen && (suggestions.length > 0 || isLoading) && (
+          <div className={styles.LookupDropdown} ref={dropdownRef}>
+            {isLoading && suggestions.length === 0 && (
+              <div className={styles.LookupDropdownLoading}>Поиск...</div>
+            )}
+            {suggestions.map((item, idx) => {
+              const primary = getItemDisplay(item);
+              const secondary = getItemSecondary(item);
+              return (
+                <div
+                  key={item.uuid ?? idx}
+                  className={`${styles.LookupDropdownItem} ${idx === activeIndex ? styles.LookupDropdownItemActive : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // Не дать blur сработать раньше click
+                    handleSuggestionClick(item);
+                  }}
+                  onMouseEnter={() => setActiveIndex(idx)}
+                >
+                  <span className={styles.LookupDropdownPrimary}>{primary}</span>
+                  {secondary && <span className={styles.LookupDropdownSecondary}>{secondary}</span>}
+                </div>
+              );
+            })}
+            {!isLoading && suggestions.length === 0 && (
+              <div className={styles.LookupDropdownLoading}>Ничего не найдено</div>
+            )}
+          </div>
+        )}
       </div>
 
       {isModalOpen && (

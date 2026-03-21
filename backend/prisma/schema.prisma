@@ -16,15 +16,15 @@ model User {
   email    String?
   password String? // Хранить только хэш!
 
-  firstName  String?
-  lastName   String?
-  middleName String?
-  fullName   String? // лучше вычислять на уровне приложения
+  employeeUuid String?
+  employee     Employee? @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
 
   curatorTodos  Todo[]         @relation("TodoCurator")
   executorTodos Todo[]         @relation("TodoExecutor")
   notifications Notification[]
+  contacts      Contact[]
 
+  @@index([employeeUuid])
   @@map("users")
 }
 
@@ -104,6 +104,28 @@ model Contract {
   @@map("contracts")
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Прикреплённые файлы (универсальная таблица)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model AttachedFile {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  ownerType String // contract, todo, organization, counterparty, sale, purchase ...
+  ownerUuid String
+
+  fileName    String
+  filePath    String // имя файла на диске (в uploads/files/)
+  fileSize    Int?
+  mimeType    String?
+  description String?
+  uploadedAt  DateTime @default(now())
+
+  @@index([ownerType, ownerUuid])
+  @@map("attached_files")
+}
+
 model ContactType {
   id        Int    @id @default(autoincrement())
   uuid      String @unique @default(uuid())
@@ -126,17 +148,23 @@ model Contact {
   organizationUuid  String?
   counterpartyUuid  String?
   contactPersonUuid String?
+  userUuid          String?
+  employeeUuid      String?
 
   ownerName String? // для быстрого отображения без join'ов
 
   organization  Organization?  @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   counterparty  Counterparty?  @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
   contactPerson ContactPerson? @relation(fields: [contactPersonUuid], references: [uuid], onDelete: SetNull)
+  user          User?          @relation(fields: [userUuid], references: [uuid], onDelete: SetNull)
+  employee      Employee?      @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
 
   @@index([contactTypeUuid])
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contactPersonUuid])
+  @@index([userUuid])
+  @@index([employeeUuid])
   @@map("contacts")
 }
 
@@ -153,6 +181,7 @@ model ContactPerson {
   counterpartyUuid String?
 
   ownerName String? // быстрое отображение
+  comment   String?
 
   organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
@@ -171,22 +200,23 @@ model BankAccount {
   organizationUuid String?
   counterpartyUuid String?
 
-  iban        String
-  bik         String? // БИК / SWIFT-BIC
-  bankName    String? // денормализация
-  currency    String? // KZT, USD, EUR...
-  accountType String? // current, savings, deposit, card...
-  shortName   String? // краткое наименование счёта
+  iban         String
+  bik          String? // БИК / SWIFT-BIC
+  bankName     String? // денормализация
+  currencyUuid String?
+  shortName    String? // краткое наименование счёта
 
   ownerName String? // для быстрого отображения без join'ов
 
   organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+  currency     Currency?     @relation(fields: [currencyUuid], references: [uuid], onDelete: SetNull)
 
   @@unique([organizationUuid, iban], name: "bankacc_org_iban_unique")
   @@unique([counterpartyUuid, iban], name: "bankacc_cp_iban_unique")
   @@index([organizationUuid])
   @@index([counterpartyUuid])
+  @@index([currencyUuid])
   @@index([iban])
   @@index([bik])
   @@map("bank_accounts")
@@ -250,7 +280,6 @@ model Todo {
   curator      User?         @relation("TodoCurator", fields: [curatorUuid], references: [uuid], onDelete: SetNull)
   executor     User?         @relation("TodoExecutor", fields: [executorUuid], references: [uuid], onDelete: SetNull)
 
-  files         TodoFile[]
   notifications Notification[]
 
   @@index([organizationUuid])
@@ -259,23 +288,6 @@ model Todo {
   @@index([executorUuid])
   @@index([status])
   @@map("todos")
-}
-
-model TodoFile {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  todoUuid String
-  todo     Todo   @relation(fields: [todoUuid], references: [uuid], onDelete: Cascade)
-
-  fileName   String
-  filePath   String
-  fileSize   Int?
-  mimeType   String?
-  uploadedAt DateTime @default(now())
-
-  @@index([todoUuid])
-  @@map("todo_files")
 }
 
 model Notification {
@@ -630,4 +642,44 @@ model SaleItem {
   @@index([saleUuid])
   @@index([productUuid])
   @@map("sale_items")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Справочник Сотрудники
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Employee {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  firstName  String?
+  lastName   String?
+  middleName String?
+  fullName   String? @db.VarChar(255)
+  iin        String? @db.VarChar(12) // ИИН
+  position   String? // Должность
+  phone      String?
+  email      String?
+
+  users    User[]
+  contacts Contact[]
+
+  @@map("employees")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Справочник валют
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Currency {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  code      String  @unique // ISO 4217: KZT, USD, EUR...
+  shortName String // Казахстанский тенге, Доллар США...
+  symbol    String? // ₸, $, €, ₽...
+
+  bankAccounts BankAccount[]
+
+  @@map("currencies")
 }

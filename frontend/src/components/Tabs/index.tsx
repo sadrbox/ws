@@ -78,7 +78,7 @@ const Tabs: React.FC<TypeTabs> = ({
               role="tabpanel"
               aria-labelledby={`tab-${tab.id}`}
             >
-              {isActive && tab.component}
+              {tab.component}
             </div>
           );
         })}

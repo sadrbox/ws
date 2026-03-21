@@ -32,9 +32,9 @@ export const useRequestQueue = () => {
 
 		// Установим таймаут для "зависшего" запроса
 		request.timeout = setTimeout(() => {
-			console.warn(
-				`[RequestQueue] Request ${request.id} is hanging, canceling...`,
-			);
+			// console.warn(
+			// 	`[RequestQueue] Request ${request.id} is hanging, canceling...`,
+			// );
 			cancelHangingRequest();
 			processQueue(); // Переходим к следующему
 		}, HANGING_REQUEST_TIMEOUT);
@@ -52,7 +52,7 @@ export const useRequestQueue = () => {
 
 	const addRequest = useCallback(
 		(id: string, execute: () => Promise<any>) => {
-			console.log(`[RequestQueue] Adding request: ${id}`);
+			// console.log(`[RequestQueue] Adding request: ${id}`);
 			queueRef.current.push({ id, execute, timestamp: Date.now() });
 			processQueue();
 		},
