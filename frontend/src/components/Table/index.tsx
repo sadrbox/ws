@@ -343,7 +343,7 @@ const Table: FC<TableProps> = memo((props) => {
     refetch();
   }, [refetch]);
 
-  const handleDeleteClick = useCallback(() => {
+  const handleDeleteClick = useCallback(async () => {
     // Собираем реальный набор id выбранных строк
     let effectiveIds: Set<number>;
     if (isAllSelectedMode) {
@@ -363,11 +363,16 @@ const Table: FC<TableProps> = memo((props) => {
     if (effectiveIds.size === 0) return;
 
     if (onDelete) {
-      onDelete(effectiveIds, rows);
+      await onDelete(effectiveIds, rows);
+      // Сбрасываем выделение после удаления
+      setSelectedRows(new Set());
+      setIsAllSelectedMode(false);
+      setExcludedRows(new Set());
+      setActiveRow(null);
     } else {
       alert('Удалить выбранные');
     }
-  }, [onDelete, selectedRows, rows, isAllSelectedMode, excludedRows, activeRow]);
+  }, [onDelete, selectedRows, rows, isAllSelectedMode, excludedRows, activeRow, setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow]);
 
   const handleConfigOpen = useCallback(() => {
     setConfigModalAction('open');
