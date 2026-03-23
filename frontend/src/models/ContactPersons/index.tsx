@@ -10,6 +10,7 @@ import columnsJson from "./columns.json";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
+import { useModelDelete } from "src/hooks/useModelDelete";
 import { Divider, Field } from "src/components/Field";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import { Group } from "src/components/UI";
@@ -250,6 +251,8 @@ const ContactPersonsList: FC<ContactPersonsListProps> = ({ variant = 'default', 
 
   const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
+
+  const handleDelete = useModelDelete(model, refetch);
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data;
     const isEdit = !!d?.uuid;
@@ -278,7 +281,7 @@ const ContactPersonsList: FC<ContactPersonsListProps> = ({ variant = 'default', 
 
   const handleCleanRefresh = useCallback(() => { cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
-  const tableProps = useMemo(() => ({ variant, onSelectItem, enableDateRange: false, componentName, rows, columns, total, totalPages: Math.ceil(total / adaptiveLimit), isLoading: isAnythingLoading, isFetching: isAnythingLoading, error, hasNextPage, isFetchingNextPage, pagination: { page: 1, limit: adaptiveLimit, onPageChange: () => { }, onLimitChange: () => { } }, sorting: { sort, onSortChange: handleSortChange }, filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters }, search: { value: search, onChange: handleSearch }, actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit }, }), [variant, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error, sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters, openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh]);
+  const tableProps = useMemo(() => ({ variant, onSelectItem, enableDateRange: false, componentName, rows, columns, total, totalPages: Math.ceil(total / adaptiveLimit), isLoading: isAnythingLoading, isFetching: isAnythingLoading, error, hasNextPage, isFetchingNextPage, pagination: { page: 1, limit: adaptiveLimit, onPageChange: () => { }, onLimitChange: () => { } }, sorting: { sort, onSortChange: handleSortChange }, filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters }, search: { value: search, onChange: handleSearch }, actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit }, onDelete: handleDelete, }), [variant, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error, sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters, openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh, handleDelete]);
 
   if (error) return (<div className="error-container"><div className="error-message"><h3>{t("errorTitle") || "Ошибка загрузки"}</h3><p>{(error as Error)?.message || "Неизвестная ошибка"}</p><button onClick={() => refetch()} className="retry-button">{t("retry") || "Повторить"}</button></div></div>);
 

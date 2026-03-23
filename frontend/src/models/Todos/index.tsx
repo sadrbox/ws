@@ -11,6 +11,7 @@ import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useIn
 import FilesPanel from "src/models/Files";
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
+import { useModelDelete } from "src/hooks/useModelDelete";
 import { Divider, Field, FieldDateTime, FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
@@ -345,6 +346,8 @@ const TodosList: FC<TodosListProps> = ({ variant = 'default', onSelectItem, owne
   const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
+
+  const handleDelete = useModelDelete(model, refetch);
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data;
     const isEdit = !!d?.uuid;
@@ -399,9 +402,10 @@ const TodosList: FC<TodosListProps> = ({ variant = 'default', onSelectItem, owne
     filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
     search: { value: search, onChange: handleSearch },
     actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
+    onDelete: handleDelete,
   }), [variant, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error,
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
-    openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh]);
+    openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh, handleDelete]);
 
   if (error) {
     return (

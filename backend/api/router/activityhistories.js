@@ -442,4 +442,29 @@ router.get("/activityhistories", async (req, res) => {
 	}
 });
 
+// ============================================
+// DELETE /activityhistories/:id
+// ============================================
+router.delete("/activityhistories/:id", async (req, res) => {
+	try {
+		const param = req.params.id;
+		const numId = Number(param);
+		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
+
+		await prisma.activityHistory.delete({
+			where: isNumeric ? { id: numId } : { uuid: param },
+		});
+
+		return res.status(200).json({ success: true, message: "Удалено" });
+	} catch (error) {
+		if (error.code === "P2025") {
+			return res
+				.status(404)
+				.json({ success: false, message: "Запись не найдена" });
+		}
+		console.error("DELETE /activityhistories/:id error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 export default router;

@@ -10,6 +10,7 @@ import columnsJson from "./columns.json";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
+import { useModelDelete } from "src/hooks/useModelDelete";
 import { Divider, Field } from "src/components/Field";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
@@ -264,6 +265,8 @@ const ContactsList: FC<ContactsListProps> = ({ variant = 'default', onSelectItem
   const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
+
+  const handleDelete = useModelDelete(model, refetch);
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data;
     const isEdit = !!d?.uuid;
@@ -315,9 +318,10 @@ const ContactsList: FC<ContactsListProps> = ({ variant = 'default', onSelectItem
     filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
     search: { value: search, onChange: handleSearch },
     actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
+    onDelete: handleDelete,
   }), [variant, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error,
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
-    openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh]);
+    openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh, handleDelete]);
 
   if (error) {
     return (

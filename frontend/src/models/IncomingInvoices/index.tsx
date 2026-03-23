@@ -10,6 +10,7 @@ import columnsJson from "./columns.json";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
+import { useModelDelete } from "src/hooks/useModelDelete";
 import { Divider, Field, FieldDateTime, FieldSelect } from "src/components/Field";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
@@ -149,6 +150,8 @@ const IncomingInvoicesList: FC<IncomingInvoicesListProps> = ({ variant = "defaul
   const params = useMemo(() => ({ sort, search, filter: ownerFilter ? { ...ownerFilter, ...filter } : filter }), [sort, search, filter, ownerFilter]);
   const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
+
+  const handleDelete = useModelDelete(model, refetch);
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data; const isEdit = !!d?.uuid;
     const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid, ownerName: ownerName || "" } as unknown as TDataItem : d;
@@ -172,7 +175,8 @@ const IncomingInvoicesList: FC<IncomingInvoicesListProps> = ({ variant = "defaul
     sorting: { sort, onSortChange: handleSortChange }, filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
     search: { value: search, onChange: handleSearch },
     actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
-  }), [variant, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error, sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters, openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh]);
+    onDelete: handleDelete,
+  }), [variant, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error, sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters, openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh, handleDelete]);
 
   if (error) return <div className="error-container"><div className="error-message"><h3>Ошибка загрузки</h3><p>{(error as Error)?.message}</p><button onClick={() => refetch()} className="retry-button">Повторить</button></div></div>;
   return <Table {...tableProps} />;
