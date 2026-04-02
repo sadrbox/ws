@@ -171,75 +171,63 @@ thead {
 	z-index: 2;
 
 	tr {
-		// position: relative;
 		th {
 			padding: 0;
 			font-weight: 500;
 			user-select: none;
+			position: relative;
+			border-bottom: 0;
+
 			&:not(:last-child) {
 				border-right: 1px solid transparent !important;
 			}
-			// box-shadow: inset 1px 0 0 $color34;
-			position: relative;
-			border-bottom: 0;
-			// border-top: 1px solid $color10;
-			// border-bottom: 1px solid $color10;
-			// border-right: 1px solid red;
-			// border-left: 1px solid red;
-
-			// &:not(:last-child) &:not(:first-child) {
-			// border-right: 1px solid red;
-			// border-left: 1px solid red;
-
 			&::after {
 				content: "";
 				position: absolute;
 				right: -1px;
 				bottom: 0;
-				// left: 0;
 				height: 100%;
 				width: 1px;
 				border-right: 1px solid $color34;
 			}
-			// }
-			&:first-child {
-				border-left: 0;
-			}
-			&:last-child {
-				border-right: 0;
-			}
+		}
+		&:first-child {
+			border-left: 0;
+		}
+		&:last-child {
+			border-right: 0;
+		}
 
-			.TableHeaderCell {
-				display: flex;
-				align-items: center;
-				height: $heightFieldInput - 4px;
-				padding: 1px;
-				margin: 1px;
+		.TableHeaderCell {
+			display: flex;
+			align-items: center;
+			height: $heightFieldInput - 1px;
+			padding: 1px;
+			// margin: 1px;
+			overflow: hidden;
+			white-space: nowrap;
+			text-overflow: ellipsis;
+			cursor: default;
+			justify-content: space-between;
+			border: 1px solid transparent;
+			span {
+				padding: 0 5px;
 				overflow: hidden;
 				white-space: nowrap;
 				text-overflow: ellipsis;
-				cursor: default;
-				justify-content: space-between;
-				border: 1px solid transparent;
-				span {
-					padding: 0 5px;
-					overflow: hidden;
-					white-space: nowrap;
-					text-overflow: ellipsis;
-				}
 			}
+		}
 
-			.ResizeHandle {
-				position: absolute;
-				right: -3px;
-				top: 0;
-				bottom: 0;
-				width: 5px;
-				cursor: col-resize;
-				z-index: 3;
-				&:hover {
-					background: rgba(#4a90d9, 0.35);
-				}
+		.ResizeHandle {
+			position: absolute;
+			right: -3px;
+			top: 0;
+			bottom: 0;
+			width: 5px;
+			cursor: col-resize;
+			z-index: 3;
+			&:hover {
+				background: rgba(#4a90d9, 0.35);
 			}
 		}
 	}
@@ -263,6 +251,7 @@ tr:has(+ tr.activeRow) {
 	}
 }
 tbody {
+	// margin-top: 10px;
 	// position: relative;
 	// Оптимизация для производительности при виртуализации
 	will-change: transform;
@@ -272,6 +261,16 @@ tbody {
 	// contain: content;
 
 	tr {
+		&:first-child {
+			td {
+				border-top: 1px solid $color34;
+			}
+			&.activeRow {
+				td {
+					border-top: 1px solid $color1;
+				}
+			}
+		}
 		&.activeRow {
 			// position: static;
 			z-index: 5;
@@ -282,10 +281,10 @@ tbody {
 				div {
 					background: $color2;
 				}
-				border-top: 0px solid $color1;
+				// border-top: 0px solid $color1;
 				border-bottom: 1px solid $color1;
 				border-right: 1px solid $color1;
-				border-left: 0px solid $color1;
+				// border-left: 0px solid $color1;
 				&:last-child {
 					border-right: 0px;
 				}
@@ -298,22 +297,21 @@ tbody {
 
 		td {
 			padding: 0;
-			border-top: 0px solid $color34;
-			border-bottom: 1px solid $color34;
-			border-right: 1px solid $color34;
-			border-left: 0px solid $color34;
+			// border-top: 1px solid $color34;
+			border-bottom: 1px solid #000;
+			border-right: 1px solid #000;
+			// border-left: 0px solid $color34;
 
 			.TableBodyCell {
 				display: flex;
 				align-items: center;
-				height: $heightFieldInput - 4px;
-				padding: 1px;
-				margin: 1px;
+				height: $heightFieldInput - 1px;
+				padding: 0 1px;
 				white-space: nowrap;
 				text-overflow: ellipsis;
 				overflow: hidden;
 				user-select: none;
-				border: 1px solid transparent;
+				border: 1px solid #fff;
 
 				// Оптимизация ячеек
 				// will-change: contents;
@@ -552,23 +550,14 @@ input[type="checkbox"] {
 	opacity: 0.6;
 }
 
-/* ── Borderless fields inside table cells ── */
+/* ── Borderless fields inside table cells (legacy, prefer variant="table" on Field*) ── */
 .borderlessCell {
-	// Stretch self to fill the td completely
-	height: 100% !important;
 	margin: 0 !important;
 	padding: 0 !important;
 	overflow: visible !important;
+	height: 100% !important;
 
-	// Kill borders/shadows on ANY nested element
-	*,
-	*::before,
-	*::after {
-		border-color: transparent !important;
-		box-shadow: none !important;
-	}
-
-	// Field wrappers — stretch to fill height, remove borders
+	// Field wrappers — stretch to fill, remove borders
 	div[class*="FieldWrapper"] {
 		height: 100%;
 		margin: 0;
@@ -586,7 +575,6 @@ input[type="checkbox"] {
 			box-shadow: none !important;
 		}
 	}
-	// Raw inputs inside table cells
 	input[type="text"],
 	input[type="number"],
 	select {
@@ -600,7 +588,6 @@ input[type="checkbox"] {
 			box-shadow: none !important;
 		}
 	}
-	// Hide label in lookup fields inside cells
 	label[class*="FieldLabel"] {
 		display: none !important;
 	}
@@ -806,6 +793,8 @@ input[type="checkbox"] {
 	background: #fff;
 	padding: 0;
 	flex: 1;
+	gap: 3px;
+	padding: 0 2px;
 	// margin: 3px;
 	// height: 22px;
 
@@ -819,7 +808,7 @@ input[type="checkbox"] {
 	border: none;
 	outline: none;
 	background: transparent;
-	padding: 0px 3px;
+	padding: 0px;
 	// font-size: 12px;
 	// line-height: 1;
 	min-width: 120px;
@@ -863,9 +852,8 @@ input[type="checkbox"] {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 3px;
+	padding: 2px;
 	background: rgba($color3, 0.06);
-	border-bottom: 1px solid #e0e0e0;
 	width: min-content;
 	// font-size: 12px;
 	// min-height: 22px;
@@ -882,7 +870,7 @@ input[type="checkbox"] {
 	cursor: pointer;
 	text-decoration: none;
 	white-space: nowrap;
-
+	font-size: 110%;
 	&:hover {
 		text-decoration: underline;
 	}

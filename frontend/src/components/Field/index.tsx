@@ -79,9 +79,12 @@ interface FieldAction {
 
 type TypeFieldActions = FieldAction[];
 
+// Варианты отображения Field*
+export type FieldVariant = 'default' | 'table';
+
 // Пропсы для Field
 interface TypeFieldStringProps {
-  label: string;
+  label?: string;
   name: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -92,12 +95,13 @@ interface TypeFieldStringProps {
   placeholder?: string;
   required?: boolean;
   actions?: TypeFieldActions;
+  variant?: FieldVariant;
 }
 
 // Пропсы для FieldGroup
 interface TypeFieldGroupProps {
   name: string;
-  label: string;
+  label?: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
@@ -106,6 +110,7 @@ interface TypeFieldGroupProps {
   disabled?: boolean;
   placeholder?: string;
   required?: boolean;
+  variant?: FieldVariant;
 }
 
 // // Иконки для действий (можно заменить на ваши SVG)
@@ -148,42 +153,26 @@ export const Field: FC<TypeFieldStringProps> = ({
   disabled = false,
   placeholder,
   required = false,
-  actions
+  actions,
+  variant = 'default',
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Обработчик очистки поля
   const handleClear = () => {
     if (inputRef.current) {
       inputRef.current.value = "";
-      // Триггерим событие onChange с пустым значением
       if (onChange) {
         const event = new Event('input', { bubbles: true });
-        Object.defineProperty(event, 'target', {
-          writable: false,
-          value: inputRef.current
-        });
+        Object.defineProperty(event, 'target', { writable: false, value: inputRef.current });
         onChange(event as any);
       }
     }
   };
 
-  const handleList = () => {
-    console.log("List action for field:", name);
-  };
-
-  const handleOpen = () => {
-    console.log("Open action for field:", name);
-  };
-
-  // Дефолтные действия (можно переопределить через props)
   const defaultActions: TypeFieldActions = actions || [
     { type: "clear", onClick: handleClear },
-    // { type: "list", onClick: handleList },
-    // { type: "open", onClick: handleOpen },
   ];
 
-  // Показываем кнопку очистки только если поле не disabled и есть значение
   const visibleActions = disabled
     ? []
     : defaultActions.filter(action => {
@@ -207,6 +196,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       disabled={disabled}
       placeholder={placeholder}
       required={required}
+      variant={variant}
     />
   );
 };
@@ -222,20 +212,22 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
   style,
   disabled = false,
   placeholder,
-  required = false
+  required = false,
+  variant = 'default',
 }) => {
+  const isTable = variant === 'table';
+  const wrapperClass = isTable
+    ? `${styles.FieldWrapper} ${styles.tableVariant}`
+    : styles.FieldWrapper;
+
   return (
-    <div
-      className={styles.FieldWrapper}
-      style={style && style}
-    >
-      <label
-        htmlFor={name}
-        className={styles.FieldLabel}
-      >
-        {label}
-        {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
-      </label>
+    <div className={wrapperClass} style={style}>
+      {!isTable && label && (
+        <label htmlFor={name} className={styles.FieldLabel}>
+          {label}
+          {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
+        </label>
+      )}
 
       <div className={styles.FieldInputWrapper}>
         <input
@@ -279,7 +271,7 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
 
 // Компонент FieldDateTime — поле выбора даты/времени (datetime-local)
 interface TypeFieldDateTimeProps {
-  label: string;
+  label?: string;
   name: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -288,6 +280,7 @@ interface TypeFieldDateTimeProps {
   maxWidth?: string;
   disabled?: boolean;
   required?: boolean;
+  variant?: FieldVariant;
 }
 
 export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
@@ -300,16 +293,24 @@ export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
   maxWidth,
   disabled = false,
   required = false,
+  variant = 'default',
 }) => {
+  const isTable = variant === 'table';
+  const wrapperClass = isTable
+    ? `${styles.FieldWrapper} ${styles.tableVariant}`
+    : styles.FieldWrapper;
+
   return (
     <div
-      className={styles.FieldWrapper}
+      className={wrapperClass}
       style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}
     >
-      <label htmlFor={name} className={styles.FieldLabel}>
-        {label}
-        {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
-      </label>
+      {!isTable && label && (
+        <label htmlFor={name} className={styles.FieldLabel}>
+          {label}
+          {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
+        </label>
+      )}
       <div className={styles.FieldInputWrapper}>
         <input
           type="datetime-local"
@@ -366,29 +367,31 @@ export const FieldString: FC<TypeFieldStringProps> = ({ label, name }) => {
 };
 
 type TypeFieldSelectProps = {
-  label: string;
+  label?: string;
   name: string;
   options: { value: string; label: string }[];
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   disabled?: boolean;
   style?: CSSProperties;
+  variant?: FieldVariant;
 };
 
-export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value, onChange, disabled = false, style }) => {
+export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value, onChange, disabled = false, style, variant = 'default' }) => {
+  const isTable = variant === 'table';
+  const wrapperClass = isTable
+    ? `${styles.FieldWrapper} ${styles.tableVariant}`
+    : styles.FieldWrapper;
+
   return (
-    <div className={styles.FieldWrapper} style={style}>
-      <label htmlFor={name} className={styles.FieldLabel}>{label}</label>
+    <div className={wrapperClass} style={style}>
+      {!isTable && label && <label htmlFor={name} className={styles.FieldLabel}>{label}</label>}
       <div className={styles.FieldSelectWrapper}>
         <select name={name} id={name} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled}>
-          {
-            options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))
-          }
-        </select >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
       </div>
     </div>
   );
@@ -630,6 +633,7 @@ interface TypeFieldNumberProps {
   max?: string;
   textAlign?: 'left' | 'right' | 'center';
   actions?: TypeFieldActions;
+  variant?: FieldVariant;
 }
 
 export const FieldNumber: FC<TypeFieldNumberProps> = ({
@@ -648,8 +652,13 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   max,
   textAlign = 'right',
   actions,
+  variant = 'default',
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const isTable = variant === 'table';
+  const wrapperClass = isTable
+    ? `${styles.FieldWrapper} ${styles.tableVariant}`
+    : styles.FieldWrapper;
 
   const handleClear = () => {
     if (inputRef.current) {
@@ -675,14 +684,14 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
 
   return (
     <div
-      className={styles.FieldWrapper}
+      className={wrapperClass}
       style={{
         width: width ?? 'auto',
         maxWidth: maxWidth ?? 'none',
         minWidth: minWidth ?? 'none',
       }}
     >
-      {label && (
+      {!isTable && label && (
         <label htmlFor={name} className={styles.FieldLabel}>
           {label}
           {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}

@@ -5,7 +5,8 @@ import react from "@vitejs/plugin-react";
 // https://vite.dev/config/
 export default defineConfig({
 	server: {
-		allowedHosts: ["buhprof.ddns.me"],
+		// host: true,
+		allowedHosts: ["sau.gidra.kz"],
 		watch: {
 			usePolling: true,
 			interval: 300,

@@ -229,6 +229,8 @@ export function getFormatColumnValue(
 				? row[column.identifier] + ""
 				: "";
 		}
+	} else if (column.type === "boolean") {
+		return row[column.identifier] ? "✔" : "";
 	}
 	return "";
 }

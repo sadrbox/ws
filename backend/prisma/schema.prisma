@@ -346,6 +346,7 @@ model Sale {
   description    String?  @db.Text
   amount         Decimal? @db.Decimal(18, 2)
   status         String   @default("draft") // draft, approved, cancelled
+  posted         Boolean  @default(false)
 
   organizationUuid String?
   counterpartyUuid String?

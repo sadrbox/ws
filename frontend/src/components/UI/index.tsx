@@ -19,6 +19,7 @@ import { TodosList } from 'src/models/Todos';
 import { NotificationsList } from 'src/models/Notifications';
 import { WarehousesList } from 'src/models/Warehouses';
 import { SalesList } from 'src/models/Sales';
+import { SalesBoardForm } from 'src/models/Sales/SalesBoardForm';
 import { PurchasesList } from 'src/models/Purchases';
 import { OutgoingInvoicesList } from 'src/models/OutgoingInvoices';
 import { IncomingInvoicesList } from 'src/models/IncomingInvoices';
@@ -149,7 +150,7 @@ export const PaneGroup = () => {
         return (
           <div key={`PaneGroup-${p.uniqId}`}
             className={[styles.Pane, (p.uniqId === activePane) && styles.ActivePane].join(" ")}>
-            <div style={{ display: "flex", gap: "6px", alignItems: "center", justifyContent: "space-between" }}>
+            <div className={styles.PaneHeaderContainer} >
               {/* <Divider /> */}
               <h2 className={styles.PaneHeaderLabel}>{p.label}</h2>
               <button
@@ -312,6 +313,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>Продажи</h3>
             <ul className={styles.NavList}>
+              <li onClick={() => addPane({ component: SalesBoardForm, label: 'Рабочий стол продаж' })}>Рабочий стол продаж</li>
               <li onClick={() => addPane({ component: SalesList })}>Реализация товара и услуг</li>
               <li onClick={() => addPane({ component: OutgoingInvoicesList })}>Электронная счет-фактура (исходящие)</li>
               <li onClick={() => addPane({ component: PaymentInvoicesList })}>Счет на оплату</li>
@@ -436,6 +438,14 @@ export const LoadingFallback: React.FC = () => {
     <div className="flex items-center justify-center min-h-screen">
       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       <span className="ml-3 text-lg">Загрузка...</span>
+    </div>
+  );
+};
+
+export const LoadingSpinner: React.FC = () => {
+  return (
+    <div className={styles.LoadingSpinnerContainer}>
+      <div className={styles.LoadingSpinner}></div>
     </div>
   );
 };

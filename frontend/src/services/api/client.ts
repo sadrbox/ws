@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
 
 const LOCAL_API_URL = "http://192.168.1.112:3000/api/v1";
-const REMOTE_API_URL = "http://buhprof.ddns.me:3000/api/v1";
+const REMOTE_API_URL = "https://api.gidra.kz/api/v1";
 
 function getApiUrl(): string {
 	const { hostname } = window.location;

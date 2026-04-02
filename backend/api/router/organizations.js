@@ -73,11 +73,16 @@ router.get("/organizations", async (req, res) => {
 
 		if (searchWords.length > 0) {
 			searchWhereClause = {
-				AND: searchWords.map((word) => ({
-					OR: TEXT_FIELDS.map((field) => ({
+				AND: searchWords.map((word) => {
+					const orConditions = TEXT_FIELDS.map((field) => ({
 						[field]: { contains: word, mode: "insensitive" },
-					})),
-				})),
+					}));
+					const num = Number(word);
+					if (Number.isInteger(num) && num > 0) {
+						orConditions.push({ id: { equals: num } });
+					}
+					return { OR: orConditions };
+				}),
 			};
 		}
 

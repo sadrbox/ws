@@ -78,6 +78,19 @@
 		"inlist": true
 	},
 	{
+		"identifier": "posted",
+		"type": "boolean",
+		"name": "Проведён",
+		"width": "90px",
+		"minWidth": "70px",
+		"alignment": "center",
+		"hint": "Документ проведён",
+		"visible": true,
+		"position": 7,
+		"filter": false,
+		"inlist": true
+	},
+	{
 		"identifier": "organization.shortName",
 		"type": "string",
 		"name": "Организация",
@@ -86,7 +99,7 @@
 		"alignment": "left",
 		"hint": "Организация",
 		"visible": true,
-		"position": 7,
+		"position": 8,
 		"filter": false,
 		"inlist": true
 	},
@@ -99,7 +112,7 @@
 		"alignment": "left",
 		"hint": "Контрагент",
 		"visible": true,
-		"position": 8,
+		"position": 9,
 		"filter": false,
 		"inlist": true
 	}

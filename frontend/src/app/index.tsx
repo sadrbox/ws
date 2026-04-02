@@ -14,7 +14,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 import { getTranslation } from "src/i18";
-import { Content, Navbar, NavList, ErrorBoundary, LoadingFallback, Screen } from "../components/UI";
+import { Content, Navbar, NavList, ErrorBoundary, LoadingFallback, Screen, LoadingSpinner } from "../components/UI";
 import { TComponentNode, TPane, TypeAppContextProps, TypeNavbarProps } from "./types";
 import useUID from "src/hooks/useUID";
 import { TDataItem } from "src/components/Table/types";
@@ -289,9 +289,9 @@ const App: React.FC = () => {
     <AppContextProvider value={contextValue}>
       <QueryClientProvider client={queryClient}>
         <ErrorBoundary fallback={<div>Что-то пошло не так</div>}>
-          <React.Suspense fallback={<LoadingFallback />}>
+          <React.Suspense fallback={<LoadingSpinner />}>
             {!authChecked ? (
-              <LoadingFallback />
+              <LoadingSpinner />
             ) : !isLoggedIn ? (
               <LoginForm onLoginSuccess={handleLoginSuccess} />
             ) : (

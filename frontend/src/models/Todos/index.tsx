@@ -93,9 +93,9 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         organizationUuid: d.organizationUuid ?? "",
         organizationName: d.organization?.shortName ?? "",
         curatorUuid: d.curatorUuid ?? "",
-        curatorName: d.curator?.fullName || d.curator?.username || "",
+        curatorName: d.curator?.employee?.fullName || d.curator?.username || "",
         executorUuid: d.executorUuid ?? "",
-        executorName: d.executor?.fullName || d.executor?.username || "",
+        executorName: d.executor?.employee?.fullName || d.executor?.username || "",
         createdAt: d.createdAt?.slice(0, 16) ?? "",
         deadline: d.deadline?.slice(0, 16) ?? "",
         deadlineDays: d.deadlineDays?.toString() ?? "",
@@ -152,9 +152,9 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         organizationUuid: saved.organizationUuid ?? "",
         organizationName: saved.organization?.shortName ?? prev.organizationName,
         curatorUuid: saved.curatorUuid ?? "",
-        curatorName: saved.curator?.fullName || saved.curator?.username || prev.curatorName,
+        curatorName: saved.curator?.employee?.fullName || saved.curator?.username || prev.curatorName,
         executorUuid: saved.executorUuid ?? "",
-        executorName: saved.executor?.fullName || saved.executor?.username || prev.executorName,
+        executorName: saved.executor?.employee?.fullName || saved.executor?.username || prev.executorName,
         createdAt: saved.createdAt?.slice(0, 16) ?? prev.createdAt,
         deadline: saved.deadline?.slice(0, 16) ?? "",
         deadlineDays: saved.deadlineDays?.toString() ?? "",
@@ -210,9 +210,13 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
             value={formData.curatorUuid}
             displayValue={formData.curatorName}
             endpoint="users"
-            displayField="fullName"
-            onSelect={(uuid, display) =>
-              setFormData(prev => ({ ...prev, curatorUuid: uuid, curatorName: display }))
+            displayField="username"
+            secondaryFields={["employee.fullName"]}
+            onSelect={(uuid, display, item) =>
+              setFormData(prev => ({ ...prev, curatorUuid: uuid, curatorName: item?.employee?.fullName || display }))
+            }
+            onClear={() =>
+              setFormData(prev => ({ ...prev, curatorUuid: "", curatorName: "" }))
             }
             minWidth="339px"
             disabled={isLoading}
@@ -223,9 +227,13 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
             value={formData.executorUuid}
             displayValue={formData.executorName}
             endpoint="users"
-            displayField="fullName"
-            onSelect={(uuid, display) =>
-              setFormData(prev => ({ ...prev, executorUuid: uuid, executorName: display }))
+            displayField="username"
+            secondaryFields={["employee.fullName"]}
+            onSelect={(uuid, display, item) =>
+              setFormData(prev => ({ ...prev, executorUuid: uuid, executorName: item?.employee?.fullName || display }))
+            }
+            onClear={() =>
+              setFormData(prev => ({ ...prev, executorUuid: "", executorName: "" }))
             }
             minWidth="339px"
             disabled={isLoading}

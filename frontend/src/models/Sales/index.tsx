@@ -34,11 +34,11 @@ const STATUS_OPTIONS = [
 
 interface TFormData {
   id?: number; uuid?: string;
-  documentNumber: string; documentDate: string; description: string; amount: string; status: string;
+  documentNumber: string; documentDate: string; description: string; amount: string; status: string; posted: boolean;
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
 }
-const EMPTY_FORM: TFormData = { documentNumber: "", documentDate: "", description: "", amount: "", status: "draft", organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "" };
+const EMPTY_FORM: TFormData = { documentNumber: "", documentDate: "", description: "", amount: "", status: "draft", posted: false, organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "" };
 
 const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
@@ -71,25 +71,37 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
       component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "16px" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: 300 }}>
-                <Field label="Номер" name={`${formUid}_docNum`} value={formData.documentNumber} onChange={e => handleFieldChange("documentNumber", e.target.value)} disabled={isLoading} />
-                <FieldDateTime label="Дата" name={`${formUid}_docDate`} value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} />
-                <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
-                <Field label="Сумма" name={`${formUid}_amount`} value={formData.amount} onChange={e => handleFieldChange("amount", e.target.value)} disabled={isLoading} />
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
+              {/* ── Строка 1: Номер + Дата ── */}
+              <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                <Field label="Номер" name={`${formUid}_docNum`} value={formData.documentNumber} onChange={e => handleFieldChange("documentNumber", e.target.value)} disabled={isLoading} width="200px" />
+                <FieldDateTime label="Дата" name={`${formUid}_docDate`} value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} width="200px" />
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: 300 }}>
-                <LookupField label="Организация" name={`${formUid}_org`} value={formData.organizationUuid} displayValue={formData.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))} onClear={() => setFormData(prev => ({ ...prev, organizationUuid: "", organizationName: "" }))} disabled={isLoading} />
-                <LookupField label="Контрагент" name={`${formUid}_cpty`} value={formData.counterpartyUuid} displayValue={formData.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, counterpartyUuid: u, counterpartyName: d }))} onClear={() => setFormData(prev => ({ ...prev, counterpartyUuid: "", counterpartyName: "" }))} disabled={isLoading} />
-                <Field label="Описание" name={`${formUid}_desc`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} />
+              {/* ── Строка 2: Организация + Контрагент ── */}
+              <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                <LookupField label="Организация" name={`${formUid}_org`} value={formData.organizationUuid} displayValue={formData.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))} onClear={() => setFormData(prev => ({ ...prev, organizationUuid: "", organizationName: "" }))} disabled={isLoading} width="300px" />
+                <LookupField label="Контрагент" name={`${formUid}_cpty`} value={formData.counterpartyUuid} displayValue={formData.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, counterpartyUuid: u, counterpartyName: d }))} onClear={() => setFormData(prev => ({ ...prev, counterpartyUuid: "", counterpartyName: "" }))} disabled={isLoading} width="300px" />
               </div>
+              {/* ── Строка 3: Статус + Проведён + Сумма ── */}
+              <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "flex-end" }}>
+                <div style={{ width: 160 }}>
+                  <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, height: 28, whiteSpace: "nowrap" }}>
+                  <input type="checkbox" id={`${formUid}_posted`} checked={formData.posted} onChange={e => setFormData(prev => ({ ...prev, posted: e.target.checked }))} disabled={isLoading} />
+                  <label htmlFor={`${formUid}_posted`} style={{ cursor: "pointer", userSelect: "none" }}>Проведён</label>
+                </div>
+                <Field label="Сумма" name={`${formUid}_amount`} value={formData.amount} onChange={e => handleFieldChange("amount", e.target.value)} disabled={isLoading} width="160px" />
+              </div>
+              {/* ── Строка 4: Описание ── */}
+              <Field label="Описание" name={`${formUid}_desc`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} />
             </div>
           </Group>
           {isEditMode && (
             <>
               <Divider />
               <Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
                   <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
                   <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
                 </div>
@@ -120,6 +132,7 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
       setFormData({
         documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 16) ?? "",
         description: d.description ?? "", amount: d.amount != null ? String(d.amount) : "", status: d.status ?? "draft",
+        posted: d.posted === true,
         organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? "",
         counterpartyUuid: d.counterpartyUuid ?? "", counterpartyName: d.counterparty?.shortName ?? "",
         id: d.id, uuid: d.uuid,
@@ -135,6 +148,7 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
       documentNumber: formData.documentNumber?.trim() || null, documentDate: formData.documentDate || null,
       description: formData.description?.trim() || null, amount: formData.amount ? parseFloat(formData.amount) : null,
       status: formData.status || "draft",
+      posted: formData.posted === true,
       organizationUuid: formData.organizationUuid || null,
       counterpartyUuid: formData.counterpartyUuid || null,
     };
@@ -146,6 +160,7 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         documentNumber: saved.documentNumber ?? "", documentDate: saved.documentDate?.slice(0, 16) ?? "",
         description: saved.description ?? "", amount: saved.amount != null ? String(saved.amount) : "",
         status: saved.status ?? "draft",
+        posted: saved.posted === true,
         organizationUuid: saved.organizationUuid ?? prev.organizationUuid,
         organizationName: saved.organization?.shortName ?? prev.organizationName,
         counterpartyUuid: saved.counterpartyUuid ?? prev.counterpartyUuid,

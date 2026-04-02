@@ -60,12 +60,17 @@ router.get("/notifications", async (req, res) => {
 
 		if (searchWords.length > 0) {
 			searchWhereClause = {
-				AND: searchWords.map((word) => ({
-					OR: [
+				AND: searchWords.map((word) => {
+					const orConditions = [
 						{ title: { contains: word, mode: "insensitive" } },
 						{ message: { contains: word, mode: "insensitive" } },
-					],
-				})),
+					];
+					const num = Number(word);
+					if (Number.isInteger(num) && num > 0) {
+						orConditions.push({ id: { equals: num } });
+					}
+					return { OR: orConditions };
+				}),
 			};
 		}
 

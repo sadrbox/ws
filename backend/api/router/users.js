@@ -57,16 +57,33 @@ router.get("/users", async (req, res) => {
 
 		// ── Поиск ─────────────────────────────────────────────────────────────
 		const TEXT_FIELDS = ["username"];
+		const EMPLOYEE_TEXT_FIELDS = [
+			"fullName",
+			"lastName",
+			"firstName",
+			"middleName",
+			"iin",
+		];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 
 		if (searchWords.length > 0) {
 			searchWhereClause = {
-				AND: searchWords.map((word) => ({
-					OR: TEXT_FIELDS.map((field) => ({
-						[field]: { contains: word, mode: "insensitive" },
-					})),
-				})),
+				AND: searchWords.map((word) => {
+					const orConditions = [
+						...TEXT_FIELDS.map((f) => ({
+							[f]: { contains: word, mode: "insensitive" },
+						})),
+						...EMPLOYEE_TEXT_FIELDS.map((f) => ({
+							employee: { [f]: { contains: word, mode: "insensitive" } },
+						})),
+					];
+					const num = Number(word);
+					if (Number.isInteger(num) && num > 0) {
+						orConditions.push({ id: { equals: num } });
+					}
+					return { OR: orConditions };
+				}),
 			};
 		}
 

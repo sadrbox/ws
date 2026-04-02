@@ -56,11 +56,16 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		let searchWhere = {};
 		if (searchWords.length > 0)
 			searchWhere = {
-				AND: searchWords.map((w) => ({
-					OR: TEXT_FIELDS.map((f) => ({
+				AND: searchWords.map((w) => {
+					const orConditions = TEXT_FIELDS.map((f) => ({
 						[f]: { contains: w, mode: "insensitive" },
-					})),
-				})),
+					}));
+					const num = Number(w);
+					if (Number.isInteger(num) && num > 0) {
+						orConditions.push({ id: { equals: num } });
+					}
+					return { OR: orConditions };
+				}),
 			};
 
 		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
@@ -149,12 +154,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				.join(" ") ||
 			null;
 		if (!computedFullName)
-			return res
-				.status(400)
-				.json({
-					success: false,
-					message: "ФИО обязательно (fullName или lastName + firstName)",
-				});
+			return res.status(400).json({
+				success: false,
+				message: "ФИО обязательно (fullName или lastName + firstName)",
+			});
 		const item = await prisma[MODEL].create({
 			data: {
 				firstName: firstName?.trim() ?? null,

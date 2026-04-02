@@ -5,10 +5,10 @@
   <meta charset="UTF-8" />
   <link rel="icon"
     type="image/svg+xml"
-    href="/vite.svg" />
+    href="/favicon.svg" />
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0" />
-  <title>Vite + React + TS</title>
+  <title>Система автоматизированного учета</title>
   <link rel="preconnect"
     href="https://fonts.googleapis.com" />
   <link rel="preconnect"
@@ -18,35 +18,41 @@
     rel="stylesheet" />
 </head>
 <style>
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid #e0e0e0;
+    border-top-color: #1c5fcb;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
   .spinnerapp {
     position: absolute;
     top: 0;
     left: 0;
     bottom: 0;
     right: 0;
-
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     background: #fff;
+    transition: opacity 0.1s ease-in;
   }
 </style>
 
 <body>
-  <div id="root"
-    style="transition: opacity 0.1s ease-in;">
+  <div id="root">
     <div class="spinnerapp">
-      <div
-        style="width:36px;height:36px;border:3px solid #e0e0e0;border-top-color:#1c5fcb;border-radius:50%;animation:spin .7s linear infinite;">
-      </div>
+      <div class="loading-spinner"></div>
     </div>
-    <style>
-      @keyframes spin {
-        to {
-          transform: rotate(360deg)
-        }
-      }
-    </style>
   </div>
 
   <div id="RootPortal"></div>

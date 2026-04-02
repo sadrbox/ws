@@ -548,7 +548,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
                         case "product":
                           return (
                             <td key={col.key}>
-                              <div className={[styles.TableBodyCell, styles.borderlessCell].join(" ")}>
+                              <div className={styles.TableBodyCell}>
                                 <LookupField
                                   label=""
                                   name={"saleitem_product_" + idx}
@@ -565,6 +565,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
                                   onClear={() => handleProductClear(idx)}
                                   disabled={disabled || isSaving}
                                   width="100%"
+                                  variant="table"
                                 />
                               </div>
                             </td>
@@ -572,7 +573,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
                         case "quantity":
                           return (
                             <td key={col.key}>
-                              <div className={[styles.TableBodyCell, styles.borderlessCell].join(" ")}>
+                              <div className={styles.TableBodyCell}>
                                 <FieldNumber
                                   name={"saleitem_qty_" + idx}
                                   value={row.quantity}
@@ -582,6 +583,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
                                   textAlign="right"
                                   width="100%"
                                   actions={[]}
+                                  variant="table"
                                 />
                               </div>
                             </td>
@@ -589,7 +591,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
                         case "price":
                           return (
                             <td key={col.key}>
-                              <div className={[styles.TableBodyCell, styles.borderlessCell].join(" ")}>
+                              <div className={styles.TableBodyCell}>
                                 <FieldNumber
                                   name={"saleitem_price_" + idx}
                                   value={row.price}
@@ -599,6 +601,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
                                   textAlign="right"
                                   width="100%"
                                   actions={[]}
+                                  variant="table"
                                 />
                               </div>
                             </td>

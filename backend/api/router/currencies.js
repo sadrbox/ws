@@ -47,11 +47,16 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		let searchWhere = {};
 		if (searchWords.length > 0)
 			searchWhere = {
-				AND: searchWords.map((w) => ({
-					OR: TEXT_FIELDS.map((f) => ({
+				AND: searchWords.map((w) => {
+					const orConditions = TEXT_FIELDS.map((f) => ({
 						[f]: { contains: w, mode: "insensitive" },
-					})),
-				})),
+					}));
+					const num = Number(w);
+					if (Number.isInteger(num) && num > 0) {
+						orConditions.push({ id: { equals: num } });
+					}
+					return { OR: orConditions };
+				}),
 			};
 
 		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
@@ -140,12 +145,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2002")
-			return res
-				.status(409)
-				.json({
-					success: false,
-					message: "Валюта с таким кодом уже существует",
-				});
+			return res.status(409).json({
+				success: false,
+				message: "Валюта с таким кодом уже существует",
+			});
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -171,12 +174,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		if (error.code === "P2002")
-			return res
-				.status(409)
-				.json({
-					success: false,
-					message: "Валюта с таким кодом уже существует",
-				});
+			return res.status(409).json({
+				success: false,
+				message: "Валюта с таким кодом уже существует",
+			});
 		console.error(`PUT /${ROUTE}/:id error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}

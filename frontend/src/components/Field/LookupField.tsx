@@ -3,6 +3,7 @@ import styles from "./Field.module.scss";
 import Modal from "../Modal";
 import { apiClient } from "src/services/api/client";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
+import type { FieldVariant } from "./index";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -10,7 +11,7 @@ import { useDebounceValue } from "src/hooks/useDebounceValue";
 
 export interface LookupFieldProps {
   /** Заголовок поля */
-  label: React.ReactNode;
+  label?: React.ReactNode;
   /** Имя поля для id/name */
   name: string;
   /** Текущий UUID (значение для хранения) */
@@ -37,6 +38,12 @@ export interface LookupFieldProps {
   placeholder?: string;
   /** Компонент списка для модалки. Если не указан — используется маппинг по endpoint */
   listComponent?: FC<any>;
+  /** Вариант отображения: default (форма) или table (внутри ячейки таблицы) */
+  variant?: FieldVariant;
+  /** Поля для отображения справа в автокомплите (напр. ["bin"] → показывает "(123456789012)").
+   *  Поддерживает вложенные ключи через точку: "brand.shortName".
+   *  Если не указан — берётся из defaultSecondaryFieldsMap по endpoint. */
+  secondaryFields?: string[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -78,6 +85,24 @@ const listComponentNameMap: Record<string, string> = {
   products: "ProductsList",
   currencies: "CurrenciesList",
   employees: "EmployeesList",
+};
+
+// ── Поля для отображения в выпадающем списке автокомплита ──────────────
+// Ключ — endpoint, значение — массив полей, которые показываются
+// справа в скобках рядом с основным displayField.
+// Поддерживает вложенные ключи через точку: "brand.shortName"
+const defaultSecondaryFieldsMap: Record<string, string[]> = {
+  organizations: ["bin"],
+  counterparties: ["bin", "iin"],
+  products: ["sku", "brand.shortName"],
+  employees: ["iin", "position"],
+  users: ["employee.fullName"],
+  contracts: ["documentNumber"],
+  bankaccounts: ["iban"],
+  currencies: ["code", "symbol"],
+  contacttypes: [],
+  warehouses: ["code"],
+  brands: [],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -176,9 +201,16 @@ const LookupField: FC<LookupFieldProps> = ({
   disabled = false,
   placeholder,
   listComponent,
+  variant = 'default',
+  secondaryFields,
 }) => {
   // Подавляем неиспользуемые переменные совместимости
   void _columns;
+
+  const isTable = variant === 'table';
+  const wrapperClass = isTable
+    ? `${styles.FieldWrapper} ${styles.tableVariant}`
+    : styles.FieldWrapper;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -341,24 +373,40 @@ const LookupField: FC<LookupFieldProps> = ({
     return String(item[displayField] ?? item.shortName ?? item.value ?? item.name ?? item.uuid ?? "");
   }, [displayField]);
 
-  // Получить вторичные поля (bin, iin, code, sku, email, iban, displayName и т.п.)
-  // Показывает все значимые текстовые поля, кроме основного displayField
+  // Вспомогательная: получить значение по ключу с поддержкой вложенности ("brand.shortName")
+  const getNestedValue = useCallback((item: Record<string, any>, key: string): string => {
+    const parts = key.split(".");
+    let val: any = item;
+    for (const p of parts) {
+      if (val == null || typeof val !== "object") return "";
+      val = val[p];
+    }
+    return val != null && typeof val !== "object" ? String(val) : "";
+  }, []);
+
+  // Определить итоговый набор вторичных полей:
+  // 1) проп secondaryFields  2) маппинг по endpoint  3) пустой (ничего)
+  const resolvedSecondaryFields = useMemo(() => {
+    if (secondaryFields && secondaryFields.length > 0) return secondaryFields;
+    return defaultSecondaryFieldsMap[endpoint] ?? [];
+  }, [secondaryFields, endpoint]);
+
+  // Получить вторичную строку для элемента автокомплита.
+  // Формат: "БИН · Код" (через разделитель) — только непустые значения
   const getItemSecondary = useCallback((item: Record<string, any>) => {
-    const FIELDS = ["bin", "iin", "code", "sku", "symbol", "email", "iban", "bik", "displayName", "fullName", "contractNumber", "documentNumber", "ownerName", "bankName", "description", "cronExpr"];
-    const skip = new Set(["uuid", "id", "createdAt", "updatedAt", "deletedAt", displayField]);
+    if (resolvedSecondaryFields.length === 0) return "";
     const parts: string[] = [];
-    for (const f of FIELDS) {
-      if (skip.has(f)) continue;
-      const v = item[f];
-      if (v && typeof v === "string") parts.push(v);
+    for (const field of resolvedSecondaryFields) {
+      const v = getNestedValue(item, field);
+      if (v) parts.push(v);
     }
     return parts.join(" · ");
-  }, [displayField]);
+  }, [resolvedSecondaryFields, getNestedValue]);
 
   return (
     <>
       <div
-        className={styles.FieldWrapper}
+        className={wrapperClass}
         style={{
           width: width ?? "auto",
           maxWidth: maxWidth ?? "none",
@@ -366,9 +414,11 @@ const LookupField: FC<LookupFieldProps> = ({
         }}
         ref={wrapperRef}
       >
-        <label htmlFor={name} className={styles.FieldLabel}>
-          {label}
-        </label>
+        {!isTable && label && (
+          <label htmlFor={name} className={styles.FieldLabel}>
+            {label}
+          </label>
+        )}
 
         <div className={styles.FieldInputWrapper}>
           <input

@@ -71,14 +71,46 @@
 	// background-color: red;
 }
 .FieldWrapper {
-	// max-width: 500px;
 	display: flex;
 	flex-direction: column;
 	position: relative;
-	// flex-grow: 1;
-	// align-items: center;
-	// margin-top: 8px;
-	// gap: 8px;
+
+	// ── Table variant: no label, no border, stretch to fill td ──
+	&.tableVariant {
+		width: 100%;
+		height: 100%;
+
+		.FieldLabel {
+			display: none;
+		}
+
+		.FieldInputWrapper,
+		.FieldSelectWrapper {
+			border: none;
+			border-radius: 0;
+			background: transparent;
+			height: 100%;
+			&:focus-within {
+				border: none;
+				box-shadow: none;
+			}
+		}
+
+		.FieldString,
+		.FieldSelect,
+		.FieldDate {
+			border: none;
+			border-radius: 0;
+			background: transparent;
+			outline: none;
+			height: 100%;
+			&:focus {
+				border: none;
+				box-shadow: none;
+				outline: none;
+			}
+		}
+	}
 }
 .FieldInputWrapper {
 	position: relative;
@@ -193,7 +225,8 @@
 .LookupDropdownItem {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	justify-content: space-between;
+	gap: 12px;
 	padding: 5px 8px;
 	cursor: pointer;
 	font-size: 13px;
@@ -223,6 +256,7 @@
 	color: $color51;
 	font-size: 12px;
 	white-space: nowrap;
+	margin-left: auto;
 }
 
 .LookupDropdownLoading {

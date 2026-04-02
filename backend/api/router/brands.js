@@ -47,11 +47,16 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		let searchWhere = {};
 		if (searchWords.length > 0)
 			searchWhere = {
-				AND: searchWords.map((w) => ({
-					OR: TEXT_FIELDS.map((f) => ({
+				AND: searchWords.map((w) => {
+					const orConditions = TEXT_FIELDS.map((f) => ({
 						[f]: { contains: w, mode: "insensitive" },
-					})),
-				})),
+					}));
+					const num = Number(w);
+					if (Number.isInteger(num) && num > 0) {
+						orConditions.push({ id: { equals: num } });
+					}
+					return { OR: orConditions };
+				}),
 			};
 
 		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
@@ -88,15 +93,13 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		if (cursorNumber === null)
 			total = await prisma[MODEL].count({ where: baseWhere });
 
-		return res
-			.status(200)
-			.json({
-				success: true,
-				items,
-				nextCursor,
-				hasMore,
-				...(total !== undefined ? { total } : {}),
-			});
+		return res.status(200).json({
+			success: true,
+			items,
+			nextCursor,
+			hasMore,
+			...(total !== undefined ? { total } : {}),
+		});
 	} catch (error) {
 		console.error(`GET /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });

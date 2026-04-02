@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Документ -->
+  <path d="M6 3C6 1.9 6.9 1 8 1h10l8 8v20c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V3z" fill="#4A90D9"/>
+  <path d="M18 1l8 8h-6c-1.1 0-2-.9-2-2V1z" fill="#3B7AC4"/>
+  <!-- Линии текста -->
+  <rect x="9" y="12" width="10" height="1.5" rx="0.75" fill="#fff" opacity="0.7"/>
+  <rect x="9" y="15.5" width="8" height="1.5" rx="0.75" fill="#fff" opacity="0.5"/>
+  <rect x="9" y="19" width="11" height="1.5" rx="0.75" fill="#fff" opacity="0.5"/>
+  <!-- Монетка -->
+  <circle cx="23" cy="23" r="7" fill="#F5A623" stroke="#D4891A" stroke-width="1"/>
+  <circle cx="23" cy="23" r="5" fill="none" stroke="#D4891A" stroke-width="0.7" opacity="0.5"/>
+  <text x="23" y="26" text-anchor="middle" font-size="9" font-weight="bold" font-family="Arial,sans-serif" fill="#7A5114">₸</text>
+</svg>
