@@ -1,9 +1,10 @@
 import express from "express";
-import cors from "cors";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { prisma } from "../../prisma/prisma-client.js";
 
 const router = express.Router();
-router.use(cors());
 
 const MODEL = "employee";
 const ROUTE = "employees";
@@ -13,10 +14,28 @@ const TEXT_FIELDS = [
 	"firstName",
 	"middleName",
 	"iin",
-	"position",
-	"phone",
-	"email",
 ];
+
+// ── Avatar upload setup ─────────────────────────────────────────────────
+const AVATAR_DIR = path.resolve("uploads/avatars");
+if (!fs.existsSync(AVATAR_DIR)) {
+	fs.mkdirSync(AVATAR_DIR, { recursive: true });
+}
+const avatarStorage = multer.diskStorage({
+	destination: (_req, _file, cb) => cb(null, AVATAR_DIR),
+	filename: (_req, file, cb) => {
+		const ext = path.extname(file.originalname) || ".jpg";
+		cb(null, `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`);
+	},
+});
+const avatarUpload = multer({
+	storage: avatarStorage,
+	limits: { fileSize: 5 * 1024 * 1024 },
+	fileFilter: (_req, file, cb) => {
+		if (file.mimetype.startsWith("image/")) cb(null, true);
+		else cb(new Error("Только изображения"));
+	},
+});
 
 // ── GET list ────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -89,7 +108,12 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		}
 
 		const baseWhere = { ...searchWhere, ...filterWhere };
-		const opts = { take: limitNumber, where: baseWhere, orderBy };
+		const opts = {
+			take: limitNumber,
+			where: baseWhere,
+			orderBy,
+			include: { organization: true },
+		};
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };
 			opts.skip = 1;
@@ -122,7 +146,10 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		const n = Number(p);
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
-		const item = await prisma[MODEL].findUnique({ where: w });
+		const item = await prisma[MODEL].findUnique({
+			where: w,
+			include: { organization: true },
+		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		return res.status(200).json({ success: true, item });
@@ -141,9 +168,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			middleName,
 			fullName,
 			iin,
-			position,
-			phone,
-			email,
+			organizationUuid,
+			avatarPath,
 		} = req.body;
 		// Автоматически строим fullName если не передан
 		const computedFullName =
@@ -165,10 +191,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				middleName: middleName?.trim() ?? null,
 				fullName: computedFullName,
 				iin: iin?.trim() ?? null,
-				position: position?.trim() ?? null,
-				phone: phone?.trim() ?? null,
-				email: email?.trim() ?? null,
+				organizationUuid: organizationUuid || null,
+				avatarPath: avatarPath?.trim() ?? null,
 			},
+			include: { organization: true },
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -194,12 +220,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.fullName !== undefined)
 			data.fullName = req.body.fullName?.trim() ?? null;
 		if (req.body.iin !== undefined) data.iin = req.body.iin?.trim() ?? null;
-		if (req.body.position !== undefined)
-			data.position = req.body.position?.trim() ?? null;
-		if (req.body.phone !== undefined)
-			data.phone = req.body.phone?.trim() ?? null;
-		if (req.body.email !== undefined)
-			data.email = req.body.email?.trim() ?? null;
+		if (req.body.organizationUuid !== undefined)
+			data.organizationUuid = req.body.organizationUuid || null;
+		if (req.body.avatarPath !== undefined)
+			data.avatarPath = req.body.avatarPath?.trim() ?? null;
 		// Автоматически строим fullName если есть ФИО-поля и fullName не передан явно
 		if (
 			data.fullName === undefined &&
@@ -218,7 +242,11 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				data.fullName = [ln, fn, mn].filter(Boolean).join(" ") || null;
 			}
 		}
-		const item = await prisma[MODEL].update({ where: w, data });
+		const item = await prisma[MODEL].update({
+			where: w,
+			data,
+			include: { organization: true },
+		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2025")
@@ -241,6 +269,81 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`DELETE /${ROUTE}/:id error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ── POST avatar ─────────────────────────────────────────────────────────
+router.post(`/${ROUTE}/:id/avatar`, avatarUpload.single("avatar"), async (req, res) => {
+	try {
+		if (!req.file) return res.status(400).json({ success: false, message: "Файл не передан" });
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+
+		// Удалить старый аватар если есть
+		const existing = await prisma[MODEL].findUnique({ where: w });
+		if (existing?.avatarPath) {
+			const oldPath = path.resolve(AVATAR_DIR, existing.avatarPath);
+			if (oldPath.startsWith(AVATAR_DIR) && fs.existsSync(oldPath)) {
+				fs.unlinkSync(oldPath);
+			}
+		}
+
+		const item = await prisma[MODEL].update({
+			where: w,
+			data: { avatarPath: req.file.filename },
+			include: { organization: true },
+		});
+		return res.status(200).json({ success: true, item });
+	} catch (error) {
+		if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
+		console.error(`POST /${ROUTE}/:id/avatar error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ── GET avatar ──────────────────────────────────────────────────────────
+router.get(`/${ROUTE}/:id/avatar`, async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const employee = await prisma[MODEL].findUnique({ where: w });
+		if (!employee?.avatarPath) return res.status(404).json({ success: false, message: "Аватар не найден" });
+		const filePath = path.resolve(AVATAR_DIR, employee.avatarPath);
+		if (!filePath.startsWith(AVATAR_DIR) || !fs.existsSync(filePath)) {
+			return res.status(404).json({ success: false, message: "Файл не найден" });
+		}
+		return res.sendFile(filePath);
+	} catch (error) {
+		console.error(`GET /${ROUTE}/:id/avatar error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ── DELETE avatar ───────────────────────────────────────────────────────
+router.delete(`/${ROUTE}/:id/avatar`, async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const existing = await prisma[MODEL].findUnique({ where: w });
+		if (existing?.avatarPath) {
+			const filePath = path.resolve(AVATAR_DIR, existing.avatarPath);
+			if (filePath.startsWith(AVATAR_DIR) && fs.existsSync(filePath)) {
+				fs.unlinkSync(filePath);
+			}
+		}
+		const item = await prisma[MODEL].update({
+			where: w,
+			data: { avatarPath: null },
+			include: { organization: true },
+		});
+		return res.status(200).json({ success: true, item });
+	} catch (error) {
+		if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
+		console.error(`DELETE /${ROUTE}/:id/avatar error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

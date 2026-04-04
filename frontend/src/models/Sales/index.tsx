@@ -37,8 +37,9 @@ interface TFormData {
   documentNumber: string; documentDate: string; description: string; amount: string; status: string; posted: boolean;
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
+  contractUuid: string; contractName: string;
 }
-const EMPTY_FORM: TFormData = { documentNumber: "", documentDate: "", description: "", amount: "", status: "draft", posted: false, organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "" };
+const EMPTY_FORM: TFormData = { documentNumber: "", documentDate: "", description: "", amount: "", status: "draft", posted: false, organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "", contractUuid: "", contractName: "" };
 
 const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
@@ -72,42 +73,39 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
-              {/* ── Строка 1: Номер + Дата ── */}
-              <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-                <Field label="Номер" name={`${formUid}_docNum`} value={formData.documentNumber} onChange={e => handleFieldChange("documentNumber", e.target.value)} disabled={isLoading} width="200px" />
-                <FieldDateTime label="Дата" name={`${formUid}_docDate`} value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} width="200px" />
-              </div>
-              {/* ── Строка 2: Организация + Контрагент ── */}
-              <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-                <LookupField label="Организация" name={`${formUid}_org`} value={formData.organizationUuid} displayValue={formData.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))} onClear={() => setFormData(prev => ({ ...prev, organizationUuid: "", organizationName: "" }))} disabled={isLoading} width="300px" />
-                <LookupField label="Контрагент" name={`${formUid}_cpty`} value={formData.counterpartyUuid} displayValue={formData.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, counterpartyUuid: u, counterpartyName: d }))} onClear={() => setFormData(prev => ({ ...prev, counterpartyUuid: "", counterpartyName: "" }))} disabled={isLoading} width="300px" />
-              </div>
-              {/* ── Строка 3: Статус + Проведён + Сумма ── */}
-              <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "flex-end" }}>
-                <div style={{ width: 160 }}>
-                  <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, height: 28, whiteSpace: "nowrap" }}>
-                  <input type="checkbox" id={`${formUid}_posted`} checked={formData.posted} onChange={e => setFormData(prev => ({ ...prev, posted: e.target.checked }))} disabled={isLoading} />
-                  <label htmlFor={`${formUid}_posted`} style={{ cursor: "pointer", userSelect: "none" }}>Проведён</label>
-                </div>
-                <Field label="Сумма" name={`${formUid}_amount`} value={formData.amount} onChange={e => handleFieldChange("amount", e.target.value)} disabled={isLoading} width="160px" />
-              </div>
-              {/* ── Строка 4: Описание ── */}
-              <Field label="Описание" name={`${formUid}_desc`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} />
-            </div>
-          </Group>
-          {isEditMode && (
-            <>
-              <Divider />
-              <Group align="row" gap="12px" className={styles.Form}>
+              {/* ── Строка 1: ID + UUID ── */}
+              {isEditMode && (
                 <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
                   <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
                   <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
                 </div>
-              </Group>
-            </>
-          )}
+              )}
+              {/* ── Строка 2: Дата + Проведён ── */}
+              <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "flex-end" }}>
+                <FieldDateTime label="Дата" name={`${formUid}_docDate`} value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} width="200px" />
+                <div style={{ display: "flex", alignItems: "center", gap: 6, height: 28, whiteSpace: "nowrap" }}>
+                  <input type="checkbox" id={`${formUid}_posted`} checked={formData.posted} onChange={e => setFormData(prev => ({ ...prev, posted: e.target.checked }))} disabled={isLoading} />
+                  <label htmlFor={`${formUid}_posted`} style={{ cursor: "pointer", userSelect: "none" }}>Проведён</label>
+                </div>
+              </div>
+              {/* ── Строка 3: Организация + Контрагент ── */}
+              <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                <LookupField label="Организация" name={`${formUid}_org`} value={formData.organizationUuid} displayValue={formData.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))} onClear={() => setFormData(prev => ({ ...prev, organizationUuid: "", organizationName: "" }))} disabled={isLoading} width="300px" />
+                <LookupField label="Контрагент" name={`${formUid}_cpty`} value={formData.counterpartyUuid} displayValue={formData.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, counterpartyUuid: u, counterpartyName: d }))} onClear={() => setFormData(prev => ({ ...prev, counterpartyUuid: "", counterpartyName: "" }))} disabled={isLoading} width="300px" />
+              </div>
+              {/* ── Строка 4: Договор ── */}
+              <LookupField label="Договор" name={`${formUid}_contract`} value={formData.contractUuid} displayValue={formData.contractName} endpoint="contracts" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, contractUuid: u, contractName: d }))} onClear={() => setFormData(prev => ({ ...prev, contractUuid: "", contractName: "" }))} disabled={isLoading} width="300px" />
+              {/* ── Строка 5: Статус + Сумма (только текст) ── */}
+              <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "flex-end" }}>
+                <div style={{ width: 160 }}>
+                  <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
+                </div>
+                <Field label="Сумма" name={`${formUid}_amount`} value={formData.amount} disabled width="160px" />
+              </div>
+              {/* ── Строка 6: Комментарий ── */}
+              <Field label="Комментарий" name={`${formUid}_desc`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} />
+            </div>
+          </Group>
         </div>
       ),
     },
@@ -135,6 +133,7 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         posted: d.posted === true,
         organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? "",
         counterpartyUuid: d.counterpartyUuid ?? "", counterpartyName: d.counterparty?.shortName ?? "",
+        contractUuid: d.contractUuid ?? "", contractName: d.contract?.shortName ?? "",
         id: d.id, uuid: d.uuid,
       });
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); } finally { setIsLoading(false); }
@@ -151,6 +150,7 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
       posted: formData.posted === true,
       organizationUuid: formData.organizationUuid || null,
       counterpartyUuid: formData.counterpartyUuid || null,
+      contractUuid: formData.contractUuid || null,
     };
     try {
       const res = isEditMode && (uuid || formData.uuid) ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload) : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
@@ -165,6 +165,8 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         organizationName: saved.organization?.shortName ?? prev.organizationName,
         counterpartyUuid: saved.counterpartyUuid ?? prev.counterpartyUuid,
         counterpartyName: saved.counterparty?.shortName ?? prev.counterpartyName,
+        contractUuid: saved.contractUuid ?? prev.contractUuid,
+        contractName: saved.contract?.shortName ?? prev.contractName,
         id: saved.id, uuid: saved.uuid,
       }));
       setIsEditMode(true);

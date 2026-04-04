@@ -1,12 +1,10 @@
 import express from "express";
-import cors from "cors";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { prisma } from "../../prisma/prisma-client.js";
 
 const router = express.Router();
-router.use(cors());
 
 const UPLOAD_DIR = path.resolve("uploads/files");
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -115,7 +113,15 @@ router.get("/files/download/:uuid", async (req, res) => {
 				.json({ success: false, message: "Файл не найден" });
 		}
 
-		const filePath = path.join(UPLOAD_DIR, file.filePath);
+		const filePath = path.resolve(UPLOAD_DIR, file.filePath);
+
+		// Защита от path traversal — проверяем, что путь остаётся внутри UPLOAD_DIR
+		if (!filePath.startsWith(UPLOAD_DIR)) {
+			return res
+				.status(403)
+				.json({ success: false, message: "Доступ запрещён" });
+		}
+
 		if (!fs.existsSync(filePath)) {
 			return res
 				.status(404)
@@ -143,7 +149,15 @@ router.delete("/files/:uuid", async (req, res) => {
 				.json({ success: false, message: "Файл не найден" });
 		}
 
-		const filePath = path.join(UPLOAD_DIR, file.filePath);
+		const filePath = path.resolve(UPLOAD_DIR, file.filePath);
+
+		// Защита от path traversal
+		if (!filePath.startsWith(UPLOAD_DIR)) {
+			return res
+				.status(403)
+				.json({ success: false, message: "Доступ запрещён" });
+		}
+
 		if (fs.existsSync(filePath)) {
 			fs.unlinkSync(filePath);
 		}

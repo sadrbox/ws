@@ -11,9 +11,12 @@ export interface AuthUser {
 		lastName: string | null;
 		middleName: string | null;
 		iin: string | null;
-		position: string | null;
-		phone: string | null;
-		email: string | null;
+		avatarPath: string | null;
+		organizationUuid: string | null;
+		accessRights?: {
+			modelName: string;
+			accessLevel: string;
+		}[];
 	} | null;
 }
 

@@ -1,9 +1,7 @@
 import express from "express";
-import cors from "cors";
 import { prisma } from "../../prisma/prisma-client.js";
 
 const router = express.Router();
-router.use(cors());
 
 const TEXT_FIELDS = ["shortName", "description", "ownerName", "status"];
 

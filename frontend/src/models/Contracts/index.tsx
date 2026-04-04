@@ -14,6 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useModelDelete } from "src/hooks/useModelDelete";
 import { Divider, Field, FieldDateTime } from "src/components/Field";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
+import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
 import { Button, ButtonImage } from "src/components/Button";
@@ -37,12 +38,15 @@ interface TFormData {
   ownerType: OwnerType;
   ownerUuid: string;
   ownerName: string;
+  counterpartyUuid: string;
+  counterpartyName: string;
 }
 
 const EMPTY_FORM: TFormData = {
   shortName: "", contractNumber: "", contractText: "",
   startDate: "", endDate: "",
   ownerType: "", ownerUuid: "", ownerName: "",
+  counterpartyUuid: "", counterpartyName: "",
 };
 
 const ContractsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
@@ -77,14 +81,15 @@ const ContractsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
     try {
       const response = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
       const d = response.data?.item ?? response.data;
-      const ot: OwnerType = d.organizationUuid ? "organization" : d.counterpartyUuid ? "counterparty" : "";
-      const ou = d.organizationUuid || d.counterpartyUuid || "";
-      const on = d.organization?.shortName || d.counterparty?.shortName || d.ownerName || "";
+      const ot: OwnerType = d.organizationUuid ? "organization" : "";
+      const ou = d.organizationUuid || "";
+      const on = d.organization?.shortName || d.ownerName || "";
       setFormData({
         shortName: d.shortName ?? "", contractNumber: d.contractNumber ?? "",
         contractText: d.contractText ?? "", startDate: d.startDate?.slice(0, 16) ?? "",
         endDate: d.endDate?.slice(0, 16) ?? "",
         ownerType: ot, ownerUuid: ou, ownerName: on,
+        counterpartyUuid: d.counterpartyUuid ?? "", counterpartyName: d.counterparty?.shortName ?? "",
         id: d.id, uuid: d.uuid,
       });
     } catch (err: any) {
@@ -112,22 +117,24 @@ const ContractsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
       endDate: formData.endDate || null,
       ownerName: formData.ownerName?.trim() || null,
       organizationUuid: formData.ownerType === "organization" ? formData.ownerUuid || null : null,
-      counterpartyUuid: formData.ownerType === "counterparty" ? formData.ownerUuid || null : null,
+      counterpartyUuid: formData.counterpartyUuid || null,
     };
     try {
       const response = isEditMode && (uuid || formData.uuid)
         ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = response.data?.item ?? response.data;
-      const sot: OwnerType = saved.organizationUuid ? "organization" : saved.counterpartyUuid ? "counterparty" : "";
-      const sou = saved.organizationUuid || saved.counterpartyUuid || "";
-      const son = saved.organization?.shortName || saved.counterparty?.shortName || "";
+      const sot: OwnerType = saved.organizationUuid ? "organization" : "";
+      const sou = saved.organizationUuid || "";
+      const son = saved.organization?.shortName || "";
       setFormData(prev => ({
         ...prev, ...saved, shortName: saved.shortName ?? "",
         contractNumber: saved.contractNumber ?? "", contractText: saved.contractText ?? "",
         startDate: saved.startDate?.slice(0, 16) ?? "", endDate: saved.endDate?.slice(0, 16) ?? "",
         ownerType: sot || prev.ownerType, ownerUuid: sou || prev.ownerUuid,
         ownerName: son || prev.ownerName,
+        counterpartyUuid: saved.counterpartyUuid ?? prev.counterpartyUuid,
+        counterpartyName: saved.counterparty?.shortName ?? prev.counterpartyName,
       }));
       setIsEditMode(true);
       if (uniqId) {
@@ -165,10 +172,22 @@ const ContractsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
             name={`${formUid}_owner`}
             onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
               setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))}
-            typeLocked={!uuid && (!!data?.organizationUuid || !!data?.counterpartyUuid)}
-            allowedTypes={["organization", "counterparty"]}
+            typeLocked={!uuid && (!!data?.organizationUuid)}
+            allowedTypes={["organization"]}
             disabled={isLoading}
             minWidth="339px"
+          />
+          <LookupField
+            label="Контрагент"
+            name={`${formUid}_counterparty`}
+            value={formData.counterpartyUuid}
+            displayValue={formData.counterpartyName}
+            endpoint="counterparties"
+            displayField="shortName"
+            onSelect={(u, d) => setFormData(prev => ({ ...prev, counterpartyUuid: u, counterpartyName: d }))}
+            onClear={() => setFormData(prev => ({ ...prev, counterpartyUuid: "", counterpartyName: "" }))}
+            disabled={isLoading}
+            width="339px"
           />
         </div>
       </Group>

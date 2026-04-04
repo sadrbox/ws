@@ -1,9 +1,7 @@
 import express from "express";
-import cors from "cors";
 import { prisma } from "../../prisma/prisma-client.js";
 
 const router = express.Router();
-router.use(cors());
 
 const MODEL = "sale";
 const ROUTE = "sales";
@@ -83,7 +81,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			orderBy,
-			include: { organization: true, counterparty: true },
+			include: { organization: true, counterparty: true, contract: true },
 		};
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };
@@ -118,7 +116,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const item = await prisma[MODEL].findUnique({
 			where: w,
-			include: { organization: true, counterparty: true },
+			include: { organization: true, counterparty: true, contract: true },
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
@@ -153,9 +151,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				posted: posted === true,
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
+				contractUuid: contractUuid || null,
 				ownerName: ownerName?.trim() ?? null,
 			},
-			include: { organization: true, counterparty: true },
+			include: { organization: true, counterparty: true, contract: true },
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -177,6 +176,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			"status",
 			"organizationUuid",
 			"counterpartyUuid",
+			"contractUuid",
 			"ownerName",
 		];
 		for (const f of strFields) {
@@ -195,7 +195,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
-			include: { organization: true, counterparty: true },
+			include: { organization: true, counterparty: true, contract: true },
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

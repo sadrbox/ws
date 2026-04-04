@@ -23,6 +23,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+  const [sortState, setSortState] = useState<Record<string, "asc" | "desc">>({ uploadedAt: "desc" });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [columns, setColumns] = useState<TColumn[]>(() =>
@@ -56,14 +57,32 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid }) => {
         ? (Number(row.fileSize) / (1024 * 1024)).toFixed(2)
         : "",
     } as TDataItem));
-    if (!searchValue.trim()) return mapped;
-    const words = searchValue.toLowerCase().split(/\s+/).filter(Boolean);
-    return mapped.filter(row =>
-      words.every(w =>
-        String(row.fileName ?? "").toLowerCase().includes(w),
-      ),
-    );
-  }, [rows, searchValue]);
+
+    // Клиентская фильтрация
+    let filtered = mapped;
+    if (searchValue.trim()) {
+      const words = searchValue.toLowerCase().split(/\s+/).filter(Boolean);
+      filtered = mapped.filter(row =>
+        words.every(w =>
+          String(row.fileName ?? "").toLowerCase().includes(w),
+        ),
+      );
+    }
+
+    // Клиентская сортировка
+    const sortKeys = Object.entries(sortState);
+    if (sortKeys.length > 0) {
+      const [field, dir] = sortKeys[0];
+      filtered = [...filtered].sort((a, b) => {
+        const va = a[field] ?? "";
+        const vb = b[field] ?? "";
+        const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
+        return dir === "desc" ? -cmp : cmp;
+      });
+    }
+
+    return filtered;
+  }, [rows, searchValue, sortState]);
 
   // ── Загрузка файла ──────────────────────────────────────────────────────
   const handleUpload = useCallback(
@@ -181,8 +200,8 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid }) => {
         onLimitChange: () => { },
       },
       sorting: {
-        sort: { uploadedAt: "desc" as const },
-        onSortChange: () => { },
+        sort: sortState,
+        onSortChange: setSortState,
       },
       filtering: {
         filters: undefined,
@@ -200,7 +219,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid }) => {
       extraButtons,
       onDelete: handleTableDelete,
     }),
-    [displayRows, columns, isLoading, isUploading, loadFiles, customOpenModelForm, extraButtons, handleTableDelete, searchValue],
+    [displayRows, columns, isLoading, isUploading, loadFiles, customOpenModelForm, extraButtons, handleTableDelete, searchValue, sortState],
   );
 
   return (

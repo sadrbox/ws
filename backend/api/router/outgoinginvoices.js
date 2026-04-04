@@ -1,8 +1,6 @@
 import express from "express";
-import cors from "cors";
 import { prisma } from "../../prisma/prisma-client.js";
 const router = express.Router();
-router.use(cors());
 const MODEL = "outgoingInvoice";
 const ROUTE = "outgoing-invoices";
 const TEXT_FIELDS = ["documentNumber", "description", "ownerName"];

@@ -1,7 +1,8 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET =
-	process.env.JWT_SECRET || "buhprof_secret_key_2025_change_in_production";
+// JWT_SECRET загружается из .env через dotenv (в server.js)
+// Если переменная не задана — сервер не запустится (проверка в server.js)
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
 
 /**
@@ -47,5 +48,3 @@ export function authMiddleware(req, res, next) {
 		});
 	}
 }
-
-export { JWT_SECRET };

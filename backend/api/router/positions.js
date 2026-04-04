@@ -3,9 +3,9 @@ import { prisma } from "../../prisma/prisma-client.js";
 
 const router = express.Router();
 
-const MODEL = "currency";
-const ROUTE = "currencies";
-const TEXT_FIELDS = ["code", "shortName", "symbol"];
+const MODEL = "position";
+const ROUTE = "positions";
+const TEXT_FIELDS = ["shortName", "description"];
 
 // ── GET list ────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -124,29 +124,20 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { code, shortName, symbol } = req.body;
-		if (!code?.trim())
-			return res
-				.status(400)
-				.json({ success: false, message: "Код валюты обязателен" });
+		const { shortName, description } = req.body;
 		if (!shortName?.trim())
-			return res
-				.status(400)
-				.json({ success: false, message: "Наименование обязательно" });
+			return res.status(400).json({
+				success: false,
+				message: "Наименование обязательно (shortName)",
+			});
 		const item = await prisma[MODEL].create({
 			data: {
-				code: code.trim().toUpperCase(),
 				shortName: shortName.trim(),
-				symbol: symbol?.trim() || null,
+				description: description?.trim() ?? null,
 			},
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
-		if (error.code === "P2002")
-			return res.status(409).json({
-				success: false,
-				message: "Валюта с таким кодом уже существует",
-			});
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -160,22 +151,15 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
-		if (req.body.code !== undefined)
-			data.code = req.body.code?.trim()?.toUpperCase() ?? null;
 		if (req.body.shortName !== undefined)
 			data.shortName = req.body.shortName?.trim() ?? null;
-		if (req.body.symbol !== undefined)
-			data.symbol = req.body.symbol?.trim() || null;
+		if (req.body.description !== undefined)
+			data.description = req.body.description?.trim() ?? null;
 		const item = await prisma[MODEL].update({ where: w, data });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
-		if (error.code === "P2002")
-			return res.status(409).json({
-				success: false,
-				message: "Валюта с таким кодом уже существует",
-			});
 		console.error(`PUT /${ROUTE}/:id error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}

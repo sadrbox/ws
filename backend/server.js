@@ -1,12 +1,23 @@
+// ── Загрузка переменных окружения (должен быть самым первым) ─────────────
+import "dotenv/config";
+
+// ── Проверка обязательных переменных окружения ──────────────────────────
+const requiredEnv = ["JWT_SECRET", "DATABASE_URL"];
+for (const key of requiredEnv) {
+	if (!process.env[key]) {
+		console.error(`FATAL: Переменная окружения ${key} не задана`);
+		process.exit(1);
+	}
+}
+
 import express from "express";
 import cors from "cors";
-import axios from "axios";
-// import { PrismaClient } from "@prisma/client";
-import { prisma } from "./prisma/prisma-client.js";
-import { parse, formatISO } from "date-fns";
-import { formatIpAddress } from "./utils/format.js";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { getLocalIP } from "./utils/module.js";
 import { authMiddleware } from "./utils/auth.js";
+
+// ── Роутеры ─────────────────────────────────────────────────────────────
 import authRouter from "./api/router/auth.js";
 import apiv1 from "./api/v1.js";
 import counterpartiesRouter from "./api/router/counterparties.js";
@@ -36,19 +47,108 @@ import productsRouter from "./api/router/products.js";
 import saleItemsRouter from "./api/router/saleitems.js";
 import currenciesRouter from "./api/router/currencies.js";
 import employeesRouter from "./api/router/employees.js";
+import positionsRouter from "./api/router/positions.js";
+import employeeHistoriesRouter from "./api/router/employeehistories.js";
+import accessRightsRouter from "./api/router/accessrights.js";
 
-// const prisma = new PrismaClient();
-// const prisma = new PrismaClient();
 const app = express();
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// ── Открытые маршруты (без авторизации) ─────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// 1. БЕЗОПАСНОСТЬ
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Заголовки безопасности (XSS, clickjacking, MIME-sniffing и т.д.)
+app.use(helmet());
+
+// Не раскрывать заголовок X-Powered-By
+app.disable("x-powered-by");
+
+// CORS — только разрешённые домены
+const allowedOrigins = (process.env.CORS_ORIGIN || "")
+	.split(",")
+	.map((o) => o.trim())
+	.filter(Boolean);
+
+app.use(
+	cors({
+		origin: (origin, callback) => {
+			// Разрешаем запросы без origin (curl, Postman, серверные запросы)
+			if (!origin) return callback(null, true);
+			if (allowedOrigins.includes(origin)) return callback(null, true);
+			return callback(new Error("Запрещено CORS-политикой"));
+		},
+		credentials: true,
+	}),
+);
+
+// Rate limiting — защита от brute-force и DDoS
+const apiLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000, // 15 минут
+	max: 500, // максимум 500 запросов с одного IP
+	standardHeaders: true,
+	legacyHeaders: false,
+	message: {
+		success: false,
+		message: "Слишком много запросов, попробуйте позже",
+	},
+});
+app.use("/api/", apiLimiter);
+
+// Более жёсткий лимит для авторизации (защита от brute-force паролей)
+const authLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000,
+	max: 20, // 20 попыток за 15 минут
+	standardHeaders: true,
+	legacyHeaders: false,
+	message: {
+		success: false,
+		message: "Слишком много попыток входа, попробуйте позже",
+	},
+});
+app.use("/api/v1/auth/login", authLimiter);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2. ПАРСИНГ ТЕЛА ЗАПРОСА
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. ЛОГИРОВАНИЕ ЗАПРОСОВ
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.use((req, res, next) => {
+	const start = Date.now();
+	res.on("finish", () => {
+		const duration = Date.now() - start;
+		console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+	});
+	next();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 4. HEALTH CHECK (без авторизации)
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.get("/api/health", (_req, res) => {
+	res.json({
+		status: "ok",
+		timestamp: new Date().toISOString(),
+		version: "1.0.0",
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. ОТКРЫТЫЕ МАРШРУТЫ (без авторизации)
+// ═══════════════════════════════════════════════════════════════════════════
+
 app.use("/api/v1", authRouter);
 
-// ── Защищённые маршруты (требуют JWT) ───────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. ЗАЩИЩЁННЫЕ МАРШРУТЫ (требуют JWT)
+// ═══════════════════════════════════════════════════════════════════════════
+
 app.use("/api/v1", authMiddleware);
 
 app.use("/api/v1", apiv1);
@@ -79,252 +179,67 @@ app.use("/api/v1", productsRouter);
 app.use("/api/v1", saleItemsRouter);
 app.use("/api/v1", currenciesRouter);
 app.use("/api/v1", employeesRouter);
+app.use("/api/v1", positionsRouter);
+app.use("/api/v1", employeeHistoriesRouter);
+app.use("/api/v1", accessRightsRouter);
 
-// Логирование запросов (опционально)
-app.use((req, res, next) => {
-	console.log(req.method, req.path);
-	next();
-});
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. ОБРАБОТКА 404
+// ═══════════════════════════════════════════════════════════════════════════
 
-app.get("/api/health", (req, res) => {
-	res.json({
-		status: "ok",
-		timestamp: new Date().toISOString(),
-		version: "1.0.0",
-	});
-});
-
-// Обработка 404
-// app.use((req, res) => {
-// 	res.status(404).json({
-// 		success: false,
-// 		message: "Endpoint не найден",
-// 		path: req.path,
-// 	});
-// });
-
-// Глобальный обработчик ошибок
-app.use((err, req, res, next) => {
-	console.error("Global error handler:", err);
-	res.status(err.status || 500).json({
+app.use((_req, res) => {
+	res.status(404).json({
 		success: false,
-		message: err.message || "Внутренняя ошибка сервера",
-		...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+		message: "Endpoint не найден",
 	});
 });
 
-app.get("/users", async (req, res) => {
-	const users = await prisma.user.findMany();
-	res.json(users);
-});
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК
+// ═══════════════════════════════════════════════════════════════════════════
 
-app.get("/users/delete", async (req, res) => {
-	await prisma.user.deleteMany();
-	res.status(204).send(); // Возвращаем пустой ответ
-});
+app.use((err, _req, res, _next) => {
+	console.error("Global error handler:", err);
 
-app.post("/users", async (req, res) => {
-	try {
-		const newUser = await prisma.user.create({
-			data: { ...req.body },
-		});
-		res.status(201).json(newUser);
-	} catch (error) {
-		res.status(500).json({ error: error.message });
+	// CORS ошибки
+	if (err.message === "Запрещено CORS-политикой") {
+		return res.status(403).json({ success: false, message: err.message });
 	}
+
+	const statusCode = err.status || 500;
+	res.status(statusCode).json({
+		success: false,
+		message: statusCode === 500 ? "Внутренняя ошибка сервера" : err.message,
+		...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
+	});
 });
 
-app.get("/", (req, res) => {
-	res.status(200).json({ message: "JSON успешно получен!" });
-});
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. ЗАПУСК СЕРВЕРА
+// ═══════════════════════════════════════════════════════════════════════════
 
-app.post("/json", async (req, res) => {
-	// console.log("first");
-	try {
-		const body = req.body || {};
-
-		// console.log(body?.actionDate);
-		// Достаём с безопасной вложенностью
-		const actionDate = body.actionDate;
-		const actionType = body.actionType;
-		const organization = body.organization || {};
-		const user = body.user || {};
-		const object = body.object || {};
-		const props = body.props || {};
-
-		const shortName = organization.shortName;
-		const bin = organization.bin;
-		const userName = user.userName;
-		const host = user.host;
-		const ip = user.ip;
-		const objectId = object.id;
-		const objectName = object.name;
-		const objectType = object.type;
-
-		const clientIp = ip || req.ip ? formatIpAddress(req.ip) : "unknown";
-
-		let city = "";
-		try {
-			const { data } = await axios.get(
-				`https://json.geoiplookup.io/${clientIp}`,
-			);
-			city = data?.city || "";
-		} catch {}
-
-		const formattedActionDate = formatISO(
-			parse(actionDate || "", "dd.MM.yyyy HH:mm:ss", new Date()),
-		);
-
-		let isOrganization = props.objectName === "Организации";
-
-		let existingOrganization = await prisma.organization.findUnique({
-			where: { bin },
-		});
-
-		if (existingOrganization) {
-			if (
-				existingOrganization.shortName !== shortName ||
-				(isOrganization &&
-					existingOrganization.displayName !== props.НаименованиеПолное)
-			) {
-				await prisma.organization.update({
-					where: { bin },
-					data: {
-						shortName,
-						displayName: isOrganization ? props.НаименованиеПолное : shortName,
-					},
-				});
-			}
-		} else {
-			existingOrganization = await prisma.organization.create({
-				data: {
-					bin,
-					shortName,
-					displayName: isOrganization ? props.НаименованиеПолное : shortName,
-				},
-			});
-		}
-		// console.log(data?.bin);
-		// Самое важное — проверяем, что организация существует и есть ключевые поля
-		if (!existingOrganization?.bin) {
-			return res
-				.status(400)
-				.json({ error: "Не удалось определить организацию (BIN отсутствует)" });
-		}
-
-		// ── User: найти или создать ────────────────────────────────────────
-		let existingUser = null;
-		if (userName) {
-			existingUser = await prisma.user.findFirst({
-				where: { username: userName },
-			});
-			if (!existingUser) {
-				existingUser = await prisma.user.create({
-					data: {
-						username: userName,
-						fullName: userName,
-					},
-				});
-			}
-		}
-
-		const transaction = await prisma.activityHistory.create({
-			data: {
-				actionDate: formattedActionDate,
-				actionType,
-				organization: { connect: { bin: existingOrganization.bin } },
-				organizationShortName: existingOrganization.shortName,
-				bin: existingOrganization.bin,
-				userName: userName || "anonymous",
-				host: host || "unknown",
-				ip: clientIp,
-				city,
-				objectId: objectId || null,
-				objectType: objectType || null,
-				objectName: objectName || null,
-				props,
-			},
-		});
-
-		console.log("Создана запись:", transaction.id);
-
-		return res.status(200).json({ success: true });
-	} catch (error) {
-		console.error("Ошибка при обработке /json:", error);
-		return res.status(500).json({ error: "Ошибка сервера" });
-	}
-});
-
-// app.get("api/json", async (req, res) => {
-// 	try {
-// 		const activities = await prisma.activityHistory.findMany({
-// 			include: {
-// 				organization: true,
-// 			},
-// 		});
-// 		res.status(200).json(activities);
-// 	} catch (error) {
-// 		console.error("Error fetching activity history:", error);
-// 		res
-// 			.status(500)
-// 			.json({ message: "Error fetching data.", error: error.message });
-// 	}
-// });
-
-app.get("/json", async (req, res) => {
-	// const { bin, shortName } = req.query;
-	// const conditions = {};
-	// if (bin) {
-	// 	conditions.push({ bin });
-	// } else if (shortName) {
-	// 	conditions.push({ shortName });
-	// }
-
-	try {
-		const activities = await prisma.activityHistory.findMany({
-			take: 100,
-			include: {
-				organization: true,
-			},
-		});
-		res.status(200).json(activities);
-	} catch (error) {
-		console.error("Error fetching activity history:", error);
-		res
-			.status(500)
-			.json({ message: "Error fetching data.", error: error.message });
-	}
-});
-
-app.get("/api/v1/history/:id", async (req, res) => {
-	const id = parseInt(req.params.id);
-	try {
-		const history = await prisma.activityHistory.findUnique({
-			where: {
-				id: id, // Замените 'id' на имя вашего уникального ключа, если оно отличается
-			},
-		});
-		if (!history) {
-			return res.status(404).json({ error: "Данные не найдены." });
-		}
-		res.json(history);
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ error: "Произошла ошибка" });
-	}
-});
-
+const port = parseInt(process.env.PORT, 10) || 3000;
 const ip = getLocalIP();
-const port = 3000;
-app.listen(port, () => {
+
+const server = app.listen(port, () => {
 	console.log(`Server is running on http://${ip}:${port}`);
+	console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
 });
 
 // Graceful shutdown
-process.on("SIGTERM", () => {
-	console.log("SIGTERM signal received: closing HTTP server");
+const gracefulShutdown = (signal) => {
+	console.log(`${signal} received: closing HTTP server`);
 	server.close(() => {
 		console.log("HTTP server closed");
 		process.exit(0);
 	});
-});
+
+	// Принудительное завершение через 10 секунд
+	setTimeout(() => {
+		console.error("Forced shutdown after timeout");
+		process.exit(1);
+	}, 10_000);
+};
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

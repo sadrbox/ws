@@ -1,11 +1,9 @@
 // routes/counterparties.js
 import express from "express";
-import cors from "cors";
 // import { querySchema } from "../utils/module.js";
 import { prisma } from "../../prisma/prisma-client.js";
 // import { success } from "zod";
 const router = express.Router();
-router.use(cors());
 
 // Валидация БИН
 const validateBIN = (bin) => {

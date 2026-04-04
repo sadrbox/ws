@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // url      = env("DATABASE_URL")
 }
 
 model User {
@@ -52,6 +51,7 @@ model Organization {
   inventoryTransfers InventoryTransfer[]
   cashReceiptOrders  CashReceiptOrder[]  @relation("OrgCashReceipts")
   cashExpenseOrders  CashExpenseOrder[]  @relation("OrgCashExpenses")
+  employees          Employee[]          @relation("EmployeeOrganization")
 
   @@map("organizations")
 }
@@ -98,6 +98,7 @@ model Contract {
 
   organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+  sales        Sale[]
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -356,10 +357,12 @@ model Sale {
 
   organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+  contract     Contract?     @relation(fields: [contractUuid], references: [uuid], onDelete: SetNull)
   saleItems    SaleItem[]
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
+  @@index([contractUuid])
   @@index([documentDate])
   @@map("sales")
 }
@@ -658,14 +661,78 @@ model Employee {
   middleName String?
   fullName   String? @db.VarChar(255)
   iin        String? @db.VarChar(12) // ИИН
-  position   String? // Должность
   phone      String?
   email      String?
+  avatarPath String? // путь к фото-портрету
 
-  users    User[]
-  contacts Contact[]
+  organizationUuid String?
+  organization     Organization? @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
 
+  users           User[]
+  contacts        Contact[]
+  employeeHistory EmployeeHistory[]
+  accessRights    AccessRight[]
+
+  @@index([organizationUuid])
   @@map("employees")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Справочник Должностей
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Position {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  shortName   String
+  description String? @db.Text
+
+  employeeHistory EmployeeHistory[]
+
+  @@map("positions")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// История сотрудника (приём/увольнение/перемещение)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model EmployeeHistory {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  eventDate DateTime @default(now())
+  eventType String // hire, fire, transfer
+  salary    Decimal? @db.Decimal(18, 2)
+
+  employeeUuid String
+  employee     Employee @relation(fields: [employeeUuid], references: [uuid], onDelete: Cascade)
+
+  positionUuid String?
+  position     Position? @relation(fields: [positionUuid], references: [uuid], onDelete: SetNull)
+
+  @@index([employeeUuid])
+  @@index([positionUuid])
+  @@map("employee_history")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Права доступа сотрудника к моделям
+// ═══════════════════════════════════════════════════════════════════════════
+
+model AccessRight {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  modelName   String // имя модели (Sales, Contracts, Organizations и т.д.)
+  accessLevel String @default("none") // full, readonly, none
+
+  employeeUuid String
+  employee     Employee @relation(fields: [employeeUuid], references: [uuid], onDelete: Cascade)
+
+  @@unique([employeeUuid, modelName])
+  @@index([employeeUuid])
+  @@map("access_rights")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

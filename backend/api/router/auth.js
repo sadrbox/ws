@@ -1,11 +1,54 @@
 import express from "express";
-import cors from "cors";
 import bcrypt from "bcryptjs";
 import { prisma } from "../../prisma/prisma-client.js";
 import { generateToken, authMiddleware } from "../../utils/auth.js";
 
 const router = express.Router();
-router.use(cors());
+
+// ── Полный список моделей для назначения прав ───────────────────────────
+const ALL_MODEL_NAMES = [
+	"Organization",
+	"Counterparty",
+	"Contract",
+	"AttachedFile",
+	"ContactType",
+	"Contact",
+	"ContactPerson",
+	"BankAccount",
+	"ActivityHistory",
+	"Todo",
+	"Notification",
+	"Warehouse",
+	"Sale",
+	"Purchase",
+	"OutgoingInvoice",
+	"IncomingInvoice",
+	"PaymentInvoice",
+	"ScheduledTask",
+	"InventoryTransfer",
+	"CashReceiptOrder",
+	"CashExpenseOrder",
+	"Brand",
+	"Product",
+	"SaleItem",
+	"Employee",
+	"Position",
+	"EmployeeHistory",
+	"AccessRight",
+	"Currency",
+	"User",
+];
+
+/**
+ * Генерирует виртуальные «полные права на всё» для admin-пользователя (dev-режим).
+ * Не записывает в БД — возвращает массив объектов, идентичных AccessRight.
+ */
+function generateFullAccessRights() {
+	return ALL_MODEL_NAMES.map((name) => ({
+		modelName: name,
+		accessLevel: "full",
+	}));
+}
 
 // ============================================
 // POST /auth/login
@@ -34,26 +77,53 @@ router.post("/auth/login", async (req, res) => {
 			include: { employee: true },
 		});
 
+		// Единое сообщение — не раскрываем, что именно неверно (защита от перебора)
+		const INVALID_CREDENTIALS = "Неверное имя пользователя или пароль";
+
 		if (!user) {
 			return res.status(401).json({
 				success: false,
-				message: "Пользователь не найден",
+				message: INVALID_CREDENTIALS,
 			});
 		}
 
-		// Если у пользователя пароль не задан (null/пустой) — вход без пароля
-		const hasPassword = user.password && user.password.trim() !== "";
+		// Подгружаем accessRights отдельно (таблица может ещё не существовать после миграции)
+		let accessRights = [];
+		if (user.employee && prisma.accessRight) {
+			try {
+				accessRights = await prisma.accessRight.findMany({
+					where: { employeeUuid: user.employee.uuid },
+					orderBy: { modelName: "asc" },
+				});
+			} catch (_) {
+				// Таблица access_rights ещё не создана — игнорируем
+			}
+		}
 
-		if (hasPassword) {
-			// Пароль задан — требуем ввод пароля
+		// Есть ли у пользователя установленный пароль?
+		const hasPassword = user.password && user.password.trim() !== "";
+		const isDev = process.env.NODE_ENV !== "production";
+
+		if (!hasPassword) {
+			if (isDev) {
+				// В dev-режиме разрешаем вход без пароля (для удобства разработки)
+				console.warn(`[DEV] Вход без пароля: ${user.username}`);
+			} else {
+				return res.status(401).json({
+					success: false,
+					message: "Пароль не установлен. Обратитесь к администратору",
+				});
+			}
+		} else {
+			// Пароль установлен — проверяем
 			if (!password || typeof password !== "string") {
 				return res.status(401).json({
 					success: false,
-					message: "Требуется пароль",
+					message: INVALID_CREDENTIALS,
 				});
 			}
 
-			// Проверяем: если пароль начинается с $2a$ или $2b$ — это bcrypt-хэш
+			// Проверяем: если пароль — bcrypt-хэш
 			const isHashed =
 				user.password.startsWith("$2a$") || user.password.startsWith("$2b$");
 
@@ -61,12 +131,10 @@ router.post("/auth/login", async (req, res) => {
 			if (isHashed) {
 				passwordValid = await bcrypt.compare(password, user.password);
 			} else {
-				// Простое сравнение (для миграции со старых паролей)
+				// Миграция со старых plain text паролей: проверяем и хешируем
 				passwordValid = password === user.password;
-
-				// Если пароль совпал — хешируем и сохраняем для безопасности
 				if (passwordValid) {
-					const hashed = await bcrypt.hash(password, 10);
+					const hashed = await bcrypt.hash(password, 12);
 					await prisma.user.update({
 						where: { uuid: user.uuid },
 						data: { password: hashed },
@@ -77,13 +145,23 @@ router.post("/auth/login", async (req, res) => {
 			if (!passwordValid) {
 				return res.status(401).json({
 					success: false,
-					message: "Неверный пароль",
+					message: INVALID_CREDENTIALS,
 				});
 			}
 		}
 
 		// Генерируем JWT-токен
 		const token = generateToken(user);
+
+		// Для admin в dev-режиме — виртуальные полные права на все модели
+		let employeeData = user.employee || null;
+		if (employeeData) {
+			const rights =
+				isDev && trimmedUsername.toLowerCase() === "admin"
+					? generateFullAccessRights()
+					: accessRights;
+			employeeData = { ...employeeData, accessRights: rights };
+		}
 
 		return res.status(200).json({
 			success: true,
@@ -92,7 +170,7 @@ router.post("/auth/login", async (req, res) => {
 				uuid: user.uuid,
 				username: user.username,
 				email: user.email,
-				employee: user.employee || null,
+				employee: employeeData,
 			},
 		});
 	} catch (error) {
@@ -133,6 +211,29 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 				.json({ success: false, message: "Пользователь не найден" });
 		}
 
+		// Подгружаем accessRights отдельно (таблица может ещё не существовать)
+		let accessRights = [];
+		if (user.employee && prisma.accessRight) {
+			try {
+				accessRights = await prisma.accessRight.findMany({
+					where: { employeeUuid: user.employee.uuid },
+					orderBy: { modelName: "asc" },
+				});
+			} catch (_) {
+				// Таблица access_rights ещё не создана — игнорируем
+			}
+		}
+
+		// Для admin в dev-режиме — виртуальные полные права на все модели
+		const isDev = process.env.NODE_ENV !== "production";
+		if (user.employee) {
+			const rights =
+				isDev && user.username?.toLowerCase() === "admin"
+					? generateFullAccessRights()
+					: accessRights;
+			user.employee = { ...user.employee, accessRights: rights };
+		}
+
 		return res.status(200).json({ success: true, user });
 	} catch (error) {
 		console.error("GET /auth/me error:", error);
@@ -155,11 +256,12 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 		if (
 			!newPassword ||
 			typeof newPassword !== "string" ||
-			newPassword.length < 1
+			newPassword.length < 6
 		) {
-			return res
-				.status(400)
-				.json({ success: false, message: "Новый пароль обязателен" });
+			return res.status(400).json({
+				success: false,
+				message: "Новый пароль должен быть не менее 6 символов",
+			});
 		}
 
 		const user = await prisma.user.findUnique({
@@ -181,9 +283,13 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 			}
 			const isHashed =
 				user.password.startsWith("$2a$") || user.password.startsWith("$2b$");
-			const valid = isHashed
-				? await bcrypt.compare(oldPassword, user.password)
-				: oldPassword === user.password;
+			let valid = false;
+			if (isHashed) {
+				valid = await bcrypt.compare(oldPassword, user.password);
+			} else {
+				// Миграция: plain text → bcrypt
+				valid = oldPassword === user.password;
+			}
 			if (!valid) {
 				return res
 					.status(401)
@@ -191,7 +297,7 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 			}
 		}
 
-		const hashed = await bcrypt.hash(newPassword, 10);
+		const hashed = await bcrypt.hash(newPassword, 12);
 		await prisma.user.update({
 			where: { uuid: req.user.uuid },
 			data: { password: hashed },
