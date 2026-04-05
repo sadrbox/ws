@@ -1,5 +1,6 @@
 import express from "express";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { prisma } from "../../prisma/prisma-client.js";
 import { generateToken, authMiddleware } from "../../utils/auth.js";
 
@@ -74,7 +75,11 @@ router.post("/auth/login", async (req, res) => {
 					mode: "insensitive",
 				},
 			},
-			include: { employee: true },
+			include: {
+				employee: {
+					include: { organization: true },
+				},
+			},
 		});
 
 		// Единое сообщение — не раскрываем, что именно неверно (защита от перебора)
@@ -170,6 +175,8 @@ router.post("/auth/login", async (req, res) => {
 				uuid: user.uuid,
 				username: user.username,
 				email: user.email,
+				organizationUuid: user.organizationUuid,
+				isSuperAdmin: user.isSuperAdmin,
 				employee: employeeData,
 			},
 		});
@@ -201,7 +208,11 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 				username: true,
 				email: true,
 				employeeUuid: true,
-				employee: true,
+				organizationUuid: true,
+				isSuperAdmin: true,
+				employee: {
+					include: { organization: true },
+				},
 			},
 		});
 
@@ -306,6 +317,212 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 		return res.status(200).json({ success: true, message: "Пароль изменён" });
 	} catch (error) {
 		console.error("POST /auth/change-password error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ============================================
+// POST /auth/register — Регистрация организации
+// Создаёт организацию + первого пользователя (admin) + сотрудника + invite-код
+// ============================================
+router.post("/auth/register", async (req, res) => {
+	try {
+		const { bin, shortName, displayName, username, password, email } = req.body;
+
+		// Валидация
+		if (!bin || typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
+			return res.status(400).json({ success: false, message: "БИН должен состоять ровно из 12 цифр" });
+		}
+		const trimmedBin = bin.trim();
+		const trimmedUsername = (username || "").trim();
+		if (!trimmedUsername) {
+			return res.status(400).json({ success: false, message: "Имя пользователя обязательно" });
+		}
+		if (!password || typeof password !== "string" || password.length < 6) {
+			return res.status(400).json({ success: false, message: "Пароль должен быть не менее 6 символов" });
+		}
+
+		// Проверяем, что БИН не занят
+		const existingOrg = await prisma.organization.findUnique({ where: { bin: trimmedBin } });
+		if (existingOrg) {
+			return res.status(409).json({ success: false, message: "Организация с таким БИН уже зарегистрирована" });
+		}
+
+		// Проверяем, что username не занят
+		const existingUser = await prisma.user.findFirst({
+			where: { username: { equals: trimmedUsername, mode: "insensitive" } },
+		});
+		if (existingUser) {
+			return res.status(409).json({ success: false, message: "Имя пользователя уже занято" });
+		}
+
+		// Генерируем invite-код (8 символов hex)
+		const inviteCode = crypto.randomBytes(4).toString("hex").toUpperCase();
+		const hashedPassword = await bcrypt.hash(password, 12);
+
+		// Создаём всё в транзакции
+		const result = await prisma.$transaction(async (tx) => {
+			// 1. Организация
+			const org = await tx.organization.create({
+				data: {
+					bin: trimmedBin,
+					shortName: (shortName || "").trim() || null,
+					displayName: (displayName || "").trim() || null,
+					inviteCode,
+				},
+			});
+
+			// 2. Сотрудник
+			const employee = await tx.employee.create({
+				data: {
+					fullName: trimmedUsername,
+					lastName: trimmedUsername,
+					organizationUuid: org.uuid,
+				},
+			});
+
+			// 3. Пользователь
+			const user = await tx.user.create({
+				data: {
+					username: trimmedUsername,
+					email: (email || "").trim() || null,
+					password: hashedPassword,
+					employeeUuid: employee.uuid,
+					organizationUuid: org.uuid,
+					isSuperAdmin: false,
+				},
+				include: { employee: { include: { organization: true } } },
+			});
+
+			return { org, user };
+		});
+
+		const token = generateToken(result.user);
+
+		return res.status(201).json({
+			success: true,
+			token,
+			inviteCode,
+			user: {
+				uuid: result.user.uuid,
+				username: result.user.username,
+				email: result.user.email,
+				organizationUuid: result.user.organizationUuid,
+				isSuperAdmin: result.user.isSuperAdmin,
+				employee: result.user.employee,
+			},
+		});
+	} catch (error) {
+		console.error("POST /auth/register error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ============================================
+// POST /auth/join — Присоединение к организации по invite-коду
+// Создаёт нового пользователя + сотрудника в организации
+// ============================================
+router.post("/auth/join", async (req, res) => {
+	try {
+		const { inviteCode, username, password, email } = req.body;
+
+		if (!inviteCode || typeof inviteCode !== "string") {
+			return res.status(400).json({ success: false, message: "Код приглашения обязателен" });
+		}
+		const trimmedCode = inviteCode.trim().toUpperCase();
+		const trimmedUsername = (username || "").trim();
+		if (!trimmedUsername) {
+			return res.status(400).json({ success: false, message: "Имя пользователя обязательно" });
+		}
+		if (!password || typeof password !== "string" || password.length < 6) {
+			return res.status(400).json({ success: false, message: "Пароль должен быть не менее 6 символов" });
+		}
+
+		// Находим организацию по invite-коду
+		const org = await prisma.organization.findUnique({ where: { inviteCode: trimmedCode } });
+		if (!org) {
+			return res.status(404).json({ success: false, message: "Организация с таким кодом приглашения не найдена" });
+		}
+
+		// Проверяем, что username не занят
+		const existingUser = await prisma.user.findFirst({
+			where: { username: { equals: trimmedUsername, mode: "insensitive" } },
+		});
+		if (existingUser) {
+			return res.status(409).json({ success: false, message: "Имя пользователя уже занято" });
+		}
+
+		const hashedPassword = await bcrypt.hash(password, 12);
+
+		const result = await prisma.$transaction(async (tx) => {
+			// 1. Сотрудник
+			const employee = await tx.employee.create({
+				data: {
+					fullName: trimmedUsername,
+					lastName: trimmedUsername,
+					organizationUuid: org.uuid,
+				},
+			});
+
+			// 2. Пользователь
+			const user = await tx.user.create({
+				data: {
+					username: trimmedUsername,
+					email: (email || "").trim() || null,
+					password: hashedPassword,
+					employeeUuid: employee.uuid,
+					organizationUuid: org.uuid,
+					isSuperAdmin: false,
+				},
+				include: { employee: { include: { organization: true } } },
+			});
+
+			return user;
+		});
+
+		const token = generateToken(result);
+
+		return res.status(201).json({
+			success: true,
+			token,
+			user: {
+				uuid: result.uuid,
+				username: result.username,
+				email: result.email,
+				organizationUuid: result.organizationUuid,
+				isSuperAdmin: result.isSuperAdmin,
+				employee: result.employee,
+			},
+		});
+	} catch (error) {
+		console.error("POST /auth/join error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ============================================
+// POST /auth/regenerate-invite — Перегенерация invite-кода (требует авторизации)
+// ============================================
+router.post("/auth/regenerate-invite", authMiddleware, async (req, res) => {
+	try {
+		if (!req.user || !req.user.uuid) {
+			return res.status(401).json({ success: false, message: "Не авторизован" });
+		}
+
+		const user = await prisma.user.findUnique({ where: { uuid: req.user.uuid } });
+		if (!user || !user.organizationUuid) {
+			return res.status(400).json({ success: false, message: "Пользователь не привязан к организации" });
+		}
+
+		const newCode = crypto.randomBytes(4).toString("hex").toUpperCase();
+		await prisma.organization.update({
+			where: { uuid: user.organizationUuid },
+			data: { inviteCode: newCode },
+		});
+
+		return res.status(200).json({ success: true, inviteCode: newCode });
+	} catch (error) {
+		console.error("POST /auth/regenerate-invite error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

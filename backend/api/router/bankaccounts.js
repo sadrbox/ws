@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -128,6 +129,7 @@ router.get("/bankaccounts", async (req, res) => {
 			...searchWhereClause,
 			...dateRangeFilter,
 			...filterWhereClause,
+			...tenantFilter(req),
 		};
 
 		// ── Курсорная пагинация ───────────────────────────────────────────────

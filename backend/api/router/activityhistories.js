@@ -1,6 +1,7 @@
 import express from "express";
 import { querySchema } from "../../utils/module.js";
 import { prisma } from "../../prisma/prisma-client.js";
+import { tenantFilter } from "../../utils/auth.js";
 // import { success } from "zod";
 const router = express.Router();
 
@@ -400,6 +401,7 @@ router.get("/activityhistories", async (req, res) => {
 			...searchWhereClause,
 			...dateRangeFilter,
 			...filterWhereClause,
+			...tenantFilter(req),
 		};
 
 		// ── Курсорная пагинация ───────────────────────────────────────────────

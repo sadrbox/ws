@@ -20,6 +20,7 @@ import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import Tabs from "src/components/Tabs";
+import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
 const MODEL_ENDPOINT = "purchases";
 const LIST_NAME = "PurchasesList";
@@ -42,6 +43,7 @@ const PurchasesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
+  const defaultOrg = useDefaultOrganization();
 
   const buildInitialForm = useCallback((): TFormData => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
@@ -49,8 +51,9 @@ const PurchasesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
     const name = (data.ownerName as string) || "";
     if (data.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = data.organizationUuid as string; init.ownerName = name; }
     else if (data.counterpartyUuid) { init.ownerType = "counterparty"; init.ownerUuid = data.counterpartyUuid as string; init.ownerName = name; }
+    else if (defaultOrg.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = defaultOrg.organizationUuid; init.ownerName = defaultOrg.organizationName; }
     return init;
-  }, [data]);
+  }, [data, defaultOrg]);
 
   const [formData, setFormData] = useState<TFormData>(buildInitialForm);
   const [isLoading, setIsLoading] = useState(false);

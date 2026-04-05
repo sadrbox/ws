@@ -17,13 +17,43 @@
 	border-radius: 8px;
 	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
 	min-width: 360px;
-	max-width: 420px;
+	max-width: 440px;
 	width: 100%;
 }
 
+.modeTabs {
+	display: flex;
+	gap: 0;
+	border-bottom: 2px solid #e0e0e0;
+	margin-bottom: 4px;
+
+	button {
+		flex: 1;
+		padding: 8px 4px;
+		border: none;
+		background: none;
+		cursor: pointer;
+		font-size: 13px;
+		font-weight: 500;
+		color: #666;
+		border-bottom: 2px solid transparent;
+		margin-bottom: -2px;
+		transition: color 0.15s, border-color 0.15s;
+
+		&:hover {
+			color: #333;
+		}
+	}
+}
+
+.modeActive {
+	color: #1976d2 !important;
+	border-bottom-color: #1976d2 !important;
+}
+
 .title {
-	margin: 0 0 8px;
-	font-size: 20px;
+	margin: 0 0 4px;
+	font-size: 18px;
 	font-weight: 600;
 	color: #222;
 	text-align: center;
@@ -36,6 +66,15 @@
 	border-radius: 4px;
 	font-size: 13px;
 	line-height: 1.4;
+}
+
+.success {
+	padding: 10px 14px;
+	background: #e8f5e9;
+	color: #2e7d32;
+	border-radius: 4px;
+	font-size: 13px;
+	line-height: 1.5;
 }
 
 .field {

@@ -20,6 +20,7 @@ import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
+import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
 const MODEL_ENDPOINT = "warehouses";
 
@@ -27,7 +28,13 @@ const WarehousesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
-  const [formData, setFormData] = useState({ shortName: "", address: "", description: "", organizationUuid: "", organizationName: "", id: undefined as number | undefined, uuid: undefined as string | undefined });
+  const defaultOrg = useDefaultOrganization();
+  const [formData, setFormData] = useState(() => ({
+    shortName: "", address: "", description: "",
+    organizationUuid: defaultOrg.organizationUuid,
+    organizationName: defaultOrg.organizationName,
+    id: undefined as number | undefined, uuid: undefined as string | undefined,
+  }));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);

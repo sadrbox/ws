@@ -20,8 +20,7 @@ import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
-
-const MODEL_ENDPOINT = "scheduled-tasks";
+import { useDefaultOrganization } from "src/hooks/useDefaultOrganization"; const MODEL_ENDPOINT = "scheduled-tasks";
 const LIST_NAME = "ScheduledTasksList";
 const FORM_LABEL = "Регламентная задача";
 
@@ -43,8 +42,13 @@ const ScheduledTasksForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
+  const defaultOrg = useDefaultOrganization();
 
-  const [formData, setFormData] = useState<TFormData>({ ...EMPTY_FORM });
+  const [formData, setFormData] = useState<TFormData>(() => ({
+    ...EMPTY_FORM,
+    organizationUuid: defaultOrg.organizationUuid,
+    organizationName: defaultOrg.organizationName,
+  }));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);

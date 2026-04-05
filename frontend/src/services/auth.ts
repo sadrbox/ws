@@ -4,6 +4,8 @@ export interface AuthUser {
 	uuid: string;
 	username: string;
 	email: string | null;
+	organizationUuid?: string | null;
+	isSuperAdmin?: boolean;
 	employee?: {
 		uuid: string;
 		fullName: string | null;
@@ -13,6 +15,7 @@ export interface AuthUser {
 		iin: string | null;
 		avatarPath: string | null;
 		organizationUuid: string | null;
+		organization?: { uuid: string; shortName: string; bin?: string } | null;
 		accessRights?: {
 			modelName: string;
 			accessLevel: string;
@@ -91,6 +94,54 @@ export function getToken(): string | null {
  */
 export function isAuthenticated(): boolean {
 	return !!localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+/**
+ * Регистрация организации + первого пользователя
+ */
+export async function registerOrganization(data: {
+	bin: string;
+	shortName?: string;
+	displayName?: string;
+	username: string;
+	password: string;
+	email?: string;
+}): Promise<{ success: boolean; user?: AuthUser; inviteCode?: string; message?: string }> {
+	try {
+		const res = await apiClient.post<LoginResponse & { inviteCode?: string }>("/auth/register", data);
+		const d = res.data;
+		if (d.success && d.token) {
+			localStorage.setItem(AUTH_TOKEN_KEY, d.token);
+			localStorage.setItem(AUTH_USER_KEY, JSON.stringify(d.user));
+			return { success: true, user: d.user, inviteCode: (d as any).inviteCode };
+		}
+		return { success: false, message: d.message || "Ошибка регистрации" };
+	} catch (err: any) {
+		return { success: false, message: err.response?.data?.message || err.message || "Ошибка соединения" };
+	}
+}
+
+/**
+ * Присоединение к организации по invite-коду
+ */
+export async function joinOrganization(data: {
+	inviteCode: string;
+	username: string;
+	password: string;
+	email?: string;
+}): Promise<{ success: boolean; user?: AuthUser; message?: string }> {
+	try {
+		const res = await apiClient.post<LoginResponse>("/auth/join", data);
+		const d = res.data;
+		if (d.success && d.token) {
+			localStorage.setItem(AUTH_TOKEN_KEY, d.token);
+			localStorage.setItem(AUTH_USER_KEY, JSON.stringify(d.user));
+			return { success: true, user: d.user };
+		}
+		return { success: false, message: d.message || "Ошибка присоединения" };
+	} catch (err: any) {
+		return { success: false, message: err.response?.data?.message || err.message || "Ошибка соединения" };
+	}
 }
 
 /**

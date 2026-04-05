@@ -21,6 +21,7 @@ import LookupField from "src/components/Field/LookupField";
 import SaleItemsTable from "./SaleItemsTable";
 import { Group } from "src/components/UI";
 import Tabs from "src/components/Tabs";
+import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
@@ -45,14 +46,16 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
+  const defaultOrg = useDefaultOrganization();
 
   const buildInitialForm = useCallback((): TFormData => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
     if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; init.organizationName = (data.ownerName as string) || ""; }
+    else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
     if (data.counterpartyUuid) { init.counterpartyUuid = data.counterpartyUuid as string; init.counterpartyName = (data.ownerName as string) || ""; }
     return init;
-  }, [data]);
+  }, [data, defaultOrg]);
 
   const [formData, setFormData] = useState<TFormData>(buildInitialForm);
   const [isLoading, setIsLoading] = useState(false);

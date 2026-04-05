@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -80,7 +81,7 @@ router.get("/contactpersons", async (req, res) => {
 			}
 		}
 
-		const baseWhere = { ...searchWhereClause, ...filterWhereClause };
+		const baseWhere = { ...searchWhereClause, ...filterWhereClause, ...tenantFilter(req) };
 
 		const queryOptions = { take: limitNumber, where: baseWhere, orderBy };
 		if (cursorNumber !== null) {

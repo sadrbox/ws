@@ -18,12 +18,18 @@ model User {
   employeeUuid String?
   employee     Employee? @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
 
+  // ── Мультитенантность ──────────────────────────────────────────────
+  organizationUuid String?
+  organization     Organization? @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+  isSuperAdmin     Boolean       @default(false) // суперадмин видит все данные всех организаций
+
   curatorTodos  Todo[]         @relation("TodoCurator")
   executorTodos Todo[]         @relation("TodoExecutor")
   notifications Notification[]
   contacts      Contact[]
 
   @@index([employeeUuid])
+  @@index([organizationUuid])
   @@map("users")
 }
 
@@ -34,6 +40,9 @@ model Organization {
   bin         String  @unique @db.VarChar(12)
   shortName   String?
   displayName String?
+
+  // ── Мультитенантность ──────────────────────────────────────────────
+  inviteCode String? @unique // код приглашения для присоединения к организации
 
   contracts          Contract[]
   contacts           Contact[]
@@ -52,6 +61,7 @@ model Organization {
   cashReceiptOrders  CashReceiptOrder[]  @relation("OrgCashReceipts")
   cashExpenseOrders  CashExpenseOrder[]  @relation("OrgCashExpenses")
   employees          Employee[]          @relation("EmployeeOrganization")
+  users              User[]              @relation("UserOrganization")
 
   @@map("organizations")
 }

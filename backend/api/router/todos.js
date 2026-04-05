@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -121,6 +122,7 @@ router.get("/todos", async (req, res) => {
 		const baseWhere = {
 			...searchWhereClause,
 			...filterWhereClause,
+			...tenantFilter(req),
 		};
 
 		// ── Курсорная пагинация ───────────────────────────────────────────────

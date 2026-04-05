@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { tenantFilter } from "../../utils/auth.js";
 const router = express.Router();
 const MODEL = "outgoingInvoice";
 const ROUTE = "outgoing-invoices";
@@ -70,7 +71,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				}
 			}
 		}
-		const baseWhere = { ...searchWhere, ...filterWhere };
+		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
 		const opts = {
 			take: limitNumber,
 			where: baseWhere,

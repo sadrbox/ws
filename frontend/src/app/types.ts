@@ -32,11 +32,19 @@ export type TypeAppContextProps = {
 			uuid: string;
 			username: string;
 			email?: string | null;
+			organizationUuid?: string | null;
+			isSuperAdmin?: boolean;
 			employee?: {
 				uuid: string;
 				fullName: string | null;
+				firstName?: string | null;
+				lastName?: string | null;
+				middleName?: string | null;
 				iin?: string | null;
-				position?: string | null;
+				avatarPath?: string | null;
+				organizationUuid?: string | null;
+				organization?: { uuid: string; shortName: string; bin?: string } | null;
+				accessRights?: { modelName: string; accessLevel: string }[];
 			} | null;
 		} | null;
 		logout: () => void;

@@ -21,6 +21,7 @@ import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 import { ContactsList } from "../Contacts";
+import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
 const MODEL_ENDPOINT = "employees";
 const LIST_NAME = "EmployeesList";
@@ -84,8 +85,13 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
+  const defaultOrg = useDefaultOrganization();
 
-  const [formData, setFormData] = useState<TFormData>({ ...EMPTY_FORM });
+  const [formData, setFormData] = useState<TFormData>(() => ({
+    ...EMPTY_FORM,
+    organizationUuid: defaultOrg.organizationUuid,
+    organizationName: defaultOrg.organizationName,
+  }));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
@@ -93,10 +99,25 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
   // ── Аватар ─────────────────────────────────────────────────────────────
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const avatarBlobUrlRef = useRef<string | null>(null);
 
-  const loadAvatar = useCallback((entityUuid: string) => {
-    const url = `${(apiClient.defaults as any).baseURL}/employees/${entityUuid}/avatar?t=${Date.now()}`;
-    setAvatarUrl(url);
+  // Освобождаем blob URL при размонтировании
+  useEffect(() => {
+    return () => {
+      if (avatarBlobUrlRef.current) URL.revokeObjectURL(avatarBlobUrlRef.current);
+    };
+  }, []);
+
+  const loadAvatar = useCallback(async (entityUuid: string) => {
+    try {
+      const res = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}/avatar`, { responseType: "blob" });
+      if (avatarBlobUrlRef.current) URL.revokeObjectURL(avatarBlobUrlRef.current);
+      const blobUrl = URL.createObjectURL(res.data);
+      avatarBlobUrlRef.current = blobUrl;
+      setAvatarUrl(blobUrl);
+    } catch {
+      setAvatarUrl(null);
+    }
   }, []);
 
   const handleAvatarUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,6 +138,8 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
     if (!formData.uuid) return;
     try {
       await apiClient.delete(`/${MODEL_ENDPOINT}/${formData.uuid}/avatar`);
+      if (avatarBlobUrlRef.current) URL.revokeObjectURL(avatarBlobUrlRef.current);
+      avatarBlobUrlRef.current = null;
       setAvatarUrl(null);
     } catch (err) { console.error("avatar delete error:", err); }
   }, [formData.uuid]);

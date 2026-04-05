@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -110,6 +111,7 @@ router.get("/contracts", async (req, res) => {
 			...searchWhereClause,
 			...dateRangeFilter,
 			...filterWhereClause,
+			...tenantFilter(req),
 		};
 		const queryOptions = {
 			take: limitNumber,

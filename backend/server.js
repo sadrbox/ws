@@ -15,7 +15,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { getLocalIP } from "./utils/module.js";
-import { authMiddleware } from "./utils/auth.js";
+import { authMiddleware, tenantMiddleware } from "./utils/auth.js";
 
 // ── Роутеры ─────────────────────────────────────────────────────────────
 import authRouter from "./api/router/auth.js";
@@ -150,6 +150,7 @@ app.use("/api/v1", authRouter);
 // ═══════════════════════════════════════════════════════════════════════════
 
 app.use("/api/v1", authMiddleware);
+app.use("/api/v1", tenantMiddleware);
 
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);

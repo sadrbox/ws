@@ -21,8 +21,7 @@ import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
-
-const MODEL_ENDPOINT = "todos";
+import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "new", label: "Новая" },
@@ -65,6 +64,7 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
+  const defaultOrg = useDefaultOrganization();
 
   const buildInitialForm = useCallback((): TFormData => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
@@ -72,9 +72,12 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
     if (data.organizationUuid) {
       init.organizationUuid = data.organizationUuid as string;
       init.organizationName = (data.ownerName as string) || "";
+    } else if (defaultOrg.organizationUuid) {
+      init.organizationUuid = defaultOrg.organizationUuid;
+      init.organizationName = defaultOrg.organizationName;
     }
     return init;
-  }, [data]);
+  }, [data, defaultOrg]);
 
   const [formData, setFormData] = useState<TFormData>(buildInitialForm);
   const [isLoading, setIsLoading] = useState(false);
