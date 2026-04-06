@@ -6,25 +6,145 @@ const router = express.Router();
 const MODEL = "accessRight";
 const ROUTE = "access-rights";
 
-// ── GET list (filtered by employeeUuid) ─────────────────────────────────
+// Текстовые поля для полнотекстового поиска
+const TEXT_FIELDS = ["modelName", "accessLevel"];
+
+// ── GET list (курсорная пагинация, фильтр по userUuid) ──────────────
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { employeeUuid } = req.query;
-		if (!employeeUuid)
+		const { userUuid } = req.query;
+		if (!userUuid)
 			return res.status(400).json({
 				success: false,
-				message: "Параметр employeeUuid обязателен",
+				message: "Параметр userUuid обязателен",
 			});
 
-		const items = await prisma[MODEL].findMany({
-			where: { employeeUuid },
-			orderBy: { modelName: "asc" },
-		});
+		const rawLimit = req.query.limit;
+		const rawCursor = req.query.cursor;
+		const search =
+			typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
+		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
+
+		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0)) {
+			return res.status(400).json({
+				success: false,
+				message: "Некорректный параметр cursor",
+			});
+		}
+
+		const filter =
+			req.query.filter && typeof req.query.filter === "object"
+				? req.query.filter
+				: {};
+
+		// ── Сортировка ────────────────────────────────────────────────────
+		const orderBy = [];
+		const sortParam =
+			typeof req.query.sort === "string" ? req.query.sort : null;
+
+		if (sortParam) {
+			try {
+				const sortObj = JSON.parse(sortParam);
+				if (sortObj && typeof sortObj === "object") {
+					for (const [field, dir] of Object.entries(sortObj)) {
+						if (dir !== "asc" && dir !== "desc") continue;
+						orderBy.push({ [field]: dir });
+					}
+				}
+			} catch {
+				// Некорректный JSON — игнорируем
+			}
+		}
+
+		if (orderBy.length === 0) {
+			orderBy.push({ id: "asc" });
+		} else {
+			const hasId = orderBy.some((o) => "id" in o);
+			if (!hasId) orderBy.push({ id: "asc" });
+		}
+
+		// ── Поиск ─────────────────────────────────────────────────────────
+		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
+		let searchWhereClause = {};
+
+		if (searchWords.length > 0) {
+			searchWhereClause = {
+				AND: searchWords.map((word) => {
+					const orConditions = TEXT_FIELDS.map((field) => ({
+						[field]: { contains: word, mode: "insensitive" },
+					}));
+					const num = Number(word);
+					if (Number.isInteger(num) && num > 0) {
+						orConditions.push({ id: { equals: num } });
+					}
+					return { OR: orConditions };
+				}),
+			};
+		}
+
+		// ── Произвольные фильтры ──────────────────────────────────────────
+		const ALLOWED_OPERATORS = ["contains", "equals", "gte", "lte", "gt", "lt"];
+		const SKIP_KEYS = ["searchBy", "dateRange"];
+		const filterWhereClause = {};
+
+		for (const [field, conditions] of Object.entries(filter)) {
+			if (SKIP_KEYS.includes(field)) continue;
+			if (!conditions || typeof conditions !== "object") continue;
+
+			for (const [operator, value] of Object.entries(conditions)) {
+				if (!ALLOWED_OPERATORS.includes(operator)) continue;
+
+				if (!filterWhereClause[field]) filterWhereClause[field] = {};
+
+				if (operator === "contains") {
+					filterWhereClause[field] = {
+						contains: String(value),
+						mode: "insensitive",
+					};
+				} else {
+					filterWhereClause[field][operator] = value;
+				}
+			}
+		}
+
+		// ── Итоговый where ────────────────────────────────────────────────
+		const baseWhere = {
+			userUuid,
+			...searchWhereClause,
+			...filterWhereClause,
+		};
+
+		// ── Курсорная пагинация ───────────────────────────────────────────
+		const queryOptions = {
+			take: limitNumber,
+			where: baseWhere,
+			orderBy,
+		};
+
+		if (cursorNumber !== null) {
+			queryOptions.cursor = { id: cursorNumber };
+			queryOptions.skip = 1;
+		}
+
+		const items = await prisma[MODEL].findMany(queryOptions);
+
+		const hasMore = items.length === limitNumber;
+		const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+		let total;
+		if (cursorNumber === null) {
+			total = await prisma[MODEL].count({ where: baseWhere });
+		}
 
 		return res.status(200).json({
 			success: true,
 			items,
-			total: items.length,
+			nextCursor,
+			hasMore,
+			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
 		console.error(`GET /${ROUTE} error:`, error);
@@ -52,11 +172,11 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { modelName, accessLevel, employeeUuid } = req.body;
-		if (!employeeUuid)
+		const { modelName, accessLevel, userUuid } = req.body;
+		if (!userUuid)
 			return res.status(400).json({
 				success: false,
-				message: "employeeUuid обязателен",
+				message: "userUuid обязателен",
 			});
 		if (!modelName)
 			return res.status(400).json({
@@ -67,7 +187,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			data: {
 				modelName: modelName.trim(),
 				accessLevel: accessLevel?.trim() || "none",
-				employeeUuid,
+				userUuid,
 			},
 		});
 		return res.status(201).json({ success: true, item });

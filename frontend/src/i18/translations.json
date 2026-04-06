@@ -228,6 +228,9 @@
 	"EmployeesList": "Сотрудники",
 	"EmployeesList_part": "Сотрудники",
 
+	"PositionsList": "Должности",
+	"PositionsList_part": "Должности",
+
 	"documentNumber": "Номер документа",
 	"documentDate": "Дата документа",
 	"amount": "Сумма",

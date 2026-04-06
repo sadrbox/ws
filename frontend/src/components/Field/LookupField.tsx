@@ -67,6 +67,7 @@ const listComponentRegistry: Record<string, () => Promise<Record<string, any>>> 
   products: () => import("src/models/Products"),
   currencies: () => import("src/models/Currencies"),
   employees: () => import("src/models/Employees"),
+  positions: () => import("src/models/Positions"),
 };
 
 const listComponentNameMap: Record<string, string> = {
@@ -85,6 +86,7 @@ const listComponentNameMap: Record<string, string> = {
   products: "ProductsList",
   currencies: "CurrenciesList",
   employees: "EmployeesList",
+  positions: "PositionsList",
 };
 
 // ── Поля для отображения в выпадающем списке автокомплита ──────────────

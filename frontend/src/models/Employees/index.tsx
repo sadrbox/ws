@@ -11,17 +11,17 @@ import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useIn
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
 import { useModelDelete } from "src/hooks/useModelDelete";
-import { Divider, Field } from "src/components/Field";
+import { Divider, Field, FieldNumber, FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
 import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
+import tableStyles from "src/components/Table/Table.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 import { ContactsList } from "../Contacts";
-import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
 const MODEL_ENDPOINT = "employees";
 const LIST_NAME = "EmployeesList";
@@ -39,14 +39,12 @@ interface TFormData {
   middleName: string;
   fullName: string;
   iin: string;
-  organizationUuid: string;
-  organizationName: string;
   avatarPath: string;
 }
 
 const EMPTY_FORM: TFormData = {
   lastName: "", firstName: "", middleName: "", fullName: "", iin: "",
-  organizationUuid: "", organizationName: "", avatarPath: "",
+  avatarPath: "",
 };
 
 // ── Типы для истории и прав доступа ────────────────────────────────────
@@ -54,11 +52,8 @@ interface THistoryRow {
   id?: number; uuid?: string;
   eventDate: string; eventType: string; salary: string;
   positionUuid: string; positionName: string;
-}
-
-interface TAccessRow {
-  id?: number; uuid?: string;
-  modelName: string; accessLevel: string;
+  organizationUuid: string; organizationName: string;
+  isDirty?: boolean; isNew?: boolean;
 }
 
 const EVENT_TYPE_OPTIONS = [
@@ -67,30 +62,13 @@ const EVENT_TYPE_OPTIONS = [
   { value: "transfer", label: "Перемещение" },
 ];
 
-const ACCESS_LEVEL_OPTIONS = [
-  { value: "full", label: "Полный" },
-  { value: "readonly", label: "Только чтение" },
-  { value: "none", label: "Нет доступа" },
-];
-
-const MODEL_NAME_OPTIONS = [
-  "Organizations", "Counterparties", "Contracts", "Sales", "Purchases",
-  "Warehouses", "Products", "Brands", "Employees", "Contacts",
-  "BankAccounts", "Currencies", "Todos", "Notifications",
-  "OutgoingInvoices", "IncomingInvoices", "PaymentInvoices",
-  "CashReceiptOrders", "CashExpenseOrders", "InventoryTransfers",
-].map(v => ({ value: v, label: v }));
-
 const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
-  const defaultOrg = useDefaultOrganization();
 
   const [formData, setFormData] = useState<TFormData>(() => ({
     ...EMPTY_FORM,
-    organizationUuid: defaultOrg.organizationUuid,
-    organizationName: defaultOrg.organizationName,
   }));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +124,7 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
 
   // ── История сотрудника ─────────────────────────────────────────────────
   const [historyRows, setHistoryRows] = useState<THistoryRow[]>([]);
-  const [editingHistory, setEditingHistory] = useState<THistoryRow | null>(null);
+  const [activeHistoryIdx, setActiveHistoryIdx] = useState<number | null>(null);
 
   const loadHistory = useCallback(async (empUuid: string) => {
     try {
@@ -159,6 +137,8 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
         salary: h.salary != null ? String(h.salary) : "",
         positionUuid: h.positionUuid ?? "",
         positionName: h.position?.shortName ?? "",
+        organizationUuid: h.organizationUuid ?? "",
+        organizationName: h.organization?.shortName ?? "",
       })));
     } catch (err) { console.error("loadHistory error:", err); }
   }, []);
@@ -170,6 +150,7 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
       eventType: row.eventType,
       salary: row.salary ? parseFloat(row.salary) : null,
       positionUuid: row.positionUuid || null,
+      organizationUuid: row.organizationUuid || null,
       employeeUuid: formData.uuid,
     };
     try {
@@ -179,7 +160,6 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
         await apiClient.post(`/employee-histories`, payload);
       }
       loadHistory(formData.uuid);
-      setEditingHistory(null);
     } catch (err) { console.error("saveHistory error:", err); }
   }, [formData.uuid, loadHistory]);
 
@@ -190,41 +170,51 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
     } catch (err) { console.error("deleteHistory error:", err); }
   }, [formData.uuid, loadHistory]);
 
-  // ── Права доступа ──────────────────────────────────────────────────────
-  const [accessRows, setAccessRows] = useState<TAccessRow[]>([]);
-  const [editingAccess, setEditingAccess] = useState<TAccessRow | null>(null);
-
-  const loadAccess = useCallback(async (empUuid: string) => {
-    try {
-      const res = await apiClient.get(`/access-rights?employeeUuid=${empUuid}`);
-      setAccessRows(res.data?.items ?? []);
-    } catch (err) { console.error("loadAccess error:", err); }
+  const updateHistoryRow = useCallback((idx: number, field: keyof THistoryRow, value: string) => {
+    setHistoryRows(prev => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value, isDirty: true };
+      return next;
+    });
   }, []);
 
-  const saveAccessRow = useCallback(async (row: TAccessRow) => {
-    if (!formData.uuid) return;
-    const payload = {
-      modelName: row.modelName,
-      accessLevel: row.accessLevel,
-      employeeUuid: formData.uuid,
-    };
-    try {
-      if (row.uuid) {
-        await apiClient.put(`/access-rights/${row.uuid}`, payload);
-      } else {
-        await apiClient.post(`/access-rights`, payload);
-      }
-      loadAccess(formData.uuid);
-      setEditingAccess(null);
-    } catch (err) { console.error("saveAccess error:", err); }
-  }, [formData.uuid, loadAccess]);
+  const addHistoryRow = useCallback(() => {
+    setHistoryRows(prev => {
+      const row: THistoryRow = {
+        eventDate: new Date().toISOString().slice(0, 10),
+        eventType: "hire", salary: "",
+        positionUuid: "", positionName: "",
+        organizationUuid: "", organizationName: "",
+        isNew: true, isDirty: true,
+      };
+      const next = [...prev, row];
+      setActiveHistoryIdx(next.length - 1);
+      return next;
+    });
+  }, []);
 
-  const deleteAccessRow = useCallback(async (rowUuid: string) => {
-    try {
-      await apiClient.delete(`/access-rights/${rowUuid}`);
-      if (formData.uuid) loadAccess(formData.uuid);
-    } catch (err) { console.error("deleteAccess error:", err); }
-  }, [formData.uuid, loadAccess]);
+  const deleteHistoryByIdx = useCallback(async (idx: number) => {
+    const row = historyRows[idx];
+    if (!row) return;
+    if (row.isNew) {
+      setHistoryRows(prev => prev.filter((_, i) => i !== idx));
+      return;
+    }
+    if (row.uuid) await deleteHistoryRow(row.uuid);
+  }, [historyRows, deleteHistoryRow]);
+
+  const saveHistoryByIdx = useCallback(async (idx: number) => {
+    const row = historyRows[idx];
+    if (row) await saveHistoryRow(row);
+  }, [historyRows, saveHistoryRow]);
+
+  const saveAllDirtyHistory = useCallback(async () => {
+    for (let i = 0; i < historyRows.length; i++) {
+      if (historyRows[i].isDirty) await saveHistoryRow(historyRows[i]);
+    }
+  }, [historyRows, saveHistoryRow]);
+
+  const hasDirtyHistory = useMemo(() => historyRows.some(r => r.isDirty), [historyRows]);
 
   // ── Загрузка данных ────────────────────────────────────────────────────
   const loadFormData = useCallback(async (entityUuid: string) => {
@@ -235,18 +225,15 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
       setFormData({
         lastName: d.lastName ?? "", firstName: d.firstName ?? "",
         middleName: d.middleName ?? "", fullName: d.fullName ?? "", iin: d.iin ?? "",
-        organizationUuid: d.organizationUuid ?? "",
-        organizationName: d.organization?.shortName ?? "",
         avatarPath: d.avatarPath ?? "",
         id: d.id, uuid: d.uuid,
       });
       if (d.avatarPath) loadAvatar(d.uuid);
       else setAvatarUrl(null);
       loadHistory(d.uuid);
-      loadAccess(d.uuid);
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); }
     finally { setIsLoading(false); }
-  }, [loadAvatar, loadHistory, loadAccess]);
+  }, [loadAvatar, loadHistory]);
 
   useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
 
@@ -269,7 +256,6 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
       middleName: formData.middleName.trim(),
       fullName: formData.fullName.trim(),
       iin: formData.iin.trim(),
-      organizationUuid: formData.organizationUuid || null,
     };
     try {
       const res = isEditMode && (uuid || formData.uuid)
@@ -281,8 +267,6 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
         lastName: saved.lastName ?? "", firstName: saved.firstName ?? "",
         middleName: saved.middleName ?? "", fullName: saved.fullName ?? "",
         iin: saved.iin ?? "",
-        organizationUuid: saved.organizationUuid ?? prev.organizationUuid,
-        organizationName: saved.organization?.shortName ?? prev.organizationName,
         avatarPath: saved.avatarPath ?? prev.avatarPath,
         id: saved.id, uuid: saved.uuid,
       }));
@@ -320,14 +304,6 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
                 <Group align="row" gap="12px" className={styles.Form}>
                   <Field label="ИИН" name={`${formUid}_iin`} minWidth="200px"
                     value={formData.iin} onChange={e => handleFieldChange("iin", e.target.value)} disabled={isLoading} />
-                </Group>
-                <Group align="row" gap="12px" className={styles.Form}>
-                  <LookupField label="Основная организация" name={`${formUid}_org`}
-                    value={formData.organizationUuid} displayValue={formData.organizationName}
-                    endpoint="organizations" displayField="shortName"
-                    onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))}
-                    onClear={() => setFormData(prev => ({ ...prev, organizationUuid: "", organizationName: "" }))}
-                    disabled={isLoading} width="400px" />
                 </Group>
                 {isEditMode && (
                   <Group align="row" gap="12px" className={styles.Form}>
@@ -376,160 +352,181 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
     ];
 
     if (isEditMode && formData.uuid) {
-      // ── Вкладка: История сотрудника ──────────────────────────────────
+      // ── Вкладка: Кадровая история (inline-таблица как SaleItemsTable) ──
       result.push({
         id: "history", label: "Кадровая история", component: (
-          <div className={styles.FormBodyParts}>
-            <div style={{ marginBottom: 8 }}>
-              <button type="button" onClick={() => setEditingHistory({ eventDate: new Date().toISOString().slice(0, 10), eventType: "hire", salary: "", positionUuid: "", positionName: "" })}
-                style={{ padding: "4px 12px", cursor: "pointer", border: "1px solid #ccc", borderRadius: 3, background: "#fff" }}>
-                + Добавить запись
-              </button>
-            </div>
-            {editingHistory && (
-              <div style={{ border: "1px solid #ddd", borderRadius: 4, padding: 12, marginBottom: 12, background: "#fafafa", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-                <div>
-                  <label style={{ fontSize: 12, display: "block", marginBottom: 2 }}>Дата</label>
-                  <input type="date" value={editingHistory.eventDate}
-                    onChange={e => setEditingHistory(prev => prev ? { ...prev, eventDate: e.target.value } : prev)}
-                    style={{ padding: "4px 8px", border: "1px solid #ccc", borderRadius: 3 }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, display: "block", marginBottom: 2 }}>Тип события</label>
-                  <select value={editingHistory.eventType}
-                    onChange={e => setEditingHistory(prev => prev ? { ...prev, eventType: e.target.value } : prev)}
-                    style={{ padding: "4px 8px", border: "1px solid #ccc", borderRadius: 3 }}>
-                    {EVENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, display: "block", marginBottom: 2 }}>Должность</label>
-                  <LookupField label="" name={`${formUid}_hist_pos`}
-                    value={editingHistory.positionUuid} displayValue={editingHistory.positionName}
-                    endpoint="positions" displayField="shortName"
-                    onSelect={(u, d) => setEditingHistory(prev => prev ? { ...prev, positionUuid: u, positionName: d } : prev)}
-                    onClear={() => setEditingHistory(prev => prev ? { ...prev, positionUuid: "", positionName: "" } : prev)}
-                    width="200px" />
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, display: "block", marginBottom: 2 }}>Оклад</label>
-                  <input type="number" value={editingHistory.salary}
-                    onChange={e => setEditingHistory(prev => prev ? { ...prev, salary: e.target.value } : prev)}
-                    style={{ padding: "4px 8px", border: "1px solid #ccc", borderRadius: 3, width: 120 }} />
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button type="button" onClick={() => editingHistory && saveHistoryRow(editingHistory)}
-                    style={{ padding: "4px 12px", cursor: "pointer", border: "1px solid #4caf50", borderRadius: 3, background: "#e8f5e9", color: "#2e7d32" }}>
-                    Сохранить
-                  </button>
-                  <button type="button" onClick={() => setEditingHistory(null)}
-                    style={{ padding: "4px 12px", cursor: "pointer", border: "1px solid #ccc", borderRadius: 3, background: "#fff" }}>
-                    Отмена
-                  </button>
+          <div className={tableStyles.TableWrapper}>
+            {/* ── Panel ── */}
+            <div className={tableStyles.TablePanel}>
+              <div className={tableStyles.TablePanelLeft}>
+                <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
+                  <Button onClick={addHistoryRow} disabled={isLoading}><span>Добавить</span></Button>
+                  <Divider />
+                  {hasDirtyHistory && (<>
+                    <Button variant="primary" onClick={saveAllDirtyHistory} disabled={isLoading}><span>Сохранить всё</span></Button>
+                    <Divider />
+                  </>)}
+                  <ButtonImage onClick={() => formData.uuid && loadHistory(formData.uuid)} title="Обновить" disabled={isLoading}>
+                    <img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? tableStyles.animationLoop : ""} />
+                  </ButtonImage>
                 </div>
               </div>
-            )}
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: "#f5f5f5", textAlign: "left" }}>
-                  <th style={{ padding: "6px 8px", borderBottom: "1px solid #ddd" }}>Дата</th>
-                  <th style={{ padding: "6px 8px", borderBottom: "1px solid #ddd" }}>Событие</th>
-                  <th style={{ padding: "6px 8px", borderBottom: "1px solid #ddd" }}>Должность</th>
-                  <th style={{ padding: "6px 8px", borderBottom: "1px solid #ddd" }}>Оклад</th>
-                  <th style={{ padding: "6px 8px", borderBottom: "1px solid #ddd", width: 80 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {historyRows.map(row => (
-                  <tr key={row.uuid} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "6px 8px" }}>{row.eventDate}</td>
-                    <td style={{ padding: "6px 8px" }}>{EVENT_TYPE_OPTIONS.find(o => o.value === row.eventType)?.label || row.eventType}</td>
-                    <td style={{ padding: "6px 8px" }}>{row.positionName}</td>
-                    <td style={{ padding: "6px 8px" }}>{row.salary}</td>
-                    <td style={{ padding: "6px 8px" }}>
-                      <button type="button" onClick={() => setEditingHistory(row)} title="Редактировать"
-                        style={{ cursor: "pointer", border: "none", background: "none", fontSize: 14 }}>✏️</button>
-                      <button type="button" onClick={() => row.uuid && deleteHistoryRow(row.uuid)} title="Удалить"
-                        style={{ cursor: "pointer", border: "none", background: "none", fontSize: 14, marginLeft: 4 }}>🗑️</button>
-                    </td>
-                  </tr>
-                ))}
-                {historyRows.length === 0 && (
-                  <tr><td colSpan={5} style={{ padding: "12px 8px", color: "#999", textAlign: "center" }}>Нет записей</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        ),
-      });
-
-      // ── Вкладка: Права доступа ───────────────────────────────────────
-      result.push({
-        id: "access", label: "Права доступа", component: (
-          <div className={styles.FormBodyParts}>
-            <div style={{ marginBottom: 8 }}>
-              <button type="button" onClick={() => setEditingAccess({ modelName: "", accessLevel: "none" })}
-                style={{ padding: "4px 12px", cursor: "pointer", border: "1px solid #ccc", borderRadius: 3, background: "#fff" }}>
-                + Добавить право
-              </button>
             </div>
-            {editingAccess && (
-              <div style={{ border: "1px solid #ddd", borderRadius: 4, padding: 12, marginBottom: 12, background: "#fafafa", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-                <div>
-                  <label style={{ fontSize: 12, display: "block", marginBottom: 2 }}>Модель</label>
-                  <select value={editingAccess.modelName}
-                    onChange={e => setEditingAccess(prev => prev ? { ...prev, modelName: e.target.value } : prev)}
-                    style={{ padding: "4px 8px", border: "1px solid #ccc", borderRadius: 3 }}>
-                    <option value="">— Выберите —</option>
-                    {MODEL_NAME_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, display: "block", marginBottom: 2 }}>Уровень доступа</label>
-                  <select value={editingAccess.accessLevel}
-                    onChange={e => setEditingAccess(prev => prev ? { ...prev, accessLevel: e.target.value } : prev)}
-                    style={{ padding: "4px 8px", border: "1px solid #ccc", borderRadius: 3 }}>
-                    {ACCESS_LEVEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button type="button" onClick={() => editingAccess && saveAccessRow(editingAccess)}
-                    style={{ padding: "4px 12px", cursor: "pointer", border: "1px solid #4caf50", borderRadius: 3, background: "#e8f5e9", color: "#2e7d32" }}>
-                    Сохранить
-                  </button>
-                  <button type="button" onClick={() => setEditingAccess(null)}
-                    style={{ padding: "4px 12px", cursor: "pointer", border: "1px solid #ccc", borderRadius: 3, background: "#fff" }}>
-                    Отмена
-                  </button>
-                </div>
+            {/* ── Info ── */}
+            <div style={{ fontSize: 13, color: "#555", padding: "0 6px", whiteSpace: "nowrap" }}>
+              Записей: <strong>{historyRows.length}</strong>
+            </div>
+            {/* ── Table ── */}
+            <div className={tableStyles.TableScrollContainer}>
+              <div className={tableStyles.TableScrollWrapper}>
+                <table>
+                  <colgroup>
+                    <col style={{ width: "140px", minWidth: "120px" }} />
+                    <col style={{ width: "140px", minWidth: "120px" }} />
+                    <col style={{ minWidth: "180px" }} />
+                    <col style={{ minWidth: "180px" }} />
+                    <col style={{ width: "130px", minWidth: "100px" }} />
+                    <col style={{ width: "70px", minWidth: "70px" }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th><div className={tableStyles.TableHeaderCell}><span>Дата</span></div></th>
+                      <th><div className={tableStyles.TableHeaderCell}><span>Событие</span></div></th>
+                      <th><div className={tableStyles.TableHeaderCell}><span>Организация</span></div></th>
+                      <th><div className={tableStyles.TableHeaderCell}><span>Должность</span></div></th>
+                      <th><div className={tableStyles.TableHeaderCell} style={{ justifyContent: "flex-end" }}><span>Оклад</span></div></th>
+                      <th><div className={tableStyles.TableHeaderCell} style={{ justifyContent: "center" }}><span></span></div></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyRows.length === 0 && !isLoading && (
+                      <tr><td colSpan={6}>
+                        <div className={tableStyles.TableBodyCell} style={{ justifyContent: "center", color: "#999", padding: "16px 0" }}>
+                          <span>Нет записей. Нажмите «Добавить»</span>
+                        </div>
+                      </td></tr>
+                    )}
+                    {historyRows.map((row, idx) => (
+                      <tr
+                        key={row.uuid || "new-" + idx}
+                        className={activeHistoryIdx === idx ? tableStyles.activeRow : undefined}
+                        onClick={() => setActiveHistoryIdx(idx)}
+                        style={{ background: row.isDirty ? "#fffde7" : undefined }}
+                      >
+                        <td>
+                          <div className={tableStyles.TableBodyCell}>
+                            <input
+                              type="date"
+                              value={row.eventDate}
+                              onChange={e => updateHistoryRow(idx, "eventDate", e.target.value)}
+                              disabled={isLoading}
+                              style={{ border: "none", background: "transparent", padding: "2px 4px", width: "100%", fontSize: 13 }}
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <div className={tableStyles.TableBodyCell}>
+                            <FieldSelect
+                              name={`hist_event_${idx}`}
+                              options={EVENT_TYPE_OPTIONS}
+                              value={row.eventType}
+                              onChange={e => updateHistoryRow(idx, "eventType", e.target.value)}
+                              disabled={isLoading}
+                              variant="table"
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <div className={tableStyles.TableBodyCell}>
+                            <LookupField
+                              label="" name={`hist_org_${idx}`}
+                              value={row.organizationUuid} displayValue={row.organizationName}
+                              endpoint="organizations" displayField="shortName"
+                              onSelect={(u, d) => {
+                                setHistoryRows(prev => {
+                                  const next = [...prev];
+                                  next[idx] = { ...next[idx], organizationUuid: u, organizationName: d, isDirty: true };
+                                  return next;
+                                });
+                              }}
+                              onClear={() => {
+                                setHistoryRows(prev => {
+                                  const next = [...prev];
+                                  next[idx] = { ...next[idx], organizationUuid: "", organizationName: "", isDirty: true };
+                                  return next;
+                                });
+                              }}
+                              disabled={isLoading}
+                              width="100%"
+                              variant="table"
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <div className={tableStyles.TableBodyCell}>
+                            <LookupField
+                              label="" name={`hist_pos_${idx}`}
+                              value={row.positionUuid} displayValue={row.positionName}
+                              endpoint="positions" displayField="shortName"
+                              onSelect={(u, d) => {
+                                setHistoryRows(prev => {
+                                  const next = [...prev];
+                                  next[idx] = { ...next[idx], positionUuid: u, positionName: d, isDirty: true };
+                                  return next;
+                                });
+                              }}
+                              onClear={() => {
+                                setHistoryRows(prev => {
+                                  const next = [...prev];
+                                  next[idx] = { ...next[idx], positionUuid: "", positionName: "", isDirty: true };
+                                  return next;
+                                });
+                              }}
+                              disabled={isLoading}
+                              width="100%"
+                              variant="table"
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <div className={tableStyles.TableBodyCell}>
+                            <FieldNumber
+                              name={`hist_salary_${idx}`}
+                              value={row.salary}
+                              onChange={e => updateHistoryRow(idx, "salary", e.target.value)}
+                              disabled={isLoading}
+                              step="0.01"
+                              textAlign="right"
+                              width="100%"
+                              actions={[]}
+                              variant="table"
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <div className={tableStyles.TableBodyCell} style={{ justifyContent: "center", gap: 2 }}>
+                            {row.isDirty && (
+                              <button
+                                onClick={e => { e.stopPropagation(); saveHistoryByIdx(idx); }}
+                                disabled={isLoading}
+                                title="Сохранить строку"
+                                style={{ padding: "1px 6px", fontSize: 11, cursor: "pointer", border: "1px solid #4caf50", borderRadius: 3, background: "#e8f5e9", color: "#2e7d32", lineHeight: "16px" }}
+                              >✓</button>
+                            )}
+                            <button
+                              onClick={e => { e.stopPropagation(); deleteHistoryByIdx(idx); }}
+                              disabled={isLoading}
+                              title="Удалить строку"
+                              style={{ padding: "1px 6px", fontSize: 11, cursor: "pointer", border: "1px solid #ef5350", borderRadius: 3, background: "#ffebee", color: "#c62828", lineHeight: "16px" }}
+                            >✕</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: "#f5f5f5", textAlign: "left" }}>
-                  <th style={{ padding: "6px 8px", borderBottom: "1px solid #ddd" }}>Модель</th>
-                  <th style={{ padding: "6px 8px", borderBottom: "1px solid #ddd" }}>Доступ</th>
-                  <th style={{ padding: "6px 8px", borderBottom: "1px solid #ddd", width: 80 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {accessRows.map(row => (
-                  <tr key={row.uuid} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "6px 8px" }}>{row.modelName}</td>
-                    <td style={{ padding: "6px 8px" }}>{ACCESS_LEVEL_OPTIONS.find(o => o.value === row.accessLevel)?.label || row.accessLevel}</td>
-                    <td style={{ padding: "6px 8px" }}>
-                      <button type="button" onClick={() => setEditingAccess(row)} title="Редактировать"
-                        style={{ cursor: "pointer", border: "none", background: "none", fontSize: 14 }}>✏️</button>
-                      <button type="button" onClick={() => row.uuid && deleteAccessRow(row.uuid)} title="Удалить"
-                        style={{ cursor: "pointer", border: "none", background: "none", fontSize: 14, marginLeft: 4 }}>🗑️</button>
-                    </td>
-                  </tr>
-                ))}
-                {accessRows.length === 0 && (
-                  <tr><td colSpan={3} style={{ padding: "12px 8px", color: "#999", textAlign: "center" }}>Нет записей</td></tr>
-                )}
-              </tbody>
-            </table>
+            </div>
           </div>
         ),
       });
@@ -544,8 +541,7 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
 
     return result;
   }, [formUid, formData, isLoading, isEditMode, handleFieldChange, avatarUrl, handleAvatarUpload, handleAvatarDelete,
-    historyRows, editingHistory, saveHistoryRow, deleteHistoryRow,
-    accessRows, editingAccess, saveAccessRow, deleteAccessRow]);
+    historyRows, activeHistoryIdx, addHistoryRow, hasDirtyHistory, saveAllDirtyHistory, saveHistoryByIdx, deleteHistoryByIdx, updateHistoryRow, loadHistory]);
 
   return (
     <div className={styles.FormWrapper}>

@@ -265,3 +265,42 @@
 	font-size: 13px;
 	text-align: center;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TEXTAREA
+// ═══════════════════════════════════════════════════════════════════════════
+
+.FieldTextareaWrapper {
+	display: flex;
+	flex-direction: column;
+	position: relative;
+}
+
+.FieldTextarea {
+	width: 100%;
+	border: none;
+	border-radius: $radius2;
+	padding: 4px 6px;
+	box-sizing: border-box;
+	font-family: "PT Sans", sans-serif;
+	font-size: inherit;
+	resize: vertical;
+	min-height: 60px;
+	line-height: 1.4;
+	&:focus {
+		outline: 0px;
+	}
+}
+
+.FieldTextareaInputWrapper {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	border-radius: $radius2;
+	border: 1px solid $color5;
+	outline: none;
+	flex: 1 1 100%;
+	&:focus-within {
+		border: 1px solid $color3;
+	}
+}

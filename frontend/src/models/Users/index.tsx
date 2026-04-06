@@ -20,6 +20,7 @@ import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
+import { AccessRightsList } from "src/models/AccessRights";
 
 const MODEL_ENDPOINT = "users";
 
@@ -50,6 +51,11 @@ const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
 
+  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
+  // ── Загрузка данных ────────────────────────────────────────────────────
   const loadFormData = useCallback(async (entityUuid: string) => {
     setIsLoading(true);
     setError(null);
@@ -70,10 +76,6 @@ const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   }, []);
 
   useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
-
-  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  }, []);
 
   const submit = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
@@ -117,6 +119,61 @@ const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
   const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
 
+  // ── Tabs ────────────────────────────────────────────────────────────────
+  const tabs = useMemo(() => {
+    const result: { id: string; label: string; component: React.ReactNode }[] = [
+      {
+        id: "general", label: translate("general") || "Общие сведения", component: (
+          <div className={styles.FormBodyParts}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
+              <Group align="row" gap="12px" className={styles.Form}>
+                <Field label="Логин *" name={`${formUid}_username`} minWidth="250px" value={formData.username} onChange={e => handleFieldChange("username", e.target.value)} disabled={isLoading} />
+              </Group>
+              <Group align="row" gap="12px" className={styles.Form}>
+                <Field label={isEditMode ? "Новый пароль" : "Пароль"} name={`${formUid}_password`} minWidth="250px" value={formData.password} onChange={e => handleFieldChange("password", e.target.value)} disabled={isLoading} />
+              </Group>
+              <Group align="row" gap="12px" className={styles.Form}>
+                <LookupField
+                  label="Сотрудник"
+                  name={`${formUid}_employee`}
+                  value={formData.employeeUuid}
+                  displayValue={formData.employeeName}
+                  endpoint="employees"
+                  displayField="fullName"
+                  minWidth="400px"
+                  disabled={isLoading}
+                  onSelect={(uuid, displayValue) => {
+                    setFormData(prev => ({ ...prev, employeeUuid: uuid, employeeName: displayValue }));
+                  }}
+                  onClear={() => {
+                    setFormData(prev => ({ ...prev, employeeUuid: "", employeeName: "" }));
+                  }}
+                />
+              </Group>
+              {isEditMode && (
+                <Group align="row" gap="12px" className={styles.Form}>
+                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                </Group>
+              )}
+            </div>
+          </div>
+        ),
+      },
+    ];
+
+    if (isEditMode && formData.uuid) {
+      // ── Вкладка: Права доступа ──────────────────────────────────────
+      result.push({
+        id: "access", label: "Права доступа", component: (
+          <AccessRightsList userUuid={formData.uuid} />
+        ),
+      });
+    }
+
+    return result;
+  }, [formUid, formData, isLoading, isEditMode, handleFieldChange]);
+
   return (
     <div className={styles.FormWrapper}>
       <div className={styles.FormPanel}>
@@ -137,50 +194,9 @@ const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         <div className={styles.TablePanelRight} />
       </div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><Tabs tabs={[
-        {
-          id: "general", label: translate("general") || "Общие сведения", component: (
-            <div className={styles.FormBodyParts}>
-              <Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-                  <Field label="Логин *" name={`${formUid}_username`} minWidth="250px" value={formData.username} onChange={e => handleFieldChange("username", e.target.value)} disabled={isLoading} />
-                  <Field label={isEditMode ? "Новый пароль" : "Пароль"} name={`${formUid}_password`} minWidth="250px" value={formData.password} onChange={e => handleFieldChange("password", e.target.value)} disabled={isLoading} />
-                </div>
-              </Group>
-              <Divider />
-              <Group align="row" gap="12px" className={styles.Form}>
-                <LookupField
-                  label="Сотрудник"
-                  name={`${formUid}_employee`}
-                  value={formData.employeeUuid}
-                  displayValue={formData.employeeName}
-                  endpoint="employees"
-                  displayField="fullName"
-                  minWidth="500px"
-                  disabled={isLoading}
-                  onSelect={(uuid, displayValue) => {
-                    setFormData(prev => ({ ...prev, employeeUuid: uuid, employeeName: displayValue }));
-                  }}
-                  onClear={() => {
-                    setFormData(prev => ({ ...prev, employeeUuid: "", employeeName: "" }));
-                  }}
-                />
-              </Group>
-              {isEditMode && (
-                <>
-                  <Divider />
-                  <Group align="row" gap="12px" className={styles.Form}>
-                    <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                      <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                      <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-                    </div>
-                  </Group>
-                </>
-              )}
-            </div>
-          )
-        },
-      ]} /></div>
+      <div className={styles.FormBody}>
+        <Tabs tabs={tabs} />
+      </div>
     </div>
   );
 };

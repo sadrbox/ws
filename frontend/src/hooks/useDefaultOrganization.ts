@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useAppContext } from "src/app";
 
 /**
- * Возвращает организацию текущего пользователя (из employee.organization).
+ * Возвращает организацию текущего пользователя (из user.organizationUuid).
  * Используется для авто-заполнения поля «Организация» при создании новых документов.
  */
 export function useDefaultOrganization(): {
@@ -11,11 +11,14 @@ export function useDefaultOrganization(): {
 } {
 	const { auth } = useAppContext();
 	return useMemo(() => {
-		const org = auth.user?.employee?.organization;
-		if (org?.uuid) {
+		const user = auth.user;
+		// Берём organizationUuid непосредственно из пользователя
+		if (user?.organizationUuid) {
+			// Название организации — из employee.organization (если есть) или пустая строка
+			const orgName = user.employee?.organization?.shortName || "";
 			return {
-				organizationUuid: org.uuid,
-				organizationName: org.shortName || "",
+				organizationUuid: user.organizationUuid,
+				organizationName: orgName,
 			};
 		}
 		return { organizationUuid: "", organizationName: "" };

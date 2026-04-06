@@ -32,6 +32,7 @@ import { BrandsList } from 'src/models/Brands';
 import { ProductsList } from 'src/models/Products';
 import { CurrenciesList } from 'src/models/Currencies';
 import { EmployeesList } from 'src/models/Employees';
+import { PositionsList } from 'src/models/Positions';
 import NotificationToast from 'src/components/NotificationToast';
 
 type TypeGroupProps = {
@@ -339,6 +340,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
               <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>
               <li onClick={() => addPane({ component: CurrenciesList })}>Валюты</li>
               <li onClick={() => addPane({ component: EmployeesList })}>Сотрудники</li>
+              <li onClick={() => addPane({ component: PositionsList })}>Должности</li>
             </ul>
           </div>
         </div>

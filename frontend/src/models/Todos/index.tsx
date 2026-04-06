@@ -12,7 +12,7 @@ import FilesPanel from "src/models/Files";
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
 import { useModelDelete } from "src/hooks/useModelDelete";
-import { Divider, Field, FieldDateTime, FieldSelect } from "src/components/Field";
+import { Divider, Field, FieldDateTime, FieldSelect, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
@@ -22,6 +22,10 @@ import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
+
+const MODEL_ENDPOINT = "todos";
+const LIST_NAME = "TodosList";
+const FORM_LABEL = "Задача";
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "new", label: "Новая" },
@@ -247,13 +251,15 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
             <FieldDateTime label="Дедлайн" name={`${formUid}_deadline`} width="200px" value={formData.deadline} onChange={e => handleFieldChange("deadline", e.target.value)} disabled={isLoading} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 339 }}>
-            <label style={{ fontSize: 13, color: "#222" }} htmlFor={`${formUid}_description`}>Описание задачи</label>
-            <textarea
-              id={`${formUid}_description`}
+            <FieldTextarea
+              label="Описание задачи"
+              name={`${formUid}_description`}
               value={formData.description}
               onChange={e => handleFieldChange("description", e.target.value)}
               disabled={isLoading}
-              style={{ minWidth: 339, minHeight: 120, padding: 8, borderRadius: 4 }}
+              minWidth="339px"
+              minHeight="120px"
+              rows={6}
             />
           </div>
         </div>

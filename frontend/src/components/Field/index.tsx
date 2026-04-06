@@ -748,6 +748,68 @@ export const Divider = () => {
   )
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FieldTextarea — многострочное текстовое поле, стилизованное как Field
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface TypeFieldTextareaProps {
+  label?: string;
+  name: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  width?: string;
+  maxWidth?: string;
+  minWidth?: string;
+  minHeight?: string;
+  rows?: number;
+  disabled?: boolean;
+  placeholder?: string;
+  required?: boolean;
+}
+
+export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
+  label,
+  name,
+  value = '',
+  onChange,
+  width,
+  maxWidth,
+  minWidth,
+  minHeight,
+  rows = 4,
+  disabled = false,
+  placeholder,
+  required = false,
+}) => {
+  return (
+    <div className={styles.FieldTextareaWrapper} style={{
+      width: width ?? 'auto',
+      maxWidth: maxWidth ?? 'none',
+      minWidth: minWidth ?? 'none',
+    }}>
+      {label && (
+        <label htmlFor={name} className={styles.FieldLabel}>
+          {label}
+          {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
+        </label>
+      )}
+      <div className={styles.FieldTextareaInputWrapper}>
+        <textarea
+          id={name}
+          name={name}
+          value={value}
+          onChange={onChange}
+          className={styles.FieldTextarea}
+          disabled={disabled}
+          placeholder={placeholder}
+          rows={rows}
+          style={{ minHeight: minHeight ?? undefined }}
+        />
+      </div>
+    </div>
+  );
+};
+
 function useDebounce(localValue: string, arg1: number) {
   throw new Error('Function not implemented.')
 }

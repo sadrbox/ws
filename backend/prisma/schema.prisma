@@ -27,6 +27,7 @@ model User {
   executorTodos Todo[]         @relation("TodoExecutor")
   notifications Notification[]
   contacts      Contact[]
+  accessRights  AccessRight[]
 
   @@index([employeeUuid])
   @@index([organizationUuid])
@@ -62,6 +63,7 @@ model Organization {
   cashExpenseOrders  CashExpenseOrder[]  @relation("OrgCashExpenses")
   employees          Employee[]          @relation("EmployeeOrganization")
   users              User[]              @relation("UserOrganization")
+  employeeHistories  EmployeeHistory[]   @relation("EmployeeHistoryOrganization")
 
   @@map("organizations")
 }
@@ -681,7 +683,6 @@ model Employee {
   users           User[]
   contacts        Contact[]
   employeeHistory EmployeeHistory[]
-  accessRights    AccessRight[]
 
   @@index([organizationUuid])
   @@map("employees")
@@ -721,13 +722,17 @@ model EmployeeHistory {
   positionUuid String?
   position     Position? @relation(fields: [positionUuid], references: [uuid], onDelete: SetNull)
 
+  organizationUuid String?
+  organization     Organization? @relation("EmployeeHistoryOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+
   @@index([employeeUuid])
   @@index([positionUuid])
+  @@index([organizationUuid])
   @@map("employee_history")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Права доступа сотрудника к моделям
+// Права доступа пользователя к моделям
 // ═══════════════════════════════════════════════════════════════════════════
 
 model AccessRight {
@@ -737,11 +742,11 @@ model AccessRight {
   modelName   String // имя модели (Sales, Contracts, Organizations и т.д.)
   accessLevel String @default("none") // full, readonly, none
 
-  employeeUuid String
-  employee     Employee @relation(fields: [employeeUuid], references: [uuid], onDelete: Cascade)
+  userUuid String
+  user     User @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
 
-  @@unique([employeeUuid, modelName])
-  @@index([employeeUuid])
+  @@unique([userUuid, modelName])
+  @@index([userUuid])
   @@map("access_rights")
 }
 
