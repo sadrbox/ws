@@ -6,6 +6,10 @@ export interface AuthUser {
 	email: string | null;
 	organizationUuid?: string | null;
 	isSuperAdmin?: boolean;
+	accessRights?: {
+		modelName: string;
+		accessLevel: string;
+	}[];
 	employee?: {
 		uuid: string;
 		fullName: string | null;

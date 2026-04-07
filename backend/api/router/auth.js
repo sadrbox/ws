@@ -67,22 +67,33 @@ router.post("/auth/login", async (req, res) => {
 
 		const trimmedUsername = username.trim();
 
-		// Поиск пользователя по username (может содержать кириллицу, пробелы, знаки препинания)
+		// Поиск пользователя через Prisma — выбираем явные поля, чтобы
+		// не пытаться читать несуществующие колонки из БД при рассинхронизации схемы
 		const user = await prisma.user.findFirst({
-			where: {
-				username: {
-					equals: trimmedUsername,
-					mode: "insensitive",
-				},
-			},
-			include: {
+			where: { username: { equals: trimmedUsername, mode: "insensitive" } },
+			select: {
+				uuid: true,
+				username: true,
+				password: true,
+				employeeUuid: true,
+				organizationUuid: true,
+				isSuperAdmin: true,
+				avatarPath: true,
 				employee: {
-					include: { organization: true },
+					select: {
+						uuid: true,
+						fullName: true,
+						firstName: true,
+						lastName: true,
+						middleName: true,
+						iin: true,
+						avatarPath: true,
+						organizationUuid: true,
+					},
 				},
 			},
 		});
 
-		// Единое сообщение — не раскрываем, что именно неверно (защита от перебора)
 		const INVALID_CREDENTIALS = "Неверное имя пользователя или пароль";
 
 		if (!user) {
@@ -92,17 +103,15 @@ router.post("/auth/login", async (req, res) => {
 			});
 		}
 
-		// Подгружаем accessRights отдельно (таблица может ещё не существовать после миграции)
+		// Подгружаем accessRights
 		let accessRights = [];
-		if (user.employee && prisma.accessRight) {
-			try {
-				accessRights = await prisma.accessRight.findMany({
-					where: { employeeUuid: user.employee.uuid },
-					orderBy: { modelName: "asc" },
-				});
-			} catch (_) {
-				// Таблица access_rights ещё не создана — игнорируем
-			}
+		try {
+			accessRights = await prisma.accessRight.findMany({
+				where: { userUuid: user.uuid },
+				orderBy: { modelName: "asc" },
+			});
+		} catch (_) {
+			// Таблица access_rights ещё не создана — игнорируем
 		}
 
 		// Есть ли у пользователя установленный пароль?
@@ -111,7 +120,6 @@ router.post("/auth/login", async (req, res) => {
 
 		if (!hasPassword) {
 			if (isDev) {
-				// В dev-режиме разрешаем вход без пароля (для удобства разработки)
 				console.warn(`[DEV] Вход без пароля: ${user.username}`);
 			} else {
 				return res.status(401).json({
@@ -120,7 +128,6 @@ router.post("/auth/login", async (req, res) => {
 				});
 			}
 		} else {
-			// Пароль установлен — проверяем
 			if (!password || typeof password !== "string") {
 				return res.status(401).json({
 					success: false,
@@ -128,7 +135,6 @@ router.post("/auth/login", async (req, res) => {
 				});
 			}
 
-			// Проверяем: если пароль — bcrypt-хэш
 			const isHashed =
 				user.password.startsWith("$2a$") || user.password.startsWith("$2b$");
 
@@ -136,7 +142,6 @@ router.post("/auth/login", async (req, res) => {
 			if (isHashed) {
 				passwordValid = await bcrypt.compare(password, user.password);
 			} else {
-				// Миграция со старых plain text паролей: проверяем и хешируем
 				passwordValid = password === user.password;
 				if (passwordValid) {
 					const hashed = await bcrypt.hash(password, 12);
@@ -158,13 +163,15 @@ router.post("/auth/login", async (req, res) => {
 		// Генерируем JWT-токен
 		const token = generateToken(user);
 
-		// Для admin в dev-режиме — виртуальные полные права на все модели
+		// Определяем права доступа
+		const isSuperOrDevAdmin =
+			user.isSuperAdmin || (isDev && trimmedUsername.toLowerCase() === "admin");
+		const rights = isSuperOrDevAdmin
+			? generateFullAccessRights()
+			: accessRights;
+
 		let employeeData = user.employee || null;
 		if (employeeData) {
-			const rights =
-				isDev && trimmedUsername.toLowerCase() === "admin"
-					? generateFullAccessRights()
-					: accessRights;
 			employeeData = { ...employeeData, accessRights: rights };
 		}
 
@@ -174,17 +181,18 @@ router.post("/auth/login", async (req, res) => {
 			user: {
 				uuid: user.uuid,
 				username: user.username,
-				email: user.email,
 				organizationUuid: user.organizationUuid,
 				isSuperAdmin: user.isSuperAdmin,
 				employee: employeeData,
+				accessRights: rights,
 			},
 		});
 	} catch (error) {
-		console.error("POST /auth/login error:", error);
+		console.error("POST /auth/login error:", error.message);
+		console.error("POST /auth/login stack:", error.stack);
 		return res.status(500).json({
 			success: false,
-			message: "Ошибка сервера",
+			message: "Ошибка сервера: " + error.message,
 		});
 	}
 });
@@ -206,7 +214,6 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 			select: {
 				uuid: true,
 				username: true,
-				email: true,
 				employeeUuid: true,
 				organizationUuid: true,
 				isSuperAdmin: true,
@@ -222,30 +229,32 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 				.json({ success: false, message: "Пользователь не найден" });
 		}
 
-		// Подгружаем accessRights отдельно (таблица может ещё не существовать)
+		// Подгружаем accessRights
 		let accessRights = [];
-		if (user.employee && prisma.accessRight) {
-			try {
-				accessRights = await prisma.accessRight.findMany({
-					where: { employeeUuid: user.employee.uuid },
-					orderBy: { modelName: "asc" },
-				});
-			} catch (_) {
-				// Таблица access_rights ещё не создана — игнорируем
-			}
-		}
+		try {
+			accessRights = await prisma.accessRight.findMany({
+				where: { userUuid: user.uuid },
+				orderBy: { modelName: "asc" },
+			});
+		} catch (_) {}
 
-		// Для admin в dev-режиме — виртуальные полные права на все модели
+		// Определяем права доступа
 		const isDev = process.env.NODE_ENV !== "production";
-		if (user.employee) {
-			const rights =
-				isDev && user.username?.toLowerCase() === "admin"
-					? generateFullAccessRights()
-					: accessRights;
-			user.employee = { ...user.employee, accessRights: rights };
+		const isSuperOrDevAdmin =
+			user.isSuperAdmin || (isDev && user.username?.toLowerCase() === "admin");
+		const rights = isSuperOrDevAdmin
+			? generateFullAccessRights()
+			: accessRights;
+
+		let employeeData = user.employee || null;
+		if (employeeData) {
+			employeeData = { ...employeeData, accessRights: rights };
 		}
 
-		return res.status(200).json({ success: true, user });
+		return res.status(200).json({
+			success: true,
+			user: { ...user, employee: employeeData, accessRights: rights },
+		});
 	} catch (error) {
 		console.error("GET /auth/me error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -298,7 +307,6 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 			if (isHashed) {
 				valid = await bcrypt.compare(oldPassword, user.password);
 			} else {
-				// Миграция: plain text → bcrypt
 				valid = oldPassword === user.password;
 			}
 			if (!valid) {
@@ -327,7 +335,7 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 // ============================================
 router.post("/auth/register", async (req, res) => {
 	try {
-		const { bin, shortName, displayName, username, password, email } = req.body;
+		const { bin, shortName, displayName, username, password } = req.body;
 
 		// Валидация
 		if (!bin || typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
@@ -350,7 +358,7 @@ router.post("/auth/register", async (req, res) => {
 
 		// Проверяем, что username не занят
 		const existingUser = await prisma.user.findFirst({
-			where: { username: { equals: trimmedUsername, mode: "insensitive" } },
+			where: { username: trimmedUsername },
 		});
 		if (existingUser) {
 			return res.status(409).json({ success: false, message: "Имя пользователя уже занято" });
@@ -360,7 +368,7 @@ router.post("/auth/register", async (req, res) => {
 		const inviteCode = crypto.randomBytes(4).toString("hex").toUpperCase();
 		const hashedPassword = await bcrypt.hash(password, 12);
 
-		// Создаём всё в транзакции
+		// Создаём всё в транзакции через Prisma
 		const result = await prisma.$transaction(async (tx) => {
 			// 1. Организация
 			const org = await tx.organization.create({
@@ -385,7 +393,6 @@ router.post("/auth/register", async (req, res) => {
 			const user = await tx.user.create({
 				data: {
 					username: trimmedUsername,
-					email: (email || "").trim() || null,
 					password: hashedPassword,
 					employeeUuid: employee.uuid,
 					organizationUuid: org.uuid,
@@ -406,7 +413,6 @@ router.post("/auth/register", async (req, res) => {
 			user: {
 				uuid: result.user.uuid,
 				username: result.user.username,
-				email: result.user.email,
 				organizationUuid: result.user.organizationUuid,
 				isSuperAdmin: result.user.isSuperAdmin,
 				employee: result.user.employee,
@@ -424,7 +430,7 @@ router.post("/auth/register", async (req, res) => {
 // ============================================
 router.post("/auth/join", async (req, res) => {
 	try {
-		const { inviteCode, username, password, email } = req.body;
+		const { inviteCode, username, password } = req.body;
 
 		if (!inviteCode || typeof inviteCode !== "string") {
 			return res.status(400).json({ success: false, message: "Код приглашения обязателен" });
@@ -446,7 +452,7 @@ router.post("/auth/join", async (req, res) => {
 
 		// Проверяем, что username не занят
 		const existingUser = await prisma.user.findFirst({
-			where: { username: { equals: trimmedUsername, mode: "insensitive" } },
+			where: { username: trimmedUsername },
 		});
 		if (existingUser) {
 			return res.status(409).json({ success: false, message: "Имя пользователя уже занято" });
@@ -454,6 +460,7 @@ router.post("/auth/join", async (req, res) => {
 
 		const hashedPassword = await bcrypt.hash(password, 12);
 
+		// Создаём в транзакции через Prisma
 		const result = await prisma.$transaction(async (tx) => {
 			// 1. Сотрудник
 			const employee = await tx.employee.create({
@@ -468,7 +475,6 @@ router.post("/auth/join", async (req, res) => {
 			const user = await tx.user.create({
 				data: {
 					username: trimmedUsername,
-					email: (email || "").trim() || null,
 					password: hashedPassword,
 					employeeUuid: employee.uuid,
 					organizationUuid: org.uuid,
@@ -488,7 +494,6 @@ router.post("/auth/join", async (req, res) => {
 			user: {
 				uuid: result.uuid,
 				username: result.username,
-				email: result.email,
 				organizationUuid: result.organizationUuid,
 				isSuperAdmin: result.isSuperAdmin,
 				employee: result.employee,

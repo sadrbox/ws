@@ -32,9 +32,6 @@ export const useRequestQueue = () => {
 
 		// Установим таймаут для "зависшего" запроса
 		request.timeout = setTimeout(() => {
-			// console.warn(
-			// 	`[RequestQueue] Request ${request.id} is hanging, canceling...`,
-			// );
 			cancelHangingRequest();
 			processQueue(); // Переходим к следующему
 		}, HANGING_REQUEST_TIMEOUT);
@@ -52,11 +49,20 @@ export const useRequestQueue = () => {
 
 	const addRequest = useCallback(
 		(id: string, execute: () => Promise<any>) => {
-			// console.log(`[RequestQueue] Adding request: ${id}`);
 			queueRef.current.push({ id, execute, timestamp: Date.now() });
+
+			// Если очередь заблокирована активным запросом > 5 сек,
+			// и в очереди уже скопились запросы — принудительно разблокируем
+			if (activeRequestRef.current && queueRef.current.length > 0) {
+				const elapsed = Date.now() - activeRequestRef.current.timestamp;
+				if (elapsed > 5000) {
+					cancelHangingRequest();
+				}
+			}
+
 			processQueue();
 		},
-		[processQueue],
+		[processQueue, cancelHangingRequest],
 	);
 
 	const cancelAll = useCallback(() => {

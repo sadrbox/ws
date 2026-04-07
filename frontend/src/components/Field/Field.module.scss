@@ -4,6 +4,7 @@
 .FieldSelect {
 	// flex: 1 1 auto;
 	// display: flex;
+	font-size: $fontsize;
 	width: 100%;
 	border: none;
 	border-radius: $radius2;
@@ -33,7 +34,8 @@
 	// height: $heightFieldInput;
 }
 .FieldSelect {
-	padding: 0px;
+	margin:0px 0 0 2px;
+	padding:0;		
 }
 .FieldDateWrapper {
 	position: relative;
@@ -62,7 +64,7 @@
 	align-items: end;
 	box-sizing: content-box;
 	text-wrap: nowrap;
-	// font-size: 110%;
+	font-size: $fontsize;
 	margin-bottom: 3px;
 	// justify-content: center;
 	// align-self: center;
@@ -104,6 +106,7 @@
 			background: transparent;
 			outline: none;
 			height: 100%;
+			font-size: $fontsize;
 			&:focus {
 				border: none;
 				box-shadow: none;
@@ -229,7 +232,7 @@
 	gap: 12px;
 	padding: 5px 8px;
 	cursor: pointer;
-	font-size: 13px;
+	font-size: $fontsize;
 	line-height: 1.3;
 	border-bottom: 1px solid $color30;
 
@@ -254,7 +257,7 @@
 .LookupDropdownSecondary {
 	flex: 0 0 auto;
 	color: $color51;
-	font-size: 12px;
+	font-size: $fontsize - 1px;
 	white-space: nowrap;
 	margin-left: auto;
 }
@@ -262,7 +265,7 @@
 .LookupDropdownLoading {
 	padding: 8px 12px;
 	color: $color51;
-	font-size: 13px;
+	font-size: $fontsize;
 	text-align: center;
 }
 
@@ -283,7 +286,8 @@
 	padding: 4px 6px;
 	box-sizing: border-box;
 	font-family: "PT Sans", sans-serif;
-	font-size: inherit;
+	font-size: $fontsize;
+	background: transparent;
 	resize: vertical;
 	min-height: 60px;
 	line-height: 1.4;
@@ -298,6 +302,7 @@
 	flex-direction: column;
 	border-radius: $radius2;
 	border: 1px solid $color5;
+	background-color: $color60;
 	outline: none;
 	flex: 1 1 100%;
 	&:focus-within {

@@ -11,7 +11,7 @@ import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useIn
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
 import { useModelDelete } from "src/hooks/useModelDelete";
-import { Divider, Field } from "src/components/Field";
+import { Divider, Field, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
@@ -21,20 +21,37 @@ import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
+import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 
 const MODEL_ENDPOINT = "warehouses";
+
+interface TFormData {
+  shortName: string;
+  address: string;
+  description: string;
+  organizationUuid: string;
+  organizationName: string;
+  id?: number;
+  uuid?: string;
+}
+
+const EMPTY_FORM: TFormData = {
+  shortName: "", address: "", description: "",
+  organizationUuid: "", organizationName: "",
+};
 
 const WarehousesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
   const defaultOrg = useDefaultOrganization();
-  const [formData, setFormData] = useState(() => ({
-    shortName: "", address: "", description: "",
-    organizationUuid: defaultOrg.organizationUuid,
-    organizationName: defaultOrg.organizationName,
-    id: undefined as number | undefined, uuid: undefined as string | undefined,
-  }));
+  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
+    "warehouses-form", uuid ?? "new", {
+      ...EMPTY_FORM,
+      organizationUuid: defaultOrg.organizationUuid,
+      organizationName: defaultOrg.organizationName,
+    },
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
@@ -48,7 +65,9 @@ const WarehousesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); } finally { setIsLoading(false); }
   }, []);
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
+  useEffect(() => {
+    if (uuid && !hadStoredData) loadFormData(uuid);
+  }, [uuid, loadFormData, hadStoredData]);
   const handleFieldChange = useCallback((field: string, value: string) => { setFormData(prev => ({ ...prev, [field]: value })); }, []);
 
   const submit = useCallback(async (): Promise<boolean> => {
@@ -65,8 +84,27 @@ const WarehousesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =
   }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
+  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
+
+  const generalTab = useMemo(() => (
+    <div className={styles.FormBodyParts}>
+              <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                <Field label="Наименование" name={`${formUid}_shortName`} value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
+                <Field label="Адрес" name={`${formUid}_address`} value={formData.address} onChange={e => handleFieldChange("address", e.target.value)} disabled={isLoading} />
+                <LookupField label="Организация" name={`${formUid}_org`} value={formData.organizationUuid} displayValue={formData.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))} minWidth="339px" disabled={isLoading} />
+                <FieldTextarea label="Описание" name={`${formUid}_description`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} minWidth="339px" minHeight="80px" rows={4} />
+              </div></Group>
+              {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+              </div></Group></>}
+            </div>
+  ), [formData, isLoading, isEditMode, formUid, handleFieldChange, setFormData]);
+
+  const tabs = useMemo<{ id: string; label: string; component: React.ReactNode }[]>(() => [
+    { id: "general", label: translate("general") || "Общие сведения", component: generalTab },
+  ], [generalTab]);
 
   return (
     <div className={styles.FormWrapper}>
@@ -77,27 +115,9 @@ const WarehousesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =
         {isEditMode && <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}><img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} /></ButtonImage>}
       </div></div><div className={styles.TablePanelRight} /></div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><Tabs tabs={[
-        {
-          id: "general", label: translate("general") || "Общие сведения", component: (
-            <div className={styles.FormBodyParts}>
-              <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-                <Field label="Наименование" name={`${formUid}_shortName`} value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
-                <Field label="Адрес" name={`${formUid}_address`} value={formData.address} onChange={e => handleFieldChange("address", e.target.value)} disabled={isLoading} />
-                <LookupField label="Организация" name={`${formUid}_org`} value={formData.organizationUuid} displayValue={formData.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))} minWidth="339px" disabled={isLoading} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 339 }}>
-                  <label style={{ fontSize: 13, color: "#222" }} htmlFor={`${formUid}_desc`}>Описание</label>
-                  <textarea id={`${formUid}_desc`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} style={{ minWidth: 339, minHeight: 80, padding: 8, borderRadius: 4 }} />
-                </div>
-              </div></Group>
-              {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-              </div></Group></>}
-            </div>
-          )
-        },
-      ]} /></div>
+      <div className={styles.FormBody}>
+        <Tabs tabs={tabs} />
+      </div>
     </div>
   );
 };
@@ -119,7 +139,7 @@ const WarehousesList: FC<WarehousesListProps> = ({ variant = "default", onSelect
   const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
   const ownerFilter = useMemo(() => { if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } }; return undefined; }, [ownerUuid, ownerField]);
   const params = useMemo(() => ({ sort, search, filter: ownerFilter ? { ...ownerFilter, ...filter } : filter }), [sort, search, filter, ownerFilter]);
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
 
   const handleDelete = useModelDelete(model, refetch);
@@ -137,7 +157,7 @@ const WarehousesList: FC<WarehousesListProps> = ({ variant = "default", onSelect
   const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => { setFilter((prev: typeof filter) => { const next = { ...(prev ?? {}) }; if (value == null || value === "") delete next[field]; else next[field] = { value, operator }; return Object.keys(next).length > 0 ? next : undefined; }); }, [setFilter]);
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
-  const handleCleanRefresh = useCallback(() => { cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "desc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "desc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   const tableProps = useMemo(() => ({
     variant, onSelectItem, enableDateRange: false, componentName, rows, columns, total,

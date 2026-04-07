@@ -21,6 +21,9 @@ import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 import { ContactsList } from "../Contacts";
+import AvatarUpload from "src/components/AvatarUpload";
+
+import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 
 const MODEL_ENDPOINT = "contactpersons";
 
@@ -32,13 +35,14 @@ interface TFormData {
   lastName: string;
   middleName: string;
   comment: string;
+  avatarPath: string;
   ownerType: OwnerType;
   ownerUuid: string;
   ownerName: string;
 }
 
 const EMPTY_FORM: TFormData = {
-  fullName: "", firstName: "", lastName: "", middleName: "", comment: "",
+  fullName: "", firstName: "", lastName: "", middleName: "", comment: "", avatarPath: "",
   ownerType: "", ownerUuid: "", ownerName: "",
 };
 
@@ -47,23 +51,19 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
 
-  const buildInitialForm = useCallback((): TFormData => {
+  const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
     const name = (data.ownerName as string) || "";
-    if (data.organizationUuid) {
-      init.ownerType = "organization";
-      init.ownerUuid = data.organizationUuid as string;
-      init.ownerName = name;
-    } else if (data.counterpartyUuid) {
-      init.ownerType = "counterparty";
-      init.ownerUuid = data.counterpartyUuid as string;
-      init.ownerName = name;
-    }
+    if (data.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = data.organizationUuid as string; init.ownerName = name; }
+    else if (data.counterpartyUuid) { init.ownerType = "counterparty"; init.ownerUuid = data.counterpartyUuid as string; init.ownerName = name; }
+    else if (data.contactPersonUuid) { init.ownerType = "contactperson"; init.ownerUuid = data.contactPersonUuid as string; init.ownerName = name; }
+    else if (data.employeeUuid) { init.ownerType = "employee"; init.ownerUuid = data.employeeUuid as string; init.ownerName = name; }
     return init;
-  }, [data]);
-
-  const [formData, setFormData] = useState<TFormData>(buildInitialForm);
+  })();
+  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
+    "contact-persons-form", uuid ?? "new", initialForm,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
@@ -92,6 +92,14 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
                 />
                 <Field label="Комментарий" name={`${formUid}_comment`} value={formData.comment} onChange={e => handleFieldChange("comment", e.target.value)} disabled={isLoading} />
               </div>
+              {isEditMode && formData.uuid && (
+                <AvatarUpload
+                  endpoint={MODEL_ENDPOINT}
+                  entityUuid={formData.uuid}
+                  hasAvatar={!!formData.avatarPath}
+                  disabled={isLoading}
+                />
+              )}
             </Group>
             {isEditMode && (
               <>
@@ -131,6 +139,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
         fullName: d.fullName ?? `${d.lastName || ""} ${d.firstName || ""}`.trim(),
         firstName: d.firstName ?? "", lastName: d.lastName ?? "", middleName: d.middleName ?? "",
         comment: d.comment ?? "",
+        avatarPath: d.avatarPath ?? "",
         ownerType: oType, ownerUuid: oUuid, ownerName: oName,
         id: d.id, uuid: d.uuid,
       });
@@ -138,7 +147,10 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
     finally { setIsLoading(false); }
   }, []);
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
+  useEffect(() => {
+    // Если данные восстановлены из sessionStorage — не грузим с сервера
+    if (uuid && !hadStoredData) loadFormData(uuid);
+  }, [uuid, loadFormData, hadStoredData]);
 
   const submit = useCallback(async (): Promise<boolean> => {
     setIsLoading(true); setError(null);
@@ -170,6 +182,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
         fullName: saved.fullName ?? prev.fullName,
         firstName: saved.firstName ?? "", lastName: saved.lastName ?? "", middleName: saved.middleName ?? "",
         comment: saved.comment ?? "",
+        avatarPath: saved.avatarPath ?? prev.avatarPath,
         ownerType: oType, ownerUuid: oUuid, ownerName: oName,
       }));
       setIsEditMode(true);
@@ -183,8 +196,8 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
   }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
+  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
 
   return (
     <div className={styles.FormWrapper}>
@@ -249,7 +262,7 @@ const ContactPersonsList: FC<ContactPersonsListProps> = ({ variant = 'default', 
 
   const params = useMemo(() => ({ sort, search, filter: ownerFilter ? { ...ownerFilter, ...filter } : filter, }), [sort, search, filter, ownerFilter]);
 
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
 
   const handleDelete = useModelDelete(model, refetch);
@@ -279,7 +292,7 @@ const ContactPersonsList: FC<ContactPersonsListProps> = ({ variant = 'default', 
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
 
-  const handleCleanRefresh = useCallback(() => { cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   const tableProps = useMemo(() => ({ variant, onSelectItem, enableDateRange: false, componentName, rows, columns, total, totalPages: Math.ceil(total / adaptiveLimit), isLoading: isAnythingLoading, isFetching: isAnythingLoading, error, hasNextPage, isFetchingNextPage, pagination: { page: 1, limit: adaptiveLimit, onPageChange: () => { }, onLimitChange: () => { } }, sorting: { sort, onSortChange: handleSortChange }, filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters }, search: { value: search, onChange: handleSearch }, actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit }, onDelete: handleDelete, }), [variant, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error, sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters, openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh, handleDelete]);
 

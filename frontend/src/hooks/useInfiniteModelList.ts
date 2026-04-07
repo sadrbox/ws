@@ -63,6 +63,7 @@ export type UseInfiniteModelListResult<TData> = UseInfiniteQueryResult<
 	allItems: TData[];
 	total: number;
 	isAnythingLoading: boolean;
+	cancelAllRequests: () => void;
 };
 
 export function useInfiniteModelList<TData = unknown>({
@@ -216,5 +217,5 @@ export function useInfiniteModelList<TData = unknown>({
 		return () => cancelAll();
 	}, [cancelAll]);
 
-	return { ...result, allItems, total, isAnythingLoading };
+	return { ...result, allItems, total, isAnythingLoading, cancelAllRequests: cancelAll };
 }

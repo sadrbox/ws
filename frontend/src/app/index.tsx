@@ -165,14 +165,19 @@ const App: React.FC = () => {
       return "";
     }
 
-    const uniqId = getUniqId(options.component, options.data);
+    // Для selector-панелей всегда уникальный ID
+    const uniqId = options.isSelector
+      ? `selector-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+      : getUniqId(options.component, options.data);
 
-    // Если *List панель уже открыта — просто активируем её
-    const existing = panes.find(p => p.uniqId === uniqId);
-    if (existing) {
-      setActivePaneId(uniqId);
-      setNavbarItems((prev) => prev.map((n) => ({ ...n, isActive: false })));
-      return uniqId;
+    // Если *List панель уже открыта — просто активируем её (не для selector)
+    if (!options.isSelector) {
+      const existing = panes.find(p => p.uniqId === uniqId);
+      if (existing) {
+        setActivePaneId(uniqId);
+        setNavbarItems((prev) => prev.map((n) => ({ ...n, isActive: false })));
+        return uniqId;
+      }
     }
 
     // Формируем заголовок, если не передан
@@ -189,6 +194,17 @@ const App: React.FC = () => {
       component: options.component, // важно сохранить ссылку на компонент
     };
 
+    // Если активна selector-панель и новая панель не является selector —
+    // привязываем дочернюю панель к selector-панели
+    if (!options.isSelector) {
+      const activeSelector = panes.find(
+        (p) => p.isSelector && (p.uniqId === activePaneId || panes.some((c) => c.selectorPaneId === p.uniqId && c.uniqId === activePaneId))
+      );
+      if (activeSelector) {
+        newPane.selectorPaneId = activeSelector.uniqId;
+      }
+    }
+
     setPanes((prev) => [...prev, newPane]);
     setActivePaneId(uniqId);
 
@@ -196,7 +212,7 @@ const App: React.FC = () => {
     setNavbarItems((prev) => prev.map((n) => ({ ...n, isActive: false })));
 
     return uniqId;
-  }, [panes]);
+  }, [panes, activePaneId]);
 
   const removePane = useCallback((uniqId: string) => {
     setPanes((prev) => {
@@ -211,16 +227,21 @@ const App: React.FC = () => {
         (h) => h !== uniqId && remainingIds.has(h)
       );
 
-      // Если закрываем активную панель → переключаемся на предыдущую из истории
+      // Если закрываем активную панель → переключаемся
       _setActivePaneId((currentActive) => {
         if (currentActive !== uniqId) return currentActive;
         if (next.length === 0) return "";
-        // Ищем последнюю панель из истории, которая ещё существует
+
+        // Приоритет: если есть открытая selector-панель → возвращаемся к ней
+        const selectorPane = next.find((p) => p.isSelector);
+        if (selectorPane) return selectorPane.uniqId;
+
+        // Иначе — последняя из истории
         const history = paneHistoryRef.current;
         if (history.length > 0) {
           return history.pop()!;
         }
-        // Если истории нет — fallback на предыдущую по индексу
+        // fallback
         const newIndex = index > 0 ? index - 1 : 0;
         return next[Math.min(newIndex, next.length - 1)].uniqId;
       });
@@ -234,6 +255,15 @@ const App: React.FC = () => {
   // }, [addPane]);
 
   const setActivePane = useCallback((uniqId: string) => {
+    // Блокировка: если есть selector-панель, разрешаем переключение
+    // только на selector и его дочерние панели
+    const selectorPane = panes.find((p) => p.isSelector);
+    if (selectorPane) {
+      const isAllowed =
+        uniqId === selectorPane.uniqId ||
+        panes.some((p) => p.uniqId === uniqId && p.selectorPaneId === selectorPane.uniqId);
+      if (!isAllowed) return;
+    }
     if (panes.some((p) => p.uniqId === uniqId)) {
       setActivePaneId(uniqId);
     }

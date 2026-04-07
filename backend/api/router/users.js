@@ -1,7 +1,28 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 const router = express.Router();
+
+// ── Avatar upload setup ─────────────────────────────────────────────────
+const AVATAR_DIR = path.resolve("uploads/avatars");
+if (!fs.existsSync(AVATAR_DIR)) {
+	fs.mkdirSync(AVATAR_DIR, { recursive: true });
+}
+const avatarStorage = multer.diskStorage({
+	destination: (_req, _file, cb) => cb(null, AVATAR_DIR),
+	filename: (_req, file, cb) => cb(null, `user_${Date.now()}_${file.originalname}`),
+});
+const avatarUpload = multer({
+	storage: avatarStorage,
+	limits: { fileSize: 5 * 1024 * 1024 },
+	fileFilter: (_req, file, cb) => {
+		if (file.mimetype.startsWith("image/")) cb(null, true);
+		else cb(new Error("Только изображения"));
+	},
+});
 
 // ============================================
 // GET /users — курсорная пагинация
@@ -178,22 +199,14 @@ router.get("/users/:id", async (req, res) => {
 		const numId = Number(param);
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 
-		const selectFields = {
-			id: true,
-			uuid: true,
-			username: true,
-			employeeUuid: true,
-			employee: true,
-		};
-
 		const item = isNumeric
 			? await prisma.user.findUnique({
 					where: { id: numId },
-					select: selectFields,
+					include: { employee: true },
 				})
 			: await prisma.user.findUnique({
 					where: { uuid: param },
-					select: selectFields,
+					include: { employee: true },
 				});
 
 		if (!item) {
@@ -311,6 +324,80 @@ router.delete("/users/:id", async (req, res) => {
 				.json({ success: false, message: "Пользователь не найден" });
 		}
 		console.error("DELETE /users/:id error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ── POST avatar ─────────────────────────────────────────────────────────
+router.post("/users/:id/avatar", avatarUpload.single("avatar"), async (req, res) => {
+	try {
+		if (!req.file) return res.status(400).json({ success: false, message: "Файл не передан" });
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+
+		const existing = await prisma.user.findUnique({ where: w });
+		if (existing?.avatarPath) {
+			const oldPath = path.resolve(AVATAR_DIR, existing.avatarPath);
+			if (oldPath.startsWith(AVATAR_DIR) && fs.existsSync(oldPath)) {
+				fs.unlinkSync(oldPath);
+			}
+		}
+
+		const item = await prisma.user.update({
+			where: w,
+			data: { avatarPath: req.file.filename },
+			include: { employee: true },
+		});
+		return res.status(200).json({ success: true, item });
+	} catch (error) {
+		if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
+		console.error("POST /users/:id/avatar error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ── GET avatar ──────────────────────────────────────────────────────────
+router.get("/users/:id/avatar", async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const user = await prisma.user.findUnique({ where: w });
+		if (!user?.avatarPath) return res.status(404).json({ success: false, message: "Аватар не найден" });
+		const filePath = path.resolve(AVATAR_DIR, user.avatarPath);
+		if (!filePath.startsWith(AVATAR_DIR) || !fs.existsSync(filePath)) {
+			return res.status(404).json({ success: false, message: "Файл не найден" });
+		}
+		return res.sendFile(filePath);
+	} catch (error) {
+		console.error("GET /users/:id/avatar error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ── DELETE avatar ───────────────────────────────────────────────────────
+router.delete("/users/:id/avatar", async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const existing = await prisma.user.findUnique({ where: w });
+		if (existing?.avatarPath) {
+			const filePath = path.resolve(AVATAR_DIR, existing.avatarPath);
+			if (filePath.startsWith(AVATAR_DIR) && fs.existsSync(filePath)) {
+				fs.unlinkSync(filePath);
+			}
+		}
+		const item = await prisma.user.update({
+			where: w,
+			data: { avatarPath: null },
+			include: { employee: true },
+		});
+		return res.status(200).json({ success: true, item });
+	} catch (error) {
+		if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
+		console.error("DELETE /users/:id/avatar error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

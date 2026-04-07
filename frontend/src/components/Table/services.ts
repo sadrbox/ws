@@ -202,6 +202,11 @@ export function getFormatColumnValue(
 	row: TDataItem,
 	column: TColumn,
 ): string | number {
+	const rawValue = row[column.identifier as keyof TDataItem];
+
+	// Если значение null или undefined — пустая строка
+	if (rawValue == null) return "";
+
 	if (column.identifier === "id" && column.type === "number") {
 		return getFormatNumericalID(+row.id);
 	} else if (
@@ -209,13 +214,11 @@ export function getFormatColumnValue(
 		column.identifier !== "position" &&
 		column.type === "number"
 	) {
-		return getFormatNumerical(
-			+(row[column.identifier as keyof TDataItem] as number),
-		);
+		return getFormatNumerical(+(rawValue as number));
 	} else if (column.identifier === "position" && column.type === "position") {
-		return row[column.identifier] + "";
+		return rawValue + "";
 	} else if (column.type === "date") {
-		const date = getFormatDate(row[column.identifier] as string);
+		const date = getFormatDate(rawValue as string);
 		return date;
 	} else if (column.type === "string") {
 		const [field, subField]: string[] = column.identifier.split(".");
@@ -224,13 +227,10 @@ export function getFormatColumnValue(
 			const val = (row[field] as Record<string, any>)[subField];
 			return val != null ? val + "" : "";
 		} else {
-			// console.log(row);
-			return row[column.identifier] !== undefined
-				? row[column.identifier] + ""
-				: "";
+			return rawValue != null ? rawValue + "" : "";
 		}
 	} else if (column.type === "boolean") {
-		return row[column.identifier] ? "✔" : "";
+		return rawValue ? "✔" : "";
 	}
 	return "";
 }

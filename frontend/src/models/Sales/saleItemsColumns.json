@@ -1,0 +1,67 @@
+[
+	{
+		"identifier": "lineNumber",
+		"type": "number",
+		"name": "N",
+		"width": "50px",
+		"minWidth": "40px",
+		"alignment": "center",
+		"hint": "Номер строки",
+		"visible": true,
+		"position": 1,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "product.shortName",
+		"type": "string",
+		"name": "Номенклатура",
+		"width": "250px",
+		"minWidth": "200px",
+		"alignment": "left",
+		"hint": "Наименование товара",
+		"visible": true,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "quantity",
+		"type": "number",
+		"name": "Кол-во",
+		"width": "100px",
+		"minWidth": "80px",
+		"alignment": "right",
+		"hint": "Количество",
+		"visible": true,
+		"position": 3,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "price",
+		"type": "number",
+		"name": "Цена",
+		"width": "100px",
+		"minWidth": "80px",
+		"alignment": "right",
+		"hint": "Цена за единицу",
+		"visible": true,
+		"position": 4,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "amount",
+		"type": "number",
+		"name": "Сумма",
+		"width": "110px",
+		"minWidth": "80px",
+		"alignment": "right",
+		"hint": "Сумма строки",
+		"visible": true,
+		"position": 5,
+		"filter": false,
+		"inlist": true
+	}
+]

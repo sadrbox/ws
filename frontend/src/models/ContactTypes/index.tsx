@@ -20,6 +20,8 @@ import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 
+import { useFormSessionStore } from "src/hooks/useFormSessionStore";
+
 const MODEL_ENDPOINT = "contacttypes";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -39,7 +41,9 @@ const ContactTypesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
 
-  const [formData, setFormData] = useState<TFormData>({ ...EMPTY_FORM });
+  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
+    "contact-types-form", uuid ?? "new", EMPTY_FORM,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
@@ -58,7 +62,10 @@ const ContactTypesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
     }
   }, []);
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
+  useEffect(() => {
+    // Если данные восстановлены из sessionStorage — не грузим с сервера
+    if (uuid && !hadStoredData) loadFormData(uuid);
+  }, [uuid, loadFormData, hadStoredData]);
 
   const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -94,8 +101,33 @@ const ContactTypesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
   }, [formData, isEditMode, uuid, onSave]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
+  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
+
+  const generalTab = useMemo(() => (
+    <div className={styles.FormBodyParts}>
+              <Group align="row" gap="12px" className={styles.Form}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                  <Field label="Наименование *" name={`${formUid}_shortName`} minWidth="339px" value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
+                </div>
+              </Group>
+              {isEditMode && (
+                <>
+                  <Divider />
+                  <Group align="row" gap="12px" className={styles.Form}>
+                    <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                      <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                      <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                    </div>
+                  </Group>
+                </>
+              )}
+            </div>
+  ), [formData, isLoading, isEditMode, formUid, handleFieldChange]);
+
+  const tabs = useMemo<{ id: string; label: string; component: React.ReactNode }[]>(() => [
+    { id: "general", label: translate("general") || "Общие сведения", component: generalTab },
+  ], [generalTab]);
 
   return (
     <div className={styles.FormWrapper}>
@@ -117,30 +149,9 @@ const ContactTypesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
         <div className={styles.TablePanelRight} />
       </div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><Tabs tabs={[
-        {
-          id: "general", label: translate("general") || "Общие сведения", component: (
-            <div className={styles.FormBodyParts}>
-              <Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-                  <Field label="Наименование *" name={`${formUid}_shortName`} minWidth="339px" value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
-                </div>
-              </Group>
-              {isEditMode && (
-                <>
-                  <Divider />
-                  <Group align="row" gap="12px" className={styles.Form}>
-                    <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                      <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                      <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-                    </div>
-                  </Group>
-                </>
-              )}
-            </div>
-          )
-        },
-      ]} /></div>
+      <div className={styles.FormBody}>
+        <Tabs tabs={tabs} />
+      </div>
     </div>
   );
 };
@@ -172,7 +183,7 @@ const ContactTypesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
   const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
   const params = useMemo(() => ({ sort, search, filter }), [sort, search, filter]);
 
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } =
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
 
@@ -207,11 +218,10 @@ const ContactTypesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
 
-  const handleCleanRefresh = useCallback(() => {
-    cachedRowsRef.current = []; setCacheVersion(0);
+  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0);
     setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500);
     queryClient.resetQueries({ queryKey: [model] });
-  }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   const tableProps = useMemo(() => ({
     variant, onSelectItem,

@@ -119,6 +119,15 @@ export interface TableContextProps {
   isFetchingNextPage?: boolean;
   adaptiveLimit?: number; // Текущий адаптивный лимит
 
+  // ── Inline-редактирование ──────────────────────────────────────────────
+  inlineEditing?: boolean;
+  renderCell?: (row: TDataItem, col: TColumn) => React.ReactNode | undefined;
+  onInlineAdd?: () => void;
+
+  // ── Refs для inline-editing (не триггерят ререндер contextValue) ───────
+  renderCellRef?: React.RefObject<((row: TDataItem, col: TColumn) => React.ReactNode | undefined) | undefined>;
+  inlineEditingRef?: React.RefObject<boolean | undefined>;
+
   states: {
     selectedRows: Set<number>;
     setSelectedRows: Dispatch<SetStateAction<Set<number>>>;
@@ -172,6 +181,10 @@ export interface TableProps {
   isFetchingNextPage?: boolean;
   extraButtons?: React.ReactNode;
   onDelete?: (selectedRows: Set<number>, rows: TDataItem[]) => void;
+  // ── Inline-редактирование ──────────────────────────────────────────────
+  inlineEditing?: boolean;
+  renderCell?: (row: TDataItem, col: TColumn) => React.ReactNode | undefined;
+  onInlineAdd?: () => void;
 }
 
 const ROW_HEIGHT = 30;  // ← ИСПРАВИЛ: было 28, должно быть 30
@@ -279,11 +292,20 @@ const Table: FC<TableProps> = memo((props) => {
     hasNextPage, isFetchingNextPage,
     extraButtons,
     onDelete,
+    inlineEditing,
+    renderCell,
+    onInlineAdd,
   } = props;
 
 
   const { openModelForm, refetch } = actions;
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Refs для inline-editing: не участвуют в contextValue, не триггерят ререндер ──
+  const renderCellRef = useRef(renderCell);
+  renderCellRef.current = renderCell;
+  const inlineEditingRef = useRef(inlineEditing);
+  inlineEditingRef.current = inlineEditing;
 
   const [activeRow, setActiveRow] = useState<number | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -314,6 +336,8 @@ const Table: FC<TableProps> = memo((props) => {
       pagination, sorting, filtering, search,
       actions: extendedActions,
       hasNextPage, isFetchingNextPage,
+      inlineEditing, renderCell, onInlineAdd,
+      renderCellRef, inlineEditingRef,
       scrollRef,
       states: {
         selectedRows, setSelectedRows,
@@ -328,13 +352,18 @@ const Table: FC<TableProps> = memo((props) => {
       isLoading, error,
       pagination, sorting, filtering, search, extendedActions,
       hasNextPage, isFetchingNextPage,
+      onInlineAdd,
       selectedRows, isAllSelectedMode, excludedRows, activeRow,
     ]
   );
 
   const handleCreate = useCallback(() => {
-    if (openModelForm) openModelForm({ onSave: refetch, onClose: () => { } });
-  }, [openModelForm, refetch]);
+    if (inlineEditing && onInlineAdd) {
+      onInlineAdd();
+    } else if (openModelForm) {
+      openModelForm({ onSave: refetch, onClose: () => { } });
+    }
+  }, [inlineEditing, onInlineAdd, openModelForm, refetch]);
 
   // onRefresh — обновляет данные.
   // isAllSelectedMode, selectedRows и excludedRows НЕ сбрасываем:
@@ -1022,6 +1051,8 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     variant,
     onSelectItem,
     rows,
+    renderCellRef,
+    inlineEditingRef,
     states: {
       activeRow, setActiveRow,
       selectedRows, setSelectedRows,
@@ -1089,12 +1120,13 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   }, [setActiveRow, row.id]);
 
   const handleDoubleClick = useCallback(() => {
-    if (variant === 'select' && onSelectItem) {
+    if (inlineEditingRef?.current) return; // В inline-режиме двойной клик не открывает форму
+    if (onSelectItem) {
       onSelectItem(row);
     } else if (openModelForm) {
       openModelForm({ data: row, onSave: refetch, onClose: () => { } });
     }
-  }, [variant, onSelectItem, openModelForm, row, refetch]);
+  }, [inlineEditingRef, onSelectItem, openModelForm, row, refetch]);
 
   return (
     <tr
@@ -1116,6 +1148,20 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         </td>
       )}
       {columns.map(col => {
+        // Кастомный рендер ячейки (переводы, спецзначения) — работает в любом режиме
+        const currentRenderCell = renderCellRef?.current;
+        if (currentRenderCell) {
+          const customCell = currentRenderCell(row, col);
+          if (customCell !== undefined) {
+            return (
+              <td key={col.identifier}>
+                <div className={styles.TableBodyCell} style={{ willChange: 'contents', transform: 'translate3d(0, 0, 0)' }}>
+                  {customCell}
+                </div>
+              </td>
+            );
+          }
+        }
         const value = getFormatColumnValue(row, col);
         const align = getTextAlignByColumnType(col);
         return (

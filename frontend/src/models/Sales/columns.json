@@ -13,19 +13,6 @@
 		"inlist": true
 	},
 	{
-		"identifier": "documentNumber",
-		"type": "string",
-		"name": "Номер документа",
-		"width": "130px",
-		"minWidth": "90px",
-		"alignment": "left",
-		"hint": "Номер документа",
-		"visible": true,
-		"position": 2,
-		"filter": false,
-		"inlist": true
-	},
-	{
 		"identifier": "documentDate",
 		"type": "date",
 		"name": "Дата",
@@ -34,7 +21,7 @@
 		"alignment": "left",
 		"hint": "Дата документа",
 		"visible": true,
-		"position": 3,
+		"position": 2,
 		"filter": false,
 		"inlist": true
 	},
@@ -47,7 +34,7 @@
 		"alignment": "left",
 		"hint": "Описание",
 		"visible": true,
-		"position": 4,
+		"position": 3,
 		"filter": false,
 		"inlist": true
 	},
@@ -60,7 +47,7 @@
 		"alignment": "right",
 		"hint": "Сумма",
 		"visible": true,
-		"position": 5,
+		"position": 4,
 		"filter": false,
 		"inlist": true
 	},
@@ -73,7 +60,7 @@
 		"alignment": "left",
 		"hint": "Статус документа",
 		"visible": true,
-		"position": 6,
+		"position": 5,
 		"filter": false,
 		"inlist": true
 	},
@@ -86,7 +73,7 @@
 		"alignment": "center",
 		"hint": "Документ проведён",
 		"visible": true,
-		"position": 7,
+		"position": 6,
 		"filter": false,
 		"inlist": true
 	},
@@ -99,7 +86,7 @@
 		"alignment": "left",
 		"hint": "Организация",
 		"visible": true,
-		"position": 8,
+		"position": 7,
 		"filter": false,
 		"inlist": true
 	},
@@ -112,7 +99,7 @@
 		"alignment": "left",
 		"hint": "Контрагент",
 		"visible": true,
-		"position": 9,
+		"position": 8,
 		"filter": false,
 		"inlist": true
 	}

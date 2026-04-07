@@ -34,6 +34,7 @@ export type TypeAppContextProps = {
 			email?: string | null;
 			organizationUuid?: string | null;
 			isSuperAdmin?: boolean;
+			accessRights?: { modelName: string; accessLevel: string }[];
 			employee?: {
 				uuid: string;
 				fullName: string | null;
@@ -65,6 +66,12 @@ export type TPane = {
 	data?: TDataItem;
 	onSave?: () => void;
 	onClose?: () => void;
+	/** Панель является формой выбора (selector) — приоритетная, требует результат */
+	isSelector?: boolean;
+	/** Callback при выборе элемента в selector-панели */
+	onSelectResult?: (item: Record<string, any>) => void;
+	/** ID selector-панели, из которой была открыта эта дочерняя панель */
+	selectorPaneId?: string;
 };
 
 export type TComponentNode =

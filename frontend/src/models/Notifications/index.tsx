@@ -47,7 +47,7 @@ const NotificationsList: FC<NotificationsListProps> = ({ variant = 'default', on
     sort, search, filter,
   }), [sort, search, filter]);
 
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } =
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
 
@@ -90,11 +90,10 @@ const NotificationsList: FC<NotificationsListProps> = ({ variant = 'default', on
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
 
-  const handleCleanRefresh = useCallback(() => {
-    cachedRowsRef.current = []; setCacheVersion(0);
+  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0);
     setSearch(""); setFilter(undefined); setSort({ createdAt: "desc" }); updateAdaptiveLimit(500);
     queryClient.resetQueries({ queryKey: [model] });
-  }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   const tableProps = useMemo(() => ({
     variant, onSelectItem,

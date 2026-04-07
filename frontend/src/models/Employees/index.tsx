@@ -11,17 +11,19 @@ import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useIn
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
 import { useModelDelete } from "src/hooks/useModelDelete";
-import { Divider, Field, FieldNumber, FieldSelect } from "src/components/Field";
-import LookupField from "src/components/Field/LookupField";
+import { Divider, Field } from "src/components/Field";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
 import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
-import tableStyles from "src/components/Table/Table.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 import { ContactsList } from "../Contacts";
+import EmployeeHistoryTable from "./EmployeeHistoryTable";
+import AvatarUpload from "src/components/AvatarUpload";
+
+import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 
 const MODEL_ENDPOINT = "employees";
 const LIST_NAME = "EmployeesList";
@@ -47,174 +49,17 @@ const EMPTY_FORM: TFormData = {
   avatarPath: "",
 };
 
-// ── Типы для истории и прав доступа ────────────────────────────────────
-interface THistoryRow {
-  id?: number; uuid?: string;
-  eventDate: string; eventType: string; salary: string;
-  positionUuid: string; positionName: string;
-  organizationUuid: string; organizationName: string;
-  isDirty?: boolean; isNew?: boolean;
-}
-
-const EVENT_TYPE_OPTIONS = [
-  { value: "hire", label: "Приём" },
-  { value: "fire", label: "Увольнение" },
-  { value: "transfer", label: "Перемещение" },
-];
-
 const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
 
-  const [formData, setFormData] = useState<TFormData>(() => ({
-    ...EMPTY_FORM,
-  }));
+  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
+    "employees-form", uuid ?? "new", EMPTY_FORM,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
-
-  // ── Аватар ─────────────────────────────────────────────────────────────
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const avatarInputRef = useRef<HTMLInputElement>(null);
-  const avatarBlobUrlRef = useRef<string | null>(null);
-
-  // Освобождаем blob URL при размонтировании
-  useEffect(() => {
-    return () => {
-      if (avatarBlobUrlRef.current) URL.revokeObjectURL(avatarBlobUrlRef.current);
-    };
-  }, []);
-
-  const loadAvatar = useCallback(async (entityUuid: string) => {
-    try {
-      const res = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}/avatar`, { responseType: "blob" });
-      if (avatarBlobUrlRef.current) URL.revokeObjectURL(avatarBlobUrlRef.current);
-      const blobUrl = URL.createObjectURL(res.data);
-      avatarBlobUrlRef.current = blobUrl;
-      setAvatarUrl(blobUrl);
-    } catch {
-      setAvatarUrl(null);
-    }
-  }, []);
-
-  const handleAvatarUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !formData.uuid) return;
-    const fd = new FormData();
-    fd.append("avatar", file);
-    try {
-      await apiClient.post(`/${MODEL_ENDPOINT}/${formData.uuid}/avatar`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      loadAvatar(formData.uuid);
-    } catch (err) { console.error("avatar upload error:", err); }
-    if (avatarInputRef.current) avatarInputRef.current.value = "";
-  }, [formData.uuid, loadAvatar]);
-
-  const handleAvatarDelete = useCallback(async () => {
-    if (!formData.uuid) return;
-    try {
-      await apiClient.delete(`/${MODEL_ENDPOINT}/${formData.uuid}/avatar`);
-      if (avatarBlobUrlRef.current) URL.revokeObjectURL(avatarBlobUrlRef.current);
-      avatarBlobUrlRef.current = null;
-      setAvatarUrl(null);
-    } catch (err) { console.error("avatar delete error:", err); }
-  }, [formData.uuid]);
-
-  // ── История сотрудника ─────────────────────────────────────────────────
-  const [historyRows, setHistoryRows] = useState<THistoryRow[]>([]);
-  const [activeHistoryIdx, setActiveHistoryIdx] = useState<number | null>(null);
-
-  const loadHistory = useCallback(async (empUuid: string) => {
-    try {
-      const res = await apiClient.get(`/employee-histories?employeeUuid=${empUuid}`);
-      const items = res.data?.items ?? [];
-      setHistoryRows(items.map((h: any) => ({
-        id: h.id, uuid: h.uuid,
-        eventDate: h.eventDate?.slice(0, 10) ?? "",
-        eventType: h.eventType ?? "",
-        salary: h.salary != null ? String(h.salary) : "",
-        positionUuid: h.positionUuid ?? "",
-        positionName: h.position?.shortName ?? "",
-        organizationUuid: h.organizationUuid ?? "",
-        organizationName: h.organization?.shortName ?? "",
-      })));
-    } catch (err) { console.error("loadHistory error:", err); }
-  }, []);
-
-  const saveHistoryRow = useCallback(async (row: THistoryRow) => {
-    if (!formData.uuid) return;
-    const payload = {
-      eventDate: row.eventDate || null,
-      eventType: row.eventType,
-      salary: row.salary ? parseFloat(row.salary) : null,
-      positionUuid: row.positionUuid || null,
-      organizationUuid: row.organizationUuid || null,
-      employeeUuid: formData.uuid,
-    };
-    try {
-      if (row.uuid) {
-        await apiClient.put(`/employee-histories/${row.uuid}`, payload);
-      } else {
-        await apiClient.post(`/employee-histories`, payload);
-      }
-      loadHistory(formData.uuid);
-    } catch (err) { console.error("saveHistory error:", err); }
-  }, [formData.uuid, loadHistory]);
-
-  const deleteHistoryRow = useCallback(async (rowUuid: string) => {
-    try {
-      await apiClient.delete(`/employee-histories/${rowUuid}`);
-      if (formData.uuid) loadHistory(formData.uuid);
-    } catch (err) { console.error("deleteHistory error:", err); }
-  }, [formData.uuid, loadHistory]);
-
-  const updateHistoryRow = useCallback((idx: number, field: keyof THistoryRow, value: string) => {
-    setHistoryRows(prev => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], [field]: value, isDirty: true };
-      return next;
-    });
-  }, []);
-
-  const addHistoryRow = useCallback(() => {
-    setHistoryRows(prev => {
-      const row: THistoryRow = {
-        eventDate: new Date().toISOString().slice(0, 10),
-        eventType: "hire", salary: "",
-        positionUuid: "", positionName: "",
-        organizationUuid: "", organizationName: "",
-        isNew: true, isDirty: true,
-      };
-      const next = [...prev, row];
-      setActiveHistoryIdx(next.length - 1);
-      return next;
-    });
-  }, []);
-
-  const deleteHistoryByIdx = useCallback(async (idx: number) => {
-    const row = historyRows[idx];
-    if (!row) return;
-    if (row.isNew) {
-      setHistoryRows(prev => prev.filter((_, i) => i !== idx));
-      return;
-    }
-    if (row.uuid) await deleteHistoryRow(row.uuid);
-  }, [historyRows, deleteHistoryRow]);
-
-  const saveHistoryByIdx = useCallback(async (idx: number) => {
-    const row = historyRows[idx];
-    if (row) await saveHistoryRow(row);
-  }, [historyRows, saveHistoryRow]);
-
-  const saveAllDirtyHistory = useCallback(async () => {
-    for (let i = 0; i < historyRows.length; i++) {
-      if (historyRows[i].isDirty) await saveHistoryRow(historyRows[i]);
-    }
-  }, [historyRows, saveHistoryRow]);
-
-  const hasDirtyHistory = useMemo(() => historyRows.some(r => r.isDirty), [historyRows]);
 
   // ── Загрузка данных ────────────────────────────────────────────────────
   const loadFormData = useCallback(async (entityUuid: string) => {
@@ -228,14 +73,14 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
         avatarPath: d.avatarPath ?? "",
         id: d.id, uuid: d.uuid,
       });
-      if (d.avatarPath) loadAvatar(d.uuid);
-      else setAvatarUrl(null);
-      loadHistory(d.uuid);
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); }
     finally { setIsLoading(false); }
-  }, [loadAvatar, loadHistory]);
+  }, []);
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
+  useEffect(() => {
+    // Если данные восстановлены из sessionStorage — не грузим с сервера
+    if (uuid && !hadStoredData) loadFormData(uuid);
+  }, [uuid, loadFormData, hadStoredData]);
 
   const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
     setFormData(prev => {
@@ -278,8 +123,8 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
   }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
+  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
 
   // ── Табы ────────────────────────────────────────────────────────────────
   const tabs = useMemo(() => {
@@ -313,37 +158,13 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
                 )}
               </div>
               {/* Правая колонка — аватар */}
-              {isEditMode && (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", minWidth: 150 }}>
-                  <div style={{
-                    width: 128, height: 128, borderRadius: "50%", overflow: "hidden",
-                    border: "2px solid #ddd", display: "flex", alignItems: "center", justifyContent: "center",
-                    background: "#f5f5f5", cursor: "pointer",
-                  }}
-                    onClick={() => avatarInputRef.current?.click()}
-                    title="Нажмите для загрузки фото"
-                  >
-                    {avatarUrl ? (
-                      <img src={avatarUrl} alt="Аватар" style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        onError={() => setAvatarUrl(null)} />
-                    ) : (
-                      <span style={{ fontSize: 48, color: "#bbb" }}>👤</span>
-                    )}
-                  </div>
-                  <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAvatarUpload} />
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button type="button" onClick={() => avatarInputRef.current?.click()}
-                      style={{ fontSize: 12, cursor: "pointer", padding: "2px 8px", border: "1px solid #ccc", borderRadius: 3, background: "#fff" }}>
-                      Загрузить
-                    </button>
-                    {avatarUrl && (
-                      <button type="button" onClick={handleAvatarDelete}
-                        style={{ fontSize: 12, cursor: "pointer", padding: "2px 8px", border: "1px solid #ccc", borderRadius: 3, background: "#fff", color: "#c00" }}>
-                        Удалить
-                      </button>
-                    )}
-                  </div>
-                </div>
+              {isEditMode && formData.uuid && (
+                <AvatarUpload
+                  endpoint={MODEL_ENDPOINT}
+                  entityUuid={formData.uuid}
+                  hasAvatar={!!formData.avatarPath}
+                  disabled={isLoading}
+                />
               )}
             </div>
           </div>
@@ -352,182 +173,10 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
     ];
 
     if (isEditMode && formData.uuid) {
-      // ── Вкладка: Кадровая история (inline-таблица как SaleItemsTable) ──
+      // ── Вкладка: Кадровая история ──
       result.push({
         id: "history", label: "Кадровая история", component: (
-          <div className={tableStyles.TableWrapper}>
-            {/* ── Panel ── */}
-            <div className={tableStyles.TablePanel}>
-              <div className={tableStyles.TablePanelLeft}>
-                <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
-                  <Button onClick={addHistoryRow} disabled={isLoading}><span>Добавить</span></Button>
-                  <Divider />
-                  {hasDirtyHistory && (<>
-                    <Button variant="primary" onClick={saveAllDirtyHistory} disabled={isLoading}><span>Сохранить всё</span></Button>
-                    <Divider />
-                  </>)}
-                  <ButtonImage onClick={() => formData.uuid && loadHistory(formData.uuid)} title="Обновить" disabled={isLoading}>
-                    <img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? tableStyles.animationLoop : ""} />
-                  </ButtonImage>
-                </div>
-              </div>
-            </div>
-            {/* ── Info ── */}
-            <div style={{ fontSize: 13, color: "#555", padding: "0 6px", whiteSpace: "nowrap" }}>
-              Записей: <strong>{historyRows.length}</strong>
-            </div>
-            {/* ── Table ── */}
-            <div className={tableStyles.TableScrollContainer}>
-              <div className={tableStyles.TableScrollWrapper}>
-                <table>
-                  <colgroup>
-                    <col style={{ width: "140px", minWidth: "120px" }} />
-                    <col style={{ width: "140px", minWidth: "120px" }} />
-                    <col style={{ minWidth: "180px" }} />
-                    <col style={{ minWidth: "180px" }} />
-                    <col style={{ width: "130px", minWidth: "100px" }} />
-                    <col style={{ width: "70px", minWidth: "70px" }} />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th><div className={tableStyles.TableHeaderCell}><span>Дата</span></div></th>
-                      <th><div className={tableStyles.TableHeaderCell}><span>Событие</span></div></th>
-                      <th><div className={tableStyles.TableHeaderCell}><span>Организация</span></div></th>
-                      <th><div className={tableStyles.TableHeaderCell}><span>Должность</span></div></th>
-                      <th><div className={tableStyles.TableHeaderCell} style={{ justifyContent: "flex-end" }}><span>Оклад</span></div></th>
-                      <th><div className={tableStyles.TableHeaderCell} style={{ justifyContent: "center" }}><span></span></div></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyRows.length === 0 && !isLoading && (
-                      <tr><td colSpan={6}>
-                        <div className={tableStyles.TableBodyCell} style={{ justifyContent: "center", color: "#999", padding: "16px 0" }}>
-                          <span>Нет записей. Нажмите «Добавить»</span>
-                        </div>
-                      </td></tr>
-                    )}
-                    {historyRows.map((row, idx) => (
-                      <tr
-                        key={row.uuid || "new-" + idx}
-                        className={activeHistoryIdx === idx ? tableStyles.activeRow : undefined}
-                        onClick={() => setActiveHistoryIdx(idx)}
-                        style={{ background: row.isDirty ? "#fffde7" : undefined }}
-                      >
-                        <td>
-                          <div className={tableStyles.TableBodyCell}>
-                            <input
-                              type="date"
-                              value={row.eventDate}
-                              onChange={e => updateHistoryRow(idx, "eventDate", e.target.value)}
-                              disabled={isLoading}
-                              style={{ border: "none", background: "transparent", padding: "2px 4px", width: "100%", fontSize: 13 }}
-                            />
-                          </div>
-                        </td>
-                        <td>
-                          <div className={tableStyles.TableBodyCell}>
-                            <FieldSelect
-                              name={`hist_event_${idx}`}
-                              options={EVENT_TYPE_OPTIONS}
-                              value={row.eventType}
-                              onChange={e => updateHistoryRow(idx, "eventType", e.target.value)}
-                              disabled={isLoading}
-                              variant="table"
-                            />
-                          </div>
-                        </td>
-                        <td>
-                          <div className={tableStyles.TableBodyCell}>
-                            <LookupField
-                              label="" name={`hist_org_${idx}`}
-                              value={row.organizationUuid} displayValue={row.organizationName}
-                              endpoint="organizations" displayField="shortName"
-                              onSelect={(u, d) => {
-                                setHistoryRows(prev => {
-                                  const next = [...prev];
-                                  next[idx] = { ...next[idx], organizationUuid: u, organizationName: d, isDirty: true };
-                                  return next;
-                                });
-                              }}
-                              onClear={() => {
-                                setHistoryRows(prev => {
-                                  const next = [...prev];
-                                  next[idx] = { ...next[idx], organizationUuid: "", organizationName: "", isDirty: true };
-                                  return next;
-                                });
-                              }}
-                              disabled={isLoading}
-                              width="100%"
-                              variant="table"
-                            />
-                          </div>
-                        </td>
-                        <td>
-                          <div className={tableStyles.TableBodyCell}>
-                            <LookupField
-                              label="" name={`hist_pos_${idx}`}
-                              value={row.positionUuid} displayValue={row.positionName}
-                              endpoint="positions" displayField="shortName"
-                              onSelect={(u, d) => {
-                                setHistoryRows(prev => {
-                                  const next = [...prev];
-                                  next[idx] = { ...next[idx], positionUuid: u, positionName: d, isDirty: true };
-                                  return next;
-                                });
-                              }}
-                              onClear={() => {
-                                setHistoryRows(prev => {
-                                  const next = [...prev];
-                                  next[idx] = { ...next[idx], positionUuid: "", positionName: "", isDirty: true };
-                                  return next;
-                                });
-                              }}
-                              disabled={isLoading}
-                              width="100%"
-                              variant="table"
-                            />
-                          </div>
-                        </td>
-                        <td>
-                          <div className={tableStyles.TableBodyCell}>
-                            <FieldNumber
-                              name={`hist_salary_${idx}`}
-                              value={row.salary}
-                              onChange={e => updateHistoryRow(idx, "salary", e.target.value)}
-                              disabled={isLoading}
-                              step="0.01"
-                              textAlign="right"
-                              width="100%"
-                              actions={[]}
-                              variant="table"
-                            />
-                          </div>
-                        </td>
-                        <td>
-                          <div className={tableStyles.TableBodyCell} style={{ justifyContent: "center", gap: 2 }}>
-                            {row.isDirty && (
-                              <button
-                                onClick={e => { e.stopPropagation(); saveHistoryByIdx(idx); }}
-                                disabled={isLoading}
-                                title="Сохранить строку"
-                                style={{ padding: "1px 6px", fontSize: 11, cursor: "pointer", border: "1px solid #4caf50", borderRadius: 3, background: "#e8f5e9", color: "#2e7d32", lineHeight: "16px" }}
-                              >✓</button>
-                            )}
-                            <button
-                              onClick={e => { e.stopPropagation(); deleteHistoryByIdx(idx); }}
-                              disabled={isLoading}
-                              title="Удалить строку"
-                              style={{ padding: "1px 6px", fontSize: 11, cursor: "pointer", border: "1px solid #ef5350", borderRadius: 3, background: "#ffebee", color: "#c62828", lineHeight: "16px" }}
-                            >✕</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <EmployeeHistoryTable employeeUuid={formData.uuid} disabled={isLoading} />
         ),
       });
 
@@ -540,8 +189,7 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
     }
 
     return result;
-  }, [formUid, formData, isLoading, isEditMode, handleFieldChange, avatarUrl, handleAvatarUpload, handleAvatarDelete,
-    historyRows, activeHistoryIdx, addHistoryRow, hasDirtyHistory, saveAllDirtyHistory, saveHistoryByIdx, deleteHistoryByIdx, updateHistoryRow, loadHistory]);
+  }, [formUid, formData, isLoading, isEditMode, handleFieldChange]);
 
   return (
     <div className={styles.FormWrapper}>
@@ -583,7 +231,7 @@ const EmployeesList: FC<EmployeesListProps> = ({ variant = "default", onSelectIt
   useEffect(() => { GLOBAL_ADAPTIVE_LIMIT_REF.current = adaptiveLimit; }, [adaptiveLimit]);
   const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
   const params = useMemo(() => ({ sort, search, filter }), [sort, search, filter]);
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
 
   const handleDelete = useModelDelete(model, refetch);
@@ -604,7 +252,7 @@ const EmployeesList: FC<EmployeesListProps> = ({ variant = "default", onSelectIt
   const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => { setFilter((prev: typeof filter) => { const next = { ...(prev ?? {}) }; if (value == null || value === "") delete next[field]; else next[field] = { value, operator }; return Object.keys(next).length > 0 ? next : undefined; }); }, [setFilter]);
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
-  const handleCleanRefresh = useCallback(() => { cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   const tableProps = useMemo(() => ({
     variant, onSelectItem, enableDateRange: false, componentName, rows, columns, total,

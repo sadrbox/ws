@@ -23,6 +23,8 @@ import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
+import { useFormSessionStore } from "src/hooks/useFormSessionStore";
+
 const MODEL_ENDPOINT = "bankaccounts";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -55,27 +57,20 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
   const formUid = useUID();
   const defaultOrg = useDefaultOrganization();
 
-  const buildInitialForm = useCallback((): TFormData => {
+  const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
     const name = (data.ownerName as string) || "";
-    if (data.organizationUuid) {
-      init.ownerType = "organization";
-      init.ownerUuid = data.organizationUuid as string;
-      init.ownerName = name;
-    } else if (data.counterpartyUuid) {
-      init.ownerType = "counterparty";
-      init.ownerUuid = data.counterpartyUuid as string;
-      init.ownerName = name;
-    } else if (defaultOrg.organizationUuid) {
-      init.ownerType = "organization";
-      init.ownerUuid = defaultOrg.organizationUuid;
-      init.ownerName = defaultOrg.organizationName;
-    }
+    if (data.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = data.organizationUuid as string; init.ownerName = name; }
+    else if (data.counterpartyUuid) { init.ownerType = "counterparty"; init.ownerUuid = data.counterpartyUuid as string; init.ownerName = name; }
+    else if (data.contactPersonUuid) { init.ownerType = "contactperson"; init.ownerUuid = data.contactPersonUuid as string; init.ownerName = name; }
+    else if (data.employeeUuid) { init.ownerType = "employee"; init.ownerUuid = data.employeeUuid as string; init.ownerName = name; }
+    else if (defaultOrg.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = defaultOrg.organizationUuid; init.ownerName = defaultOrg.organizationName; }
     return init;
-  }, [data, defaultOrg]);
-
-  const [formData, setFormData] = useState<TFormData>(buildInitialForm);
+  })();
+  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
+    "bank-accounts-form", uuid ?? "new", initialForm,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
@@ -103,7 +98,10 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
     }
   }, []);
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
+  useEffect(() => {
+    // Если данные восстановлены из sessionStorage — не грузим с сервера
+    if (uuid && !hadStoredData) loadFormData(uuid);
+  }, [uuid, loadFormData, hadStoredData]);
 
   const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -159,33 +157,11 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
   }, [formData, isEditMode, uuid, onSave]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
+  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
 
-  return (
-    <div className={styles.FormWrapper}>
-      <div className={styles.FormPanel}>
-        <div className={styles.TablePanelLeft}>
-          <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
-            <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button>
-            <Divider />
-            <Button onClick={handleSave} disabled={isLoading}><span>Сохранить</span></Button>
-            <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button>
-            <Divider />
-            {isEditMode && (
-              <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}>
-                <img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} />
-              </ButtonImage>
-            )}
-          </div>
-        </div>
-        <div className={styles.TablePanelRight} />
-      </div>
-      {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><Tabs tabs={[
-        {
-          id: "general", label: translate("general") || "Общие сведения", component: (
-            <div className={styles.FormBodyParts}>
+  const generalTab = useMemo(() => (
+    <div className={styles.FormBodyParts}>
               <Group align="row" gap="12px" className={styles.Form}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
                   <Field label="Наименование" name={`${formUid}_shortName`} minWidth="339px" value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
@@ -231,9 +207,35 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
                 </>
               )}
             </div>
-          )
-        },
-      ]} /></div>
+  ), [formData, isLoading, isEditMode, formUid, handleFieldChange, setFormData]);
+
+  const tabs = useMemo<{ id: string; label: string; component: React.ReactNode }[]>(() => [
+    { id: "general", label: translate("general") || "Общие сведения", component: generalTab },
+  ], [generalTab]);
+
+  return (
+    <div className={styles.FormWrapper}>
+      <div className={styles.FormPanel}>
+        <div className={styles.TablePanelLeft}>
+          <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
+            <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button>
+            <Divider />
+            <Button onClick={handleSave} disabled={isLoading}><span>Сохранить</span></Button>
+            <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button>
+            <Divider />
+            {isEditMode && (
+              <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}>
+                <img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} />
+              </ButtonImage>
+            )}
+          </div>
+        </div>
+        <div className={styles.TablePanelRight} />
+      </div>
+      {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
+      <div className={styles.FormBody}>
+        <Tabs tabs={tabs} />
+      </div>
     </div>
   );
 };
@@ -283,7 +285,7 @@ const BankAccountsList: FC<BankAccountsListProps> = ({ variant = 'default', onSe
     filter: ownerFilter ? { ...ownerFilter, ...filter } : filter,
   }), [sort, search, filter, ownerFilter]);
 
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } =
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
 
@@ -321,11 +323,10 @@ const BankAccountsList: FC<BankAccountsListProps> = ({ variant = 'default', onSe
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
 
-  const handleCleanRefresh = useCallback(() => {
-    cachedRowsRef.current = []; setCacheVersion(0);
+  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0);
     setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500);
     queryClient.resetQueries({ queryKey: [model] });
-  }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   const tableProps = useMemo(() => ({
     variant, onSelectItem,

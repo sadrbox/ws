@@ -63,18 +63,6 @@
 		"position": 5,
 		"filter": false,
 		"inlist": true
-	},
-	{
-		"identifier": "employee.position",
-		"type": "string",
-		"name": "Должность",
-		"width": "200px",
-		"minWidth": "100px",
-		"alignment": "left",
-		"hint": "Должность сотрудника",
-		"visible": true,
-		"position": 6,
-		"filter": false,
-		"inlist": true
 	}
+    
 ]

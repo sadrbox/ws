@@ -20,6 +20,8 @@ import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 
+import { useFormSessionStore } from "src/hooks/useFormSessionStore";
+
 const MODEL_ENDPOINT = "positions";
 const LIST_NAME = "PositionsList";
 const FORM_LABEL = "Должность";
@@ -42,7 +44,9 @@ const PositionsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
 
-  const [formData, setFormData] = useState<TFormData>({ ...EMPTY_FORM });
+  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
+    "positions-form", uuid ?? "new", EMPTY_FORM,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
@@ -57,7 +61,10 @@ const PositionsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
     finally { setIsLoading(false); }
   }, []);
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
+  useEffect(() => {
+    // Если данные восстановлены из sessionStorage — не грузим с сервера
+    if (uuid && !hadStoredData) loadFormData(uuid);
+  }, [uuid, loadFormData, hadStoredData]);
 
   const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -81,22 +88,11 @@ const PositionsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
   }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
+  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
 
-  return (
-    <div className={styles.FormWrapper}>
-      <div className={styles.FormPanel}><div className={styles.TablePanelLeft}><div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
-        <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button><Divider />
-        <Button onClick={handleSave} disabled={isLoading}><span>Сохранить</span></Button>
-        <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button><Divider />
-        {isEditMode && <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}><img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} /></ButtonImage>}
-      </div></div><div className={styles.TablePanelRight} /></div>
-      {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><Tabs tabs={[
-        {
-          id: "general", label: translate("general") || "Общие сведения", component: (
-            <div className={styles.FormBodyParts}>
+  const generalTab = useMemo(() => (
+    <div className={styles.FormBodyParts}>
               <Group align="row" gap="12px" className={styles.Form}>
                 <Field label="Наименование *" name={`${formUid}_shortName`} minWidth="339px"
                   value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
@@ -112,9 +108,24 @@ const PositionsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
                 </div>
               </Group></>}
             </div>
-          )
-        },
-      ]} /></div>
+  ), [formData, isLoading, isEditMode, formUid, handleFieldChange]);
+
+  const tabs = useMemo<{ id: string; label: string; component: React.ReactNode }[]>(() => [
+    { id: "general", label: translate("general") || "Общие сведения", component: generalTab },
+  ], [generalTab]);
+
+  return (
+    <div className={styles.FormWrapper}>
+      <div className={styles.FormPanel}><div className={styles.TablePanelLeft}><div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
+        <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button><Divider />
+        <Button onClick={handleSave} disabled={isLoading}><span>Сохранить</span></Button>
+        <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button><Divider />
+        {isEditMode && <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}><img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} /></ButtonImage>}
+      </div></div><div className={styles.TablePanelRight} /></div>
+      {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
+      <div className={styles.FormBody}>
+        <Tabs tabs={tabs} />
+      </div>
     </div>
   );
 };
@@ -143,7 +154,7 @@ const PositionsList: FC<PositionsListProps> = ({ variant = "default", onSelectIt
   useEffect(() => { GLOBAL_ADAPTIVE_LIMIT_REF.current = adaptiveLimit; }, [adaptiveLimit]);
   const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
   const params = useMemo(() => ({ sort, search, filter }), [sort, search, filter]);
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
   const handleDelete = useModelDelete(model, refetch);
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
@@ -163,7 +174,7 @@ const PositionsList: FC<PositionsListProps> = ({ variant = "default", onSelectIt
   const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => { setFilter((prev: typeof filter) => { const next = { ...(prev ?? {}) }; if (value == null || value === "") delete next[field]; else next[field] = { value, operator }; return Object.keys(next).length > 0 ? next : undefined; }); }, [setFilter]);
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
-  const handleCleanRefresh = useCallback(() => { cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   const tableProps = useMemo(() => ({
     variant, onSelectItem, enableDateRange: false, componentName, rows, columns, total,

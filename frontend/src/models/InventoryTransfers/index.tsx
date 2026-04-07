@@ -11,7 +11,7 @@ import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useIn
 import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
 import { useModelDelete } from "src/hooks/useModelDelete";
-import { Divider, Field, FieldDateTime, FieldSelect } from "src/components/Field";
+import { Divider, Field, FieldDateTime, FieldSelect, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
@@ -46,11 +46,9 @@ const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uni
   const formUid = useUID();
   const defaultOrg = useDefaultOrganization();
 
-  const [formData, setFormData] = useState<TFormData>(() => ({
-    ...EMPTY_FORM,
-    organizationUuid: defaultOrg.organizationUuid,
-    organizationName: defaultOrg.organizationName,
-  }));
+  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
+    "inventory-transfers-form", uuid ?? "new", EMPTY_FORM,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
@@ -70,7 +68,10 @@ const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uni
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); } finally { setIsLoading(false); }
   }, []);
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
+  useEffect(() => {
+    // Если данные восстановлены из sessionStorage — не грузим с сервера
+    if (uuid && !hadStoredData) loadFormData(uuid);
+  }, [uuid, loadFormData, hadStoredData]);
   const handleFieldChange = useCallback((field: keyof TFormData, value: string) => { setFormData(prev => ({ ...prev, [field]: value })); }, []);
 
   const submit = useCallback(async (): Promise<boolean> => {
@@ -98,8 +99,30 @@ const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uni
   }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
+  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
+
+  const generalTab = useMemo(() => (
+    <div className={styles.FormBodyParts}>
+              <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                <Field label="Номер документа" name={`${formUid}_docNum`} minWidth="339px" value={formData.documentNumber} onChange={e => handleFieldChange("documentNumber", e.target.value)} disabled={isLoading} />
+                <FieldDateTime label="Дата документа" name={`${formUid}_docDate`} minWidth="200px" value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} />
+                <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
+                <LookupField label="Со склада" name={`${formUid}_fromWh`} value={formData.fromWarehouseUuid} displayValue={formData.fromWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, fromWarehouseUuid: u, fromWarehouseName: d }))} minWidth="339px" disabled={isLoading} />
+                <LookupField label="На склад" name={`${formUid}_toWh`} value={formData.toWarehouseUuid} displayValue={formData.toWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, toWarehouseUuid: u, toWarehouseName: d }))} minWidth="339px" disabled={isLoading} />
+                <LookupField label="Организация" name={`${formUid}_org`} value={formData.organizationUuid} displayValue={formData.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))} minWidth="339px" disabled={isLoading} />
+                <FieldTextarea label="Описание" name={`${formUid}_description`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} minWidth="339px" minHeight="80px" rows={4} />
+              </div></Group>
+              {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+              </div></Group></>}
+            </div>
+  ), [formData, isLoading, isEditMode, formUid, handleFieldChange, setFormData]);
+
+  const tabs = useMemo<{ id: string; label: string; component: React.ReactNode }[]>(() => [
+    { id: "general", label: translate("general") || "Общие сведения", component: generalTab },
+  ], [generalTab]);
 
   return (
     <div className={styles.FormWrapper}>
@@ -110,30 +133,9 @@ const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uni
         {isEditMode && <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}><img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} /></ButtonImage>}
       </div></div><div className={styles.TablePanelRight} /></div>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><Tabs tabs={[
-        {
-          id: "general", label: translate("general") || "Общие сведения", component: (
-            <div className={styles.FormBodyParts}>
-              <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-                <Field label="Номер документа" name={`${formUid}_docNum`} minWidth="339px" value={formData.documentNumber} onChange={e => handleFieldChange("documentNumber", e.target.value)} disabled={isLoading} />
-                <FieldDateTime label="Дата документа" name={`${formUid}_docDate`} minWidth="200px" value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} />
-                <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
-                <LookupField label="Со склада" name={`${formUid}_fromWh`} value={formData.fromWarehouseUuid} displayValue={formData.fromWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, fromWarehouseUuid: u, fromWarehouseName: d }))} minWidth="339px" disabled={isLoading} />
-                <LookupField label="На склад" name={`${formUid}_toWh`} value={formData.toWarehouseUuid} displayValue={formData.toWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, toWarehouseUuid: u, toWarehouseName: d }))} minWidth="339px" disabled={isLoading} />
-                <LookupField label="Организация" name={`${formUid}_org`} value={formData.organizationUuid} displayValue={formData.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))} minWidth="339px" disabled={isLoading} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 339 }}>
-                  <label style={{ fontSize: 13, color: "#222" }} htmlFor={`${formUid}_desc`}>Описание</label>
-                  <textarea id={`${formUid}_desc`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} style={{ minWidth: 339, minHeight: 80, padding: 8, borderRadius: 4 }} />
-                </div>
-              </div></Group>
-              {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-              </div></Group></>}
-            </div>
-          )
-        },
-      ]} /></div>
+      <div className={styles.FormBody}>
+        <Tabs tabs={tabs} />
+      </div>
     </div>
   );
 };
@@ -154,7 +156,7 @@ const InventoryTransfersList: FC<InventoryTransfersListProps> = ({ variant = "de
   const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
   const ownerFilter = useMemo(() => { if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } }; return undefined; }, [ownerUuid, ownerField]);
   const params = useMemo(() => ({ sort, search, filter: ownerFilter ? { ...ownerFilter, ...filter } : filter }), [sort, search, filter, ownerFilter]);
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
 
   const handleDelete = useModelDelete(model, refetch);
@@ -172,7 +174,7 @@ const InventoryTransfersList: FC<InventoryTransfersListProps> = ({ variant = "de
   const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => { setFilter((prev: typeof filter) => { const next = { ...(prev ?? {}) }; if (value == null || value === "") delete next[field]; else next[field] = { value, operator }; return Object.keys(next).length > 0 ? next : undefined; }); }, [setFilter]);
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
-  const handleCleanRefresh = useCallback(() => { cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "desc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "desc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   const tableProps = useMemo(() => ({
     variant, onSelectItem, enableDateRange: false, componentName, rows, columns, total,

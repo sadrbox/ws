@@ -1,8 +1,10 @@
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import styles from "./Field.module.scss";
-import Modal from "../Modal";
 import { apiClient } from "src/services/api/client";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
+import { useAppContext } from "src/app";
+import SelectPaneWrapper from "./SelectPaneWrapper";
 import type { FieldVariant } from "./index";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -47,47 +49,8 @@ export interface LookupFieldProps {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// МАППИНГ endpoint → *List компонент (ленивый импорт для избежания
-// циклических зависимостей)
+// МАППИНГ endpoint → *List компонент — перенесён в SelectPaneWrapper.tsx
 // ═══════════════════════════════════════════════════════════════════════════
-
-const listComponentRegistry: Record<string, () => Promise<Record<string, any>>> = {
-  organizations: () => import("src/models/Organizations"),
-  counterparties: () => import("src/models/Counterparties"),
-  contacttypes: () => import("src/models/ContactTypes"),
-  contactpersons: () => import("src/models/ContactPersons/index"),
-  contacts: () => import("src/models/Contacts"),
-  contracts: () => import("src/models/Contracts"),
-  bankaccounts: () => import("src/models/BankAccounts"),
-  users: () => import("src/models/Users"),
-  activityhistories: () => import("src/models/ActivityHistories"),
-  todos: () => import("src/models/Todos"),
-  notifications: () => import("src/models/Notifications"),
-  brands: () => import("src/models/Brands"),
-  products: () => import("src/models/Products"),
-  currencies: () => import("src/models/Currencies"),
-  employees: () => import("src/models/Employees"),
-  positions: () => import("src/models/Positions"),
-};
-
-const listComponentNameMap: Record<string, string> = {
-  organizations: "OrganizationsList",
-  counterparties: "CounterpartiesList",
-  contacttypes: "ContactTypesList",
-  contactpersons: "ContactPersonsList",
-  contacts: "ContactsList",
-  contracts: "ContractsList",
-  bankaccounts: "BankAccountsList",
-  users: "UsersList",
-  activityhistories: "ActivityHistoriesList",
-  todos: "TodosList",
-  notifications: "NotificationsList",
-  brands: "BrandsList",
-  products: "ProductsList",
-  currencies: "CurrenciesList",
-  employees: "EmployeesList",
-  positions: "PositionsList",
-};
 
 // ── Поля для отображения в выпадающем списке автокомплита ──────────────
 // Ключ — endpoint, значение — массив полей, которые показываются
@@ -108,83 +71,8 @@ const defaultSecondaryFieldsMap: Record<string, string[]> = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LOOKUP MODAL — модальное окно с *List variant="select"
-// ═══════════════════════════════════════════════════════════════════════════
-
-interface LookupSelectModalProps {
-  title: React.ReactNode;
-  endpoint: string;
-  listComponent?: FC<any>;
-  onSelect: (item: Record<string, any>) => void;
-  onClose: () => void;
-}
-
-const LookupSelectModal: FC<LookupSelectModalProps> = ({ title, endpoint, listComponent: ListComponentProp, onSelect, onClose }) => {
-  const [ResolvedList, setResolvedList] = useState<FC<any> | null>(ListComponentProp || null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  // Ленивая загрузка компонента списка по endpoint
-  useEffect(() => {
-    if (ListComponentProp) {
-      setResolvedList(() => ListComponentProp);
-      return;
-    }
-    const loader = listComponentRegistry[endpoint];
-    if (!loader) {
-      setLoadError(`Неизвестный endpoint: ${endpoint}`);
-      return;
-    }
-    let cancelled = false;
-    loader().then((mod) => {
-      if (cancelled) return;
-      const name = listComponentNameMap[endpoint];
-      const Comp = mod[name] || mod.default;
-      if (Comp) {
-        setResolvedList(() => Comp);
-      } else {
-        setLoadError(`Компонент ${name} не найден в модуле`);
-      }
-    }).catch((err) => {
-      if (!cancelled) setLoadError(err?.message || "Ошибка загрузки модуля");
-    });
-    return () => { cancelled = true; };
-  }, [endpoint, ListComponentProp]);
-
-  // Обработка выбора элемента
-  const handleSelectItem = useCallback((item: Record<string, any>) => {
-    onSelect(item);
-  }, [onSelect]);
-
-  return (
-    <Modal
-      title={<>Выбор: {title}</>}
-      onClose={onClose}
-      style={{
-        maxWidth: "900px",
-        width: "90vw",
-        // height: "70vh",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
-      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        {loadError && (
-          <div style={{ color: "red", padding: "16px", background: "#ffebee" }}>{loadError}</div>
-        )}
-        {!ResolvedList && !loadError && (
-          <div style={{ padding: "24px", textAlign: "center", color: "#888" }}>Загрузка...</div>
-        )}
-        {ResolvedList && (
-          <ResolvedList variant="select" onSelectItem={handleSelectItem} />
-        )}
-      </div>
-    </Modal>
-  );
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
 // LOOKUP FIELD — поле с кнопками "выбор" и "очистить"
+// Форма выбора открывается как отдельная Pane-вкладка через SelectPaneWrapper
 // ═══════════════════════════════════════════════════════════════════════════
 
 const LookupField: FC<LookupFieldProps> = ({
@@ -209,12 +97,12 @@ const LookupField: FC<LookupFieldProps> = ({
   // Подавляем неиспользуемые переменные совместимости
   void _columns;
 
+  const { windows: { addPane } } = useAppContext();
+
   const isTable = variant === 'table';
   const wrapperClass = isTable
     ? `${styles.FieldWrapper} ${styles.tableVariant}`
     : styles.FieldWrapper;
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // ── Autocomplete state ──────────────────────────────────────────────────
   const [inputText, setInputText] = useState(displayValue || "");
@@ -226,6 +114,30 @@ const LookupField: FC<LookupFieldProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedText = useDebounceValue(inputText, 300);
+
+  // ── Portal dropdown position (for table variant) ──────────────────────
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (!isTable || !isDropdownOpen || !wrapperRef.current) {
+      setDropdownPos(null);
+      return;
+    }
+    const updatePos = () => {
+      const rect = wrapperRef.current?.getBoundingClientRect();
+      if (rect) {
+        setDropdownPos({ top: rect.bottom, left: rect.left, width: rect.width });
+      }
+    };
+    updatePos();
+    // Обновляем при скролле / ресайзе
+    window.addEventListener("scroll", updatePos, true);
+    window.addEventListener("resize", updatePos);
+    return () => {
+      window.removeEventListener("scroll", updatePos, true);
+      window.removeEventListener("resize", updatePos);
+    };
+  }, [isTable, isDropdownOpen]);
 
   // Синхронизация inputText с displayValue (при выборе или внешнем изменении)
   useEffect(() => {
@@ -263,7 +175,9 @@ const LookupField: FC<LookupFieldProps> = ({
   // Click-outside: закрытие dropdown
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (wrapperRef.current && !wrapperRef.current.contains(target) &&
+          (!dropdownRef.current || !dropdownRef.current.contains(target))) {
         setIsDropdownOpen(false);
         // Если значение не выбрано — восстановить displayValue
         if (!value) {
@@ -278,18 +192,26 @@ const LookupField: FC<LookupFieldProps> = ({
   }, [value, displayValue]);
 
   const handleOpenModal = useCallback(() => {
-    if (!disabled) setIsModalOpen(true);
-  }, [disabled]);
-
-  const handleCloseModal = useCallback(() => {
-    setIsModalOpen(false);
-  }, []);
+    if (disabled) return;
+    addPane({
+      component: SelectPaneWrapper,
+      label: `Выбор: ${typeof label === "string" ? label : endpoint}`,
+      isSelector: true,
+      data: { endpoint, listComponent } as any,
+      onSelectResult: (item: Record<string, any>) => {
+        const uuid = item.uuid as string;
+        const display = String(item[displayField] ?? item.shortName ?? item.value ?? item.name ?? uuid);
+        onSelect(uuid, display, item);
+        setIsDropdownOpen(false);
+        setInputText(display);
+      },
+    });
+  }, [disabled, addPane, label, endpoint, listComponent, displayField, onSelect]);
 
   const handleSelectItem = useCallback((item: Record<string, any>) => {
     const uuid = item.uuid as string;
     const display = String(item[displayField] ?? item.shortName ?? item.value ?? item.name ?? uuid);
     onSelect(uuid, display, item);
-    setIsModalOpen(false);
     setIsDropdownOpen(false);
     setInputText(display);
   }, [onSelect, displayField]);
@@ -504,7 +426,7 @@ const LookupField: FC<LookupFieldProps> = ({
         </div>
 
         {/* ── Autocomplete dropdown ───────────────────────────────────── */}
-        {isDropdownOpen && (suggestions.length > 0 || isLoading) && (
+        {isDropdownOpen && (suggestions.length > 0 || isLoading) && !isTable && (
           <div className={styles.LookupDropdown} ref={dropdownRef}>
             {isLoading && suggestions.length === 0 && (
               <div className={styles.LookupDropdownLoading}>Поиск...</div>
@@ -534,15 +456,47 @@ const LookupField: FC<LookupFieldProps> = ({
         )}
       </div>
 
-      {isModalOpen && (
-        <LookupSelectModal
-          title={label}
-          endpoint={endpoint}
-          listComponent={listComponent}
-          onSelect={handleSelectItem}
-          onClose={handleCloseModal}
-        />
+      {/* ── Portal dropdown for table variant ──────────────────────────── */}
+      {isTable && isDropdownOpen && (suggestions.length > 0 || isLoading) && dropdownPos && createPortal(
+        <div
+          className={styles.LookupDropdown}
+          ref={dropdownRef}
+          style={{
+            position: "fixed",
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+            zIndex: 9999,
+          }}
+        >
+          {isLoading && suggestions.length === 0 && (
+            <div className={styles.LookupDropdownLoading}>Поиск...</div>
+          )}
+          {suggestions.map((item, idx) => {
+            const primary = getItemDisplay(item);
+            const secondary = getItemSecondary(item);
+            return (
+              <div
+                key={item.uuid ?? idx}
+                className={`${styles.LookupDropdownItem} ${idx === activeIndex ? styles.LookupDropdownItemActive : ""}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSuggestionClick(item);
+                }}
+                onMouseEnter={() => setActiveIndex(idx)}
+              >
+                <span className={styles.LookupDropdownPrimary}>{primary}</span>
+                {secondary && <span className={styles.LookupDropdownSecondary}>{secondary}</span>}
+              </div>
+            );
+          })}
+          {!isLoading && suggestions.length === 0 && (
+            <div className={styles.LookupDropdownLoading}>Ничего не найдено</div>
+          )}
+        </div>,
+        document.body,
       )}
+
     </>
   );
 };

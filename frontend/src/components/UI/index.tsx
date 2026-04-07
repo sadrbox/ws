@@ -33,6 +33,7 @@ import { ProductsList } from 'src/models/Products';
 import { CurrenciesList } from 'src/models/Currencies';
 import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
+import { UnsavedFormsList } from 'src/models/UnsavedForms';
 import NotificationToast from 'src/components/NotificationToast';
 
 type TypeGroupProps = {
@@ -113,25 +114,40 @@ export const PaneTab: FC = () => {
   const panes = context?.windows.panes;
   const { activePane, setActivePane, removePane } = context?.windows;
 
+  // Определяем, есть ли активная selector-панель → блокировка остальных вкладок
+  const selectorPane = panes.find((p) => p.isSelector);
+
   return (
     <div className={styles.PaneTabWrapper}>
-      {panes.map(p => (
-        <div
-          key={`PaneTab-${p.uniqId}`}
-          className={[styles.PaneTab, (p.uniqId === activePane) && styles.PaneTabActive].join(" ")}
-          onClick={() => setActivePane(p.uniqId)}
-          title={p.label}
-          role="tab"
-          tabIndex={0}>
-          <button
-            className={styles.PaneTabClose}
-            onClick={(e) => { e.stopPropagation(); removePane(p.uniqId); }}
-            title="Закрыть"
-            type="button"
-          >✕</button>
-          <span className={styles.PaneTabLabel}>{p.label}</span>
-        </div>
-      ))}
+      {panes.map(p => {
+        const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
+        return (
+          <div
+            key={`PaneTab-${p.uniqId}`}
+            className={[
+              styles.PaneTab,
+              (p.uniqId === activePane) && styles.PaneTabActive,
+              p.isSelector && styles.PaneTabSelector,
+              isLocked && styles.PaneTabDisabled,
+            ].filter(Boolean).join(" ")}
+            onClick={isLocked ? undefined : () => setActivePane(p.uniqId)}
+            title={p.label}
+            role="tab"
+            tabIndex={isLocked ? -1 : 0}
+            aria-disabled={isLocked}
+          >
+            {!isLocked && (
+              <button
+                className={styles.PaneTabClose}
+                onClick={(e) => { e.stopPropagation(); removePane(p.uniqId); }}
+                title="Закрыть"
+                type="button"
+              >✕</button>
+            )}
+            <span className={styles.PaneTabLabel}>{p.isSelector && "🔍 "}{p.label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -394,6 +410,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
               <li onClick={() => addPane({ component: UsersList })}>Пользователи</li>
               <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>
               <li onClick={() => addPane({ component: NotificationsList })}>Уведомления</li>
+              <li onClick={() => addPane({ component: UnsavedFormsList })}>Несохранённые записи</li>
             </ul>
           </div>
         </div>

@@ -247,5 +247,34 @@
 	"uploadedAt": "Дата загрузки",
 
 	"symbol": "Символ",
-	"code": "Код"
+	"code": "Код",
+
+	"modelName": "Модель",
+	"accessLevel": "Уровень доступа",
+	"accessLevelFull": "Полный",
+	"accessLevelReadonly": "Только чтение",
+	"accessLevelNone": "Нет доступа",
+	"select": "Выберите",
+	"comment": "Комментарий",
+	"iin": "ИИН",
+	"brand.shortName": "Бренд",
+	"employee.fullName": "Сотрудник",
+	"employee.iin": "ИИН сотрудника",
+	"employee.position": "Должность",
+
+	"eventDate": "Дата",
+	"eventType": "Событие",
+	"eventTypeHire": "Приём",
+	"eventTypeFire": "Увольнение",
+	"eventTypeTransfer": "Перемещение",
+
+	"EmployeeHistoriesList": "Кадровая история",
+	"EmployeeHistoriesList_part": "Кадровая история",
+
+	"UnsavedFormsList": "Несохранённые записи",
+
+	"SaleItemsList": "Товары",
+	"SaleItemsList_part": "Товары",
+	"lineNumber": "N",
+	"product.shortName": "Номенклатура"
 }

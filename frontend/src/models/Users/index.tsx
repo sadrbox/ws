@@ -21,6 +21,8 @@ import styles from "src/styles/main.module.scss";
 import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 import { AccessRightsList } from "src/models/AccessRights";
+import AvatarUpload from "src/components/AvatarUpload";
+import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 
 const MODEL_ENDPOINT = "users";
 
@@ -35,10 +37,11 @@ interface TFormData {
   password: string;
   employeeUuid: string;
   employeeName: string;
+  avatarPath: string;
 }
 
 const EMPTY_FORM: TFormData = {
-  username: "", password: "", employeeUuid: "", employeeName: "",
+  username: "", password: "", employeeUuid: "", employeeName: "", avatarPath: "",
 };
 
 const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
@@ -46,14 +49,16 @@ const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
 
-  const [formData, setFormData] = useState<TFormData>({ ...EMPTY_FORM });
+  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
+    "users-form", uuid ?? "new", EMPTY_FORM,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
 
   const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-  }, []);
+  }, [setFormData]);
 
   // ── Загрузка данных ────────────────────────────────────────────────────
   const loadFormData = useCallback(async (entityUuid: string) => {
@@ -66,6 +71,7 @@ const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         username: d.username ?? "", password: "",
         employeeUuid: d.employeeUuid ?? d.employee?.uuid ?? "",
         employeeName: d.employee?.fullName ?? "",
+        avatarPath: d.avatarPath ?? "",
         id: d.id, uuid: d.uuid,
       });
     } catch (err: any) {
@@ -75,7 +81,10 @@ const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
     }
   }, []);
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
+  useEffect(() => {
+    // Если данные уже восстановлены из sessionStorage — не загружаем повторно
+    if (uuid && !hadStoredData) loadFormData(uuid);
+  }, [uuid, loadFormData, hadStoredData]);
 
   const submit = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
@@ -96,6 +105,7 @@ const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         password: "",
         employeeUuid: saved.employeeUuid ?? saved.employee?.uuid ?? "",
         employeeName: saved.employee?.fullName ?? "",
+        avatarPath: saved.avatarPath ?? prev.avatarPath,
       }));
       setIsEditMode(true);
       if (uniqId) {
@@ -116,8 +126,8 @@ const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   }, [formData, isEditMode, uuid, onSave]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
+  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
 
   // ── Tabs ────────────────────────────────────────────────────────────────
   const tabs = useMemo(() => {
@@ -125,37 +135,55 @@ const UsersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
       {
         id: "general", label: translate("general") || "Общие сведения", component: (
           <div className={styles.FormBodyParts}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
-              <Group align="row" gap="12px" className={styles.Form}>
-                <Field label="Логин *" name={`${formUid}_username`} minWidth="250px" value={formData.username} onChange={e => handleFieldChange("username", e.target.value)} disabled={isLoading} />
-              </Group>
-              <Group align="row" gap="12px" className={styles.Form}>
-                <Field label={isEditMode ? "Новый пароль" : "Пароль"} name={`${formUid}_password`} minWidth="250px" value={formData.password} onChange={e => handleFieldChange("password", e.target.value)} disabled={isLoading} />
-              </Group>
-              <Group align="row" gap="12px" className={styles.Form}>
-                <LookupField
-                  label="Сотрудник"
-                  name={`${formUid}_employee`}
-                  value={formData.employeeUuid}
-                  displayValue={formData.employeeName}
-                  endpoint="employees"
-                  displayField="fullName"
-                  minWidth="400px"
-                  disabled={isLoading}
-                  onSelect={(uuid, displayValue) => {
-                    setFormData(prev => ({ ...prev, employeeUuid: uuid, employeeName: displayValue }));
-                  }}
-                  onClear={() => {
-                    setFormData(prev => ({ ...prev, employeeUuid: "", employeeName: "" }));
-                  }}
-                />
-              </Group>
-              {isEditMode && (
+            <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
+              {/* Левая колонка — поля */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
                 <Group align="row" gap="12px" className={styles.Form}>
-                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+
+                  <Group align="col" gap="12px">
+                    <Group align="row" gap="12px" className={styles.Form}>
+                      <Field label="Логин *" name={`${formUid}_username`} minWidth="150px" value={formData.username} onChange={e => handleFieldChange("username", e.target.value)} disabled={isLoading} />
+
+                      <Field label={isEditMode ? "Новый пароль" : "Пароль"} name={`${formUid}_password`} minWidth="150px" value={formData.password} onChange={e => handleFieldChange("password", e.target.value)} disabled={isLoading} />
+                    </Group>
+
+                    {isEditMode && formData.uuid && (
+                      <AvatarUpload
+                        endpoint={MODEL_ENDPOINT}
+                        entityUuid={formData.uuid}
+                        hasAvatar={!!formData.avatarPath}
+                        disabled={isLoading}
+                      />
+                    )}
+
+
+                  </Group>
+                  <LookupField
+                    label="Сотрудник"
+                    name={`${formUid}_employee`}
+                    value={formData.employeeUuid}
+                    displayValue={formData.employeeName}
+                    endpoint="employees"
+                    displayField="fullName"
+                    minWidth="400px"
+                    disabled={isLoading}
+                    onSelect={(uuid, displayValue) => {
+                      setFormData(prev => ({ ...prev, employeeUuid: uuid, employeeName: displayValue }));
+                    }}
+                    onClear={() => {
+                      setFormData(prev => ({ ...prev, employeeUuid: "", employeeName: "" }));
+                    }}
+                  />
                 </Group>
-              )}
+                {isEditMode && (
+                  <Group align="row" gap="12px" className={styles.Form}>
+                    <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
+                    <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                  </Group>
+                )}
+              </div>
+              {/* Правая колонка — аватар */}
+
             </div>
           </div>
         ),
@@ -228,7 +256,7 @@ const UsersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
   const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
   const params = useMemo(() => ({ sort, search, filter }), [sort, search, filter]);
 
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } =
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage, cancelAllRequests } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
 
@@ -266,8 +294,9 @@ const UsersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
   const handleCleanRefresh = useCallback(() => {
     cachedRowsRef.current = []; setCacheVersion(0);
     setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500);
+    cancelAllRequests();
     queryClient.resetQueries({ queryKey: [model] });
-  }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit, cancelAllRequests]);
 
   const tableProps = useMemo(() => ({
     variant, onSelectItem,

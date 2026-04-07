@@ -8,26 +8,22 @@ datasource db {
 }
 
 model User {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  username String?
-  email    String?
-  password String? // Хранить только хэш!
-
-  employeeUuid String?
-  employee     Employee? @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
-
-  // ── Мультитенантность ──────────────────────────────────────────────
+  id               Int            @id @default(autoincrement())
+  uuid             String         @unique @default(uuid())
+  username         String?
+  email            String?
+  password         String?
+  employeeUuid     String?
+  isSuperAdmin     Boolean        @default(false)
+  avatarPath       String?
   organizationUuid String?
-  organization     Organization? @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  isSuperAdmin     Boolean       @default(false) // суперадмин видит все данные всех организаций
-
-  curatorTodos  Todo[]         @relation("TodoCurator")
-  executorTodos Todo[]         @relation("TodoExecutor")
-  notifications Notification[]
-  contacts      Contact[]
-  accessRights  AccessRight[]
+  accessRights     AccessRight[]
+  contacts         Contact[]
+  notifications    Notification[]
+  curatorTodos     Todo[]         @relation("TodoCurator")
+  executorTodos    Todo[]         @relation("TodoExecutor")
+  employee         Employee?      @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
+  organization     Organization?  @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
 
   @@index([employeeUuid])
   @@index([organizationUuid])
@@ -35,101 +31,83 @@ model User {
 }
 
 model Organization {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  bin         String  @unique @db.VarChar(12)
-  shortName   String?
-  displayName String?
-
-  // ── Мультитенантность ──────────────────────────────────────────────
-  inviteCode String? @unique // код приглашения для присоединения к организации
-
-  contracts          Contract[]
-  contacts           Contact[]
-  contactPersons     ContactPerson[]
-  bankAccounts       BankAccount[]
+  id                 Int                 @id @default(autoincrement())
+  uuid               String              @unique @default(uuid())
+  bin                String              @unique @db.VarChar(12)
+  shortName          String?
+  displayName        String?
+  inviteCode         String?             @unique
   activityHistories  ActivityHistory[]
-  todos              Todo[]
-  warehouses         Warehouse[]
-  sales              Sale[]
-  purchases          Purchase[]
-  outgoingInvoices   OutgoingInvoice[]   @relation("OrgOutgoingInvoices")
-  incomingInvoices   IncomingInvoice[]   @relation("OrgIncomingInvoices")
-  paymentInvoices    PaymentInvoice[]
-  scheduledTasks     ScheduledTask[]
-  inventoryTransfers InventoryTransfer[]
-  cashReceiptOrders  CashReceiptOrder[]  @relation("OrgCashReceipts")
+  bankAccounts       BankAccount[]
   cashExpenseOrders  CashExpenseOrder[]  @relation("OrgCashExpenses")
+  cashReceiptOrders  CashReceiptOrder[]  @relation("OrgCashReceipts")
+  contactPersons     ContactPerson[]
+  contacts           Contact[]
+  contracts          Contract[]
   employees          Employee[]          @relation("EmployeeOrganization")
+  incomingInvoices   IncomingInvoice[]   @relation("OrgIncomingInvoices")
+  inventoryTransfers InventoryTransfer[]
+  outgoingInvoices   OutgoingInvoice[]   @relation("OrgOutgoingInvoices")
+  paymentInvoices    PaymentInvoice[]
+  purchases          Purchase[]
+  sales              Sale[]
+  scheduledTasks     ScheduledTask[]
+  todos              Todo[]
   users              User[]              @relation("UserOrganization")
-  employeeHistories  EmployeeHistory[]   @relation("EmployeeHistoryOrganization")
+  warehouses         Warehouse[]
 
   @@map("organizations")
 }
 
 model Counterparty {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  bin         String  @unique @db.VarChar(12)
-  shortName   String?
-  displayName String?
-
-  contracts         Contract[]
-  contacts          Contact[]
-  contactPersons    ContactPerson[]
+  id                Int                @id @default(autoincrement())
+  uuid              String             @unique @default(uuid())
+  bin               String             @unique @db.VarChar(12)
+  shortName         String?
+  displayName       String?
   bankAccounts      BankAccount[]
-  todos             Todo[]
-  sales             Sale[]
-  purchases         Purchase[]
-  outgoingInvoices  OutgoingInvoice[]  @relation("CpOutgoingInvoices")
-  incomingInvoices  IncomingInvoice[]  @relation("CpIncomingInvoices")
-  paymentInvoices   PaymentInvoice[]
-  cashReceiptOrders CashReceiptOrder[] @relation("CpCashReceipts")
   cashExpenseOrders CashExpenseOrder[] @relation("CpCashExpenses")
+  cashReceiptOrders CashReceiptOrder[] @relation("CpCashReceipts")
+  contactPersons    ContactPerson[]
+  contacts          Contact[]
+  contracts         Contract[]
+  incomingInvoices  IncomingInvoice[]  @relation("CpIncomingInvoices")
+  outgoingInvoices  OutgoingInvoice[]  @relation("CpOutgoingInvoices")
+  paymentInvoices   PaymentInvoice[]
+  purchases         Purchase[]
+  sales             Sale[]
+  todos             Todo[]
 
   @@map("counterparties")
 }
 
 model Contract {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  shortName      String
-  contractNumber String?
-  contractText   String? @db.Text
-
-  startDate DateTime?
-  endDate   DateTime?
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  shortName        String
+  contractNumber   String?
+  contractText     String?
+  startDate        DateTime?
+  endDate          DateTime?
   organizationUuid String?
   counterpartyUuid String?
-
-  ownerName String? // для быстрого отображения без join'ов
-
-  organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
-  sales        Sale[]
+  ownerName        String?
+  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
+  sales            Sale[]
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@map("contracts")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Прикреплённые файлы (универсальная таблица)
-// ═══════════════════════════════════════════════════════════════════════════
-
 model AttachedFile {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  ownerType String // contract, todo, organization, counterparty, sale, purchase ...
-  ownerUuid String
-
+  id          Int      @id @default(autoincrement())
+  uuid        String   @unique @default(uuid())
+  ownerType   String
+  ownerUuid   String
   fileName    String
-  filePath    String // имя файла на диске (в uploads/files/)
+  filePath    String
   fileSize    Int?
   mimeType    String?
   description String?
@@ -140,37 +118,31 @@ model AttachedFile {
 }
 
 model ContactType {
-  id        Int    @id @default(autoincrement())
-  uuid      String @unique @default(uuid())
-  shortName String @unique
-
-  contacts Contact[]
+  id        Int       @id @default(autoincrement())
+  uuid      String    @unique @default(uuid())
+  shortName String    @unique
+  contacts  Contact[]
 
   @@map("contact_types")
 }
 
 model Contact {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  value String
-
-  contactType     ContactType @relation(fields: [contactTypeUuid], references: [uuid], onDelete: Restrict)
-  contactTypeUuid String
-
+  id                Int            @id @default(autoincrement())
+  uuid              String         @unique @default(uuid())
+  value             String
+  contactTypeUuid   String
   organizationUuid  String?
   counterpartyUuid  String?
+  ownerName         String?
   contactPersonUuid String?
-  userUuid          String?
   employeeUuid      String?
-
-  ownerName String? // для быстрого отображения без join'ов
-
-  organization  Organization?  @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty  Counterparty?  @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
-  contactPerson ContactPerson? @relation(fields: [contactPersonUuid], references: [uuid], onDelete: SetNull)
-  user          User?          @relation(fields: [userUuid], references: [uuid], onDelete: SetNull)
-  employee      Employee?      @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
+  userUuid          String?
+  contactPerson     ContactPerson? @relation(fields: [contactPersonUuid], references: [uuid])
+  contactType       ContactType    @relation(fields: [contactTypeUuid], references: [uuid])
+  counterparty      Counterparty?  @relation(fields: [counterpartyUuid], references: [uuid])
+  employee          Employee?      @relation(fields: [employeeUuid], references: [uuid])
+  organization      Organization?  @relation(fields: [organizationUuid], references: [uuid])
+  user              User?          @relation(fields: [userUuid], references: [uuid])
 
   @@index([contactTypeUuid])
   @@index([organizationUuid])
@@ -182,24 +154,20 @@ model Contact {
 }
 
 model ContactPerson {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  firstName  String?
-  lastName   String?
-  middleName String?
-  fullName   String? @db.VarChar(255)
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  firstName        String?
+  lastName         String?
+  middleName       String?
+  fullName         String?       @db.VarChar(255)
   organizationUuid String?
   counterpartyUuid String?
-
-  ownerName String? // быстрое отображение
-  comment   String?
-
-  organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
-
-  contacts Contact[]
+  ownerName        String?
+  comment          String?
+  avatarPath       String?
+  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
+  contacts         Contact[]
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -207,23 +175,19 @@ model ContactPerson {
 }
 
 model BankAccount {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
   organizationUuid String?
   counterpartyUuid String?
-
-  iban         String
-  bik          String? // БИК / SWIFT-BIC
-  bankName     String? // денормализация
-  currencyUuid String?
-  shortName    String? // краткое наименование счёта
-
-  ownerName String? // для быстрого отображения без join'ов
-
-  organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
-  currency     Currency?     @relation(fields: [currencyUuid], references: [uuid], onDelete: SetNull)
+  iban             String
+  bik              String?
+  bankName         String?
+  ownerName        String?
+  shortName        String?
+  currencyUuid     String?
+  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
+  currency         Currency?     @relation(fields: [currencyUuid], references: [uuid])
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
   @@unique([organizationUuid, iban], name: "bankacc_org_iban_unique")
   @@unique([counterpartyUuid, iban], name: "bankacc_cp_iban_unique")
@@ -236,28 +200,22 @@ model BankAccount {
 }
 
 model ActivityHistory {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  actionDate DateTime @default(now())
-
+  id                    Int          @id @default(autoincrement())
+  uuid                  String       @unique @default(uuid())
+  actionDate            DateTime     @default(now())
   actionType            String
   organizationUuid      String
   organizationShortName String
   bin                   String
-
-  userName String
-  host     String
-  ip       String?
-  city     String?
-
-  objectId   String
-  objectType String
-  objectName String
-
-  props Json?
-
-  organization Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  userName              String
+  host                  String
+  ip                    String?
+  city                  String?
+  objectId              String
+  objectType            String
+  objectName            String
+  props                 Json?
+  organization          Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
 
   @@index([actionDate])
   @@index([organizationUuid])
@@ -265,35 +223,25 @@ model ActivityHistory {
   @@map("activity_history")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Задачи
-// ═══════════════════════════════════════════════════════════════════════════
-
 model Todo {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  shortName   String?
-  description String? @db.Text
-  status      String  @default("new") // new, in_progress, done, cancelled
-
+  id               Int            @id @default(autoincrement())
+  uuid             String         @unique @default(uuid())
+  shortName        String?
+  description      String?
   organizationUuid String?
   counterpartyUuid String?
   curatorUuid      String?
   executorUuid     String?
-
-  createdAt    DateTime  @default(now())
-  deadline     DateTime?
-  deadlineDays Int?
-
-  ownerName String?
-
-  organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
-  curator      User?         @relation("TodoCurator", fields: [curatorUuid], references: [uuid], onDelete: SetNull)
-  executor     User?         @relation("TodoExecutor", fields: [executorUuid], references: [uuid], onDelete: SetNull)
-
-  notifications Notification[]
+  createdAt        DateTime       @default(now())
+  deadline         DateTime?
+  deadlineDays     Int?
+  status           String         @default("new")
+  ownerName        String?
+  notifications    Notification[]
+  counterparty     Counterparty?  @relation(fields: [counterpartyUuid], references: [uuid])
+  curator          User?          @relation("TodoCurator", fields: [curatorUuid], references: [uuid])
+  executor         User?          @relation("TodoExecutor", fields: [executorUuid], references: [uuid])
+  organization     Organization?  @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -304,19 +252,16 @@ model Todo {
 }
 
 model Notification {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  userUuid String
-  user     User   @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
-
-  todoUuid String?
-  todo     Todo?   @relation(fields: [todoUuid], references: [uuid], onDelete: SetNull)
-
+  id        Int      @id @default(autoincrement())
+  uuid      String   @unique @default(uuid())
+  userUuid  String
+  todoUuid  String?
   title     String
   message   String?
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
+  todo      Todo?    @relation(fields: [todoUuid], references: [uuid])
+  user      User     @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
 
   @@index([userUuid])
   @@index([todoUuid])
@@ -324,53 +269,38 @@ model Notification {
   @@map("notifications")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Склады
-// ═══════════════════════════════════════════════════════════════════════════
-
 model Warehouse {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  shortName   String
-  address     String?
-  description String? @db.Text
-
-  organizationUuid String?
-  organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-
+  id                     Int                 @id @default(autoincrement())
+  uuid                   String              @unique @default(uuid())
+  shortName              String
+  address                String?
+  description            String?
+  organizationUuid       String?
   inventoryTransfersFrom InventoryTransfer[] @relation("TransferFrom")
   inventoryTransfersTo   InventoryTransfer[] @relation("TransferTo")
+  organization           Organization?       @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@map("warehouses")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Реализация товара и услуг
-// ═══════════════════════════════════════════════════════════════════════════
-
 model Sale {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  documentNumber String?
-  documentDate   DateTime @default(now())
-  description    String?  @db.Text
-  amount         Decimal? @db.Decimal(18, 2)
-  status         String   @default("draft") // draft, approved, cancelled
-  posted         Boolean  @default(false)
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  documentNumber   String?
+  documentDate     DateTime      @default(now())
+  description      String?
+  amount           Decimal?      @db.Decimal(18, 2)
+  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
-
-  ownerName String?
-
-  organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
-  contract     Contract?     @relation(fields: [contractUuid], references: [uuid], onDelete: SetNull)
-  saleItems    SaleItem[]
+  ownerName        String?
+  posted           Boolean       @default(false)
+  saleItems        SaleItem[]
+  contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
+  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -379,28 +309,20 @@ model Sale {
   @@map("sales")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Поступление товара и услуг
-// ═══════════════════════════════════════════════════════════════════════════
-
 model Purchase {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  documentNumber String?
-  documentDate   DateTime @default(now())
-  description    String?  @db.Text
-  amount         Decimal? @db.Decimal(18, 2)
-  status         String   @default("draft")
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  documentNumber   String?
+  documentDate     DateTime      @default(now())
+  description      String?
+  amount           Decimal?      @db.Decimal(18, 2)
+  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
-
-  ownerName String?
-
-  organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+  ownerName        String?
+  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -408,27 +330,19 @@ model Purchase {
   @@map("purchases")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Электронная счет-фактура (исходящие)
-// ═══════════════════════════════════════════════════════════════════════════
-
 model OutgoingInvoice {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  documentNumber String?
-  documentDate   DateTime @default(now())
-  description    String?  @db.Text
-  amount         Decimal? @db.Decimal(18, 2)
-  status         String   @default("draft")
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  documentNumber   String?
+  documentDate     DateTime      @default(now())
+  description      String?
+  amount           Decimal?      @db.Decimal(18, 2)
+  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
-
-  ownerName String?
-
-  organization Organization? @relation("OrgOutgoingInvoices", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation("CpOutgoingInvoices", fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+  ownerName        String?
+  counterparty     Counterparty? @relation("CpOutgoingInvoices", fields: [counterpartyUuid], references: [uuid])
+  organization     Organization? @relation("OrgOutgoingInvoices", fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -436,27 +350,19 @@ model OutgoingInvoice {
   @@map("outgoing_invoices")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Электронная счет-фактура (входящие)
-// ═══════════════════════════════════════════════════════════════════════════
-
 model IncomingInvoice {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  documentNumber String?
-  documentDate   DateTime @default(now())
-  description    String?  @db.Text
-  amount         Decimal? @db.Decimal(18, 2)
-  status         String   @default("draft")
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  documentNumber   String?
+  documentDate     DateTime      @default(now())
+  description      String?
+  amount           Decimal?      @db.Decimal(18, 2)
+  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
-
-  ownerName String?
-
-  organization Organization? @relation("OrgIncomingInvoices", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation("CpIncomingInvoices", fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+  ownerName        String?
+  counterparty     Counterparty? @relation("CpIncomingInvoices", fields: [counterpartyUuid], references: [uuid])
+  organization     Organization? @relation("OrgIncomingInvoices", fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -464,27 +370,19 @@ model IncomingInvoice {
   @@map("incoming_invoices")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Счет на оплату
-// ═══════════════════════════════════════════════════════════════════════════
-
 model PaymentInvoice {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  documentNumber String?
-  documentDate   DateTime @default(now())
-  description    String?  @db.Text
-  amount         Decimal? @db.Decimal(18, 2)
-  status         String   @default("draft")
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  documentNumber   String?
+  documentDate     DateTime      @default(now())
+  description      String?
+  amount           Decimal?      @db.Decimal(18, 2)
+  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
-
-  ownerName String?
-
-  organization Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation(fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+  ownerName        String?
+  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -492,51 +390,37 @@ model PaymentInvoice {
   @@map("payment_invoices")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Регламентные задачи
-// ═══════════════════════════════════════════════════════════════════════════
-
 model ScheduledTask {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  shortName   String
-  description String?   @db.Text
-  cronExpr    String? // cron-выражение для расписания
-  status      String    @default("active") // active, paused, completed
-  lastRunAt   DateTime?
-  nextRunAt   DateTime?
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  shortName        String
+  description      String?
+  cronExpr         String?
+  status           String        @default("active")
+  lastRunAt        DateTime?
+  nextRunAt        DateTime?
   organizationUuid String?
-  organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([status])
   @@map("scheduled_tasks")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Перемещение ТМЗ
-// ═══════════════════════════════════════════════════════════════════════════
-
 model InventoryTransfer {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  documentNumber String?
-  documentDate   DateTime @default(now())
-  description    String?  @db.Text
-  status         String   @default("draft")
-
+  id                Int           @id @default(autoincrement())
+  uuid              String        @unique @default(uuid())
+  documentNumber    String?
+  documentDate      DateTime      @default(now())
+  description       String?
+  status            String        @default("draft")
   fromWarehouseUuid String?
   toWarehouseUuid   String?
   organizationUuid  String?
-
-  ownerName String?
-
-  fromWarehouse Warehouse?    @relation("TransferFrom", fields: [fromWarehouseUuid], references: [uuid], onDelete: SetNull)
-  toWarehouse   Warehouse?    @relation("TransferTo", fields: [toWarehouseUuid], references: [uuid], onDelete: SetNull)
-  organization  Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+  ownerName         String?
+  fromWarehouse     Warehouse?    @relation("TransferFrom", fields: [fromWarehouseUuid], references: [uuid])
+  organization      Organization? @relation(fields: [organizationUuid], references: [uuid])
+  toWarehouse       Warehouse?    @relation("TransferTo", fields: [toWarehouseUuid], references: [uuid])
 
   @@index([fromWarehouseUuid])
   @@index([toWarehouseUuid])
@@ -545,27 +429,19 @@ model InventoryTransfer {
   @@map("inventory_transfers")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Приходный кассовый ордер (ПКО)
-// ═══════════════════════════════════════════════════════════════════════════
-
 model CashReceiptOrder {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  documentNumber String?
-  documentDate   DateTime @default(now())
-  description    String?  @db.Text
-  amount         Decimal? @db.Decimal(18, 2)
-  status         String   @default("draft")
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  documentNumber   String?
+  documentDate     DateTime      @default(now())
+  description      String?
+  amount           Decimal?      @db.Decimal(18, 2)
+  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
-
-  ownerName String?
-
-  organization Organization? @relation("OrgCashReceipts", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation("CpCashReceipts", fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+  ownerName        String?
+  counterparty     Counterparty? @relation("CpCashReceipts", fields: [counterpartyUuid], references: [uuid])
+  organization     Organization? @relation("OrgCashReceipts", fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -573,27 +449,19 @@ model CashReceiptOrder {
   @@map("cash_receipt_orders")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Расходный кассовый ордер (РКО)
-// ═══════════════════════════════════════════════════════════════════════════
-
 model CashExpenseOrder {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  documentNumber String?
-  documentDate   DateTime @default(now())
-  description    String?  @db.Text
-  amount         Decimal? @db.Decimal(18, 2)
-  status         String   @default("draft")
-
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  documentNumber   String?
+  documentDate     DateTime      @default(now())
+  description      String?
+  amount           Decimal?      @db.Decimal(18, 2)
+  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
-
-  ownerName String?
-
-  organization Organization? @relation("OrgCashExpenses", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-  counterparty Counterparty? @relation("CpCashExpenses", fields: [counterpartyUuid], references: [uuid], onDelete: SetNull)
+  ownerName        String?
+  counterparty     Counterparty? @relation("CpCashExpenses", fields: [counterpartyUuid], references: [uuid])
+  organization     Organization? @relation("OrgCashExpenses", fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -601,167 +469,111 @@ model CashExpenseOrder {
   @@map("cash_expense_orders")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Справочник Бренды
-// ═══════════════════════════════════════════════════════════════════════════
-
 model Brand {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
+  id        Int       @id @default(autoincrement())
+  uuid      String    @unique @default(uuid())
   shortName String
-
-  products Product[]
+  products  Product[]
 
   @@map("brands")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Справочник Номенклатура (Товары)
-// ═══════════════════════════════════════════════════════════════════════════
-
 model Product {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
+  id        Int        @id @default(autoincrement())
+  uuid      String     @unique @default(uuid())
   shortName String
-  sku       String? // артикул
-
+  sku       String?
   brandUuid String?
-  brand     Brand?  @relation(fields: [brandUuid], references: [uuid], onDelete: SetNull)
-
+  brand     Brand?     @relation(fields: [brandUuid], references: [uuid])
   saleItems SaleItem[]
 
   @@index([brandUuid])
   @@map("products")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Строки реализации товара (табличная часть Sale)
-// ═══════════════════════════════════════════════════════════════════════════
-
 model SaleItem {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  lineNumber Int     @default(0) // порядковый номер строки
-  quantity   Decimal @default(0) @db.Decimal(18, 4)
-  price      Decimal @default(0) @db.Decimal(18, 2)
-  amount     Decimal @default(0) @db.Decimal(18, 2) // кол-во × цена
-
+  id          Int      @id @default(autoincrement())
+  uuid        String   @unique @default(uuid())
+  lineNumber  Int      @default(0)
+  quantity    Decimal  @default(0) @db.Decimal(18, 4)
+  price       Decimal  @default(0) @db.Decimal(18, 2)
+  amount      Decimal  @default(0) @db.Decimal(18, 2)
   productUuid String?
-  product     Product? @relation(fields: [productUuid], references: [uuid], onDelete: SetNull)
-
-  saleUuid String
-  sale     Sale   @relation(fields: [saleUuid], references: [uuid], onDelete: Cascade)
+  saleUuid    String
+  product     Product? @relation(fields: [productUuid], references: [uuid])
+  sale        Sale     @relation(fields: [saleUuid], references: [uuid], onDelete: Cascade)
 
   @@index([saleUuid])
   @@index([productUuid])
   @@map("sale_items")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Справочник Сотрудники
-// ═══════════════════════════════════════════════════════════════════════════
-
 model Employee {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  firstName  String?
-  lastName   String?
-  middleName String?
-  fullName   String? @db.VarChar(255)
-  iin        String? @db.VarChar(12) // ИИН
-  phone      String?
-  email      String?
-  avatarPath String? // путь к фото-портрету
-
+  id               Int               @id @default(autoincrement())
+  uuid             String            @unique @default(uuid())
+  firstName        String?
+  lastName         String?
+  middleName       String?
+  fullName         String?           @db.VarChar(255)
+  iin              String?           @db.VarChar(12)
+  phone            String?
+  email            String?
+  avatarPath       String?
   organizationUuid String?
-  organization     Organization? @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
-
-  users           User[]
-  contacts        Contact[]
-  employeeHistory EmployeeHistory[]
+  contacts         Contact[]
+  employeeHistory  EmployeeHistory[]
+  organization     Organization?     @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid])
+  users            User[]
 
   @@index([organizationUuid])
   @@map("employees")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Справочник Должностей
-// ═══════════════════════════════════════════════════════════════════════════
-
 model Position {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  shortName   String
-  description String? @db.Text
-
+  id              Int               @id @default(autoincrement())
+  uuid            String            @unique @default(uuid())
+  shortName       String
+  description     String?
   employeeHistory EmployeeHistory[]
 
   @@map("positions")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// История сотрудника (приём/увольнение/перемещение)
-// ═══════════════════════════════════════════════════════════════════════════
-
 model EmployeeHistory {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  eventDate DateTime @default(now())
-  eventType String // hire, fire, transfer
-  salary    Decimal? @db.Decimal(18, 2)
-
+  id           Int       @id @default(autoincrement())
+  uuid         String    @unique @default(uuid())
+  eventDate    DateTime  @default(now())
+  eventType    String
+  salary       Decimal?  @db.Decimal(18, 2)
   employeeUuid String
-  employee     Employee @relation(fields: [employeeUuid], references: [uuid], onDelete: Cascade)
-
   positionUuid String?
-  position     Position? @relation(fields: [positionUuid], references: [uuid], onDelete: SetNull)
-
-  organizationUuid String?
-  organization     Organization? @relation("EmployeeHistoryOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+  employee     Employee  @relation(fields: [employeeUuid], references: [uuid], onDelete: Cascade)
+  position     Position? @relation(fields: [positionUuid], references: [uuid])
 
   @@index([employeeUuid])
   @@index([positionUuid])
-  @@index([organizationUuid])
   @@map("employee_history")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Права доступа пользователя к моделям
-// ═══════════════════════════════════════════════════════════════════════════
-
 model AccessRight {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  modelName   String // имя модели (Sales, Contracts, Organizations и т.д.)
-  accessLevel String @default("none") // full, readonly, none
-
-  userUuid String
-  user     User @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+  id          Int      @id @default(autoincrement())
+  uuid        String   @unique @default(uuid())
+  modelName   String
+  accessLevel String   @default("none")
+  userUuid    String
+  user        User     @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
 
   @@unique([userUuid, modelName])
   @@index([userUuid])
   @@map("access_rights")
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Справочник валют
-// ═══════════════════════════════════════════════════════════════════════════
-
 model Currency {
-  id   Int    @id @default(autoincrement())
-  uuid String @unique @default(uuid())
-
-  code      String  @unique // ISO 4217: KZT, USD, EUR...
-  shortName String // Казахстанский тенге, Доллар США...
-  symbol    String? // ₸, $, €, ₽...
-
+  id           Int           @id @default(autoincrement())
+  uuid         String        @unique @default(uuid())
+  code         String        @unique
+  shortName    String
+  symbol       String?
   bankAccounts BankAccount[]
 
   @@map("currencies")

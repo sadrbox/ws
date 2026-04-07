@@ -24,6 +24,8 @@ import { ContractsList } from "../Contracts";
 import { ContactsList } from "../Contacts";
 import { ActivityHistoriesList } from "../ActivityHistories";
 
+import { useFormSessionStore } from "src/hooks/useFormSessionStore";
+
 const MODEL_ENDPOINT = "organizations";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -45,7 +47,9 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
 
-  const [formData, setFormData] = useState<TFormData>({ ...EMPTY_FORM });
+  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
+    "organizations-form", uuid ?? "new", EMPTY_FORM,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
@@ -102,7 +106,10 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
     }
   }, []);
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
+  useEffect(() => {
+    // Если данные восстановлены из sessionStorage — не грузим с сервера
+    if (uuid && !hadStoredData) loadFormData(uuid);
+  }, [uuid, loadFormData, hadStoredData]);
 
   const submit = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
@@ -140,8 +147,8 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
   }, [formData, isEditMode, uuid, onSave]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
+  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
 
   return (
     <div className={styles.FormWrapper}>
@@ -197,7 +204,7 @@ const OrganizationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDa
   const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
   const params = useMemo(() => ({ sort, search, filter }), [sort, search, filter]);
 
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } =
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
   const handleDelete = useModelDelete(model, refetch);
@@ -232,11 +239,10 @@ const OrganizationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDa
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
 
-  const handleCleanRefresh = useCallback(() => {
-    cachedRowsRef.current = []; setCacheVersion(0);
+  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0);
     setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500);
     queryClient.resetQueries({ queryKey: [model] });
-  }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   const tableProps = useMemo(() => ({
     variant, onSelectItem,

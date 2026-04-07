@@ -277,7 +277,7 @@ tbody {
 				display: flex;
 				align-items: center;
 				height: $heightFieldInput - 1px;
-				padding: 0 1px;
+				padding: 0;
 				white-space: nowrap;
 				text-overflow: ellipsis;
 				overflow: hidden;
@@ -293,8 +293,8 @@ tbody {
 					border: 0px transparent;
 				}
 				span {
-					padding: 0 5px;
-					line-height: 17px;
+					padding: 0 6px;
+					// line-height: 17px;
 					overflow: hidden;
 					white-space: nowrap;
 					text-overflow: ellipsis;
@@ -500,7 +500,7 @@ input[type="checkbox"] {
 				display: grid;
 				grid-template-columns: 22px 1fr;
 				align-items: center;
-				font-size: 12px;
+				font-size: $fontsize - 1px;
 
 				&:hover {
 					color: $colorTheme;
@@ -512,7 +512,7 @@ input[type="checkbox"] {
 
 /* Headers & wrappers */
 .HeaderName {
-	font-size: 110%;
+	font-size: $fontsize + 1px;
 	user-select: none;
 	background: #fff;
 	border: 1px solid $color10;
@@ -560,6 +560,7 @@ input[type="checkbox"] {
 		background: transparent !important;
 		height: 100%;
 		border-radius: 0 !important;
+		
 		&:focus-within {
 			border: none !important;
 			box-shadow: none !important;
@@ -647,7 +648,7 @@ input[type="checkbox"] {
 	border: 1px solid $color10;
 	border-radius: $radius2;
 	padding: 0 6px;
-	font-size: 120%;
+	font-size: $fontsize + 2px;
 
 	input[type="number"] {
 		width: 30px;
@@ -671,7 +672,7 @@ input[type="checkbox"] {
 	justify-content: center;
 	gap: 6px;
 	padding: 6px 0;
-	font-size: 12px;
+	font-size: $fontsize - 1px;
 	color: $color10;
 
 	.spinnerIcon {
@@ -722,7 +723,7 @@ input[type="checkbox"] {
 	gap: 10px;
 	background: rgba(255, 255, 255, 0.95);
 	border-top: 1px solid #e0e0e0;
-	font-size: 14px;
+	font-size: $fontsize + 1px;
 	color: #666;
 }
 
@@ -754,7 +755,7 @@ input[type="checkbox"] {
 	padding: 6px 10px;
 	border: 1px solid #ddd;
 	border-radius: $radius2;
-	font-size: 13px;
+	// font-size: 13px;
 	background: #fff;
 	transition: border-color 0.2s ease;
 
@@ -806,7 +807,7 @@ input[type="checkbox"] {
 
 	&::placeholder {
 		color: #aaa;
-		font-size: 12px;
+		font-size: $fontsize - 1px;
 	}
 }
 
@@ -860,7 +861,7 @@ input[type="checkbox"] {
 	cursor: pointer;
 	text-decoration: none;
 	white-space: nowrap;
-	font-size: 110%;
+	font-size: $fontsize + 1px;
 	&:hover {
 		text-decoration: underline;
 	}

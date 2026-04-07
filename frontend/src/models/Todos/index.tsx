@@ -23,6 +23,8 @@ import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
+import { useFormSessionStore } from "src/hooks/useFormSessionStore";
+
 const MODEL_ENDPOINT = "todos";
 const LIST_NAME = "TodosList";
 const FORM_LABEL = "Задача";
@@ -70,20 +72,16 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const formUid = useUID();
   const defaultOrg = useDefaultOrganization();
 
-  const buildInitialForm = useCallback((): TFormData => {
+  const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
-    if (data.organizationUuid) {
-      init.organizationUuid = data.organizationUuid as string;
-      init.organizationName = (data.ownerName as string) || "";
-    } else if (defaultOrg.organizationUuid) {
-      init.organizationUuid = defaultOrg.organizationUuid;
-      init.organizationName = defaultOrg.organizationName;
-    }
+    if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; init.organizationName = (data.ownerName as string) || ""; }
+    else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
     return init;
-  }, [data, defaultOrg]);
-
-  const [formData, setFormData] = useState<TFormData>(buildInitialForm);
+  })();
+  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
+    "todos-form", uuid ?? "new", initialForm,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(!!uuid);
@@ -115,7 +113,10 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
     }
   }, []);
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
+  useEffect(() => {
+    // Если данные восстановлены из sessionStorage — не грузим с сервера
+    if (uuid && !hadStoredData) loadFormData(uuid);
+  }, [uuid, loadFormData, hadStoredData]);
 
   const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -186,8 +187,8 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
+  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
 
   // ── Табы ────────────────────────────────────────────────────────────────
   const generalTab = useMemo(() => (
@@ -360,7 +361,7 @@ const TodosList: FC<TodosListProps> = ({ variant = 'default', onSelectItem, owne
     filter: ownerFilter ? { ...ownerFilter, ...filter } : filter,
   }), [sort, search, filter, ownerFilter]);
 
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } =
+  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
 
 
@@ -401,11 +402,10 @@ const TodosList: FC<TodosListProps> = ({ variant = 'default', onSelectItem, owne
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
 
-  const handleCleanRefresh = useCallback(() => {
-    cachedRowsRef.current = []; setCacheVersion(0);
+  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0);
     setSearch(""); setFilter(undefined); setSort({ id: "desc" }); updateAdaptiveLimit(500);
     queryClient.resetQueries({ queryKey: [model] });
-  }, [queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
+  }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
 
   const tableProps = useMemo(() => ({
     variant, onSelectItem,

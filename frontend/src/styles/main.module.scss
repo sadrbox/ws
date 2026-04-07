@@ -14,7 +14,7 @@
 html,
 body {
 	// user-select: none;
-	font-size: 13px;
+	font-size: $fontsize;
 	margin: 0;
 	padding: 0;
 	// width: fit-content;
@@ -403,6 +403,15 @@ body {
 			// cursor: default;
 			// color: $color3;
 		}
+	}
+	.PaneTabSelector {
+		border-left: 2px solid $color3;
+		font-style: italic;
+	}
+	.PaneTabDisabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+		pointer-events: none;
 	}
 }
 
