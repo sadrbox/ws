@@ -1,5 +1,5 @@
 import { TColumn } from "src/components/Table/types";
-import translations from "./translations.json" assert { type: "json" };
+import translations from "./translations.json" with { type: "json" };
 
 export function getTranslation(word: string | undefined | null): string {
 	const normalizedWord = word?.toLowerCase()?.replace(/\s/g, "") || "";
