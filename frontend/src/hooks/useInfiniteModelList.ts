@@ -36,6 +36,7 @@ type InfiniteQueryKey = readonly [
 		sort?: Record<string, "asc" | "desc"> | null;
 		search?: string;
 		filter?: Record<string, { value: unknown; operator: string }> | undefined;
+		extra?: Record<string, any>;
 	},
 ];
 
@@ -87,8 +88,9 @@ export function useInfiniteModelList<TData = unknown>({
 			sort: params.sort,
 			search: params.search,
 			filter: params.filter,
+			extra: params.extra,
 		}),
-		[JSON.stringify(params.sort), params.search, JSON.stringify(params.filter)],
+		[JSON.stringify(params.sort), params.search, JSON.stringify(params.filter), JSON.stringify(params.extra)],
 	);
 
 	const queryKey: InfiniteQueryKey = [model, "infinite", memoizedQueryParams];

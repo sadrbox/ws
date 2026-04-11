@@ -109,11 +109,21 @@ router.get("/contacts", async (req, res) => {
 			}
 		}
 
+		// ── Фильтрация по FK-полям (SubTable передаёт как query-параметры) ────
+		const fkFilter = {};
+		const FK_FIELDS = ["organizationUuid", "counterpartyUuid", "contactPersonUuid", "employeeUuid", "userUuid"];
+		for (const fk of FK_FIELDS) {
+			if (typeof req.query[fk] === "string" && req.query[fk].trim()) {
+				fkFilter[fk] = req.query[fk].trim();
+			}
+		}
+
 		// ── Итоговый where ────────────────────────────────────────────────────
 		const baseWhere = {
 			...searchWhereClause,
 			...dateRangeFilter,
 			...filterWhereClause,
+			...fkFilter,
 			...tenantFilter(req),
 		};
 
@@ -202,6 +212,27 @@ router.get("/contacts/:id", async (req, res) => {
 	}
 });
 
+// ── Авто-вычисление ownerName из FK-связей ─────────────────────────────
+async function resolveOwnerName({ organizationUuid, counterpartyUuid, contactPersonUuid, employeeUuid }) {
+	if (organizationUuid) {
+		const org = await prisma.organization.findUnique({ where: { uuid: organizationUuid }, select: { shortName: true } });
+		if (org) return org.shortName || null;
+	}
+	if (counterpartyUuid) {
+		const cp = await prisma.counterparty.findUnique({ where: { uuid: counterpartyUuid }, select: { shortName: true } });
+		if (cp) return cp.shortName || null;
+	}
+	if (contactPersonUuid) {
+		const cp = await prisma.contactPerson.findUnique({ where: { uuid: contactPersonUuid }, select: { fullName: true } });
+		if (cp) return cp.fullName || null;
+	}
+	if (employeeUuid) {
+		const emp = await prisma.employee.findUnique({ where: { uuid: employeeUuid }, select: { fullName: true } });
+		if (emp) return emp.fullName || null;
+	}
+	return null;
+}
+
 // ============================================
 // POST /contacts
 // ============================================
@@ -217,17 +248,14 @@ router.post("/contacts", async (req, res) => {
 			employeeUuid,
 		} = req.body;
 
-		if (!value || typeof value !== "string" || !value.trim()) {
-			return res
-				.status(400)
-				.json({ success: false, message: "Значение контакта обязательно" });
-		}
+		// Авто-вычисление ownerName если не передано явно
+		const computedOwnerName = ownerName?.trim() || await resolveOwnerName({ organizationUuid, counterpartyUuid, contactPersonUuid, employeeUuid });
 
 		const item = await prisma.contact.create({
 			data: {
-				value: value.trim(),
+				value: typeof value === "string" ? value.trim() : "",
 				contactTypeUuid: contactTypeUuid || null,
-				ownerName: ownerName?.trim() ?? null,
+				ownerName: computedOwnerName ?? null,
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contactPersonUuid: contactPersonUuid || null,
@@ -271,7 +299,6 @@ router.put("/contacts/:id", async (req, res) => {
 		if (value !== undefined) data.value = value?.trim() ?? null;
 		if (contactTypeUuid !== undefined)
 			data.contactTypeUuid = contactTypeUuid || null;
-		if (ownerName !== undefined) data.ownerName = ownerName?.trim() ?? null;
 		if (organizationUuid !== undefined)
 			data.organizationUuid = organizationUuid || null;
 		if (counterpartyUuid !== undefined)
@@ -279,6 +306,21 @@ router.put("/contacts/:id", async (req, res) => {
 		if (contactPersonUuid !== undefined)
 			data.contactPersonUuid = contactPersonUuid || null;
 		if (employeeUuid !== undefined) data.employeeUuid = employeeUuid || null;
+
+		// Авто-вычисление ownerName при изменении FK-полей
+		if (ownerName !== undefined) {
+			data.ownerName = ownerName?.trim() ?? null;
+		} else if (organizationUuid !== undefined || counterpartyUuid !== undefined || contactPersonUuid !== undefined || employeeUuid !== undefined) {
+			// FK изменился — пересчитываем ownerName из актуальных FK
+			const existing = await prisma.contact.findUnique({ where: isNumeric ? { id: numId } : { uuid: param } });
+			const fks = {
+				organizationUuid: organizationUuid !== undefined ? (organizationUuid || null) : existing?.organizationUuid,
+				counterpartyUuid: counterpartyUuid !== undefined ? (counterpartyUuid || null) : existing?.counterpartyUuid,
+				contactPersonUuid: contactPersonUuid !== undefined ? (contactPersonUuid || null) : existing?.contactPersonUuid,
+				employeeUuid: employeeUuid !== undefined ? (employeeUuid || null) : existing?.employeeUuid,
+			};
+			data.ownerName = await resolveOwnerName(fks);
+		}
 
 		const item = await prisma.contact.update({
 			where: isNumeric ? { id: numId } : { uuid: param },

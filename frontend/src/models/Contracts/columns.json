@@ -102,5 +102,18 @@
 		"position": 7,
 		"filter": true,
 		"inlist": true
+	},
+	{
+		"identifier": "counterparty.shortName",
+		"type": "string",
+		"name": "Counterparty",
+		"width": "250px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Контрагент",
+		"visible": true,
+		"position": 8,
+		"filter": false,
+		"inlist": true
 	}
 ]

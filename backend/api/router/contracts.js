@@ -107,10 +107,20 @@ router.get("/contracts", async (req, res) => {
 			}
 		}
 
+		// ── Фильтрация по FK-полям (SubTable передаёт как query-параметры) ────
+		const fkFilter = {};
+		const FK_FIELDS = ["organizationUuid", "counterpartyUuid"];
+		for (const fk of FK_FIELDS) {
+			if (typeof req.query[fk] === "string" && req.query[fk].trim()) {
+				fkFilter[fk] = req.query[fk].trim();
+			}
+		}
+
 		const baseWhere = {
 			...searchWhereClause,
 			...dateRangeFilter,
 			...filterWhereClause,
+			...fkFilter,
 			...tenantFilter(req),
 		};
 		const queryOptions = {
@@ -182,6 +192,18 @@ router.post("/contracts", async (req, res) => {
 				.status(400)
 				.json({ success: false, message: "shortName required" });
 
+		// Авто-вычисление ownerName из FK-владельца
+		let computedOwnerName = ownerName?.trim() || null;
+		if (!computedOwnerName) {
+			if (organizationUuid) {
+				const org = await prisma.organization.findUnique({ where: { uuid: organizationUuid }, select: { shortName: true } });
+				if (org) computedOwnerName = org.shortName;
+			} else if (counterpartyUuid) {
+				const cp = await prisma.counterparty.findUnique({ where: { uuid: counterpartyUuid }, select: { shortName: true } });
+				if (cp) computedOwnerName = cp.shortName;
+			}
+		}
+
 		const item = await prisma.contract.create({
 			data: {
 				shortName: shortName.trim(),
@@ -189,7 +211,7 @@ router.post("/contracts", async (req, res) => {
 				contractText: contractText ?? null,
 				startDate: startDate ? new Date(startDate) : null,
 				endDate: endDate ? new Date(endDate) : null,
-				ownerName: ownerName?.trim() ?? null,
+				ownerName: computedOwnerName,
 				organizationUuid: organizationUuid ?? null,
 				counterpartyUuid: counterpartyUuid ?? null,
 			},
@@ -228,11 +250,28 @@ router.put("/contracts/:id", async (req, res) => {
 			data.startDate = startDate ? new Date(startDate) : null;
 		if (endDate !== undefined)
 			data.endDate = endDate ? new Date(endDate) : null;
-		if (ownerName !== undefined) data.ownerName = ownerName?.trim() ?? null;
 		if (organizationUuid !== undefined)
 			data.organizationUuid = organizationUuid ?? null;
 		if (counterpartyUuid !== undefined)
 			data.counterpartyUuid = counterpartyUuid ?? null;
+
+		// Авто-вычисление ownerName при изменении FK-владельца
+		if (ownerName !== undefined) {
+			data.ownerName = ownerName?.trim() ?? null;
+		} else if (organizationUuid !== undefined || counterpartyUuid !== undefined) {
+			const existing = await prisma.contract.findUnique({ where: whereClause, select: { organizationUuid: true, counterpartyUuid: true } });
+			const finalOrgUuid = organizationUuid !== undefined ? organizationUuid : existing?.organizationUuid;
+			const finalCpUuid = counterpartyUuid !== undefined ? counterpartyUuid : existing?.counterpartyUuid;
+			if (finalOrgUuid) {
+				const org = await prisma.organization.findUnique({ where: { uuid: finalOrgUuid }, select: { shortName: true } });
+				if (org) data.ownerName = org.shortName;
+			} else if (finalCpUuid) {
+				const cp = await prisma.counterparty.findUnique({ where: { uuid: finalCpUuid }, select: { shortName: true } });
+				if (cp) data.ownerName = cp.shortName;
+			} else {
+				data.ownerName = null;
+			}
+		}
 
 		const item = await prisma.contract.update({
 			where: whereClause,

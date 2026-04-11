@@ -1,19 +1,12 @@
-import { FC, useMemo, useCallback, useState, useEffect, useRef } from "react";
+import { FC, useCallback, useMemo } from "react";
 import { useAppContext } from "src/app";
-import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
-import Table, { TOpenModelFormProps } from "src/components/Table";
-import type { TTableVariant } from "src/components/Table";
-import columnsJson from "./saleItemsColumns.json";
-import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
-import { useModelDelete } from "src/hooks/useModelDelete";
-import { Divider, FieldNumber } from "src/components/Field";
-import { ButtonImage } from "src/components/Button";
-import apiClient from "src/services/api/client";
-import editInlineIcon from "src/assets/edit-inline_16.svg";
+import { FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import SaleItemsForm from "./SaleItemsForm";
 import { translate } from "src/i18";
+import columnsJson from "./saleItemsColumns.json";
+import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
 
 const MODEL_ENDPOINT = "saleitems";
 const COMPONENT_NAME = "SaleItemsList_part";
@@ -22,119 +15,49 @@ interface SaleItemsTableProps {
   saleUuid: string;
   disabled?: boolean;
   onTotalChange?: (total: number) => void;
+  /** Если true — не отправлять изменения на сервер, хранить локально (для отложенного сохранения) */
+  deferRemoteChanges?: boolean;
+  /** Колбэк при изменении строк (для формы-родителя) */
+  onItemsChange?: (items: TDataItem[]) => void;
+  /** Начальные pending-строки (для восстановления из sessionStorage) */
+  initialPendingRows?: TDataItem[];
 }
 
-const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, onTotalChange }) => {
+const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, onTotalChange, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
   const { addPane } = useAppContext().windows;
   const t = translate;
 
-  const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(columnsJson, COMPONENT_NAME, "part"));
-  const [sort, setSort] = useState<Record<string, "asc" | "desc">>({ lineNumber: "asc" });
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Record<string, { value: unknown; operator: string }> | undefined>(undefined);
-  const [inlineEditing, setInlineEditing] = useState(true);
-
-  const [adaptiveLimit, setAdaptiveLimit] = useState(500);
-  useEffect(() => { GLOBAL_ADAPTIVE_LIMIT_REF.current = adaptiveLimit; }, [adaptiveLimit]);
-  const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
-
-  const params = useMemo(() => ({
-    sort, search, filter,
-    extra: saleUuid ? { saleUuid } : undefined,
-  }), [sort, search, filter, saleUuid]);
-
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage } =
-    useInfiniteModelList<TDataItem>({ model: MODEL_ENDPOINT, params, queryOptions: {} });
-
-  const handleDelete = useModelDelete(MODEL_ENDPOINT, refetch);
-
-  // ── Пересчёт общей суммы ──────────────────────────────────────────────
-  useEffect(() => {
-    if (!onTotalChange) return;
-    const sum = allItems.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-    onTotalChange(Math.round(sum * 100) / 100);
-  }, [allItems, onTotalChange]);
-
-  // ── Кеширование строк ─────────────────────────────────────────────────
-  const cachedRowsRef = useRef<TDataItem[]>([]);
-  const [cacheVersion, setCacheVersion] = useState(0);
-  useEffect(() => { cachedRowsRef.current = allItems; setCacheVersion(v => v + 1); }, [allItems]);
-  const rows = useMemo(() => cachedRowsRef.current, [cacheVersion]);
-
-  const handleSortChange = useCallback((s: typeof sort) => {
-    cachedRowsRef.current = []; setCacheVersion(0); updateAdaptiveLimit(500); setSort(s ?? { lineNumber: "asc" });
-  }, [updateAdaptiveLimit]);
-
-  const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => {
-    setFilter((prev) => {
-      const next = { ...(prev ?? {}) };
-      if (value == null || value === "") delete next[field];
-      else next[field] = { value, operator };
-      return Object.keys(next).length > 0 ? next : undefined;
-    });
-  }, []);
-
-  const handleSearch = useCallback((v: string) => setSearch(v.trim()), []);
-  const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, []);
-
-  const handleCleanRefresh = useCallback(() => {
-    cachedRowsRef.current = []; setCacheVersion(0);
-    setSearch(""); setFilter(undefined); setSort({ lineNumber: "asc" }); updateAdaptiveLimit(500);
-    refetch();
-  }, [refetch, updateAdaptiveLimit]);
-
-  // ── Inline-редактирование ──────────────────────────────────────────────
-
-  const handleInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
-    if (!row.uuid) return;
-    try {
-      await apiClient.put(`/${MODEL_ENDPOINT}/${row.uuid}`, { [field]: value });
-      refetch();
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Ошибка сохранения");
+  // ── Пересчёт общей суммы при изменении строк ──────────────────────────
+  const handleItemsChange = useCallback((items: TDataItem[]) => {
+    if (onTotalChange) {
+      const sum = items.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      onTotalChange(Math.round(sum * 100) / 100);
     }
-  }, [refetch]);
+    onItemsChange?.(items);
+  }, [onTotalChange, onItemsChange]);
 
-  const handleProductSelect = useCallback(async (row: TDataItem, uuid: string) => {
-    if (!row.uuid) return;
-    try {
-      await apiClient.put(`/${MODEL_ENDPOINT}/${row.uuid}`, { productUuid: uuid });
-      refetch();
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Ошибка сохранения");
-    }
-  }, [refetch]);
+  // ── Правила валидации ячеек ────────────────────────────────────────────
+  const validationRules = useMemo<Record<string, TCellValidator>>(() => ({
+    quantity: (value) => {
+      const n = Number(value);
+      if (value === "" || value == null) return undefined;
+      if (isNaN(n)) return "Должно быть числом";
+      if (n < 0) return "Не может быть отрицательным";
+      return undefined;
+    },
+    price: (value) => {
+      const n = Number(value);
+      if (value === "" || value == null) return undefined;
+      if (isNaN(n)) return "Должно быть числом";
+      if (n < 0) return "Не может быть отрицательным";
+      return undefined;
+    },
+  }), []);
 
-  const handleProductClear = useCallback(async (row: TDataItem) => {
-    if (!row.uuid) return;
-    try {
-      await apiClient.put(`/${MODEL_ENDPOINT}/${row.uuid}`, { productUuid: null });
-      refetch();
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Ошибка сохранения");
-    }
-  }, [refetch]);
-
-  const handleInlineAdd = useCallback(async () => {
-    if (!saleUuid) return;
-    try {
-      await apiClient.post(`/${MODEL_ENDPOINT}`, {
-        saleUuid,
-        productUuid: null,
-        quantity: 0,
-        price: 0,
-      });
-      refetch();
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Ошибка создания строки");
-    }
-  }, [saleUuid, refetch]);
-
-  // ── renderCell: оба режима ─────────────────────────────────────────────
-
-  const renderCell = useCallback((row: TDataItem, col: TColumn): React.ReactNode | undefined => {
+  // ── renderCell ─────────────────────────────────────────────────────────
+  const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     if (col.identifier === "product.shortName") {
-      if (inlineEditing) {
+      if (ctx.inlineEditing) {
         return (
           <LookupField
             label=""
@@ -148,24 +71,30 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
               { key: "sku", label: "Артикул" },
               { key: "brand.shortName", label: "Бренд" },
             ]}
-            onSelect={(uuid) => handleProductSelect(row, uuid)}
-            onClear={() => handleProductClear(row)}
-            disabled={disabled}
+            onSelect={(uuid, _displayValue, item) => {
+              ctx.handleLookupChange(row, "productUuid", uuid, {
+                product: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
+              });
+            }}
+            onClear={() => {
+              ctx.handleLookupChange(row, "productUuid", null, { product: null });
+            }}
+            disabled={ctx.disabled}
             width="100%"
             variant="table"
           />
         );
       }
-      return undefined;
+      return <span>{(row.product as any)?.shortName ?? ""}</span>;
     }
     if (col.identifier === "quantity") {
-      if (inlineEditing) {
+      if (ctx.inlineEditing) {
         return (
           <FieldNumber
             name={`saleitem_qty_${row.id}`}
             value={row.quantity != null ? String(Number(row.quantity)) : ""}
-            onChange={e => handleInlineChange(row, "quantity", e.target.value)}
-            disabled={disabled}
+            onChange={e => ctx.handleInlineChange(row, "quantity", e.target.value)}
+            disabled={ctx.disabled}
             step="0.0001"
             textAlign="right"
             width="100%"
@@ -174,16 +103,16 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
           />
         );
       }
-      return undefined;
+      return <span style={{ textAlign: "right", display: "block" }}>{row.quantity != null ? String(Number(row.quantity)) : ""}</span>;
     }
     if (col.identifier === "price") {
-      if (inlineEditing) {
+      if (ctx.inlineEditing) {
         return (
           <FieldNumber
             name={`saleitem_price_${row.id}`}
             value={row.price != null ? String(Number(row.price)) : ""}
-            onChange={e => handleInlineChange(row, "price", e.target.value)}
-            disabled={disabled}
+            onChange={e => ctx.handleInlineChange(row, "price", e.target.value)}
+            disabled={ctx.disabled}
             step="0.01"
             textAlign="right"
             width="100%"
@@ -192,84 +121,51 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
           />
         );
       }
-      return undefined;
+      return <span style={{ textAlign: "right", display: "block" }}>{row.price != null ? String(Number(row.price)) : ""}</span>;
     }
     return undefined;
-  }, [handleInlineChange, handleProductSelect, handleProductClear, disabled, inlineEditing]);
+  }, []);
 
-  const toggleInlineEditing = useCallback(() => setInlineEditing(prev => !prev), []);
-
-  // ── openModelForm ─────────────────────────────────────────────────────
-  const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
-    const d = formProps.data;
-    const isEdit = !!d?.uuid;
+  // ── openFormFor ────────────────────────────────────────────────────────
+  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
+    const isEdit = !!data?.uuid;
     addPane({
       label: isEdit
-        ? `${t("SaleItemsList")}: ${(d as any)?.product?.shortName || t("noName")} • ${d?.id ?? "?"}`
+        ? `${t("SaleItemsList")}: ${(data as any)?.product?.shortName || t("noName")} • ${data?.id ?? "?"}`
         : `${t("SaleItemsList")}: ${t("new")}`,
       component: SaleItemsForm,
-      data: { ...(d ?? {}), saleUuid } as any,
-      onSave: () => refetch(),
-      onClose: () => refetch(),
+      data: { ...(data ?? {}), saleUuid } as any,
+      onSave: () => ctx.refetch(),
+      onClose: () => ctx.refetch(),
     });
-  }, [addPane, t, refetch, saleUuid]);
+  }, [addPane, t, saleUuid]);
 
-  const extraButtons = useMemo(() => (
-    <>
-      <Divider />
-      <ButtonImage onClick={toggleInlineEditing} active={inlineEditing} title={inlineEditing ? "Редактирование через форму" : "Редактирование в таблице"}>
-        <img src={editInlineIcon} alt="Inline edit" height={16} width={16} />
-      </ButtonImage>
-    </>
-  ), [toggleInlineEditing, inlineEditing]);
+  // ── defaultNewRow ───────────────────────────────────────────────────────
+  const defaultNewRow = useMemo(() => ({
+    productUuid: null,
+    quantity: 0,
+    price: 0,
+  }), []);
 
-  const tableProps = useMemo(() => ({
-    variant: "embedded" as TTableVariant,
-    enableDateRange: false,
-    componentName: COMPONENT_NAME,
-    rows,
-    columns,
-    total,
-    totalPages: Math.ceil(total / adaptiveLimit),
-    isLoading: isAnythingLoading,
-    isFetching: isAnythingLoading,
-    error,
-    hasNextPage,
-    isFetchingNextPage,
-    pagination: { page: 1, limit: adaptiveLimit, onPageChange: () => { }, onLimitChange: () => { } },
-    sorting: { sort, onSortChange: handleSortChange },
-    filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
-    search: { value: search, onChange: handleSearch },
-    actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
-    onDelete: handleDelete,
-    extraButtons,
-    inlineEditing,
-    renderCell,
-    onInlineAdd: inlineEditing ? handleInlineAdd : undefined,
-  }), [rows, columns, total, adaptiveLimit, isAnythingLoading, error,
-    sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
-    openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh, handleDelete,
-    extraButtons, inlineEditing, renderCell, handleInlineAdd]);
-
-  if (!saleUuid) {
-    return (
-      <div style={{ padding: "24px", color: "#999", textAlign: "center" }}>
-        Сохраните документ для добавления товаров.
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="error-container"><div className="error-message">
-        <h3>Ошибка загрузки</h3>
-        <p>{(error as Error)?.message || "Неизвестная ошибка"}</p>
-        <button onClick={() => refetch()} className="retry-button">Повторить</button>
-      </div></div>
-    );
-  }
-
-  return <Table {...tableProps} />;
+  return (
+    <SubTable
+      model={MODEL_ENDPOINT}
+      componentName={COMPONENT_NAME}
+      columnsJson={columnsJson}
+      parentKey="saleUuid"
+      parentUuid={saleUuid}
+      defaultSort={{ lineNumber: "asc" }}
+      disabled={disabled}
+      deferRemoteChanges={deferRemoteChanges}
+      initialPendingRows={initialPendingRows}
+      emptyMessage="Сохраните документ для добавления товаров."
+      renderCell={renderCell}
+      openFormFor={openFormFor}
+      defaultNewRow={defaultNewRow}
+      onItemsChange={handleItemsChange}
+      validationRules={validationRules}
+    />
+  );
 };
 
 SaleItemsTable.displayName = "SaleItemsTable";

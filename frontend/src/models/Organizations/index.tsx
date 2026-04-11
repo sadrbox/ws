@@ -1,30 +1,29 @@
 import { FC, useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useAppContext } from "src/app";
-import { getModelColumns } from "src/components/Table/services";
 import { translate } from "src/i18";
-import type { TColumn, TDataItem } from "src/components/Table/types";
+import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
-import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
-import { useModelDelete } from "src/hooks/useModelDelete";
 import { Divider, Field } from "src/components/Field";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
-import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
-import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
-import { BankAccountsList } from "../BankAccounts";
-import { ContractsList } from "../Contracts";
-import { ContactsList } from "../Contacts";
+import BankAccountsTable from "../BankAccounts/BankAccountsTable";
+import ContractsTable from "../Contracts/ContractsTable";
+import ContactsTable from "../Contacts/ContactsTable";
 import { ActivityHistoriesList } from "../ActivityHistories";
-
+import FormError from "src/components/FormError";
+import { useFormError } from "src/hooks/useFormError";
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
+import { commitPendingRows } from "src/services/commitPendingRows";
+import FormPanel from "src/components/FormPanel";
+import { useModelListState } from "src/hooks/useModelListState";
+import { useAccessRight } from "src/hooks/useAccessRight";
 
 const MODEL_ENDPOINT = "organizations";
 
@@ -38,6 +37,12 @@ interface TFormData {
   bin: string;
   shortName: string;
   displayName: string;
+  /** Pending-строки SubTable контактов (сохраняются в sessionStorage вместе с формой) */
+  _pendingContacts?: TDataItem[];
+  /** Pending-строки SubTable банковских счетов */
+  _pendingBankAccounts?: TDataItem[];
+  /** Pending-строки SubTable договоров */
+  _pendingContracts?: TDataItem[];
 }
 
 const EMPTY_FORM: TFormData = { bin: "", shortName: "", displayName: "" };
@@ -45,14 +50,19 @@ const EMPTY_FORM: TFormData = { bin: "", shortName: "", displayName: "" };
 const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
+  const { canWrite } = useAccessRight("Organization");
   const formUid = useUID();
 
   const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
     "organizations-form", uuid ?? "new", EMPTY_FORM,
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError, errorRevision] = useFormError();
   const [isEditMode, setIsEditMode] = useState(!!uuid);
+  const contactsPendingRef = useRef<TDataItem[]>([]);
+  const bankAccountsPendingRef = useRef<TDataItem[]>([]);
+  const contractsPendingRef = useRef<TDataItem[]>([]);
+  const queryClient = useQueryClient();
 
   const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -83,9 +93,54 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
         </div>
       ),
     },
-    { id: 'tab1', label: 'Банковские счета', component: <BankAccountsList ownerUuid={formData.uuid} ownerField="organizationUuid" ownerName={formData.shortName} /> },
-    { id: 'tab2', label: 'Договора', component: <ContractsList ownerUuid={formData.uuid} ownerField="organizationUuid" ownerName={formData.shortName} /> },
-    { id: 'tab3', label: 'Контакты', component: <ContactsList ownerUuid={formData.uuid} ownerField="organizationUuid" ownerName={formData.shortName} /> },
+    { id: 'tab1', label: 'Банковские счета', component: <BankAccountsTable
+      deferRemoteChanges={true}
+      parentField="organizationUuid"
+      parentUuid={formData.uuid ?? ""}
+      parentName={formData.shortName}
+      initialPendingRows={formData._pendingBankAccounts}
+      onItemsChange={(items) => {
+        bankAccountsPendingRef.current = items ?? [];
+        const pending = (items ?? []).filter((r: any) => r._pendingAction);
+        setFormData(prev => {
+          if (JSON.stringify(prev._pendingBankAccounts) === JSON.stringify(pending)) return prev;
+          return { ...prev, _pendingBankAccounts: pending.length ? pending : undefined };
+        });
+      }}
+    /> },
+    { id: 'tab2', label: 'Договора', component: <ContractsTable
+      deferRemoteChanges={true}
+      parentField="organizationUuid"
+      parentUuid={formData.uuid ?? ""}
+      parentName={formData.shortName}
+      initialPendingRows={formData._pendingContracts}
+      onItemsChange={(items) => {
+        contractsPendingRef.current = items ?? [];
+        const pending = (items ?? []).filter((r: any) => r._pendingAction);
+        setFormData(prev => {
+          if (JSON.stringify(prev._pendingContracts) === JSON.stringify(pending)) return prev;
+          return { ...prev, _pendingContracts: pending.length ? pending : undefined };
+        });
+      }}
+    /> },
+  { id: 'tab3', label: 'Контакты', component: <ContactsTable
+      deferRemoteChanges={true}
+      parentField="organizationUuid"
+      parentUuid={formData.uuid ?? ""}
+      parentName={formData.shortName}
+      initialPendingRows={formData._pendingContacts}
+      onItemsChange={(items) => {
+        contactsPendingRef.current = items ?? [];
+        // Сохраняем только строки с _pendingAction в sessionStorage вместе с формой
+        const pending = (items ?? []).filter((r: any) => r._pendingAction);
+        setFormData(prev => {
+          // Избегаем лишних перерисовок, если pending не изменился
+          const prevPending = prev._pendingContacts;
+          if (JSON.stringify(prevPending) === JSON.stringify(pending)) return prev;
+          return { ...prev, _pendingContacts: pending.length ? pending : undefined };
+        });
+      }}
+    /> },
     { id: 'tab4', label: 'История действий', component: <ActivityHistoriesList ownerUuid={formData.uuid} ownerField="organizationUuid" /> },
   ], [formData, formUid, isLoading, isEditMode, handleFieldChange]);
 
@@ -99,12 +154,28 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
         bin: d.bin ?? "", shortName: d.shortName ?? "", displayName: d.displayName ?? "",
         id: d.id, uuid: d.uuid,
       });
+      // Обновляем вложенные SubTable — invalidate их кэши
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["bankaccounts"] });
+      queryClient.invalidateQueries({ queryKey: ["contracts"] });
     } catch (err: any) {
       setError(err.response?.data?.message || "Не удалось загрузить данные");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [queryClient]);
+
+  /** Универсальный коммит pending-строк SubTable на сервер */
+  const commitPending = useCallback(async (
+    endpoint: string,
+    parentField: string,
+    savedParentUuid: string,
+    pendingRef: React.MutableRefObject<TDataItem[]>,
+    tableName: string,
+  ) => {
+    await commitPendingRows(endpoint, pendingRef.current || [], savedParentUuid, parentField, tableName);
+    try { await queryClient.refetchQueries({ queryKey: [endpoint] }); } catch {}
+  }, [queryClient]);
 
   useEffect(() => {
     // Если данные восстановлены из sessionStorage — не грузим с сервера
@@ -132,6 +203,22 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
         const label = `${translate("OrganizationsList") || "OrganizationsList"}: ${saved.shortName || saved.bin || "?"} • ${saved.id ?? "?"}`;
         updatePaneLabel(uniqId, label);
       }
+      // Commit pending SubTable rows
+      try {
+        const parentUuid = saved.uuid ?? saved.id ?? "";
+        await commitPending("contacts", "organizationUuid", parentUuid, contactsPendingRef, translate("ContactsList") || "Контакты");
+        await commitPending("bankaccounts", "organizationUuid", parentUuid, bankAccountsPendingRef, translate("BankAccountsList") || "Банковские счета");
+        await commitPending("contracts", "organizationUuid", parentUuid, contractsPendingRef, translate("ContractsList") || "Договора");
+        // Очистить pending после успешного коммита
+        setFormData(prev => ({ ...prev, _pendingContacts: undefined, _pendingBankAccounts: undefined, _pendingContracts: undefined }));
+        contactsPendingRef.current = [];
+        bankAccountsPendingRef.current = [];
+        contractsPendingRef.current = [];
+      } catch (e: any) {
+        const msg = e?.message || "Не удалось сохранить вложенные данные";
+        setError(msg);
+        return false;
+      }
       onSave?.();
       return true;
     } catch (err: any) {
@@ -144,7 +231,7 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
     } finally {
       setIsLoading(false);
     }
-  }, [formData, isEditMode, uuid, onSave]);
+  }, [formData, isEditMode, uuid, onSave, commitPending]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
   const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
@@ -152,24 +239,16 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
 
   return (
     <div className={styles.FormWrapper}>
-      <div className={styles.FormPanel}>
-        <div className={styles.TablePanelLeft}>
-          <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
-            <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button>
-            <Divider />
-            <Button onClick={handleSave} disabled={isLoading}><span>Сохранить</span></Button>
-            <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button>
-            <Divider />
-            {isEditMode && (
-              <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}>
-                <img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} />
-              </ButtonImage>
-            )}
-          </div>
-        </div>
-        <div className={styles.TablePanelRight} />
-      </div>
-      {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
+      <FormPanel
+        onSaveAndClose={handleSaveAndClose}
+        onSave={handleSave}
+        onClose={handleClose}
+        onReload={uuid ? () => loadFormData(uuid) : undefined}
+        isLoading={isLoading}
+        showReload={isEditMode}
+        readonly={!canWrite}
+      />
+      <FormError message={error} revision={errorRevision} onDismiss={() => setError(null)} />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
       </div>
@@ -182,84 +261,28 @@ OrganizationsForm.displayName = "OrganizationsForm";
 // LIST
 // ═══════════════════════════════════════════════════════════════════════════
 
-const stringifyJson = (v: any): string => {
-  if (v == null) return "";
-  try { const s = JSON.stringify(v); return s === "{}" || s === "[]" ? "" : s; } catch { return ""; }
-};
+const LIST_NAME = "OrganizationsList";
 
 const OrganizationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant = 'default', onSelectItem } = {}) => {
-  const componentName = "OrganizationsList";
-  const model = MODEL_ENDPOINT;
   const { addPane } = useAppContext().windows;
-  const queryClient = useQueryClient();
   const t = (key: string) => translate(key) || key;
 
-  const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(columnsJson, componentName));
-  const [sort, setSort] = useQueryParams<Record<string, "asc" | "desc">>("sort", { id: "asc" }, undefined, { stringify: stringifyJson });
-  const [search, setSearch] = useQueryParams<string>("search", "");
-  const [filter, setFilter] = useQueryParams<Record<string, { value: unknown; operator: string }> | undefined>("filter", undefined, undefined, { stringify: stringifyJson });
-
-  const [adaptiveLimit, setAdaptiveLimit] = useState(500);
-  useEffect(() => { GLOBAL_ADAPTIVE_LIMIT_REF.current = adaptiveLimit; }, [adaptiveLimit]);
-  const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
-  const params = useMemo(() => ({ sort, search, filter }), [sort, search, filter]);
-
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } =
-    useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
-
-  const handleDelete = useModelDelete(model, refetch);
+  const { error, refetch, buildTableProps } = useModelListState({
+    model: MODEL_ENDPOINT,
+    componentName: LIST_NAME,
+    columnsJson,
+  });
 
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data;
     const isEdit = !!d?.uuid;
     addPane({
-      label: isEdit ? `${t(componentName)}: ${d?.shortName || t("noName")} • ${d?.id ?? "?"}` : `${t(componentName)}: ${t("new")}`,
+      label: isEdit ? `${t(LIST_NAME)}: ${d?.shortName || t("noName")} • ${d?.id ?? "?"}` : `${t(LIST_NAME)}: ${t("new")}`,
       component: OrganizationsForm, data: d, onSave: () => refetch(), onClose: () => refetch(),
     });
-  }, [addPane, t, refetch, componentName]);
+  }, [addPane, t, refetch]);
 
-  const cachedRowsRef = useRef<TDataItem[]>([]);
-  const [cacheVersion, setCacheVersion] = useState(0);
-  useEffect(() => { cachedRowsRef.current = allItems; setCacheVersion(v => v + 1); }, [allItems]);
-  const rows = useMemo(() => cachedRowsRef.current, [cacheVersion]);
-
-  const handleSortChange = useCallback((s: typeof sort) => {
-    cachedRowsRef.current = []; setCacheVersion(0); updateAdaptiveLimit(500); setSort(s ?? { id: "asc" });
-  }, [setSort, updateAdaptiveLimit]);
-
-  const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => {
-    setFilter((prev: typeof filter) => {
-      const next = { ...(prev ?? {}) };
-      if (value == null || value === "") delete next[field];
-      else next[field] = { value, operator };
-      return Object.keys(next).length > 0 ? next : undefined;
-    });
-  }, [setFilter]);
-
-  const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
-  const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
-
-  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0);
-    setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500);
-    queryClient.resetQueries({ queryKey: [model] });
-  }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
-
-  const tableProps = useMemo(() => ({
-    variant, onSelectItem,
-    enableDateRange: false,
-    componentName, rows, columns, total,
-    totalPages: Math.ceil(total / adaptiveLimit),
-    isLoading: isAnythingLoading, isFetching: isAnythingLoading, error,
-    hasNextPage, isFetchingNextPage,
-    pagination: { page: 1, limit: adaptiveLimit, onPageChange: () => { }, onLimitChange: () => { } },
-    sorting: { sort, onSortChange: handleSortChange },
-    filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
-    search: { value: search, onChange: handleSearch },
-    actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
-    onDelete: handleDelete,
-  }), [variant, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error,
-    sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
-    openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh, handleDelete]);
+  const tableProps = useMemo(() => buildTableProps({ variant, onSelectItem, openModelForm }), [buildTableProps, variant, onSelectItem, openModelForm]);
 
   if (error) {
     return (
@@ -276,4 +299,3 @@ const OrganizationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDa
 
 OrganizationsList.displayName = "OrganizationsList";
 export { OrganizationsList, OrganizationsForm };
-// export default memo(OrganizationsList);

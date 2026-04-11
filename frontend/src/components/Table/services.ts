@@ -202,7 +202,18 @@ export function getFormatColumnValue(
 	row: TDataItem,
 	column: TColumn,
 ): string | number {
-	const rawValue = row[column.identifier as keyof TDataItem];
+	// Разрешаем значение: сначала пробуем прямой ключ, затем точечную нотацию
+	let rawValue = row[column.identifier as keyof TDataItem];
+
+	if (rawValue == null && column.identifier.includes(".")) {
+		const parts = column.identifier.split(".");
+		let current: any = row;
+		for (const part of parts) {
+			if (current == null || typeof current !== "object") { current = undefined; break; }
+			current = current[part];
+		}
+		rawValue = current;
+	}
 
 	// Если значение null или undefined — пустая строка
 	if (rawValue == null) return "";
@@ -221,14 +232,8 @@ export function getFormatColumnValue(
 		const date = getFormatDate(rawValue as string);
 		return date;
 	} else if (column.type === "string") {
-		const [field, subField]: string[] = column.identifier.split(".");
-
-		if (subField && typeof row[field] === "object" && row[field] !== null) {
-			const val = (row[field] as Record<string, any>)[subField];
-			return val != null ? val + "" : "";
-		} else {
-			return rawValue != null ? rawValue + "" : "";
-		}
+		// Для dot-notation rawValue уже разрешён выше — просто возвращаем
+		return rawValue != null ? rawValue + "" : "";
 	} else if (column.type === "boolean") {
 		return rawValue ? "✔" : "";
 	}

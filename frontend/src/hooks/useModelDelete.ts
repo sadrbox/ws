@@ -1,13 +1,17 @@
 import { useCallback } from "react";
 import apiClient from "src/services/api/client";
 import type { TDataItem } from "src/components/Table/types";
+import { useAppContext } from "src/app";
 
 /**
  * Хук для удаления записей модели по выбранным строкам таблицы.
+ * Использует глобальный ConfirmModal из AppContext вместо window.confirm.
  * @param model — endpoint модели (например "organizations")
  * @param refetch — функция обновления списка после удаления
  */
 export function useModelDelete(model: string, refetch: () => void) {
+	const { actions: { confirm } } = useAppContext();
+
 	const handleDelete = useCallback(
 		async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
 			const items = tableRows.filter((r) => selectedRowIds.has(Number(r.id)));
@@ -18,7 +22,8 @@ export function useModelDelete(model: string, refetch: () => void) {
 					? `Удалить запись #${items[0].id}?`
 					: `Удалить записи (${items.length} шт.)?`;
 
-			if (!window.confirm(message)) return;
+			const confirmed = await confirm(message);
+			if (!confirmed) return;
 
 			const errors: string[] = [];
 			for (const item of items) {
@@ -37,7 +42,7 @@ export function useModelDelete(model: string, refetch: () => void) {
 
 			refetch();
 		},
-		[model, refetch],
+		[model, refetch, confirm],
 	);
 
 	return handleDelete;

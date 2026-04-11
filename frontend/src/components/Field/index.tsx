@@ -326,6 +326,50 @@ export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
   );
 };
 
+// Компонент FieldDate — поле выбора даты (без времени)
+export const FieldDate: FC<TypeFieldDateTimeProps> = ({
+  label,
+  name,
+  value = '',
+  onChange,
+  width,
+  minWidth,
+  maxWidth,
+  disabled = false,
+  required = false,
+  variant = 'default',
+}) => {
+  const isTable = variant === 'table';
+  const wrapperClass = isTable
+    ? `${styles.FieldWrapper} ${styles.tableVariant}`
+    : styles.FieldWrapper;
+
+  return (
+    <div
+      className={wrapperClass}
+      style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}
+    >
+      {!isTable && label && (
+        <label htmlFor={name} className={styles.FieldLabel}>
+          {label}
+          {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
+        </label>
+      )}
+      <div className={styles.FieldInputWrapper}>
+        <input
+          type="date"
+          id={name}
+          name={name}
+          value={value}
+          onChange={onChange}
+          className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+};
+
 export const FieldFilter: FC<TypeFieldFilterProps> = ({ label, name, actions }) => {
   const inputRef = useRef<HTMLInputElement | null>(null)
 

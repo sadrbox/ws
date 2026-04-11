@@ -91,41 +91,15 @@
 		"inlist": true
 	},
 	{
-		"identifier": "position",
+		"identifier": "organization.shortName",
 		"type": "string",
-		"name": "Должность",
+		"name": "Организация",
 		"width": "200px",
 		"minWidth": "100px",
 		"alignment": "left",
-		"hint": "Должность сотрудника",
+		"hint": "Организация сотрудника",
 		"visible": true,
 		"position": 8,
-		"filter": false,
-		"inlist": true
-	},
-	{
-		"identifier": "phone",
-		"type": "string",
-		"name": "Телефон",
-		"width": "150px",
-		"minWidth": "100px",
-		"alignment": "left",
-		"hint": "Телефон",
-		"visible": true,
-		"position": 9,
-		"filter": false,
-		"inlist": true
-	},
-	{
-		"identifier": "email",
-		"type": "string",
-		"name": "Email",
-		"width": "200px",
-		"minWidth": "100px",
-		"alignment": "left",
-		"hint": "Электронная почта",
-		"visible": true,
-		"position": 10,
 		"filter": false,
 		"inlist": true
 	}

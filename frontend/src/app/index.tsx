@@ -27,6 +27,8 @@ import { uniqueId } from 'lodash';
 import { ContactPersonsList } from "src/models/ContactPersons";
 import LoginForm from "src/components/LoginForm";
 import { isAuthenticated, verifyToken, logout, getCurrentUser, type AuthUser } from "src/services/auth";
+import { useConfirm } from "src/hooks/useConfirm";
+import ConfirmModal from "src/components/ConfirmModal";
 
 export const getComponentName = (node: TComponentNode): string => {
   if (node == null) return "Unknown";
@@ -286,6 +288,11 @@ const App: React.FC = () => {
   }, []);
 
   // ────────────────────────────────────────────────
+  // Глобальный confirm (замена window.confirm)
+  // ────────────────────────────────────────────────
+  const { confirm, confirmState } = useConfirm();
+
+  // ────────────────────────────────────────────────
   // Контекстное значение (мемоизировано)
   // ────────────────────────────────────────────────
 
@@ -305,14 +312,14 @@ const App: React.FC = () => {
         setProps: setNavbarItems,
       },
       actions: {
-        // можно расширить при необходимости
+        confirm,
       },
       auth: {
         user: currentUser,
         logout: handleLogout,
       },
     }),
-    [panes, activePaneId, addPane, removePane, setActivePane, updatePaneLabel, navbarItems, currentUser, handleLogout]
+    [panes, activePaneId, addPane, removePane, setActivePane, updatePaneLabel, navbarItems, currentUser, handleLogout, confirm]
   );
 
   return (
@@ -335,6 +342,8 @@ const App: React.FC = () => {
 
         {/* {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />} */}
       </QueryClientProvider>
+
+      <ConfirmModal {...confirmState} />
     </AppContextProvider>
   );
 };

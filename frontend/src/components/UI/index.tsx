@@ -35,6 +35,7 @@ import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
 import { UnsavedFormsList } from 'src/models/UnsavedForms';
 import NotificationToast from 'src/components/NotificationToast';
+import { getAccessLevel } from 'src/hooks/useAccessRight';
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -320,7 +321,12 @@ export const NavList = ({ label }: TypeNavListProps) => {
 
   const context = useAppContext();
   const addPane = context.windows.addPane;
+  const user = context.auth.user;
+  const rights = user?.accessRights ?? user?.employee?.accessRights ?? [];
+  const isSuperAdmin = user?.isSuperAdmin;
 
+  /** Проверяет, имеет ли пользователь хотя бы readonly доступ к модели */
+  const can = (modelName: string) => getAccessLevel(rights, modelName, isSuperAdmin).canRead;
 
   if (label.toLocaleLowerCase() === "Operations".toLocaleLowerCase()) {
     return (
@@ -330,33 +336,33 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>Продажи</h3>
             <ul className={styles.NavList}>
-              <li onClick={() => addPane({ component: SalesBoardForm, label: 'Рабочий стол продаж' })}>Рабочий стол продаж</li>
-              <li onClick={() => addPane({ component: SalesList })}>Реализация товара и услуг</li>
-              <li onClick={() => addPane({ component: OutgoingInvoicesList })}>Электронная счет-фактура (исходящие)</li>
-              <li onClick={() => addPane({ component: PaymentInvoicesList })}>Счет на оплату</li>
+              {can("Sale") && <li onClick={() => addPane({ component: SalesBoardForm, label: 'Рабочий стол продаж' })}>Рабочий стол продаж</li>}
+              {can("Sale") && <li onClick={() => addPane({ component: SalesList })}>Реализация товара и услуг</li>}
+              {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList })}>Электронная счет-фактура (исходящие)</li>}
+              {can("PaymentInvoice") && <li onClick={() => addPane({ component: PaymentInvoicesList })}>Счет на оплату</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
             <h3>Закупка</h3>
             <ul className={styles.NavList}>
-              <li onClick={() => addPane({ component: PurchasesList })}>Поступление товара и услуг</li>
-              <li onClick={() => addPane({ component: IncomingInvoicesList })}>Электронная счет-фактура (входящие)</li>
+              {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList })}>Поступление товара и услуг</li>}
+              {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList })}>Электронная счет-фактура (входящие)</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
             <h3>Справочники</h3>
             <ul className={styles.NavList}>
-              <li onClick={() => addPane({ component: WarehousesList })}>Склады</li>
-              <li onClick={() => addPane({ component: OrganizationsList })}>Организации</li>
-              <li onClick={() => addPane({ component: CounterpartiesList })}>Контрагенты</li>
-              <li onClick={() => addPane({ component: ContractsList })}>Договора</li>
-              <li onClick={() => addPane({ component: BankAccountsList })}>Банковские счета</li>
-              <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>
-              <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>
-              <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>
-              <li onClick={() => addPane({ component: CurrenciesList })}>Валюты</li>
-              <li onClick={() => addPane({ component: EmployeesList })}>Сотрудники</li>
-              <li onClick={() => addPane({ component: PositionsList })}>Должности</li>
+              {can("Warehouse") && <li onClick={() => addPane({ component: WarehousesList })}>Склады</li>}
+              {can("Organization") && <li onClick={() => addPane({ component: OrganizationsList })}>Организации</li>}
+              {can("Counterparty") && <li onClick={() => addPane({ component: CounterpartiesList })}>Контрагенты</li>}
+              {can("Contract") && <li onClick={() => addPane({ component: ContractsList })}>Договора</li>}
+              {can("BankAccount") && <li onClick={() => addPane({ component: BankAccountsList })}>Банковские счета</li>}
+              {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>}
+              {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>}
+              {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>}
+              {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList })}>Валюты</li>}
+              {can("Employee") && <li onClick={() => addPane({ component: EmployeesList })}>Сотрудники</li>}
+              {can("Position") && <li onClick={() => addPane({ component: PositionsList })}>Должности</li>}
             </ul>
           </div>
         </div>
@@ -370,18 +376,18 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>Управление задачами</h3>
             <ul className={styles.NavList}>
-              <li onClick={() => addPane({ component: TodosList })}>Задачи</li>
-              <li onClick={() => addPane({ component: ScheduledTasksList })}>Регламентные задачи</li>
+              {can("Todo") && <li onClick={() => addPane({ component: TodosList })}>Задачи</li>}
+              {can("ScheduledTask") && <li onClick={() => addPane({ component: ScheduledTasksList })}>Регламентные задачи</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
             <h3>Справочники</h3>
             <ul className={styles.NavList}>
-              <li onClick={() => addPane({ component: SalesList })}>Реализация товара и услуг</li>
-              <li onClick={() => addPane({ component: PurchasesList })}>Поступление товара и услуг</li>
-              <li onClick={() => addPane({ component: InventoryTransfersList })}>Перемещение ТМЗ</li>
-              <li onClick={() => addPane({ component: CashReceiptOrdersList })}>Приходный кассовый ордер</li>
-              <li onClick={() => addPane({ component: CashExpenseOrdersList })}>Расходный кассовый ордер</li>
+              {can("Sale") && <li onClick={() => addPane({ component: SalesList })}>Реализация товара и услуг</li>}
+              {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList })}>Поступление товара и услуг</li>}
+              {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList })}>Перемещение ТМЗ</li>}
+              {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList })}>Приходный кассовый ордер</li>}
+              {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList })}>Расходный кассовый ордер</li>}
             </ul>
           </div>
         </div>
@@ -395,21 +401,21 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>Справочники</h3>
             <ul className={styles.NavList}>
-              <li onClick={() => addPane({ component: OrganizationsList })}>Организации</li>
-              <li onClick={() => addPane({ component: CounterpartiesList })}>Контрагенты</li>
-              <li onClick={() => addPane({ component: ContractsList })}>Договора</li>
-              <li onClick={() => addPane({ component: BankAccountsList })}>Банковские счета</li>
-              <li onClick={() => addPane({ component: ContactTypesList })}>Типы контактов</li>
-              <li onClick={() => addPane({ component: ContactsList })}>Контакты</li>
-              <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>
+              {can("Organization") && <li onClick={() => addPane({ component: OrganizationsList })}>Организации</li>}
+              {can("Counterparty") && <li onClick={() => addPane({ component: CounterpartiesList })}>Контрагенты</li>}
+              {can("Contract") && <li onClick={() => addPane({ component: ContractsList })}>Договора</li>}
+              {can("BankAccount") && <li onClick={() => addPane({ component: BankAccountsList })}>Банковские счета</li>}
+              {can("ContactType") && <li onClick={() => addPane({ component: ContactTypesList })}>Типы контактов</li>}
+              {can("Contact") && <li onClick={() => addPane({ component: ContactsList })}>Контакты</li>}
+              {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
             <h3>Администрирование</h3>
             <ul className={styles.NavList}>
-              <li onClick={() => addPane({ component: UsersList })}>Пользователи</li>
-              <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>
-              <li onClick={() => addPane({ component: NotificationsList })}>Уведомления</li>
+              {can("User") && <li onClick={() => addPane({ component: UsersList })}>Пользователи</li>}
+              {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>}
+              {can("Notification") && <li onClick={() => addPane({ component: NotificationsList })}>Уведомления</li>}
               <li onClick={() => addPane({ component: UnsavedFormsList })}>Несохранённые записи</li>
             </ul>
           </div>
@@ -461,9 +467,9 @@ export const LoadingFallback: React.FC = () => {
   );
 };
 
-export const LoadingSpinner: React.FC = () => {
+export const LoadingSpinner: React.FC<{ variant?: 'default' | 'overlay' }> = ({ variant = 'default' }) => {
   return (
-    <div className={styles.LoadingSpinnerContainer}>
+    <div className={variant === 'overlay' ? styles.LoadingSpinnerOverlay : styles.LoadingSpinnerContainer}>
       <div className={styles.LoadingSpinner}></div>
     </div>
   );

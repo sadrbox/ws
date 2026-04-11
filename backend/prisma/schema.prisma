@@ -55,6 +55,7 @@ model Organization {
   todos              Todo[]
   users              User[]              @relation("UserOrganization")
   warehouses         Warehouse[]
+  employeeHistories  EmployeeHistory[]
 
   @@map("organizations")
 }
@@ -129,8 +130,8 @@ model ContactType {
 model Contact {
   id                Int            @id @default(autoincrement())
   uuid              String         @unique @default(uuid())
-  value             String
-  contactTypeUuid   String
+  value             String         @default("")
+  contactTypeUuid   String?
   organizationUuid  String?
   counterpartyUuid  String?
   ownerName         String?
@@ -138,7 +139,7 @@ model Contact {
   employeeUuid      String?
   userUuid          String?
   contactPerson     ContactPerson? @relation(fields: [contactPersonUuid], references: [uuid])
-  contactType       ContactType    @relation(fields: [contactTypeUuid], references: [uuid])
+  contactType       ContactType?   @relation(fields: [contactTypeUuid], references: [uuid])
   counterparty      Counterparty?  @relation(fields: [counterpartyUuid], references: [uuid])
   employee          Employee?      @relation(fields: [employeeUuid], references: [uuid])
   organization      Organization?  @relation(fields: [organizationUuid], references: [uuid])
@@ -516,8 +517,6 @@ model Employee {
   middleName       String?
   fullName         String?           @db.VarChar(255)
   iin              String?           @db.VarChar(12)
-  phone            String?
-  email            String?
   avatarPath       String?
   organizationUuid String?
   contacts         Contact[]
@@ -540,18 +539,21 @@ model Position {
 }
 
 model EmployeeHistory {
-  id           Int       @id @default(autoincrement())
-  uuid         String    @unique @default(uuid())
-  eventDate    DateTime  @default(now())
-  eventType    String
-  salary       Decimal?  @db.Decimal(18, 2)
-  employeeUuid String
-  positionUuid String?
-  employee     Employee  @relation(fields: [employeeUuid], references: [uuid], onDelete: Cascade)
-  position     Position? @relation(fields: [positionUuid], references: [uuid])
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  eventDate        DateTime      @default(now())
+  eventType        String
+  salary           Decimal?      @db.Decimal(18, 2)
+  employeeUuid     String
+  positionUuid     String?
+  organizationUuid String?
+  employee         Employee      @relation(fields: [employeeUuid], references: [uuid], onDelete: Cascade)
+  position         Position?     @relation(fields: [positionUuid], references: [uuid])
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([employeeUuid])
   @@index([positionUuid])
+  @@index([organizationUuid])
   @@map("employee_history")
 }
 

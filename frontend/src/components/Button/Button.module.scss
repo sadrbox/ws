@@ -61,6 +61,12 @@
 
 	&:enabled {
 	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+		pointer-events: none;
+	}
 }
 
 .ButtonImage {
@@ -90,5 +96,11 @@
 	}
 	&:hover:not(.Active) {
 		background-color: rgba($color3, 0.1);
+	}
+
+	&:disabled {
+		opacity: 0.4;
+		cursor: default;
+		pointer-events: none;
 	}
 }

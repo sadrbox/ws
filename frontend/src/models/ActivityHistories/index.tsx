@@ -1,27 +1,24 @@
-import { FC, useMemo, useCallback, useState, useEffect, useRef } from "react";
+import { FC, useMemo, useCallback, useState, useEffect } from "react";
 import { useAppContext } from "src/app";
-import { getModelColumns } from "src/components/Table/services";
 import { translate } from "src/i18";
-import type { TColumn, TDataItem } from "src/components/Table/types";
+import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
-import useQueryParams from "src/hooks/useQueryParams";
-import { useQueryClient } from "@tanstack/react-query";
-import { useModelDelete } from "src/hooks/useModelDelete";
 import { Divider, Field } from "src/components/Field";
 import { Group } from "src/components/UI";
 import { getFormatDate } from "src/utils/main.module";
 import useUID from "src/hooks/useUID";
-import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
-import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
 
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
+import FormError from "src/components/FormError";
+import FormPanel from "src/components/FormPanel";
+import { useAccessRight } from "src/hooks/useAccessRight";
+import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "activityhistories";
 
@@ -63,6 +60,7 @@ const mapToFormData = (d: any): TFormData => ({
 
 const ActivityHistoriesForm: FC<Partial<TPane>> = ({ onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
+  const { canWrite } = useAccessRight("ActivityHistory");
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
 
@@ -168,22 +166,9 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = ({ onClose, data, uniqId }) =>
 
   return (
     <div className={styles.FormWrapper}>
-      <div className={styles.FormPanel}>
-        <div className={styles.TablePanelLeft}>
-          <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
-            <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button>
-            <Divider />
-            {isEditMode && (
-              <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}>
-                <img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} />
-              </ButtonImage>
-            )}
-          </div>
-        </div>
-        <div className={styles.TablePanelRight} />
-      </div>
+      <FormPanel readonly={!canWrite} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
 
-      {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
+      <FormError message={error} onDismiss={() => setError(null)} />
 
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
@@ -197,11 +182,6 @@ ActivityHistoriesForm.displayName = "ActivityHistoriesForm";
 // LIST
 // ═══════════════════════════════════════════════════════════════════════════
 
-const stringifyJson = (v: any): string => {
-  if (v == null) return "";
-  try { const s = JSON.stringify(v); return s === "{}" || s === "[]" ? "" : s; } catch { return ""; }
-};
-
 interface ActivityHistoriesListProps {
   variant?: TTableVariant;
   onSelectItem?: (item: TDataItem) => void;
@@ -212,35 +192,22 @@ interface ActivityHistoriesListProps {
 const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField } = {}) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? "ActivityHistoriesList_part" : "ActivityHistoriesList";
-  const model = MODEL_ENDPOINT;
 
   const { addPane } = useAppContext().windows;
-  const queryClient = useQueryClient();
   const t = (key: string) => translate(key) || key;
-
-  const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(columnsJson, componentName, isPartOf ? "part" : undefined));
-  const [sort, setSort] = useQueryParams<Record<string, "asc" | "desc">>("sort", { id: "asc" }, undefined, { stringify: stringifyJson });
-  const [search, setSearch] = useQueryParams<string>("search", "");
-  const [filter, setFilter] = useQueryParams<Record<string, { value: unknown; operator: string }> | undefined>("filter", undefined, undefined, { stringify: stringifyJson });
-
-  const [adaptiveLimit, setAdaptiveLimit] = useState(500);
-  useEffect(() => { GLOBAL_ADAPTIVE_LIMIT_REF.current = adaptiveLimit; }, [adaptiveLimit]);
-  const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
 
   const ownerFilter = useMemo(() => {
     if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } };
     return undefined;
   }, [ownerUuid, ownerField]);
 
-  const params = useMemo(() => ({
-    sort, search,
-    filter: ownerFilter ? { ...ownerFilter, ...filter } : filter,
-  }), [sort, search, filter, ownerFilter]);
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } =
-    useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
+  const { error, refetch, buildTableProps } = useModelListState({
+    model: MODEL_ENDPOINT, componentName, columnsJson,
+    defaultSort: { id: "asc" },
+    columnsVariant: isPartOf ? "part" : undefined,
+    ownerFilter,
+  });
 
-
-  const handleDelete = useModelDelete(model, refetch);
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data;
     const isEdit = !!d?.uuid;
@@ -249,49 +216,6 @@ const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant = 'defa
       component: ActivityHistoriesForm, data: d, onSave: () => refetch(), onClose: () => refetch(),
     });
   }, [addPane, t, refetch, componentName]);
-
-  const cachedRowsRef = useRef<TDataItem[]>([]);
-  const [cacheVersion, setCacheVersion] = useState(0);
-  useEffect(() => { cachedRowsRef.current = allItems; setCacheVersion(v => v + 1); }, [allItems]);
-  const rows = useMemo(() => cachedRowsRef.current, [cacheVersion]);
-
-  const handleSortChange = useCallback((s: typeof sort) => {
-    cachedRowsRef.current = []; setCacheVersion(0); updateAdaptiveLimit(500); setSort(s ?? { id: "asc" });
-  }, [setSort, updateAdaptiveLimit]);
-
-  const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => {
-    setFilter((prev: typeof filter) => {
-      const next = { ...(prev ?? {}) };
-      if (value == null || value === "") delete next[field];
-      else if (field === "dateRange") (next as any)[field] = value;
-      else next[field] = { value, operator };
-      return Object.keys(next).length > 0 ? next : undefined;
-    });
-  }, [setFilter]);
-
-  const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
-  const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
-
-  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0);
-    setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500);
-    queryClient.resetQueries({ queryKey: [model] });
-  }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
-
-  const tableProps = useMemo(() => ({
-    variant, onSelectItem,
-    componentName, rows, columns, total,
-    totalPages: Math.ceil(total / adaptiveLimit),
-    isLoading: isAnythingLoading, isFetching: isAnythingLoading, error,
-    hasNextPage, isFetchingNextPage,
-    pagination: { page: 1, limit: adaptiveLimit, onPageChange: () => { }, onLimitChange: () => { } },
-    sorting: { sort, onSortChange: handleSortChange },
-    filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
-    search: { value: search, onChange: handleSearch },
-    actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
-    onDelete: handleDelete,
-  }), [variant, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error,
-    sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
-    openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh, handleDelete]);
 
   if (error) {
     return (
@@ -303,7 +227,7 @@ const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant = 'defa
     );
   }
 
-  return <Table {...tableProps} />;
+  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm })} />;
 };
 
 ActivityHistoriesList.displayName = "ActivityHistoriesList";

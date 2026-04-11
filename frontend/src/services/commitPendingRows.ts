@@ -1,0 +1,91 @@
+import apiClient from "src/services/api/client";
+import type { TDataItem } from "src/components/Table/types";
+
+/** Поля, которые не учитываются при проверке «пустая ли строка» */
+const SKIP_FIELDS = new Set(["_pendingAction", "id", "uuid", "_tempId"]);
+
+/**
+ * Универсальная функция коммита pending-строк SubTable.
+ *
+ * Два режима:
+ * 1. **Простой** (generic) — все поля строки (кроме служебных) отправляются «как есть».
+ *    Подходит для contacts, bankaccounts, contracts, employee-histories и т.д.
+ *
+ * 2. **С кастомными payload-функциями** — передаются `createPayload` / `updatePayload`.
+ *    Используется если payload отличается от набора полей в строке (например saleitems).
+ *
+ * @param endpoint      API endpoint (без `/`), например `"contacts"`, `"saleitems"`
+ * @param rows          массив pending-строк
+ * @param parentUuid    UUID родительской записи
+ * @param parentField   имя FK-поля (например `"organizationUuid"`)
+ * @param tableName     человекочитаемое имя таблицы для сообщения об ошибке
+ * @param options       опциональные createPayload/updatePayload
+ */
+export async function commitPendingRows(
+  endpoint: string,
+  rows: TDataItem[],
+  parentUuid: string,
+  parentField: string,
+  tableName: string,
+  options?: {
+    createPayload?: (row: TDataItem) => Record<string, unknown>;
+    updatePayload?: (row: TDataItem) => Record<string, unknown>;
+    /** Дополнительные поля-ключи, специфичные для endpoint, которые надо исключить из проверки «пустая строка» */
+    extraSkipFields?: string[];
+  },
+): Promise<void> {
+  if (!rows.length) return;
+
+  const skipSet = new Set(SKIP_FIELDS);
+  skipSet.add(parentField);
+  if (options?.extraSkipFields) {
+    for (const f of options.extraSkipFields) skipSet.add(f);
+  }
+
+  for (const row of rows) {
+    if (!row._pendingAction) continue;
+
+    try {
+      if (row._pendingAction === "create") {
+        // Проверяем, заполнена ли строка — полностью пустую просто пропускаем
+        const hasData = Object.entries(row).some(
+          ([k, v]) => !skipSet.has(k) && v !== "" && v !== null && v !== undefined && v !== 0,
+        );
+        if (!hasData) continue;
+
+        const payload = options?.createPayload
+          ? { ...options.createPayload(row), [parentField]: parentUuid }
+          : buildGenericPayload(row, parentField, parentUuid);
+
+        await apiClient.post(`/${endpoint}`, payload);
+      } else if (row._pendingAction === "update") {
+        if (!row.uuid) continue;
+
+        const payload = options?.updatePayload
+          ? { ...options.updatePayload(row), [parentField]: parentUuid }
+          : buildGenericPayload(row, parentField, parentUuid);
+
+        await apiClient.put(`/${endpoint}/${row.uuid}`, payload);
+      } else if (row._pendingAction === "delete") {
+        if (!row.uuid) continue;
+        await apiClient.delete(`/${endpoint}/${row.uuid}`);
+      }
+    } catch (err: any) {
+      throw new Error(
+        err.response?.data?.message ||
+        err.message ||
+        `Заполните данные в добавленной строке (${tableName}) или удалите пустую строку`,
+      );
+    }
+  }
+}
+
+/** Строит payload «как есть», убирая служебные поля */
+function buildGenericPayload(
+  row: TDataItem,
+  parentField: string,
+  parentUuid: string,
+): Record<string, unknown> {
+  const { _pendingAction, id, uuid: _u, _tempId, ...rest } = row as any;
+  return { ...rest, [parentField]: parentUuid };
+}

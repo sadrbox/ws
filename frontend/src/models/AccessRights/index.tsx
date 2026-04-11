@@ -1,26 +1,22 @@
 import { FC, useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useAppContext } from "src/app";
-import { getModelColumns } from "src/components/Table/services";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
-import Table, { TOpenModelFormProps } from "src/components/Table";
-import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import { useQueryClient } from "@tanstack/react-query";
-import { useModelDelete } from "src/hooks/useModelDelete";
 import { Divider, Field, FieldSelect } from "src/components/Field";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
-import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
-import reload_16 from "src/assets/reload_16.png";
-import editInlineIcon from "src/assets/edit-inline_16.svg";
 import Tabs from "src/components/Tabs";
+import SubTable, { type SubTableContext } from "src/components/SubTable";
 
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
+import FormError from "src/components/FormError";
+import FormPanel from "src/components/FormPanel";
+import { useAccessRight } from "src/hooks/useAccessRight";
 
 const MODEL_ENDPOINT = "access-rights";
 
@@ -38,9 +34,11 @@ const MODEL_NAME_OPTIONS = [
   { value: "", label: "— " + (translate("select") || "Выберите") + " —" },
   ...["Organizations", "Counterparties", "Contracts", "Sales", "Purchases",
     "Warehouses", "Products", "Brands", "Employees", "Contacts",
+    "ContactPersons", "ContactTypes", "Positions",
     "BankAccounts", "Currencies", "Todos", "Notifications",
     "OutgoingInvoices", "IncomingInvoices", "PaymentInvoices",
     "CashReceiptOrders", "CashExpenseOrders", "InventoryTransfers",
+    "ScheduledTasks", "Users", "ActivityHistories", "EmployeeHistories",
   ].map(v => ({ value: v, label: translate(v + "List") || v })),
 ];
 
@@ -58,6 +56,7 @@ const EMPTY_FORM: TFormData = {
 
 const AccessRightsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
+  const { canWrite } = useAccessRight("AccessRight");
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
 
@@ -179,24 +178,8 @@ const AccessRightsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
 
   return (
     <div className={styles.FormWrapper}>
-      <div className={styles.FormPanel}>
-        <div className={styles.TablePanelLeft}>
-          <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
-            <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button>
-            <Divider />
-            <Button onClick={handleSave} disabled={isLoading}><span>Сохранить</span></Button>
-            <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button>
-            <Divider />
-            {isEditMode && (
-              <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}>
-                <img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} />
-              </ButtonImage>
-            )}
-          </div>
-        </div>
-        <div className={styles.TablePanelRight} />
-      </div>
-      {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
+      <FormPanel readonly={!canWrite} onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
+      <FormError message={error} onDismiss={() => setError(null)} />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
       </div>
@@ -210,137 +193,69 @@ AccessRightsForm.displayName = "AccessRightsForm";
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface AccessRightsListProps {
-  variant?: TTableVariant;
-  onSelectItem?: (item: TDataItem) => void;
   userUuid?: string;
 }
 
-const AccessRightsList: FC<AccessRightsListProps> = ({ variant = "default", onSelectItem, userUuid }) => {
-  const isPartOf = !!userUuid;
-  const componentName = isPartOf ? "AccessRightsList_part" : "AccessRightsList";
-  const model = MODEL_ENDPOINT;
+const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
   const t = (key: string) => translate(key) || key;
 
-  const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(columnsJson, componentName));
-  const [sort, setSort] = useState<Record<string, "asc" | "desc">>({ id: "asc" });
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Record<string, { value: unknown; operator: string }> | undefined>(undefined);
-  const [inlineEditing, setInlineEditing] = useState(false);
+  // ── Маппинги для отображения/поиска ────────────────────────────────────
+  const modelNameMap = useMemo(
+    () => Object.fromEntries(MODEL_NAME_OPTIONS.filter(o => o.value).map(o => [o.value, o.label])),
+    [],
+  );
+  const accessLevelMap = useMemo(
+    () => Object.fromEntries(ACCESS_LEVEL_OPTIONS.map(o => [o.value, o.label])),
+    [],
+  );
 
-  const [adaptiveLimit, setAdaptiveLimit] = useState(500);
-  useEffect(() => { GLOBAL_ADAPTIVE_LIMIT_REF.current = adaptiveLimit; }, [adaptiveLimit]);
-  const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
-
-  const params = useMemo(() => ({
-    sort, search, filter,
-    extra: userUuid ? { userUuid } : undefined,
-  }), [sort, search, filter, userUuid]);
-
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage, cancelAllRequests } =
-    useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
-
-  const handleDelete = useModelDelete(model, refetch);
-  const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
-    const d = formProps.data;
-    const isEdit = !!d?.uuid;
-    const newData = !isEdit && userUuid
-      ? { userUuid } as unknown as TDataItem
-      : d;
-    addPane({
-      label: isEdit ? `Право доступа: ${d?.modelName || t("noName")} • ${d?.id ?? "?"}` : `Право доступа: ${t("new")}`,
-      component: AccessRightsForm, data: newData, onSave: () => refetch(), onClose: () => refetch(),
+  // ── Фронт-фильтрация по поиску (кириллица / латиница) ──────────────────
+  const filterRows = useCallback((rows: TDataItem[], search: string): TDataItem[] => {
+    const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+    return rows.filter((row: TDataItem) => {
+      const modelLabel = (modelNameMap[row.modelName as string] ?? (row.modelName as string) ?? "").toLowerCase();
+      const levelLabel = (accessLevelMap[row.accessLevel as string] ?? (row.accessLevel as string) ?? "").toLowerCase();
+      const modelKey = ((row.modelName as string) ?? "").toLowerCase();
+      const levelKey = ((row.accessLevel as string) ?? "").toLowerCase();
+      const idStr = String(row.id ?? "");
+      return words.every((w: string) =>
+        modelLabel.includes(w) || modelKey.includes(w) ||
+        levelLabel.includes(w) || levelKey.includes(w) ||
+        idStr.includes(w)
+      );
     });
-  }, [addPane, t, refetch, userUuid]);
+  }, [modelNameMap, accessLevelMap]);
 
-  const cachedRowsRef = useRef<TDataItem[]>([]);
-  const [cacheVersion, setCacheVersion] = useState(0);
-  useEffect(() => { cachedRowsRef.current = allItems; setCacheVersion(v => v + 1); }, [allItems]);
-  const rows = useMemo(() => cachedRowsRef.current, [cacheVersion]);
-
-  const handleSortChange = useCallback((s: typeof sort) => {
-    cachedRowsRef.current = []; setCacheVersion(0); updateAdaptiveLimit(500); setSort(s ?? { id: "asc" });
-  }, [updateAdaptiveLimit]);
-
-  const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => {
-    setFilter((prev) => {
-      const next = { ...(prev ?? {}) };
-      if (value == null || value === "") delete next[field];
-      else next[field] = { value, operator };
-      return Object.keys(next).length > 0 ? next : undefined;
-    });
-  }, []);
-
-  const handleSearch = useCallback((v: string) => setSearch(v.trim()), []);
-  const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, []);
-
-  const handleCleanRefresh = useCallback(() => {
-    cachedRowsRef.current = []; setCacheVersion(0);
-    setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500);
-    // Сначала отменяем все активные/очередные запросы в useRequestQueue,
-    // чтобы resetQueries мог запустить новый refetch без блокировки
-    cancelAllRequests();
-    queryClient.resetQueries({ queryKey: [model] });
-  }, [queryClient, updateAdaptiveLimit, cancelAllRequests]);
-
-  // ── Inline-редактирование ──────────────────────────────────────────────
-
-  const handleInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
+  // ── Inline-change с обновлением кэша React Query ──────────────────────
+  const customInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
     if (!row.uuid) return;
-    try {
-      await apiClient.put(`/${MODEL_ENDPOINT}/${row.uuid}`, { [field]: value });
-      // Обновляем кэш React Query без полного refetch — избегаем ререндера всех строк
-      queryClient.setQueriesData({ queryKey: [MODEL_ENDPOINT] }, (oldData: any) => {
-        if (!oldData?.pages) return oldData;
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page: any) => ({
-            ...page,
-            items: page.items.map((item: any) =>
-              item.uuid === row.uuid ? { ...item, [field]: value } : item
-            ),
-          })),
-        };
-      });
-    } catch (err: any) {
-      const msg = err.response?.data?.message || "Ошибка сохранения";
-      alert(msg);
-    }
+    await apiClient.put(`/${MODEL_ENDPOINT}/${row.uuid}`, { [field]: value });
+    queryClient.setQueriesData({ queryKey: [MODEL_ENDPOINT] }, (oldData: any) => {
+      if (!oldData?.pages) return oldData;
+      return {
+        ...oldData,
+        pages: oldData.pages.map((page: any) => ({
+          ...page,
+          items: page.items.map((item: any) =>
+            item.uuid === row.uuid ? { ...item, [field]: value } : item
+          ),
+        })),
+      };
+    });
   }, [queryClient]);
 
-  const handleInlineAdd = useCallback(async () => {
-    if (!userUuid) return;
-    // Находим первую модель, для которой ещё нет записи
-    const existingModels = new Set(rows.map(r => r.modelName as string));
-    const available = MODEL_NAME_OPTIONS.find(o => o.value && !existingModels.has(o.value));
-    const modelName = available?.value || MODEL_NAME_OPTIONS[1]?.value || "Organizations";
-    try {
-      await apiClient.post(`/${MODEL_ENDPOINT}`, {
-        modelName,
-        accessLevel: "none",
-        userUuid,
-      });
-      refetch();
-    } catch (err: any) {
-      const msg = err.response?.data?.message || "Ошибка создания";
-      alert(msg);
-    }
-  }, [userUuid, rows, refetch]);
-
-  // Маппинг значений для отображения переведённых label
-  const modelNameMap = useMemo(() => Object.fromEntries(MODEL_NAME_OPTIONS.filter(o => o.value).map(o => [o.value, o.label])), []);
-  const accessLevelMap = useMemo(() => Object.fromEntries(ACCESS_LEVEL_OPTIONS.map(o => [o.value, o.label])), []);
-
-  const renderCell = useCallback((row: TDataItem, col: TColumn): React.ReactNode | undefined => {
+  // ── renderCell ─────────────────────────────────────────────────────────
+  const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     if (col.identifier === "modelName") {
-      if (inlineEditing) {
+      if (ctx.inlineEditing) {
         return (
           <FieldSelect
             name={`inline_model_${row.id}`}
             options={MODEL_NAME_OPTIONS}
             value={(row.modelName as string) ?? ""}
-            onChange={e => handleInlineChange(row, "modelName", e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => ctx.handleInlineChange(row, "modelName", e.target.value)}
             variant="table"
           />
         );
@@ -348,75 +263,81 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ variant = "default", onSe
       return <span>{modelNameMap[row.modelName as string] ?? row.modelName}</span>;
     }
     if (col.identifier === "accessLevel") {
-      if (inlineEditing) {
+      if (ctx.inlineEditing) {
         return (
           <FieldSelect
             name={`inline_level_${row.id}`}
             options={ACCESS_LEVEL_OPTIONS}
             value={(row.accessLevel as string) ?? "none"}
-            onChange={e => handleInlineChange(row, "accessLevel", e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => ctx.handleInlineChange(row, "accessLevel", e.target.value)}
             variant="table"
           />
         );
       }
       return <span>{accessLevelMap[row.accessLevel as string] ?? row.accessLevel}</span>;
     }
-    return undefined; // Остальные колонки — стандартный рендер
-  }, [handleInlineChange, inlineEditing, modelNameMap, accessLevelMap]);
+    return undefined;
+  }, [modelNameMap, accessLevelMap]);
 
-  const toggleInlineEditing = useCallback(() => setInlineEditing(prev => !prev), []);
+  // ── openFormFor ────────────────────────────────────────────────────────
+  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
+    const isEdit = !!data?.uuid;
+    const newData = !isEdit && userUuid ? { userUuid } as unknown as TDataItem : data;
+    addPane({
+      label: isEdit
+        ? `Право доступа: ${data?.modelName || t("noName")} • ${data?.id ?? "?"}`
+        : `Право доступа: ${t("new")}`,
+      component: AccessRightsForm,
+      data: newData,
+      onSave: () => ctx.refetch(),
+      onClose: () => ctx.refetch(),
+    });
+  }, [addPane, t, userUuid]);
 
-  const extraButtons = useMemo(() => (
-    <>
-      <Divider />
-      <ButtonImage onClick={toggleInlineEditing} active={inlineEditing} title={inlineEditing ? "Редактирование через форму" : "Редактирование в таблице"}>
-        <img src={editInlineIcon} alt="Inline edit" height={16} width={16} />
-      </ButtonImage>
-    </>
-  ), [toggleInlineEditing, inlineEditing]);
+  // ── onInlineAdd ────────────────────────────────────────────────────────
+  const addingRef = useRef(false);
+  const onInlineAdd = useCallback(async () => {
+    if (!userUuid || addingRef.current) return;
+    addingRef.current = true;
+    try {
+      // Получаем актуальный список с сервера, чтобы не полагаться на кэш
+      const resp = await apiClient.get(`/${MODEL_ENDPOINT}`, { params: { userUuid, limit: 100 } });
+      const serverRows: TDataItem[] = resp.data?.items ?? resp.data ?? [];
+      const existingModels = new Set(serverRows.map((r: TDataItem) => r.modelName as string));
+      const available = MODEL_NAME_OPTIONS.find(o => o.value && !existingModels.has(o.value));
+      if (!available) {
+        alert("Все модели уже добавлены");
+        return;
+      }
+      await apiClient.post(`/${MODEL_ENDPOINT}`, { modelName: available.value, accessLevel: "none", userUuid });
+    } catch (err: any) {
+      // 409 = дубликат, не показываем ошибку — refetch обновит таблицу
+      if (err.response?.status !== 409) {
+        alert(err.response?.data?.message || "Ошибка создания");
+      }
+    } finally {
+      addingRef.current = false;
+    }
+  }, [userUuid]);
 
-  const tableProps = useMemo(() => ({
-    variant: isPartOf ? "embedded" as TTableVariant : variant,
-    onSelectItem,
-    enableDateRange: false,
-    componentName, rows, columns, total,
-    totalPages: Math.ceil(total / adaptiveLimit),
-    isLoading: isAnythingLoading, isFetching: isAnythingLoading, error,
-    hasNextPage, isFetchingNextPage,
-    pagination: { page: 1, limit: adaptiveLimit, onPageChange: () => { }, onLimitChange: () => { } },
-    sorting: { sort, onSortChange: handleSortChange },
-    filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
-    search: { value: search, onChange: handleSearch },
-    actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
-    onDelete: handleDelete,
-    extraButtons,
-    inlineEditing,
-    renderCell,
-    onInlineAdd: inlineEditing ? handleInlineAdd : undefined,
-  }), [variant, isPartOf, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error,
-    sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
-    openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh, handleDelete,
-    extraButtons, inlineEditing, renderCell, handleInlineAdd]);
-
-  if (!userUuid) {
-    return (
-      <div style={{ padding: "24px", color: "#999", textAlign: "center" }}>
-        Сохраните пользователя, чтобы управлять правами доступа.
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="error-container"><div className="error-message">
-        <h3>{t("errorTitle") || "Ошибка загрузки"}</h3>
-        <p>{(error as Error)?.message || "Неизвестная ошибка"}</p>
-        <button onClick={() => refetch()} className="retry-button">{t("retry") || "Повторить"}</button>
-      </div></div>
-    );
-  }
-
-  return <Table {...tableProps} />;
+  return (
+    <SubTable
+      model={MODEL_ENDPOINT}
+      componentName="AccessRightsList_part"
+      columnsJson={columnsJson}
+      parentKey="userUuid"
+      parentUuid={userUuid ?? ""}
+      defaultSort={{ id: "asc" }}
+      defaultInlineEditing={false}
+      disabled={false}
+      emptyMessage="Сохраните пользователя, чтобы управлять правами доступа."
+      renderCell={renderCell}
+      openFormFor={openFormFor}
+      onInlineAdd={onInlineAdd}
+      filterRows={filterRows}
+      customInlineChange={customInlineChange}
+    />
+  );
 };
 
 AccessRightsList.displayName = "AccessRightsList";

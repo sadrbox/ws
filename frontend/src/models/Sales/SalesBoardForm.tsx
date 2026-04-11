@@ -10,7 +10,7 @@ import apiClient from "src/services/api/client";
 import type { TPane } from "src/app/types";
 import type { TDataItem } from "src/components/Table/types";
 import { Button, ButtonImage } from "src/components/Button";
-import { Divider, Field, FieldDateTime, FieldSelect, FieldNumber } from "src/components/Field";
+import { Divider, Field, FieldDate, FieldSelect, FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import useUID from "src/hooks/useUID";
 import styles from "src/styles/main.module.scss";
@@ -191,7 +191,7 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
           id: d.id,
           uuid: d.uuid,
           documentNumber: d.documentNumber ?? "",
-          documentDate: d.documentDate?.slice(0, 16) ?? "",
+          documentDate: d.documentDate?.slice(0, 10) ?? "",
           description: d.description ?? "",
           amount: d.amount != null ? String(d.amount) : "",
           status: d.status ?? "draft",
@@ -277,7 +277,7 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
         id: saved.id,
         uuid: saved.uuid,
         documentNumber: saved.documentNumber ?? "",
-        documentDate: saved.documentDate?.slice(0, 16) ?? "",
+        documentDate: saved.documentDate?.slice(0, 10) ?? "",
         description: saved.description ?? "",
         amount: saved.amount != null ? String(saved.amount) : "",
         status: saved.status ?? "draft",
@@ -721,7 +721,7 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
               disabled={saleLoading}
               width="120px"
             />
-            <FieldDateTime
+            <FieldDate
               label="Дата"
               name={`${formUid}_docDate`}
               value={sale.documentDate}

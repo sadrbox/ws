@@ -148,7 +148,9 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
   variant = "default",
   onSelectItem,
 }) => {
-  const { addPane } = useAppContext().windows;
+  const appCtx = useAppContext();
+  const { addPane } = appCtx.windows;
+  const { confirm } = appCtx.actions;
   const t = (key: string) => translate(key) || key;
 
   const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(columnsJson, componentName));
@@ -205,12 +207,12 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
   }, [loadEntries]);
 
   // Очистить всё
-  const handleClearAll = useCallback(() => {
-    if (!confirm("Удалить все несохранённые данные форм?")) return;
+  const handleClearAll = useCallback(async () => {
+    if (!(await confirm("Удалить все несохранённые данные форм?"))) return;
     const entries = getAllFormStoreEntries();
     entries.forEach(e => removeFormStoreEntry(e.storageKey));
     loadEntries();
-  }, [loadEntries]);
+  }, [loadEntries, confirm]);
 
   // Рендер ячейки "Тип объекта" — как кликабельную ссылку
   const renderCell = useCallback((row: TDataItem, col: TColumn): React.ReactNode | undefined => {

@@ -1,0 +1,56 @@
+.formError {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  margin: 0;
+  background: #fff0f0;
+  border-left: 3px solid #d32f2f;
+  border-radius: 4px;
+  color: #b71c1c;
+  font-size: 13px;
+  line-height: 1.45;
+  animation: slideIn 0.2s ease-out;
+  position: relative;
+}
+
+.icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+
+.message {
+  flex: 1;
+  word-break: break-word;
+}
+
+.close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #b71c1c;
+  opacity: 0.6;
+  padding: 0;
+  margin: -2px -4px 0 4px;
+  line-height: 1;
+  font-size: 18px;
+  transition: opacity 0.15s;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

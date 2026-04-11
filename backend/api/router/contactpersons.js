@@ -108,7 +108,16 @@ router.get("/contactpersons", async (req, res) => {
 			}
 		}
 
-		const baseWhere = { ...searchWhereClause, ...filterWhereClause, ...tenantFilter(req) };
+		// ── Фильтрация по FK-полям (SubTable передаёт как query-параметры) ────
+		const fkFilter = {};
+		const FK_FIELDS = ["organizationUuid", "counterpartyUuid"];
+		for (const fk of FK_FIELDS) {
+			if (typeof req.query[fk] === "string" && req.query[fk].trim()) {
+				fkFilter[fk] = req.query[fk].trim();
+			}
+		}
+
+		const baseWhere = { ...searchWhereClause, ...filterWhereClause, ...fkFilter, ...tenantFilter(req) };
 
 		const queryOptions = { take: limitNumber, where: baseWhere, orderBy };
 		if (cursorNumber !== null) {

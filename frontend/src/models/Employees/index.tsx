@@ -1,29 +1,28 @@
 import { FC, useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useAppContext } from "src/app";
-import { getModelColumns } from "src/components/Table/services";
 import { translate } from "src/i18";
-import type { TColumn, TDataItem } from "src/components/Table/types";
+import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
-import useQueryParams from "src/hooks/useQueryParams";
 import { useQueryClient } from "@tanstack/react-query";
-import { useModelDelete } from "src/hooks/useModelDelete";
-import { Divider, Field } from "src/components/Field";
+import { Field } from "src/components/Field";
 import { Group } from "src/components/UI";
 import useUID from "src/hooks/useUID";
-import { Button, ButtonImage } from "src/components/Button";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
-import reload_16 from "src/assets/reload_16.png";
 import Tabs from "src/components/Tabs";
-import { ContactsList } from "../Contacts";
+import ContactsTable from "../Contacts/ContactsTable";
 import EmployeeHistoryTable from "./EmployeeHistoryTable";
 import AvatarUpload from "src/components/AvatarUpload";
 
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
+import FormError from "src/components/FormError";
+import { useFormError } from "src/hooks/useFormError";
+import { commitPendingRows } from "src/services/commitPendingRows";
+import FormPanel from "src/components/FormPanel";
+import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "employees";
 const LIST_NAME = "EmployeesList";
@@ -42,6 +41,8 @@ interface TFormData {
   fullName: string;
   iin: string;
   avatarPath: string;
+  _pendingContacts?: TDataItem[];
+  _pendingHistory?: TDataItem[];
 }
 
 const EMPTY_FORM: TFormData = {
@@ -58,8 +59,11 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
     "employees-form", uuid ?? "new", EMPTY_FORM,
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError, errorRevision] = useFormError();
   const [isEditMode, setIsEditMode] = useState(!!uuid);
+  const contactsPendingRef = useRef<TDataItem[]>([]);
+  const historyPendingRef = useRef<TDataItem[]>([]);
+  const queryClient = useQueryClient();
 
   // ── Загрузка данных ────────────────────────────────────────────────────
   const loadFormData = useCallback(async (entityUuid: string) => {
@@ -73,9 +77,12 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
         avatarPath: d.avatarPath ?? "",
         id: d.id, uuid: d.uuid,
       });
+      // Обновляем вложенные SubTable — invalidate их кэши
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-histories"] });
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     // Если данные восстановлены из sessionStorage — не грузим с сервера
@@ -117,10 +124,42 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
       }));
       setIsEditMode(true);
       if (uniqId) updatePaneLabel(uniqId, `${translate(LIST_NAME) || FORM_LABEL}: ${saved.fullName || saved.lastName || "?"} • ${saved.id ?? "?"}`);
+      // Коммит pending contacts
+      try {
+        await commitPendingRows("contacts", contactsPendingRef.current, saved.uuid, "employeeUuid",
+          translate("ContactsList") || "Контакты",
+          {
+            createPayload: (r: any) => ({ value: r.value ?? "", contactTypeUuid: r.contactTypeUuid ?? null }),
+            updatePayload: (r: any) => ({ value: r.value ?? "", contactTypeUuid: r.contactTypeUuid ?? null }),
+          },
+        );
+        setFormData(prev => ({ ...prev, _pendingContacts: undefined }));
+        contactsPendingRef.current = [];
+        await queryClient.refetchQueries({ queryKey: ["contacts"] });
+      } catch (e: any) {
+        setError(e?.message || "Не удалось сохранить контакты");
+        return false;
+      }
+      // Коммит pending history
+      try {
+        await commitPendingRows("employee-histories", historyPendingRef.current, saved.uuid, "employeeUuid",
+          translate("EmployeeHistoriesList") || "Кадровая история",
+          {
+            createPayload: (r: any) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
+            updatePayload: (r: any) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
+          },
+        );
+        setFormData(prev => ({ ...prev, _pendingHistory: undefined }));
+        historyPendingRef.current = [];
+        await queryClient.refetchQueries({ queryKey: ["employee-histories"] });
+      } catch (e: any) {
+        setError(e?.message || "Не удалось сохранить кадровую историю");
+        return false;
+      }
       onSave?.(); return true;
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка сохранения"); return false; }
     finally { setIsLoading(false); }
-  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel]);
+  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel, queryClient]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
   const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
@@ -176,14 +215,41 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
       // ── Вкладка: Кадровая история ──
       result.push({
         id: "history", label: "Кадровая история", component: (
-          <EmployeeHistoryTable employeeUuid={formData.uuid} disabled={isLoading} />
+          <EmployeeHistoryTable
+            employeeUuid={formData.uuid}
+            disabled={isLoading}
+            deferRemoteChanges={true}
+            initialPendingRows={formData._pendingHistory}
+            onItemsChange={(items) => {
+              historyPendingRef.current = items ?? [];
+              const pending = (items ?? []).filter((r: any) => r._pendingAction);
+              setFormData(prev => {
+                if (JSON.stringify(prev._pendingHistory) === JSON.stringify(pending)) return prev;
+                return { ...prev, _pendingHistory: pending.length ? pending : undefined };
+              });
+            }}
+          />
         ),
       });
 
       // ── Вкладка: Контакты ────────────────────────────────────────────
       result.push({
         id: "contacts", label: translate("ContactsList") || "Контакты", component: (
-          <ContactsList ownerUuid={formData.uuid} ownerField="employeeUuid" ownerName={formData.fullName || formData.lastName} />
+          <ContactsTable
+            deferRemoteChanges={true}
+            parentField="employeeUuid"
+            parentUuid={formData.uuid ?? ""}
+            parentName={formData.fullName || formData.lastName}
+            initialPendingRows={formData._pendingContacts}
+            onItemsChange={(items) => {
+              contactsPendingRef.current = items ?? [];
+              const pending = (items ?? []).filter((r: any) => r._pendingAction);
+              setFormData(prev => {
+                if (JSON.stringify(prev._pendingContacts) === JSON.stringify(pending)) return prev;
+                return { ...prev, _pendingContacts: pending.length ? pending : undefined };
+              });
+            }}
+          />
         ),
       });
     }
@@ -193,13 +259,15 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
 
   return (
     <div className={styles.FormWrapper}>
-      <div className={styles.FormPanel}><div className={styles.TablePanelLeft}><div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
-        <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button><Divider />
-        <Button onClick={handleSave} disabled={isLoading}><span>Сохранить</span></Button>
-        <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button><Divider />
-        {isEditMode && <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}><img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} /></ButtonImage>}
-      </div></div><div className={styles.TablePanelRight} /></div>
-      {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
+      <FormPanel
+        onSaveAndClose={handleSaveAndClose}
+        onSave={handleSave}
+        onClose={handleClose}
+        onReload={uuid ? () => loadFormData(uuid) : undefined}
+        isLoading={isLoading}
+        showReload={isEditMode}
+      />
+      <FormError message={error} revision={errorRevision} onDismiss={() => setError(null)} />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
       </div>
@@ -212,57 +280,28 @@ EmployeesForm.displayName = "EmployeesForm";
 // LIST
 // ═══════════════════════════════════════════════════════════════════════════
 
-const stringifyJson = (v: any): string => { if (v == null) return ""; try { const s = JSON.stringify(v); return s === "{}" || s === "[]" ? "" : s; } catch { return ""; } };
-
 interface EmployeesListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; }
 
 const EmployeesList: FC<EmployeesListProps> = ({ variant = "default", onSelectItem } = {}) => {
-  const componentName = LIST_NAME;
-  const model = MODEL_ENDPOINT;
   const { addPane } = useAppContext().windows;
-  const queryClient = useQueryClient();
   const t = (k: string) => translate(k) || k;
 
-  const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(columnsJson, componentName));
-  const [sort, setSort] = useQueryParams<Record<string, "asc" | "desc">>("sort", { id: "asc" }, undefined, { stringify: stringifyJson });
-  const [search, setSearch] = useQueryParams<string>("search", "");
-  const [filter, setFilter] = useQueryParams<Record<string, { value: unknown; operator: string }> | undefined>("filter", undefined, undefined, { stringify: stringifyJson });
-  const [adaptiveLimit, setAdaptiveLimit] = useState(500);
-  useEffect(() => { GLOBAL_ADAPTIVE_LIMIT_REF.current = adaptiveLimit; }, [adaptiveLimit]);
-  const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
-  const params = useMemo(() => ({ sort, search, filter }), [sort, search, filter]);
-  const { allItems, total, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage , cancelAllRequests } = useInfiniteModelList<TDataItem>({ model, params, queryOptions: {} });
+  const { error, refetch, buildTableProps } = useModelListState({
+    model: MODEL_ENDPOINT,
+    componentName: LIST_NAME,
+    columnsJson,
+  });
 
-
-  const handleDelete = useModelDelete(model, refetch);
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data;
     const isEdit = !!d?.uuid;
     addPane({
-      label: isEdit ? `${t(componentName)}: ${d?.fullName || d?.lastName || t("noName")} • ${d?.id ?? "?"}` : `${t(componentName)}: ${t("new")}`,
+      label: isEdit ? `${t(LIST_NAME)}: ${d?.fullName || d?.lastName || t("noName")} • ${d?.id ?? "?"}` : `${t(LIST_NAME)}: ${t("new")}`,
       component: EmployeesForm, data: d, onSave: () => refetch(), onClose: () => refetch(),
     });
-  }, [addPane, t, refetch, componentName]);
+  }, [addPane, t, refetch]);
 
-  const cachedRowsRef = useRef<TDataItem[]>([]);
-  const [cacheVersion, setCacheVersion] = useState(0);
-  useEffect(() => { cachedRowsRef.current = allItems; setCacheVersion(v => v + 1); }, [allItems]);
-  const rows = useMemo(() => cachedRowsRef.current, [cacheVersion]);
-  const handleSortChange = useCallback((s: typeof sort) => { cachedRowsRef.current = []; setCacheVersion(0); updateAdaptiveLimit(500); setSort(s ?? { id: "asc" }); }, [setSort, updateAdaptiveLimit]);
-  const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => { setFilter((prev: typeof filter) => { const next = { ...(prev ?? {}) }; if (value == null || value === "") delete next[field]; else next[field] = { value, operator }; return Object.keys(next).length > 0 ? next : undefined; }); }, [setFilter]);
-  const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
-  const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
-  const handleCleanRefresh = useCallback(() => { cancelAllRequests(); cachedRowsRef.current = []; setCacheVersion(0); setSearch(""); setFilter(undefined); setSort({ id: "asc" }); updateAdaptiveLimit(500); queryClient.resetQueries({ queryKey: [model] }); }, [cancelAllRequests, queryClient, setSearch, setFilter, setSort, updateAdaptiveLimit]);
-
-  const tableProps = useMemo(() => ({
-    variant, onSelectItem, enableDateRange: false, componentName, rows, columns, total,
-    totalPages: Math.ceil(total / adaptiveLimit), isLoading: isAnythingLoading, isFetching: isAnythingLoading, error, hasNextPage, isFetchingNextPage,
-    pagination: { page: 1, limit: adaptiveLimit, onPageChange: () => { }, onLimitChange: () => { } },
-    sorting: { sort, onSortChange: handleSortChange }, filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
-    search: { value: search, onChange: handleSearch },
-    actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
-    onDelete: handleDelete,
-  }), [variant, onSelectItem, componentName, rows, columns, total, adaptiveLimit, isAnythingLoading, error, sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters, openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit, handleCleanRefresh, handleDelete]);
+  const tableProps = useMemo(() => buildTableProps({ variant, onSelectItem, openModelForm }), [buildTableProps, variant, onSelectItem, openModelForm]);
 
   if (error) return <div className="error-container"><div className="error-message"><h3>Ошибка загрузки</h3><p>{(error as Error)?.message}</p><button onClick={() => refetch()} className="retry-button">Повторить</button></div></div>;
   return <Table {...tableProps} />;

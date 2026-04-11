@@ -16,6 +16,7 @@ import { Divider } from '../Field';
 import Modal from '../Modal';
 import { Group } from 'src/components/UI';
 import { Button, ButtonImage } from '../Button';
+import { LoadingSpinner } from '../UI';
 
 import settingsForm_16 from '../../assets/form-setting_16.png';
 import reloadImage_16 from '../../assets/reload_16.png';
@@ -185,6 +186,8 @@ export interface TableProps {
   inlineEditing?: boolean;
   renderCell?: (row: TDataItem, col: TColumn) => React.ReactNode | undefined;
   onInlineAdd?: () => void;
+  /** Если true — скрыть кнопки «Добавить»/«Удалить» (режим только чтение по правам доступа) */
+  readonly?: boolean;
 }
 
 const ROW_HEIGHT = 30;  // ← ИСПРАВИЛ: было 28, должно быть 30
@@ -208,6 +211,8 @@ interface TableControlPanelProps {
   onDeleteClick: () => void;
   search: { value: string; onChange: (value: string) => void };
   extraButtons?: React.ReactNode;
+  /** Если true — скрыть кнопки «Добавить»/«Удалить» (режим только чтение) */
+  readonly?: boolean;
 }
 
 const TableControlPanel = memo(({
@@ -224,18 +229,20 @@ const TableControlPanel = memo(({
   onDeleteClick,
   search,
   extraButtons,
+  readonly: isReadonly = false,
 }: TableControlPanelProps) => {
   const isSelect = variant === 'select';
+  const hideWrite = isSelect || isReadonly;
   return (
     <div className={styles.TablePanel}>
       <div className={styles.TablePanelLeft}>
         <div className={[styles.colGroup, styles.gap6].join(' ')} style={{ justifyContent: 'flex-start' }}>
           {/* <Divider /> */}
-          {!isSelect && <Button onClick={onAddClick}><span>Добавить</span></Button>}
-          {!isSelect && <Button onClick={onDeleteClick}><span>Удалить</span></Button>}
+          {!hideWrite && <Button onClick={onAddClick} disabled={isLoading}><span>Добавить</span></Button>}
+          {!hideWrite && <Button onClick={onDeleteClick} disabled={isLoading}><span>Удалить</span></Button>}
           {!isSelect && extraButtons}
           {!isSelect && <Divider />}
-          <ButtonImage onClick={onRefresh} title="Обновить">
+          <ButtonImage onClick={onRefresh} disabled={isLoading} title="Обновить">
             <img src={reloadImage_16} alt="Reload" height={16} width={16}
               className={isLoading ? styles.animationLoop : ''} />
           </ButtonImage>
@@ -271,7 +278,8 @@ const TableControlPanel = memo(({
     prevProps.search === nextProps.search &&
     prevProps.extraButtons === nextProps.extraButtons &&
     prevProps.onDeleteClick === nextProps.onDeleteClick &&
-    prevProps.onAddClick === nextProps.onAddClick
+    prevProps.onAddClick === nextProps.onAddClick &&
+    prevProps.readonly === nextProps.readonly
   );
 });
 
@@ -295,6 +303,7 @@ const Table: FC<TableProps> = memo((props) => {
     inlineEditing,
     renderCell,
     onInlineAdd,
+    readonly: isReadonly = false,
   } = props;
 
 
@@ -412,8 +421,17 @@ const Table: FC<TableProps> = memo((props) => {
     setDateRangeModalAction('open');
   }, []);
 
+  const searchOnChangeRef = useRef(search.onChange);
+  searchOnChangeRef.current = search.onChange;
+
   const handleSearchToggle = useCallback(() => {
-    setVisibleFastSearch(v => !v);
+    setVisibleFastSearch(v => {
+      if (v) {
+        // Скрываем поиск → очищаем значение
+        searchOnChangeRef.current("");
+      }
+      return !v;
+    });
   }, []);
 
   // Применить период из модалки → отправить фильтр dateRange
@@ -468,6 +486,7 @@ const Table: FC<TableProps> = memo((props) => {
           onDeleteClick={handleDeleteClick}
           search={search}
           extraButtons={extraButtons}
+          readonly={isReadonly}
         />
 
         {enableDateRange && hasDateRange && (
@@ -484,9 +503,7 @@ const Table: FC<TableProps> = memo((props) => {
             <TableArea />
           </div>
           {(isLoading || isFetchingNextPage) && (
-            <div className={styles.TableLoadingOverlay}>
-              <div className={styles.TableSpinner} />
-            </div>
+            <LoadingSpinner variant="overlay" />
           )}
         </div>
         {/* <TableStatusBar /> */}
@@ -1482,6 +1499,7 @@ const FieldFastSearchInternal = memo(({ value, onChange }: {
           onChange={(e) => handleChange(e.target.value)}
           placeholder="Быстрый поиск по всем полям"
           className={styles.SearchInput}
+          autoFocus
         // title="Быстрый поиск по всем полям"
         />
         <button

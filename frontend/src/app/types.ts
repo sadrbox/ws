@@ -22,7 +22,9 @@ export type TypeAppContextProps = {
 		setActivePane: (uniqId: string) => void;
 		updatePaneLabel: (uniqId: string, label: string) => void;
 	};
-	actions: {};
+	actions: {
+		confirm: (message: string) => Promise<boolean>;
+	};
 	navbar: {
 		props: TypeNavbarProps[];
 		setProps: Dispatch<SetStateAction<TypeNavbarProps[]>>;

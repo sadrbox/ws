@@ -89,3 +89,105 @@ export function tenantFilter(req, field = "organizationUuid") {
 	if (!req.user.organizationUuid) return {}; // пользователь не привязан к организации — без фильтра
 	return { [field]: req.user.organizationUuid };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Маппинг URL-путей → имя модели в AccessRight (PascalCase из ALL_MODEL_NAMES)
+// ═══════════════════════════════════════════════════════════════════════════
+const ROUTE_TO_MODEL = {
+	organizations: "Organization",
+	counterparties: "Counterparty",
+	contracts: "Contract",
+	"contract-files": "AttachedFile",
+	contacttypes: "ContactType",
+	contacts: "Contact",
+	contactpersons: "ContactPerson",
+	bankaccounts: "BankAccount",
+	activityhistories: "ActivityHistory",
+	todos: "Todo",
+	notifications: "Notification",
+	warehouses: "Warehouse",
+	sales: "Sale",
+	purchases: "Purchase",
+	"outgoing-invoices": "OutgoingInvoice",
+	"incoming-invoices": "IncomingInvoice",
+	"payment-invoices": "PaymentInvoice",
+	"scheduled-tasks": "ScheduledTask",
+	"inventory-transfers": "InventoryTransfer",
+	"cash-receipt-orders": "CashReceiptOrder",
+	"cash-expense-orders": "CashExpenseOrder",
+	brands: "Brand",
+	products: "Product",
+	saleitems: "SaleItem",
+	employees: "Employee",
+	positions: "Position",
+	"employee-histories": "EmployeeHistory",
+	"access-rights": "AccessRight",
+	currencies: "Currency",
+	users: "User",
+	files: "AttachedFile",
+	todofiles: "Todo",
+};
+
+/**
+ * Middleware проверки прав доступа.
+ *
+ * Определяет имя модели из URL, загружает `accessLevel` пользователя
+ * и проверяет разрешение:
+ *   - GET  → требуется "readonly" или "full"
+ *   - POST / PUT / DELETE → требуется "full"
+ *   - "none" или отсутствие записи → 403 Forbidden
+ *
+ * Суперадмин и dev-admin пропускаются без проверки.
+ *
+ * ДОЛЖЕН вызываться ПОСЛЕ authMiddleware + tenantMiddleware.
+ */
+export async function accessRightMiddleware(req, res, next) {
+	if (req.method === "OPTIONS") return next();
+
+	// Суперадмин — пропускаем
+	if (req.user?.isSuperAdmin) return next();
+
+	// Dev-режим: admin пропускается
+	const isDev = process.env.NODE_ENV !== "production";
+	if (isDev && req.user?.username?.toLowerCase() === "admin") return next();
+
+	// Определяем имя модели из URL
+	// URL вида: /api/v1/<route>/... — нам нужен первый сегмент пути
+	const pathSegments = req.path.replace(/^\/+/, "").split("/");
+	const routeSegment = pathSegments[0]; // например "organizations", "access-rights"
+
+	const modelName = ROUTE_TO_MODEL[routeSegment];
+	if (!modelName) {
+		// Маршрут не найден в маппинге — пропускаем (например v1.js)
+		return next();
+	}
+
+	try {
+		const accessRight = await prisma.accessRight.findFirst({
+			where: {
+				userUuid: req.user.uuid,
+				modelName,
+			},
+			select: { accessLevel: true },
+		});
+
+		const level = accessRight?.accessLevel || "none";
+
+		// GET-запросы требуют "readonly" или "full"
+		if (req.method === "GET") {
+			if (level === "readonly" || level === "full") return next();
+		} else {
+			// POST, PUT, DELETE, PATCH — требуют "full"
+			if (level === "full") return next();
+		}
+
+		return res.status(403).json({
+			success: false,
+			message: `Нет доступа к ${modelName} (уровень: ${level})`,
+		});
+	} catch (err) {
+		console.error("accessRightMiddleware error:", err);
+		// Если таблица access_rights ещё не создана — пропускаем
+		return next();
+	}
+}

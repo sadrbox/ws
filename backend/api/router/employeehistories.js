@@ -39,7 +39,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			take: limitNumber,
 			where: { employeeUuid },
 			orderBy,
-			include: { position: true, employee: true },
+			include: { position: true, employee: true, organization: true },
 		});
 
 		return res.status(200).json({
@@ -62,7 +62,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const item = await prisma[MODEL].findUnique({
 			where: w,
-			include: { position: true, employee: true },
+			include: { position: true, employee: true, organization: true },
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
@@ -76,7 +76,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { eventDate, eventType, salary, employeeUuid, positionUuid } =
+		const { eventDate, eventType, salary, employeeUuid, positionUuid, organizationUuid } =
 			req.body;
 		if (!employeeUuid)
 			return res.status(400).json({
@@ -95,8 +95,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				salary: salary != null ? parseFloat(salary) : null,
 				employeeUuid,
 				positionUuid: positionUuid || null,
+				organizationUuid: organizationUuid || null,
 			},
-			include: { position: true, employee: true },
+			include: { position: true, employee: true, organization: true },
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -122,11 +123,13 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				req.body.salary != null ? parseFloat(req.body.salary) : null;
 		if (req.body.positionUuid !== undefined)
 			data.positionUuid = req.body.positionUuid || null;
+		if (req.body.organizationUuid !== undefined)
+			data.organizationUuid = req.body.organizationUuid || null;
 
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
-			include: { position: true, employee: true },
+			include: { position: true, employee: true, organization: true },
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

@@ -80,6 +80,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					if (Number.isInteger(num) && num > 0) {
 						orConditions.push({ id: { equals: num } });
 					}
+
 					return { OR: orConditions };
 				}),
 			};
