@@ -200,6 +200,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
       await commitPending(saved.uuid);
       contactsPendingRef.current = [];
       setFormData(prev => { const { _pendingContacts, ...rest } = prev; return rest as TFormData; });
+      queryClient.invalidateQueries({ queryKey: ["contactpersons"] });
       onSave?.();
       return true;
     } catch (err: any) {

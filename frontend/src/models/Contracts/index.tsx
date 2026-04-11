@@ -17,6 +17,7 @@ import Tabs from "src/components/Tabs";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { resolveOwnerName } from "src/utils/resolveOwnerName";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 import FormError from "src/components/FormError";
 import FormPanel from "src/components/FormPanel";
@@ -50,6 +51,7 @@ const ContractsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
   const defaultOrg = useDefaultOrganization();
+  const queryClient = useQueryClient();
 
   const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
@@ -125,6 +127,7 @@ const ContractsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
         const label = `${translate("ContractsList") || "ContractsList"}: ${saved.shortName || saved.contractNumber || "?"} • ${saved.id ?? "?"}`;
         updatePaneLabel(uniqId, label);
       }
+      queryClient.invalidateQueries({ queryKey: ["contracts"] });
       onSave?.();
       return true;
     } catch (err: any) {

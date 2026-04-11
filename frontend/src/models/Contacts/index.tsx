@@ -16,6 +16,7 @@ import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupFie
 import Tabs from "src/components/Tabs";
 import { resolveOwnerName } from "src/utils/resolveOwnerName";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 import FormError from "src/components/FormError";
 import FormPanel from "src/components/FormPanel";
@@ -44,6 +45,7 @@ const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
   const uuid = data?.uuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
+  const queryClient = useQueryClient();
 
   const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
@@ -115,6 +117,7 @@ const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
         const label = `${translate("ContactsList") || "ContactsList"}: ${saved.value || "?"} • ${saved.id ?? "?"}`;
         updatePaneLabel(uniqId, label);
       }
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
       onSave?.();
       return true;
     } catch (err: any) {
