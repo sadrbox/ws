@@ -76,5 +76,18 @@
 		"position": 7,
 		"filter": true,
 		"inlist": true
+	},
+	{
+		"identifier": "ownerName",
+		"type": "string",
+		"name": "Владелец",
+		"width": "250px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Владелец банковского счёта",
+		"visible": true,
+		"position": 8,
+		"filter": false,
+		"inlist": true
 	}
 ]

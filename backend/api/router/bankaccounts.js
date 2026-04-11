@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { enrichWithOwnerName } from "../../utils/resolveOwnerName.js";
 
 const router = express.Router();
 
@@ -156,6 +157,7 @@ router.get("/bankaccounts", async (req, res) => {
 		}
 
 		const items = await prisma.bankAccount.findMany(queryOptions);
+		const enrichedItems = await enrichWithOwnerName(items);
 
 		const hasMore = items.length === limitNumber;
 		const nextCursor = hasMore ? items[items.length - 1].id : null;
@@ -167,7 +169,7 @@ router.get("/bankaccounts", async (req, res) => {
 
 		return res.status(200).json({
 			success: true,
-			items,
+			items: enrichedItems,
 			nextCursor,
 			hasMore,
 			...(total !== undefined ? { total } : {}),

@@ -89,5 +89,18 @@
 		"position": 6,
 		"filter": false,
 		"inlist": true
+	},
+	{
+		"identifier": "ownerName",
+		"type": "string",
+		"name": "Владелец",
+		"width": "250px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Владелец договора",
+		"visible": true,
+		"position": 7,
+		"filter": false,
+		"inlist": true
 	}
 ]
