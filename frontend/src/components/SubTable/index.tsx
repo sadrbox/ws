@@ -257,12 +257,21 @@ const SubTable: FC<SubTableProps> = ({
   }, []); // Только при первом монтировании
 
   // Сброс pendingAppliedRef когда pending очищается (после commit) —
-  // это позволяет повторный мерж при следующем восстановлении из sessionStorage
+  // это позволяет повторный мерж при следующем восстановлении из sessionStorage.
+  // Также принудительно синхронизируем кэш с серверными данными,
+  // удаляя все остаточные temp-строки из cachedRowsRef.
   useEffect(() => {
     if (deferRemoteChanges && pendingAppliedRef.current && !initialPendingRows?.length) {
       pendingAppliedRef.current = false;
+      // Принудительно сбросить кэш к серверным данным — убрать temp/pending строки
+      const clean = allItems.filter((r: any) =>
+        !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-"))
+      );
+      cachedRowsRef.current = clean;
+      setCacheVersion(v => v + 1);
+      onItemsChangeRef.current?.(clean);
     }
-  }, [deferRemoteChanges, initialPendingRows]);
+  }, [deferRemoteChanges, initialPendingRows, allItems]);
 
   // Обёртка для delete — показывает спиннер во время удаления
   const handleDelete = useCallback(async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
@@ -334,8 +343,18 @@ const SubTable: FC<SubTableProps> = ({
       setCacheVersion(v => v + 1);
       onItemsChangeRef.current?.(merged);
     } else {
-      cachedRowsRef.current = allItems;
+      // Чистое присвоение серверных данных — убираем любые остаточные temp-строки
+      // (с отрицательным id или uuid начинающимся на "tmp-")
+      const clean = allItems.filter((r: any) =>
+        !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-"))
+      );
+      const hadDirtyRows = cachedRowsRef.current.some((r: any) => r._pendingAction);
+      cachedRowsRef.current = clean;
       setCacheVersion(v => v + 1);
+      // Если были pending-строки в кэше — оповестим родителя что кэш теперь чистый
+      if (hadDirtyRows) {
+        onItemsChangeRef.current?.(clean);
+      }
     }
   }, [allItems, dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
   // dataUpdatedAt гарантирует срабатывание эффекта даже если allItems ссылочно не изменился
