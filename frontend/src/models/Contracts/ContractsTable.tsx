@@ -1,5 +1,6 @@
 import { FC, useCallback, useMemo } from "react";
 import { useAppContext } from "src/app";
+import { useQueryClient } from "@tanstack/react-query";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
@@ -32,6 +33,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
 }) => {
   const { addPane } = useAppContext().windows;
+  const queryClient = useQueryClient();
   const t = translate;
 
   // ── renderCell ─────────────────────────────────────────────────────────
@@ -128,7 +130,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
   }, []);
 
   // ── openFormFor ────────────────────────────────────────────────────────
-  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
+  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     addPane({
       label: isEdit
@@ -136,10 +138,10 @@ const ContractsTable: FC<ContractsTableProps> = ({
         : `${t("ContractsList")}: ${t("new")}`,
       component: ContractsForm,
       data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
-      onSave: () => ctx.refetch(),
-      onClose: () => ctx.refetch(),
+      onSave: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
+      onClose: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
     });
-  }, [addPane, t, ownerType, parentUuid, parentName]);
+  }, [addPane, t, ownerType, parentUuid, parentName, queryClient]);
 
   // ── defaultNewRow ─────────────────────────────────────────────────────
   const defaultNewRow = useMemo(() => ({

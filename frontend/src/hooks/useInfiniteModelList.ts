@@ -214,10 +214,14 @@ export function useInfiniteModelList<TData = unknown>({
 	const isAnythingLoading =
 		result.isLoading || result.isFetching || result.isFetchingNextPage;
 
+	// Таймстамп последнего обновления данных — можно использовать как триггер
+	// для сброса кэшей, не зависящий от ссылочного равенства allItems
+	const dataUpdatedAt = result.dataUpdatedAt;
+
 	// Отменяем очередь при unmount
 	useEffect(() => {
 		return () => cancelAll();
 	}, [cancelAll]);
 
-	return { ...result, allItems, total, isAnythingLoading, cancelAllRequests: cancelAll };
+	return { ...result, allItems, total, isAnythingLoading, cancelAllRequests: cancelAll, dataUpdatedAt };
 }

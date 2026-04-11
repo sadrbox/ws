@@ -237,7 +237,7 @@ const SubTable: FC<SubTableProps> = ({
     extra: parentUuid ? { [parentKey]: parentUuid, ...(extraQueryParams ?? {}) } : undefined,
   }), [sort, filter, parentUuid, parentKey, extraQueryParams]);
 
-  const { allItems, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage, cancelAllRequests } =
+  const { allItems, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage, cancelAllRequests, dataUpdatedAt } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: { enabled: !!parentUuid } });
 
   const handleDeleteRaw = useModelDelete(model, refetch);
@@ -337,8 +337,9 @@ const SubTable: FC<SubTableProps> = ({
       cachedRowsRef.current = allItems;
       setCacheVersion(v => v + 1);
     }
-  }, [allItems]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Зависимости ограничены allItems — остальное читается через ref/prop при первом мерже
+  }, [allItems, dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // dataUpdatedAt гарантирует срабатывание эффекта даже если allItems ссылочно не изменился
+  // (например, после refetch с идентичными данными)
 
   const rows = useMemo(() => cachedRowsRef.current, [cacheVersion]);
 
