@@ -1,6 +1,5 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -124,7 +123,6 @@ router.get("/contacts", async (req, res) => {
 			...dateRangeFilter,
 			...filterWhereClause,
 			...fkFilter,
-			...tenantFilter(req),
 		};
 
 		const queryOptions = {

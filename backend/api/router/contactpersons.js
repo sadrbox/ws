@@ -3,7 +3,6 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -117,7 +116,7 @@ router.get("/contactpersons", async (req, res) => {
 			fkFilter.ownerUuid = req.query.ownerUuid.trim();
 		}
 
-		const baseWhere = { ...searchWhereClause, ...filterWhereClause, ...fkFilter, ...tenantFilter(req) };
+		const baseWhere = { ...searchWhereClause, ...filterWhereClause, ...fkFilter };
 
 		const queryOptions = { take: limitNumber, where: baseWhere, orderBy };
 		if (cursorNumber !== null) {
