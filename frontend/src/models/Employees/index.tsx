@@ -126,11 +126,12 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
       if (uniqId) updatePaneLabel(uniqId, `${translate(LIST_NAME) || FORM_LABEL}: ${saved.fullName || saved.lastName || "?"} • ${saved.id ?? "?"}`);
       // Коммит pending contacts
       try {
-        await commitPendingRows("contacts", contactsPendingRef.current, saved.uuid, "employeeUuid",
+        await commitPendingRows("contacts", contactsPendingRef.current, saved.uuid, "ownerUuid",
           translate("ContactsList") || "Контакты",
           {
             createPayload: (r: any) => ({ value: r.value ?? "", contactTypeUuid: r.contactTypeUuid ?? null }),
             updatePayload: (r: any) => ({ value: r.value ?? "", contactTypeUuid: r.contactTypeUuid ?? null }),
+            extraFields: { ownerType: "employee" },
           },
         );
         setFormData(prev => ({ ...prev, _pendingContacts: undefined }));
@@ -237,7 +238,7 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
         id: "contacts", label: translate("ContactsList") || "Контакты", component: (
           <ContactsTable
             deferRemoteChanges={true}
-            parentField="employeeUuid"
+            ownerType="employee"
             parentUuid={formData.uuid ?? ""}
             parentName={formData.fullName || formData.lastName}
             initialPendingRows={formData._pendingContacts}

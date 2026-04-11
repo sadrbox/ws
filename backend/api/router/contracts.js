@@ -51,7 +51,7 @@ router.get("/contracts", async (req, res) => {
 			if (!orderBy.some((o) => "id" in o)) orderBy.push({ id: "asc" });
 		}
 
-		const TEXT_FIELDS = ["shortName", "contractNumber", "ownerName"];
+		const TEXT_FIELDS = ["shortName", "contractNumber"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 		if (searchWords.length > 0) {
@@ -107,13 +107,13 @@ router.get("/contracts", async (req, res) => {
 			}
 		}
 
-		// ── Фильтрация по FK-полям (SubTable передаёт как query-параметры) ────
+		// ── Фильтрация по ownerType + ownerUuid ────
 		const fkFilter = {};
-		const FK_FIELDS = ["organizationUuid", "counterpartyUuid"];
-		for (const fk of FK_FIELDS) {
-			if (typeof req.query[fk] === "string" && req.query[fk].trim()) {
-				fkFilter[fk] = req.query[fk].trim();
-			}
+		if (typeof req.query.ownerType === "string" && req.query.ownerType.trim()) {
+			fkFilter.ownerType = req.query.ownerType.trim();
+		}
+		if (typeof req.query.ownerUuid === "string" && req.query.ownerUuid.trim()) {
+			fkFilter.ownerUuid = req.query.ownerUuid.trim();
 		}
 
 		const baseWhere = {
@@ -126,7 +126,6 @@ router.get("/contracts", async (req, res) => {
 		const queryOptions = {
 			take: limitNumber,
 			where: baseWhere,
-			include: { organization: true, counterparty: true },
 			orderBy,
 		};
 		if (cursorNumber !== null) {
@@ -164,7 +163,6 @@ router.get("/contracts/:id", async (req, res) => {
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 		const item = await prisma.contract.findUnique({
 			where: whereClause,
-			include: { organization: true, counterparty: true },
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Not found" });
@@ -183,26 +181,13 @@ router.post("/contracts", async (req, res) => {
 			contractText,
 			startDate,
 			endDate,
-			ownerName,
-			organizationUuid,
-			counterpartyUuid,
+			ownerType,
+			ownerUuid,
 		} = req.body;
 		if (!shortName || typeof shortName !== "string")
 			return res
 				.status(400)
 				.json({ success: false, message: "shortName required" });
-
-		// Авто-вычисление ownerName из FK-владельца
-		let computedOwnerName = ownerName?.trim() || null;
-		if (!computedOwnerName) {
-			if (organizationUuid) {
-				const org = await prisma.organization.findUnique({ where: { uuid: organizationUuid }, select: { shortName: true } });
-				if (org) computedOwnerName = org.shortName;
-			} else if (counterpartyUuid) {
-				const cp = await prisma.counterparty.findUnique({ where: { uuid: counterpartyUuid }, select: { shortName: true } });
-				if (cp) computedOwnerName = cp.shortName;
-			}
-		}
 
 		const item = await prisma.contract.create({
 			data: {
@@ -211,11 +196,9 @@ router.post("/contracts", async (req, res) => {
 				contractText: contractText ?? null,
 				startDate: startDate ? new Date(startDate) : null,
 				endDate: endDate ? new Date(endDate) : null,
-				ownerName: computedOwnerName,
-				organizationUuid: organizationUuid ?? null,
-				counterpartyUuid: counterpartyUuid ?? null,
+				ownerType: ownerType?.trim() || null,
+				ownerUuid: ownerUuid?.trim() || null,
 			},
-			include: { organization: true, counterparty: true },
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -236,9 +219,8 @@ router.put("/contracts/:id", async (req, res) => {
 			contractText,
 			startDate,
 			endDate,
-			ownerName,
-			organizationUuid,
-			counterpartyUuid,
+			ownerType,
+			ownerUuid,
 		} = req.body;
 
 		const data = {};
@@ -250,33 +232,12 @@ router.put("/contracts/:id", async (req, res) => {
 			data.startDate = startDate ? new Date(startDate) : null;
 		if (endDate !== undefined)
 			data.endDate = endDate ? new Date(endDate) : null;
-		if (organizationUuid !== undefined)
-			data.organizationUuid = organizationUuid ?? null;
-		if (counterpartyUuid !== undefined)
-			data.counterpartyUuid = counterpartyUuid ?? null;
-
-		// Авто-вычисление ownerName при изменении FK-владельца
-		if (ownerName !== undefined) {
-			data.ownerName = ownerName?.trim() ?? null;
-		} else if (organizationUuid !== undefined || counterpartyUuid !== undefined) {
-			const existing = await prisma.contract.findUnique({ where: whereClause, select: { organizationUuid: true, counterpartyUuid: true } });
-			const finalOrgUuid = organizationUuid !== undefined ? organizationUuid : existing?.organizationUuid;
-			const finalCpUuid = counterpartyUuid !== undefined ? counterpartyUuid : existing?.counterpartyUuid;
-			if (finalOrgUuid) {
-				const org = await prisma.organization.findUnique({ where: { uuid: finalOrgUuid }, select: { shortName: true } });
-				if (org) data.ownerName = org.shortName;
-			} else if (finalCpUuid) {
-				const cp = await prisma.counterparty.findUnique({ where: { uuid: finalCpUuid }, select: { shortName: true } });
-				if (cp) data.ownerName = cp.shortName;
-			} else {
-				data.ownerName = null;
-			}
-		}
+		if (ownerType !== undefined) data.ownerType = ownerType?.trim() || null;
+		if (ownerUuid !== undefined) data.ownerUuid = ownerUuid?.trim() || null;
 
 		const item = await prisma.contract.update({
 			where: whereClause,
 			data,
-			include: { organization: true, counterparty: true },
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

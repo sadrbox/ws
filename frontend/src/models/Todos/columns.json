@@ -71,19 +71,6 @@
 		"inlist": true
 	},
 	{
-		"identifier": "ownerName",
-		"type": "string",
-		"name": "Владелец",
-		"width": "200px",
-		"minWidth": "150px",
-		"alignment": "left",
-		"hint": "Владелец",
-		"visible": true,
-		"position": 6,
-		"filter": true,
-		"inlist": true
-	},
-	{
 		"identifier": "createdAt",
 		"type": "date",
 		"name": "Дата создания",

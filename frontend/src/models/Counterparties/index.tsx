@@ -90,7 +90,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
     },
     { id: 'tab1', label: 'Банковские счета', component: <BankAccountsTable
       deferRemoteChanges={true}
-      parentField="counterpartyUuid"
+      ownerType="counterparty"
       parentUuid={formData.uuid ?? ""}
       parentName={formData.shortName}
       initialPendingRows={formData._pendingBankAccounts}
@@ -105,7 +105,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
     /> },
     { id: 'tab2', label: 'Договора', component: <ContractsTable
       deferRemoteChanges={true}
-      parentField="counterpartyUuid"
+      ownerType="counterparty"
       parentUuid={formData.uuid ?? ""}
       parentName={formData.shortName}
       initialPendingRows={formData._pendingContracts}
@@ -120,7 +120,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
     /> },
     { id: 'tab3', label: 'Контакты', component: <ContactsTable
         deferRemoteChanges={true}
-        parentField="counterpartyUuid"
+        ownerType="counterparty"
         parentUuid={formData.uuid ?? ""}
         parentName={formData.shortName}
         initialPendingRows={formData._pendingContacts}
@@ -140,12 +140,14 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
   /** Коммит pending-строк SubTable на сервер */
   const commitPending = useCallback(async (
     endpoint: string,
-    parentField: string,
+    ownerType: string,
     savedParentUuid: string,
     pendingRef: React.MutableRefObject<TDataItem[]>,
     tableName: string,
   ) => {
-    await commitPendingRows(endpoint, pendingRef.current || [], savedParentUuid, parentField, tableName);
+    await commitPendingRows(endpoint, pendingRef.current || [], savedParentUuid, "ownerUuid", tableName, {
+      extraFields: { ownerType },
+    });
     try { await queryClient.refetchQueries({ queryKey: [endpoint] }); } catch {}
   }, [queryClient]);
 
@@ -208,9 +210,9 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
       // Commit pending SubTable rows
       try {
         const parentUuid = saved.uuid ?? saved.id ?? "";
-        await commitPending("contacts", "counterpartyUuid", parentUuid, contactsPendingRef, translate("ContactsList") || "Контакты");
-        await commitPending("bankaccounts", "counterpartyUuid", parentUuid, bankAccountsPendingRef, translate("BankAccountsList") || "Банковские счета");
-        await commitPending("contracts", "counterpartyUuid", parentUuid, contractsPendingRef, translate("ContractsList") || "Договора");
+        await commitPending("contacts", "counterparty", parentUuid, contactsPendingRef, translate("ContactsList") || "Контакты");
+        await commitPending("bankaccounts", "counterparty", parentUuid, bankAccountsPendingRef, translate("BankAccountsList") || "Банковские счета");
+        await commitPending("contracts", "counterparty", parentUuid, contractsPendingRef, translate("ContractsList") || "Договора");
         // Очистить pending после успешного коммита
         setFormData(prev => ({ ...prev, _pendingContacts: undefined, _pendingBankAccounts: undefined, _pendingContracts: undefined }));
         contactsPendingRef.current = [];

@@ -17,6 +17,7 @@ import styles from "src/styles/main.module.scss";
 import Tabs from "src/components/Tabs";
 import ContactsTable from "../Contacts/ContactsTable";
 import AvatarUpload from "src/components/AvatarUpload";
+import { resolveOwnerName } from "src/utils/resolveOwnerName";
 
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 import FormError from "src/components/FormError";
@@ -55,11 +56,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
   const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
-    const name = (data.ownerName as string) || "";
-    if (data.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = data.organizationUuid as string; init.ownerName = name; }
-    else if (data.counterpartyUuid) { init.ownerType = "counterparty"; init.ownerUuid = data.counterpartyUuid as string; init.ownerName = name; }
-    else if (data.contactPersonUuid) { init.ownerType = "contactperson"; init.ownerUuid = data.contactPersonUuid as string; init.ownerName = name; }
-    else if (data.employeeUuid) { init.ownerType = "employee"; init.ownerUuid = data.employeeUuid as string; init.ownerName = name; }
+    if (data.ownerType) { init.ownerType = data.ownerType as OwnerType; init.ownerUuid = (data.ownerUuid as string) || ""; init.ownerName = (data.ownerName as string) || ""; }
     return init;
   })();
   const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
@@ -90,7 +87,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
                     setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))
                   }
                   disabled={isLoading}
-                  typeLocked={!uuid && (!!data?.organizationUuid || !!data?.counterpartyUuid)}
+                  typeLocked={!uuid && !!data?.ownerType}
                   allowedTypes={["organization", "counterparty"]}
                 />
                 <Field label="Комментарий" name={`${formUid}_comment`} value={formData.comment} onChange={e => handleFieldChange("comment", e.target.value)} disabled={isLoading} />
@@ -122,7 +119,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
     if (isEditMode && formData.uuid) {
       t.push({ id: 'contacts', label: 'Контакты', component: <ContactsTable
           deferRemoteChanges={true}
-          parentField="contactPersonUuid"
+          ownerType="contactperson"
           parentUuid={formData.uuid ?? ""}
           parentName={formData.fullName}
           initialPendingRows={formData._pendingContacts}
@@ -140,7 +137,9 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
   }, [formData, formUid, isLoading, isEditMode, handleFieldChange, data]);
 
   const commitPending = useCallback(async (parentUuid: string) => {
-    await commitPendingRows("contacts", contactsPendingRef.current, parentUuid, "contactPersonUuid", translate("ContactsList") || "Контакты");
+    await commitPendingRows("contacts", contactsPendingRef.current, parentUuid, "ownerUuid", translate("ContactsList") || "Контакты", {
+      extraFields: { ownerType: "contactperson" },
+    });
     await queryClient.refetchQueries({ queryKey: ["contacts"] });
   }, [queryClient]);
 
@@ -149,20 +148,13 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
     try {
       const res = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
       const d = res.data?.item ?? res.data;
-      let oType: OwnerType = "";
-      let oUuid = "";
-      let oName = "";
-      if (d.organizationUuid) {
-        oType = "organization"; oUuid = d.organizationUuid; oName = d.organization?.shortName ?? d.ownerName ?? "";
-      } else if (d.counterpartyUuid) {
-        oType = "counterparty"; oUuid = d.counterpartyUuid; oName = d.counterparty?.shortName ?? d.ownerName ?? "";
-      }
+      const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
       setFormData({
         fullName: d.fullName ?? `${d.lastName || ""} ${d.firstName || ""}`.trim(),
         firstName: d.firstName ?? "", lastName: d.lastName ?? "", middleName: d.middleName ?? "",
         comment: d.comment ?? "",
         avatarPath: d.avatarPath ?? "",
-        ownerType: oType, ownerUuid: oUuid, ownerName: oName,
+        ownerType: (d.ownerType as OwnerType) ?? "", ownerUuid: d.ownerUuid ?? "", ownerName: oName,
         id: d.id, uuid: d.uuid,
       });
       // Обновляем вложенную SubTable — invalidate кэш контактов
@@ -184,30 +176,23 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
       middleName: formData.middleName || null,
       fullName: formData.fullName?.trim() || null,
       comment: formData.comment?.trim() || null,
-      ownerName: formData.ownerName?.trim() || null,
-      organizationUuid: formData.ownerType === "organization" ? (formData.ownerUuid || null) : null,
-      counterpartyUuid: formData.ownerType === "counterparty" ? (formData.ownerUuid || null) : null,
+      ownerType: formData.ownerType || null,
+      ownerUuid: formData.ownerUuid || null,
     };
     try {
       const response = isEditMode && (uuid || formData.uuid)
         ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = response.data?.item ?? response.data;
-      let oType: OwnerType = formData.ownerType;
-      let oUuid = formData.ownerUuid;
-      let oName = formData.ownerName;
-      if (saved.organizationUuid) {
-        oType = "organization"; oUuid = saved.organizationUuid; oName = saved.organization?.shortName ?? oName;
-      } else if (saved.counterpartyUuid) {
-        oType = "counterparty"; oUuid = saved.counterpartyUuid; oName = saved.counterparty?.shortName ?? oName;
-      }
       setFormData(prev => ({
         ...prev, ...saved,
         fullName: saved.fullName ?? prev.fullName,
         firstName: saved.firstName ?? "", lastName: saved.lastName ?? "", middleName: saved.middleName ?? "",
         comment: saved.comment ?? "",
         avatarPath: saved.avatarPath ?? prev.avatarPath,
-        ownerType: oType, ownerUuid: oUuid, ownerName: oName,
+        ownerType: (saved.ownerType as OwnerType) ?? prev.ownerType,
+        ownerUuid: saved.ownerUuid ?? prev.ownerUuid,
+        ownerName: saved.ownerName ?? prev.ownerName,
       }));
       setIsEditMode(true);
       if (uniqId) updatePaneLabel(uniqId, `${translate("ContactPersonsList") || "Контактные лица"}: ${saved.fullName || "?"} • ${saved.id ?? "?"}`);
@@ -252,10 +237,9 @@ interface ContactPersonsListProps {
   onSelectItem?: (item: TDataItem) => void;
   ownerUuid?: string;
   ownerField?: string;
-  ownerName?: string;
 }
 
-const ContactPersonsList: FC<ContactPersonsListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField, ownerName } = {}) => {
+const ContactPersonsList: FC<ContactPersonsListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField } = {}) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? "ContactPersonsList_part" : "ContactPersonsList";
   const { addPane } = useAppContext().windows;
@@ -278,9 +262,9 @@ const ContactPersonsList: FC<ContactPersonsListProps> = ({ variant = 'default', 
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data;
     const isEdit = !!d?.uuid;
-    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid, ownerName: ownerName || "" } as unknown as TDataItem : d;
+    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid } as unknown as TDataItem : d;
     addPane({ label: isEdit ? `${t(componentName)}: ${d?.fullName || t("noName")} • ${d?.id ?? "?"}` : `${t(componentName)}: ${t("new")}`, component: ContactPersonsForm, data: newData, onSave: () => refetch(), onClose: () => refetch(), });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField, ownerName]);
+  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
 
   if (error) return (<div className="error-container"><div className="error-message"><h3>{t("errorTitle") || "Ошибка загрузки"}</h3><p>{(error as Error)?.message || "Неизвестная ошибка"}</p><button onClick={() => refetch()} className="retry-button">{t("retry") || "Повторить"}</button></div></div>);
 

@@ -18,7 +18,6 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 import FormError from "src/components/FormError";
 import FormPanel from "src/components/FormPanel";
-import { useAccessRight } from "src/hooks/useAccessRight";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "cash-expense-orders";
@@ -40,16 +39,13 @@ const EMPTY_FORM: TFormData = { documentNumber: "", documentDate: "", descriptio
 
 const CashExpenseOrdersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
-  const { canWrite } = useAccessRight("CashExpenseOrder");
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
   const defaultOrg = useDefaultOrganization();
   const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
-    const name = (data.ownerName as string) || "";
-    if (data.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = data.organizationUuid as string; init.ownerName = name; }
-    else if (data.counterpartyUuid) { init.ownerType = "counterparty"; init.ownerUuid = data.counterpartyUuid as string; init.ownerName = name; }
+    if (data.ownerType) { init.ownerType = data.ownerType as OwnerType; init.ownerUuid = (data.ownerUuid as string) || ""; init.ownerName = (data.ownerName as string) || ""; }
     else if (defaultOrg.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = defaultOrg.organizationUuid; init.ownerName = defaultOrg.organizationName; }
     return init;
   })();
@@ -83,7 +79,7 @@ const CashExpenseOrdersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniq
     const payload: Record<string, unknown> = {
       documentNumber: formData.documentNumber?.trim() || null, documentDate: formData.documentDate || null,
       description: formData.description?.trim() || null, amount: formData.amount ? parseFloat(formData.amount) : null,
-      status: formData.status || "draft", ownerName: formData.ownerName?.trim() || null,
+      status: formData.status || "draft",
       organizationUuid: formData.ownerType === "organization" ? (formData.ownerUuid || null) : null,
       counterpartyUuid: formData.ownerType === "counterparty" ? (formData.ownerUuid || null) : null,
     };
@@ -111,7 +107,7 @@ const CashExpenseOrdersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniq
                 <FieldDate label="Дата документа" name={`${formUid}_docDate`} minWidth="200px" value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} />
                 <Field label="Сумма" name={`${formUid}_amount`} minWidth="200px" value={formData.amount} onChange={e => handleFieldChange("amount", e.target.value)} disabled={isLoading} />
                 <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
-                <OwnerLookupField name={`${formUid}_owner`} ownerType={formData.ownerType} ownerUuid={formData.ownerUuid} ownerName={formData.ownerName} onOwnerChange={({ ownerType, ownerUuid, ownerName }) => setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))} disabled={isLoading} typeLocked={!uuid && (!!data?.organizationUuid || !!data?.counterpartyUuid)} minWidth="339px" />
+                <OwnerLookupField name={`${formUid}_owner`} ownerType={formData.ownerType} ownerUuid={formData.ownerUuid} ownerName={formData.ownerName} onOwnerChange={({ ownerType, ownerUuid, ownerName }) => setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))} disabled={isLoading} typeLocked={!uuid && !!data?.ownerType} minWidth="339px" />
                 <FieldTextarea label="Описание" name={`${formUid}_description`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} minWidth="339px" minHeight="80px" rows={4} />
               </div></Group>
               {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
@@ -127,7 +123,7 @@ const CashExpenseOrdersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniq
 
   return (
     <div className={styles.FormWrapper}>
-      <FormPanel readonly={!canWrite} onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
+      <FormPanel onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
       <FormError message={error} onDismiss={() => setError(null)} />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
@@ -137,19 +133,19 @@ const CashExpenseOrdersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniq
 };
 CashExpenseOrdersForm.displayName = "CashExpenseOrdersForm";
 
-interface CashExpenseOrdersListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; ownerName?: string; }
+interface CashExpenseOrdersListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; }
 
-const CashExpenseOrdersList: FC<CashExpenseOrdersListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField, ownerName } = {}) => {
+const CashExpenseOrdersList: FC<CashExpenseOrdersListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField } = {}) => {
   const isPartOf = !!ownerUuid; const componentName = isPartOf ? `${LIST_NAME}_part` : LIST_NAME;
   const { addPane } = useAppContext().windows; const t = (k: string) => translate(k) || k;
   const ownerFilter = useMemo(() => { if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } }; return undefined; }, [ownerUuid, ownerField]);
   const { error, refetch, buildTableProps } = useModelListState({ model: MODEL_ENDPOINT, componentName, columnsJson, defaultSort: { id: "desc" }, columnsVariant: isPartOf ? "part" : undefined, ownerFilter });
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data; const isEdit = !!d?.uuid;
-    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid, ownerName: ownerName || "" } as unknown as TDataItem : d;
+    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid } as unknown as TDataItem : d;
     const title = isEdit ? (d?.documentNumber ? String(d.documentNumber).slice(0, 50) : t("noName")) : t("new");
     addPane({ label: `${t(componentName)}: ${title} • ${d?.id ?? "?"}`, component: CashExpenseOrdersForm, data: newData, onSave: () => refetch(), onClose: () => refetch() });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField, ownerName]);
+  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
   if (error) return <div className="error-container"><div className="error-message"><h3>Ошибка загрузки</h3><p>{(error as Error)?.message}</p><button onClick={() => refetch()} className="retry-button">Повторить</button></div></div>;
   return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange: false })} />;
 };

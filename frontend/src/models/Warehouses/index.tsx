@@ -17,7 +17,6 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 import FormError from "src/components/FormError";
 import FormPanel from "src/components/FormPanel";
-import { useAccessRight } from "src/hooks/useAccessRight";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "warehouses";
@@ -39,7 +38,6 @@ const EMPTY_FORM: TFormData = {
 
 const WarehousesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
-  const { canWrite } = useAccessRight("Warehouse");
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
   const defaultOrg = useDefaultOrganization();
@@ -107,7 +105,6 @@ const WarehousesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =
   return (
     <div className={styles.FormWrapper}>
       <FormPanel
-        readonly={!canWrite}
         onSaveAndClose={handleSaveAndClose}
         onSave={handleSave}
         onClose={handleClose}
@@ -124,9 +121,9 @@ const WarehousesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =
 };
 WarehousesForm.displayName = "WarehousesForm";
 
-interface WarehousesListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; ownerName?: string; }
+interface WarehousesListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; }
 
-const WarehousesList: FC<WarehousesListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField, ownerName } = {}) => {
+const WarehousesList: FC<WarehousesListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField } = {}) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? "WarehousesList_part" : "WarehousesList";
   const { addPane } = useAppContext().windows;
@@ -148,10 +145,10 @@ const WarehousesList: FC<WarehousesListProps> = ({ variant = "default", onSelect
 
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data; const isEdit = !!d?.uuid;
-    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid, ownerName: ownerName || "" } as unknown as TDataItem : d;
+    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid } as unknown as TDataItem : d;
     const title = isEdit ? (d?.shortName ? String(d.shortName).slice(0, 50) : t("noName")) : t("new");
     addPane({ label: `${t(componentName)}: ${title} • ${d?.id ?? "?"}`, component: WarehousesForm, data: newData, onSave: () => refetch(), onClose: () => refetch() });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField, ownerName]);
+  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
 
   if (error) return <div className="error-container"><div className="error-message"><h3>Ошибка загрузки</h3><p>{(error as Error)?.message}</p><button onClick={() => refetch()} className="retry-button">Повторить</button></div></div>;
   return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange: false })} />;

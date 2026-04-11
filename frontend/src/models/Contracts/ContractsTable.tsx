@@ -12,8 +12,8 @@ const MODEL_ENDPOINT = "contracts";
 const COMPONENT_NAME = "ContractsList_part";
 
 interface ContractsTableProps {
-  /** FK-поле владельца, например "organizationUuid" */
-  parentField: string;
+  /** Тип владельца: "organization", "counterparty" */
+  ownerType: string;
   /** UUID владельца */
   parentUuid: string;
   /** Имя владельца (для передачи в форму) */
@@ -28,7 +28,7 @@ interface ContractsTableProps {
 }
 
 const ContractsTable: FC<ContractsTableProps> = ({
-  parentField, parentUuid, parentName = "", disabled = false,
+  ownerType, parentUuid, parentName = "", disabled = false,
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
 }) => {
   const { addPane } = useAppContext().windows;
@@ -135,11 +135,11 @@ const ContractsTable: FC<ContractsTableProps> = ({
         ? `${t("ContractsList")}: ${data?.shortName || data?.contractNumber || t("noName")} • ${data?.id ?? "?"}`
         : `${t("ContractsList")}: ${t("new")}`,
       component: ContractsForm,
-      data: isEdit ? data : { [parentField]: parentUuid, ownerName: parentName } as any,
+      data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
       onSave: () => ctx.refetch(),
       onClose: () => ctx.refetch(),
     });
-  }, [addPane, t, parentField, parentUuid, parentName]);
+  }, [addPane, t, ownerType, parentUuid, parentName]);
 
   // ── defaultNewRow ─────────────────────────────────────────────────────
   const defaultNewRow = useMemo(() => ({
@@ -155,8 +155,9 @@ const ContractsTable: FC<ContractsTableProps> = ({
       model={MODEL_ENDPOINT}
       componentName={COMPONENT_NAME}
       columnsJson={columnsJson}
-      parentKey={parentField}
+      parentKey="ownerUuid"
       parentUuid={parentUuid}
+      extraQueryParams={{ ownerType }}
       defaultSort={{ id: "asc" }}
       disabled={disabled}
       deferRemoteChanges={deferRemoteChanges}

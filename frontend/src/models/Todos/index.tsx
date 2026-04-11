@@ -19,7 +19,6 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 import FormError from "src/components/FormError";
 import FormPanel from "src/components/FormPanel";
-import { useAccessRight } from "src/hooks/useAccessRight";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "todos";
@@ -63,7 +62,6 @@ const EMPTY_FORM: TFormData = {
 
 const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
-  const { canWrite } = useAccessRight("Todo");
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
   const defaultOrg = useDefaultOrganization();
@@ -71,7 +69,7 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
-    if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; init.organizationName = (data.ownerName as string) || ""; }
+    if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; init.organizationName = ""; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
     return init;
   })();
@@ -136,7 +134,6 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
     const payload: Record<string, unknown> = {
       description: formData.description?.trim() || null,
       status: formData.status || "new",
-      ownerName: formData.organizationName?.trim() || null,
       organizationUuid: formData.organizationUuid || null,
       counterpartyUuid: null,
       curatorUuid: formData.curatorUuid || null,
@@ -287,7 +284,7 @@ const TodosForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
 
   return (
     <div className={styles.FormWrapper}>
-      <FormPanel readonly={!canWrite} onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
+      <FormPanel onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
       <FormError message={error} onDismiss={() => setError(null)} />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
@@ -306,10 +303,9 @@ interface TodosListProps {
   onSelectItem?: (item: TDataItem) => void;
   ownerUuid?: string;
   ownerField?: string;
-  ownerName?: string;
 }
 
-const TodosList: FC<TodosListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField, ownerName } = {}) => {
+const TodosList: FC<TodosListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField } = {}) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? "TodosList_part" : "TodosList";
   const { addPane } = useAppContext().windows;
@@ -331,7 +327,7 @@ const TodosList: FC<TodosListProps> = ({ variant = 'default', onSelectItem, owne
     const d = formProps.data;
     const isEdit = !!d?.uuid;
     const newData = !isEdit && ownerUuid && ownerField
-      ? { [ownerField]: ownerUuid, ownerName: ownerName || "" } as unknown as TDataItem
+      ? { [ownerField]: ownerUuid } as unknown as TDataItem
       : d;
     const title = isEdit
       ? (d?.description ? (String(d.description).slice(0, 50) + (String(d.description).length > 50 ? "..." : "")) : t("noName"))
@@ -340,7 +336,7 @@ const TodosList: FC<TodosListProps> = ({ variant = 'default', onSelectItem, owne
       label: `${t(componentName)}: ${title} • ${d?.id ?? "?"}`,
       component: TodosForm, data: newData, onSave: () => refetch(), onClose: () => refetch(),
     });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField, ownerName]);
+  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
 
   if (error) {
     return (

@@ -54,9 +54,9 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
-    if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; init.organizationName = (data.ownerName as string) || ""; }
+    if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; init.organizationName = ""; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
-    if (data.counterpartyUuid) { init.counterpartyUuid = data.counterpartyUuid as string; init.counterpartyName = (data.ownerName as string) || ""; }
+    if (data.counterpartyUuid) { init.counterpartyUuid = data.counterpartyUuid as string; init.counterpartyName = ""; }
     return init;
   })();
   const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
@@ -259,9 +259,9 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
 };
 SalesForm.displayName = "SalesForm";
 
-interface SalesListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; ownerName?: string; }
+interface SalesListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; }
 
-const SalesList: FC<SalesListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField, ownerName } = {}) => {
+const SalesList: FC<SalesListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField } = {}) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? `${LIST_NAME}_part` : LIST_NAME;
   const { addPane } = useAppContext().windows;
@@ -283,10 +283,10 @@ const SalesList: FC<SalesListProps> = ({ variant = "default", onSelectItem, owne
 
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data; const isEdit = !!d?.uuid;
-    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid, ownerName: ownerName || "" } as unknown as TDataItem : d;
+    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid } as unknown as TDataItem : d;
     const title = isEdit ? (d?.id ? String(d.id) : t("noName")) : t("new");
     addPane({ label: `${t(componentName)}: ${title} • ${d?.id ?? "?"}`, component: SalesForm, data: newData, onSave: () => refetch(), onClose: () => refetch() });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField, ownerName]);
+  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
 
   const tableProps = useMemo(() => buildTableProps({ variant, onSelectItem, openModelForm }), [buildTableProps, variant, onSelectItem, openModelForm]);
 

@@ -5,7 +5,7 @@ import { tenantFilter } from "../../utils/auth.js";
 const router = express.Router();
 
 // Текстовые поля для полнотекстового поиска
-const TEXT_FIELDS = ["shortName", "iban", "bik", "bankName", "ownerName"];
+const TEXT_FIELDS = ["shortName", "iban", "bik", "bankName"];
 
 // ============================================
 // GET /bankaccounts — курсорная пагинация
@@ -124,13 +124,13 @@ router.get("/bankaccounts", async (req, res) => {
 			}
 		}
 
-		// ── Фильтрация по FK-полям (SubTable передаёт как query-параметры) ────
+		// ── Фильтрация по ownerType + ownerUuid ────
 		const fkFilter = {};
-		const FK_FIELDS = ["organizationUuid", "counterpartyUuid"];
-		for (const fk of FK_FIELDS) {
-			if (typeof req.query[fk] === "string" && req.query[fk].trim()) {
-				fkFilter[fk] = req.query[fk].trim();
-			}
+		if (typeof req.query.ownerType === "string" && req.query.ownerType.trim()) {
+			fkFilter.ownerType = req.query.ownerType.trim();
+		}
+		if (typeof req.query.ownerUuid === "string" && req.query.ownerUuid.trim()) {
+			fkFilter.ownerUuid = req.query.ownerUuid.trim();
 		}
 
 		// ── Итоговый where ────────────────────────────────────────────────────
@@ -147,8 +147,6 @@ router.get("/bankaccounts", async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			include: {
-				organization: true,
-				counterparty: true,
 				currency: true,
 			},
 			orderBy,
@@ -198,8 +196,6 @@ router.get("/bankaccounts/:id", async (req, res) => {
 		const item = await prisma.bankAccount.findUnique({
 			where: whereClause,
 			include: {
-				organization: true,
-				counterparty: true,
 				currency: true,
 			},
 		});
@@ -228,9 +224,8 @@ router.post("/bankaccounts", async (req, res) => {
 			bik,
 			bankName,
 			currencyUuid,
-			ownerName,
-			organizationUuid,
-			counterpartyUuid,
+			ownerType,
+			ownerUuid,
 		} = req.body;
 
 		if (!iban || typeof iban !== "string") {
@@ -240,27 +235,6 @@ router.post("/bankaccounts", async (req, res) => {
 			});
 		}
 
-		// Банковский счёт может принадлежать только одному владельцу
-		if (organizationUuid && counterpartyUuid) {
-			return res.status(400).json({
-				success: false,
-				message:
-					"Банковский счёт может принадлежать только Организации или Контрагенту, но не обоим одновременно",
-			});
-		}
-
-		// Авто-вычисление ownerName если не передано явно
-		let computedOwnerName = ownerName?.trim() || null;
-		if (!computedOwnerName) {
-			if (organizationUuid) {
-				const org = await prisma.organization.findUnique({ where: { uuid: organizationUuid }, select: { shortName: true } });
-				if (org) computedOwnerName = org.shortName || null;
-			} else if (counterpartyUuid) {
-				const cp = await prisma.counterparty.findUnique({ where: { uuid: counterpartyUuid }, select: { shortName: true } });
-				if (cp) computedOwnerName = cp.shortName || null;
-			}
-		}
-
 		const item = await prisma.bankAccount.create({
 			data: {
 				shortName: shortName?.trim() ?? null,
@@ -268,13 +242,10 @@ router.post("/bankaccounts", async (req, res) => {
 				bik: bik?.trim() ?? null,
 				bankName: bankName?.trim() ?? null,
 				currencyUuid: currencyUuid ?? null,
-				ownerName: computedOwnerName,
-				organizationUuid: organizationUuid ?? null,
-				counterpartyUuid: counterpartyUuid ?? null,
+				ownerType: ownerType?.trim() || null,
+				ownerUuid: ownerUuid?.trim() || null,
 			},
 			include: {
-				organization: true,
-				counterparty: true,
 				currency: true,
 			},
 		});
@@ -308,59 +279,23 @@ router.put("/bankaccounts/:id", async (req, res) => {
 			bik,
 			bankName,
 			currencyUuid,
-			ownerName,
-			organizationUuid,
-			counterpartyUuid,
+			ownerType,
+			ownerUuid,
 		} = req.body;
 		const data = {};
-
-		// Банковский счёт может принадлежать только одному владельцу
-		const effectiveOrgUuid =
-			organizationUuid !== undefined ? organizationUuid : undefined;
-		const effectiveCpUuid =
-			counterpartyUuid !== undefined ? counterpartyUuid : undefined;
-		if (effectiveOrgUuid && effectiveCpUuid) {
-			return res.status(400).json({
-				success: false,
-				message:
-					"Банковский счёт может принадлежать только Организации или Контрагенту, но не обоим одновременно",
-			});
-		}
 
 		if (shortName !== undefined) data.shortName = shortName?.trim() ?? null;
 		if (iban !== undefined) data.iban = iban.trim();
 		if (bik !== undefined) data.bik = bik?.trim() ?? null;
 		if (bankName !== undefined) data.bankName = bankName?.trim() ?? null;
 		if (currencyUuid !== undefined) data.currencyUuid = currencyUuid ?? null;
-		if (organizationUuid !== undefined)
-			data.organizationUuid = organizationUuid ?? null;
-		if (counterpartyUuid !== undefined)
-			data.counterpartyUuid = counterpartyUuid ?? null;
-
-		// Авто-вычисление ownerName при изменении FK-владельца
-		if (ownerName !== undefined) {
-			data.ownerName = ownerName?.trim() ?? null;
-		} else if (organizationUuid !== undefined || counterpartyUuid !== undefined) {
-			const existing = await prisma.bankAccount.findUnique({ where: whereClause, select: { organizationUuid: true, counterpartyUuid: true } });
-			const finalOrgUuid = organizationUuid !== undefined ? organizationUuid : existing?.organizationUuid;
-			const finalCpUuid = counterpartyUuid !== undefined ? counterpartyUuid : existing?.counterpartyUuid;
-			if (finalOrgUuid) {
-				const org = await prisma.organization.findUnique({ where: { uuid: finalOrgUuid }, select: { shortName: true } });
-				if (org) data.ownerName = org.shortName;
-			} else if (finalCpUuid) {
-				const cp = await prisma.counterparty.findUnique({ where: { uuid: finalCpUuid }, select: { shortName: true } });
-				if (cp) data.ownerName = cp.shortName;
-			} else {
-				data.ownerName = null;
-			}
-		}
+		if (ownerType !== undefined) data.ownerType = ownerType?.trim() || null;
+		if (ownerUuid !== undefined) data.ownerUuid = ownerUuid?.trim() || null;
 
 		const item = await prisma.bankAccount.update({
 			where: whereClause,
 			data,
 			include: {
-				organization: true,
-				counterparty: true,
 				currency: true,
 			},
 		});
@@ -398,48 +333,6 @@ router.delete("/bankaccounts/:id", async (req, res) => {
 		}
 		console.error("DELETE /bankaccounts/:id error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
-	}
-});
-
-// ============================================
-// GET /bankaccounts
-// ============================================
-router.get("/", async (req, res) => {
-	try {
-		const {
-			search,
-			sortField,
-			sortOrder,
-			page = 1,
-			limit = 50,
-			ownerUuid,
-			ownerField,
-		} = req.query;
-
-		const where = {};
-
-		if (ownerUuid && ownerField) {
-			where[ownerField] = ownerUuid;
-		}
-
-		if (search) {
-			where.OR = TEXT_FIELDS.map((field) => ({
-				[field]: { contains: search, mode: "insensitive" },
-			}));
-		}
-
-		const totalCount = await prisma.bankAccount.count({ where });
-		const items = await prisma.bankAccount.findMany({
-			where,
-			orderBy: sortField ? { [sortField]: sortOrder || "asc" } : { id: "asc" },
-			skip: (parseInt(page) - 1) * parseInt(limit),
-			take: parseInt(limit),
-		});
-
-		res.json({ items, totalCount });
-	} catch (err) {
-		console.error(err);
-		res.status(500).json({ error: "Ошибка при получении банковских счетов" });
 	}
 });
 

@@ -12,8 +12,8 @@ const MODEL_ENDPOINT = "contacts";
 const COMPONENT_NAME = "ContactsList_part";
 
 interface ContactsTableProps {
-  /** FK-поле владельца, например "organizationUuid", "counterpartyUuid", "employeeUuid", "contactPersonUuid" */
-  parentField: string;
+  /** Тип владельца: "organization", "counterparty", "employee", "contactPerson", "user" */
+  ownerType: string;
   /** UUID владельца */
   parentUuid: string;
   /** Имя владельца (для передачи в форму) */
@@ -27,7 +27,7 @@ interface ContactsTableProps {
   initialPendingRows?: any[];
 }
 
-const ContactsTable: FC<ContactsTableProps> = ({ parentField, parentUuid, parentName = "", disabled = false, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
+const ContactsTable: FC<ContactsTableProps> = ({ ownerType, parentUuid, parentName = "", disabled = false, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
   const { addPane } = useAppContext().windows;
   const t = translate;
 
@@ -87,11 +87,11 @@ const ContactsTable: FC<ContactsTableProps> = ({ parentField, parentUuid, parent
         ? `${t("ContactsList")}: ${data?.value || t("noName")} • ${data?.id ?? "?"}`
         : `${t("ContactsList")}: ${t("new")}`,
       component: ContactsForm,
-      data: isEdit ? data : { [parentField]: parentUuid, ownerName: parentName } as any,
+      data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
       onSave: () => ctx.refetch(),
       onClose: () => ctx.refetch(),
     });
-  }, [addPane, t, parentField, parentUuid, parentName]);
+  }, [addPane, t, ownerType, parentUuid, parentName]);
 
   // ── defaultNewRow (SubTable сам обрабатывает POST / deferred create) ───
   const defaultNewRow = useMemo(() => ({
@@ -104,8 +104,9 @@ const ContactsTable: FC<ContactsTableProps> = ({ parentField, parentUuid, parent
       model={MODEL_ENDPOINT}
       componentName={COMPONENT_NAME}
       columnsJson={columnsJson}
-      parentKey={parentField}
+      parentKey="ownerUuid"
       parentUuid={parentUuid}
+      extraQueryParams={{ ownerType }}
       defaultSort={{ id: "asc" }}
       disabled={disabled}
       deferRemoteChanges={deferRemoteChanges}

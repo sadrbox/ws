@@ -11,8 +11,8 @@ const MODEL_ENDPOINT = "bankaccounts";
 const COMPONENT_NAME = "BankAccountsList_part";
 
 interface BankAccountsTableProps {
-  /** FK-поле владельца, например "organizationUuid", "counterpartyUuid" */
-  parentField: string;
+  /** Тип владельца: "organization", "counterparty" */
+  ownerType: string;
   /** UUID владельца */
   parentUuid: string;
   /** Имя владельца (для передачи в форму) */
@@ -27,7 +27,7 @@ interface BankAccountsTableProps {
 }
 
 const BankAccountsTable: FC<BankAccountsTableProps> = ({
-  parentField, parentUuid, parentName = "", disabled = false,
+  ownerType, parentUuid, parentName = "", disabled = false,
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
 }) => {
   const { addPane } = useAppContext().windows;
@@ -110,11 +110,11 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
         ? `${t("BankAccountsList")}: ${data?.shortName || data?.iban || t("noName")} • ${data?.id ?? "?"}`
         : `${t("BankAccountsList")}: ${t("new")}`,
       component: BankAccountsForm,
-      data: isEdit ? data : { [parentField]: parentUuid, ownerName: parentName } as any,
+      data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
       onSave: () => ctx.refetch(),
       onClose: () => ctx.refetch(),
     });
-  }, [addPane, t, parentField, parentUuid, parentName]);
+  }, [addPane, t, ownerType, parentUuid, parentName]);
 
   // ── defaultNewRow ─────────────────────────────────────────────────────
   const defaultNewRow = useMemo(() => ({
@@ -130,8 +130,9 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
       model={MODEL_ENDPOINT}
       componentName={COMPONENT_NAME}
       columnsJson={columnsJson}
-      parentKey={parentField}
+      parentKey="ownerUuid"
       parentUuid={parentUuid}
+      extraQueryParams={{ ownerType }}
       defaultSort={{ id: "asc" }}
       disabled={disabled}
       deferRemoteChanges={deferRemoteChanges}

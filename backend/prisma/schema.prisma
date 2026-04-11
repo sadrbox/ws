@@ -18,7 +18,6 @@ model User {
   avatarPath       String?
   organizationUuid String?
   accessRights     AccessRight[]
-  contacts         Contact[]
   notifications    Notification[]
   curatorTodos     Todo[]         @relation("TodoCurator")
   executorTodos    Todo[]         @relation("TodoExecutor")
@@ -38,12 +37,8 @@ model Organization {
   displayName        String?
   inviteCode         String?             @unique
   activityHistories  ActivityHistory[]
-  bankAccounts       BankAccount[]
   cashExpenseOrders  CashExpenseOrder[]  @relation("OrgCashExpenses")
   cashReceiptOrders  CashReceiptOrder[]  @relation("OrgCashReceipts")
-  contactPersons     ContactPerson[]
-  contacts           Contact[]
-  contracts          Contract[]
   employees          Employee[]          @relation("EmployeeOrganization")
   incomingInvoices   IncomingInvoice[]   @relation("OrgIncomingInvoices")
   inventoryTransfers InventoryTransfer[]
@@ -66,12 +61,8 @@ model Counterparty {
   bin               String             @unique @db.VarChar(12)
   shortName         String?
   displayName       String?
-  bankAccounts      BankAccount[]
   cashExpenseOrders CashExpenseOrder[] @relation("CpCashExpenses")
   cashReceiptOrders CashReceiptOrder[] @relation("CpCashReceipts")
-  contactPersons    ContactPerson[]
-  contacts          Contact[]
-  contracts         Contract[]
   incomingInvoices  IncomingInvoice[]  @relation("CpIncomingInvoices")
   outgoingInvoices  OutgoingInvoice[]  @relation("CpOutgoingInvoices")
   paymentInvoices   PaymentInvoice[]
@@ -83,22 +74,18 @@ model Counterparty {
 }
 
 model Contract {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
-  shortName        String
-  contractNumber   String?
-  contractText     String?
-  startDate        DateTime?
-  endDate          DateTime?
-  organizationUuid String?
-  counterpartyUuid String?
-  ownerName        String?
-  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
-  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
-  sales            Sale[]
+  id        Int       @id @default(autoincrement())
+  uuid      String    @unique @default(uuid())
+  shortName String
+  contractNumber String?
+  contractText   String?
+  startDate DateTime?
+  endDate   DateTime?
+  ownerType String?
+  ownerUuid String?
+  sales     Sale[]
 
-  @@index([organizationUuid])
-  @@index([counterpartyUuid])
+  @@index([ownerType, ownerUuid])
   @@map("contracts")
 }
 
@@ -128,72 +115,48 @@ model ContactType {
 }
 
 model Contact {
-  id                Int            @id @default(autoincrement())
-  uuid              String         @unique @default(uuid())
-  value             String         @default("")
-  contactTypeUuid   String?
-  organizationUuid  String?
-  counterpartyUuid  String?
-  ownerName         String?
-  contactPersonUuid String?
-  employeeUuid      String?
-  userUuid          String?
-  contactPerson     ContactPerson? @relation(fields: [contactPersonUuid], references: [uuid])
-  contactType       ContactType?   @relation(fields: [contactTypeUuid], references: [uuid])
-  counterparty      Counterparty?  @relation(fields: [counterpartyUuid], references: [uuid])
-  employee          Employee?      @relation(fields: [employeeUuid], references: [uuid])
-  organization      Organization?  @relation(fields: [organizationUuid], references: [uuid])
-  user              User?          @relation(fields: [userUuid], references: [uuid])
+  id              Int          @id @default(autoincrement())
+  uuid            String       @unique @default(uuid())
+  value           String       @default("")
+  contactTypeUuid String?
+  ownerType       String?
+  ownerUuid       String?
+  contactType     ContactType? @relation(fields: [contactTypeUuid], references: [uuid])
 
   @@index([contactTypeUuid])
-  @@index([organizationUuid])
-  @@index([counterpartyUuid])
-  @@index([contactPersonUuid])
-  @@index([userUuid])
-  @@index([employeeUuid])
+  @@index([ownerType, ownerUuid])
   @@map("contacts")
 }
 
 model ContactPerson {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
-  firstName        String?
-  lastName         String?
-  middleName       String?
-  fullName         String?       @db.VarChar(255)
-  organizationUuid String?
-  counterpartyUuid String?
-  ownerName        String?
-  comment          String?
-  avatarPath       String?
-  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
-  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
-  contacts         Contact[]
+  id        Int     @id @default(autoincrement())
+  uuid      String  @unique @default(uuid())
+  firstName String?
+  lastName  String?
+  middleName String?
+  fullName  String? @db.VarChar(255)
+  ownerType String?
+  ownerUuid String?
+  comment   String?
+  avatarPath String?
 
-  @@index([organizationUuid])
-  @@index([counterpartyUuid])
+  @@index([ownerType, ownerUuid])
   @@map("contact_persons")
 }
 
 model BankAccount {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
-  organizationUuid String?
-  counterpartyUuid String?
-  iban             String
-  bik              String?
-  bankName         String?
-  ownerName        String?
-  shortName        String?
-  currencyUuid     String?
-  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
-  currency         Currency?     @relation(fields: [currencyUuid], references: [uuid])
-  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
+  id           Int       @id @default(autoincrement())
+  uuid         String    @unique @default(uuid())
+  ownerType    String?
+  ownerUuid    String?
+  iban         String
+  bik          String?
+  bankName     String?
+  shortName    String?
+  currencyUuid String?
+  currency     Currency? @relation(fields: [currencyUuid], references: [uuid])
 
-  @@unique([organizationUuid, iban], name: "bankacc_org_iban_unique")
-  @@unique([counterpartyUuid, iban], name: "bankacc_cp_iban_unique")
-  @@index([organizationUuid])
-  @@index([counterpartyUuid])
+  @@index([ownerType, ownerUuid])
   @@index([currencyUuid])
   @@index([iban])
   @@index([bik])
@@ -237,7 +200,6 @@ model Todo {
   deadline         DateTime?
   deadlineDays     Int?
   status           String         @default("new")
-  ownerName        String?
   notifications    Notification[]
   counterparty     Counterparty?  @relation(fields: [counterpartyUuid], references: [uuid])
   curator          User?          @relation("TodoCurator", fields: [curatorUuid], references: [uuid])
@@ -296,7 +258,6 @@ model Sale {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
-  ownerName        String?
   posted           Boolean       @default(false)
   saleItems        SaleItem[]
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
@@ -321,7 +282,6 @@ model Purchase {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
-  ownerName        String?
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
@@ -341,7 +301,6 @@ model OutgoingInvoice {
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
-  ownerName        String?
   counterparty     Counterparty? @relation("CpOutgoingInvoices", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgOutgoingInvoices", fields: [organizationUuid], references: [uuid])
 
@@ -361,7 +320,6 @@ model IncomingInvoice {
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
-  ownerName        String?
   counterparty     Counterparty? @relation("CpIncomingInvoices", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgIncomingInvoices", fields: [organizationUuid], references: [uuid])
 
@@ -381,7 +339,6 @@ model PaymentInvoice {
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
-  ownerName        String?
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
@@ -418,7 +375,6 @@ model InventoryTransfer {
   fromWarehouseUuid String?
   toWarehouseUuid   String?
   organizationUuid  String?
-  ownerName         String?
   fromWarehouse     Warehouse?    @relation("TransferFrom", fields: [fromWarehouseUuid], references: [uuid])
   organization      Organization? @relation(fields: [organizationUuid], references: [uuid])
   toWarehouse       Warehouse?    @relation("TransferTo", fields: [toWarehouseUuid], references: [uuid])
@@ -440,7 +396,6 @@ model CashReceiptOrder {
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
-  ownerName        String?
   counterparty     Counterparty? @relation("CpCashReceipts", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashReceipts", fields: [organizationUuid], references: [uuid])
 
@@ -460,7 +415,6 @@ model CashExpenseOrder {
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
-  ownerName        String?
   counterparty     Counterparty? @relation("CpCashExpenses", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashExpenses", fields: [organizationUuid], references: [uuid])
 
@@ -519,7 +473,6 @@ model Employee {
   iin              String?           @db.VarChar(12)
   avatarPath       String?
   organizationUuid String?
-  contacts         Contact[]
   employeeHistory  EmployeeHistory[]
   organization     Organization?     @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid])
   users            User[]

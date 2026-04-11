@@ -15,11 +15,11 @@ import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import Tabs from "src/components/Tabs";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
+import { resolveOwnerName } from "src/utils/resolveOwnerName";
 
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 import FormError from "src/components/FormError";
 import FormPanel from "src/components/FormPanel";
-import { useAccessRight } from "src/hooks/useAccessRight";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "bankaccounts";
@@ -50,7 +50,6 @@ const EMPTY_FORM: TFormData = {
 
 const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
-  const { canWrite } = useAccessRight("BankAccount");
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
   const defaultOrg = useDefaultOrganization();
@@ -58,11 +57,7 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
   const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
-    const name = (data.ownerName as string) || "";
-    if (data.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = data.organizationUuid as string; init.ownerName = name; }
-    else if (data.counterpartyUuid) { init.ownerType = "counterparty"; init.ownerUuid = data.counterpartyUuid as string; init.ownerName = name; }
-    else if (data.contactPersonUuid) { init.ownerType = "contactperson"; init.ownerUuid = data.contactPersonUuid as string; init.ownerName = name; }
-    else if (data.employeeUuid) { init.ownerType = "employee"; init.ownerUuid = data.employeeUuid as string; init.ownerName = name; }
+    if (data.ownerType) { init.ownerType = data.ownerType as OwnerType; init.ownerUuid = (data.ownerUuid as string) || ""; init.ownerName = (data.ownerName as string) || ""; }
     else if (defaultOrg.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = defaultOrg.organizationUuid; init.ownerName = defaultOrg.organizationName; }
     return init;
   })();
@@ -79,14 +74,12 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
     try {
       const response = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
       const d = response.data?.item ?? response.data;
-      const ot: OwnerType = d.organizationUuid ? "organization" : d.counterpartyUuid ? "counterparty" : "";
-      const ou = d.organizationUuid || d.counterpartyUuid || "";
-      const on = d.organization?.shortName || d.counterparty?.shortName || d.ownerName || "";
+      const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
       setFormData({
         shortName: d.shortName ?? "", iban: d.iban ?? "", bik: d.bik ?? "", bankName: d.bankName ?? "",
         currencyUuid: d.currencyUuid ?? "",
         currencyName: d.currency ? `${d.currency.code} — ${d.currency.shortName}` : "",
-        ownerType: ot, ownerUuid: ou, ownerName: on,
+        ownerType: (d.ownerType as OwnerType) ?? "", ownerUuid: d.ownerUuid ?? "", ownerName: oName,
         id: d.id, uuid: d.uuid,
       });
     } catch (err: any) {
@@ -115,26 +108,23 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
       bik: formData.bik?.trim() || null,
       bankName: formData.bankName?.trim() || null,
       currencyUuid: formData.currencyUuid || null,
-      organizationUuid: formData.ownerType === "organization" ? formData.ownerUuid || null : null,
-      counterpartyUuid: formData.ownerType === "counterparty" ? formData.ownerUuid || null : null,
-      ownerName: formData.ownerName?.trim() || null,
+      ownerType: formData.ownerType || null,
+      ownerUuid: formData.ownerUuid || null,
     };
     try {
       const response = isEditMode && (uuid || formData.uuid)
         ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = response.data?.item ?? response.data;
-      const sot: OwnerType = saved.organizationUuid ? "organization" : saved.counterpartyUuid ? "counterparty" : "";
-      const sou = saved.organizationUuid || saved.counterpartyUuid || "";
-      const son = saved.organization?.shortName || saved.counterparty?.shortName || "";
       setFormData(prev => ({
         ...prev, ...saved,
         shortName: saved.shortName ?? "", iban: saved.iban ?? "", bik: saved.bik ?? "",
         bankName: saved.bankName ?? "",
         currencyUuid: saved.currencyUuid ?? prev.currencyUuid,
         currencyName: saved.currency ? `${saved.currency.code} — ${saved.currency.shortName}` : prev.currencyName,
-        ownerType: sot || prev.ownerType, ownerUuid: sou || prev.ownerUuid,
-        ownerName: son || prev.ownerName,
+        ownerType: (saved.ownerType as OwnerType) ?? prev.ownerType,
+        ownerUuid: saved.ownerUuid ?? prev.ownerUuid,
+        ownerName: saved.ownerName ?? prev.ownerName,
       }));
       setIsEditMode(true);
       if (uniqId) {
@@ -187,7 +177,7 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
                     name={`${formUid}_owner`}
                     onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
                       setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))}
-                    typeLocked={!uuid && (!!data?.organizationUuid || !!data?.counterpartyUuid)}
+                    typeLocked={!uuid && !!data?.ownerType}
                     allowedTypes={["organization", "counterparty"]}
                     disabled={isLoading}
                   />
@@ -213,7 +203,7 @@ const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
 
   return (
     <div className={styles.FormWrapper}>
-      <FormPanel readonly={!canWrite} onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
+      <FormPanel onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
       <FormError message={error} onDismiss={() => setError(null)} />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
@@ -232,10 +222,9 @@ interface BankAccountsListProps {
   onSelectItem?: (item: TDataItem) => void;
   ownerUuid?: string;
   ownerField?: string;
-  ownerName?: string;
 }
 
-const BankAccountsList: FC<BankAccountsListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField, ownerName } = {}) => {
+const BankAccountsList: FC<BankAccountsListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField } = {}) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? "BankAccountsList_part" : "BankAccountsList";
   const { addPane } = useAppContext().windows;
@@ -257,13 +246,13 @@ const BankAccountsList: FC<BankAccountsListProps> = ({ variant = 'default', onSe
     const d = formProps.data;
     const isEdit = !!d?.uuid;
     const newData = !isEdit && ownerUuid && ownerField
-      ? { [ownerField]: ownerUuid, ownerName: ownerName || "" } as unknown as TDataItem
+      ? { [ownerField]: ownerUuid } as unknown as TDataItem
       : d;
     addPane({
       label: isEdit ? `${t(componentName)}: ${d?.shortName || d?.iban || t("noName")} • ${d?.id ?? "?"}` : `${t(componentName)}: ${t("new")}`,
       component: BankAccountsForm, data: newData, onSave: () => refetch(), onClose: () => refetch(),
     });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField, ownerName]);
+  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
 
   if (error) {
     return (

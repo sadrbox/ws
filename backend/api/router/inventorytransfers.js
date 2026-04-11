@@ -4,7 +4,7 @@ import { tenantFilter } from "../../utils/auth.js";
 const router = express.Router();
 const MODEL = "inventoryTransfer";
 const ROUTE = "inventory-transfers";
-const TEXT_FIELDS = ["documentNumber", "description", "ownerName"];
+const TEXT_FIELDS = ["documentNumber", "description"];
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -128,7 +128,6 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			fromWarehouseUuid,
 			toWarehouseUuid,
 			organizationUuid,
-			ownerName,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
@@ -139,7 +138,6 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				fromWarehouseUuid: fromWarehouseUuid || null,
 				toWarehouseUuid: toWarehouseUuid || null,
 				organizationUuid: organizationUuid || null,
-				ownerName: ownerName?.trim() ?? null,
 			},
 			include: { fromWarehouse: true, toWarehouse: true, organization: true },
 		});
@@ -163,7 +161,6 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			"fromWarehouseUuid",
 			"toWarehouseUuid",
 			"organizationUuid",
-			"ownerName",
 		]) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;

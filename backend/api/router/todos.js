@@ -4,7 +4,7 @@ import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
-const TEXT_FIELDS = ["shortName", "description", "ownerName", "status"];
+const TEXT_FIELDS = ["shortName", "description", "status"];
 
 const INCLUDE = {
 	organization: true,
@@ -207,7 +207,6 @@ router.post("/todos", async (req, res) => {
 			executorUuid,
 			deadline,
 			deadlineDays,
-			ownerName,
 		} = req.body;
 
 		const item = await prisma.todo.create({
@@ -221,7 +220,6 @@ router.post("/todos", async (req, res) => {
 				executorUuid: executorUuid || null,
 				deadline: deadline ? new Date(deadline) : null,
 				deadlineDays: deadlineDays ? parseInt(deadlineDays) : null,
-				ownerName: ownerName?.trim() ?? null,
 			},
 			include: INCLUDE,
 		});
@@ -272,7 +270,6 @@ router.put("/todos/:id", async (req, res) => {
 			executorUuid,
 			deadline,
 			deadlineDays,
-			ownerName,
 		} = req.body;
 
 		const data = {};
@@ -290,7 +287,6 @@ router.put("/todos/:id", async (req, res) => {
 			data.deadline = deadline ? new Date(deadline) : null;
 		if (deadlineDays !== undefined)
 			data.deadlineDays = deadlineDays ? parseInt(deadlineDays) : null;
-		if (ownerName !== undefined) data.ownerName = ownerName?.trim() ?? null;
 
 		const item = await prisma.todo.update({
 			where: whereClause,

@@ -39,19 +39,6 @@
 		"inlist": true
 	},
 	{
-		"identifier": "ownerName",
-		"type": "string",
-		"name": "Владелец",
-		"width": "220px",
-		"minWidth": "160px",
-		"alignment": "left",
-		"hint": "Организация или контрагент",
-		"visible": true,
-		"position": 4,
-		"filter": true,
-		"inlist": true
-	},
-	{
 		"identifier": "comment",
 		"type": "string",
 		"name": "Комментарий",

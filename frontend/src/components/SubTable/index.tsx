@@ -103,6 +103,12 @@ export interface SubTableProps {
    * FK родителя (parentKey → parentUuid) добавляется автоматически.
    */
   defaultNewRow?: Record<string, unknown>;
+  /**
+   * Дополнительные query-параметры, которые отправляются при каждом GET-запросе
+   * и добавляются к новым строкам (как дополнение к parentKey / parentUuid).
+   * Пример: `{ ownerType: "organization" }`
+   */
+  extraQueryParams?: Record<string, string>;
 }
 
 /** Контекст, передаваемый в кастомные колбэки */
@@ -175,6 +181,7 @@ const SubTable: FC<SubTableProps> = ({
   initialPendingRows,
   validationRules,
   defaultNewRow,
+  extraQueryParams,
 }) => {
   const queryClient = useQueryClient();
 
@@ -227,8 +234,8 @@ const SubTable: FC<SubTableProps> = ({
   // SubTable — вложенная таблица: поиск ВСЕГДА на фронтенде, не отправляем search на сервер
   const params = useMemo(() => ({
     sort, filter,
-    extra: parentUuid ? { [parentKey]: parentUuid } : undefined,
-  }), [sort, filter, parentUuid, parentKey]);
+    extra: parentUuid ? { [parentKey]: parentUuid, ...(extraQueryParams ?? {}) } : undefined,
+  }), [sort, filter, parentUuid, parentKey, extraQueryParams]);
 
   const { allItems, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage, cancelAllRequests } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: { enabled: !!parentUuid } });
@@ -590,7 +597,7 @@ const SubTable: FC<SubTableProps> = ({
       // создаём локальную временную строку и не отправляем на сервер
       const tmpId = tempIdRef.current--;
       const tmpUuid = `tmp-${Date.now()}-${Math.abs(tmpId)}`;
-      const newRow: any = { id: tmpId, uuid: tmpUuid, [parentKey]: parentUuid };
+      const newRow: any = { id: tmpId, uuid: tmpUuid, [parentKey]: parentUuid, ...(extraQueryParams ?? {}) };
       // инициализация полей из columns
       columns.forEach((c) => {
         if (!(c.identifier in newRow)) newRow[c.identifier] = c.type === "number" ? null : "";
@@ -618,7 +625,7 @@ const SubTable: FC<SubTableProps> = ({
       setOpCount(c => c + 1);
       try {
         const { default: apiClient } = await import("src/services/api/client");
-        await apiClient.post(`/${model}`, { ...defaultNewRow, [parentKey]: parentUuid });
+        await apiClient.post(`/${model}`, { ...defaultNewRow, [parentKey]: parentUuid, ...(extraQueryParams ?? {}) });
       } catch (err: any) {
         alert(err.response?.data?.message || "Ошибка создания записи");
       } finally {
@@ -626,7 +633,7 @@ const SubTable: FC<SubTableProps> = ({
         setOpCount(c => c - 1);
       }
     }
-  }, [deferRemoteChanges, tempIdRef, columns, parentKey, parentUuid, onInlineAddProp, defaultNewRow, model, ctx, refetch]);
+  }, [deferRemoteChanges, tempIdRef, columns, parentKey, parentUuid, extraQueryParams, onInlineAddProp, defaultNewRow, model, ctx, refetch]);
 
   // ── Кнопки ─────────────────────────────────────────────────────────────
   const extraButtons = useMemo(() => (

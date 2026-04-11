@@ -32,6 +32,8 @@ export async function commitPendingRows(
     updatePayload?: (row: TDataItem) => Record<string, unknown>;
     /** Дополнительные поля-ключи, специфичные для endpoint, которые надо исключить из проверки «пустая строка» */
     extraSkipFields?: string[];
+    /** Дополнительные поля, которые добавляются к каждому payload (например { ownerType: "organization" }) */
+    extraFields?: Record<string, unknown>;
   },
 ): Promise<void> {
   if (!rows.length) return;
@@ -53,17 +55,19 @@ export async function commitPendingRows(
         );
         if (!hasData) continue;
 
+        const extra = options?.extraFields ?? {};
         const payload = options?.createPayload
-          ? { ...options.createPayload(row), [parentField]: parentUuid }
-          : buildGenericPayload(row, parentField, parentUuid);
+          ? { ...options.createPayload(row), [parentField]: parentUuid, ...extra }
+          : { ...buildGenericPayload(row, parentField, parentUuid), ...extra };
 
         await apiClient.post(`/${endpoint}`, payload);
       } else if (row._pendingAction === "update") {
         if (!row.uuid) continue;
 
+        const extra = options?.extraFields ?? {};
         const payload = options?.updatePayload
-          ? { ...options.updatePayload(row), [parentField]: parentUuid }
-          : buildGenericPayload(row, parentField, parentUuid);
+          ? { ...options.updatePayload(row), [parentField]: parentUuid, ...extra }
+          : { ...buildGenericPayload(row, parentField, parentUuid), ...extra };
 
         await apiClient.put(`/${endpoint}/${row.uuid}`, payload);
       } else if (row._pendingAction === "delete") {

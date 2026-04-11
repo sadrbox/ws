@@ -16,7 +16,6 @@ import Tabs from "src/components/Tabs";
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 import FormError from "src/components/FormError";
 import FormPanel from "src/components/FormPanel";
-import { useAccessRight } from "src/hooks/useAccessRight";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "scheduled-tasks";
@@ -39,7 +38,6 @@ const EMPTY_FORM: TFormData = { shortName: "", description: "", cronExpr: "", st
 
 const ScheduledTasksForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
-  const { canWrite } = useAccessRight("ScheduledTask");
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
 
@@ -111,7 +109,7 @@ const ScheduledTasksForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
 
   return (
     <div className={styles.FormWrapper}>
-      <FormPanel readonly={!canWrite} onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
+      <FormPanel onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
       <FormError message={error} onDismiss={() => setError(null)} />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
@@ -121,19 +119,19 @@ const ScheduledTasksForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
 };
 ScheduledTasksForm.displayName = "ScheduledTasksForm";
 
-interface ScheduledTasksListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; ownerName?: string; }
+interface ScheduledTasksListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; }
 
-const ScheduledTasksList: FC<ScheduledTasksListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField, ownerName } = {}) => {
+const ScheduledTasksList: FC<ScheduledTasksListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField } = {}) => {
   const isPartOf = !!ownerUuid; const componentName = isPartOf ? `${LIST_NAME}_part` : LIST_NAME;
   const { addPane } = useAppContext().windows; const t = (k: string) => translate(k) || k;
   const ownerFilter = useMemo(() => { if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } }; return undefined; }, [ownerUuid, ownerField]);
   const { error, refetch, buildTableProps } = useModelListState({ model: MODEL_ENDPOINT, componentName, columnsJson, defaultSort: { id: "desc" }, columnsVariant: isPartOf ? "part" : undefined, ownerFilter });
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data; const isEdit = !!d?.uuid;
-    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid, ownerName: ownerName || "" } as unknown as TDataItem : d;
+    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid } as unknown as TDataItem : d;
     const title = isEdit ? (d?.shortName ? String(d.shortName).slice(0, 50) : t("noName")) : t("new");
     addPane({ label: `${t(componentName)}: ${title} • ${d?.id ?? "?"}`, component: ScheduledTasksForm, data: newData, onSave: () => refetch(), onClose: () => refetch() });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField, ownerName]);
+  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
   if (error) return <div className="error-container"><div className="error-message"><h3>Ошибка загрузки</h3><p>{(error as Error)?.message}</p><button onClick={() => refetch()} className="retry-button">Повторить</button></div></div>;
   return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange: false })} />;
 };

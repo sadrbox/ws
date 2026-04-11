@@ -50,18 +50,5 @@
 		"position": 3,
 		"filter": false,
 		"inlist": true
-	},
-	{
-		"identifier": "ownerName",
-		"type": "string",
-		"name": "Owner Name",
-		"width": "250px",
-		"minWidth": "150px",
-		"alignment": "left",
-		"hint": "Владелец контакта",
-		"visible": true,
-		"position": 4,
-		"filter": true,
-		"inlist": true
 	}
 ]

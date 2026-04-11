@@ -6,7 +6,7 @@ const router = express.Router();
 
 const MODEL = "sale";
 const ROUTE = "sales";
-const TEXT_FIELDS = ["documentNumber", "description", "ownerName"];
+const TEXT_FIELDS = ["documentNumber", "description"];
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -140,7 +140,6 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			organizationUuid,
 			counterpartyUuid,
 			contractUuid,
-			ownerName,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
@@ -153,7 +152,6 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
-				ownerName: ownerName?.trim() ?? null,
 			},
 			include: { organization: true, counterparty: true, contract: true },
 		});
@@ -178,7 +176,6 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			"organizationUuid",
 			"counterpartyUuid",
 			"contractUuid",
-			"ownerName",
 		];
 		for (const f of strFields) {
 			if (req.body[f] !== undefined)

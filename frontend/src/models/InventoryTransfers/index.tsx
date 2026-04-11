@@ -17,7 +17,6 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 import FormError from "src/components/FormError";
 import FormPanel from "src/components/FormPanel";
-import { useAccessRight } from "src/hooks/useAccessRight";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "inventory-transfers";
@@ -36,13 +35,11 @@ interface TFormData {
   fromWarehouseUuid: string; fromWarehouseName: string;
   toWarehouseUuid: string; toWarehouseName: string;
   organizationUuid: string; organizationName: string;
-  ownerName: string;
 }
-const EMPTY_FORM: TFormData = { documentNumber: "", documentDate: "", description: "", status: "draft", fromWarehouseUuid: "", fromWarehouseName: "", toWarehouseUuid: "", toWarehouseName: "", organizationUuid: "", organizationName: "", ownerName: "" };
+const EMPTY_FORM: TFormData = { documentNumber: "", documentDate: "", description: "", status: "draft", fromWarehouseUuid: "", fromWarehouseName: "", toWarehouseUuid: "", toWarehouseName: "", organizationUuid: "", organizationName: "" };
 
 const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
-  const { canWrite } = useAccessRight("InventoryTransfer");
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
   const defaultOrg = useDefaultOrganization();
@@ -64,7 +61,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uni
         fromWarehouseUuid: d.fromWarehouseUuid ?? "", fromWarehouseName: d.fromWarehouse?.shortName ?? "",
         toWarehouseUuid: d.toWarehouseUuid ?? "", toWarehouseName: d.toWarehouse?.shortName ?? "",
         organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? "",
-        ownerName: d.ownerName ?? "", id: d.id, uuid: d.uuid,
+        id: d.id, uuid: d.uuid,
       });
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); } finally { setIsLoading(false); }
   }, []);
@@ -81,7 +78,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uni
       documentNumber: formData.documentNumber?.trim() || null, documentDate: formData.documentDate || null,
       description: formData.description?.trim() || null, status: formData.status || "draft",
       fromWarehouseUuid: formData.fromWarehouseUuid || null, toWarehouseUuid: formData.toWarehouseUuid || null,
-      organizationUuid: formData.organizationUuid || null, ownerName: formData.ownerName?.trim() || null,
+      organizationUuid: formData.organizationUuid || null,
     };
     try {
       const res = isEditMode && (uuid || formData.uuid) ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload) : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
@@ -91,7 +88,6 @@ const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uni
         fromWarehouseName: saved.fromWarehouse?.shortName ?? prev.fromWarehouseName,
         toWarehouseName: saved.toWarehouse?.shortName ?? prev.toWarehouseName,
         organizationName: saved.organization?.shortName ?? prev.organizationName,
-        ownerName: saved.ownerName ?? prev.ownerName,
       }));
       setIsEditMode(true);
       if (uniqId) updatePaneLabel(uniqId, `${translate(LIST_NAME) || FORM_LABEL}: ${saved.documentNumber || "?"} • ${saved.id ?? "?"}`);
@@ -127,7 +123,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uni
 
   return (
     <div className={styles.FormWrapper}>
-      <FormPanel readonly={!canWrite} onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
+      <FormPanel onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
       <FormError message={error} onDismiss={() => setError(null)} />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
@@ -137,19 +133,19 @@ const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uni
 };
 InventoryTransfersForm.displayName = "InventoryTransfersForm";
 
-interface InventoryTransfersListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; ownerName?: string; }
+interface InventoryTransfersListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; }
 
-const InventoryTransfersList: FC<InventoryTransfersListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField, ownerName } = {}) => {
+const InventoryTransfersList: FC<InventoryTransfersListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField } = {}) => {
   const isPartOf = !!ownerUuid; const componentName = isPartOf ? `${LIST_NAME}_part` : LIST_NAME;
   const { addPane } = useAppContext().windows; const t = (k: string) => translate(k) || k;
   const ownerFilter = useMemo(() => { if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } }; return undefined; }, [ownerUuid, ownerField]);
   const { error, refetch, buildTableProps } = useModelListState({ model: MODEL_ENDPOINT, componentName, columnsJson, defaultSort: { id: "desc" }, columnsVariant: isPartOf ? "part" : undefined, ownerFilter });
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     const d = formProps.data; const isEdit = !!d?.uuid;
-    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid, ownerName: ownerName || "" } as unknown as TDataItem : d;
+    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid } as unknown as TDataItem : d;
     const title = isEdit ? (d?.documentNumber ? String(d.documentNumber).slice(0, 50) : t("noName")) : t("new");
     addPane({ label: `${t(componentName)}: ${title} • ${d?.id ?? "?"}`, component: InventoryTransfersForm, data: newData, onSave: () => refetch(), onClose: () => refetch() });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField, ownerName]);
+  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
   if (error) return <div className="error-container"><div className="error-message"><h3>Ошибка загрузки</h3><p>{(error as Error)?.message}</p><button onClick={() => refetch()} className="retry-button">Повторить</button></div></div>;
   return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange: false })} />;
 };

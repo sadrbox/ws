@@ -70,7 +70,7 @@ router.get("/contactpersons", async (req, res) => {
 		}
 		if (orderBy.length === 0) orderBy.push({ id: "asc" });
 
-		const TEXT_FIELDS = ["fullName", "ownerName", "comment"];
+		const TEXT_FIELDS = ["fullName", "comment"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 		if (searchWords.length > 0) {
@@ -108,13 +108,13 @@ router.get("/contactpersons", async (req, res) => {
 			}
 		}
 
-		// ── Фильтрация по FK-полям (SubTable передаёт как query-параметры) ────
+		// ── Фильтрация по ownerType + ownerUuid ────
 		const fkFilter = {};
-		const FK_FIELDS = ["organizationUuid", "counterpartyUuid"];
-		for (const fk of FK_FIELDS) {
-			if (typeof req.query[fk] === "string" && req.query[fk].trim()) {
-				fkFilter[fk] = req.query[fk].trim();
-			}
+		if (typeof req.query.ownerType === "string" && req.query.ownerType.trim()) {
+			fkFilter.ownerType = req.query.ownerType.trim();
+		}
+		if (typeof req.query.ownerUuid === "string" && req.query.ownerUuid.trim()) {
+			fkFilter.ownerUuid = req.query.ownerUuid.trim();
 		}
 
 		const baseWhere = { ...searchWhereClause, ...filterWhereClause, ...fkFilter, ...tenantFilter(req) };
@@ -127,7 +127,6 @@ router.get("/contactpersons", async (req, res) => {
 
 		const items = await prisma.contactPerson.findMany({
 			...queryOptions,
-			include: { organization: true, counterparty: true },
 		});
 		const hasMore = items.length === limitNumber;
 		const nextCursor = hasMore ? items[items.length - 1].id : null;
@@ -159,11 +158,9 @@ router.get("/contactpersons/:id", async (req, res) => {
 		const item = isNumeric
 			? await prisma.contactPerson.findUnique({
 					where: { id: numId },
-					include: { contacts: true, organization: true, counterparty: true },
 				})
 			: await prisma.contactPerson.findUnique({
 					where: { uuid: param },
-					include: { contacts: true, organization: true, counterparty: true },
 				});
 
 		if (!item)
@@ -185,9 +182,8 @@ router.post("/contactpersons", async (req, res) => {
 			lastName,
 			middleName,
 			fullName,
-			ownerName,
-			organizationUuid,
-			counterpartyUuid,
+			ownerType,
+			ownerUuid,
 			comment,
 		} = req.body;
 		const nameFinal =
@@ -200,9 +196,8 @@ router.post("/contactpersons", async (req, res) => {
 				lastName: lastName?.trim() || null,
 				middleName: middleName?.trim() || null,
 				fullName: nameFinal,
-				ownerName: ownerName?.trim() || null,
-				organizationUuid: organizationUuid || null,
-				counterpartyUuid: counterpartyUuid || null,
+				ownerType: ownerType?.trim() || null,
+				ownerUuid: ownerUuid?.trim() || null,
 				comment: comment?.trim() || null,
 			},
 		});
@@ -224,9 +219,8 @@ router.put("/contactpersons/:id", async (req, res) => {
 			lastName,
 			middleName,
 			fullName,
-			ownerName,
-			organizationUuid,
-			counterpartyUuid,
+			ownerType,
+			ownerUuid,
 			comment,
 		} = req.body;
 		const data = {};
@@ -234,11 +228,8 @@ router.put("/contactpersons/:id", async (req, res) => {
 		if (lastName !== undefined) data.lastName = lastName?.trim() || null;
 		if (middleName !== undefined) data.middleName = middleName?.trim() || null;
 		if (fullName !== undefined) data.fullName = fullName?.trim() || null;
-		if (ownerName !== undefined) data.ownerName = ownerName?.trim() || null;
-		if (organizationUuid !== undefined)
-			data.organizationUuid = organizationUuid || null;
-		if (counterpartyUuid !== undefined)
-			data.counterpartyUuid = counterpartyUuid || null;
+		if (ownerType !== undefined) data.ownerType = ownerType?.trim() || null;
+		if (ownerUuid !== undefined) data.ownerUuid = ownerUuid?.trim() || null;
 		if (comment !== undefined) data.comment = comment?.trim() || null;
 
 		const item = await prisma.contactPerson.update({

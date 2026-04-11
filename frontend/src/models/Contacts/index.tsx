@@ -14,11 +14,11 @@ import styles from "src/styles/main.module.scss";
 import LookupField from "src/components/Field/LookupField";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import Tabs from "src/components/Tabs";
+import { resolveOwnerName } from "src/utils/resolveOwnerName";
 
 import { useFormSessionStore } from "src/hooks/useFormSessionStore";
 import FormError from "src/components/FormError";
 import FormPanel from "src/components/FormPanel";
-import { useAccessRight } from "src/hooks/useAccessRight";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "contacts";
@@ -42,18 +42,13 @@ const EMPTY_FORM: TFormData = {
 
 const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
   const uuid = data?.uuid as string | undefined;
-  const { canWrite } = useAccessRight("Contact");
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
   const formUid = useUID();
 
   const initialForm: TFormData = (() => {
     if (!data || data.uuid) return { ...EMPTY_FORM };
     const init = { ...EMPTY_FORM };
-    const name = (data.ownerName as string) || "";
-    if (data.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = data.organizationUuid as string; init.ownerName = name; }
-    else if (data.counterpartyUuid) { init.ownerType = "counterparty"; init.ownerUuid = data.counterpartyUuid as string; init.ownerName = name; }
-    else if (data.contactPersonUuid) { init.ownerType = "contactperson"; init.ownerUuid = data.contactPersonUuid as string; init.ownerName = name; }
-    else if (data.employeeUuid) { init.ownerType = "employee"; init.ownerUuid = data.employeeUuid as string; init.ownerName = name; }
+    if (data.ownerType) { init.ownerType = data.ownerType as OwnerType; init.ownerUuid = (data.ownerUuid as string) || ""; init.ownerName = (data.ownerName as string) || ""; }
     return init;
   })();
   const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
@@ -69,13 +64,11 @@ const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
     try {
       const response = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
       const d = response.data?.item ?? response.data;
-      const ot: OwnerType = d.organizationUuid ? "organization" : d.counterpartyUuid ? "counterparty" : d.contactPersonUuid ? "contactperson" : d.employeeUuid ? "employee" : "";
-      const ou = d.organizationUuid || d.counterpartyUuid || d.contactPersonUuid || d.employeeUuid || "";
-      const on = d.organization?.shortName || d.counterparty?.shortName || d.contactPerson?.fullName || d.employee?.fullName || d.ownerName || "";
+      const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
       setFormData({
         value: d.value ?? "", contactTypeUuid: d.contactTypeUuid ?? "",
         contactTypeName: d.contactType?.shortName ?? d.contactType?.name ?? "",
-        ownerType: ot, ownerUuid: ou, ownerName: on,
+        ownerType: (d.ownerType as OwnerType) ?? "", ownerUuid: d.ownerUuid ?? "", ownerName: oName,
         id: d.id, uuid: d.uuid,
       });
     } catch (err: any) {
@@ -101,26 +94,21 @@ const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
     const payload: Record<string, unknown> = {
       value: formData.value.trim(),
       contactTypeUuid: formData.contactTypeUuid || null,
-      ownerName: formData.ownerName?.trim() || null,
-      organizationUuid: formData.ownerType === "organization" ? formData.ownerUuid || null : null,
-      counterpartyUuid: formData.ownerType === "counterparty" ? formData.ownerUuid || null : null,
-      contactPersonUuid: formData.ownerType === "contactperson" ? formData.ownerUuid || null : null,
-      employeeUuid: formData.ownerType === "employee" ? formData.ownerUuid || null : null,
+      ownerType: formData.ownerType || null,
+      ownerUuid: formData.ownerUuid || null,
     };
     try {
       const response = isEditMode && (uuid || formData.uuid)
         ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
         : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
       const saved = response.data?.item ?? response.data;
-      const sot: OwnerType = saved.organizationUuid ? "organization" : saved.counterpartyUuid ? "counterparty" : saved.contactPersonUuid ? "contactperson" : saved.employeeUuid ? "employee" : "";
-      const sou = saved.organizationUuid || saved.counterpartyUuid || saved.contactPersonUuid || saved.employeeUuid || "";
-      const son = saved.organization?.shortName || saved.counterparty?.shortName || saved.contactPerson?.fullName || saved.employee?.fullName || "";
       setFormData(prev => ({
         ...prev, ...saved, value: saved.value ?? "",
         contactTypeUuid: saved.contactTypeUuid ?? "",
         contactTypeName: saved.contactType?.shortName ?? saved.contactType?.name ?? prev.contactTypeName,
-        ownerType: sot || prev.ownerType, ownerUuid: sou || prev.ownerUuid,
-        ownerName: son || prev.ownerName,
+        ownerType: (saved.ownerType as OwnerType) ?? prev.ownerType,
+        ownerUuid: saved.ownerUuid ?? prev.ownerUuid,
+        ownerName: saved.ownerName ?? prev.ownerName,
       }));
       setIsEditMode(true);
       if (uniqId) {
@@ -162,7 +150,7 @@ const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
                     name={`${formUid}_owner`}
                     onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
                       setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))}
-                    typeLocked={!uuid && (!!data?.organizationUuid || !!data?.counterpartyUuid || !!data?.contactPersonUuid || !!data?.employeeUuid)}
+                    typeLocked={!uuid && !!data?.ownerType}
                     disabled={isLoading}
                   />
                 </div>
@@ -187,7 +175,7 @@ const ContactsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => 
 
   return (
     <div className={styles.FormWrapper}>
-      <FormPanel readonly={!canWrite} onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
+      <FormPanel onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
       <FormError message={error} onDismiss={() => setError(null)} />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
@@ -206,10 +194,9 @@ interface ContactsListProps {
   onSelectItem?: (item: TDataItem) => void;
   ownerUuid?: string;
   ownerField?: string;
-  ownerName?: string;
 }
 
-const ContactsList: FC<ContactsListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField, ownerName } = {}) => {
+const ContactsList: FC<ContactsListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField } = {}) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? "ContactsList_part" : "ContactsList";
   const { addPane } = useAppContext().windows;
@@ -231,13 +218,13 @@ const ContactsList: FC<ContactsListProps> = ({ variant = 'default', onSelectItem
     const d = formProps.data;
     const isEdit = !!d?.uuid;
     const newData = !isEdit && ownerUuid && ownerField
-      ? { [ownerField]: ownerUuid, ownerName: ownerName || "" } as unknown as TDataItem
+      ? { [ownerField]: ownerUuid } as unknown as TDataItem
       : d;
     addPane({
       label: isEdit ? `${t(componentName)}: ${d?.value || t("noName")} • ${d?.id ?? "?"}` : `${t(componentName)}: ${t("new")}`,
       component: ContactsForm, data: newData, onSave: () => refetch(), onClose: () => refetch(),
     });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField, ownerName]);
+  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
 
   if (error) {
     return (
