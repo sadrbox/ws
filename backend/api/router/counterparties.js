@@ -241,15 +241,6 @@ router.get("/counterparties", async (req, res) => {
 		const queryOptions = {
 			take: limitNumber,
 			where: baseWhere,
-			include: {
-				_count: {
-					select: {
-						contracts: true,
-						contacts: true,
-						bankAccounts: true,
-					},
-				},
-			},
 			orderBy,
 		};
 
@@ -304,34 +295,6 @@ router.get("/counterparties/:uuid", async (req, res) => {
 
 		const counterparty = await prisma.counterparty.findUnique({
 			where: { uuid },
-			include: {
-				contracts: {
-					select: {
-						id: true,
-						contractNumber: true,
-						contractText: true,
-						startDate: true,
-						endDate: true,
-					},
-					// orderBy: { contractDate: "desc" },
-				},
-				contacts: {
-					select: {
-						id: true,
-						value: true,
-					},
-					// orderBy: { name: "asc" },
-				},
-				bankAccounts: {
-					select: {
-						id: true,
-						iban: true,
-						bankName: true,
-						bik: true,
-					},
-					// orderBy: { bankName: "asc" },
-				},
-			},
 		});
 
 		if (!counterparty) {
@@ -359,17 +322,6 @@ router.get("/counterparties/uuid/:uuid", async (req, res) => {
 
 		const counterparty = await prisma.counterparty.findUnique({
 			where: { uuid },
-			include: {
-				contracts: {
-					orderBy: { contractDate: "desc" },
-				},
-				contacts: {
-					orderBy: { name: "asc" },
-				},
-				bankAccounts: {
-					orderBy: { bankName: "asc" },
-				},
-			},
 		});
 
 		if (!counterparty) {
@@ -567,38 +519,11 @@ router.delete("/counterparties/:uuid", async (req, res) => {
 		// Проверка существования и связанных данных
 		const existingCounterparty = await prisma.counterparty.findUnique({
 			where: { uuid },
-			include: {
-				_count: {
-					select: {
-						contracts: true,
-						contacts: true,
-						bankAccounts: true,
-					},
-				},
-			},
 		});
 
 		if (!existingCounterparty) {
 			return res.status(404).json({
 				message: "Контрагент не найден",
-			});
-		}
-
-		// Проверка на наличие связанных записей
-		const hasRelatedData =
-			existingCounterparty._count.contracts > 0 ||
-			existingCounterparty._count.contacts > 0 ||
-			existingCounterparty._count.bankAccounts > 0;
-
-		if (hasRelatedData) {
-			return res.status(409).json({
-				message:
-					"Невозможно удалить контрагента, так как существуют связанные записи",
-				details: {
-					contracts: existingCounterparty._count.contracts,
-					contacts: existingCounterparty._count.contacts,
-					bankAccounts: existingCounterparty._count.bankAccounts,
-				},
 			});
 		}
 
@@ -643,15 +568,6 @@ router.get("/counterparties/search/bin/:bin", async (req, res) => {
 
 		const counterparty = await prisma.counterparty.findUnique({
 			where: { bin: bin.trim() },
-			include: {
-				_count: {
-					select: {
-						contracts: true,
-						contacts: true,
-						bankAccounts: true,
-					},
-				},
-			},
 		});
 
 		if (!counterparty) {
@@ -690,44 +606,6 @@ router.post("/counterparties/bulk-delete", async (req, res) => {
 		if (counterpartyIds.length === 0) {
 			return res.status(400).json({
 				message: "Не найдено корректных ID для удаления",
-			});
-		}
-
-		// Проверка на связанные данные
-		const counterpartiesWithRelations = await prisma.counterparty.findMany({
-			where: { id: { in: counterpartyIds } },
-			include: {
-				_count: {
-					select: {
-						contracts: true,
-						contacts: true,
-						bankAccounts: true,
-					},
-				},
-			},
-		});
-
-		const cannotDelete = counterpartiesWithRelations.filter(
-			(cp) =>
-				cp._count.contracts > 0 ||
-				cp._count.contacts > 0 ||
-				cp._count.bankAccounts > 0,
-		);
-
-		if (cannotDelete.length > 0) {
-			return res.status(409).json({
-				message:
-					"Некоторые контрагенты имеют связанные записи и не могут быть удалены",
-				cannotDelete: cannotDelete.map((cp) => ({
-					id: cp.id,
-					bin: cp.bin,
-					displayName: cp.displayName,
-					relations: {
-						contracts: cp._count.contracts,
-						contacts: cp._count.contacts,
-						bankAccounts: cp._count.bankAccounts,
-					},
-				})),
 			});
 		}
 

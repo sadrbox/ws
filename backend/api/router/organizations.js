@@ -180,11 +180,9 @@ router.get("/organizations/:id", async (req, res) => {
 		const item = isNumeric
 			? await prisma.organization.findUnique({
 					where: { id: numId },
-					include: { contracts: true, contacts: true, bankAccounts: true },
 				})
 			: await prisma.organization.findUnique({
 					where: { uuid: param },
-					include: { contracts: true, contacts: true, bankAccounts: true },
 				});
 
 		if (!item) {
