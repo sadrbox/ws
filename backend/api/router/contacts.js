@@ -157,8 +157,8 @@ router.get("/contacts", async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error("GET /contacts error:", error?.message, error?.stack);
-		return res.status(500).json({ success: false, message: "Ошибка сервера", debug: error?.message });
+		console.error("GET /contacts error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 

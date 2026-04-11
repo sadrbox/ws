@@ -173,11 +173,10 @@ router.get("/bankaccounts", async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error("GET /bankaccounts error:", error?.message, error?.stack);
+		console.error("GET /bankaccounts error:", error);
 		return res.status(500).json({
 			success: false,
 			message: "Ошибка сервера при получении банковских счетов",
-			debug: error?.message,
 		});
 	}
 });

@@ -148,8 +148,8 @@ router.get("/contracts", async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error("GET /contracts error:", error?.message, error?.stack);
-		return res.status(500).json({ success: false, message: "Server error", debug: error?.message });
+		console.error("GET /contracts error:", error);
+		return res.status(500).json({ success: false, message: "Server error" });
 	}
 });
 
