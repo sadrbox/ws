@@ -341,14 +341,46 @@ const SubTable: FC<SubTableProps> = ({
       return;
     }
 
-    // ── Ветка B: чистая синхронизация кэша с серверными данными ──
+    // ── Ветка B: синхронизация кэша с серверными данными ──
     // Убираем любые остаточные temp-строки (отрицательный id или uuid "tmp-...")
     const clean = allItems.filter((r: any) =>
       !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-"))
     );
 
-    // Проверяем, отличаются ли данные от текущего кэша
     const prev = cachedRowsRef.current;
+    const dirtyRows = deferRemoteChanges ? prev.filter((r: any) => r._pendingAction) : [];
+
+    // Если есть pending-строки при deferRemoteChanges — мержим с серверными данными,
+    // чтобы не потерять локальные изменения при invalidateQueries (например после
+    // сохранения формы открытой из SubTable в режиме "Редактирование в форме").
+    if (dirtyRows.length > 0) {
+      const serverUuidSet = new Set(clean.map((r: any) => r.uuid).filter(Boolean));
+      const merged: TDataItem[] = [];
+
+      // 1. Обходим серверные строки: если для строки есть pending update/delete — ставим его
+      for (const item of clean) {
+        const pendingRow = dirtyRows.find((p: any) =>
+          p._pendingAction && p._pendingAction !== "create" &&
+          ((p.uuid && p.uuid === (item as any).uuid) || p.id === (item as any).id)
+        );
+        merged.push(pendingRow ?? item);
+      }
+
+      // 2. Добавляем temp-строки (create) которых нет на сервере
+      for (const p of dirtyRows) {
+        if ((p as any)._pendingAction === "create" && !serverUuidSet.has((p as any).uuid)) {
+          merged.unshift(p);
+        }
+      }
+
+      cachedRowsRef.current = merged;
+      setCacheVersion(v => v + 1);
+      // Оповещаем родителя — данные могли обновиться на сервере
+      onItemsChangeRef.current?.(merged);
+      return;
+    }
+
+    // Нет pending-строк — чистая замена кэша
     const hadDirtyRows = prev.some((r: any) => r._pendingAction);
     const countChanged = prev.length !== clean.length;
     const contentChanged = countChanged || prev.some((r: any, i: number) => {
