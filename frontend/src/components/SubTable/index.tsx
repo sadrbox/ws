@@ -458,7 +458,13 @@ const SubTable: FC<SubTableProps> = ({
     }
   }, [allItems, dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const rows = useMemo(() => cachedRowsRef.current, [cacheVersion]);
+  const rows = useMemo(() => {
+    const r = cachedRowsRef.current;
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[SubTable:${model}] rows memo recalc`, { cacheVersion, rowsLen: r.length, ids: r.slice(0, 5).map((x: any) => x.id) });
+    }
+    return r;
+  }, [cacheVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Обработчики ────────────────────────────────────────────────────────
   const handleSortChange = useCallback((s: typeof sort) => {
@@ -627,6 +633,15 @@ const SubTable: FC<SubTableProps> = ({
         // Пропускаем новые temp-строки (id < 0) — у них parentKey всегда правильный
         if (typeof (r as any).id === "number" && (r as any).id < 0) return true;
         return val === parentUuid;
+      });
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[SubTable:${model}] displayRows`, {
+        rowsLen: rows.length,
+        visibleLen: visible.length,
+        parentUuid: parentUuid?.slice(0, 8),
+        parentKey,
       });
     }
 
