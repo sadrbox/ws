@@ -264,9 +264,23 @@ const SubTable: FC<SubTableProps> = ({
     const curLen = initialPendingRows?.length ?? 0;
     prevInitialPendingLenRef.current = curLen;
 
-    if (deferRemoteChanges && pendingAppliedRef.current && prevLen > 0 && curLen === 0) {
+    if (deferRemoteChanges && prevLen > 0 && curLen === 0) {
       // pending очищен после коммита — сбрасываем флаг мержа
       pendingAppliedRef.current = false;
+
+      // Очищаем dirty-маркеры и temp-строки из кэша.
+      // После коммита данные уже на сервере, а ветка B при следующем allItems
+      // должна выполнить чистую замену кэша (без мержа старых dirty-строк).
+      cachedRowsRef.current = cachedRowsRef.current
+        .filter((r: any) => !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")))
+        .map((r: any) => {
+          if (r._pendingAction) {
+            const { _pendingAction, _untouched, ...rest } = r;
+            return rest;
+          }
+          return r;
+        });
+      setCacheVersion(v => v + 1);
     }
   }, [deferRemoteChanges, initialPendingRows]);
 
