@@ -265,6 +265,9 @@ const SubTable: FC<SubTableProps> = ({
     prevInitialPendingLenRef.current = curLen;
 
     if (deferRemoteChanges && prevLen > 0 && curLen === 0) {
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[SubTable:${model}] cleanup: pending cleared (prevLen=${prevLen}→0), resetting cache & invalidating`);
+      }
       // pending очищен после коммита — сбрасываем флаг мержа
       pendingAppliedRef.current = false;
 
@@ -281,8 +284,13 @@ const SubTable: FC<SubTableProps> = ({
           return r;
         });
       setCacheVersion(v => v + 1);
+
+      // Принудительно запрашиваем свежие данные с сервера.
+      // Не полагаемся на setTimeout(invalidateQueries) в родителе — SubTable
+      // сам гарантирует обновление кэша после коммита.
+      queryClient.invalidateQueries({ queryKey: [model] });
     }
-  }, [deferRemoteChanges, initialPendingRows]);
+  }, [deferRemoteChanges, initialPendingRows, queryClient, model]);
 
   // Обёртка для delete — показывает спиннер во время удаления
   const handleDelete = useCallback(async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
@@ -330,6 +338,17 @@ const SubTable: FC<SubTableProps> = ({
   const [cacheVersion, setCacheVersion] = useState(0);
 
   useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[SubTable:${model}] sync effect`, {
+        allItemsLen: allItems.length,
+        dataUpdatedAt,
+        deferRemoteChanges,
+        pendingApplied: pendingAppliedRef.current,
+        initialPendingLen: initialPendingRows?.length ?? 0,
+        cachedLen: cachedRowsRef.current.length,
+        dirtyCount: cachedRowsRef.current.filter((r: any) => r._pendingAction).length,
+      });
+    }
     // ── Ветка A: мерж pending-строк из sessionStorage (один раз при восстановлении) ──
     if (deferRemoteChanges && initialPendingRows?.length && !pendingAppliedRef.current) {
       pendingAppliedRef.current = true;
@@ -412,10 +431,21 @@ const SubTable: FC<SubTableProps> = ({
     // Нет pending-строк — чистая замена кэша
     const hadDirtyRows = prev.some((r: any) => r._pendingAction);
     const countChanged = prev.length !== clean.length;
+    // Сравниваем содержимое: проверяем id, uuid и все скалярные поля (deep compare).
+    // Ранее сравнивались только id/uuid, что пропускало обновления содержимого строк.
     const contentChanged = countChanged || prev.some((r: any, i: number) => {
       const c = clean[i] as any;
-      return !c || r.id !== c.id || r.uuid !== c.uuid;
+      if (!c || r.id !== c.id || r.uuid !== c.uuid) return true;
+      // Быстрая deep-проверка через JSON
+      return JSON.stringify(r) !== JSON.stringify(c);
     });
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[SubTable:${model}] branch B: clean replace`, {
+        prevLen: prev.length, cleanLen: clean.length,
+        hadDirtyRows, countChanged, contentChanged,
+      });
+    }
 
     cachedRowsRef.current = clean;
     setCacheVersion(v => v + 1);
