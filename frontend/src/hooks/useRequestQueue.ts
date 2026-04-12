@@ -1,74 +1,105 @@
-import { useRef, useCallback } from "react";
+import { useCallback, useRef } from "react";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ГЛОБАЛЬНАЯ ОЧЕРЕДЬ ЗАПРОСОВ (singleton)
+// ═══════════════════════════════════════════════════════════════════════════
+// Все экземпляры useInfiniteModelList используют ОДНУ очередь.
+// Это предотвращает burst-нагрузку, когда несколько SubTable / списков
+// одновременно отправляют запросы и исчерпывают rate-limit бэкенда.
+// ═══════════════════════════════════════════════════════════════════════════
 
 interface QueuedRequest {
 	id: string;
 	execute: () => Promise<any>;
 	timestamp: number;
-	timeout?: NodeJS.Timeout;
+	timeout?: ReturnType<typeof setTimeout>;
+	/** Callback для отмены (когда компонент размонтирован) */
+	cancelled?: boolean;
 }
 
-const HANGING_REQUEST_TIMEOUT = 30000; // 30 сек
+/** Максимум параллельных запросов */
+const MAX_CONCURRENT = 6;
+/** Таймаут для "зависшего" запроса */
+const HANGING_REQUEST_TIMEOUT = 30_000; // 30 сек
 
-export const useRequestQueue = () => {
-	const queueRef = useRef<QueuedRequest[]>([]);
-	const activeRequestRef = useRef<QueuedRequest | null>(null);
+// ─── Глобальное состояние (НЕ внутри хука) ───
+const queue: QueuedRequest[] = [];
+let activeCount = 0;
 
-	const cancelHangingRequest = useCallback(() => {
-		if (activeRequestRef.current?.timeout) {
-			clearTimeout(activeRequestRef.current.timeout);
-		}
-		activeRequestRef.current = null;
-	}, []);
+function processQueue() {
+	while (activeCount < MAX_CONCURRENT && queue.length > 0) {
+		const request = queue.shift();
+		if (!request) break;
 
-	const processQueue = useCallback(async () => {
-		if (activeRequestRef.current || queueRef.current.length === 0) {
-			return;
-		}
+		// Если запрос отменён до начала выполнения — пропускаем
+		if (request.cancelled) continue;
 
-		const request = queueRef.current.shift();
-		if (!request) return;
+		activeCount++;
 
-		activeRequestRef.current = request;
-
-		// Установим таймаут для "зависшего" запроса
-		request.timeout = setTimeout(() => {
-			cancelHangingRequest();
-			processQueue(); // Переходим к следующему
+		const timeout = setTimeout(() => {
+			// Принудительно освобождаем слот для "зависшего" запроса
+			activeCount = Math.max(0, activeCount - 1);
+			processQueue();
 		}, HANGING_REQUEST_TIMEOUT);
 
-		try {
-			await request.execute();
-			clearTimeout(request.timeout);
-		} catch (error) {
-			console.error(`[RequestQueue] Request ${request.id} failed:`, error);
-		} finally {
-			activeRequestRef.current = null;
-			processQueue(); // Переходим к следующему
+		request.timeout = timeout;
+
+		request
+			.execute()
+			.catch((err) => {
+				// Ошибка уже обрабатывается в execute — тут только лог
+				if (!(err instanceof Error && err.name === "CanceledError")) {
+					console.error(`[RequestQueue] ${request.id} failed:`, err);
+				}
+			})
+			.finally(() => {
+				clearTimeout(timeout);
+				activeCount = Math.max(0, activeCount - 1);
+				processQueue();
+			});
+	}
+}
+
+function addRequestGlobal(id: string, execute: () => Promise<any>) {
+	const req: QueuedRequest = { id, execute, timestamp: Date.now() };
+	queue.push(req);
+	processQueue();
+}
+
+function cancelGroupGlobal(groupId: string) {
+	// Помечаем ожидающие запросы этой группы как отменённые
+	for (const req of queue) {
+		if (req.id.startsWith(groupId + ":")) {
+			req.cancelled = true;
 		}
-	}, [cancelHangingRequest]);
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ХУКИ для компонентов
+// ═══════════════════════════════════════════════════════════════════════════
+
+let instanceCounter = 0;
+
+/**
+ * Хук-обёртка над глобальной очередью.
+ * Каждый экземпляр получает уникальный groupId для возможности
+ * отмены "своих" запросов при unmount.
+ */
+export const useRequestQueue = () => {
+	const groupIdRef = useRef(`rq-${++instanceCounter}`);
 
 	const addRequest = useCallback(
 		(id: string, execute: () => Promise<any>) => {
-			queueRef.current.push({ id, execute, timestamp: Date.now() });
-
-			// Если очередь заблокирована активным запросом > 5 сек,
-			// и в очереди уже скопились запросы — принудительно разблокируем
-			if (activeRequestRef.current && queueRef.current.length > 0) {
-				const elapsed = Date.now() - activeRequestRef.current.timestamp;
-				if (elapsed > 5000) {
-					cancelHangingRequest();
-				}
-			}
-
-			processQueue();
+			const fullId = `${groupIdRef.current}:${id}`;
+			addRequestGlobal(fullId, execute);
 		},
-		[processQueue, cancelHangingRequest],
+		[],
 	);
 
 	const cancelAll = useCallback(() => {
-		queueRef.current = [];
-		cancelHangingRequest();
-	}, [cancelHangingRequest]);
+		cancelGroupGlobal(groupIdRef.current);
+	}, []);
 
-	return { addRequest, cancelAll, getQueueSize: () => queueRef.current.length };
+	return { addRequest, cancelAll, getQueueSize: () => queue.length };
 };

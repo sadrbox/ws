@@ -505,7 +505,7 @@ body {
 }
 .FormBodyParts {
 	display: flex;
-	// flex: 1;
+	flex: 1;
 	flex-direction: row;
 	// transition: all 2s ease;
 
@@ -553,6 +553,7 @@ body {
 	// box-shadow: 1px 1px 3px rgba($color6, 0.8);
 	// padding-bottom: 12px;
 }
+
 
 .FormTable {
 	// margin: 6px;

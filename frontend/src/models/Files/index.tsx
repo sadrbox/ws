@@ -223,9 +223,9 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid }) => {
   );
 
   return (
-    <div className={styles.FormBodyParts}>
+    // <div className={styles.FormWrapper}>
       <Table {...(tableProps as any)} />
-    </div>
+    // </div>
   );
 };
 

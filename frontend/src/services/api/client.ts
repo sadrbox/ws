@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
+import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosError } from "axios";
 
 const LOCAL_API_URL = "http://192.168.1.112:3000/api/v1";
 const REMOTE_API_URL = "https://api.gidra.kz/api/v1";
@@ -59,6 +59,39 @@ apiClient.interceptors.response.use(
 		return Promise.reject(error);
 	},
 );
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Interceptor: retry с exponential backoff при 429 (Too Many Requests)
+// ═══════════════════════════════════════════════════════════════════════════
+const MAX_RETRIES = 3;
+
+apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
+	const config = error.config as AxiosRequestConfig & { _retryCount?: number };
+	if (!config || error.response?.status !== 429) {
+		return Promise.reject(error);
+	}
+
+	config._retryCount = (config._retryCount ?? 0) + 1;
+	if (config._retryCount > MAX_RETRIES) {
+		return Promise.reject(error);
+	}
+
+	// Retry-After header или экспоненциальный backoff
+	const retryAfterHeader = error.response?.headers?.["retry-after"];
+	const baseDelay = retryAfterHeader
+		? Number(retryAfterHeader) * 1000
+		: 1000 * Math.pow(2, config._retryCount - 1); // 1s, 2s, 4s
+	// Добавляем jitter ±25%
+	const jitter = baseDelay * (0.75 + Math.random() * 0.5);
+	const delay = Math.min(jitter, 10_000); // не более 10 сек
+
+	console.warn(
+		`[API] 429 Too Many Requests → retry ${config._retryCount}/${MAX_RETRIES} через ${Math.round(delay)}ms: ${config.url}`,
+	);
+
+	await new Promise((r) => setTimeout(r, delay));
+	return apiClient.request(config);
+});
 
 /** Типизированные сокращения для удобства */
 export const api = {

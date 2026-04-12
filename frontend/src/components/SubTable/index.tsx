@@ -489,12 +489,12 @@ const SubTable: FC<SubTableProps> = ({
     cancelAllRequests();
     // Сбрасываем флаг мержа pending, чтобы при повторном открытии мерж мог выполниться
     pendingAppliedRef.current = false;
-    // invalidateQueries + refetch гарантирует загрузку свежих данных с сервера
+    // invalidateQueries помечает кэш как stale и автоматически вызывает refetch
+    // для активного (mounted) query — ручной refetch() НЕ нужен, иначе будет два запроса.
     // Кэш cachedRowsRef НЕ сбрасываем — useEffect на [allItems] обновит его когда придут новые данные,
     // а пока пользователь видит предыдущие строки вместо пустой таблицы.
     queryClient.invalidateQueries({ queryKey: [model] });
-    refetch();
-  }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model, refetch]);
+  }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model]);
 
   // ── Inline-редактирование ──────────────────────────────────────────────
   const handleInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {

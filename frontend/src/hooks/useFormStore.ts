@@ -1,0 +1,821 @@
+import {
+	useCallback,
+	useRef,
+	useSyncExternalStore,
+	useEffect,
+} from "react";
+import { useAppContext } from "src/app";
+import apiClient from "src/services/api/client";
+import { commitPendingRows } from "src/services/commitPendingRows";
+import type { TDataItem } from "src/components/Table/types";
+import type { TPane } from "src/app/types";
+import useUID from "./useUID";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ТИПЫ
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Описание одной вложенной таблицы */
+export interface TableDef {
+	/** API endpoint SubTable (например "contacts", "saleitems") */
+	endpoint: string;
+	/** FK-поле, связывающее строки с родителем (например "ownerUuid") */
+	parentField: string;
+	/** Человекочитаемое имя (для ошибок) */
+	label: string;
+	/** Доп. поля, добавляемые к каждому payload (например { ownerType: "organization" }) */
+	extraFields?: Record<string, unknown>;
+	/** Кастомные payload-функции */
+	createPayload?: (row: TDataItem) => Record<string, unknown>;
+	updatePayload?: (row: TDataItem) => Record<string, unknown>;
+	extraSkipFields?: string[];
+}
+
+/** Описание полей формы: ключ → значение по умолчанию */
+export type FieldDefs<F extends object> = {
+	[K in keyof F]: F[K];
+};
+
+/** Данные одной вложенной таблицы в store */
+export interface TableState {
+	/** Строки с _pendingAction (create | update | delete) */
+	pending: TDataItem[];
+}
+
+/** Полное состояние формы */
+export interface FormStoreState<F extends object> {
+	fields: F;
+	tables: Record<string, TableState>;
+	meta: {
+		uuid: string | undefined;
+		endpoint: string;
+		isLoading: boolean;
+		isEditMode: boolean;
+		error: string | null;
+		errorRevision: number;
+	};
+}
+
+/** Тип подписки */
+type Listener = () => void;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PERSIST (sessionStorage)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const STORAGE_PREFIX = "formStore:";
+
+function persistToSession<F extends object>(
+	storageKey: string,
+	state: FormStoreState<F>,
+): void {
+	try {
+		// Сохраняем только fields + tables (meta не нужна)
+		const payload = { fields: state.fields, tables: state.tables };
+		sessionStorage.setItem(storageKey, JSON.stringify(payload));
+	} catch {
+		/* quota exceeded */
+	}
+}
+
+function restoreFromSession<F extends object>(
+	storageKey: string,
+): { fields: F; tables: Record<string, TableState> } | null {
+	try {
+		const raw = sessionStorage.getItem(storageKey);
+		if (!raw) return null;
+		return JSON.parse(raw) as { fields: F; tables: Record<string, TableState> };
+	} catch {
+		return null;
+	}
+}
+
+function clearSession(storageKey: string): void {
+	try {
+		sessionStorage.removeItem(storageKey);
+	} catch {
+		/* ignore */
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CORE STORE (чистый JS, без React)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function createFormStore<F extends object>(
+	defaultFields: F,
+	tableDefs: Record<string, TableDef>,
+	endpoint: string,
+	uuid: string | undefined,
+	storageKey: string,
+) {
+	// ── Начальное состояние ──
+	const emptyTables: Record<string, TableState> = {};
+	for (const key of Object.keys(tableDefs)) {
+		emptyTables[key] = { pending: [] };
+	}
+
+	let state: FormStoreState<F> = {
+		fields: { ...defaultFields },
+		tables: emptyTables,
+		meta: {
+			uuid,
+			endpoint,
+			isLoading: false,
+			isEditMode: !!uuid,
+			error: null,
+			errorRevision: 0,
+		},
+	};
+
+	// Пробуем восстановить из sessionStorage
+	let hadStoredData = false;
+	const restored = restoreFromSession<F>(storageKey);
+	if (restored) {
+		state.fields = { ...defaultFields, ...restored.fields };
+		// Восстанавливаем tables, но только те, которые определены в tableDefs
+		for (const key of Object.keys(tableDefs)) {
+			if (restored.tables?.[key]) {
+				state.tables[key] = restored.tables[key];
+			}
+		}
+		hadStoredData = true;
+	}
+
+	// ── Подписчики ──
+	const listeners = new Set<Listener>();
+
+	function notify(): void {
+		for (const l of listeners) l();
+	}
+
+	function subscribe(listener: Listener): () => void {
+		listeners.add(listener);
+		return () => {
+			listeners.delete(listener);
+		};
+	}
+
+	function getSnapshot(): FormStoreState<F> {
+		return state;
+	}
+
+	// ── Debounced persist ──
+	let persistTimer: ReturnType<typeof setTimeout> | null = null;
+	function schedulePersist(): void {
+		if (persistTimer) clearTimeout(persistTimer);
+		persistTimer = setTimeout(() => {
+			persistToSession(storageKey, state);
+		}, 300);
+	}
+
+	// ── Мутации ──
+
+	/** Обновить одно поле формы */
+	function setField<K extends keyof F>(field: K, value: F[K]): void {
+		if (state.fields[field] === value) return;
+		state = {
+			...state,
+			fields: { ...state.fields, [field]: value },
+		};
+		notify();
+		schedulePersist();
+	}
+
+	/** Обновить несколько полей формы за раз */
+	function setFields(patch: Partial<F>): void {
+		state = {
+			...state,
+			fields: { ...state.fields, ...patch },
+		};
+		notify();
+		schedulePersist();
+	}
+
+	/** Заменить все поля формы целиком */
+	function replaceFields(fields: F): void {
+		state = { ...state, fields };
+		notify();
+		schedulePersist();
+	}
+
+	/** Обновить pending-строки вложенной таблицы */
+	function setTablePending(tableKey: string, pending: TDataItem[]): void {
+		const prev = state.tables[tableKey];
+		if (!prev) return;
+		state = {
+			...state,
+			tables: {
+				...state.tables,
+				[tableKey]: { ...prev, pending },
+			},
+		};
+		notify();
+		schedulePersist();
+	}
+
+	/** Очистить pending одной таблицы */
+	function clearTablePending(tableKey: string): void {
+		setTablePending(tableKey, []);
+	}
+
+	/** Очистить pending всех таблиц */
+	function clearAllTablesPending(): void {
+		const next: Record<string, TableState> = {};
+		for (const key of Object.keys(state.tables)) {
+			next[key] = { pending: [] };
+		}
+		state = { ...state, tables: next };
+		notify();
+		schedulePersist();
+	}
+
+	/** Обновить meta-поля */
+	function setMeta(patch: Partial<FormStoreState<F>["meta"]>): void {
+		state = {
+			...state,
+			meta: { ...state.meta, ...patch },
+		};
+		notify();
+	}
+
+	/** Установить ошибку (с инкрементом revision для перемонтирования FormError) */
+	function setError(msg: string | null): void {
+		setMeta({
+			error: msg,
+			errorRevision: msg
+				? state.meta.errorRevision + 1
+				: state.meta.errorRevision,
+		});
+	}
+
+	// ── API ──
+
+	/** Загрузить данные сущности с сервера */
+	async function load(
+		entityUuid: string,
+		mapServerToForm: (data: any, prev?: F) => F | Promise<F>,
+		afterLoad?: () => void,
+	): Promise<void> {
+		setMeta({ isLoading: true });
+		setError(null);
+		try {
+			const response = await apiClient.get(
+				`/${endpoint}/${entityUuid}`,
+			);
+			const d = response.data?.item ?? response.data;
+			const mapped = await Promise.resolve(
+				mapServerToForm(d, state.fields),
+			);
+			replaceFields(mapped);
+			setMeta({ isLoading: false, isEditMode: true, uuid: entityUuid });
+			afterLoad?.();
+		} catch (err: any) {
+			setError(
+				err.response?.data?.message ||
+					"Не удалось загрузить данные",
+			);
+			setMeta({ isLoading: false });
+		}
+	}
+
+	/** Сохранить поля формы на сервере (POST или PUT) */
+	async function submitFields(
+		buildPayload: (fields: F) => Record<string, unknown> | string,
+		mapServerToForm: (data: any, prev?: F) => F | Promise<F>,
+		buildPaneLabel: (saved: any) => string,
+		updatePaneLabel: (uniqId: string, label: string) => void,
+		uniqId?: string,
+	): Promise<{ success: boolean; savedData?: any }> {
+		setMeta({ isLoading: true });
+		setError(null);
+
+		const payloadOrError = buildPayload(state.fields);
+		if (typeof payloadOrError === "string") {
+			setError(payloadOrError);
+			setMeta({ isLoading: false });
+			return { success: false };
+		}
+
+		try {
+			const isEdit =
+				state.meta.isEditMode &&
+				(state.meta.uuid || (state.fields as any).uuid);
+			const entityUuid =
+				state.meta.uuid || (state.fields as any).uuid;
+			const response = isEdit
+				? await apiClient.put(
+						`/${endpoint}/${entityUuid}`,
+						payloadOrError,
+					)
+				: await apiClient.post(`/${endpoint}`, payloadOrError);
+
+			const saved = response.data?.item ?? response.data;
+			const mapped = await Promise.resolve(
+				mapServerToForm(saved, state.fields),
+			);
+			replaceFields(mapped);
+			setMeta({
+				isLoading: false,
+				isEditMode: true,
+				uuid: saved.uuid ?? entityUuid,
+			});
+			if (uniqId) updatePaneLabel(uniqId, buildPaneLabel(saved));
+			return { success: true, savedData: saved };
+		} catch (err: any) {
+			let msg = "Не удалось сохранить";
+			if (err.response?.status === 409)
+				msg =
+					err.response.data?.message || "Запись уже существует";
+			else if (err.response?.status === 400)
+				msg =
+					err.response.data?.message || "Ошибка валидации";
+			else if (err.message) msg = err.message;
+			setError(msg);
+			setMeta({ isLoading: false });
+			return { success: false };
+		}
+	}
+
+	/** Коммит pending-строк всех вложенных таблиц на сервер */
+	async function commitAllTables(parentUuid: string): Promise<void> {
+		for (const [key, tableDef] of Object.entries(tableDefs)) {
+			const { pending } = state.tables[key];
+			if (!pending.length) continue;
+			await commitPendingRows(
+				tableDef.endpoint,
+				pending,
+				parentUuid,
+				tableDef.parentField,
+				tableDef.label,
+				{
+					createPayload: tableDef.createPayload,
+					updatePayload: tableDef.updatePayload,
+					extraSkipFields: tableDef.extraSkipFields,
+					extraFields: tableDef.extraFields,
+				},
+			);
+		}
+		clearAllTablesPending();
+	}
+
+	/** Коммит pending-строк одной конкретной таблицы */
+	async function commitTable(
+		tableKey: string,
+		parentUuid: string,
+	): Promise<void> {
+		const tableDef = tableDefs[tableKey];
+		if (!tableDef) return;
+		const { pending } = state.tables[tableKey];
+		if (!pending.length) return;
+		await commitPendingRows(
+			tableDef.endpoint,
+			pending,
+			parentUuid,
+			tableDef.parentField,
+			tableDef.label,
+			{
+				createPayload: tableDef.createPayload,
+				updatePayload: tableDef.updatePayload,
+				extraSkipFields: tableDef.extraSkipFields,
+				extraFields: tableDef.extraFields,
+			},
+		);
+		clearTablePending(tableKey);
+	}
+
+	/** Полная очистка (sessionStorage + reset state) */
+	function destroy(): void {
+		if (persistTimer) clearTimeout(persistTimer);
+		clearSession(storageKey);
+		listeners.clear();
+	}
+
+	return {
+		// Подписка
+		subscribe,
+		getSnapshot,
+		hadStoredData,
+
+		// Мутации fields
+		setField,
+		setFields,
+		replaceFields,
+
+		// Мутации tables
+		setTablePending,
+		clearTablePending,
+		clearAllTablesPending,
+
+		// Meta
+		setMeta,
+		setError,
+
+		// API
+		load,
+		submitFields,
+		commitAllTables,
+		commitTable,
+
+		// Cleanup
+		destroy,
+		clearStorage: () => clearSession(storageKey),
+	};
+}
+
+/** Тип store, возвращаемого createFormStore */
+export type FormStore<F extends object> = ReturnType<
+	typeof createFormStore<F>
+>;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// КЭШИРОВАНИЕ STORE (синглтон на storageKey)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const storeCache = new Map<string, FormStore<any>>();
+
+function getOrCreate<F extends object>(
+	defaultFields: F,
+	tableDefs: Record<string, TableDef>,
+	endpoint: string,
+	uuid: string | undefined,
+	storageKey: string,
+): FormStore<F> {
+	if (!storeCache.has(storageKey)) {
+		storeCache.set(
+			storageKey,
+			createFormStore(defaultFields, tableDefs, endpoint, uuid, storageKey),
+		);
+	}
+	return storeCache.get(storageKey)! as FormStore<F>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REACT ХУКИ
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Опции для useFormStore */
+export interface UseFormStoreOptions<F extends object> {
+	/** API endpoint (например "organizations") */
+	endpoint: string;
+	/** Ключ sessionStorage (например "organizations-form") */
+	storageKey: string;
+	/** Поля формы по умолчанию */
+	defaultFields: F;
+	/** Описания вложенных таблиц */
+	tables?: Record<string, TableDef>;
+	/** Props панели (из компонента формы) */
+	paneProps: Partial<TPane>;
+	/** Начальные значения формы (если не из server, а из paneProps.data). Перезаписывают defaultFields. */
+	initialFields?: F;
+
+	/** Маппинг ответа сервера → fields. Может быть async. */
+	mapServerToForm: (data: any, prev?: F) => F | Promise<F>;
+	/** Формирование payload для POST/PUT. Возвращает string при ошибке валидации. */
+	buildPayload: (fields: F) => Record<string, unknown> | string;
+	/** Метка панели после сохранения */
+	buildPaneLabel: (saved: any) => string;
+	/** Доп. логика после load */
+	afterLoad?: () => void;
+	/** Доп. логика после save (кроме commitTables — он вызывается автоматически) */
+	afterSave?: (savedData: any) => Promise<void> | void;
+}
+
+/** Возвращаемый тип useFormStore */
+export interface UseFormStoreReturn<F extends object> {
+	/** Ссылка на store (для прямого доступа из колбэков) */
+	store: FormStore<F>;
+
+	// ── Реактивные данные (через useSyncExternalStore) ──
+
+	/** Значения полей формы */
+	fields: F;
+	/** Pending-строки вложенных таблиц */
+	tables: Record<string, TableState>;
+	/** Мета: isLoading, isEditMode, error и т.д. */
+	meta: FormStoreState<F>["meta"];
+
+	// ── Гранулярные хуки (для оптимизации ре-рендеров) ──
+
+	/** Подписка на одно поле. Ре-рендер только при изменении этого поля. */
+	useField: <K extends keyof F>(field: K) => [F[K], (value: F[K]) => void];
+	/** Подписка на pending-строки одной таблицы. */
+	useTable: (tableKey: string) => {
+		pending: TDataItem[];
+		setPending: (rows: TDataItem[]) => void;
+		onItemsChange: (items: TDataItem[] | undefined) => void;
+	};
+
+	// ── Действия ──
+
+	/** Обновить одно поле */
+	setField: <K extends keyof F>(field: K, value: F[K]) => void;
+	/** Обновить несколько полей */
+	setFields: (patch: Partial<F>) => void;
+
+	/** Загрузить с сервера (GET) */
+	loadFromServer: (entityUuid: string) => Promise<void>;
+	/** Сохранить + закрыть (или только сохранить) */
+	handleSave: () => void;
+	handleSaveAndClose: () => Promise<void>;
+	handleClose: () => void;
+
+	/** UUID текущей записи */
+	uuid: string | undefined;
+	/** Уникальный ID инстанса для привязки к input name */
+	formUid: string;
+
+	// ── Совместимость со старым API ──
+	/** handleFieldChange(field, stringValue) — как в useModelForm */
+	handleFieldChange: (field: keyof F, value: string) => void;
+	/** setFormData — совместимость для usePendingSubTable */
+	setFormData: (updater: F | ((prev: F) => F)) => void;
+	/** formData — совместимость с существующим JSX */
+	formData: F;
+	isLoading: boolean;
+	isEditMode: boolean;
+	error: string | null;
+	errorRevision: number;
+	setError: (msg: string | null) => void;
+	clearFormStorage: () => void;
+	submit: () => Promise<boolean>;
+}
+
+/**
+ * Хук формы на основе ref-store.
+ *
+ * Заменяет useModelForm + usePendingSubTable единым API.
+ * Все данные живут в одном ref-объекте {fields, tables, meta}.
+ * React-подписки гранулярные — изменение одного поля НЕ ре-рендерит другие.
+ */
+export function useFormStore<F extends object>(
+	options: UseFormStoreOptions<F>,
+): UseFormStoreReturn<F> {
+	const {
+		endpoint,
+		storageKey,
+		defaultFields,
+		initialFields,
+		tables: tableDefs = {},
+		paneProps,
+		mapServerToForm,
+		buildPayload,
+		buildPaneLabel,
+		afterLoad,
+		afterSave,
+	} = options;
+
+	const { onSave, onClose, data, uniqId } = paneProps;
+	const uuid = data?.uuid as string | undefined;
+	const {
+		windows: { removePane, updatePaneLabel },
+	} = useAppContext();
+	const formUid = useUID();
+
+	// ── Создание / получение store из кэша ──
+	const fullStorageKey = `${STORAGE_PREFIX}${storageKey}:${uuid ?? "new"}`;
+	const effectiveDefaults = initialFields ?? defaultFields;
+	const store = getOrCreate<F>(
+		effectiveDefaults,
+		tableDefs,
+		endpoint,
+		uuid,
+		fullStorageKey,
+	);
+
+	// ── Стабильные ref-ы для колбэков (не пересоздаются) ──
+	const mapRef = useRef(mapServerToForm);
+	mapRef.current = mapServerToForm;
+	const buildPayloadRef = useRef(buildPayload);
+	buildPayloadRef.current = buildPayload;
+	const buildLabelRef = useRef(buildPaneLabel);
+	buildLabelRef.current = buildPaneLabel;
+	const afterLoadRef = useRef(afterLoad);
+	afterLoadRef.current = afterLoad;
+	const afterSaveRef = useRef(afterSave);
+	afterSaveRef.current = afterSave;
+	const onSaveRef = useRef(onSave);
+	onSaveRef.current = onSave;
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
+
+	// ── Полная подписка (для meta / error / loading) ──
+	const snapshot = useSyncExternalStore(
+		store.subscribe,
+		store.getSnapshot,
+		store.getSnapshot,
+	);
+
+	// ── Auto-load при монтировании ──
+	const loadTriggeredRef = useRef(false);
+	useEffect(() => {
+		if (uuid && !store.hadStoredData && !loadTriggeredRef.current) {
+			loadTriggeredRef.current = true;
+			store.load(uuid, mapRef.current, afterLoadRef.current);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [uuid, store]);
+
+	// ── Гранулярный useField ──
+	const useField = useCallback(
+		<K extends keyof F>(field: K): [F[K], (value: F[K]) => void] => {
+			// eslint-disable-next-line react-hooks/rules-of-hooks
+			const value = useSyncExternalStore(
+				store.subscribe,
+				() => store.getSnapshot().fields[field],
+				() => store.getSnapshot().fields[field],
+			);
+			// eslint-disable-next-line react-hooks/rules-of-hooks
+			const setValue = useCallback(
+				(v: F[K]) => store.setField(field, v),
+				// eslint-disable-next-line react-hooks/exhaustive-deps
+				[field],
+			);
+			return [value, setValue];
+		},
+		[store],
+	);
+
+	// ── Гранулярный useTable ──
+	const useTable = useCallback(
+		(tableKey: string) => {
+			// eslint-disable-next-line react-hooks/rules-of-hooks
+			const tableState = useSyncExternalStore(
+				store.subscribe,
+				() => store.getSnapshot().tables[tableKey],
+				() => store.getSnapshot().tables[tableKey],
+			);
+
+			// eslint-disable-next-line react-hooks/rules-of-hooks
+			const setPending = useCallback(
+				(rows: TDataItem[]) =>
+					store.setTablePending(tableKey, rows),
+				// eslint-disable-next-line react-hooks/exhaustive-deps
+				[tableKey],
+			);
+
+			// onItemsChange — колбэк для SubTable.onItemsChange
+			// Фильтрует строки с _pendingAction и сохраняет в store
+			// eslint-disable-next-line react-hooks/rules-of-hooks
+			const onItemsChange = useCallback(
+				(items: TDataItem[] | undefined) => {
+					const all = items ?? [];
+					const pending = all.filter(
+						(r: any) => r._pendingAction,
+					);
+					store.setTablePending(tableKey, pending);
+				},
+				// eslint-disable-next-line react-hooks/exhaustive-deps
+				[tableKey],
+			);
+
+			return {
+				pending: tableState?.pending ?? [],
+				setPending,
+				onItemsChange,
+			};
+		},
+		[store],
+	);
+
+	// ── loadFromServer ──
+	const loadFromServer = useCallback(
+		async (entityUuid: string) => {
+			await store.load(
+				entityUuid,
+				mapRef.current,
+				afterLoadRef.current,
+			);
+		},
+		[store],
+	);
+
+	// ── Submit (fields + tables) ──
+	const submit = useCallback(async (): Promise<boolean> => {
+		const { success, savedData } = await store.submitFields(
+			buildPayloadRef.current,
+			mapRef.current,
+			buildLabelRef.current,
+			updatePaneLabel,
+			uniqId,
+		);
+		if (!success) return false;
+
+		// Коммит всех pending-таблиц
+		const parentUuid =
+			savedData?.uuid ??
+			store.getSnapshot().meta.uuid ??
+			"";
+		if (Object.keys(tableDefs).length > 0 && parentUuid) {
+			try {
+				await store.commitAllTables(parentUuid);
+			} catch (e: any) {
+				store.setError(
+					e?.message ||
+						"Не удалось сохранить вложенные данные",
+				);
+				return false;
+			}
+		}
+
+		// afterSave — дополнительная логика (invalidate и т.д.)
+		if (afterSaveRef.current) {
+			try {
+				await afterSaveRef.current(savedData);
+			} catch (e: any) {
+				store.setError(
+					e?.message ||
+						"Ошибка после сохранения",
+				);
+				return false;
+			}
+		}
+
+		onSaveRef.current?.();
+		return true;
+	}, [store, tableDefs, updatePaneLabel, uniqId]);
+
+	// ── Actions ──
+	const handleSave = useCallback(() => {
+		submit();
+	}, [submit]);
+
+	const handleSaveAndClose = useCallback(async () => {
+		if (await submit()) {
+			store.clearStorage();
+			storeCache.delete(fullStorageKey);
+			onCloseRef.current?.();
+			if (uniqId) removePane(uniqId);
+		}
+	}, [submit, store, fullStorageKey, uniqId, removePane]);
+
+	const handleClose = useCallback(() => {
+		store.clearStorage();
+		storeCache.delete(fullStorageKey);
+		onCloseRef.current?.();
+		if (uniqId) removePane(uniqId);
+	}, [store, fullStorageKey, uniqId, removePane]);
+
+	// ── Совместимость со старым API ──
+	const handleFieldChange = useCallback(
+		(field: keyof F, value: string) => {
+			store.setField(field, value as any);
+		},
+		[store],
+	);
+
+	const setFormData = useCallback(
+		(updater: F | ((prev: F) => F)) => {
+			const current = store.getSnapshot().fields;
+			const next =
+				typeof updater === "function"
+					? (updater as (prev: F) => F)(current)
+					: updater;
+			store.replaceFields(next);
+		},
+		[store],
+	);
+
+	const clearFormStorage = useCallback(() => {
+		store.clearStorage();
+		storeCache.delete(fullStorageKey);
+	}, [store, fullStorageKey]);
+
+	return {
+		store,
+
+		// Реактивные данные
+		fields: snapshot.fields,
+		tables: snapshot.tables,
+		meta: snapshot.meta,
+
+		// Гранулярные хуки
+		useField,
+		useTable,
+
+		// Прямые мутации
+		setField: store.setField,
+		setFields: store.setFields,
+
+		// API
+		loadFromServer,
+		handleSave,
+		handleSaveAndClose,
+		handleClose,
+
+		uuid,
+		formUid,
+
+		// ── Совместимость ──
+		handleFieldChange,
+		setFormData,
+		formData: snapshot.fields,
+		isLoading: snapshot.meta.isLoading,
+		isEditMode: snapshot.meta.isEditMode,
+		error: snapshot.meta.error,
+		errorRevision: snapshot.meta.errorRevision,
+		setError: store.setError,
+		clearFormStorage,
+		submit,
+	};
+}

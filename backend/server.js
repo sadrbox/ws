@@ -84,7 +84,7 @@ app.use(
 // Rate limiting — защита от brute-force и DDoS
 const apiLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000, // 15 минут
-	max: 500, // максимум 500 запросов с одного IP
+	max: 2000, // максимум 2000 запросов с одного IP за 15 мин
 	standardHeaders: true,
 	legacyHeaders: false,
 	message: {

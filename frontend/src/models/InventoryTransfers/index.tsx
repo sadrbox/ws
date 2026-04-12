@@ -1,23 +1,17 @@
-import { FC, useMemo, useCallback, useState, useEffect } from "react";
-import { useAppContext } from "src/app";
+import { FC, useMemo } from "react";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
-import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Divider, Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
-import useUID from "src/hooks/useUID";
-import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
-import Tabs from "src/components/Tabs";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useFormSessionStore } from "src/hooks/useFormSessionStore";
-import FormError from "src/components/FormError";
-import FormPanel from "src/components/FormPanel";
-import { useModelListState } from "src/hooks/useModelListState";
+import { useFormStore } from "src/hooks/useFormStore";
+import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelList from "src/components/ModelList";
 
 const MODEL_ENDPOINT = "inventory-transfers";
 const LIST_NAME = "InventoryTransfersList";
@@ -29,125 +23,85 @@ const STATUS_OPTIONS = [
   { value: "cancelled", label: "Отменён" },
 ];
 
-interface TFormData {
+interface TFields {
   id?: number; uuid?: string;
   documentNumber: string; documentDate: string; description: string; status: string;
   fromWarehouseUuid: string; fromWarehouseName: string;
   toWarehouseUuid: string; toWarehouseName: string;
   organizationUuid: string; organizationName: string;
 }
-const EMPTY_FORM: TFormData = { documentNumber: "", documentDate: "", description: "", status: "draft", fromWarehouseUuid: "", fromWarehouseName: "", toWarehouseUuid: "", toWarehouseName: "", organizationUuid: "", organizationName: "" };
 
-const InventoryTransfersForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
-  const uuid = data?.uuid as string | undefined;
-  const { windows: { removePane, updatePaneLabel } } = useAppContext();
-  const formUid = useUID();
+const DEFAULT_FIELDS: TFields = {
+  documentNumber: "", documentDate: "", description: "", status: "draft",
+  fromWarehouseUuid: "", fromWarehouseName: "",
+  toWarehouseUuid: "", toWarehouseName: "",
+  organizationUuid: "", organizationName: "",
+};
+
+const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
 
-  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
-    "inventory-transfers-form", uuid ?? "new", EMPTY_FORM,
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(!!uuid);
+  const initialFields: TFields | undefined = (() => {
+    const data = paneProps.data;
+    if (!data || data.uuid) return undefined;
+    const init = { ...DEFAULT_FIELDS };
+    if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; }
+    else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
+    return init;
+  })();
 
-  const loadFormData = useCallback(async (entityUuid: string) => {
-    setIsLoading(true); setError(null);
-    try {
-      const res = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
-      const d = res.data?.item ?? res.data;
-      setFormData({
-        documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 10) ?? "", description: d.description ?? "", status: d.status ?? "draft",
-        fromWarehouseUuid: d.fromWarehouseUuid ?? "", fromWarehouseName: d.fromWarehouse?.shortName ?? "",
-        toWarehouseUuid: d.toWarehouseUuid ?? "", toWarehouseName: d.toWarehouse?.shortName ?? "",
-        organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? "",
-        id: d.id, uuid: d.uuid,
-      });
-    } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); } finally { setIsLoading(false); }
-  }, []);
+  const form = useFormStore<TFields>({
+    endpoint: MODEL_ENDPOINT, storageKey: "inventory-transfers-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
+    mapServerToForm: (d, prev) => ({
+      ...(prev ?? DEFAULT_FIELDS), ...d,
+      documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 10) ?? "",
+      description: d.description ?? "", status: d.status ?? "draft",
+      fromWarehouseUuid: d.fromWarehouseUuid ?? "", fromWarehouseName: d.fromWarehouse?.shortName ?? prev?.fromWarehouseName ?? "",
+      toWarehouseUuid: d.toWarehouseUuid ?? "", toWarehouseName: d.toWarehouse?.shortName ?? prev?.toWarehouseName ?? "",
+      organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? prev?.organizationName ?? "",
+    }),
+    buildPayload: (fd) => ({
+      documentNumber: fd.documentNumber?.trim() || null, documentDate: fd.documentDate || null,
+      description: fd.description?.trim() || null, status: fd.status || "draft",
+      fromWarehouseUuid: fd.fromWarehouseUuid || null, toWarehouseUuid: fd.toWarehouseUuid || null,
+      organizationUuid: fd.organizationUuid || null,
+    }),
+    buildPaneLabel: (saved) => `${translate(LIST_NAME) || FORM_LABEL}: ${saved.documentNumber || "?"} • ${saved.id ?? "?"}`,
+  });
 
-  useEffect(() => {
-    // Если данные восстановлены из sessionStorage — не грузим с сервера
-    if (uuid && !hadStoredData) loadFormData(uuid);
-  }, [uuid, loadFormData, hadStoredData]);
-  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => { setFormData(prev => ({ ...prev, [field]: value })); }, []);
-
-  const submit = useCallback(async (): Promise<boolean> => {
-    setIsLoading(true); setError(null);
-    const payload: Record<string, unknown> = {
-      documentNumber: formData.documentNumber?.trim() || null, documentDate: formData.documentDate || null,
-      description: formData.description?.trim() || null, status: formData.status || "draft",
-      fromWarehouseUuid: formData.fromWarehouseUuid || null, toWarehouseUuid: formData.toWarehouseUuid || null,
-      organizationUuid: formData.organizationUuid || null,
-    };
-    try {
-      const res = isEditMode && (uuid || formData.uuid) ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload) : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
-      const saved = res.data?.item ?? res.data;
-      setFormData(prev => ({
-        ...prev, ...saved, documentNumber: saved.documentNumber ?? "", documentDate: saved.documentDate?.slice(0, 10) ?? "", description: saved.description ?? "", status: saved.status ?? "draft",
-        fromWarehouseName: saved.fromWarehouse?.shortName ?? prev.fromWarehouseName,
-        toWarehouseName: saved.toWarehouse?.shortName ?? prev.toWarehouseName,
-        organizationName: saved.organization?.shortName ?? prev.organizationName,
-      }));
-      setIsEditMode(true);
-      if (uniqId) updatePaneLabel(uniqId, `${translate(LIST_NAME) || FORM_LABEL}: ${saved.documentNumber || "?"} • ${saved.id ?? "?"}`);
-      onSave?.(); return true;
-    } catch (err: any) { setError(err.response?.data?.message || "Ошибка сохранения"); return false; } finally { setIsLoading(false); }
-  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel]);
-
-  const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
-  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
-
-  const generalTab = useMemo(() => (
-    <div className={styles.FormBodyParts}>
-              <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-                <Field label="Номер документа" name={`${formUid}_docNum`} minWidth="339px" value={formData.documentNumber} onChange={e => handleFieldChange("documentNumber", e.target.value)} disabled={isLoading} />
-                <FieldDate label="Дата документа" name={`${formUid}_docDate`} minWidth="200px" value={formData.documentDate} onChange={e => handleFieldChange("documentDate", e.target.value)} disabled={isLoading} />
-                <FieldSelect label="Статус" name={`${formUid}_status`} value={formData.status} options={STATUS_OPTIONS} onChange={e => handleFieldChange("status", e.target.value)} disabled={isLoading} />
-                <LookupField label="Со склада" name={`${formUid}_fromWh`} value={formData.fromWarehouseUuid} displayValue={formData.fromWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, fromWarehouseUuid: u, fromWarehouseName: d }))} minWidth="339px" disabled={isLoading} />
-                <LookupField label="На склад" name={`${formUid}_toWh`} value={formData.toWarehouseUuid} displayValue={formData.toWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, toWarehouseUuid: u, toWarehouseName: d }))} minWidth="339px" disabled={isLoading} />
-                <LookupField label="Организация" name={`${formUid}_org`} value={formData.organizationUuid} displayValue={formData.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => setFormData(prev => ({ ...prev, organizationUuid: u, organizationName: d }))} minWidth="339px" disabled={isLoading} />
-                <FieldTextarea label="Описание" name={`${formUid}_description`} value={formData.description} onChange={e => handleFieldChange("description", e.target.value)} disabled={isLoading} minWidth="339px" minHeight="80px" rows={4} />
-              </div></Group>
-              {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-              </div></Group></>}
-            </div>
-  ), [formData, isLoading, isEditMode, formUid, handleFieldChange, setFormData]);
-
-  const tabs = useMemo<{ id: string; label: string; component: React.ReactNode }[]>(() => [
-    { id: "general", label: translate("general") || "Общие сведения", component: generalTab },
-  ], [generalTab]);
+  const tabs = useMemo(() => [
+    { id: "general", label: translate("general") || "Общие сведения", component: (
+      <div className={styles.FormBodyParts}>
+        <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+          <Field label="Номер документа" name={`${form.formUid}_docNum`} minWidth="339px" value={form.fields.documentNumber} onChange={e => form.setField("documentNumber", e.target.value)} disabled={form.isLoading} />
+          <FieldDate label="Дата документа" name={`${form.formUid}_docDate`} minWidth="200px" value={form.fields.documentDate} onChange={e => form.setField("documentDate", e.target.value)} disabled={form.isLoading} />
+          <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+          <LookupField label="Со склада" name={`${form.formUid}_fromWh`} value={form.fields.fromWarehouseUuid} displayValue={form.fields.fromWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ fromWarehouseUuid: u, fromWarehouseName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+          <LookupField label="На склад" name={`${form.formUid}_toWh`} value={form.fields.toWarehouseUuid} displayValue={form.fields.toWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ toWarehouseUuid: u, toWarehouseName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+          <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+          <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
+        </div></Group>
+        {form.isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+          <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+          <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+        </div></Group></>}
+      </div>
+    )},
+  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);
 
   return (
-    <div className={styles.FormWrapper}>
-      <FormPanel onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
-      <FormError message={error} onDismiss={() => setError(null)} />
-      <div className={styles.FormBody}>
-        <Tabs tabs={tabs} />
-      </div>
-    </div>
+    <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
+      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} />
   );
 };
 InventoryTransfersForm.displayName = "InventoryTransfersForm";
 
-interface InventoryTransfersListProps { variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; }
-
-const InventoryTransfersList: FC<InventoryTransfersListProps> = ({ variant = "default", onSelectItem, ownerUuid, ownerField } = {}) => {
-  const isPartOf = !!ownerUuid; const componentName = isPartOf ? `${LIST_NAME}_part` : LIST_NAME;
-  const { addPane } = useAppContext().windows; const t = (k: string) => translate(k) || k;
-  const ownerFilter = useMemo(() => { if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } }; return undefined; }, [ownerUuid, ownerField]);
-  const { error, refetch, buildTableProps } = useModelListState({ model: MODEL_ENDPOINT, componentName, columnsJson, defaultSort: { id: "desc" }, columnsVariant: isPartOf ? "part" : undefined, ownerFilter });
-  const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
-    const d = formProps.data; const isEdit = !!d?.uuid;
-    const newData = !isEdit && ownerUuid && ownerField ? { [ownerField]: ownerUuid } as unknown as TDataItem : d;
-    const title = isEdit ? (d?.documentNumber ? String(d.documentNumber).slice(0, 50) : t("noName")) : t("new");
-    addPane({ label: `${t(componentName)}: ${title} • ${d?.id ?? "?"}`, component: InventoryTransfersForm, data: newData, onSave: () => refetch(), onClose: () => refetch() });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
-  if (error) return <div className="error-container"><div className="error-message"><h3>Ошибка загрузки</h3><p>{(error as Error)?.message}</p><button onClick={() => refetch()} className="retry-button">Повторить</button></div></div>;
-  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange: false })} />;
-};
+const InventoryTransfersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+  <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={InventoryTransfersForm}
+    getLabel={(d) => d?.documentNumber ? String(d.documentNumber).slice(0, 50) : "?"} variant={variant} onSelectItem={onSelectItem}
+    ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
+);
 InventoryTransfersList.displayName = "InventoryTransfersList";
+
 export { InventoryTransfersList, InventoryTransfersForm };
