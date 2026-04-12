@@ -1,5 +1,6 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import { useAppContext } from "src/app";
+import { useQueryClient } from "@tanstack/react-query";
 import apiClient from "src/services/api/client";
 import type { TPane } from "src/app/types";
 import { Button, ButtonImage } from "src/components/Button";
@@ -48,6 +49,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId
   const uuid = data?.uuid as string | undefined;
   const employeeUuid = (data as any)?.employeeUuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
+  const queryClient = useQueryClient();
   const formUid = useUID();
 
   const [formData, setFormData] = useState<TFormData>(() => ({
@@ -122,10 +124,11 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId
       }));
       setIsEditMode(true);
       if (uniqId) updatePaneLabel(uniqId, `${translate("EmployeeHistoriesList") || "Кадровая история"}: ${eventTypeLabel} • ${saved.id ?? "?"}`);
+      queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
       onSave?.(); return true;
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка сохранения"); return false; }
     finally { setIsLoading(false); }
-  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel, eventTypeLabel]);
+  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel, eventTypeLabel, queryClient]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
   const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);

@@ -129,12 +129,14 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
           initialPendingRows={formData._pendingSaleItems}
           onTotalChange={handleTotalChange}
           onItemsChange={(items) => {
-            saleItemsPendingRef.current = items ?? [];
-            const pending = (items ?? []).filter((r: any) => r._pendingAction);
+            const all = items ?? [];
+            const pending = all.filter((r: any) => r._pendingAction);
+            saleItemsPendingRef.current = pending;
             setFormData(prev => {
               const prevPending = prev._pendingSaleItems;
-              if (JSON.stringify(prevPending) === JSON.stringify(pending)) return prev;
-              return { ...prev, _pendingSaleItems: pending.length ? pending : undefined };
+              const next = pending.length ? pending : undefined;
+              if (JSON.stringify(prevPending) === JSON.stringify(next)) return prev;
+              return { ...prev, _pendingSaleItems: next };
             });
           }}
         />

@@ -1,5 +1,6 @@
 import { FC, useCallback, useMemo } from "react";
 import { useAppContext } from "src/app";
+import { useQueryClient } from "@tanstack/react-query";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
@@ -25,6 +26,7 @@ interface SaleItemsTableProps {
 
 const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, onTotalChange, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
   const { addPane } = useAppContext().windows;
+  const queryClient = useQueryClient();
   const t = translate;
 
   // ── Пересчёт общей суммы при изменении строк ──────────────────────────
@@ -127,7 +129,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
   }, []);
 
   // ── openFormFor ────────────────────────────────────────────────────────
-  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
+  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     addPane({
       label: isEdit
@@ -135,10 +137,10 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
         : `${t("SaleItemsList")}: ${t("new")}`,
       component: SaleItemsForm,
       data: { ...(data ?? {}), saleUuid } as any,
-      onSave: () => ctx.refetch(),
-      onClose: () => ctx.refetch(),
+      onSave: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
+      onClose: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
     });
-  }, [addPane, t, saleUuid]);
+  }, [addPane, t, saleUuid, queryClient]);
 
   // ── defaultNewRow ───────────────────────────────────────────────────────
   const defaultNewRow = useMemo(() => ({

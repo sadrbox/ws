@@ -95,11 +95,13 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
       parentName={formData.shortName}
       initialPendingRows={formData._pendingBankAccounts}
       onItemsChange={(items) => {
-        bankAccountsPendingRef.current = items ?? [];
-        const pending = (items ?? []).filter((r: any) => r._pendingAction);
+        const all = items ?? [];
+        const pending = all.filter((r: any) => r._pendingAction);
+        bankAccountsPendingRef.current = pending;
         setFormData(prev => {
-          if (JSON.stringify(prev._pendingBankAccounts) === JSON.stringify(pending)) return prev;
-          return { ...prev, _pendingBankAccounts: pending.length ? pending : undefined };
+          const next = pending.length ? pending : undefined;
+          if (JSON.stringify(prev._pendingBankAccounts) === JSON.stringify(next)) return prev;
+          return { ...prev, _pendingBankAccounts: next };
         });
       }}
     /> },
@@ -110,11 +112,13 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
       parentName={formData.shortName}
       initialPendingRows={formData._pendingContracts}
       onItemsChange={(items) => {
-        contractsPendingRef.current = items ?? [];
-        const pending = (items ?? []).filter((r: any) => r._pendingAction);
+        const all = items ?? [];
+        const pending = all.filter((r: any) => r._pendingAction);
+        contractsPendingRef.current = pending;
         setFormData(prev => {
-          if (JSON.stringify(prev._pendingContracts) === JSON.stringify(pending)) return prev;
-          return { ...prev, _pendingContracts: pending.length ? pending : undefined };
+          const next = pending.length ? pending : undefined;
+          if (JSON.stringify(prev._pendingContracts) === JSON.stringify(next)) return prev;
+          return { ...prev, _pendingContracts: next };
         });
       }}
     /> },
@@ -125,11 +129,13 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
         parentName={formData.shortName}
         initialPendingRows={formData._pendingContacts}
         onItemsChange={(items) => {
-          contactsPendingRef.current = items ?? [];
-          const pending = (items ?? []).filter((r: any) => r._pendingAction);
+          const all = items ?? [];
+          const pending = all.filter((r: any) => r._pendingAction);
+          contactsPendingRef.current = pending;
           setFormData(prev => {
-            if (JSON.stringify(prev._pendingContacts) === JSON.stringify(pending)) return prev;
-            return { ...prev, _pendingContacts: pending.length ? pending : undefined };
+            const next = pending.length ? pending : undefined;
+            if (JSON.stringify(prev._pendingContacts) === JSON.stringify(next)) return prev;
+            return { ...prev, _pendingContacts: next };
           });
         }}
       /> },

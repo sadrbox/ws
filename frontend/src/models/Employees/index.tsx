@@ -222,11 +222,13 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
             deferRemoteChanges={true}
             initialPendingRows={formData._pendingHistory}
             onItemsChange={(items) => {
-              historyPendingRef.current = items ?? [];
-              const pending = (items ?? []).filter((r: any) => r._pendingAction);
+              const all = items ?? [];
+              const pending = all.filter((r: any) => r._pendingAction);
+              historyPendingRef.current = pending;
               setFormData(prev => {
-                if (JSON.stringify(prev._pendingHistory) === JSON.stringify(pending)) return prev;
-                return { ...prev, _pendingHistory: pending.length ? pending : undefined };
+                const next = pending.length ? pending : undefined;
+                if (JSON.stringify(prev._pendingHistory) === JSON.stringify(next)) return prev;
+                return { ...prev, _pendingHistory: next };
               });
             }}
           />
@@ -243,11 +245,13 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
             parentName={formData.fullName || formData.lastName}
             initialPendingRows={formData._pendingContacts}
             onItemsChange={(items) => {
-              contactsPendingRef.current = items ?? [];
-              const pending = (items ?? []).filter((r: any) => r._pendingAction);
+              const all = items ?? [];
+              const pending = all.filter((r: any) => r._pendingAction);
+              contactsPendingRef.current = pending;
               setFormData(prev => {
-                if (JSON.stringify(prev._pendingContacts) === JSON.stringify(pending)) return prev;
-                return { ...prev, _pendingContacts: pending.length ? pending : undefined };
+                const next = pending.length ? pending : undefined;
+                if (JSON.stringify(prev._pendingContacts) === JSON.stringify(next)) return prev;
+                return { ...prev, _pendingContacts: next };
               });
             }}
           />

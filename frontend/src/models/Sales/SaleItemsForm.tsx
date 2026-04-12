@@ -1,5 +1,6 @@
 import { FC, useCallback, useEffect, useState } from "react";
 import { useAppContext } from "src/app";
+import { useQueryClient } from "@tanstack/react-query";
 import apiClient from "src/services/api/client";
 import type { TPane } from "src/app/types";
 import { Button, ButtonImage } from "src/components/Button";
@@ -40,6 +41,7 @@ const SaleItemsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
   const uuid = data?.uuid as string | undefined;
   const saleUuid = (data as any)?.saleUuid as string | undefined;
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
+  const queryClient = useQueryClient();
   const formUid = useUID();
 
   const [formData, setFormData] = useState<TFormData>(() => ({
@@ -113,10 +115,11 @@ const SaleItemsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
       }));
       setIsEditMode(true);
       if (uniqId) updatePaneLabel(uniqId, `${translate("SaleItemsList") || "Товар"}: ${saved.product?.shortName || "?"} • ${saved.id ?? "?"}`);
+      queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
       onSave?.(); return true;
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка сохранения"); return false; }
     finally { setIsLoading(false); }
-  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel]);
+  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel, queryClient]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
   const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);

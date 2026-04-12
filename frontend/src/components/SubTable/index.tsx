@@ -258,20 +258,17 @@ const SubTable: FC<SubTableProps> = ({
 
   // Сброс pendingAppliedRef когда pending очищается (после commit) —
   // это позволяет повторный мерж при следующем восстановлении из sessionStorage.
-  // Также принудительно синхронизируем кэш с серверными данными,
-  // удаляя все остаточные temp-строки из cachedRowsRef.
+  const prevInitialPendingLenRef = useRef(initialPendingRows?.length ?? 0);
   useEffect(() => {
-    if (deferRemoteChanges && pendingAppliedRef.current && !initialPendingRows?.length) {
+    const prevLen = prevInitialPendingLenRef.current;
+    const curLen = initialPendingRows?.length ?? 0;
+    prevInitialPendingLenRef.current = curLen;
+
+    if (deferRemoteChanges && pendingAppliedRef.current && prevLen > 0 && curLen === 0) {
+      // pending очищен после коммита — сбрасываем флаг мержа
       pendingAppliedRef.current = false;
-      // Принудительно сбросить кэш к серверным данным — убрать temp/pending строки
-      const clean = allItems.filter((r: any) =>
-        !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-"))
-      );
-      cachedRowsRef.current = clean;
-      setCacheVersion(v => v + 1);
-      onItemsChangeRef.current?.(clean);
     }
-  }, [deferRemoteChanges, initialPendingRows, allItems]);
+  }, [deferRemoteChanges, initialPendingRows]);
 
   // Обёртка для delete — показывает спиннер во время удаления
   const handleDelete = useCallback(async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
@@ -307,8 +304,8 @@ const SubTable: FC<SubTableProps> = ({
   const [cacheVersion, setCacheVersion] = useState(0);
 
   useEffect(() => {
+    // ── Ветка A: мерж pending-строк из sessionStorage (один раз при восстановлении) ──
     if (deferRemoteChanges && initialPendingRows?.length && !pendingAppliedRef.current) {
-      // Мержим initialPendingRows с серверными данными (один раз)
       pendingAppliedRef.current = true;
       const serverItems = [...allItems];
       const pending = initialPendingRows;
@@ -325,7 +322,6 @@ const SubTable: FC<SubTableProps> = ({
           ((p.uuid && p.uuid === (item as any).uuid) || p.id === (item as any).id)
         );
         if (pendingRow) {
-          // Берём pending-версию (update или delete)
           merged.push(pendingRow);
         } else {
           merged.push(item);
@@ -335,30 +331,41 @@ const SubTable: FC<SubTableProps> = ({
       // 2. Добавляем temp-строки (create), которых нет на сервере
       for (const p of pending) {
         if ((p as any)._pendingAction === "create" && !serverUuidSet.has((p as any).uuid)) {
-          merged.unshift(p); // новые — в начало
+          merged.unshift(p);
         }
       }
 
       cachedRowsRef.current = merged;
       setCacheVersion(v => v + 1);
       onItemsChangeRef.current?.(merged);
-    } else {
-      // Чистое присвоение серверных данных — убираем любые остаточные temp-строки
-      // (с отрицательным id или uuid начинающимся на "tmp-")
-      const clean = allItems.filter((r: any) =>
-        !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-"))
-      );
-      const hadDirtyRows = cachedRowsRef.current.some((r: any) => r._pendingAction);
-      cachedRowsRef.current = clean;
-      setCacheVersion(v => v + 1);
-      // Если были pending-строки в кэше — оповестим родителя что кэш теперь чистый
-      if (hadDirtyRows) {
-        onItemsChangeRef.current?.(clean);
-      }
+      return;
+    }
+
+    // ── Ветка B: чистая синхронизация кэша с серверными данными ──
+    // Убираем любые остаточные temp-строки (отрицательный id или uuid "tmp-...")
+    const clean = allItems.filter((r: any) =>
+      !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-"))
+    );
+
+    // Проверяем, отличаются ли данные от текущего кэша
+    const prev = cachedRowsRef.current;
+    const hadDirtyRows = prev.some((r: any) => r._pendingAction);
+    const countChanged = prev.length !== clean.length;
+    const contentChanged = countChanged || prev.some((r: any, i: number) => {
+      const c = clean[i] as any;
+      return !c || r.id !== c.id || r.uuid !== c.uuid;
+    });
+
+    cachedRowsRef.current = clean;
+    setCacheVersion(v => v + 1);
+
+    // Оповещаем родителя:
+    // - ВСЕГДА если были dirty-строки (чтобы родитель узнал что pending очищен)
+    // - ВСЕГДА если данные реально изменились (новые/удалённые строки с сервера)
+    if (deferRemoteChanges && (hadDirtyRows || contentChanged)) {
+      onItemsChangeRef.current?.(clean);
     }
   }, [allItems, dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
-  // dataUpdatedAt гарантирует срабатывание эффекта даже если allItems ссылочно не изменился
-  // (например, после refetch с идентичными данными)
 
   const rows = useMemo(() => cachedRowsRef.current, [cacheVersion]);
 

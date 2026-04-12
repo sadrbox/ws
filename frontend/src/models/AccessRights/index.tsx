@@ -58,6 +58,7 @@ const AccessRightsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
   const uuid = data?.uuid as string | undefined;
   const { canWrite } = useAccessRight("AccessRight");
   const { windows: { removePane, updatePaneLabel } } = useAppContext();
+  const queryClient = useQueryClient();
   const formUid = useUID();
 
   // Начальное значение: если передан userUuid через data (новая запись из AccessRightsList) — подставляем
@@ -118,6 +119,7 @@ const AccessRightsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
         const label = `Право доступа: ${saved.modelName || "?"} • ${saved.id ?? "?"}`;
         updatePaneLabel(uniqId, label);
       }
+      queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
       onSave?.();
       return true;
     } catch (err: any) {
@@ -130,7 +132,7 @@ const AccessRightsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId })
     } finally {
       setIsLoading(false);
     }
-  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel]);
+  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel, queryClient]);
 
   const handleSave = useCallback(() => { submit(); }, [submit]);
   const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
@@ -280,7 +282,7 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
   }, [modelNameMap, accessLevelMap]);
 
   // ── openFormFor ────────────────────────────────────────────────────────
-  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
+  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     const newData = !isEdit && userUuid ? { userUuid } as unknown as TDataItem : data;
     addPane({
@@ -289,10 +291,10 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
         : `Право доступа: ${t("new")}`,
       component: AccessRightsForm,
       data: newData,
-      onSave: () => ctx.refetch(),
-      onClose: () => ctx.refetch(),
+      onSave: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
+      onClose: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
     });
-  }, [addPane, t, userUuid]);
+  }, [addPane, t, userUuid, queryClient]);
 
   // ── onInlineAdd ────────────────────────────────────────────────────────
   const addingRef = useRef(false);

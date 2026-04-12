@@ -1,5 +1,6 @@
 import { FC, useCallback, useMemo } from "react";
 import { useAppContext } from "src/app";
+import { useQueryClient } from "@tanstack/react-query";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { FieldNumber, FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
@@ -30,6 +31,7 @@ interface EmployeeHistoryTableProps {
 
 const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({ employeeUuid, disabled = false, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
   const { addPane } = useAppContext().windows;
+  const queryClient = useQueryClient();
   const t = translate;
 
   const eventTypeMap = useMemo(() => Object.fromEntries(EVENT_TYPE_OPTIONS.map(o => [o.value, o.label])), []);
@@ -156,7 +158,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({ employeeUuid, dis
   }), []);
 
   // ── openFormFor ────────────────────────────────────────────────────────
-  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
+  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     addPane({
       label: isEdit
@@ -164,10 +166,10 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({ employeeUuid, dis
         : `${t("EmployeeHistoriesList")}: ${t("new")}`,
       component: EmployeeHistoryForm,
       data: { ...(data ?? {}), employeeUuid } as any,
-      onSave: () => ctx.refetch(),
-      onClose: () => ctx.refetch(),
+      onSave: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
+      onClose: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
     });
-  }, [addPane, t, employeeUuid, eventTypeMap]);
+  }, [addPane, t, employeeUuid, eventTypeMap, queryClient]);
 
   // ── defaultNewRow ───────────────────────────────────────────────────────
   const defaultNewRow = useMemo(() => ({
