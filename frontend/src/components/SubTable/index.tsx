@@ -283,7 +283,7 @@ const SubTable: FC<SubTableProps> = ({
         return r;
       }).filter(Boolean);
       setCacheVersion(v => v + 1);
-      onItemsChangeRef.current?.(cachedRowsRef.current as TDataItem[]);
+      notifyParent(cachedRowsRef.current as TDataItem[]);
       return;
     }
     setOpCount(c => c + 1);
@@ -298,6 +298,18 @@ const SubTable: FC<SubTableProps> = ({
   // НЕ вызываем onItemsChange при каждом allItems — это вызывало бесконечный цикл,
   // т.к. onItemsChange → setFormData → re-render → onItemsChange пересоздаётся → эффект снова.
   // Вместо этого onItemsChange вызывается только при ЛОКАЛЬНЫХ изменениях (add/edit/delete/merge).
+
+  /**
+   * Оповестить родителя об изменении данных.
+   * При передаче исключаем «нетронутые» строки (_untouched) —
+   * новые пустые строки, которые пользователь ещё не редактировал,
+   * не должны попадать в pending (sessionStorage) и не должны коммититься.
+   */
+  const notifyParent = useCallback((items: TDataItem[]) => {
+    if (!onItemsChangeRef.current) return;
+    const filtered = items.filter((r: any) => !r._untouched);
+    onItemsChangeRef.current(filtered);
+  }, []);
 
   // ── Кэширование строк ─────────────────────────────────────────────────
   const cachedRowsRef = useRef<TDataItem[]>([]);
@@ -337,7 +349,7 @@ const SubTable: FC<SubTableProps> = ({
 
       cachedRowsRef.current = merged;
       setCacheVersion(v => v + 1);
-      onItemsChangeRef.current?.(merged);
+      notifyParent(merged);
       return;
     }
 
@@ -348,7 +360,10 @@ const SubTable: FC<SubTableProps> = ({
     );
 
     const prev = cachedRowsRef.current;
-    const dirtyRows = deferRemoteChanges ? prev.filter((r: any) => r._pendingAction) : [];
+    // Собираем dirty-строки, исключая «нетронутые» (новые пустые строки — не были отредактированы)
+    const dirtyRows = deferRemoteChanges
+      ? prev.filter((r: any) => r._pendingAction && !r._untouched)
+      : [];
 
     // Если есть pending-строки при deferRemoteChanges — мержим с серверными данными,
     // чтобы не потерять локальные изменения при invalidateQueries (например после
@@ -376,7 +391,7 @@ const SubTable: FC<SubTableProps> = ({
       cachedRowsRef.current = merged;
       setCacheVersion(v => v + 1);
       // Оповещаем родителя — данные могли обновиться на сервере
-      onItemsChangeRef.current?.(merged);
+      notifyParent(merged);
       return;
     }
 
@@ -395,7 +410,7 @@ const SubTable: FC<SubTableProps> = ({
     // - ВСЕГДА если были dirty-строки (чтобы родитель узнал что pending очищен)
     // - ВСЕГДА если данные реально изменились (новые/удалённые строки с сервера)
     if (deferRemoteChanges && (hadDirtyRows || contentChanged)) {
-      onItemsChangeRef.current?.(clean);
+      notifyParent(clean);
     }
   }, [allItems, dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -446,12 +461,14 @@ const SubTable: FC<SubTableProps> = ({
         if (idMatch) {
           const next = { ...r, [field]: value };
           if (next._pendingAction !== "create") next._pendingAction = "update";
+          // Строка была отредактирована — снимаем маркер «нетронутая»
+          delete next._untouched;
           return next;
         }
         return r;
       });
       setCacheVersion(v => v + 1);
-      onItemsChangeRef.current?.(cachedRowsRef.current as TDataItem[]);
+      notifyParent(cachedRowsRef.current as TDataItem[]);
       return;
     }
 
@@ -498,12 +515,14 @@ const SubTable: FC<SubTableProps> = ({
       if (idMatch) {
         const next = { ...r, ...patch };
         if (next._pendingAction !== "create") next._pendingAction = "update";
+        // Строка была отредактирована — снимаем маркер «нетронутая»
+        delete next._untouched;
         return next;
       }
       return r;
     });
     setCacheVersion(v => v + 1);
-    onItemsChangeRef.current?.(cachedRowsRef.current as TDataItem[]);
+    notifyParent(cachedRowsRef.current as TDataItem[]);
   }, [validateCell, setCellError]);
 
   // ── Контекст для кастомных колбэков ────────────────────────────────────
@@ -661,10 +680,18 @@ const SubTable: FC<SubTableProps> = ({
       columns.forEach((c) => {
         if (!(c.identifier in newRow)) newRow[c.identifier] = c.type === "number" ? null : "";
       });
+      // Применяем defaultNewRow поверх (если задан) — чтобы дефолтные значения были в строке
+      if (defaultNewRow) {
+        Object.assign(newRow, defaultNewRow);
+      }
       newRow._pendingAction = "create";
+      // Маркер: строка ещё не была отредактирована пользователем.
+      // При обновлении данных (ветка B) или при передаче pending родителю
+      // такие строки игнорируются — не сохраняются и не мержатся.
+      newRow._untouched = true;
       cachedRowsRef.current = [newRow as TDataItem, ...cachedRowsRef.current];
       setCacheVersion(v => v + 1);
-      onItemsChangeRef.current?.(cachedRowsRef.current as TDataItem[]);
+      notifyParent(cachedRowsRef.current as TDataItem[]);
       return;
     }
 
