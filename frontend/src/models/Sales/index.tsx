@@ -168,8 +168,7 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
         extraSkipFields: ["saleUuid"],
       },
     );
-    try { await queryClient.refetchQueries({ queryKey: ["saleitems"] }); } catch {}
-  }, [queryClient]);
+  }, []);
 
   const loadFormData = useCallback(async (entityUuid: string) => {
     setIsLoading(true); setError(null);
@@ -228,12 +227,17 @@ const SalesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
       // Коммит pending sale items
       try {
         await commitPendingSaleItems(saved.uuid ?? saved.id ?? "");
-        setFormData(prev => ({ ...prev, _pendingSaleItems: undefined }));
         saleItemsPendingRef.current = [];
+        setFormData(prev => ({ ...prev, _pendingSaleItems: undefined }));
       } catch (e: any) {
         setError(e?.message || "Не удалось сохранить товары");
         return false;
       }
+      // Отложенный invalidate — ждём один тик рендера, чтобы SubTable
+      // успел получить новый parentUuid и включить свой query (enabled: true).
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["saleitems"] });
+      }, 0);
       onSave?.(); return true;
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка сохранения"); return false; } finally { setIsLoading(false); }
   }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel, commitPendingSaleItems]);

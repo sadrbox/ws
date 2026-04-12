@@ -168,7 +168,7 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
     }
   }, [queryClient]);
 
-  /** Универсальный коммит pending-строк SubTable на сервер */
+  /** Универсальный коммит pending-строк SubTable на сервер (без refetch — он будет позже) */
   const commitPending = useCallback(async (
     endpoint: string,
     ownerType: string,
@@ -179,8 +179,7 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
     await commitPendingRows(endpoint, pendingRef.current || [], savedParentUuid, "ownerUuid", tableName, {
       extraFields: { ownerType },
     });
-    try { await queryClient.refetchQueries({ queryKey: [endpoint] }); } catch {}
-  }, [queryClient]);
+  }, []);
 
   useEffect(() => {
     // Если данные восстановлены из sessionStorage — не грузим с сервера
@@ -215,10 +214,18 @@ const OrganizationsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }
         await commitPending("bankaccounts", "organization", parentUuid, bankAccountsPendingRef, translate("BankAccountsList") || "Банковские счета");
         await commitPending("contracts", "organization", parentUuid, contractsPendingRef, translate("ContractsList") || "Договора");
         // Очистить pending после успешного коммита
-        setFormData(prev => ({ ...prev, _pendingContacts: undefined, _pendingBankAccounts: undefined, _pendingContracts: undefined }));
         contactsPendingRef.current = [];
         bankAccountsPendingRef.current = [];
         contractsPendingRef.current = [];
+        setFormData(prev => ({ ...prev, _pendingContacts: undefined, _pendingBankAccounts: undefined, _pendingContracts: undefined }));
+        // Отложенный invalidate — ждём один тик рендера, чтобы SubTable
+        // успел получить новый parentUuid и включить свой query (enabled: true).
+        // Без этого при создании нового элемента query ещё disabled и invalidate бесполезен.
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ["contacts"] });
+          queryClient.invalidateQueries({ queryKey: ["bankaccounts"] });
+          queryClient.invalidateQueries({ queryKey: ["contracts"] });
+        }, 0);
       } catch (e: any) {
         const msg = e?.message || "Не удалось сохранить вложенные данные";
         setError(msg);

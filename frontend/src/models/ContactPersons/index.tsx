@@ -140,8 +140,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
     await commitPendingRows("contacts", contactsPendingRef.current, parentUuid, "ownerUuid", translate("ContactsList") || "Контакты", {
       extraFields: { ownerType: "contactperson" },
     });
-    await queryClient.refetchQueries({ queryKey: ["contacts"] });
-  }, [queryClient]);
+  }, []);
 
   const loadFormData = useCallback(async (entityUuid: string) => {
     setIsLoading(true); setError(null);
@@ -200,6 +199,11 @@ const ContactPersonsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
       await commitPending(saved.uuid);
       contactsPendingRef.current = [];
       setFormData(prev => { const { _pendingContacts, ...rest } = prev; return rest as TFormData; });
+      // Отложенный invalidate — ждём один тик рендера, чтобы SubTable
+      // успел получить новый parentUuid и включить свой query (enabled: true).
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      }, 0);
       queryClient.invalidateQueries({ queryKey: ["contactpersons"] });
       onSave?.();
       return true;

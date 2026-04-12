@@ -134,9 +134,8 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
             extraFields: { ownerType: "employee" },
           },
         );
-        setFormData(prev => ({ ...prev, _pendingContacts: undefined }));
         contactsPendingRef.current = [];
-        await queryClient.refetchQueries({ queryKey: ["contacts"] });
+        setFormData(prev => ({ ...prev, _pendingContacts: undefined }));
       } catch (e: any) {
         setError(e?.message || "Не удалось сохранить контакты");
         return false;
@@ -150,13 +149,18 @@ const EmployeesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
             updatePayload: (r: any) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
           },
         );
-        setFormData(prev => ({ ...prev, _pendingHistory: undefined }));
         historyPendingRef.current = [];
-        await queryClient.refetchQueries({ queryKey: ["employee-histories"] });
+        setFormData(prev => ({ ...prev, _pendingHistory: undefined }));
       } catch (e: any) {
         setError(e?.message || "Не удалось сохранить кадровую историю");
         return false;
       }
+      // Отложенный invalidate — ждём один тик рендера, чтобы SubTable
+      // успел получить новый parentUuid и включить свой query (enabled: true).
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["contacts"] });
+        queryClient.invalidateQueries({ queryKey: ["employee-histories"] });
+      }, 0);
       onSave?.(); return true;
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка сохранения"); return false; }
     finally { setIsLoading(false); }

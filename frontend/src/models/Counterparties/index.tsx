@@ -154,8 +154,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
     await commitPendingRows(endpoint, pendingRef.current || [], savedParentUuid, "ownerUuid", tableName, {
       extraFields: { ownerType },
     });
-    try { await queryClient.refetchQueries({ queryKey: [endpoint] }); } catch {}
-  }, [queryClient]);
+  }, []);
 
   const loadFormData = useCallback(async (entityUuid: string) => {
     setIsLoading(true);
@@ -220,10 +219,17 @@ const CounterpartiesForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId 
         await commitPending("bankaccounts", "counterparty", parentUuid, bankAccountsPendingRef, translate("BankAccountsList") || "Банковские счета");
         await commitPending("contracts", "counterparty", parentUuid, contractsPendingRef, translate("ContractsList") || "Договора");
         // Очистить pending после успешного коммита
-        setFormData(prev => ({ ...prev, _pendingContacts: undefined, _pendingBankAccounts: undefined, _pendingContracts: undefined }));
         contactsPendingRef.current = [];
         bankAccountsPendingRef.current = [];
         contractsPendingRef.current = [];
+        setFormData(prev => ({ ...prev, _pendingContacts: undefined, _pendingBankAccounts: undefined, _pendingContracts: undefined }));
+        // Отложенный invalidate — ждём один тик рендера, чтобы SubTable
+        // успел получить новый parentUuid и включить свой query (enabled: true).
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ["contacts"] });
+          queryClient.invalidateQueries({ queryKey: ["bankaccounts"] });
+          queryClient.invalidateQueries({ queryKey: ["contracts"] });
+        }, 0);
       } catch (e: any) {
         const msg = e?.message || "Не удалось сохранить вложенные данные";
         setError(msg);
