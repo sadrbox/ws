@@ -81,7 +81,10 @@ const AppContextProvider: React.FC<PropsWithChildren<{ value: TypeAppContextProp
 // ────────────────────────────────────────────────
 
 const App: React.FC = () => {
-  const queryClient = new QueryClient();
+  // ⚠️ QueryClient создаётся один раз и сохраняется в state.
+  // Ранее `new QueryClient()` вызывался при каждом рендере — это приводило
+  // к потере кэша React Query и невозможности invalidateQueries обновлять данные.
+  const [queryClient] = useState(() => new QueryClient());
 
   const screenRef = useRef<HTMLDivElement>(null);
 

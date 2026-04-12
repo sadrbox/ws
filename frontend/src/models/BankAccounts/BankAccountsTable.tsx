@@ -107,14 +107,18 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
   // ── openFormFor ────────────────────────────────────────────────────────
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
+      _ctx.refetch();
+    };
     addPane({
       label: isEdit
         ? `${t("BankAccountsList")}: ${data?.shortName || data?.iban || t("noName")} • ${data?.id ?? "?"}`
         : `${t("BankAccountsList")}: ${t("new")}`,
       component: BankAccountsForm,
       data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
-      onSave: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
-      onClose: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
+      onSave: refresh,
+      onClose: refresh,
     });
   }, [addPane, t, ownerType, parentUuid, parentName, queryClient]);
 

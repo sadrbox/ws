@@ -131,14 +131,18 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
   // ── openFormFor ────────────────────────────────────────────────────────
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
+      _ctx.refetch();
+    };
     addPane({
       label: isEdit
         ? `${t("SaleItemsList")}: ${(data as any)?.product?.shortName || t("noName")} • ${data?.id ?? "?"}`
         : `${t("SaleItemsList")}: ${t("new")}`,
       component: SaleItemsForm,
       data: { ...(data ?? {}), saleUuid } as any,
-      onSave: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
-      onClose: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
+      onSave: refresh,
+      onClose: refresh,
     });
   }, [addPane, t, saleUuid, queryClient]);
 

@@ -132,14 +132,18 @@ const ContractsTable: FC<ContractsTableProps> = ({
   // ── openFormFor ────────────────────────────────────────────────────────
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
+      _ctx.refetch();
+    };
     addPane({
       label: isEdit
         ? `${t("ContractsList")}: ${data?.shortName || data?.contractNumber || t("noName")} • ${data?.id ?? "?"}`
         : `${t("ContractsList")}: ${t("new")}`,
       component: ContractsForm,
       data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
-      onSave: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
-      onClose: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
+      onSave: refresh,
+      onClose: refresh,
     });
   }, [addPane, t, ownerType, parentUuid, parentName, queryClient]);
 

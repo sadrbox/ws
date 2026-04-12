@@ -285,14 +285,18 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     const newData = !isEdit && userUuid ? { userUuid } as unknown as TDataItem : data;
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
+      _ctx.refetch();
+    };
     addPane({
       label: isEdit
         ? `Право доступа: ${data?.modelName || t("noName")} • ${data?.id ?? "?"}`
         : `Право доступа: ${t("new")}`,
       component: AccessRightsForm,
       data: newData,
-      onSave: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
-      onClose: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
+      onSave: refresh,
+      onClose: refresh,
     });
   }, [addPane, t, userUuid, queryClient]);
 

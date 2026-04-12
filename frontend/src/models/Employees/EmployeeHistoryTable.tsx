@@ -160,14 +160,18 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({ employeeUuid, dis
   // ── openFormFor ────────────────────────────────────────────────────────
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
+      _ctx.refetch();
+    };
     addPane({
       label: isEdit
         ? `${t("EmployeeHistoriesList")}: ${eventTypeMap[(data as any)?.eventType] || t("noName")} • ${data?.id ?? "?"}`
         : `${t("EmployeeHistoriesList")}: ${t("new")}`,
       component: EmployeeHistoryForm,
       data: { ...(data ?? {}), employeeUuid } as any,
-      onSave: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
-      onClose: () => queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
+      onSave: refresh,
+      onClose: refresh,
     });
   }, [addPane, t, employeeUuid, eventTypeMap, queryClient]);
 
