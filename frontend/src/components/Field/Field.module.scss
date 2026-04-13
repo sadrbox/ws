@@ -107,11 +107,24 @@
 			outline: none;
 			height: 100%;
 			font-size: $fontsize;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			overflow: hidden;
 			&:focus {
 				border: none;
 				box-shadow: none;
 				outline: none;
 			}
+		}
+
+		// Скрывать кнопки FieldActions по умолчанию в строках таблицы
+		.FieldActions {
+			display: none;
+		}
+
+		// Показывать FieldActions только в активной строке (tr[data-active])
+		:global(tr[data-active]) & .FieldActions {
+			display: flex;
 		}
 	}
 }

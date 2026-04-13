@@ -1150,6 +1150,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
       onClick={handleRowClick}
       onDoubleClick={handleDoubleClick}
       className={[isActive && styles.activeRow].filter(r => !!r).join(' ')}
+      data-active={isActive || undefined}
       style={{
         willChange: isActive ? 'background-color, box-shadow' : 'auto',
         transform: 'translate3d(0, 0, 0)',

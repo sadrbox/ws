@@ -199,6 +199,31 @@ function createFormStore<F extends object>(
 		schedulePersist();
 	}
 
+	// ── Dirty tracking ──────────────────────────────────────────────────
+	// savedSnapshot хранит JSON-строку «чистого» состояния (после load / save).
+	// isDirty() сравнивает текущее состояние с последним сохранённым.
+	let savedSnapshot: string = JSON.stringify({
+		fields: state.fields,
+		tables: state.tables,
+	});
+
+	/** Сбросить dirty-флаг (вызывать после load / save) */
+	function markClean(): void {
+		savedSnapshot = JSON.stringify({
+			fields: state.fields,
+			tables: state.tables,
+		});
+	}
+
+	/** Есть ли несохранённые изменения? */
+	function isDirty(): boolean {
+		const current = JSON.stringify({
+			fields: state.fields,
+			tables: state.tables,
+		});
+		return current !== savedSnapshot;
+	}
+
 	/** Обновить pending-строки вложенной таблицы */
 	function setTablePending(tableKey: string, pending: TDataItem[]): void {
 		const prev = state.tables[tableKey];
@@ -269,6 +294,7 @@ function createFormStore<F extends object>(
 			);
 			replaceFields(mapped);
 			setMeta({ isLoading: false, isEditMode: true, uuid: entityUuid });
+			markClean();
 			afterLoad?.();
 		} catch (err: any) {
 			setError(
@@ -417,6 +443,10 @@ function createFormStore<F extends object>(
 		commitAllTables,
 		commitTable,
 
+		// Dirty tracking
+		isDirty,
+		markClean,
+
 		// Cleanup
 		destroy,
 		clearStorage: () => clearSession(storageKey),
@@ -518,7 +548,7 @@ export interface UseFormStoreReturn<F extends object> {
 	/** Сохранить + закрыть (или только сохранить) */
 	handleSave: () => void;
 	handleSaveAndClose: () => Promise<void>;
-	handleClose: () => void;
+	handleClose: () => Promise<void>;
 
 	/** UUID текущей записи */
 	uuid: string | undefined;
@@ -569,6 +599,7 @@ export function useFormStore<F extends object>(
 	const uuid = data?.uuid as string | undefined;
 	const {
 		windows: { removePane, updatePaneLabel },
+		actions: { confirm },
 	} = useAppContext();
 	const formUid = useUID();
 
@@ -732,6 +763,7 @@ export function useFormStore<F extends object>(
 		}
 
 		onSaveRef.current?.();
+		store.markClean();
 		return true;
 	}, [store, tableDefs, updatePaneLabel, uniqId]);
 
@@ -749,12 +781,18 @@ export function useFormStore<F extends object>(
 		}
 	}, [submit, store, fullStorageKey, uniqId, removePane]);
 
-	const handleClose = useCallback(() => {
+	const handleClose = useCallback(async () => {
+		if (store.isDirty()) {
+			const answer = await confirm(
+				"Имеются несохранённые изменения. Закрыть без сохранения?",
+			);
+			if (!answer) return;
+		}
 		store.clearStorage();
 		storeCache.delete(fullStorageKey);
 		onCloseRef.current?.();
 		if (uniqId) removePane(uniqId);
-	}, [store, fullStorageKey, uniqId, removePane]);
+	}, [store, fullStorageKey, uniqId, removePane, confirm]);
 
 	// ── Совместимость со старым API ──
 	const handleFieldChange = useCallback(

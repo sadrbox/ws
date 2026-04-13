@@ -782,7 +782,9 @@ input[type="checkbox"] {
 	// line-height: 1;
 	min-width: 120px;
 	height: $heightFieldInput;
-
+		text-overflow: ellipsis;
+			white-space: nowrap;
+			overflow: hidden;
 	&::placeholder {
 		color: #aaa;
 		font-size: $fontsize - 1px;

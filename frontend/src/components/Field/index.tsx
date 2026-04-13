@@ -243,7 +243,7 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
           placeholder={placeholder}
           style={{
             ...(actions && actions.length > 0 && {
-              paddingRight: `${actions.length * 32 + 8}px`
+              paddingRight: `${actions.length * 32 - 6}px`
             })
           }}
         />
@@ -537,7 +537,7 @@ export const FieldFastSearch: FC = () => {
         placeholder="Поиск..."
         className={styles.FieldString}
         autoComplete="off"
-        style={{ paddingRight: '40px' }}
+        style={{ paddingRight: '26px' }}
         value={localValue}
         onChange={handleChange}
       />
@@ -760,7 +760,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
           style={{
             textAlign,
             ...(visibleActions.length > 0 && {
-              paddingRight: `${visibleActions.length * 32 + 8}px`,
+              paddingRight: `${visibleActions.length * 32 - 6}px`,
             }),
           }}
         />
