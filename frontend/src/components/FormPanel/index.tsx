@@ -13,6 +13,8 @@ export interface FormPanelProps {
   showReload?: boolean;
   /** Если true — скрыть кнопки сохранения (режим только чтение по правам доступа) */
   readonly?: boolean;
+  /** Есть ли несохранённые изменения? */
+  isDirty?: boolean;
 }
 
 /**
@@ -33,6 +35,7 @@ const FormPanel: FC<FormPanelProps> = ({
   isLoading,
   showReload = true,
   readonly: isReadonly = false,
+  isDirty = false,
 }) => {
   const effectiveSaveAndClose = isReadonly ? undefined : onSaveAndClose;
   const effectiveSave = isReadonly ? undefined : onSave;
@@ -70,6 +73,12 @@ const FormPanel: FC<FormPanelProps> = ({
                 className={isLoading ? styles.animationLoop : ""}
               />
             </ButtonImage>
+          </>
+        )}
+        {isDirty && !isReadonly && (
+          <>
+            <Divider />
+            <span className={styles.DirtyBadge} title="Имеются несохранённые изменения">● Не сохранено</span>
           </>
         )}
       </div>

@@ -35,6 +35,8 @@ interface ModelFormWrapperProps {
   onErrorDismiss: () => void;
   /** Только чтение (опционально) */
   readonly?: boolean;
+  /** Есть ли несохранённые изменения? */
+  isDirty?: boolean;
 }
 
 const ModelFormWrapper: FC<ModelFormWrapperProps> = ({
@@ -49,6 +51,7 @@ const ModelFormWrapper: FC<ModelFormWrapperProps> = ({
   errorRevision,
   onErrorDismiss,
   readonly,
+  isDirty,
 }) => {
   return (
     <div className={styles.FormWrapper}>
@@ -60,6 +63,7 @@ const ModelFormWrapper: FC<ModelFormWrapperProps> = ({
         onReload={onReload}
         isLoading={isLoading}
         showReload={showReload}
+        isDirty={isDirty}
       />
       <FormError
         message={error}

@@ -138,6 +138,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           deferRemoteChanges={true}
           parentKey="organizationUuid"
           parentUuid={form.fields.uuid ?? ""}
+          parentName={form.fields.shortName}
           initialPendingRows={contracts.pending}
           onItemsChange={contracts.onItemsChange}
         />
@@ -175,6 +176,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       errorRevision={form.errorRevision}
       onErrorDismiss={() => form.setError(null)}
       readonly={!canWrite}
+      isDirty={form.isDirty}
     />
   );
 };

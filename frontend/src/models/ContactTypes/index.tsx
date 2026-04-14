@@ -88,6 +88,7 @@ const ContactTypesForm: FC<Partial<TPane>> = (paneProps) => {
       errorRevision={form.errorRevision}
       onErrorDismiss={() => form.setError(null)}
       readonly={!canWrite}
+      isDirty={form.isDirty}
     />
   );
 };

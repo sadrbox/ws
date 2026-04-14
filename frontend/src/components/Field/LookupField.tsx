@@ -74,64 +74,8 @@ const defaultSecondaryFieldsMap: Record<string, string[]> = {
   brands: [],
 };
 
-// ── Ленивая загрузка Form-компонента по endpoint ──────────────────────
-const formModuleRegistry: Record<string, () => Promise<any>> = {
-  organizations: () => import("src/models/Organizations"),
-  counterparties: () => import("src/models/Counterparties"),
-  contacttypes: () => import("src/models/ContactTypes"),
-  contactpersons: () => import("src/models/ContactPersons"),
-  contacts: () => import("src/models/Contacts"),
-  contracts: () => import("src/models/Contracts"),
-  bankaccounts: () => import("src/models/BankAccounts"),
-  users: () => import("src/models/Users"),
-  activityhistories: () => import("src/models/ActivityHistories"),
-  todos: () => import("src/models/Todos"),
-  brands: () => import("src/models/Brands"),
-  products: () => import("src/models/Products"),
-  currencies: () => import("src/models/Currencies"),
-  employees: () => import("src/models/Employees"),
-  positions: () => import("src/models/Positions"),
-  warehouses: () => import("src/models/Warehouses"),
-  sales: () => import("src/models/Sales"),
-  purchases: () => import("src/models/Purchases"),
-  "incoming-invoices": () => import("src/models/IncomingInvoices"),
-  "outgoing-invoices": () => import("src/models/OutgoingInvoices"),
-  "payment-invoices": () => import("src/models/PaymentInvoices"),
-  "cash-receipt-orders": () => import("src/models/CashReceiptOrders"),
-  "cash-expense-orders": () => import("src/models/CashExpenseOrders"),
-  "inventory-transfers": () => import("src/models/InventoryTransfers"),
-  "scheduled-tasks": () => import("src/models/ScheduledTasks"),
-  "access-rights": () => import("src/models/AccessRights"),
-};
-
-const formComponentNameMap: Record<string, string> = {
-  organizations: "OrganizationsForm",
-  counterparties: "CounterpartiesForm",
-  contacttypes: "ContactTypesForm",
-  contactpersons: "ContactPersonsForm",
-  contacts: "ContactsForm",
-  contracts: "ContractsForm",
-  bankaccounts: "BankAccountsForm",
-  users: "UsersForm",
-  activityhistories: "ActivityHistoriesForm",
-  todos: "TodosForm",
-  brands: "BrandsForm",
-  products: "ProductsForm",
-  currencies: "CurrenciesForm",
-  employees: "EmployeesForm",
-  positions: "PositionsForm",
-  warehouses: "WarehousesForm",
-  sales: "SalesForm",
-  purchases: "PurchasesForm",
-  "incoming-invoices": "IncomingInvoicesForm",
-  "outgoing-invoices": "OutgoingInvoicesForm",
-  "payment-invoices": "PaymentInvoicesForm",
-  "cash-receipt-orders": "CashReceiptOrdersForm",
-  "cash-expense-orders": "CashExpenseOrdersForm",
-  "inventory-transfers": "InventoryTransfersForm",
-  "scheduled-tasks": "ScheduledTasksForm",
-  "access-rights": "AccessRightsForm",
-};
+// ── Ленивая загрузка Form-компонента по endpoint (через единый реестр) ──
+import { getByEndpoint } from "src/registry/modelRegistry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOOKUP FIELD — поле с кнопками "выбор" и "очистить"
@@ -291,15 +235,14 @@ const LookupField: FC<LookupFieldProps> = ({
   // ── Открыть форму выбранного элемента ─────────────────────────────────
   const handleOpenItemForm = useCallback(() => {
     if (!value || disabled) return;
-    const loader = formModuleRegistry[endpoint];
-    if (!loader) return;
-    const formName = formComponentNameMap[endpoint];
-    loader().then((mod) => {
-      const FormComp: FC<any> | undefined = mod[formName] || mod.default;
+    const entry = getByEndpoint(endpoint);
+    if (!entry) return;
+    entry.module().then((mod) => {
+      const FormComp: FC<any> | undefined = mod[entry.formName] || mod.default;
       if (!FormComp) return;
       const t = translate;
       addPane({
-        label: `${t(formName) || endpoint}: ${displayValue || value}`,
+        label: `${t(entry.formName) || endpoint}: ${displayValue || value}`,
         component: FormComp,
         data: { uuid: value } as any,
       });
@@ -370,7 +313,7 @@ const LookupField: FC<LookupFieldProps> = ({
     if (value || inputText) {
       acts.push({ type: "clear", onClick: handleClear });
     }
-    if (value && formModuleRegistry[endpoint]) {
+    if (value && getByEndpoint(endpoint)) {
       acts.push({ type: "open", onClick: handleOpenItemForm });
     }
     acts.push({ type: "list", onClick: handleOpenModal });
@@ -451,9 +394,9 @@ const LookupField: FC<LookupFieldProps> = ({
             onDoubleClick={handleOpenModal}
             style={{
               cursor: disabled ? "default" : "text",
-              ...(fieldActions.length > 0 && {
-                paddingRight: `${fieldActions.length * 32 + 8}px`,
-              }),
+              // ...(fieldActions.length > 0 && {
+              //   paddingRight: `${fieldActions.length * 32 + 8}px`,
+              // }),
             }}
           />
 

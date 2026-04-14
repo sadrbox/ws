@@ -25,9 +25,9 @@ export async function resolveOwnerName(ownerType, ownerUuid) {
 	try {
 		const record = await prisma[config.model].findUnique({
 			where: { uuid: ownerUuid },
-			select: { [config.field]: true, shortName: true },
+			select: { [config.field]: true },
 		});
-		return record?.[config.field] ?? record?.shortName ?? "";
+		return record?.[config.field] ?? "";
 	} catch {
 		return "";
 	}

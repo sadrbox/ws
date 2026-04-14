@@ -16,73 +16,8 @@ import {
   type FormStoreEntry,
 } from "src/hooks/useFormSessionStore";
 
-// Импорты всех *Form компонентов
-import { UsersForm } from "src/models/Users";
-import { OrganizationsForm } from "src/models/Organizations";
-import { CounterpartiesForm } from "src/models/Counterparties";
-import { ContractsForm } from "src/models/Contracts";
-import { BankAccountsForm } from "src/models/BankAccounts";
-import { ContactsForm } from "src/models/Contacts";
-import { ContactPersonsForm } from "src/models/ContactPersons";
-import { ContactTypesForm } from "src/models/ContactTypes";
-import { EmployeesForm } from "src/models/Employees";
-import { PositionsForm } from "src/models/Positions";
-import { ProductsForm } from "src/models/Products";
-import { BrandsForm } from "src/models/Brands";
-import { CurrenciesForm } from "src/models/Currencies";
-import { TodosForm } from "src/models/Todos";
-import { SalesForm } from "src/models/Sales";
-import { PurchasesForm } from "src/models/Purchases";
-import { OutgoingInvoicesForm } from "src/models/OutgoingInvoices";
-import { IncomingInvoicesForm } from "src/models/IncomingInvoices";
-import { PaymentInvoicesForm } from "src/models/PaymentInvoices";
-import { CashReceiptOrdersForm } from "src/models/CashReceiptOrders";
-import { CashExpenseOrdersForm } from "src/models/CashExpenseOrders";
-import { InventoryTransfersForm } from "src/models/InventoryTransfers";
-import { WarehousesForm } from "src/models/Warehouses";
-import { AccessRightsForm } from "src/models/AccessRights";
-import { ScheduledTasksForm } from "src/models/ScheduledTasks";
-import { ActivityHistoriesForm } from "src/models/ActivityHistories";
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Маппинг formName → { label (русское название), FormComponent }
-// formName соответствует первому аргументу useFormSessionStore
-// Пример ключа sessionStorage: "formStore:users-form:some-uuid"
-// ═══════════════════════════════════════════════════════════════════════════
-
-interface FormMapping {
-  label: string;
-  FormComponent: FC<any>;
-}
-
-const FORM_REGISTRY: Record<string, FormMapping> = {
-  "users-form":              { label: "Пользователи",       FormComponent: UsersForm },
-  "organizations-form":      { label: "Организации",         FormComponent: OrganizationsForm },
-  "counterparties-form":     { label: "Контрагенты",         FormComponent: CounterpartiesForm },
-  "contracts-form":          { label: "Договора",            FormComponent: ContractsForm },
-  "bank-accounts-form":      { label: "Банковские счета",    FormComponent: BankAccountsForm },
-  "contacts-form":           { label: "Контакты",            FormComponent: ContactsForm },
-  "contact-persons-form":    { label: "Контактные лица",     FormComponent: ContactPersonsForm },
-  "contact-types-form":      { label: "Типы контактов",      FormComponent: ContactTypesForm },
-  "employees-form":          { label: "Сотрудники",          FormComponent: EmployeesForm },
-  "positions-form":          { label: "Должности",           FormComponent: PositionsForm },
-  "products-form":           { label: "Номенклатура",        FormComponent: ProductsForm },
-  "brands-form":             { label: "Бренды",              FormComponent: BrandsForm },
-  "currencies-form":         { label: "Валюты",              FormComponent: CurrenciesForm },
-  "todos-form":              { label: "Задачи",              FormComponent: TodosForm },
-  "sales-form":              { label: "Реализация",          FormComponent: SalesForm },
-  "purchases-form":          { label: "Поступления",         FormComponent: PurchasesForm },
-  "outgoing-invoices-form":  { label: "СФ исходящие",        FormComponent: OutgoingInvoicesForm },
-  "incoming-invoices-form":  { label: "СФ входящие",         FormComponent: IncomingInvoicesForm },
-  "payment-invoices-form":   { label: "Счета на оплату",     FormComponent: PaymentInvoicesForm },
-  "cash-receipt-orders-form":{ label: "ПКО",                 FormComponent: CashReceiptOrdersForm },
-  "cash-expense-orders-form":{ label: "РКО",                 FormComponent: CashExpenseOrdersForm },
-  "inventory-transfers-form":{ label: "Перемещение ТМЗ",     FormComponent: InventoryTransfersForm },
-  "warehouses-form":         { label: "Склады",              FormComponent: WarehousesForm },
-  "access-rights-form":      { label: "Права доступа",       FormComponent: AccessRightsForm },
-  "scheduled-tasks-form":    { label: "Регламентные задачи",  FormComponent: ScheduledTasksForm },
-  "activity-histories-form": { label: "Журнал действий",      FormComponent: ActivityHistoriesForm },
-};
+// Единый реестр моделей (заменяет 26 статических импортов + FORM_REGISTRY)
+import { getByStorageKey } from "src/registry/modelRegistry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Хелперы
@@ -172,13 +107,13 @@ function isUuid(str: string): boolean {
 
 function entriesToRows(entries: FormStoreEntry[]): UnsavedRow[] {
   return entries.map((entry, idx) => {
-    const mapping = FORM_REGISTRY[entry.formName];
+    const regEntry = getByStorageKey(entry.formName);
     return {
       id: idx + 1,
       uuid: entry.storageKey, // используем storageKey как uuid
       storageKey: entry.storageKey,
       formName: entry.formName,
-      formLabel: mapping?.label ?? entry.formName,
+      formLabel: regEntry?.label ?? entry.formName,
       entityId: isUuid(entry.entityId) ? entry.entityId : "Новый",
       description: getDescription(entry.data),
       pendingSummary: getPendingSummary(entry.data),
@@ -221,13 +156,13 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
 
   // Открыть форму с данными из sessionStorage
   const openUnsavedForm = useCallback((row: UnsavedRow) => {
-    const mapping = FORM_REGISTRY[row.formName];
-    if (!mapping) {
+    const regEntry = getByStorageKey(row.formName);
+    if (!regEntry) {
       alert(`Неизвестный тип формы: ${row.formName}`);
       return;
     }
 
-    const { FormComponent, label } = mapping;
+    const { label } = regEntry;
     const entryData = row._entry.data;
 
     // Новый формат: { fields: {...}, tables: {...} }
@@ -242,12 +177,22 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
       ? { ...fields, _formStorageKey: row.storageKey } as unknown as TDataItem
       : { ...fields, uuid: originalEntityId, _formStorageKey: row.storageKey } as unknown as TDataItem;
 
-    addPane({
-      label: `${label}: ${row.description || (isNew ? t("new") : originalEntityId)}`,
-      component: FormComponent,
-      data: paneData,
-      onSave: () => loadEntries(),
-      onClose: () => loadEntries(),
+    // Ленивая загрузка Form-компонента
+    regEntry.module().then((mod) => {
+      const FormComponent = mod[regEntry.formName] || mod.default;
+      if (!FormComponent) {
+        alert(`Компонент ${regEntry.formName} не найден в модуле`);
+        return;
+      }
+      addPane({
+        label: `${label}: ${row.description || (isNew ? t("new") : originalEntityId)}`,
+        component: FormComponent,
+        data: paneData,
+        onSave: () => loadEntries(),
+        onClose: () => loadEntries(),
+      });
+    }).catch((err) => {
+      alert(`Ошибка загрузки формы: ${err?.message || "неизвестная ошибка"}`);
     });
   }, [addPane, t, loadEntries]);
 

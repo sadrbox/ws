@@ -167,6 +167,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
       error={form.error}
       errorRevision={form.errorRevision}
       onErrorDismiss={() => form.setError(null)}
+      isDirty={form.isDirty}
     />
   );
 };

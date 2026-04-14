@@ -146,6 +146,10 @@ function createFormStore<F extends object>(
 		hadStoredData = true;
 	}
 
+	// snapshotReady = false пока серверный snapshot не загружен (при hadStoredData).
+	// Блокирует isDirty() чтобы не мерцал индикатор «Не сохранено».
+	let snapshotReady = !hadStoredData;
+
 	// ── Подписчики ──
 	const listeners = new Set<Listener>();
 
@@ -219,11 +223,14 @@ function createFormStore<F extends object>(
 			fields: state.fields,
 			tables: state.tables,
 		});
+		snapshotReady = true;
 		notify(); // Уведомить подписчиков (dirty-индикатор на вкладке)
 	}
 
 	/** Есть ли несохранённые изменения? */
 	function isDirty(): boolean {
+		// Пока серверный snapshot не загружен — не показывать dirty
+		if (!snapshotReady) return false;
 		const current = JSON.stringify({
 			fields: state.fields,
 			tables: state.tables,
@@ -283,11 +290,17 @@ function createFormStore<F extends object>(
 
 	// ── API ──
 
-	/** Загрузить данные сущности с сервера */
+	/**
+	 * Загрузить данные сущности с сервера.
+	 * @param snapshotOnly — если true, НЕ заменять текущие fields/tables,
+	 *   а только обновить savedSnapshot серверными данными (для корректного isDirty).
+	 *   Используется когда fields восстановлены из sessionStorage.
+	 */
 	async function load(
 		entityUuid: string,
 		mapServerToForm: (data: any, prev?: F) => F | Promise<F>,
 		afterLoad?: () => void,
+		snapshotOnly = false,
 	): Promise<void> {
 		setMeta({ isLoading: true });
 		setError(null);
@@ -299,10 +312,23 @@ function createFormStore<F extends object>(
 			const mapped = await Promise.resolve(
 				mapServerToForm(d, state.fields),
 			);
-			replaceFields(mapped);
-			clearAllTablesPending();
-			setMeta({ isLoading: false, isEditMode: true, uuid: entityUuid });
-			markClean();
+
+			if (snapshotOnly) {
+				// Только обновляем «серверный» snapshot — fields остаются из sessionStorage.
+				// isDirty() будет сравнивать текущие fields с реальными серверными данными.
+				savedSnapshot = JSON.stringify({
+					fields: mapped,
+					tables: emptyTables,
+				});
+				snapshotReady = true;
+				setMeta({ isLoading: false, isEditMode: true, uuid: entityUuid });
+				notify();
+			} else {
+				replaceFields(mapped);
+				clearAllTablesPending();
+				setMeta({ isLoading: false, isEditMode: true, uuid: entityUuid });
+				markClean();
+			}
 			afterLoad?.();
 		} catch (err: any) {
 			if (isNetworkError(err)) {
@@ -494,7 +520,14 @@ function createFormStore<F extends object>(
 
 		// Cleanup
 		destroy,
-		clearStorage: () => clearSession(currentStorageKey),
+		clearStorage: () => {
+			// Отменяем отложенную запись, чтобы она не перезаписала очищенные данные
+			if (persistTimer) {
+				clearTimeout(persistTimer);
+				persistTimer = null;
+			}
+			clearSession(currentStorageKey);
+		},
 	};
 
 	return storeResult;
@@ -609,6 +642,9 @@ export interface UseFormStoreReturn<F extends object> {
 	tables: Record<string, TableState>;
 	/** Мета: isLoading, isEditMode, error и т.д. */
 	meta: FormStoreState<F>["meta"];
+
+	/** Есть ли несохранённые изменения? (реактивно) */
+	isDirty: boolean;
 
 	// ── Гранулярные хуки (для оптимизации ре-рендеров) ──
 
@@ -735,9 +771,12 @@ export function useFormStore<F extends object>(
 	// ── Auto-load при монтировании ──
 	const loadTriggeredRef = useRef(false);
 	useEffect(() => {
-		if (uuid && !store.hadStoredData && !loadTriggeredRef.current) {
+		if (uuid && !loadTriggeredRef.current) {
 			loadTriggeredRef.current = true;
-			store.load(uuid, mapRef.current, afterLoadRef.current);
+			// Если данные восстановлены из sessionStorage — загружаем серверные данные
+			// только для snapshot (isDirty будет сравнивать с реальным серверным состоянием).
+			// Если sessionStorage пуст — полная загрузка (заменяет fields).
+			store.load(uuid, mapRef.current, afterLoadRef.current, store.hadStoredData);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uuid, store]);
@@ -983,6 +1022,9 @@ export function useFormStore<F extends object>(
 		fields: snapshot.fields,
 		tables: snapshot.tables,
 		meta: snapshot.meta,
+
+		// Dirty-состояние (реактивно — обновляется при каждом snapshot)
+		isDirty: store.isDirty(),
 
 		// Гранулярные хуки
 		useField,

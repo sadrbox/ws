@@ -416,6 +416,10 @@ body {
 	.PaneTabDirty {
 		.PaneTabLabel {
 			font-style: italic;
+			color: #c77600;
+		}
+		.PaneTabClose {
+			color: #c77600;
 		}
 	}
 	.PaneTabDirtyDot {
@@ -423,7 +427,7 @@ body {
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
-		background-color: currentColor;
+		background-color: #e8a030;
 	}
 }
 
@@ -564,6 +568,23 @@ body {
 	// background: $color33;
 	// box-shadow: 1px 1px 3px rgba($color6, 0.8);
 	// padding-bottom: 12px;
+}
+
+.DirtyBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	font-size: 12px;
+	color: #c77600;
+	font-weight: 600;
+	white-space: nowrap;
+	user-select: none;
+	animation: dirtyFadeIn 0.3s ease;
+}
+
+@keyframes dirtyFadeIn {
+	from { opacity: 0; transform: translateX(-4px); }
+	to   { opacity: 1; transform: translateX(0); }
 }
 
 

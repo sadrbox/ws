@@ -70,8 +70,10 @@ export function startHealthCheck(intervalMs = 30_000): void {
   stopHealthCheck();
   healthCheckTimer = setInterval(async () => {
     try {
-      // Лёгкий ping к API (HEAD на /api/health — без /v1 prefix)
-      await apiClient.head("/health", { baseURL: "/api", timeout: 5000 });
+      // Лёгкий ping к API (HEAD на /health — относительно базового URL без /v1)
+      const base = apiClient.defaults.baseURL || "/api/v1";
+      const healthUrl = base.replace(/\/v1\/?$/, "/health");
+      await apiClient.head(healthUrl, { baseURL: "" , timeout: 5000 });
       if (!_isOnline) handleOnline();
     } catch {
       if (_isOnline && !navigator.onLine) handleOffline();

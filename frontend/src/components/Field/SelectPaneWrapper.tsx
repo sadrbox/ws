@@ -20,66 +20,8 @@ import type { TPane } from "src/app/types";
  *  5. После закрытия дочерней формы — система вернёт фокус на эту selector-панель
  */
 
-// Реестр загрузчиков List-компонентов (тот же, что в LookupField)
-const listComponentRegistry: Record<string, () => Promise<any>> = {
-  organizations: () => import("src/models/Organizations"),
-  counterparties: () => import("src/models/Counterparties"),
-  contacttypes: () => import("src/models/ContactTypes"),
-  contactpersons: () => import("src/models/ContactPersons"),
-  contacts: () => import("src/models/Contacts"),
-  contracts: () => import("src/models/Contracts"),
-  bankaccounts: () => import("src/models/BankAccounts"),
-  users: () => import("src/models/Users"),
-  activityhistories: () => import("src/models/ActivityHistories"),
-  todos: () => import("src/models/Todos"),
-  notifications: () => import("src/models/Notifications"),
-  brands: () => import("src/models/Brands"),
-  products: () => import("src/models/Products"),
-  currencies: () => import("src/models/Currencies"),
-  employees: () => import("src/models/Employees"),
-  positions: () => import("src/models/Positions"),
-  warehouses: () => import("src/models/Warehouses"),
-  sales: () => import("src/models/Sales"),
-  purchases: () => import("src/models/Purchases"),
-  "incoming-invoices": () => import("src/models/IncomingInvoices"),
-  "outgoing-invoices": () => import("src/models/OutgoingInvoices"),
-  "payment-invoices": () => import("src/models/PaymentInvoices"),
-  "cash-receipt-orders": () => import("src/models/CashReceiptOrders"),
-  "cash-expense-orders": () => import("src/models/CashExpenseOrders"),
-  "inventory-transfers": () => import("src/models/InventoryTransfers"),
-  "scheduled-tasks": () => import("src/models/ScheduledTasks"),
-  "access-rights": () => import("src/models/AccessRights"),
-};
-
-const listComponentNameMap: Record<string, string> = {
-  organizations: "OrganizationsList",
-  counterparties: "CounterpartiesList",
-  contacttypes: "ContactTypesList",
-  contactpersons: "ContactPersonsList",
-  contacts: "ContactsList",
-  contracts: "ContractsList",
-  bankaccounts: "BankAccountsList",
-  users: "UsersList",
-  activityhistories: "ActivityHistoriesList",
-  todos: "TodosList",
-  notifications: "NotificationsList",
-  brands: "BrandsList",
-  products: "ProductsList",
-  currencies: "CurrenciesList",
-  employees: "EmployeesList",
-  positions: "PositionsList",
-  warehouses: "WarehousesList",
-  sales: "SalesList",
-  purchases: "PurchasesList",
-  "incoming-invoices": "IncomingInvoicesList",
-  "outgoing-invoices": "OutgoingInvoicesList",
-  "payment-invoices": "PaymentInvoicesList",
-  "cash-receipt-orders": "CashReceiptOrdersList",
-  "cash-expense-orders": "CashExpenseOrdersList",
-  "inventory-transfers": "InventoryTransfersList",
-  "scheduled-tasks": "ScheduledTasksList",
-  "access-rights": "AccessRightsList",
-};
+// Реестр загрузчиков List-компонентов (из единого modelRegistry)
+import { getByEndpoint } from "src/registry/modelRegistry";
 
 const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId }) => {
   const { windows: { removePane } } = useAppContext();
@@ -100,20 +42,19 @@ const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId })
       setLoadError("endpoint не указан");
       return;
     }
-    const loader = listComponentRegistry[endpoint];
-    if (!loader) {
+    const entry = getByEndpoint(endpoint);
+    if (!entry) {
       setLoadError(`Неизвестный endpoint: ${endpoint}`);
       return;
     }
     let cancelled = false;
-    loader().then((mod) => {
+    entry.module().then((mod) => {
       if (cancelled) return;
-      const listName = listComponentNameMap[endpoint];
-      const ListComp = mod[listName] || mod.default;
+      const ListComp = mod[entry.listName] || mod.default;
       if (ListComp) {
         setResolvedList(() => ListComp);
       } else {
-        setLoadError(`Компонент ${listName} не найден в модуле`);
+        setLoadError(`Компонент ${entry.listName} не найден в модуле`);
       }
     }).catch((err) => {
       if (!cancelled) setLoadError(err?.message || "Ошибка загрузки модуля");

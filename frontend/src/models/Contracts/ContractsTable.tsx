@@ -17,6 +17,8 @@ interface ContractsTableProps {
   parentKey: "organizationUuid" | "counterpartyUuid";
   /** UUID владельца */
   parentUuid: string;
+  /** Имя владельца (для передачи в форму) */
+  parentName?: string;
   disabled?: boolean;
   /** Если true — не отправлять изменения на сервер, хранить их локально */
   deferRemoteChanges?: boolean;
@@ -27,7 +29,7 @@ interface ContractsTableProps {
 }
 
 const ContractsTable: FC<ContractsTableProps> = ({
-  parentKey, parentUuid, disabled = false,
+  parentKey, parentUuid, parentName = "", disabled = false,
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
 }) => {
   const { addPane } = useAppContext().windows;
@@ -134,16 +136,18 @@ const ContractsTable: FC<ContractsTableProps> = ({
       queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
       _ctx.refetch();
     };
+    // Формируем имя-поле для формы: organizationUuid → organizationName, counterpartyUuid → counterpartyName
+    const nameKey = parentKey.replace(/Uuid$/, "Name");
     addPane({
       label: isEdit
         ? `${t("ContractsList")}: ${data?.shortName || data?.contractNumber || t("noName")} • ${data?.id ?? "?"}`
         : `${t("ContractsList")}: ${t("new")}`,
       component: ContractsForm,
-      data: isEdit ? data : { [parentKey]: parentUuid } as any,
+      data: isEdit ? data : { [parentKey]: parentUuid, [nameKey]: parentName } as any,
       onSave: refresh,
       onClose: refresh,
     });
-  }, [addPane, t, parentKey, parentUuid, queryClient]);
+  }, [addPane, t, parentKey, parentUuid, parentName, queryClient]);
 
   // ── defaultNewRow ─────────────────────────────────────────────────────
   const defaultNewRow = useMemo(() => ({

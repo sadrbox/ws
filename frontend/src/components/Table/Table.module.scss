@@ -244,7 +244,7 @@ tbody {
 		will-change: auto;
 		transform: translate3d(0, 0, 0);
 
-		td {
+		& > td {
 			padding: 0;
 			// border-top: 1px solid $color34;
 			border-bottom: 1px solid $color34;
@@ -291,8 +291,8 @@ tbody {
 			// Оптимизируем активную строку
 			will-change: background-color, box-shadow;
 
-			td {
-				div {
+			& > td {
+				& > div {
 					background: $color2;
 				}
 				// border-top: 1px solid $color1;
