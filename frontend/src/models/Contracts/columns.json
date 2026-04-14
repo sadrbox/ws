@@ -91,15 +91,28 @@
 		"inlist": true
 	},
 	{
-		"identifier": "ownerName",
+		"identifier": "organization.shortName",
 		"type": "string",
-		"name": "Владелец",
+		"name": "Организация",
 		"width": "250px",
 		"minWidth": "150px",
 		"alignment": "left",
-		"hint": "Владелец договора",
+		"hint": "Организация-владелец договора",
 		"visible": true,
 		"position": 7,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "counterparty.shortName",
+		"type": "string",
+		"name": "Контрагент",
+		"width": "250px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Контрагент по договору",
+		"visible": true,
+		"position": 8,
 		"filter": false,
 		"inlist": true
 	}

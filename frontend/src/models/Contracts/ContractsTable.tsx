@@ -13,12 +13,10 @@ const MODEL_ENDPOINT = "contracts";
 const COMPONENT_NAME = "ContractsList_part";
 
 interface ContractsTableProps {
-  /** Тип владельца: "organization", "counterparty" */
-  ownerType: string;
+  /** Ключ FK — "organizationUuid" или "counterpartyUuid" */
+  parentKey: "organizationUuid" | "counterpartyUuid";
   /** UUID владельца */
   parentUuid: string;
-  /** Имя владельца (для передачи в форму) */
-  parentName?: string;
   disabled?: boolean;
   /** Если true — не отправлять изменения на сервер, хранить их локально */
   deferRemoteChanges?: boolean;
@@ -29,7 +27,7 @@ interface ContractsTableProps {
 }
 
 const ContractsTable: FC<ContractsTableProps> = ({
-  ownerType, parentUuid, parentName = "", disabled = false,
+  parentKey, parentUuid, disabled = false,
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
 }) => {
   const { addPane } = useAppContext().windows;
@@ -141,11 +139,11 @@ const ContractsTable: FC<ContractsTableProps> = ({
         ? `${t("ContractsList")}: ${data?.shortName || data?.contractNumber || t("noName")} • ${data?.id ?? "?"}`
         : `${t("ContractsList")}: ${t("new")}`,
       component: ContractsForm,
-      data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
+      data: isEdit ? data : { [parentKey]: parentUuid } as any,
       onSave: refresh,
       onClose: refresh,
     });
-  }, [addPane, t, ownerType, parentUuid, parentName, queryClient]);
+  }, [addPane, t, parentKey, parentUuid, queryClient]);
 
   // ── defaultNewRow ─────────────────────────────────────────────────────
   const defaultNewRow = useMemo(() => ({
@@ -161,9 +159,8 @@ const ContractsTable: FC<ContractsTableProps> = ({
       model={MODEL_ENDPOINT}
       componentName={COMPONENT_NAME}
       columnsJson={columnsJson}
-      parentKey="ownerUuid"
+      parentKey={parentKey}
       parentUuid={parentUuid}
-      extraQueryParams={{ ownerType }}
       defaultSort={{ id: "asc" }}
       disabled={disabled}
       deferRemoteChanges={deferRemoteChanges}

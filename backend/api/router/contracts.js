@@ -1,6 +1,5 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { enrichWithOwnerName } from "../../utils/resolveOwnerName.js";
 
 const router = express.Router();
 
@@ -107,13 +106,13 @@ router.get("/contracts", async (req, res) => {
 			}
 		}
 
-		// ── Фильтрация по ownerType + ownerUuid ────
+		// ── Фильтрация по organizationUuid / counterpartyUuid ────
 		const fkFilter = {};
-		if (typeof req.query.ownerType === "string" && req.query.ownerType.trim()) {
-			fkFilter.ownerType = req.query.ownerType.trim();
+		if (typeof req.query.organizationUuid === "string" && req.query.organizationUuid.trim()) {
+			fkFilter.organizationUuid = req.query.organizationUuid.trim();
 		}
-		if (typeof req.query.ownerUuid === "string" && req.query.ownerUuid.trim()) {
-			fkFilter.ownerUuid = req.query.ownerUuid.trim();
+		if (typeof req.query.counterpartyUuid === "string" && req.query.counterpartyUuid.trim()) {
+			fkFilter.counterpartyUuid = req.query.counterpartyUuid.trim();
 		}
 
 		const baseWhere = {
@@ -126,6 +125,7 @@ router.get("/contracts", async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			orderBy,
+			include: { organization: true, counterparty: true },
 		};
 		if (cursorNumber !== null) {
 			queryOptions.cursor = { id: cursorNumber };
@@ -133,7 +133,6 @@ router.get("/contracts", async (req, res) => {
 		}
 
 		const items = await prisma.contract.findMany(queryOptions);
-		const enrichedItems = await enrichWithOwnerName(items);
 		const hasMore = items.length === limitNumber;
 		const nextCursor = hasMore ? items[items.length - 1].id : null;
 
@@ -144,7 +143,7 @@ router.get("/contracts", async (req, res) => {
 
 		return res.status(200).json({
 			success: true,
-			items: enrichedItems,
+			items: items,
 			nextCursor,
 			hasMore,
 			...(total !== undefined ? { total } : {}),
@@ -163,6 +162,7 @@ router.get("/contracts/:id", async (req, res) => {
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 		const item = await prisma.contract.findUnique({
 			where: whereClause,
+			include: { organization: true, counterparty: true },
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Not found" });
@@ -181,8 +181,8 @@ router.post("/contracts", async (req, res) => {
 			contractText,
 			startDate,
 			endDate,
-			ownerType,
-			ownerUuid,
+			organizationUuid,
+			counterpartyUuid,
 		} = req.body;
 		if (!shortName || typeof shortName !== "string")
 			return res
@@ -196,9 +196,10 @@ router.post("/contracts", async (req, res) => {
 				contractText: contractText ?? null,
 				startDate: startDate ? new Date(startDate) : null,
 				endDate: endDate ? new Date(endDate) : null,
-				ownerType: ownerType?.trim() || null,
-				ownerUuid: ownerUuid?.trim() || null,
+				organizationUuid: organizationUuid || null,
+				counterpartyUuid: counterpartyUuid || null,
 			},
+			include: { organization: true, counterparty: true },
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -219,8 +220,8 @@ router.put("/contracts/:id", async (req, res) => {
 			contractText,
 			startDate,
 			endDate,
-			ownerType,
-			ownerUuid,
+			organizationUuid,
+			counterpartyUuid,
 		} = req.body;
 
 		const data = {};
@@ -232,12 +233,15 @@ router.put("/contracts/:id", async (req, res) => {
 			data.startDate = startDate ? new Date(startDate) : null;
 		if (endDate !== undefined)
 			data.endDate = endDate ? new Date(endDate) : null;
-		if (ownerType !== undefined) data.ownerType = ownerType?.trim() || null;
-		if (ownerUuid !== undefined) data.ownerUuid = ownerUuid?.trim() || null;
+		if (organizationUuid !== undefined)
+			data.organizationUuid = organizationUuid || null;
+		if (counterpartyUuid !== undefined)
+			data.counterpartyUuid = counterpartyUuid || null;
 
 		const item = await prisma.contract.update({
 			where: whereClause,
 			data,
+			include: { organization: true, counterparty: true },
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

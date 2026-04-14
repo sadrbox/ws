@@ -122,8 +122,9 @@
 			display: none;
 		}
 
-		// Показывать FieldActions только в активной строке (tr[data-active])
-		:global(tr[data-active]) & .FieldActions {
+		// Показывать FieldActions только при фокусе на input/select внутри обёртки
+		.FieldInputWrapper:focus-within .FieldActions,
+		.FieldSelectWrapper:focus-within .FieldActions {
 			display: flex;
 		}
 	}

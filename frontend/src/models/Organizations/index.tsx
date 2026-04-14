@@ -136,9 +136,8 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       id: "tab2", label: "Договора", component: (
         <ContractsTable
           deferRemoteChanges={true}
-          ownerType="organization"
+          parentKey="organizationUuid"
           parentUuid={form.fields.uuid ?? ""}
-          parentName={form.fields.shortName}
           initialPendingRows={contracts.pending}
           onItemsChange={contracts.onItemsChange}
         />

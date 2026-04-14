@@ -39,6 +39,7 @@ model Organization {
   activityHistories  ActivityHistory[]
   cashExpenseOrders  CashExpenseOrder[]  @relation("OrgCashExpenses")
   cashReceiptOrders  CashReceiptOrder[]  @relation("OrgCashReceipts")
+  contracts          Contract[]          @relation("OrgContracts")
   employees          Employee[]          @relation("EmployeeOrganization")
   incomingInvoices   IncomingInvoice[]   @relation("OrgIncomingInvoices")
   inventoryTransfers InventoryTransfer[]
@@ -63,6 +64,7 @@ model Counterparty {
   displayName       String?
   cashExpenseOrders CashExpenseOrder[] @relation("CpCashExpenses")
   cashReceiptOrders CashReceiptOrder[] @relation("CpCashReceipts")
+  contracts         Contract[]         @relation("CpContracts")
   incomingInvoices  IncomingInvoice[]  @relation("CpIncomingInvoices")
   outgoingInvoices  OutgoingInvoice[]  @relation("CpOutgoingInvoices")
   paymentInvoices   PaymentInvoice[]
@@ -74,18 +76,27 @@ model Counterparty {
 }
 
 model Contract {
-  id        Int       @id @default(autoincrement())
-  uuid      String    @unique @default(uuid())
-  shortName String
-  contractNumber String?
-  contractText   String?
-  startDate DateTime?
-  endDate   DateTime?
-  ownerType String?
-  ownerUuid String?
-  sales     Sale[]
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  shortName        String
+  contractNumber   String?
+  contractText     String?
+  startDate        DateTime?
+  endDate          DateTime?
+  organizationUuid String?
+  counterpartyUuid String?
+  organization     Organization? @relation("OrgContracts", fields: [organizationUuid], references: [uuid])
+  counterparty     Counterparty? @relation("CpContracts", fields: [counterpartyUuid], references: [uuid])
+  cashExpenseOrders  CashExpenseOrder[]
+  cashReceiptOrders  CashReceiptOrder[]
+  incomingInvoices   IncomingInvoice[]
+  outgoingInvoices   OutgoingInvoice[]
+  paymentInvoices    PaymentInvoice[]
+  purchases          Purchase[]
+  sales              Sale[]
 
-  @@index([ownerType, ownerUuid])
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
   @@map("contracts")
 }
 
@@ -282,11 +293,13 @@ model Purchase {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
+  @@index([contractUuid])
   @@index([documentDate])
   @@map("purchases")
 }
@@ -301,11 +314,14 @@ model OutgoingInvoice {
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
+  contractUuid     String?
+  contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpOutgoingInvoices", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgOutgoingInvoices", fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
+  @@index([contractUuid])
   @@index([documentDate])
   @@map("outgoing_invoices")
 }
@@ -320,11 +336,14 @@ model IncomingInvoice {
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
+  contractUuid     String?
+  contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpIncomingInvoices", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgIncomingInvoices", fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
+  @@index([contractUuid])
   @@index([documentDate])
   @@map("incoming_invoices")
 }
@@ -339,11 +358,14 @@ model PaymentInvoice {
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
+  contractUuid     String?
+  contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
+  @@index([contractUuid])
   @@index([documentDate])
   @@map("payment_invoices")
 }
@@ -396,11 +418,14 @@ model CashReceiptOrder {
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
+  contractUuid     String?
+  contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpCashReceipts", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashReceipts", fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
+  @@index([contractUuid])
   @@index([documentDate])
   @@map("cash_receipt_orders")
 }
@@ -415,11 +440,14 @@ model CashExpenseOrder {
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
+  contractUuid     String?
+  contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpCashExpenses", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashExpenses", fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
+  @@index([contractUuid])
   @@index([documentDate])
   @@map("cash_expense_orders")
 }

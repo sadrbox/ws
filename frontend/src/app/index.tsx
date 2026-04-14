@@ -12,6 +12,7 @@ import React, {
 } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { restoreQueryCache, persistQueryCache, clearPersistedCache } from "src/services/queryPersist";
 
 import { getTranslation } from "src/i18";
 import { Content, Navbar, NavList, ErrorBoundary, LoadingFallback, Screen, LoadingSpinner } from "../components/UI";
@@ -23,12 +24,14 @@ import { TDataItem } from "src/components/Table/types";
 
 import { ActivityHistoriesList } from "src/models/ActivityHistories";
 import { CounterpartiesList } from "src/models/Counterparties";
-import { uniqueId } from 'lodash';
 import { ContactPersonsList } from "src/models/ContactPersons";
 import LoginForm from "src/components/LoginForm";
 import { isAuthenticated, verifyToken, logout, getCurrentUser, type AuthUser } from "src/services/auth";
 import { useConfirm } from "src/hooks/useConfirm";
 import ConfirmModal from "src/components/ConfirmModal";
+import { startHealthCheck, stopHealthCheck } from "src/services/networkStatus";
+import { clearAllFormStores } from "src/hooks/useFormSessionStore";
+import { clearAllEntries as clearOfflineQueue } from "src/services/offlineQueue";
 
 export const getComponentName = (node: TComponentNode): string => {
   if (node == null) return "Unknown";
@@ -84,13 +87,40 @@ const App: React.FC = () => {
   // ⚠️ QueryClient создаётся один раз и сохраняется в state.
   // Ранее `new QueryClient()` вызывался при каждом рендере — это приводило
   // к потере кэша React Query и невозможности invalidateQueries обновлять данные.
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        // offlineFirst: при отсутствии сети — сначала отдать данные из кэша,
+        // а сетевой запрос выполнить позже, когда сеть восстановится.
+        networkMode: "offlineFirst",
+        staleTime: 2 * 60 * 1000,
+        gcTime: 30 * 60 * 1000,
+        retry: (failureCount, error: any) => {
+          // Не ретраить при сетевых ошибках — бессмысленно
+          if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") return false;
+          return failureCount < 1;
+        },
+      },
+      mutations: {
+        networkMode: "offlineFirst",
+      },
+    },
+  }));
 
   const screenRef = useRef<HTMLDivElement>(null);
 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(isAuthenticated());
   const [authChecked, setAuthChecked] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(getCurrentUser());
+
+  // ── Query Persist: восстановить кэш из IndexedDB + подписка на сохранение ──
+  useEffect(() => {
+    // Восстанавливаем кэш (данные появляются мгновенно при offline)
+    restoreQueryCache(queryClient).catch(() => {});
+    // Подписываемся на сохранение изменений кэша в IndexedDB
+    const unsubscribe = persistQueryCache(queryClient);
+    return unsubscribe;
+  }, [queryClient]);
 
   // Проверяем токен при первом монтировании
   useEffect(() => {
@@ -120,6 +150,14 @@ const App: React.FC = () => {
     return () => window.removeEventListener("auth_logout", handleLogout);
   }, []);
 
+  // Запускаем health-check для определения реальной доступности сервера
+  useEffect(() => {
+    if (isLoggedIn) {
+      startHealthCheck(30_000); // каждые 30 сек
+      return () => stopHealthCheck();
+    }
+  }, [isLoggedIn]);
+
   const handleLoginSuccess = useCallback(() => {
     setIsLoggedIn(true);
     setCurrentUser(getCurrentUser());
@@ -127,15 +165,38 @@ const App: React.FC = () => {
 
   const handleLogout = useCallback(() => {
     logout();
+    // Очистка данных сессии при выходе
+    clearAllFormStores();
+    clearPersistedCache().catch(() => {});
+    clearOfflineQueue().catch(() => {});
+    queryClient.clear();
     setIsLoggedIn(false);
     setCurrentUser(null);
-  }, []);
+  }, [queryClient]);
 
   const [panes, setPanes] = useState<TPane[]>([]);
   const [activePaneId, _setActivePaneId] = useState<string>("");
 
   // Стек истории активных панелей (для возврата к предыдущей при закрытии)
   const paneHistoryRef = useRef<string[]>([]);
+
+  // ── beforeClose guards ──────────────────────────────────────────────
+  // Map: paneUniqId → Set<guard-функций>
+  const beforeCloseGuardsRef = useRef<Map<string, Set<() => Promise<boolean> | boolean>>>(new Map());
+
+  /** Регистрирует guard-функцию для панели. Возвращает unregister. */
+  const registerBeforeClose = useCallback(
+    (uniqId: string, guard: () => Promise<boolean> | boolean): (() => void) => {
+      const guards = beforeCloseGuardsRef.current;
+      if (!guards.has(uniqId)) guards.set(uniqId, new Set());
+      guards.get(uniqId)!.add(guard);
+      return () => {
+        guards.get(uniqId)?.delete(guard);
+        if (guards.get(uniqId)?.size === 0) guards.delete(uniqId);
+      };
+    },
+    [],
+  );
 
   const setActivePaneId = useCallback((id: string) => {
     _setActivePaneId((prev) => {
@@ -255,9 +316,19 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // const openPane = useCallback((pane: Partial<TOpenPaneProps>) => {
-  //   addPane(pane);
-  // }, [addPane]);
+  /** Закрытие панели с проверкой beforeClose guards. Если guard вернул false — закрытие отменяется. */
+  const requestClose = useCallback(async (uniqId: string) => {
+    const guards = beforeCloseGuardsRef.current.get(uniqId);
+    if (guards && guards.size > 0) {
+      for (const guard of guards) {
+        const canClose = await guard();
+        if (!canClose) return; // guard отменил закрытие
+      }
+    }
+    // Все guards разрешили (или их нет) — закрываем
+    beforeCloseGuardsRef.current.delete(uniqId);
+    removePane(uniqId);
+  }, [removePane]);
 
   const setActivePane = useCallback((uniqId: string) => {
     // Блокировка: если есть selector-панель, разрешаем переключение
@@ -307,8 +378,10 @@ const App: React.FC = () => {
         activePane: activePaneId,
         addPane,
         removePane,
+        requestClose,
         setActivePane,
         updatePaneLabel,
+        registerBeforeClose,
       },
       navbar: {
         props: navbarItems,
@@ -322,7 +395,7 @@ const App: React.FC = () => {
         logout: handleLogout,
       },
     }),
-    [panes, activePaneId, addPane, removePane, setActivePane, updatePaneLabel, navbarItems, currentUser, handleLogout, confirm]
+    [panes, activePaneId, addPane, removePane, requestClose, setActivePane, updatePaneLabel, registerBeforeClose, navbarItems, currentUser, handleLogout, confirm]
   );
 
   return (

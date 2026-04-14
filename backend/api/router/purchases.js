@@ -78,7 +78,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			orderBy,
-			include: { organization: true, counterparty: true },
+			include: { organization: true, counterparty: true, contract: true },
 		};
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };
@@ -111,7 +111,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const item = await prisma[MODEL].findUnique({
 			where: w,
-			include: { organization: true, counterparty: true },
+			include: { organization: true, counterparty: true, contract: true },
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
@@ -132,6 +132,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			status,
 			organizationUuid,
 			counterpartyUuid,
+			contractUuid,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
@@ -142,8 +143,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				status: status || "draft",
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
+				contractUuid: contractUuid || null,
 			},
-			include: { organization: true, counterparty: true },
+			include: { organization: true, counterparty: true, contract: true },
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -165,6 +167,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			"status",
 			"organizationUuid",
 			"counterpartyUuid",
+			"contractUuid",
 		]) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
@@ -179,7 +182,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
-			include: { organization: true, counterparty: true },
+			include: { organization: true, counterparty: true, contract: true },
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

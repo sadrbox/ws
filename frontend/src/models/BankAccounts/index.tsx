@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback, useState, useEffect } from "react";
+import { FC, useMemo, useCallback } from "react";
 import { useAppContext } from "src/app";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
@@ -10,17 +10,11 @@ import { Divider, Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import { Group } from "src/components/UI";
-import useUID from "src/hooks/useUID";
-import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
-import Tabs from "src/components/Tabs";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { resolveOwnerName } from "src/utils/resolveOwnerName";
 
-import { useQueryClient } from "@tanstack/react-query";
-import { useFormSessionStore } from "src/hooks/useFormSessionStore";
-import FormError from "src/components/FormError";
-import FormPanel from "src/components/FormPanel";
+import { useFormStore } from "src/hooks/useFormStore";
+import ModelFormWrapper from "src/components/ModelFormWrapper";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "bankaccounts";
@@ -29,7 +23,7 @@ const MODEL_ENDPOINT = "bankaccounts";
 // FORM
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface TFormData {
+interface TFields {
   id?: number;
   uuid?: string;
   shortName: string;
@@ -43,175 +37,137 @@ interface TFormData {
   ownerName: string;
 }
 
-const EMPTY_FORM: TFormData = {
+const DEFAULT_FIELDS: TFields = {
   shortName: "", iban: "", bik: "", bankName: "",
   currencyUuid: "", currencyName: "",
   ownerType: "", ownerUuid: "", ownerName: "",
 };
 
-const BankAccountsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
-  const uuid = data?.uuid as string | undefined;
-  const { windows: { removePane, updatePaneLabel } } = useAppContext();
-  const formUid = useUID();
+const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
+  const data = paneProps.data;
   const defaultOrg = useDefaultOrganization();
-  const queryClient = useQueryClient();
 
-  const initialForm: TFormData = (() => {
-    if (!data || data.uuid) return { ...EMPTY_FORM };
-    const init = { ...EMPTY_FORM };
-    if (data.ownerType) { init.ownerType = data.ownerType as OwnerType; init.ownerUuid = (data.ownerUuid as string) || ""; init.ownerName = (data.ownerName as string) || ""; }
-    else if (defaultOrg.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = defaultOrg.organizationUuid; init.ownerName = defaultOrg.organizationName; }
+  const initialFields: TFields | undefined = (() => {
+    if (!data || data.uuid) return undefined;
+    const init = { ...DEFAULT_FIELDS };
+    if (data.ownerType) {
+      init.ownerType = data.ownerType as OwnerType;
+      init.ownerUuid = (data.ownerUuid as string) || "";
+      init.ownerName = (data.ownerName as string) || "";
+    } else if (defaultOrg.organizationUuid) {
+      init.ownerType = "organization";
+      init.ownerUuid = defaultOrg.organizationUuid;
+      init.ownerName = defaultOrg.organizationName;
+    }
     return init;
   })();
-  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
-    "bank-accounts-form", uuid ?? "new", initialForm,
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(!!uuid);
 
-  const loadFormData = useCallback(async (entityUuid: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
-      const d = response.data?.item ?? response.data;
+  const form = useFormStore<TFields>({
+    endpoint: MODEL_ENDPOINT,
+    storageKey: "bank-accounts-form",
+    defaultFields: DEFAULT_FIELDS,
+    initialFields,
+    paneProps,
+    mapServerToForm: async (d, prev) => {
+      const { resolveOwnerName } = await import("src/utils/resolveOwnerName");
       const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
-      setFormData({
-        shortName: d.shortName ?? "", iban: d.iban ?? "", bik: d.bik ?? "", bankName: d.bankName ?? "",
+      return {
+        ...(prev ?? DEFAULT_FIELDS),
+        shortName: d.shortName ?? "",
+        iban: d.iban ?? "",
+        bik: d.bik ?? "",
+        bankName: d.bankName ?? "",
         currencyUuid: d.currencyUuid ?? "",
         currencyName: d.currency ? `${d.currency.code} — ${d.currency.shortName}` : "",
-        ownerType: (d.ownerType as OwnerType) ?? "", ownerUuid: d.ownerUuid ?? "", ownerName: oName,
-        id: d.id, uuid: d.uuid,
-      });
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Не удалось загрузить данные");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+        ownerType: (d.ownerType as OwnerType) ?? "",
+        ownerUuid: d.ownerUuid ?? "",
+        ownerName: oName,
+        id: d.id,
+        uuid: d.uuid,
+      };
+    },
+    buildPayload: (fd) => {
+      if (!fd.iban?.trim()) return "IBAN обязателен";
+      return {
+        shortName: fd.shortName?.trim() || null,
+        iban: fd.iban.trim(),
+        bik: fd.bik?.trim() || null,
+        bankName: fd.bankName?.trim() || null,
+        currencyUuid: fd.currencyUuid || null,
+        ownerType: fd.ownerType || null,
+        ownerUuid: fd.ownerUuid || null,
+      };
+    },
+    buildPaneLabel: (saved) =>
+      `${translate("BankAccountsList") || "BankAccountsList"}: ${saved.shortName || saved.iban || "?"} • ${saved.id ?? "?"}`,
+  });
 
-  useEffect(() => {
-    // Если данные восстановлены из sessionStorage — не грузим с сервера
-    if (uuid && !hadStoredData) loadFormData(uuid);
-  }, [uuid, loadFormData, hadStoredData]);
-
-  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  }, []);
-
-  const submit = useCallback(async (): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
-    if (!formData.iban?.trim()) { setError("IBAN обязателен"); setIsLoading(false); return false; }
-    const payload: Record<string, unknown> = {
-      shortName: formData.shortName?.trim() || null,
-      iban: formData.iban.trim(),
-      bik: formData.bik?.trim() || null,
-      bankName: formData.bankName?.trim() || null,
-      currencyUuid: formData.currencyUuid || null,
-      ownerType: formData.ownerType || null,
-      ownerUuid: formData.ownerUuid || null,
-    };
-    try {
-      const response = isEditMode && (uuid || formData.uuid)
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
-        : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
-      const saved = response.data?.item ?? response.data;
-      setFormData(prev => ({
-        ...prev, ...saved,
-        shortName: saved.shortName ?? "", iban: saved.iban ?? "", bik: saved.bik ?? "",
-        bankName: saved.bankName ?? "",
-        currencyUuid: saved.currencyUuid ?? prev.currencyUuid,
-        currencyName: saved.currency ? `${saved.currency.code} — ${saved.currency.shortName}` : prev.currencyName,
-        ownerType: (saved.ownerType as OwnerType) ?? prev.ownerType,
-        ownerUuid: saved.ownerUuid ?? prev.ownerUuid,
-        ownerName: saved.ownerName ?? prev.ownerName,
-      }));
-      setIsEditMode(true);
-      if (uniqId) {
-        const label = `${translate("BankAccountsList") || "BankAccountsList"}: ${saved.shortName || saved.iban || "?"} • ${saved.id ?? "?"}`;
-        updatePaneLabel(uniqId, label);
-      }
-      queryClient.invalidateQueries({ queryKey: ["bankaccounts"] });
-      onSave?.();
-      return true;
-    } catch (err: any) {
-      let msg = "Не удалось сохранить";
-      if (err.response?.status === 400) msg = err.response.data?.message || "Ошибка валидации";
-      else if (err.message) msg = err.message;
-      setError(msg);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [formData, isEditMode, uuid, onSave]);
-
-  const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
-  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
-
-  const generalTab = useMemo(() => (
-    <div className={styles.FormBodyParts}>
+  const tabs = useMemo(() => [
+    {
+      id: "general", label: translate("general") || "Общие сведения", component: (
+        <div className={styles.FormBodyParts}>
+          <Group align="row" gap="12px" className={styles.Form}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+              <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
+              <Field label="IBAN *" name={`${form.formUid}_iban`} minWidth="339px" value={form.fields.iban} onChange={e => form.setField("iban", e.target.value)} disabled={form.isLoading} />
+              <Field label="БИК" name={`${form.formUid}_bik`} minWidth="200px" value={form.fields.bik} onChange={e => form.setField("bik", e.target.value)} disabled={form.isLoading} />
+              <Field label="Название банка" name={`${form.formUid}_bankName`} minWidth="339px" value={form.fields.bankName} onChange={e => form.setField("bankName", e.target.value)} disabled={form.isLoading} />
+              <LookupField
+                label="Валюта"
+                name={`${form.formUid}_currency`}
+                value={form.fields.currencyUuid}
+                displayValue={form.fields.currencyName}
+                endpoint="currencies"
+                displayField="code"
+                onSelect={(uuid, _display, item) =>
+                  form.setFields({ currencyUuid: uuid, currencyName: `${item.code} — ${item.shortName}` } as any)
+                }
+                onClear={() =>
+                  form.setFields({ currencyUuid: "", currencyName: "" } as any)
+                }
+                minWidth="250px"
+                disabled={form.isLoading}
+              />
+              <OwnerLookupField
+                ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
+                name={`${form.formUid}_owner`}
+                onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
+                  form.setFields({ ownerType, ownerUuid, ownerName } as any)}
+                typeLocked={!form.uuid && !!data?.ownerType}
+                allowedTypes={["organization", "counterparty"]}
+                disabled={form.isLoading}
+              />
+            </div>
+          </Group>
+          {form.isEditMode && (
+            <>
+              <Divider />
               <Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-                  <Field label="Наименование" name={`${formUid}_shortName`} minWidth="339px" value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
-                  <Field label="IBAN *" name={`${formUid}_iban`} minWidth="339px" value={formData.iban} onChange={e => handleFieldChange("iban", e.target.value)} disabled={isLoading} />
-                  <Field label="БИК" name={`${formUid}_bik`} minWidth="200px" value={formData.bik} onChange={e => handleFieldChange("bik", e.target.value)} disabled={isLoading} />
-                  <Field label="Название банка" name={`${formUid}_bankName`} minWidth="339px" value={formData.bankName} onChange={e => handleFieldChange("bankName", e.target.value)} disabled={isLoading} />
-                  <LookupField
-                    label="Валюта"
-                    name={`${formUid}_currency`}
-                    value={formData.currencyUuid}
-                    displayValue={formData.currencyName}
-                    endpoint="currencies"
-                    displayField="code"
-                    onSelect={(uuid, _display, item) =>
-                      setFormData(prev => ({ ...prev, currencyUuid: uuid, currencyName: `${item.code} — ${item.shortName}` }))
-                    }
-                    onClear={() =>
-                      setFormData(prev => ({ ...prev, currencyUuid: "", currencyName: "" }))
-                    }
-                    minWidth="250px"
-                    disabled={isLoading}
-                  />
-                  <OwnerLookupField
-                    ownerType={formData.ownerType} ownerUuid={formData.ownerUuid} ownerName={formData.ownerName}
-                    name={`${formUid}_owner`}
-                    onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
-                      setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))}
-                    typeLocked={!uuid && !!data?.ownerType}
-                    allowedTypes={["organization", "counterparty"]}
-                    disabled={isLoading}
-                  />
+                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                  <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                  <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
                 </div>
               </Group>
-              {isEditMode && (
-                <>
-                  <Divider />
-                  <Group align="row" gap="12px" className={styles.Form}>
-                    <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                      <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                      <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-                    </div>
-                  </Group>
-                </>
-              )}
-            </div>
-  ), [formData, isLoading, isEditMode, formUid, handleFieldChange, setFormData]);
-
-  const tabs = useMemo<{ id: string; label: string; component: React.ReactNode }[]>(() => [
-    { id: "general", label: translate("general") || "Общие сведения", component: generalTab },
-  ], [generalTab]);
+            </>
+          )}
+        </div>
+      ),
+    },
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, form.uuid, data?.ownerType]);
 
   return (
-    <div className={styles.FormWrapper}>
-      <FormPanel onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
-      <FormError message={error} onDismiss={() => setError(null)} />
-      <div className={styles.FormBody}>
-        <Tabs tabs={tabs} />
-      </div>
-    </div>
+    <ModelFormWrapper
+      tabs={tabs}
+      onSave={form.handleSave}
+      onSaveAndClose={form.handleSaveAndClose}
+      onClose={form.handleClose}
+      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
+      isLoading={form.isLoading}
+      showReload={form.isEditMode}
+      error={form.error}
+      errorRevision={form.errorRevision}
+      onErrorDismiss={() => form.setError(null)}
+    />
   );
 };
 BankAccountsForm.displayName = "BankAccountsForm";

@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosError } from "axios";
+import { isNetworkError, buildEntryFromAxiosConfig, enqueue } from "src/services/offlineQueue";
 
 const LOCAL_API_URL = "http://192.168.1.112:3000/api/v1";
 const REMOTE_API_URL = "https://api.gidra.kz/api/v1";
@@ -91,6 +92,62 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 
 	await new Promise((r) => setTimeout(r, delay));
 	return apiClient.request(config);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Interceptor: offline queue — при ошибке сети сохраняем мутирующие запросы
+// ═══════════════════════════════════════════════════════════════════════════
+apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
+	// Только ошибки сети (нет response / timeout / ERR_NETWORK)
+	if (!isNetworkError(error)) {
+		return Promise.reject(error);
+	}
+
+	const config = error.config;
+	if (!config) return Promise.reject(error);
+
+	// Если это уже retry-запрос из sync engine — не ставим в очередь повторно
+	if ((config as any)._fromSyncEngine) {
+		return Promise.reject(error);
+	}
+
+	// Auth-запросы не ставим в очередь — у них своя offline-логика
+	const url = config.url || "";
+	if (url.includes("/auth/")) {
+		return Promise.reject(error);
+	}
+
+	// Формируем запись для очереди
+	const entry = buildEntryFromAxiosConfig(config);
+	if (!entry) {
+		// GET-запросы и FormData не сохраняем — просто отбрасываем
+		return Promise.reject(error);
+	}
+
+	// Сохраняем в IndexedDB
+	try {
+		const id = await enqueue(entry);
+		console.warn(
+			`[Offline] Запрос сохранён в очередь (id=${id}): ${entry.method} ${entry.url}`,
+		);
+
+		// Возвращаем "успешный" ответ с offline-меткой,
+		// чтобы форма не показывала ошибку, а показала уведомление
+		return {
+			data: {
+				_offline: true,
+				_queueId: id,
+				message: "Данные сохранены локально. Синхронизация произойдёт при восстановлении связи.",
+			},
+			status: 202,
+			statusText: "Accepted (Offline)",
+			headers: {},
+			config,
+		};
+	} catch (enqueueError) {
+		console.error("[Offline] Не удалось сохранить в очередь:", enqueueError);
+		return Promise.reject(error);
+	}
 });
 
 /** Типизированные сокращения для удобства */

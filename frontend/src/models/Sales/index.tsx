@@ -98,6 +98,23 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     form.setField("amount", String(total));
   }, [form.setField]);
 
+  /** При выборе договора — автозаполняем Организацию и Контрагента из данных договора */
+  const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
+    const updates: Partial<TFields> = {
+      contractUuid: uuid,
+      contractName: displayValue,
+    };
+    if (item.organizationUuid) {
+      updates.organizationUuid = item.organizationUuid;
+      updates.organizationName = item.organization?.shortName ?? "";
+    }
+    if (item.counterpartyUuid) {
+      updates.counterpartyUuid = item.counterpartyUuid;
+      updates.counterpartyName = item.counterparty?.shortName ?? "";
+    }
+    form.setFields(updates);
+  }, [form.setFields]);
+
   const tabs = useMemo(() => [
     { id: "tab-details", label: translate("general") || "Общие сведения", component: (
       <div className={styles.FormBodyParts}>
@@ -120,7 +137,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" />
               <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" />
             </div>
-            <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={(u, d) => form.setFields({ contractUuid: u, contractName: d } as Partial<TFields>)} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" />
+            <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
             <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "flex-end" }}>
               <div style={{ width: 160 }}>
                 <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
@@ -141,7 +158,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         Сохраните документ для добавления товаров
       </div>
     )},
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, saleItems]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, saleItems]);
 
   return (
     <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}

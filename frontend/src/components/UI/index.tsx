@@ -10,6 +10,7 @@ import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 import { useAppContext } from 'src/app';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
+import { usePaneDirty } from 'src/hooks/useFormStore';
 import { CounterpartiesList } from 'src/models/Counterparties';
 import { ContactTypesList } from 'src/models/ContactTypes';
 import { ContactsList } from 'src/models/Contacts';
@@ -35,6 +36,7 @@ import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
 import { UnsavedFormsList } from 'src/models/UnsavedForms';
 import NotificationToast from 'src/components/NotificationToast';
+import OfflineIndicator from 'src/components/OfflineIndicator';
 import { getAccessLevel } from 'src/hooks/useAccessRight';
 
 type TypeGroupProps = {
@@ -109,11 +111,49 @@ export const Content = () => {
   );
 }
 
+/** Одна вкладка — отдельный компонент, чтобы можно было использовать хук usePaneDirty */
+const PaneTabItem: FC<{
+  pane: { uniqId: string; label: string; isSelector?: boolean; selectorPaneId?: string };
+  isActive: boolean;
+  isLocked: boolean;
+  onActivate: () => void;
+  onClose: () => void;
+}> = ({ pane, isActive, isLocked, onActivate, onClose }) => {
+  const isDirty = usePaneDirty(pane.uniqId);
+
+  return (
+    <div
+      className={[
+        styles.PaneTab,
+        isActive && styles.PaneTabActive,
+        pane.isSelector && styles.PaneTabSelector,
+        isLocked && styles.PaneTabDisabled,
+        isDirty && styles.PaneTabDirty,
+      ].filter(Boolean).join(" ")}
+      onClick={isLocked ? undefined : onActivate}
+      title={pane.label}
+      role="tab"
+      tabIndex={isLocked ? -1 : 0}
+      aria-disabled={isLocked}
+    >
+      {!isLocked && (
+        <button
+          className={styles.PaneTabClose}
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          title="Закрыть"
+          type="button"
+        >{isDirty ? <span className={styles.PaneTabDirtyDot} /> : "✕"}</button>
+      )}
+      <span className={styles.PaneTabLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
+    </div>
+  );
+};
+
 export const PaneTab: FC = () => {
 
   const context = useAppContext();
   const panes = context?.windows.panes;
-  const { activePane, setActivePane, removePane } = context?.windows;
+  const { activePane, setActivePane, requestClose } = context?.windows;
 
   // Определяем, есть ли активная selector-панель → блокировка остальных вкладок
   const selectorPane = panes.find((p) => p.isSelector);
@@ -123,30 +163,14 @@ export const PaneTab: FC = () => {
       {panes.map(p => {
         const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
         return (
-          <div
+          <PaneTabItem
             key={`PaneTab-${p.uniqId}`}
-            className={[
-              styles.PaneTab,
-              (p.uniqId === activePane) && styles.PaneTabActive,
-              p.isSelector && styles.PaneTabSelector,
-              isLocked && styles.PaneTabDisabled,
-            ].filter(Boolean).join(" ")}
-            onClick={isLocked ? undefined : () => setActivePane(p.uniqId)}
-            title={p.label}
-            role="tab"
-            tabIndex={isLocked ? -1 : 0}
-            aria-disabled={isLocked}
-          >
-            {!isLocked && (
-              <button
-                className={styles.PaneTabClose}
-                onClick={(e) => { e.stopPropagation(); removePane(p.uniqId); }}
-                title="Закрыть"
-                type="button"
-              >✕</button>
-            )}
-            <span className={styles.PaneTabLabel}>{p.isSelector && "🔍 "}{p.label}</span>
-          </div>
+            pane={p}
+            isActive={p.uniqId === activePane}
+            isLocked={isLocked}
+            onActivate={() => setActivePane(p.uniqId)}
+            onClose={() => requestClose(p.uniqId)}
+          />
         );
       })}
     </div>
@@ -155,7 +179,7 @@ export const PaneTab: FC = () => {
 
 export const PaneGroup = () => {
   const context = useAppContext();
-  const { panes, activePane, removePane } = context?.windows;
+  const { panes, activePane, requestClose } = context?.windows;
 
 
 
@@ -173,7 +197,7 @@ export const PaneGroup = () => {
               <h2 className={styles.PaneHeaderLabel}>{p.label}</h2>
               <button
                 className={styles.PaneHeaderClose}
-                onClick={() => removePane(p.uniqId)}
+                onClick={() => requestClose(p.uniqId)}
                 title="Закрыть"
                 type="button"
               >✕</button>
@@ -290,6 +314,7 @@ export const Navbar: React.FC = () => {
           </a>
         ))}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "12px", marginRight: "12px" }}>
+          <OfflineIndicator />
           <NotificationToast />
           {context.auth?.user && (
             <span style={{ fontSize: "12px", color: "#666", whiteSpace: "nowrap" }}>

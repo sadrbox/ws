@@ -19,8 +19,13 @@ export type TypeAppContextProps = {
 		activePane: string | null;
 		addPane: (pane: Partial<TPane>) => void;
 		removePane: (uniqId: string) => void;
+		/** Закрытие панели с проверкой beforeClose guard-ов. Если guard вернул false — закрытие отменяется. */
+		requestClose: (uniqId: string) => Promise<void>;
 		setActivePane: (uniqId: string) => void;
 		updatePaneLabel: (uniqId: string, label: string) => void;
+		/** Регистрирует guard-функцию, которая будет вызвана перед закрытием панели.
+		 *  Возвращает unregister-функцию. Guard возвращает true = можно закрыть, false = отмена. */
+		registerBeforeClose: (uniqId: string, guard: () => Promise<boolean> | boolean) => () => void;
 	};
 	actions: {
 		confirm: (message: string) => Promise<boolean>;

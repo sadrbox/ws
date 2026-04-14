@@ -489,12 +489,23 @@ const SubTable: FC<SubTableProps> = ({
     cancelAllRequests();
     // Сбрасываем флаг мержа pending, чтобы при повторном открытии мерж мог выполниться
     pendingAppliedRef.current = false;
+
+    // При deferRemoteChanges — сбрасываем все несохранённые (pending) строки из кэша,
+    // чтобы после refetch остались ТОЛЬКО актуальные серверные данные.
+    if (deferRemoteChanges) {
+      cachedRowsRef.current = cachedRowsRef.current.filter(
+        (r: any) => !r._pendingAction,
+      );
+      setCacheVersion(v => v + 1);
+      notifyParent(cachedRowsRef.current as TDataItem[]);
+    }
+
     // invalidateQueries помечает кэш как stale и автоматически вызывает refetch
     // для активного (mounted) query — ручной refetch() НЕ нужен, иначе будет два запроса.
     // Кэш cachedRowsRef НЕ сбрасываем — useEffect на [allItems] обновит его когда придут новые данные,
     // а пока пользователь видит предыдущие строки вместо пустой таблицы.
     queryClient.invalidateQueries({ queryKey: [model] });
-  }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model]);
+  }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model, deferRemoteChanges, notifyParent]);
 
   // ── Inline-редактирование ──────────────────────────────────────────────
   const handleInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {

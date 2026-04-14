@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback, useState, useEffect, useRef } from "react";
+import { FC, useMemo, useCallback, useRef } from "react";
 import { useAppContext } from "src/app";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -7,16 +7,13 @@ import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
 import { Divider, Field, FieldSelect } from "src/components/Field";
 import { Group } from "src/components/UI";
-import useUID from "src/hooks/useUID";
 import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
-import Tabs from "src/components/Tabs";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 
-import { useFormSessionStore } from "src/hooks/useFormSessionStore";
-import FormError from "src/components/FormError";
-import FormPanel from "src/components/FormPanel";
+import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import ModelFormWrapper from "src/components/ModelFormWrapper";
 
 const MODEL_ENDPOINT = "access-rights";
 
@@ -42,7 +39,7 @@ const MODEL_NAME_OPTIONS = [
   ].map(v => ({ value: v, label: translate(v + "List") || v })),
 ];
 
-interface TFormData {
+interface TFields {
   id?: number;
   uuid?: string;
   modelName: string;
@@ -50,142 +47,101 @@ interface TFormData {
   userUuid: string;
 }
 
-const EMPTY_FORM: TFormData = {
+const DEFAULT_FIELDS: TFields = {
   modelName: "", accessLevel: "none", userUuid: "",
 };
 
-const AccessRightsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
-  const uuid = data?.uuid as string | undefined;
+const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("AccessRight");
-  const { windows: { removePane, updatePaneLabel } } = useAppContext();
-  const queryClient = useQueryClient();
-  const formUid = useUID();
 
-  // Начальное значение: если передан userUuid через data (новая запись из AccessRightsList) — подставляем
-  const initialForm: TFormData = (!data || data.uuid)
-    ? EMPTY_FORM
-    : { ...EMPTY_FORM, userUuid: (data.userUuid as string) || "" };
+  // Если передан userUuid через data (новая запись из AccessRightsList) — подставляем
+  const initialFields: TFields | undefined = (() => {
+    const data = paneProps.data;
+    if (!data || data.uuid) return undefined;
+    if (data.userUuid) return { ...DEFAULT_FIELDS, userUuid: data.userUuid as string };
+    return undefined;
+  })();
 
-  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
-    "access-rights-form", uuid ?? "new", initialForm,
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(!!uuid);
+  const form = useFormStore<TFields>({
+    endpoint: MODEL_ENDPOINT,
+    storageKey: "access-rights-form",
+    defaultFields: DEFAULT_FIELDS,
+    initialFields,
+    paneProps,
+    mapServerToForm: (d, prev) => ({
+      ...(prev ?? DEFAULT_FIELDS),
+      ...d,
+      modelName: d.modelName ?? "",
+      accessLevel: d.accessLevel ?? "none",
+      userUuid: d.userUuid ?? "",
+    }),
+    buildPayload: (fd) => {
+      if (!fd.modelName?.trim()) return "Модель обязательна";
+      if (!fd.userUuid) return "userUuid обязателен";
+      return {
+        modelName: fd.modelName.trim(),
+        accessLevel: fd.accessLevel || "none",
+        userUuid: fd.userUuid,
+      };
+    },
+    buildPaneLabel: (saved) =>
+      `Право доступа: ${saved.modelName || "?"} • ${saved.id ?? "?"}`,
+  });
 
-  // ── Загрузка данных ────────────────────────────────────────────────────
-  const loadFormData = useCallback(async (entityUuid: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
-      const d = response.data?.item ?? response.data;
-      setFormData({
-        id: d.id, uuid: d.uuid,
-        modelName: d.modelName ?? "",
-        accessLevel: d.accessLevel ?? "none",
-        userUuid: d.userUuid ?? "",
-      });
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Не удалось загрузить данные");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Если данные восстановлены из sessionStorage — не грузим с сервера
-    if (uuid && !hadStoredData) loadFormData(uuid);
-  }, [uuid, loadFormData, hadStoredData]);
-
-  const submit = useCallback(async (): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
-    if (!formData.modelName?.trim()) { setError("Модель обязательна"); setIsLoading(false); return false; }
-    if (!formData.userUuid) { setError("userUuid обязателен"); setIsLoading(false); return false; }
-    const payload = {
-      modelName: formData.modelName.trim(),
-      accessLevel: formData.accessLevel || "none",
-      userUuid: formData.userUuid,
-    };
-    try {
-      const response = isEditMode && (uuid || formData.uuid)
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
-        : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
-      const saved = response.data?.item ?? response.data;
-      setFormData(prev => ({ ...prev, ...saved }));
-      setIsEditMode(true);
-      if (uniqId) {
-        const label = `Право доступа: ${saved.modelName || "?"} • ${saved.id ?? "?"}`;
-        updatePaneLabel(uniqId, label);
-      }
-      queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
-      onSave?.();
-      return true;
-    } catch (err: any) {
-      let msg = "Не удалось сохранить";
-      if (err.response?.status === 400) msg = err.response.data?.message || "Ошибка валидации";
-      else if (err.response?.status === 409) msg = err.response.data?.message || "Право доступа для этой модели уже существует";
-      else if (err.message) msg = err.message;
-      setError(msg);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel, queryClient]);
-
-  const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
-  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
-
-  const generalTab = useMemo(() => (
-    <div className={styles.FormBodyParts}>
+  const tabs = useMemo(() => [
+    {
+      id: "general", label: translate("general") || "Общие сведения", component: (
+        <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
               <FieldSelect
                 label="Модель *"
-                name={`${formUid}_modelName`}
+                name={`${form.formUid}_modelName`}
                 options={MODEL_NAME_OPTIONS}
-                value={formData.modelName}
-                onChange={e => setFormData(prev => ({ ...prev, modelName: e.target.value }))}
-                disabled={isLoading}
+                value={form.fields.modelName}
+                onChange={e => form.setField("modelName", e.target.value)}
+                disabled={form.isLoading}
               />
               <FieldSelect
                 label="Уровень доступа"
-                name={`${formUid}_accessLevel`}
+                name={`${form.formUid}_accessLevel`}
                 options={ACCESS_LEVEL_OPTIONS}
-                value={formData.accessLevel}
-                onChange={e => setFormData(prev => ({ ...prev, accessLevel: e.target.value }))}
-                disabled={isLoading}
+                value={form.fields.accessLevel}
+                onChange={e => form.setField("accessLevel", e.target.value)}
+                disabled={form.isLoading}
               />
-              {isEditMode && (
+              {form.isEditMode && (
                 <>
                   <Divider />
                   <Group align="row" gap="12px" className={styles.Form}>
                     <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                      <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                      <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
+                      <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                      <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
                     </div>
                   </Group>
                 </>
               )}
             </div>
           </Group>
-            </div>
-  ), [formData, isLoading, isEditMode, formUid, setFormData]);
-
-  const tabs = useMemo<{ id: string; label: string; component: React.ReactNode }[]>(() => [
-    { id: "general", label: translate("general") || "Общие сведения", component: generalTab },
-  ], [generalTab]);
+        </div>
+      ),
+    },
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField]);
 
   return (
-    <div className={styles.FormWrapper}>
-      <FormPanel readonly={!canWrite} onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
-      <FormError message={error} onDismiss={() => setError(null)} />
-      <div className={styles.FormBody}>
-        <Tabs tabs={tabs} />
-      </div>
-    </div>
+    <ModelFormWrapper
+      tabs={tabs}
+      onSave={form.handleSave}
+      onSaveAndClose={form.handleSaveAndClose}
+      onClose={form.handleClose}
+      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
+      isLoading={form.isLoading}
+      showReload={form.isEditMode}
+      error={form.error}
+      errorRevision={form.errorRevision}
+      onErrorDismiss={() => form.setError(null)}
+      readonly={!canWrite}
+    />
   );
 };
 AccessRightsForm.displayName = "AccessRightsForm";

@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback, useState, useEffect } from "react";
+import { FC, useMemo, useCallback } from "react";
 import { useAppContext } from "src/app";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
@@ -8,26 +8,20 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import FilesPanel from "src/models/Files";
 import { Divider, Field, FieldDate } from "src/components/Field";
-import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
+import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
-import useUID from "src/hooks/useUID";
-import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
-import Tabs from "src/components/Tabs";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { resolveOwnerName } from "src/utils/resolveOwnerName";
 
-import { useQueryClient } from "@tanstack/react-query";
-import { useFormSessionStore } from "src/hooks/useFormSessionStore";
-import FormError from "src/components/FormError";
-import FormPanel from "src/components/FormPanel";
+import { useFormStore } from "src/hooks/useFormStore";
+import ModelFormWrapper from "src/components/ModelFormWrapper";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "contracts";
 // FORM
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface TFormData {
+interface TFields {
   id?: number;
   uuid?: string;
   shortName: string;
@@ -35,168 +29,125 @@ interface TFormData {
   contractText: string;
   startDate: string;
   endDate: string;
-  ownerType: OwnerType;
-  ownerUuid: string;
-  ownerName: string;
+  organizationUuid: string;
+  organizationName: string;
+  counterpartyUuid: string;
+  counterpartyName: string;
 }
 
-const EMPTY_FORM: TFormData = {
+const DEFAULT_FIELDS: TFields = {
   shortName: "", contractNumber: "", contractText: "",
   startDate: "", endDate: "",
-  ownerType: "", ownerUuid: "", ownerName: "",
+  organizationUuid: "", organizationName: "",
+  counterpartyUuid: "", counterpartyName: "",
 };
 
-const ContractsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
-  const uuid = data?.uuid as string | undefined;
-  const { windows: { removePane, updatePaneLabel } } = useAppContext();
-  const formUid = useUID();
+const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
+  const data = paneProps.data;
   const defaultOrg = useDefaultOrganization();
-  const queryClient = useQueryClient();
 
-  const initialForm: TFormData = (() => {
-    if (!data || data.uuid) return { ...EMPTY_FORM };
-    const init = { ...EMPTY_FORM };
-    if (data.ownerType) { init.ownerType = data.ownerType as OwnerType; init.ownerUuid = (data.ownerUuid as string) || ""; init.ownerName = (data.ownerName as string) || ""; }
-    else if (defaultOrg.organizationUuid) { init.ownerType = "organization"; init.ownerUuid = defaultOrg.organizationUuid; init.ownerName = defaultOrg.organizationName; }
+  const initialFields: TFields | undefined = (() => {
+    if (!data || data.uuid) return undefined;
+    const init = { ...DEFAULT_FIELDS };
+    if (data.organizationUuid) {
+      init.organizationUuid = data.organizationUuid as string;
+      init.organizationName = (data.organizationName as string) || "";
+    } else if (defaultOrg.organizationUuid) {
+      init.organizationUuid = defaultOrg.organizationUuid;
+      init.organizationName = defaultOrg.organizationName;
+    }
+    if (data.counterpartyUuid) {
+      init.counterpartyUuid = data.counterpartyUuid as string;
+      init.counterpartyName = (data.counterpartyName as string) || "";
+    }
     return init;
   })();
-  const [formData, setFormData, clearFormStorage, hadStoredData] = useFormSessionStore<TFormData>(
-    "contracts-form", uuid ?? "new", initialForm,
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(!!uuid);
 
-  const loadFormData = useCallback(async (entityUuid: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
-      const d = response.data?.item ?? response.data;
-      const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
-      setFormData({
-        shortName: d.shortName ?? "", contractNumber: d.contractNumber ?? "",
-        contractText: d.contractText ?? "", startDate: d.startDate?.slice(0, 10) ?? "",
-        endDate: d.endDate?.slice(0, 10) ?? "",
-        ownerType: d.ownerType || "", ownerUuid: d.ownerUuid || "", ownerName: oName,
-        id: d.id, uuid: d.uuid,
-      });
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Не удалось загрузить данные");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const form = useFormStore<TFields>({
+    endpoint: MODEL_ENDPOINT,
+    storageKey: "contracts-form",
+    defaultFields: DEFAULT_FIELDS,
+    initialFields,
+    paneProps,
+    mapServerToForm: (d, prev) => ({
+      ...(prev ?? DEFAULT_FIELDS),
+      shortName: d.shortName ?? "",
+      contractNumber: d.contractNumber ?? "",
+      contractText: d.contractText ?? "",
+      startDate: d.startDate?.slice(0, 10) ?? "",
+      endDate: d.endDate?.slice(0, 10) ?? "",
+      organizationUuid: d.organizationUuid ?? prev?.organizationUuid ?? "",
+      organizationName: d.organization?.shortName ?? prev?.organizationName ?? "",
+      counterpartyUuid: d.counterpartyUuid ?? prev?.counterpartyUuid ?? "",
+      counterpartyName: d.counterparty?.shortName ?? prev?.counterpartyName ?? "",
+      id: d.id,
+      uuid: d.uuid,
+    }),
+    buildPayload: (fd) => {
+      if (!fd.shortName?.trim()) return "Наименование обязательно";
+      return {
+        shortName: fd.shortName.trim(),
+        contractNumber: fd.contractNumber?.trim() || null,
+        contractText: fd.contractText?.trim() || null,
+        startDate: fd.startDate || null,
+        endDate: fd.endDate || null,
+        organizationUuid: fd.organizationUuid || null,
+        counterpartyUuid: fd.counterpartyUuid || null,
+      };
+    },
+    buildPaneLabel: (saved) =>
+      `${translate("ContractsList") || "ContractsList"}: ${saved.shortName || saved.contractNumber || "?"} • ${saved.id ?? "?"}`,
+  });
 
-  useEffect(() => {
-    // Если данные восстановлены из sessionStorage — не грузим с сервера
-    if (uuid && !hadStoredData) loadFormData(uuid);
-  }, [uuid, loadFormData, hadStoredData]);
-
-  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  }, []);
-
-  const submit = useCallback(async (): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
-    if (!formData.shortName?.trim()) { setError("Наименование обязательно"); setIsLoading(false); return false; }
-    const payload: Record<string, unknown> = {
-      shortName: formData.shortName.trim(),
-      contractNumber: formData.contractNumber?.trim() || null,
-      contractText: formData.contractText?.trim() || null,
-      startDate: formData.startDate || null,
-      endDate: formData.endDate || null,
-      ownerType: formData.ownerType || null,
-      ownerUuid: formData.ownerUuid || null,
-    };
-    try {
-      const response = isEditMode && (uuid || formData.uuid)
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
-        : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
-      const saved = response.data?.item ?? response.data;
-      setFormData(prev => ({
-        ...prev, ...saved, shortName: saved.shortName ?? "",
-        contractNumber: saved.contractNumber ?? "", contractText: saved.contractText ?? "",
-        startDate: saved.startDate?.slice(0, 10) ?? "", endDate: saved.endDate?.slice(0, 10) ?? "",
-        ownerType: saved.ownerType || prev.ownerType, ownerUuid: saved.ownerUuid || prev.ownerUuid,
-        ownerName: saved.ownerName || prev.ownerName,
-      }));
-      setIsEditMode(true);
-      if (uniqId) {
-        const label = `${translate("ContractsList") || "ContractsList"}: ${saved.shortName || saved.contractNumber || "?"} • ${saved.id ?? "?"}`;
-        updatePaneLabel(uniqId, label);
-      }
-      queryClient.invalidateQueries({ queryKey: ["contracts"] });
-      onSave?.();
-      return true;
-    } catch (err: any) {
-      let msg = "Не удалось сохранить";
-      if (err.response?.status === 400) msg = err.response.data?.message || "Ошибка валидации";
-      else if (err.message) msg = err.message;
-      setError(msg);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [formData, isEditMode, uuid, onSave]);
-
-  const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId, clearFormStorage]);
-  const handleClose = useCallback(() => { clearFormStorage(); onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId, clearFormStorage]);
-
-  // ── Табы ────────────────────────────────────────────────────────────────
-  const generalTab = useMemo(() => (
-    <div className={styles.FormBodyParts}>
-      <Group align="row" gap="12px" className={styles.Form}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-          <Field label="Наименование *" name={`${formUid}_shortName`} minWidth="339px" value={formData.shortName} onChange={e => handleFieldChange("shortName", e.target.value)} disabled={isLoading} />
-          <Field label="Номер договора" name={`${formUid}_contractNumber`} minWidth="339px" value={formData.contractNumber} onChange={e => handleFieldChange("contractNumber", e.target.value)} disabled={isLoading} />
-          <FieldDate label="Дата начала" name={`${formUid}_startDate`} minWidth="200px" value={formData.startDate} onChange={e => handleFieldChange("startDate", e.target.value)} disabled={isLoading} />
-          <FieldDate label="Дата окончания" name={`${formUid}_endDate`} minWidth="200px" value={formData.endDate} onChange={e => handleFieldChange("endDate", e.target.value)} disabled={isLoading} />
-          <OwnerLookupField
-            ownerType={formData.ownerType} ownerUuid={formData.ownerUuid} ownerName={formData.ownerName}
-            name={`${formUid}_owner`}
-            onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
-              setFormData(prev => ({ ...prev, ownerType, ownerUuid, ownerName }))}
-            typeLocked={!!data?.ownerType}
-            disabled={isLoading}
-            minWidth="339px"
-          />
-        </div>
-      </Group>
-      {isEditMode && (
-        <>
-          <Divider />
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-              <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-              <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-            </div>
-          </Group>
-        </>
-      )}
-    </div>
-  ), [formData, isLoading, isEditMode, formUid, handleFieldChange]);
-
-  const tabs = useMemo<{ id: string; label: string; component: React.ReactNode }[]>(() => {
+  const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general") || "Общие сведения", component: generalTab },
+      {
+        id: "general", label: translate("general") || "Общие сведения", component: (
+          <div className={styles.FormBodyParts}>
+            <Group align="row" gap="12px" className={styles.Form}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                <Field label="Наименование *" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
+                <Field label="Номер договора" name={`${form.formUid}_contractNumber`} minWidth="339px" value={form.fields.contractNumber} onChange={e => form.setField("contractNumber", e.target.value)} disabled={form.isLoading} />
+                <FieldDate label="Дата начала" name={`${form.formUid}_startDate`} minWidth="200px" value={form.fields.startDate} onChange={e => form.setField("startDate", e.target.value)} disabled={form.isLoading} />
+                <FieldDate label="Дата окончания" name={`${form.formUid}_endDate`} minWidth="200px" value={form.fields.endDate} onChange={e => form.setField("endDate", e.target.value)} disabled={form.isLoading} />
+                <LookupField label="Организация (владелец)" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} minWidth="339px" />
+                <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} minWidth="339px" />
+              </div>
+            </Group>
+            {form.isEditMode && (
+              <>
+                <Divider />
+                <Group align="row" gap="12px" className={styles.Form}>
+                  <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                    <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                    <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+                  </div>
+                </Group>
+              </>
+            )}
+          </div>
+        ),
+      },
     ];
-    if (isEditMode && formData.uuid) {
-      t.push({ id: "files", label: translate("files") || "Файлы", component: <FilesPanel ownerType="contract" ownerUuid={formData.uuid} /> });
+    if (form.isEditMode && form.fields.uuid) {
+      t.push({ id: "files", label: translate("files") || "Файлы", component: <FilesPanel ownerType="contract" ownerUuid={form.fields.uuid} /> });
     }
     return t;
-  }, [generalTab, isEditMode, formData.uuid]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields]);
 
   return (
-    <div className={styles.FormWrapper}>
-      <FormPanel onSaveAndClose={handleSaveAndClose} onSave={handleSave} onClose={handleClose} onReload={uuid ? () => loadFormData(uuid) : undefined} isLoading={isLoading} showReload={isEditMode} />
-      <FormError message={error} onDismiss={() => setError(null)} />
-      <div className={styles.FormBody}>
-        <Tabs tabs={tabs} />
-      </div>
-    </div>
+    <ModelFormWrapper
+      tabs={tabs}
+      onSave={form.handleSave}
+      onSaveAndClose={form.handleSaveAndClose}
+      onClose={form.handleClose}
+      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
+      isLoading={form.isLoading}
+      showReload={form.isEditMode}
+      error={form.error}
+      errorRevision={form.errorRevision}
+      onErrorDismiss={() => form.setError(null)}
+    />
   );
 };
 ContractsForm.displayName = "ContractsForm";
@@ -210,18 +161,29 @@ interface ContractsListProps {
   onSelectItem?: (item: TDataItem) => void;
   ownerUuid?: string;
   ownerField?: string;
+  /** Дополнительные query-параметры (от LookupField extraParams) */
+  extraParams?: Record<string, string>;
 }
 
-const ContractsList: FC<ContractsListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField } = {}) => {
+const ContractsList: FC<ContractsListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField, extraParams } = {}) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? "ContractsList_part" : "ContractsList";
   const { addPane } = useAppContext().windows;
   const t = (key: string) => translate(key) || key;
 
   const ownerFilter = useMemo(() => {
-    if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } };
-    return undefined;
-  }, [ownerUuid, ownerField]);
+    const f: Record<string, { value: unknown; operator: string }> = {};
+    if (ownerUuid && ownerField) {
+      f[ownerField] = { value: ownerUuid, operator: "equals" };
+    }
+    // extraParams → превращаем в ownerFilter (напр. organizationUuid=abc → filter)
+    if (extraParams) {
+      for (const [key, val] of Object.entries(extraParams)) {
+        if (val) f[key] = { value: val, operator: "equals" };
+      }
+    }
+    return Object.keys(f).length > 0 ? f : undefined;
+  }, [ownerUuid, ownerField, extraParams]);
 
   const { error, refetch, buildTableProps } = useModelListState({
     model: MODEL_ENDPOINT, componentName, columnsJson,

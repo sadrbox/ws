@@ -72,7 +72,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
       <BankAccountsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={bankAccounts.pending} onItemsChange={bankAccounts.onItemsChange} />
     )},
     { id: "tab2", label: "Договора", component: (
-      <ContractsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contracts.pending} onItemsChange={contracts.onItemsChange} />
+      <ContractsTable deferRemoteChanges parentKey="counterpartyUuid" parentUuid={form.fields.uuid ?? ""} initialPendingRows={contracts.pending} onItemsChange={contracts.onItemsChange} />
     )},
     { id: "tab3", label: "Контакты", component: (
       <ContactsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} />

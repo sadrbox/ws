@@ -5,6 +5,7 @@ import { apiClient } from "src/services/api/client";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
 import { useAppContext } from "src/app";
 import SelectPaneWrapper from "./SelectPaneWrapper";
+import { translate } from "src/i18";
 import type { FieldVariant } from "./index";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -46,6 +47,9 @@ export interface LookupFieldProps {
    *  Поддерживает вложенные ключи через точку: "brand.shortName".
    *  Если не указан — берётся из defaultSecondaryFieldsMap по endpoint. */
   secondaryFields?: string[];
+  /** Дополнительные query-параметры для фильтрации (передаются в autocomplete и SelectPaneWrapper).
+   *  Например: { organizationUuid: "abc-123" } → ?organizationUuid=abc-123 */
+  extraParams?: Record<string, string>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -68,6 +72,65 @@ const defaultSecondaryFieldsMap: Record<string, string[]> = {
   contacttypes: [],
   warehouses: ["code"],
   brands: [],
+};
+
+// ── Ленивая загрузка Form-компонента по endpoint ──────────────────────
+const formModuleRegistry: Record<string, () => Promise<any>> = {
+  organizations: () => import("src/models/Organizations"),
+  counterparties: () => import("src/models/Counterparties"),
+  contacttypes: () => import("src/models/ContactTypes"),
+  contactpersons: () => import("src/models/ContactPersons"),
+  contacts: () => import("src/models/Contacts"),
+  contracts: () => import("src/models/Contracts"),
+  bankaccounts: () => import("src/models/BankAccounts"),
+  users: () => import("src/models/Users"),
+  activityhistories: () => import("src/models/ActivityHistories"),
+  todos: () => import("src/models/Todos"),
+  brands: () => import("src/models/Brands"),
+  products: () => import("src/models/Products"),
+  currencies: () => import("src/models/Currencies"),
+  employees: () => import("src/models/Employees"),
+  positions: () => import("src/models/Positions"),
+  warehouses: () => import("src/models/Warehouses"),
+  sales: () => import("src/models/Sales"),
+  purchases: () => import("src/models/Purchases"),
+  "incoming-invoices": () => import("src/models/IncomingInvoices"),
+  "outgoing-invoices": () => import("src/models/OutgoingInvoices"),
+  "payment-invoices": () => import("src/models/PaymentInvoices"),
+  "cash-receipt-orders": () => import("src/models/CashReceiptOrders"),
+  "cash-expense-orders": () => import("src/models/CashExpenseOrders"),
+  "inventory-transfers": () => import("src/models/InventoryTransfers"),
+  "scheduled-tasks": () => import("src/models/ScheduledTasks"),
+  "access-rights": () => import("src/models/AccessRights"),
+};
+
+const formComponentNameMap: Record<string, string> = {
+  organizations: "OrganizationsForm",
+  counterparties: "CounterpartiesForm",
+  contacttypes: "ContactTypesForm",
+  contactpersons: "ContactPersonsForm",
+  contacts: "ContactsForm",
+  contracts: "ContractsForm",
+  bankaccounts: "BankAccountsForm",
+  users: "UsersForm",
+  activityhistories: "ActivityHistoriesForm",
+  todos: "TodosForm",
+  brands: "BrandsForm",
+  products: "ProductsForm",
+  currencies: "CurrenciesForm",
+  employees: "EmployeesForm",
+  positions: "PositionsForm",
+  warehouses: "WarehousesForm",
+  sales: "SalesForm",
+  purchases: "PurchasesForm",
+  "incoming-invoices": "IncomingInvoicesForm",
+  "outgoing-invoices": "OutgoingInvoicesForm",
+  "payment-invoices": "PaymentInvoicesForm",
+  "cash-receipt-orders": "CashReceiptOrdersForm",
+  "cash-expense-orders": "CashExpenseOrdersForm",
+  "inventory-transfers": "InventoryTransfersForm",
+  "scheduled-tasks": "ScheduledTasksForm",
+  "access-rights": "AccessRightsForm",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -93,6 +156,7 @@ const LookupField: FC<LookupFieldProps> = ({
   listComponent,
   variant = 'default',
   secondaryFields,
+  extraParams,
 }) => {
   // Подавляем неиспользуемые переменные совместимости
   void _columns;
@@ -155,7 +219,7 @@ const LookupField: FC<LookupFieldProps> = ({
     let cancelled = false;
     setIsLoading(true);
     apiClient
-      .get(`/${endpoint}`, { params: { search: debouncedText, limit: 10 } })
+      .get(`/${endpoint}`, { params: { search: debouncedText, limit: 10, ...extraParams } })
       .then((res) => {
         if (cancelled) return;
         const items = res.data?.items ?? res.data?.data ?? res.data ?? [];
@@ -197,7 +261,7 @@ const LookupField: FC<LookupFieldProps> = ({
       component: SelectPaneWrapper,
       label: `Выбор: ${typeof label === "string" ? label : endpoint}`,
       isSelector: true,
-      data: { endpoint, listComponent } as any,
+      data: { endpoint, listComponent, extraParams } as any,
       onSelectResult: (item: Record<string, any>) => {
         const uuid = item.uuid as string;
         const display = String(item[displayField] ?? item.shortName ?? item.value ?? item.name ?? uuid);
@@ -206,7 +270,7 @@ const LookupField: FC<LookupFieldProps> = ({
         setInputText(display);
       },
     });
-  }, [disabled, addPane, label, endpoint, listComponent, displayField, onSelect]);
+  }, [disabled, addPane, label, endpoint, listComponent, displayField, onSelect, extraParams]);
 
   const handleSelectItem = useCallback((item: Record<string, any>) => {
     const uuid = item.uuid as string;
@@ -223,6 +287,24 @@ const LookupField: FC<LookupFieldProps> = ({
     setSuggestions([]);
     setIsDropdownOpen(false);
   }, [onSelect, onClear]);
+
+  // ── Открыть форму выбранного элемента ─────────────────────────────────
+  const handleOpenItemForm = useCallback(() => {
+    if (!value || disabled) return;
+    const loader = formModuleRegistry[endpoint];
+    if (!loader) return;
+    const formName = formComponentNameMap[endpoint];
+    loader().then((mod) => {
+      const FormComp: FC<any> | undefined = mod[formName] || mod.default;
+      if (!FormComp) return;
+      const t = translate;
+      addPane({
+        label: `${t(formName) || endpoint}: ${displayValue || value}`,
+        component: FormComp,
+        data: { uuid: value } as any,
+      });
+    }).catch(() => { /* тихо игнорируем ошибку загрузки */ });
+  }, [value, disabled, endpoint, displayValue, addPane]);
 
   // Выбор элемента из dropdown
   const handleSuggestionClick = useCallback((item: Record<string, any>) => {
@@ -288,9 +370,12 @@ const LookupField: FC<LookupFieldProps> = ({
     if (value || inputText) {
       acts.push({ type: "clear", onClick: handleClear });
     }
+    if (value && formModuleRegistry[endpoint]) {
+      acts.push({ type: "open", onClick: handleOpenItemForm });
+    }
     acts.push({ type: "list", onClick: handleOpenModal });
     return acts;
-  }, [disabled, value, inputText, handleClear, handleOpenModal]);
+  }, [disabled, value, inputText, endpoint, handleClear, handleOpenItemForm, handleOpenModal]);
 
   // Получить отображаемое поле элемента
   const getItemDisplay = useCallback((item: Record<string, any>) => {

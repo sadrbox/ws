@@ -190,8 +190,12 @@ export function useInfiniteModelList<TData = unknown>({
 		},
 		queryFn: wrappedQueryFn,
 		staleTime: 2 * 60 * 1000,
-		gcTime: 10 * 60 * 1000,
-		retry: 1,
+		gcTime: 30 * 60 * 1000,
+		retry: (failureCount, error: any) => {
+			// Не ретраить при сетевых ошибках
+			if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") return false;
+			return failureCount < 1;
+		},
 		refetchOnWindowFocus: false,
 		placeholderData: (previousData) => previousData,
 		...restQueryOptions,

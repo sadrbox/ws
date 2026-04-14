@@ -6,6 +6,7 @@ import {
 } from "react";
 import { useAppContext } from "src/app";
 import apiClient from "src/services/api/client";
+import { isNetworkError } from "src/services/offlineQueue";
 import { commitPendingRows } from "src/services/commitPendingRows";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -109,6 +110,9 @@ function createFormStore<F extends object>(
 	uuid: string | undefined,
 	storageKey: string,
 ) {
+	// Мутабельный ключ — может измениться после первого save (new → uuid)
+	let currentStorageKey = storageKey;
+
 	// ── Начальное состояние ──
 	const emptyTables: Record<string, TableState> = {};
 	for (const key of Object.keys(tableDefs)) {
@@ -130,7 +134,7 @@ function createFormStore<F extends object>(
 
 	// Пробуем восстановить из sessionStorage
 	let hadStoredData = false;
-	const restored = restoreFromSession<F>(storageKey);
+	const restored = restoreFromSession<F>(currentStorageKey);
 	if (restored) {
 		state.fields = { ...defaultFields, ...restored.fields };
 		// Восстанавливаем tables, но только те, которые определены в tableDefs
@@ -165,7 +169,7 @@ function createFormStore<F extends object>(
 	function schedulePersist(): void {
 		if (persistTimer) clearTimeout(persistTimer);
 		persistTimer = setTimeout(() => {
-			persistToSession(storageKey, state);
+			persistToSession(currentStorageKey, state);
 		}, 300);
 	}
 
@@ -202,9 +206,11 @@ function createFormStore<F extends object>(
 	// ── Dirty tracking ──────────────────────────────────────────────────
 	// savedSnapshot хранит JSON-строку «чистого» состояния (после load / save).
 	// isDirty() сравнивает текущее состояние с последним сохранённым.
+	// ⚠️ Инициализация = начальные defaults + пустые таблицы (ДО восстановления из sessionStorage).
+	// Если данные были восстановлены из session — isDirty() вернёт true, что корректно.
 	let savedSnapshot: string = JSON.stringify({
-		fields: state.fields,
-		tables: state.tables,
+		fields: defaultFields,
+		tables: emptyTables,
 	});
 
 	/** Сбросить dirty-флаг (вызывать после load / save) */
@@ -213,6 +219,7 @@ function createFormStore<F extends object>(
 			fields: state.fields,
 			tables: state.tables,
 		});
+		notify(); // Уведомить подписчиков (dirty-индикатор на вкладке)
 	}
 
 	/** Есть ли несохранённые изменения? */
@@ -293,14 +300,19 @@ function createFormStore<F extends object>(
 				mapServerToForm(d, state.fields),
 			);
 			replaceFields(mapped);
+			clearAllTablesPending();
 			setMeta({ isLoading: false, isEditMode: true, uuid: entityUuid });
 			markClean();
 			afterLoad?.();
 		} catch (err: any) {
-			setError(
-				err.response?.data?.message ||
-					"Не удалось загрузить данные",
-			);
+			if (isNetworkError(err)) {
+				setError("Нет связи с сервером. Работа в режиме offline — данные будут загружены при восстановлении соединения.");
+			} else {
+				setError(
+					err.response?.data?.message ||
+						"Не удалось загрузить данные",
+				);
+			}
 			setMeta({ isLoading: false });
 		}
 	}
@@ -336,6 +348,15 @@ function createFormStore<F extends object>(
 					)
 				: await apiClient.post(`/${endpoint}`, payloadOrError);
 
+			// ── Offline-interceptor вернул заглушку ──
+			if (response.data?._offline) {
+				setMeta({ isLoading: false });
+				setError(null);
+				markClean();
+				// Не обновляем поля — данные не были сохранены на сервере
+				return { success: true, savedData: null };
+			}
+
 			const saved = response.data?.item ?? response.data;
 			const mapped = await Promise.resolve(
 				mapServerToForm(saved, state.fields),
@@ -350,7 +371,9 @@ function createFormStore<F extends object>(
 			return { success: true, savedData: saved };
 		} catch (err: any) {
 			let msg = "Не удалось сохранить";
-			if (err.response?.status === 409)
+			if (isNetworkError(err))
+				msg = "Нет связи с сервером. Изменения сохранены локально и будут отправлены при восстановлении соединения.";
+			else if (err.response?.status === 409)
 				msg =
 					err.response.data?.message || "Запись уже существует";
 			else if (err.response?.status === 400)
@@ -413,11 +436,29 @@ function createFormStore<F extends object>(
 	/** Полная очистка (sessionStorage + reset state) */
 	function destroy(): void {
 		if (persistTimer) clearTimeout(persistTimer);
-		clearSession(storageKey);
+		clearSession(currentStorageKey);
 		listeners.clear();
 	}
 
-	return {
+	/**
+	 * Миграция storageKey (после первого POST: new → uuid).
+	 * Удаляет старый ключ из sessionStorage, обновляет текущий, сохраняет state.
+	 */
+	function migrateStorageKey(newKey: string): void {
+		if (newKey === currentStorageKey) return;
+		clearSession(currentStorageKey);
+		storeCache.delete(currentStorageKey);
+		currentStorageKey = newKey;
+		storeCache.set(newKey, storeResult as any);
+		schedulePersist();
+	}
+
+	/** Получить текущий storageKey (для внешних операций с кэшем) */
+	function getStorageKey(): string {
+		return currentStorageKey;
+	}
+
+	const storeResult = {
 		// Подписка
 		subscribe,
 		getSnapshot,
@@ -447,10 +488,16 @@ function createFormStore<F extends object>(
 		isDirty,
 		markClean,
 
+		// Storage key migration
+		migrateStorageKey,
+		getStorageKey,
+
 		// Cleanup
 		destroy,
-		clearStorage: () => clearSession(storageKey),
+		clearStorage: () => clearSession(currentStorageKey),
 	};
+
+	return storeResult;
 }
 
 /** Тип store, возвращаемого createFormStore */
@@ -463,6 +510,44 @@ export type FormStore<F extends object> = ReturnType<
 // ═══════════════════════════════════════════════════════════════════════════
 
 const storeCache = new Map<string, FormStore<any>>();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DIRTY PANES STORE — глобальный реактивный Set<uniqId> для индикации
+// несохранённых изменений на вкладках. Использует useSyncExternalStore.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const dirtySet = new Set<string>();
+const dirtyListeners = new Set<() => void>();
+
+function notifyDirtyListeners(): void {
+	for (const l of dirtyListeners) l();
+}
+
+/** Пометить панель как dirty/clean. Вызывается из useFormStore при мутациях. */
+export function setPaneDirty(uniqId: string, dirty: boolean): void {
+	const had = dirtySet.has(uniqId);
+	if (dirty && !had) {
+		dirtySet.add(uniqId);
+		notifyDirtyListeners();
+	} else if (!dirty && had) {
+		dirtySet.delete(uniqId);
+		notifyDirtyListeners();
+	}
+}
+
+function subscribeDirty(listener: () => void): () => void {
+	dirtyListeners.add(listener);
+	return () => { dirtyListeners.delete(listener); };
+}
+
+/** Хук: подписка на dirty-состояние конкретной панели. */
+export function usePaneDirty(uniqId: string): boolean {
+	return useSyncExternalStore(
+		subscribeDirty,
+		() => dirtySet.has(uniqId),
+		() => false,
+	);
+}
 
 function getOrCreate<F extends object>(
 	defaultFields: F,
@@ -598,13 +683,23 @@ export function useFormStore<F extends object>(
 	const { onSave, onClose, data, uniqId } = paneProps;
 	const uuid = data?.uuid as string | undefined;
 	const {
-		windows: { removePane, updatePaneLabel },
+		windows: {
+			removePane,
+			updatePaneLabel,
+			requestClose,
+			registerBeforeClose,
+		},
 		actions: { confirm },
 	} = useAppContext();
 	const formUid = useUID();
 
 	// ── Создание / получение store из кэша ──
-	const fullStorageKey = `${STORAGE_PREFIX}${storageKey}:${uuid ?? "new"}`;
+	// Для существующих записей (uuid) ключ стабилен: "formStore:<storageKey>:<uuid>"
+	// Для НОВЫХ форм ключ привязан к uniqId панели: "formStore:<storageKey>:<uniqId>"
+	// Это гарантирует что каждая новая форма имеет свой собственный store.
+	// При восстановлении из UnsavedForms — data._formStorageKey содержит оригинальный ключ.
+	const fullStorageKey = (data as any)?._formStorageKey as string
+		|| `${STORAGE_PREFIX}${storageKey}:${uuid ?? uniqId ?? "new"}`;
 	const effectiveDefaults = initialFields ?? defaultFields;
 	const store = getOrCreate<F>(
 		effectiveDefaults,
@@ -646,6 +741,49 @@ export function useFormStore<F extends object>(
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uuid, store]);
+
+	// ── Регистрация beforeClose guard ──
+	useEffect(() => {
+		if (!uniqId) return;
+
+		const unregister = registerBeforeClose(uniqId, async () => {
+			if (!store.isDirty()) {
+				// Чистая форма — разрешаем закрытие, но чистим ресурсы
+				store.clearStorage();
+				storeCache.delete(store.getStorageKey());
+				onCloseRef.current?.();
+				return true;
+			}
+			const answer = await confirm(
+				"Имеются несохранённые изменения. Закрыть без сохранения?",
+			);
+			if (!answer) return false;
+			// Очистка при подтверждённом закрытии
+			store.clearStorage();
+			storeCache.delete(store.getStorageKey());
+			onCloseRef.current?.();
+			return true;
+		});
+
+		return unregister;
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [uniqId, store]);
+
+	// ── Синхронизация dirty-состояния → индикатор на вкладке ──
+	useEffect(() => {
+		if (!uniqId) return;
+		// Первоначальная проверка
+		setPaneDirty(uniqId, store.isDirty());
+		// Подписка на изменения store
+		const unsub = store.subscribe(() => {
+			setPaneDirty(uniqId, store.isDirty());
+		});
+		return () => {
+			unsub();
+			setPaneDirty(uniqId, false);
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [uniqId, store]);
 
 	// ── Гранулярный useField ──
 	const useField = useCallback(
@@ -764,8 +902,20 @@ export function useFormStore<F extends object>(
 
 		onSaveRef.current?.();
 		store.markClean();
+
+		// Миграция storageKey после первого POST (new → uuid).
+		// Если запись была создана (есть savedData.uuid) и текущий ключ НЕ содержит uuid —
+		// мигрируем ключ, чтобы при F5 данные были привязаны к uuid записи.
+		const newUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid;
+		if (newUuid) {
+			const uuidKey = `${STORAGE_PREFIX}${storageKey}:${newUuid}`;
+			if (store.getStorageKey() !== uuidKey) {
+				store.migrateStorageKey(uuidKey);
+			}
+		}
+
 		return true;
-	}, [store, tableDefs, updatePaneLabel, uniqId]);
+	}, [store, tableDefs, updatePaneLabel, uniqId, storageKey]);
 
 	// ── Actions ──
 	const handleSave = useCallback(() => {
@@ -774,25 +924,32 @@ export function useFormStore<F extends object>(
 
 	const handleSaveAndClose = useCallback(async () => {
 		if (await submit()) {
+			const currentKey = store.getStorageKey();
 			store.clearStorage();
-			storeCache.delete(fullStorageKey);
+			storeCache.delete(currentKey);
 			onCloseRef.current?.();
 			if (uniqId) removePane(uniqId);
 		}
-	}, [submit, store, fullStorageKey, uniqId, removePane]);
+	}, [submit, store, uniqId, removePane]);
 
 	const handleClose = useCallback(async () => {
-		if (store.isDirty()) {
-			const answer = await confirm(
-				"Имеются несохранённые изменения. Закрыть без сохранения?",
-			);
-			if (!answer) return;
+		if (uniqId) {
+			// requestClose вызовет beforeClose guard, который
+			// проверит isDirty и выполнит очистку при подтверждении
+			await requestClose(uniqId);
+		} else {
+			// Нет uniqId — прямое закрытие с проверкой
+			if (store.isDirty()) {
+				const answer = await confirm(
+					"Имеются несохранённые изменения. Закрыть без сохранения?",
+				);
+				if (!answer) return;
+			}
+			store.clearStorage();
+			storeCache.delete(store.getStorageKey());
+			onCloseRef.current?.();
 		}
-		store.clearStorage();
-		storeCache.delete(fullStorageKey);
-		onCloseRef.current?.();
-		if (uniqId) removePane(uniqId);
-	}, [store, fullStorageKey, uniqId, removePane, confirm]);
+	}, [store, uniqId, requestClose, confirm]);
 
 	// ── Совместимость со старым API ──
 	const handleFieldChange = useCallback(
@@ -816,8 +973,8 @@ export function useFormStore<F extends object>(
 
 	const clearFormStorage = useCallback(() => {
 		store.clearStorage();
-		storeCache.delete(fullStorageKey);
-	}, [store, fullStorageKey]);
+		storeCache.delete(store.getStorageKey());
+	}, [store]);
 
 	return {
 		store,

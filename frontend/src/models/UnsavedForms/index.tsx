@@ -41,6 +41,8 @@ import { CashExpenseOrdersForm } from "src/models/CashExpenseOrders";
 import { InventoryTransfersForm } from "src/models/InventoryTransfers";
 import { WarehousesForm } from "src/models/Warehouses";
 import { AccessRightsForm } from "src/models/AccessRights";
+import { ScheduledTasksForm } from "src/models/ScheduledTasks";
+import { ActivityHistoriesForm } from "src/models/ActivityHistories";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Маппинг formName → { label (русское название), FormComponent }
@@ -78,6 +80,8 @@ const FORM_REGISTRY: Record<string, FormMapping> = {
   "inventory-transfers-form":{ label: "Перемещение ТМЗ",     FormComponent: InventoryTransfersForm },
   "warehouses-form":         { label: "Склады",              FormComponent: WarehousesForm },
   "access-rights-form":      { label: "Права доступа",       FormComponent: AccessRightsForm },
+  "scheduled-tasks-form":    { label: "Регламентные задачи",  FormComponent: ScheduledTasksForm },
+  "activity-histories-form": { label: "Журнал действий",      FormComponent: ActivityHistoriesForm },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -162,6 +166,10 @@ interface UnsavedRow extends TDataItem {
   _entry: FormStoreEntry;
 }
 
+function isUuid(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
 function entriesToRows(entries: FormStoreEntry[]): UnsavedRow[] {
   return entries.map((entry, idx) => {
     const mapping = FORM_REGISTRY[entry.formName];
@@ -171,7 +179,7 @@ function entriesToRows(entries: FormStoreEntry[]): UnsavedRow[] {
       storageKey: entry.storageKey,
       formName: entry.formName,
       formLabel: mapping?.label ?? entry.formName,
-      entityId: entry.entityId,
+      entityId: isUuid(entry.entityId) ? entry.entityId : "Новый",
       description: getDescription(entry.data),
       pendingSummary: getPendingSummary(entry.data),
       _entry: entry,
@@ -228,13 +236,14 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
       : entryData) as Record<string, unknown>;
 
     // Передаём uuid если это существующая запись (не "new")
-    const isNew = row.entityId === "new";
+    const originalEntityId = row._entry.entityId;
+    const isNew = !isUuid(originalEntityId);
     const paneData = isNew
-      ? { ...fields } as unknown as TDataItem
-      : { ...fields, uuid: row.entityId } as unknown as TDataItem;
+      ? { ...fields, _formStorageKey: row.storageKey } as unknown as TDataItem
+      : { ...fields, uuid: originalEntityId, _formStorageKey: row.storageKey } as unknown as TDataItem;
 
     addPane({
-      label: `${label}: ${row.description || (isNew ? t("new") : row.entityId)}`,
+      label: `${label}: ${row.description || (isNew ? t("new") : originalEntityId)}`,
       component: FormComponent,
       data: paneData,
       onSave: () => loadEntries(),

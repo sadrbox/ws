@@ -39,6 +39,16 @@ const listComponentRegistry: Record<string, () => Promise<any>> = {
   employees: () => import("src/models/Employees"),
   positions: () => import("src/models/Positions"),
   warehouses: () => import("src/models/Warehouses"),
+  sales: () => import("src/models/Sales"),
+  purchases: () => import("src/models/Purchases"),
+  "incoming-invoices": () => import("src/models/IncomingInvoices"),
+  "outgoing-invoices": () => import("src/models/OutgoingInvoices"),
+  "payment-invoices": () => import("src/models/PaymentInvoices"),
+  "cash-receipt-orders": () => import("src/models/CashReceiptOrders"),
+  "cash-expense-orders": () => import("src/models/CashExpenseOrders"),
+  "inventory-transfers": () => import("src/models/InventoryTransfers"),
+  "scheduled-tasks": () => import("src/models/ScheduledTasks"),
+  "access-rights": () => import("src/models/AccessRights"),
 };
 
 const listComponentNameMap: Record<string, string> = {
@@ -59,6 +69,16 @@ const listComponentNameMap: Record<string, string> = {
   employees: "EmployeesList",
   positions: "PositionsList",
   warehouses: "WarehousesList",
+  sales: "SalesList",
+  purchases: "PurchasesList",
+  "incoming-invoices": "IncomingInvoicesList",
+  "outgoing-invoices": "OutgoingInvoicesList",
+  "payment-invoices": "PaymentInvoicesList",
+  "cash-receipt-orders": "CashReceiptOrdersList",
+  "cash-expense-orders": "CashExpenseOrdersList",
+  "inventory-transfers": "InventoryTransfersList",
+  "scheduled-tasks": "ScheduledTasksList",
+  "access-rights": "AccessRightsList",
 };
 
 const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId }) => {
@@ -66,6 +86,7 @@ const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId })
 
   const endpoint = (data as any)?.endpoint as string | undefined;
   const ListComponentProp = (data as any)?.listComponent as FC<any> | undefined;
+  const extraParams = (data as any)?.extraParams as Record<string, string> | undefined;
 
   const [ResolvedList, setResolvedList] = useState<FC<any> | null>(ListComponentProp || null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -122,7 +143,7 @@ const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId })
     return <div style={{ padding: "24px", textAlign: "center", color: "#888" }}>Загрузка...</div>;
   }
 
-  return <ResolvedList variant="default" onSelectItem={handleSelectItem} />;
+  return <ResolvedList variant="default" onSelectItem={handleSelectItem} extraParams={extraParams} />;
 };
 
 SelectPaneWrapper.displayName = "SelectPaneWrapper";
