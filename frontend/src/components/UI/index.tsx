@@ -1,4 +1,4 @@
-import React, { CSSProperties, FC, PropsWithChildren, useContext, useEffect, useState, forwardRef, useRef, useImperativeHandle, ReactNode, ReactElement, ComponentType, Component, isValidElement, JSX, ErrorInfo } from 'react';
+import React, { CSSProperties, FC, PropsWithChildren, useContext, useEffect, useState, useCallback, forwardRef, useRef, useImperativeHandle, ReactNode, ReactElement, ComponentType, Component, isValidElement, JSX, ErrorInfo } from 'react';
 import styles from "../../styles/main.module.scss"
 import { createPortal } from 'react-dom';
 import { ContractsList } from 'src/models/Contracts';
@@ -34,7 +34,10 @@ import { ProductsList } from 'src/models/Products';
 import { CurrenciesList } from 'src/models/Currencies';
 import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
+import { PayrollCalculationsList } from 'src/models/PayrollCalculations';
+import { PayrollPaymentsList } from 'src/models/PayrollPayments';
 import { UnsavedFormsList } from 'src/models/UnsavedForms';
+import { SyncDashboard } from 'src/models/SyncDashboard';
 import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
 import { getAccessLevel } from 'src/hooks/useAccessRight';
@@ -284,40 +287,52 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(({ children }, ref
 
 export const Navbar: React.FC = () => {
   const context = useAppContext();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { props, setProps } = context?.navbar;
   const activeNav = props.find(nav => nav.isActive);
-  // const [navs, setNavs] = useState(items);
-  // const [activeNav, setActiveNav] = useState(items[0]);
 
-  // const setActive = (id: string) => {
-  //   setProps(prev => prev.map(nav => ({ ...nav, isActive: nav.id === id })))
-  //   // setActiveNav(items.find(nav => nav.id === id) ?? items[0])
-  // }
-
-  const toggleNav = (id: string) => {
+  const toggleNav = useCallback((id: string) => {
     setProps(prev => prev.map(n =>
       n.id === id
         ? { ...n, isActive: !n.isActive }
         : { ...n, isActive: false }
-    ))
-  }
+    ));
+    setMobileMenuOpen(false);
+  }, [setProps]);
+
+  const toggleMobileMenu = useCallback(() => {
+    setMobileMenuOpen(prev => !prev);
+  }, []);
 
   return (
     <>
       <div className={styles.NavbarWrapper}>
+        {/* Hamburger — видна только на ≤768px */}
+        <button
+          className={styles.NavbarBurger}
+          onClick={toggleMobileMenu}
+          aria-label="Меню"
+          type="button"
+        >
+          <span />
+        </button>
+
+        {/* Десктопные навигационные ссылки (скрыты на мобильных через CSS) */}
         {props.map(nav => (
           <a key={nav.id} href="#"
-            onClick={() => toggleNav(nav.id)}
-            className={[styles.NavbarItem, nav.isActive && styles.Active].join(" ")}>
+            onClick={(e) => { e.preventDefault(); toggleNav(nav.id); }}
+            className={[styles.NavbarItem, nav.isActive && styles.Active].filter(Boolean).join(" ")}>
             {nav.title}
           </a>
         ))}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "12px", marginRight: "12px" }}>
+
+        {/* Правая часть: индикаторы, имя, выход */}
+        <div className={styles.NavbarRight}>
           <OfflineIndicator />
           <NotificationToast />
           {context.auth?.user && (
-            <span style={{ fontSize: "12px", color: "#666", whiteSpace: "nowrap" }}>
+            <span className={styles.NavbarUserName}>
               {context.auth.user.employee?.fullName || context.auth.user.username}
             </span>
           )}
@@ -325,13 +340,26 @@ export const Navbar: React.FC = () => {
             <a
               href="#"
               onClick={(e) => { e.preventDefault(); context.auth.logout(); }}
-              style={{ fontSize: "12px", color: "#888", whiteSpace: "nowrap", textDecoration: "none" }}
+              className={styles.NavbarLogout}
               title="Выйти из системы"
             >
               Выход
             </a>
           )}
         </div>
+
+        {/* Мобильное раскрывающееся меню */}
+        {mobileMenuOpen && (
+          <div className={styles.NavbarMobileMenu}>
+            {props.map(nav => (
+              <a key={nav.id} href="#"
+                onClick={(e) => { e.preventDefault(); toggleNav(nav.id); }}
+                className={nav.isActive ? styles.Active : undefined}>
+                {nav.title}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
       {activeNav && <div className={styles.NavbarOverlayWrapper}>{activeNav?.component}</div>}
     </>
@@ -353,10 +381,10 @@ export const NavList = ({ label }: TypeNavListProps) => {
   /** Проверяет, имеет ли пользователь хотя бы readonly доступ к модели */
   const can = (modelName: string) => getAccessLevel(rights, modelName, isSuperAdmin).canRead;
 
-  if (label.toLocaleLowerCase() === "Operations".toLocaleLowerCase()) {
+  if (label.toLocaleLowerCase() === "Trade".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
-        <h1>Операционная деятельность</h1>
+        <h1>Торговля</h1>
         <div className={styles.NavSection}>
           <div className={styles.NavGroup}>
             <h3>Продажи</h3>
@@ -375,17 +403,37 @@ export const NavList = ({ label }: TypeNavListProps) => {
             </ul>
           </div>
           <div className={styles.NavGroup}>
-            <h3>Справочники</h3>
+            <h3>Склад</h3>
             <ul className={styles.NavList}>
               {can("Warehouse") && <li onClick={() => addPane({ component: WarehousesList })}>Склады</li>}
-              {can("Organization") && <li onClick={() => addPane({ component: OrganizationsList })}>Организации</li>}
-              {can("Counterparty") && <li onClick={() => addPane({ component: CounterpartiesList })}>Контрагенты</li>}
-              {can("Contract") && <li onClick={() => addPane({ component: ContractsList })}>Договора</li>}
-              {can("BankAccount") && <li onClick={() => addPane({ component: BankAccountsList })}>Банковские счета</li>}
-              {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>}
-              {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>}
-              {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>}
-              {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList })}>Валюты</li>}
+              {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList })}>Перемещение ТМЗ</li>}
+            </ul>
+          </div>
+          <div className={styles.NavGroup}>
+            <h3>Касса</h3>
+            <ul className={styles.NavList}>
+              {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList })}>Приходный кассовый ордер</li>}
+              {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList })}>Расходный кассовый ордер</li>}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )
+  } else if (label.toLocaleLowerCase() === "HR".toLocaleLowerCase()) {
+    return (
+      <div className={styles.NavListWrapper}>
+        <h1>Кадровый учёт</h1>
+        <div className={styles.NavSection}>
+          <div className={styles.NavGroup}>
+            <h3>Документы</h3>
+            <ul className={styles.NavList}>
+              {can("PayrollCalculation") && <li onClick={() => addPane({ component: PayrollCalculationsList })}>Начисление заработной платы</li>}
+              {can("PayrollPayment") && <li onClick={() => addPane({ component: PayrollPaymentsList })}>Выплата заработной платы</li>}
+            </ul>
+          </div>
+          <div className={styles.NavGroup}>
+            <h3>Справочники</h3>
+            <ul className={styles.NavList}>
               {can("Employee") && <li onClick={() => addPane({ component: EmployeesList })}>Сотрудники</li>}
               {can("Position") && <li onClick={() => addPane({ component: PositionsList })}>Должности</li>}
             </ul>
@@ -403,16 +451,6 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               {can("Todo") && <li onClick={() => addPane({ component: TodosList })}>Задачи</li>}
               {can("ScheduledTask") && <li onClick={() => addPane({ component: ScheduledTasksList })}>Регламентные задачи</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>Справочники</h3>
-            <ul className={styles.NavList}>
-              {can("Sale") && <li onClick={() => addPane({ component: SalesList })}>Реализация товара и услуг</li>}
-              {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList })}>Поступление товара и услуг</li>}
-              {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList })}>Перемещение ТМЗ</li>}
-              {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList })}>Приходный кассовый ордер</li>}
-              {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList })}>Расходный кассовый ордер</li>}
             </ul>
           </div>
         </div>
@@ -433,6 +471,9 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("ContactType") && <li onClick={() => addPane({ component: ContactTypesList })}>Типы контактов</li>}
               {can("Contact") && <li onClick={() => addPane({ component: ContactsList })}>Контакты</li>}
               {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>}
+              {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>}
+              {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>}
+              {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList })}>Валюты</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
@@ -442,6 +483,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>}
               {can("Notification") && <li onClick={() => addPane({ component: NotificationsList })}>Уведомления</li>}
               <li onClick={() => addPane({ component: UnsavedFormsList })}>Несохранённые записи</li>
+              <li onClick={() => addPane({ component: SyncDashboard, label: 'Синхронизация и оффлайн-данные' })}>Синхронизация и оффлайн-данные</li>
             </ul>
           </div>
         </div>

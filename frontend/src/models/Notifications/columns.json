@@ -28,7 +28,7 @@
 	{
 		"identifier": "title",
 		"type": "string",
-		"name": "Title",
+		"name": "Заголовок",
 		"width": "250px",
 		"minWidth": "180px",
 		"alignment": "left",
@@ -41,7 +41,7 @@
 	{
 		"identifier": "message",
 		"type": "string",
-		"name": "Message",
+		"name": "Сообщение",
 		"width": "350px",
 		"minWidth": "200px",
 		"alignment": "left",
@@ -54,7 +54,7 @@
 	{
 		"identifier": "isRead",
 		"type": "string",
-		"name": "Is Read",
+		"name": "Прочитано",
 		"width": "110px",
 		"minWidth": "80px",
 		"alignment": "center",
@@ -67,7 +67,7 @@
 	{
 		"identifier": "todo.shortName",
 		"type": "string",
-		"name": "Todo",
+		"name": "Задача",
 		"width": "200px",
 		"minWidth": "150px",
 		"alignment": "left",
@@ -80,7 +80,7 @@
 	{
 		"identifier": "createdAt",
 		"type": "date",
-		"name": "Created At",
+		"name": "Дата создания",
 		"width": "160px",
 		"minWidth": "130px",
 		"alignment": "center",

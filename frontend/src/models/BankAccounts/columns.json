@@ -28,7 +28,7 @@
 	{
 		"identifier": "shortName",
 		"type": "string",
-		"name": "Short Name",
+		"name": "Наименование",
 		"width": "200px",
 		"minWidth": "150px",
 		"alignment": "left",
@@ -54,7 +54,7 @@
 	{
 		"identifier": "bankName",
 		"type": "string",
-		"name": "Bank Name",
+		"name": "Банк",
 		"width": "220px",
 		"minWidth": "150px",
 		"alignment": "left",
@@ -67,7 +67,7 @@
 	{
 		"identifier": "bik",
 		"type": "string",
-		"name": "BIK",
+		"name": "БИК",
 		"width": "120px",
 		"minWidth": "100px",
 		"alignment": "center",

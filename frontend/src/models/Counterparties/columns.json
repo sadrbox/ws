@@ -28,7 +28,7 @@
 	{
 		"identifier": "bin",
 		"type": "string",
-		"name": "BIN",
+		"name": "БИН",
 		"width": "150px",
 		"minWidth": "120px",
 		"alignment": "left",
@@ -41,7 +41,7 @@
 	{
 		"identifier": "shortName",
 		"type": "string",
-		"name": "Short Name",
+		"name": "Наименование",
 		"width": "300px",
 		"minWidth": "150px",
 		"alignment": "left",
@@ -54,7 +54,7 @@
 	{
 		"identifier": "displayName",
 		"type": "string",
-		"name": "Display Name",
+		"name": "Полное наименование",
 		"width": "300px",
 		"minWidth": "150px",
 		"alignment": "left",

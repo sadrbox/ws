@@ -1,122 +1,222 @@
 /**
- * useOfflineSync — React-хук для интеграции offline-очереди в компоненты.
+ * useOfflineSync — React-хук для интеграции offline-синхронизации.
+ *
+ * Единая очередь: _pendingChanges в Dexie (offlineDb).
+ * Синхронизация: через syncManager (push/pull).
  *
  * Предоставляет:
  *  - isOnline        — текущий статус сети
  *  - isSyncing       — идёт ли синхронизация
- *  - summary         — { pending, syncing, synced, failed, conflict, total }
- *  - entries         — полный список QueueEntry[]
- *  - syncNow()       — ручной запуск синхронизации
+ *  - pendingChanges  — массив PendingChange из Dexie
+ *  - pendingCount    — количество ожидающих изменений
+ *  - syncState       — состояние syncManager (status, progress, message, lastSyncAt)
+ *  - syncNow()       — ручной запуск полной синхронизации
  *  - abortSync()     — отмена текущей синхронизации
- *  - removeEntry(id) — удалить запись вручную
- *  - clearSynced()   — очистить все synced
+ *  - removePending(id) — удалить pending change
+ *  - clearAllPending() — очистить все pending changes
+ *  - conflicts       — конфликты из последней синхронизации
+ *  - offlineStats    — статистика оффлайн-хранилища
  */
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   subscribeNetwork,
   getIsOnline,
-  processQueue,
-  abortSync,
   getIsSyncing,
   subscribeSyncStatus,
-  subscribeQueue,
-  getQueueRevision,
-  getQueueSummary,
-  type QueueSummary,
-  type QueueEntry,
 } from "src/services/networkStatus";
 import {
-  getAllEntries,
-  removeEntry as removeQueueEntry,
-  clearSynced as clearQueueSynced,
-} from "src/services/offlineQueue";
+  fullSync,
+  abortSyncManager,
+  getSyncState,
+  subscribeSyncManager,
+  type SyncState,
+  type SyncConflict,
+} from "src/services/syncManager";
+import {
+  getAllPendingChanges,
+  getPendingChangesCount,
+  removePendingChange,
+  clearAllPendingChanges,
+  getOfflineDbStats,
+  type PendingChange,
+} from "src/services/offlineDb";
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HOOK
+// Types
 // ═══════════════════════════════════════════════════════════════════════════
+
+export interface OfflineStats {
+  tables: Record<string, number>;
+  totalRecords: number;
+  pendingChanges: number;
+}
 
 export interface UseOfflineSyncResult {
   /** true если есть подключение к серверу */
   isOnline: boolean;
-  /** true если сейчас идёт синхронизация очереди */
+  /** true если сейчас идёт синхронизация */
   isSyncing: boolean;
-  /** Сводка по статусам очереди */
-  summary: QueueSummary;
-  /** Все записи очереди */
-  entries: QueueEntry[];
-  /** Ручной запуск синхронизации */
+  /** Все pending changes из Dexie */
+  pendingChanges: PendingChange[];
+  /** Количество pending changes */
+  pendingCount: number;
+  /** Состояние syncManager (data sync) */
+  syncState: SyncState;
+  /** Конфликты из последней синхронизации */
+  conflicts: SyncConflict[];
+  /** Ручной запуск полной синхронизации */
   syncNow: () => Promise<void>;
   /** Отмена текущей синхронизации */
   abortSync: () => void;
-  /** Удалить запись из очереди */
-  removeEntry: (id: number) => Promise<void>;
-  /** Очистить все synced записи */
-  clearSynced: () => Promise<void>;
-  /** Есть ли записи, требующие внимания (pending + failed + conflict) */
+  /** Удалить pending change */
+  removePending: (id: number) => Promise<void>;
+  /** Очистить все pending changes */
+  clearAllPending: () => Promise<void>;
+  /** Есть ли записи, требующие внимания */
   hasActionRequired: boolean;
-  /** Общее число pending + conflict */
+  /** Общее число pending (для бейджа) */
   badgeCount: number;
+  /** Статистика оффлайн-хранилища */
+  offlineStats: OfflineStats | null;
+  /** Обновить статистику */
+  refreshStats: () => Promise<void>;
+
+  // ── Обратная совместимость ──
+  /** @deprecated Используйте pendingCount */
+  pendingChangesCount: number;
+  /** @deprecated Используйте pendingChanges */
+  entries: PendingChange[];
+  /** @deprecated Используйте removePending */
+  removeEntry: (id: number) => Promise<void>;
+  /** @deprecated Не нужна — pending changes удаляются при успешном push */
+  clearSynced: () => Promise<void>;
+  /** @deprecated Используйте pendingCount и conflicts */
+  summary: { pending: number; syncing: number; synced: number; failed: number; conflict: number; total: number };
 }
 
-const EMPTY_SUMMARY: QueueSummary = {
-  pending: 0, syncing: 0, synced: 0, failed: 0, conflict: 0, total: 0,
-};
+// ═══════════════════════════════════════════════════════════════════════════
+// Hook
+// ═══════════════════════════════════════════════════════════════════════════
 
 export function useOfflineSync(): UseOfflineSyncResult {
   // ── Статус сети ──
   const isOnline = useSyncExternalStore(subscribeNetwork, getIsOnline);
 
   // ── Статус синхронизации ──
-  const isSyncing = useSyncExternalStore(subscribeSyncStatus, getIsSyncing);
+  const isSyncingNetwork = useSyncExternalStore(subscribeSyncStatus, getIsSyncing);
 
-  // ── revision из очереди (триггер перечитки) ──
-  const queueRevision = useSyncExternalStore(subscribeQueue, getQueueRevision);
+  // ── Состояние syncManager ──
+  const syncState = useSyncExternalStore(subscribeSyncManager, getSyncState);
 
-  // ── Данные очереди (загружаем при изменении revision) ──
-  const [summary, setSummary] = useState<QueueSummary>(EMPTY_SUMMARY);
-  const [entries, setEntries] = useState<QueueEntry[]>([]);
+  // ── Pending changes ──
+  const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [offlineStats, setOfflineStats] = useState<OfflineStats | null>(null);
 
+  // Конфликты из последнего результата
+  const conflicts = syncState.lastResult?.conflicts ?? [];
+
+  // Перечитка pending changes при изменении syncState
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [s, e] = await Promise.all([getQueueSummary(), getAllEntries()]);
+      const [changes, count] = await Promise.all([
+        getAllPendingChanges(),
+        getPendingChangesCount(),
+      ]);
       if (!cancelled) {
-        setSummary(s);
-        setEntries(e);
+        setPendingChanges(changes);
+        setPendingCount(count);
       }
     })();
     return () => { cancelled = true; };
-  }, [queueRevision]);
+  }, [syncState.status, syncState.lastResult]);
+
+  // ── Refresh stats ──
+  const refreshStats = useCallback(async () => {
+    try {
+      const stats = await getOfflineDbStats();
+      const pc = await getPendingChangesCount();
+      const { _pendingChanges: _, ...tables } = stats;
+      const totalRecords = Object.values(tables).reduce((sum, n) => sum + n, 0);
+      setOfflineStats({
+        tables,
+        totalRecords,
+        pendingChanges: pc,
+      });
+    } catch (err) {
+      console.warn("[useOfflineSync] Failed to get stats:", err);
+    }
+  }, []);
+
+  // Загрузка статистики при первом рендере
+  useEffect(() => {
+    refreshStats();
+  }, [refreshStats]);
 
   // ── Actions ──
   const syncNow = useCallback(async () => {
-    await processQueue();
+    await fullSync();
   }, []);
 
-  const removeEntry = useCallback(async (id: number) => {
-    await removeQueueEntry(id);
+  const abortSync = useCallback(() => {
+    abortSyncManager();
   }, []);
 
-  const clearSynced = useCallback(async () => {
-    await clearQueueSynced();
+  const removePending = useCallback(async (id: number) => {
+    await removePendingChange(id);
+    setPendingChanges(prev => prev.filter(p => p.id !== id));
+    setPendingCount(prev => Math.max(0, prev - 1));
   }, []);
 
-  const hasActionRequired = summary.pending > 0 || summary.failed > 0 || summary.conflict > 0;
-  const badgeCount = summary.pending + summary.conflict;
+  const clearAllPending = useCallback(async () => {
+    await clearAllPendingChanges();
+    setPendingChanges([]);
+    setPendingCount(0);
+  }, []);
+
+  const isSyncing = isSyncingNetwork || syncState.status === "pulling" || syncState.status === "pushing";
+  const hasActionRequired = pendingCount > 0 || conflicts.length > 0;
+  const badgeCount = pendingCount + conflicts.length;
+
+  // ── Обратная совместимость ──
+  const compatSummary = useMemo(() => ({
+    pending: pendingCount,
+    syncing: isSyncing ? 1 : 0,
+    synced: 0,
+    failed: 0,
+    conflict: conflicts.length,
+    total: pendingCount + conflicts.length,
+  }), [pendingCount, isSyncing, conflicts.length]);
 
   return useMemo(() => ({
     isOnline,
     isSyncing,
-    summary,
-    entries,
+    pendingChanges,
+    pendingCount,
+    syncState,
+    conflicts,
     syncNow,
     abortSync,
-    removeEntry,
-    clearSynced,
+    removePending,
+    clearAllPending,
     hasActionRequired,
     badgeCount,
-  }), [isOnline, isSyncing, summary, entries, syncNow, removeEntry, clearSynced, hasActionRequired, badgeCount]);
+    offlineStats,
+    refreshStats,
+
+    // Обратная совместимость
+    pendingChangesCount: pendingCount,
+    entries: pendingChanges as any,
+    removeEntry: removePending,
+    clearSynced: clearAllPending,
+    summary: compatSummary,
+  }), [
+    isOnline, isSyncing, pendingChanges, pendingCount, syncState, conflicts,
+    syncNow, abortSync, removePending, clearAllPending,
+    hasActionRequired, badgeCount, offlineStats, refreshStats, compatSummary,
+  ]);
 }
 
 /**
@@ -126,17 +226,20 @@ export function useOfflineSync(): UseOfflineSyncResult {
 export function useNetworkStatus(): { isOnline: boolean; badgeCount: number; isSyncing: boolean } {
   const isOnline = useSyncExternalStore(subscribeNetwork, getIsOnline);
   const isSyncing = useSyncExternalStore(subscribeSyncStatus, getIsSyncing);
-  const queueRevision = useSyncExternalStore(subscribeQueue, getQueueRevision);
+  const syncState = useSyncExternalStore(subscribeSyncManager, getSyncState);
 
   const [badgeCount, setBadgeCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    getQueueSummary().then(s => {
-      if (!cancelled) setBadgeCount(s.pending + s.conflict);
+    getPendingChangesCount().then(count => {
+      if (!cancelled) {
+        const conflicts = syncState.lastResult?.conflicts?.length ?? 0;
+        setBadgeCount(count + conflicts);
+      }
     });
     return () => { cancelled = true; };
-  }, [queueRevision]);
+  }, [syncState.status, syncState.lastResult]);
 
   return useMemo(() => ({ isOnline, badgeCount, isSyncing }), [isOnline, badgeCount, isSyncing]);
 }

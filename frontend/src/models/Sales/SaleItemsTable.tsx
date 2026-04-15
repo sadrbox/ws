@@ -33,7 +33,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
   const handleItemsChange = useCallback((items: TDataItem[]) => {
     if (onTotalChange) {
       const sum = items.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-      onTotalChange(Math.round(sum * 100) / 100);
+      (onTotalChange as any)(Math.round(sum * 100) / 100, items);
     }
     onItemsChange?.(items);
   }, [onTotalChange, onItemsChange]);
@@ -52,6 +52,20 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
       if (value === "" || value == null) return undefined;
       if (isNaN(n)) return "Должно быть числом";
       if (n < 0) return "Не может быть отрицательным";
+      return undefined;
+    },
+    vatRate: (value) => {
+      const n = Number(value);
+      if (value === "" || value == null) return undefined;
+      if (isNaN(n)) return "Должно быть числом";
+      if (n < 0 || n > 100) return "От 0 до 100";
+      return undefined;
+    },
+    discountPercent: (value) => {
+      const n = Number(value);
+      if (value === "" || value == null) return undefined;
+      if (isNaN(n)) return "Должно быть числом";
+      if (n < 0 || n > 100) return "От 0 до 100";
       return undefined;
     },
   }), []);
@@ -125,6 +139,64 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
       }
       return <span style={{ textAlign: "right", display: "block" }}>{row.price != null ? String(Number(row.price)) : ""}</span>;
     }
+    if (col.identifier === "unitOfMeasure") {
+      if (ctx.inlineEditing) {
+        return (
+          <FieldNumber
+            name={`saleitem_uom_${row.id}`}
+            value={row.unitOfMeasure != null ? String(row.unitOfMeasure) : "шт"}
+            onChange={e => ctx.handleInlineChange(row, "unitOfMeasure", e.target.value)}
+            disabled={ctx.disabled}
+            width="100%"
+            actions={[]}
+            variant="table"
+          />
+        );
+      }
+      return <span style={{ textAlign: "center", display: "block" }}>{row.unitOfMeasure != null ? String(row.unitOfMeasure) : "шт"}</span>;
+    }
+    if (col.identifier === "vatRate") {
+      if (ctx.inlineEditing) {
+        return (
+          <FieldNumber
+            name={`saleitem_vatRate_${row.id}`}
+            value={row.vatRate != null ? String(Number(row.vatRate)) : "12"}
+            onChange={e => ctx.handleInlineChange(row, "vatRate", e.target.value)}
+            disabled={ctx.disabled}
+            step="0.01"
+            textAlign="right"
+            width="100%"
+            actions={[]}
+            variant="table"
+          />
+        );
+      }
+      return <span style={{ textAlign: "right", display: "block" }}>{row.vatRate != null ? String(Number(row.vatRate)) : "12"}</span>;
+    }
+    if (col.identifier === "discountPercent") {
+      if (ctx.inlineEditing) {
+        return (
+          <FieldNumber
+            name={`saleitem_discount_${row.id}`}
+            value={row.discountPercent != null ? String(Number(row.discountPercent)) : "0"}
+            onChange={e => ctx.handleInlineChange(row, "discountPercent", e.target.value)}
+            disabled={ctx.disabled}
+            step="0.01"
+            textAlign="right"
+            width="100%"
+            actions={[]}
+            variant="table"
+          />
+        );
+      }
+      return <span style={{ textAlign: "right", display: "block" }}>{row.discountPercent != null ? String(Number(row.discountPercent)) : "0"}</span>;
+    }
+    if (col.identifier === "vatAmount") {
+      return <span style={{ textAlign: "right", display: "block" }}>{row.vatAmount != null ? String(Number(row.vatAmount)) : "0"}</span>;
+    }
+    if (col.identifier === "discountAmount") {
+      return <span style={{ textAlign: "right", display: "block" }}>{row.discountAmount != null ? String(Number(row.discountAmount)) : "0"}</span>;
+    }
     return undefined;
   }, []);
 
@@ -151,6 +223,9 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
     productUuid: null,
     quantity: 0,
     price: 0,
+    unitOfMeasure: "шт",
+    vatRate: 12,
+    discountPercent: 0,
   }), []);
 
   return (

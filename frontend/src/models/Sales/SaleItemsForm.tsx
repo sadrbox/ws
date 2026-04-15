@@ -24,6 +24,11 @@ interface TFormData {
   quantity: string;
   price: string;
   amount: string;
+  unitOfMeasure: string;
+  vatRate: string;
+  vatAmount: string;
+  discountPercent: string;
+  discountAmount: string;
   saleUuid: string;
 }
 
@@ -34,6 +39,11 @@ const EMPTY_FORM: TFormData = {
   quantity: "",
   price: "",
   amount: "",
+  unitOfMeasure: "шт",
+  vatRate: "12",
+  vatAmount: "0",
+  discountPercent: "0",
+  discountAmount: "0",
   saleUuid: "",
 };
 
@@ -66,6 +76,11 @@ const SaleItemsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
         quantity: d.quantity != null ? String(Number(d.quantity)) : "",
         price: d.price != null ? String(Number(d.price)) : "",
         amount: d.amount != null ? String(Number(d.amount)) : "",
+        unitOfMeasure: d.unitOfMeasure ?? "шт",
+        vatRate: d.vatRate != null ? String(Number(d.vatRate)) : "12",
+        vatAmount: d.vatAmount != null ? String(Number(d.vatAmount)) : "0",
+        discountPercent: d.discountPercent != null ? String(Number(d.discountPercent)) : "0",
+        discountAmount: d.discountAmount != null ? String(Number(d.discountAmount)) : "0",
         saleUuid: d.saleUuid ?? saleUuid ?? "",
       });
     } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); }
@@ -77,10 +92,19 @@ const SaleItemsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
   const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
     setFormData(prev => {
       const next = { ...prev, [field]: value };
-      if (field === "quantity" || field === "price") {
+      if (["quantity", "price", "vatRate", "discountPercent"].includes(field)) {
         const q = parseFloat(field === "quantity" ? value : prev.quantity) || 0;
         const p = parseFloat(field === "price" ? value : prev.price) || 0;
-        next.amount = (Math.round(q * p * 100) / 100).toString();
+        const vr = parseFloat(field === "vatRate" ? value : prev.vatRate) || 0;
+        const dp = parseFloat(field === "discountPercent" ? value : prev.discountPercent) || 0;
+        const base = q * p;
+        const discAmt = Math.round(base * dp / 100 * 100) / 100;
+        const afterDiscount = base - discAmt;
+        const vatAmt = Math.round(afterDiscount * vr / 100 * 100) / 100;
+        const total = Math.round((afterDiscount + vatAmt) * 100) / 100;
+        next.discountAmount = discAmt.toString();
+        next.vatAmount = vatAmt.toString();
+        next.amount = total.toString();
       }
       return next;
     });
@@ -95,6 +119,9 @@ const SaleItemsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
       quantity: formData.quantity ? parseFloat(formData.quantity) : 0,
       price: formData.price ? parseFloat(formData.price) : 0,
       lineNumber: formData.lineNumber ? parseInt(formData.lineNumber) : undefined,
+      unitOfMeasure: formData.unitOfMeasure || "шт",
+      vatRate: formData.vatRate ? parseFloat(formData.vatRate) : 12,
+      discountPercent: formData.discountPercent ? parseFloat(formData.discountPercent) : 0,
     };
     try {
       const res = isEditMode && (uuid || formData.uuid)
@@ -111,6 +138,11 @@ const SaleItemsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
         quantity: saved.quantity != null ? String(Number(saved.quantity)) : "",
         price: saved.price != null ? String(Number(saved.price)) : "",
         amount: saved.amount != null ? String(Number(saved.amount)) : "",
+        unitOfMeasure: saved.unitOfMeasure ?? prev.unitOfMeasure,
+        vatRate: saved.vatRate != null ? String(Number(saved.vatRate)) : prev.vatRate,
+        vatAmount: saved.vatAmount != null ? String(Number(saved.vatAmount)) : prev.vatAmount,
+        discountPercent: saved.discountPercent != null ? String(Number(saved.discountPercent)) : prev.discountPercent,
+        discountAmount: saved.discountAmount != null ? String(Number(saved.discountAmount)) : prev.discountAmount,
         saleUuid: saved.saleUuid ?? prev.saleUuid,
       }));
       setIsEditMode(true);
@@ -163,9 +195,24 @@ const SaleItemsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
                 <FieldNumber label="Цена" name={`${formUid}_price`} width="180px"
                   value={formData.price} onChange={e => handleFieldChange("price", e.target.value)}
                   disabled={isLoading} step="0.01" textAlign="right" />
+                <Field label="Ед. изм." name={`${formUid}_uom`} width="80px"
+                  value={formData.unitOfMeasure} onChange={e => handleFieldChange("unitOfMeasure", e.target.value)}
+                  disabled={isLoading} />
               </Group>
               <Group align="row" gap="12px" className={styles.Form}>
-                <FieldNumber label="Сумма" name={`${formUid}_amount`} width="180px"
+                <FieldNumber label="Ставка НДС %" name={`${formUid}_vatRate`} width="120px"
+                  value={formData.vatRate} onChange={e => handleFieldChange("vatRate", e.target.value)}
+                  disabled={isLoading} step="0.01" textAlign="right" />
+                <FieldNumber label="Скидка %" name={`${formUid}_discPct`} width="120px"
+                  value={formData.discountPercent} onChange={e => handleFieldChange("discountPercent", e.target.value)}
+                  disabled={isLoading} step="0.01" textAlign="right" />
+              </Group>
+              <Group align="row" gap="12px" className={styles.Form}>
+                <FieldNumber label="Сумма НДС" name={`${formUid}_vatAmt`} width="150px"
+                  value={formData.vatAmount} disabled textAlign="right" />
+                <FieldNumber label="Сумма скидки" name={`${formUid}_discAmt`} width="150px"
+                  value={formData.discountAmount} disabled textAlign="right" />
+                <FieldNumber label="Итого" name={`${formUid}_amount`} width="180px"
                   value={formData.amount} disabled textAlign="right" />
               </Group>
               {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}>

@@ -7,6 +7,8 @@ import {
 import { useRef, useMemo, useCallback, useEffect } from "react";
 import apiClient from "src/services/api/client";
 import { useRequestQueue } from "./useRequestQueue";
+import { fetchList, isSyncableEndpoint } from "src/services/offlineDataService";
+import { getIsOnline } from "src/services/networkStatus";
 
 // ⚠️ ГЛОБАЛЬНЫЙ REF для хранения adaptiveLimit
 export const GLOBAL_ADAPTIVE_LIMIT_REF = { current: 200 };
@@ -150,13 +152,89 @@ export function useInfiniteModelList<TData = unknown>({
 
 			return new Promise<InfiniteModelPage<TData>>((resolve, reject) => {
 				addRequest(`${model}-page-${pageParam}`, async () => {
+					// ── Offline-first: при offline и syncable → читаем из Dexie ──
+					if (!getIsOnline() && isSyncableEndpoint(model)) {
+						try {
+							const result = await fetchList<TData>(model, {
+								limit: query.limit,
+								cursor: pageParam,
+								sort: currentParams.sort,
+								search: currentParams.search,
+							}, query);
+							resolve({
+								items: result.items,
+								nextCursor: result.nextCursor,
+								hasMore: result.hasMore,
+								total: result.total,
+							});
+							return;
+						} catch (offlineErr) {
+							console.warn(`[InfiniteList] Offline fallback failed for ${model}:`, offlineErr);
+							// Продолжаем попытку онлайн-запроса (на случай если navigator.onLine ошибся)
+						}
+					}
+
 					try {
 						const response = await apiClient.get<InfiniteModelPage<TData>>(
 							model,
 							{ params: query },
 						);
+
+						// Кэшируем данные в Dexie для будущего offline-доступа
+						if (isSyncableEndpoint(model) && response.data?.items?.length > 0) {
+							import("src/services/offlineDb").then(({ upsertRecords }) =>
+								upsertRecords(model, response.data.items as any[]).catch(() => {}),
+							);
+						}
+
 						resolve(response.data);
 					} catch (err) {
+						// Если сеть упала во время запроса → fallback на Dexie (без повторного сетевого запроса)
+						if (isSyncableEndpoint(model) && isNetworkLikeError(err)) {
+							try {
+								const { getActiveRecords, countActiveRecords, searchRecords } = await import("src/services/offlineDb");
+
+								let sortField = "id";
+								let sortDir: "asc" | "desc" = "desc";
+								if (currentParams.sort) {
+									const entries = Object.entries(currentParams.sort);
+									if (entries.length > 0) [sortField, sortDir] = entries[0] as [string, "asc" | "desc"];
+								}
+
+								let items: any[];
+								let total: number;
+								const limit = query.limit ?? 200;
+								const offset = pageParam ?? 0;
+
+								if (currentParams.search) {
+									items = await searchRecords(model, currentParams.search);
+									total = items.length;
+									items.sort((a: any, b: any) => {
+										const va = a[sortField], vb = b[sortField];
+										if (va == null && vb == null) return 0;
+										if (va == null) return 1;
+										if (vb == null) return -1;
+										return sortDir === "desc" ? (vb > va ? 1 : -1) : (va > vb ? 1 : -1);
+									});
+									items = items.slice(offset, offset + limit);
+								} else {
+									total = await countActiveRecords(model);
+									items = await getActiveRecords(model, { limit, offset, sortField, sortDir });
+								}
+
+								const hasMore = offset + items.length < total;
+								resolve({
+									items: items as TData[],
+									nextCursor: hasMore ? offset + items.length : null,
+									hasMore,
+									total,
+								});
+								return;
+							} catch {
+								// Fallback тоже не сработал
+							}
+						}
+
 						if (err instanceof Error && err.name === "CanceledError") {
 							reject(new Error("Request was cancelled"));
 						}
@@ -228,4 +306,13 @@ export function useInfiniteModelList<TData = unknown>({
 	}, [cancelAll]);
 
 	return { ...result, allItems, total, isAnythingLoading, cancelAllRequests: cancelAll, dataUpdatedAt };
+}
+
+/** Определяет, является ли ошибка проблемой сети */
+function isNetworkLikeError(err: any): boolean {
+	if (!err) return false;
+	if (err.code === "ERR_NETWORK" || err.code === "ECONNABORTED") return true;
+	if (err.message === "Network Error") return true;
+	if (err.isAxiosError && !err.response) return true;
+	return false;
 }

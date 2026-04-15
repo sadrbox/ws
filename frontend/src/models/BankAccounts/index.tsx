@@ -14,6 +14,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
 import { useFormStore } from "src/hooks/useFormStore";
+import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import { useModelListState } from "src/hooks/useModelListState";
 
@@ -46,6 +47,7 @@ const DEFAULT_FIELDS: TFields = {
 const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
   const data = paneProps.data;
   const defaultOrg = useDefaultOrganization();
+  const { canWrite } = useAccessRight("BankAccount");
 
   const initialFields: TFields | undefined = (() => {
     if (!data || data.uuid) return undefined;
@@ -167,6 +169,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
       error={form.error}
       errorRevision={form.errorRevision}
       onErrorDismiss={() => form.setError(null)}
+      readonly={!canWrite}
       isDirty={form.isDirty}
     />
   );

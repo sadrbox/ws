@@ -82,7 +82,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			orderBy,
-			include: { organization: true, counterparty: true, contract: true },
+			include: { organization: true, counterparty: true, contract: true, warehouse: true },
 		};
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };
@@ -117,7 +117,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const item = await prisma[MODEL].findUnique({
 			where: w,
-			include: { organization: true, counterparty: true, contract: true },
+			include: { organization: true, counterparty: true, contract: true, warehouse: true },
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
@@ -135,11 +135,15 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			documentDate,
 			description,
 			amount,
+			amountWithoutVat,
+			vatAmount,
+			discountAmount,
 			status,
 			posted,
 			organizationUuid,
 			counterpartyUuid,
 			contractUuid,
+			warehouseUuid,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
@@ -147,13 +151,17 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				documentDate: documentDate ? new Date(documentDate) : new Date(),
 				description: description?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
+				amountWithoutVat: amountWithoutVat != null ? parseFloat(amountWithoutVat) : null,
+				vatAmount: vatAmount != null ? parseFloat(vatAmount) : null,
+				discountAmount: discountAmount != null ? parseFloat(discountAmount) : null,
 				status: status || "draft",
 				posted: posted === true,
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
+				warehouseUuid: warehouseUuid || null,
 			},
-			include: { organization: true, counterparty: true, contract: true },
+			include: { organization: true, counterparty: true, contract: true, warehouse: true },
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -176,6 +184,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			"organizationUuid",
 			"counterpartyUuid",
 			"contractUuid",
+			"warehouseUuid",
 		];
 		for (const f of strFields) {
 			if (req.body[f] !== undefined)
@@ -189,11 +198,20 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.amount !== undefined)
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
+		if (req.body.amountWithoutVat !== undefined)
+			data.amountWithoutVat =
+				req.body.amountWithoutVat != null ? parseFloat(req.body.amountWithoutVat) : null;
+		if (req.body.vatAmount !== undefined)
+			data.vatAmount =
+				req.body.vatAmount != null ? parseFloat(req.body.vatAmount) : null;
+		if (req.body.discountAmount !== undefined)
+			data.discountAmount =
+				req.body.discountAmount != null ? parseFloat(req.body.discountAmount) : null;
 
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
-			include: { organization: true, counterparty: true, contract: true },
+			include: { organization: true, counterparty: true, contract: true, warehouse: true },
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

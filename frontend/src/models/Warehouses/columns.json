@@ -15,7 +15,7 @@
 	{
 		"identifier": "shortName",
 		"type": "string",
-		"name": "Short Name",
+		"name": "Наименование",
 		"width": "300px",
 		"minWidth": "150px",
 		"alignment": "left",
@@ -28,7 +28,7 @@
 	{
 		"identifier": "address",
 		"type": "string",
-		"name": "Address",
+		"name": "Адрес",
 		"width": "300px",
 		"minWidth": "150px",
 		"alignment": "left",
@@ -41,13 +41,26 @@
 	{
 		"identifier": "organization.shortName",
 		"type": "string",
-		"name": "Organization",
+		"name": "Организация",
 		"width": "250px",
 		"minWidth": "150px",
 		"alignment": "left",
 		"hint": "Организация",
 		"visible": true,
 		"position": 4,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "description",
+		"type": "string",
+		"name": "Описание",
+		"width": "300px",
+		"minWidth": "150px",
+		"alignment": "left",
+		"hint": "Описание склада",
+		"visible": false,
+		"position": 5,
 		"filter": false,
 		"inlist": true
 	}

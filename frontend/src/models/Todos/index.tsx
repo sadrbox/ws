@@ -11,6 +11,7 @@ import { Group } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
+import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -42,6 +43,7 @@ const DEFAULT_FIELDS: TFields = {
 
 const TodosForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
+  const { canWrite } = useAccessRight("Todo");
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;
@@ -126,7 +128,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
-      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} isDirty={form.isDirty} />
+      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );
 };
 TodosForm.displayName = "TodosForm";

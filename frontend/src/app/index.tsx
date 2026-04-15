@@ -13,6 +13,9 @@ import React, {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { restoreQueryCache, persistQueryCache, clearPersistedCache } from "src/services/queryPersist";
+import { initialSync, startPeriodicSync, stopPeriodicSync } from "src/services/syncManager";
+import { clearOfflineDb } from "src/services/offlineDb";
+import { registerServiceWorker } from "src/services/registerSW";
 
 import { getTranslation } from "src/i18";
 import { Content, Navbar, NavList, ErrorBoundary, LoadingFallback, Screen, LoadingSpinner } from "../components/UI";
@@ -154,9 +157,24 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isLoggedIn) {
       startHealthCheck(30_000); // каждые 30 сек
-      return () => stopHealthCheck();
+
+      // ── Offline-first: начальная синхронизация + периодическая ──
+      initialSync().catch((err) =>
+        console.warn("[App] Initial sync failed:", err),
+      );
+      startPeriodicSync(5 * 60 * 1000); // каждые 5 минут
+
+      return () => {
+        stopHealthCheck();
+        stopPeriodicSync();
+      };
     }
   }, [isLoggedIn]);
+
+  // ── Регистрация Service Worker (один раз при монтировании) ──
+  useEffect(() => {
+    registerServiceWorker().catch(() => {});
+  }, []);
 
   const handleLoginSuccess = useCallback(() => {
     setIsLoggedIn(true);
@@ -169,6 +187,8 @@ const App: React.FC = () => {
     clearAllFormStores();
     clearPersistedCache().catch(() => {});
     clearOfflineQueue().catch(() => {});
+    clearOfflineDb().catch(() => {});
+    stopPeriodicSync();
     queryClient.clear();
     setIsLoggedIn(false);
     setCurrentUser(null);
@@ -213,7 +233,8 @@ const App: React.FC = () => {
   // Навбар (можно вынести в отдельный хук / компонент позже)
   const initialNavbar: TypeNavbarProps[] =
     [
-      { id: useUID(), isActive: false, title: "Операционная деятельность", component: <NavList label="Operations" /> },
+      { id: useUID(), isActive: false, title: "Торговля", component: <NavList label="Trade" /> },
+      { id: useUID(), isActive: false, title: "Кадровый учёт", component: <NavList label="HR" /> },
       { id: useUID(), isActive: false, title: "CRM", component: <NavList label="CRM" /> },
       { id: useUID(), isActive: false, title: "Настройки", component: <NavList label="Settings" /> },
     ]

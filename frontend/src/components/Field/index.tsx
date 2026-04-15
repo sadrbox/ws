@@ -300,6 +300,17 @@ export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
     ? `${styles.FieldWrapper} ${styles.tableVariant}`
     : styles.FieldWrapper;
 
+  // Гарантируем, что value для input[type=datetime-local] имеет формат YYYY-MM-DDTHH:mm
+  const safeValue = (() => {
+    if (!value) return '';
+    // Если в формате YYYY-MM-DDTHH:mm или YYYY-MM-DDTHH:mm:ss — ОК
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return value;
+    // Если только дата YYYY-MM-DD — добавляем 00:00
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${value}T00:00`;
+    // Любое другое значение — пустая строка
+    return '';
+  })();
+
   return (
     <div
       className={wrapperClass}
@@ -316,7 +327,7 @@ export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
           type="datetime-local"
           id={name}
           name={name}
-          value={value}
+          value={safeValue}
           onChange={onChange}
           className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
           disabled={disabled}
@@ -344,6 +355,17 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
     ? `${styles.FieldWrapper} ${styles.tableVariant}`
     : styles.FieldWrapper;
 
+  // Гарантируем, что value для input[type=date] имеет формат YYYY-MM-DD
+  const safeValue = (() => {
+    if (!value) return '';
+    // Если уже в формате YYYY-MM-DD — ОК
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    // Если ISO datetime — берём первые 10 символов
+    if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 10);
+    // Любое другое значение (включая русский текст) — пустая строка
+    return '';
+  })();
+
   return (
     <div
       className={wrapperClass}
@@ -360,7 +382,7 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
           type="date"
           id={name}
           name={name}
-          value={value}
+          value={safeValue}
           onChange={onChange}
           className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
           disabled={disabled}
@@ -704,6 +726,13 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     ? `${styles.FieldWrapper} ${styles.tableVariant}`
     : styles.FieldWrapper;
 
+  // Гарантируем, что value для input[type=number] является числовой строкой
+  const safeValue = (() => {
+    if (value === '' || value === undefined || value === null) return '';
+    if (!isNaN(Number(value))) return String(value);
+    return ''; // Невалидное значение → пустая строка
+  })();
+
   const handleClear = () => {
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -748,7 +777,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
           type="number"
           id={name}
           name={name}
-          value={value}
+          value={safeValue}
           onChange={onChange}
           className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
           autoComplete="off"

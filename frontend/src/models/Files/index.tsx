@@ -16,9 +16,11 @@ const COMPONENT_NAME = "FilesList_part";
 interface FilesPanelProps {
   ownerType: string;
   ownerUuid: string;
+  /** Вызывается после загрузки/удаления файлов (для обновления смежных компонентов) */
+  onFilesChange?: () => void;
 }
 
-const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid }) => {
+const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }) => {
   const [rows, setRows] = useState<TDataItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -97,6 +99,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid }) => {
         fd.append("ownerUuid", ownerUuid);
         await apiClient.post(`/${MODEL_ENDPOINT}`, fd);
         await loadFiles();
+        onFilesChange?.();
       } catch (err) {
         console.error("upload error:", err);
       } finally {
@@ -104,7 +107,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid }) => {
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     },
-    [ownerType, ownerUuid, loadFiles],
+    [ownerType, ownerUuid, loadFiles, onFilesChange],
   );
 
   // ── Скачивание ──────────────────────────────────────────────────────────
@@ -150,8 +153,9 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid }) => {
         await handleDelete(uuid);
       }
       await loadFiles();
+      onFilesChange?.();
     },
-    [handleDelete, loadFiles],
+    [handleDelete, loadFiles, onFilesChange],
   );
 
   // ── Кнопка загрузки файла для панели таблицы ─────────────────────────

@@ -273,8 +273,21 @@
 
 	"UnsavedFormsList": "Несохранённые записи",
 
+	"AccessRightsList": "Права доступа",
+	"AccessRightsList_part": "Права доступа",
+
 	"SaleItemsList": "Товары",
 	"SaleItemsList_part": "Товары",
 	"lineNumber": "N",
-	"product.shortName": "Номенклатура"
+	"product.shortName": "Номенклатура",
+
+	"PayrollCalculationsList": "Начисление ЗП",
+	"PayrollCalculationsList_part": "Начисление ЗП",
+	"PayrollPaymentsList": "Выплата ЗП",
+	"PayrollPaymentsList_part": "Выплата ЗП",
+
+	"userName": "Пользователь",
+	"salary": "Оклад",
+	"accessRights": "Права доступа",
+	"bankAccounts": "Банковские счета"
 }

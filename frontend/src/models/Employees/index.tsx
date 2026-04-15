@@ -12,6 +12,7 @@ import ContactsTable from "../Contacts/ContactsTable";
 import EmployeeHistoryTable from "./EmployeeHistoryTable";
 import AvatarUpload from "src/components/AvatarUpload";
 import { useFormStore } from "src/hooks/useFormStore";
+import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -29,6 +30,7 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
+  const { canWrite } = useAccessRight("Employee");
   const queryClient = useQueryClient();
 
   const invalidateSubTables = useCallback(() => {
@@ -119,7 +121,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
     ];
 
     if (form.isEditMode && form.fields.uuid) {
-      result.push({ id: "history", label: "Кадровая история", component: (
+      result.push({ id: "history", label: translate("EmployeeHistoriesList") || "Кадровая история", component: (
         <EmployeeHistoryTable employeeUuid={form.fields.uuid} disabled={form.isLoading} deferRemoteChanges initialPendingRows={history.pending} onItemsChange={history.onItemsChange} />
       )});
       result.push({ id: "contacts", label: translate("ContactsList") || "Контакты", component: (
@@ -133,7 +135,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
-      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} isDirty={form.isDirty} />
+      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );
 };
 EmployeesForm.displayName = "EmployeesForm";

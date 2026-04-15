@@ -17,6 +17,9 @@ model User {
   isSuperAdmin     Boolean        @default(false)
   avatarPath       String?
   organizationUuid String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @default(now()) @updatedAt
+  deletedAt        DateTime?
   accessRights     AccessRight[]
   notifications    Notification[]
   curatorTodos     Todo[]         @relation("TodoCurator")
@@ -26,33 +29,40 @@ model User {
 
   @@index([employeeUuid])
   @@index([organizationUuid])
+  @@index([updatedAt])
   @@map("users")
 }
 
 model Organization {
-  id                 Int                 @id @default(autoincrement())
-  uuid               String              @unique @default(uuid())
-  bin                String              @unique @db.VarChar(12)
+  id                 Int                    @id @default(autoincrement())
+  uuid               String                 @unique @default(uuid())
+  bin                String                 @unique @db.VarChar(12)
   shortName          String?
   displayName        String?
-  inviteCode         String?             @unique
+  inviteCode         String?                @unique
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @default(now()) @updatedAt
+  deletedAt          DateTime?
   activityHistories  ActivityHistory[]
-  cashExpenseOrders  CashExpenseOrder[]  @relation("OrgCashExpenses")
-  cashReceiptOrders  CashReceiptOrder[]  @relation("OrgCashReceipts")
-  contracts          Contract[]          @relation("OrgContracts")
-  employees          Employee[]          @relation("EmployeeOrganization")
-  incomingInvoices   IncomingInvoice[]   @relation("OrgIncomingInvoices")
+  cashExpenseOrders  CashExpenseOrder[]     @relation("OrgCashExpenses")
+  cashReceiptOrders  CashReceiptOrder[]     @relation("OrgCashReceipts")
+  contracts          Contract[]             @relation("OrgContracts")
+  employees          Employee[]             @relation("EmployeeOrganization")
+  incomingInvoices   IncomingInvoice[]      @relation("OrgIncomingInvoices")
   inventoryTransfers InventoryTransfer[]
-  outgoingInvoices   OutgoingInvoice[]   @relation("OrgOutgoingInvoices")
+  outgoingInvoices   OutgoingInvoice[]      @relation("OrgOutgoingInvoices")
   paymentInvoices    PaymentInvoice[]
+  payrollCalculations PayrollCalculation[]  @relation("OrgPayrollCalc")
+  payrollPayments    PayrollPayment[]       @relation("OrgPayrollPay")
   purchases          Purchase[]
   sales              Sale[]
   scheduledTasks     ScheduledTask[]
   todos              Todo[]
-  users              User[]              @relation("UserOrganization")
+  users              User[]                 @relation("UserOrganization")
   warehouses         Warehouse[]
   employeeHistories  EmployeeHistory[]
 
+  @@index([updatedAt])
   @@map("organizations")
 }
 
@@ -62,6 +72,9 @@ model Counterparty {
   bin               String             @unique @db.VarChar(12)
   shortName         String?
   displayName       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @default(now()) @updatedAt
+  deletedAt         DateTime?
   cashExpenseOrders CashExpenseOrder[] @relation("CpCashExpenses")
   cashReceiptOrders CashReceiptOrder[] @relation("CpCashReceipts")
   contracts         Contract[]         @relation("CpContracts")
@@ -72,6 +85,7 @@ model Counterparty {
   sales             Sale[]
   todos             Todo[]
 
+  @@index([updatedAt])
   @@map("counterparties")
 }
 
@@ -85,6 +99,9 @@ model Contract {
   endDate          DateTime?
   organizationUuid String?
   counterpartyUuid String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
   organization     Organization? @relation("OrgContracts", fields: [organizationUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpContracts", fields: [counterpartyUuid], references: [uuid])
   cashExpenseOrders  CashExpenseOrder[]
@@ -97,12 +114,13 @@ model Contract {
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
+  @@index([updatedAt])
   @@map("contracts")
 }
 
 model AttachedFile {
-  id          Int      @id @default(autoincrement())
-  uuid        String   @unique @default(uuid())
+  id          Int       @id @default(autoincrement())
+  uuid        String    @unique @default(uuid())
   ownerType   String
   ownerUuid   String
   fileName    String
@@ -110,9 +128,12 @@ model AttachedFile {
   fileSize    Int?
   mimeType    String?
   description String?
-  uploadedAt  DateTime @default(now())
+  uploadedAt  DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  deletedAt   DateTime?
 
   @@index([ownerType, ownerUuid])
+  @@index([updatedAt])
   @@map("attached_files")
 }
 
@@ -120,8 +141,11 @@ model ContactType {
   id        Int       @id @default(autoincrement())
   uuid      String    @unique @default(uuid())
   shortName String    @unique
+  updatedAt DateTime  @default(now()) @updatedAt
+  deletedAt DateTime?
   contacts  Contact[]
 
+  @@index([updatedAt])
   @@map("contact_types")
 }
 
@@ -132,26 +156,32 @@ model Contact {
   contactTypeUuid String?
   ownerType       String?
   ownerUuid       String?
+  updatedAt       DateTime     @default(now()) @updatedAt
+  deletedAt       DateTime?
   contactType     ContactType? @relation(fields: [contactTypeUuid], references: [uuid])
 
   @@index([contactTypeUuid])
   @@index([ownerType, ownerUuid])
+  @@index([updatedAt])
   @@map("contacts")
 }
 
 model ContactPerson {
-  id        Int     @id @default(autoincrement())
-  uuid      String  @unique @default(uuid())
-  firstName String?
-  lastName  String?
+  id         Int       @id @default(autoincrement())
+  uuid       String    @unique @default(uuid())
+  firstName  String?
+  lastName   String?
   middleName String?
-  fullName  String? @db.VarChar(255)
-  ownerType String?
-  ownerUuid String?
-  comment   String?
+  fullName   String?   @db.VarChar(255)
+  ownerType  String?
+  ownerUuid  String?
+  comment    String?
   avatarPath String?
+  updatedAt  DateTime  @default(now()) @updatedAt
+  deletedAt  DateTime?
 
   @@index([ownerType, ownerUuid])
+  @@index([updatedAt])
   @@map("contact_persons")
 }
 
@@ -165,12 +195,15 @@ model BankAccount {
   bankName     String?
   shortName    String?
   currencyUuid String?
+  updatedAt    DateTime  @default(now()) @updatedAt
+  deletedAt    DateTime?
   currency     Currency? @relation(fields: [currencyUuid], references: [uuid])
 
   @@index([ownerType, ownerUuid])
   @@index([currencyUuid])
   @@index([iban])
   @@index([bik])
+  @@index([updatedAt])
   @@map("bank_accounts")
 }
 
@@ -208,6 +241,8 @@ model Todo {
   curatorUuid      String?
   executorUuid     String?
   createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @default(now()) @updatedAt
+  deletedAt        DateTime?
   deadline         DateTime?
   deadlineDays     Int?
   status           String         @default("new")
@@ -222,24 +257,28 @@ model Todo {
   @@index([curatorUuid])
   @@index([executorUuid])
   @@index([status])
+  @@index([updatedAt])
   @@map("todos")
 }
 
 model Notification {
-  id        Int      @id @default(autoincrement())
-  uuid      String   @unique @default(uuid())
+  id        Int       @id @default(autoincrement())
+  uuid      String    @unique @default(uuid())
   userUuid  String
   todoUuid  String?
   title     String
   message   String?
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  todo      Todo?    @relation(fields: [todoUuid], references: [uuid])
-  user      User     @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+  isRead    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+  deletedAt DateTime?
+  todo      Todo?     @relation(fields: [todoUuid], references: [uuid])
+  user      User      @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
 
   @@index([userUuid])
   @@index([todoUuid])
   @@index([userUuid, isRead])
+  @@index([updatedAt])
   @@map("notifications")
 }
 
@@ -250,11 +289,15 @@ model Warehouse {
   address                String?
   description            String?
   organizationUuid       String?
+  updatedAt              DateTime            @default(now()) @updatedAt
+  deletedAt              DateTime?
   inventoryTransfersFrom InventoryTransfer[] @relation("TransferFrom")
   inventoryTransfersTo   InventoryTransfer[] @relation("TransferTo")
+  sales                  Sale[]
   organization           Organization?       @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
+  @@index([updatedAt])
   @@map("warehouses")
 }
 
@@ -265,20 +308,29 @@ model Sale {
   documentDate     DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
+  amountWithoutVat Decimal?      @db.Decimal(18, 2)
+  vatAmount        Decimal?      @db.Decimal(18, 2)
+  discountAmount   Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  warehouseUuid    String?
   posted           Boolean       @default(false)
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
   saleItems        SaleItem[]
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
+  warehouse        Warehouse?    @relation(fields: [warehouseUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
+  @@index([warehouseUuid])
   @@index([documentDate])
+  @@index([updatedAt])
   @@map("sales")
 }
 
@@ -293,6 +345,8 @@ model Purchase {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
@@ -301,6 +355,7 @@ model Purchase {
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([documentDate])
+  @@index([updatedAt])
   @@map("purchases")
 }
 
@@ -315,6 +370,8 @@ model OutgoingInvoice {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpOutgoingInvoices", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgOutgoingInvoices", fields: [organizationUuid], references: [uuid])
@@ -323,6 +380,7 @@ model OutgoingInvoice {
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([documentDate])
+  @@index([updatedAt])
   @@map("outgoing_invoices")
 }
 
@@ -337,6 +395,8 @@ model IncomingInvoice {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpIncomingInvoices", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgIncomingInvoices", fields: [organizationUuid], references: [uuid])
@@ -345,6 +405,7 @@ model IncomingInvoice {
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([documentDate])
+  @@index([updatedAt])
   @@map("incoming_invoices")
 }
 
@@ -359,6 +420,8 @@ model PaymentInvoice {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
@@ -367,6 +430,7 @@ model PaymentInvoice {
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([documentDate])
+  @@index([updatedAt])
   @@map("payment_invoices")
 }
 
@@ -380,10 +444,13 @@ model ScheduledTask {
   lastRunAt        DateTime?
   nextRunAt        DateTime?
   organizationUuid String?
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([status])
+  @@index([updatedAt])
   @@map("scheduled_tasks")
 }
 
@@ -397,6 +464,8 @@ model InventoryTransfer {
   fromWarehouseUuid String?
   toWarehouseUuid   String?
   organizationUuid  String?
+  updatedAt         DateTime      @default(now()) @updatedAt
+  deletedAt         DateTime?
   fromWarehouse     Warehouse?    @relation("TransferFrom", fields: [fromWarehouseUuid], references: [uuid])
   organization      Organization? @relation(fields: [organizationUuid], references: [uuid])
   toWarehouse       Warehouse?    @relation("TransferTo", fields: [toWarehouseUuid], references: [uuid])
@@ -405,6 +474,7 @@ model InventoryTransfer {
   @@index([toWarehouseUuid])
   @@index([organizationUuid])
   @@index([documentDate])
+  @@index([updatedAt])
   @@map("inventory_transfers")
 }
 
@@ -419,6 +489,8 @@ model CashReceiptOrder {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpCashReceipts", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashReceipts", fields: [organizationUuid], references: [uuid])
@@ -427,6 +499,7 @@ model CashReceiptOrder {
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([documentDate])
+  @@index([updatedAt])
   @@map("cash_receipt_orders")
 }
 
@@ -441,6 +514,8 @@ model CashExpenseOrder {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpCashExpenses", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashExpenses", fields: [organizationUuid], references: [uuid])
@@ -449,6 +524,7 @@ model CashExpenseOrder {
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([documentDate])
+  @@index([updatedAt])
   @@map("cash_expense_orders")
 }
 
@@ -456,8 +532,11 @@ model Brand {
   id        Int       @id @default(autoincrement())
   uuid      String    @unique @default(uuid())
   shortName String
+  updatedAt DateTime  @default(now()) @updatedAt
+  deletedAt DateTime?
   products  Product[]
 
+  @@index([updatedAt])
   @@map("brands")
 }
 
@@ -467,55 +546,75 @@ model Product {
   shortName String
   sku       String?
   brandUuid String?
+  updatedAt DateTime   @default(now()) @updatedAt
+  deletedAt DateTime?
   brand     Brand?     @relation(fields: [brandUuid], references: [uuid])
   saleItems SaleItem[]
 
   @@index([brandUuid])
+  @@index([updatedAt])
   @@map("products")
 }
 
 model SaleItem {
-  id          Int      @id @default(autoincrement())
-  uuid        String   @unique @default(uuid())
-  lineNumber  Int      @default(0)
-  quantity    Decimal  @default(0) @db.Decimal(18, 4)
-  price       Decimal  @default(0) @db.Decimal(18, 2)
-  amount      Decimal  @default(0) @db.Decimal(18, 2)
-  productUuid String?
-  saleUuid    String
-  product     Product? @relation(fields: [productUuid], references: [uuid])
-  sale        Sale     @relation(fields: [saleUuid], references: [uuid], onDelete: Cascade)
+  id              Int       @id @default(autoincrement())
+  uuid            String    @unique @default(uuid())
+  lineNumber      Int       @default(0)
+  quantity        Decimal   @default(0) @db.Decimal(18, 4)
+  price           Decimal   @default(0) @db.Decimal(18, 2)
+  amount          Decimal   @default(0) @db.Decimal(18, 2)
+  unitOfMeasure   String?
+  vatRate         Decimal   @default(12) @db.Decimal(5, 2)
+  vatAmount       Decimal   @default(0) @db.Decimal(18, 2)
+  discountPercent Decimal   @default(0) @db.Decimal(5, 2)
+  discountAmount  Decimal   @default(0) @db.Decimal(18, 2)
+  productUuid     String?
+  saleUuid        String
+  updatedAt       DateTime  @default(now()) @updatedAt
+  deletedAt       DateTime?
+  product         Product?  @relation(fields: [productUuid], references: [uuid])
+  sale            Sale      @relation(fields: [saleUuid], references: [uuid], onDelete: Cascade)
 
   @@index([saleUuid])
   @@index([productUuid])
+  @@index([updatedAt])
   @@map("sale_items")
 }
 
 model Employee {
-  id               Int               @id @default(autoincrement())
-  uuid             String            @unique @default(uuid())
-  firstName        String?
-  lastName         String?
-  middleName       String?
-  fullName         String?           @db.VarChar(255)
-  iin              String?           @db.VarChar(12)
-  avatarPath       String?
-  organizationUuid String?
-  employeeHistory  EmployeeHistory[]
-  organization     Organization?     @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid])
-  users            User[]
+  id                   Int                    @id @default(autoincrement())
+  uuid                 String                 @unique @default(uuid())
+  firstName            String?
+  lastName             String?
+  middleName           String?
+  fullName             String?                @db.VarChar(255)
+  iin                  String?                @db.VarChar(12)
+  avatarPath           String?
+  organizationUuid     String?
+  updatedAt            DateTime               @default(now()) @updatedAt
+  deletedAt            DateTime?
+  employeeHistory      EmployeeHistory[]
+  payrollCalculations  PayrollCalculation[]   @relation("PayrollCalcEmployee")
+  payrollPayments      PayrollPayment[]       @relation("PayrollPayEmployee")
+  organization         Organization?          @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid])
+  users                User[]
 
   @@index([organizationUuid])
+  @@index([updatedAt])
   @@map("employees")
 }
 
 model Position {
-  id              Int               @id @default(autoincrement())
-  uuid            String            @unique @default(uuid())
-  shortName       String
-  description     String?
-  employeeHistory EmployeeHistory[]
+  id                  Int                    @id @default(autoincrement())
+  uuid                String                 @unique @default(uuid())
+  shortName           String
+  description         String?
+  updatedAt           DateTime               @default(now()) @updatedAt
+  deletedAt           DateTime?
+  employeeHistory     EmployeeHistory[]
+  payrollCalculations PayrollCalculation[]   @relation("PayrollCalcPosition")
 
+  @@index([updatedAt])
   @@map("positions")
 }
 
@@ -528,6 +627,8 @@ model EmployeeHistory {
   employeeUuid     String
   positionUuid     String?
   organizationUuid String?
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
   employee         Employee      @relation(fields: [employeeUuid], references: [uuid], onDelete: Cascade)
   position         Position?     @relation(fields: [positionUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
@@ -535,19 +636,23 @@ model EmployeeHistory {
   @@index([employeeUuid])
   @@index([positionUuid])
   @@index([organizationUuid])
+  @@index([updatedAt])
   @@map("employee_history")
 }
 
 model AccessRight {
-  id          Int      @id @default(autoincrement())
-  uuid        String   @unique @default(uuid())
+  id          Int       @id @default(autoincrement())
+  uuid        String    @unique @default(uuid())
   modelName   String
-  accessLevel String   @default("none")
+  accessLevel String    @default("none")
   userUuid    String
-  user        User     @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+  updatedAt   DateTime  @default(now()) @updatedAt
+  deletedAt   DateTime?
+  user        User      @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
 
   @@unique([userUuid, modelName])
   @@index([userUuid])
+  @@index([updatedAt])
   @@map("access_rights")
 }
 
@@ -557,7 +662,70 @@ model Currency {
   code         String        @unique
   shortName    String
   symbol       String?
+  updatedAt    DateTime      @default(now()) @updatedAt
+  deletedAt    DateTime?
   bankAccounts BankAccount[]
 
+  @@index([updatedAt])
   @@map("currencies")
+}
+
+model PayrollCalculation {
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  documentNumber   String?
+  documentDate     DateTime      @default(now())
+  description      String?
+  period           String?       @db.VarChar(7)
+  employeeUuid     String?
+  organizationUuid String?
+  positionUuid     String?
+  baseSalary       Decimal       @default(0) @db.Decimal(18, 2)
+  opv              Decimal       @default(0) @db.Decimal(18, 2)
+  ipn              Decimal       @default(0) @db.Decimal(18, 2)
+  socialContrib    Decimal       @default(0) @db.Decimal(18, 2)
+  socialTax        Decimal       @default(0) @db.Decimal(18, 2)
+  vosms            Decimal       @default(0) @db.Decimal(18, 2)
+  oosms            Decimal       @default(0) @db.Decimal(18, 2)
+  netSalary        Decimal       @default(0) @db.Decimal(18, 2)
+  totalExpense     Decimal       @default(0) @db.Decimal(18, 2)
+  status           String        @default("draft")
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
+  employee         Employee?     @relation("PayrollCalcEmployee", fields: [employeeUuid], references: [uuid])
+  organization     Organization? @relation("OrgPayrollCalc", fields: [organizationUuid], references: [uuid])
+  position         Position?     @relation("PayrollCalcPosition", fields: [positionUuid], references: [uuid])
+
+  @@index([employeeUuid])
+  @@index([organizationUuid])
+  @@index([positionUuid])
+  @@index([documentDate])
+  @@index([period])
+  @@index([updatedAt])
+  @@map("payroll_calculations")
+}
+
+model PayrollPayment {
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  documentNumber   String?
+  documentDate     DateTime      @default(now())
+  description      String?
+  period           String?       @db.VarChar(7)
+  employeeUuid     String?
+  organizationUuid String?
+  paymentMethod    String?       @default("bank_transfer")
+  amount           Decimal       @default(0) @db.Decimal(18, 2)
+  status           String        @default("draft")
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
+  employee         Employee?     @relation("PayrollPayEmployee", fields: [employeeUuid], references: [uuid])
+  organization     Organization? @relation("OrgPayrollPay", fields: [organizationUuid], references: [uuid])
+
+  @@index([employeeUuid])
+  @@index([organizationUuid])
+  @@index([documentDate])
+  @@index([period])
+  @@index([updatedAt])
+  @@map("payroll_payments")
 }

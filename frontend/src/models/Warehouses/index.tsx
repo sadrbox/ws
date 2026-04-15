@@ -9,6 +9,7 @@ import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
+import { useAccessRight } from "src/hooks/useAccessRight";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
@@ -21,6 +22,7 @@ const DEFAULT_FIELDS: TFields = { shortName: "", address: "", description: "", o
 
 const WarehousesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
+  const { canWrite } = useAccessRight("Warehouse");
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "warehouses-form", paneProps,
     defaultFields: DEFAULT_FIELDS,
@@ -55,7 +57,7 @@ const WarehousesForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
-      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} isDirty={form.isDirty} />
+      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );
 };
 WarehousesForm.displayName = "WarehousesForm";

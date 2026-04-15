@@ -85,7 +85,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
       )},
     ];
     if (form.isEditMode && form.fields.uuid) {
-      result.push({ id: "access", label: "Права доступа", component: <AccessRightsList userUuid={form.fields.uuid} /> });
+      result.push({ id: "access", label: translate("accessLevel") || "Права доступа", component: <AccessRightsList userUuid={form.fields.uuid} /> });
     }
     return result;
   }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields]);

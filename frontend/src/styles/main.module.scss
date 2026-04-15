@@ -40,68 +40,275 @@ body {
 }
 
 .NavbarWrapper {
-	// gap: 12px;
-	// padding-left: 6px;
 	position: sticky;
 	top: 0px;
 	z-index: 4;
-	// height: 49px;
-	// gap: 12px;
-	// padding: 6px;
 	border-bottom: 0px solid $color10;
 	display: flex;
 	align-items: center;
 	background-color: #fff;
 	box-shadow: 0px 0px 3px rgba(#000, 0.4);
-	// position: relative;
-	// gap: 6px;
-	// z-index: 1;
 	height: $heightFieldInput + 21px;
+	flex-wrap: nowrap;
+	overflow: visible;
+	// position: relative нужен для абсолютного позиционирования мобильного меню
+	// sticky уже задаёт containing block, но на мобильных нужен явный relative
+
 	.NavbarItem {
 		height: 100%;
 		user-select: none;
-		// background-color: rgba($color3, 0.8);
-		// font-weight: bold;
 		color: $color3;
-		// border-radius: $radius3;
-		// font-size: 110%;
-		// text-decoration: underline;
 		font-weight: 500;
-		// text-shadow: 0px 0px 1px 1px #000;
 		margin: 0px;
 		padding: 0 12px;
 		display: flex;
 		flex-direction: row;
 		align-items: center;
-		// &:not(:last-child) {
-		// 	margin-left: 12px;
-		// }
-		// background-color: rgba($color3, 0.1);
+		white-space: nowrap;
+		font-size: 13px;
+		text-decoration: none;
+		flex-shrink: 0;
+		transition: background 0.15s, color 0.15s;
 	}
 	.Active {
 		background-color: rgba($color3, 0.8);
 		color: #fff;
 		text-decoration: none;
-		// background: $color80;
+	}
+}
+
+// ── Hamburger-кнопка (видна только на мобильных) ──
+.NavbarBurger {
+	display: none;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 100%;
+	flex-shrink: 0;
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	padding: 0;
+	color: $color3;
+
+	span {
+		display: block;
+		width: 18px;
+		height: 2px;
+		background-color: currentColor;
+		border-radius: 1px;
+		position: relative;
+		transition: background 0.2s;
+		&::before,
+		&::after {
+			content: "";
+			position: absolute;
+			left: 0;
+			width: 100%;
+			height: 2px;
+			background-color: currentColor;
+			border-radius: 1px;
+			transition: transform 0.2s;
+		}
+		&::before { top: -6px; }
+		&::after  { top: 6px; }
+	}
+}
+
+// ── Мобильная навигация — позиционируется абсолютно ПОД навбаром ──
+// На десктопе элемент не рендерится (React conditional rendering).
+// На мобильных стилизуется через @media ниже.
+.NavbarMobileMenu {
+	display: none;
+}
+
+// ── Правая часть навбара (индикатор, уведомления, имя, выход) ──
+.NavbarRight {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-right: 12px;
+	flex-shrink: 0;
+	min-width: 0;
+}
+
+.NavbarUserName {
+	font-size: 12px;
+	color: $color51;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 200px;
+}
+
+.NavbarLogout {
+	font-size: 12px;
+	color: $color5;
+	white-space: nowrap;
+	text-decoration: none;
+	flex-shrink: 0;
+	&:hover {
+		color: $color3;
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RESPONSIVE ≤ 768px (планшет / мобильный)
+// ═══════════════════════════════════════════════════════════════════════════
+
+@media (max-width: 768px) {
+	.NavbarWrapper {
+		flex-wrap: nowrap;
+		height: $heightFieldInput + 21px;
+		padding: 0;
+		position: sticky;
+		top: 0;
+
+		// Скрываем десктопные навигационные ссылки
+		.NavbarItem {
+			display: none;
+		}
+	}
+
+	// Показываем hamburger
+	.NavbarBurger {
+		display: flex;
+	}
+
+	// Правая часть — укорачиваем
+	.NavbarRight {
+		gap: 8px;
+		margin-right: 8px;
+		flex: 1;
+		justify-content: flex-end;
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	.NavbarUserName {
+		max-width: 120px;
+		font-size: 11px;
+	}
+
+	// Мобильное меню — абсолютное позиционирование ПОД навбаром
+	.NavbarMobileMenu {
+		display: flex;
+		flex-direction: column;
+		position: absolute;
+		top: 100%; // ← сразу под NavbarWrapper
+		left: 0;
+		right: 0;
+		z-index: 10;
+		background-color: #fff;
+		border-top: 1px solid $color33;
+		box-shadow: 0 4px 12px rgba(#000, 0.12);
+		animation: navSlideDown 0.2s ease;
+
+		a {
+			padding: 12px 16px;
+			color: $color3;
+			font-size: 14px;
+			font-weight: 500;
+			text-decoration: none;
+			border-bottom: 1px solid rgba($color33, 0.5);
+			user-select: none;
+			transition: background 0.15s;
+
+			&:last-child {
+				border-bottom: none;
+			}
+			&:hover,
+			&:active {
+				background: rgba($color3, 0.06);
+			}
+		}
+		.Active {
+			background-color: rgba($color3, 0.8);
+			color: #fff;
+		}
+	}
+
+	@keyframes navSlideDown {
+		from { opacity: 0; transform: translateY(-8px); }
+		to   { opacity: 1; transform: translateY(0); }
+	}
+
+	// Overlay — подстраиваем top под авторазмер навбара
+	.NavbarOverlayWrapper {
+		top: $heightFieldInput + 21px;
+	}
+
+	// NavListWrapper — одна колонка
+	.NavListWrapper {
+		h1 {
+			font-size: 14px;
+		}
+	}
+
+	.NavSection {
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.NavGroup {
+		min-width: unset;
+	}
+
+	.NavList li {
+		padding: 8px 12px;
+		font-size: 14px;
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RESPONSIVE ≤ 480px (маленький телефон)
+// ═══════════════════════════════════════════════════════════════════════════
+
+@media (max-width: 480px) {
+	.NavbarRight {
+		gap: 6px;
+		margin-right: 6px;
+	}
+
+	// На маленьких экранах скрываем имя пользователя
+	.NavbarUserName {
+		display: none;
+	}
+
+	.NavbarLogout {
+		font-size: 11px;
+	}
+
+	.NavbarMobileMenu a {
+		padding: 12px 16px;
+		font-size: 15px;
+	}
+
+	.NavListWrapper {
+		h1 {
+			font-size: 13px;
+		}
+	}
+
+	.NavList li {
+		padding: 10px 12px;
+		font-size: 15px;
 	}
 }
 .NavbarOverlayWrapper {
 	position: absolute;
-	display: flex; //!!!
-	flex: 1; //!!!
-	top: 40px;
+	display: flex;
+	flex: 1;
+	top: $heightFieldInput + 21px;
 	bottom: 0;
 	left: 0px;
 	right: 0;
 	padding: 6px;
-	// margin: 6px;
-	// height: 50%;
-	// width: 60%;
-	// background: $color80;
 	z-index: 4;
 	background-color: #fff;
-	// border-bottom: 6px solid rgba($color34, 0.8);
-	// box-shadow: 3px 3px 6px rgba($color3, 0.8);
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
 }
 .NavListWrapper {
 	display: flex;
@@ -992,4 +1199,573 @@ body {
 	justify-content: flex-end;
 	padding-top: 8px;
 	border-top: 1px solid #e0e0e0;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SyncDashboard — панель синхронизации и оффлайн-данных
+// ═══════════════════════════════════════════════════════════════════════════
+
+.SyncDashboard {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+	background: #fafafa;
+}
+
+.SyncDashTabs {
+	display: flex;
+	gap: 0;
+	border-bottom: 2px solid #e0e0e0;
+	background: #fff;
+	flex-shrink: 0;
+	padding: 0 12px;
+}
+
+.SyncDashTab {
+	position: relative;
+	padding: 10px 16px;
+	font-size: 13px;
+	font-weight: 500;
+	color: #666;
+	background: none;
+	border: none;
+	cursor: pointer;
+	transition: color 0.15s;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+
+	&:hover {
+		color: #333;
+	}
+}
+
+.SyncDashTabActive {
+	color: #1565c0;
+	&::after {
+		content: "";
+		position: absolute;
+		bottom: -2px;
+		left: 0;
+		right: 0;
+		height: 2px;
+		background: #1565c0;
+		border-radius: 1px 1px 0 0;
+	}
+}
+
+.SyncDashBadge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 5px;
+	border-radius: 9px;
+	background: #e53935;
+	color: #fff;
+	font-size: 10px;
+	font-weight: 600;
+	line-height: 1;
+}
+
+.SyncDashContent {
+	flex: 1;
+	overflow-y: auto;
+	padding: 16px;
+}
+
+.SyncDashSection {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.SyncDashCard {
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.SyncDashCardTitle {
+	font-size: 13px;
+	font-weight: 600;
+	color: #333;
+	padding: 10px 14px;
+	background: #f5f5f5;
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.SyncDashCardBody {
+	padding: 12px 14px;
+}
+
+.SyncDashRow {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 5px 0;
+	font-size: 13px;
+	color: #333;
+	border-bottom: 1px solid #f5f5f5;
+	&:last-child { border-bottom: none; }
+}
+
+.SyncDashLabel {
+	color: #888;
+	flex-shrink: 0;
+}
+
+.SyncDashOnline { color: #43a047; font-weight: 600; }
+.SyncDashOffline { color: #e53935; font-weight: 600; }
+
+.SyncDashProgress {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 0;
+	span { font-size: 12px; color: #666; flex-shrink: 0; }
+}
+
+.SyncDashProgressBar {
+	flex: 1;
+	height: 6px;
+	background: #e0e0e0;
+	border-radius: 3px;
+	position: relative;
+	overflow: hidden;
+	&::after {
+		content: "";
+		position: absolute;
+		left: 0;
+		top: 0;
+		bottom: 0;
+		width: 100%;
+		background: #1565c0;
+		border-radius: 3px;
+		transition: width 0.3s ease;
+	}
+}
+
+.SyncDashActions {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	padding: 8px 0;
+	flex-wrap: wrap;
+}
+
+.SyncDashEmpty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 32px;
+	color: #999;
+	font-size: 13px;
+}
+
+// ── Queue ──
+
+.SyncDashQueue {
+	display: flex;
+	flex-direction: column;
+}
+
+.SyncDashQueueItem {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 8px 0;
+	border-bottom: 1px solid #f0f0f0;
+	&:last-child { border-bottom: none; }
+}
+
+.SyncDashQueueIcon {
+	flex-shrink: 0;
+	font-size: 14px;
+	padding-top: 1px;
+}
+
+.SyncDashQueueBody {
+	flex: 1;
+	min-width: 0;
+}
+
+.SyncDashQueueLabel {
+	font-size: 13px;
+	color: #333;
+	font-weight: 500;
+}
+
+.SyncDashQueueMeta {
+	font-size: 11px;
+	color: #999;
+	margin-top: 2px;
+}
+
+.SyncDashQueueActions {
+	flex-shrink: 0;
+	align-self: center;
+}
+
+// ── Conflicts ──
+
+.SyncDashConflict {
+	padding: 12px 0;
+	border-bottom: 1px solid #f0f0f0;
+	&:last-child { border-bottom: none; }
+}
+
+.SyncDashConflictHeader {
+	font-size: 13px;
+	font-weight: 600;
+	color: #e65100;
+	margin-bottom: 8px;
+}
+
+.SyncDashConflictDiff {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.SyncDashConflictCol {
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.SyncDashConflictColTitle {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	color: #666;
+	letter-spacing: 0.5px;
+	padding: 6px 10px;
+	background: #f5f5f5;
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.SyncDashConflictPre {
+	font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+	font-size: 11px;
+	line-height: 1.4;
+	padding: 8px 10px;
+	margin: 0;
+	white-space: pre-wrap;
+	word-break: break-all;
+	max-height: 200px;
+	overflow-y: auto;
+	background: #fff;
+	color: #333;
+}
+
+// ── Storage ──
+
+.SyncDashStorageTable {
+	display: flex;
+	flex-direction: column;
+}
+
+.SyncDashStorageHeader {
+	display: flex;
+	justify-content: space-between;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	color: #888;
+	letter-spacing: 0.5px;
+	padding: 6px 0;
+	border-bottom: 2px solid #e0e0e0;
+	span:last-child { text-align: right; }
+}
+
+.SyncDashStorageRow {
+	display: flex;
+	justify-content: space-between;
+	font-size: 13px;
+	padding: 5px 0;
+	border-bottom: 1px solid #f5f5f5;
+	color: #333;
+	&:last-child { border-bottom: none; }
+	span:last-child {
+		font-weight: 600;
+		color: #1565c0;
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PrintPreview — предпросмотр и печать документов A4
+// ═══════════════════════════════════════════════════════════════════════════
+
+.PrintPreview {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.PrintPanel {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 0;
+	flex-wrap: wrap;
+}
+
+.PrintPanelLeft {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1 1 0%;
+	min-width: 160px;
+	justify-content: flex-start;
+}
+
+.PrintPanelCenter {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: 0 0 auto;
+	justify-content: center;
+}
+
+.PrintPanelRight {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1 1 0%;
+	min-width: 160px;
+	justify-content: flex-end;
+}
+
+.PrintLabel {
+	font-size: 13px;
+	font-weight: 600;
+	color: $color6;
+	white-space: nowrap;
+}
+
+.PrintSelect {
+	flex: 1;
+	min-width: 140px;
+	max-width: 400px;
+	height: $heightFieldInput;
+	font-size: 13px;
+	padding: 0 6px;
+	border: 1px solid $color33;
+	border-radius: $radius2;
+	background: #fff;
+	color: $color6;
+	outline: none;
+	cursor: pointer;
+	&:focus {
+		border-color: $color3;
+	}
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+}
+
+.PrintZoomLabel {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 46px;
+	height: $heightFieldInput;
+	font-size: 12px;
+	font-weight: 600;
+	color: $color6;
+	background: $color30;
+	border: 1px solid $color33;
+	border-radius: $radius2;
+	cursor: pointer;
+	padding: 0 4px;
+	user-select: none;
+	&:hover {
+		background: $color33;
+	}
+}
+
+.PrintError {
+	padding: 8px 12px;
+	background: #fef2f2;
+	border: 1px solid #fca5a5;
+	border-radius: $radius2;
+	color: #b91c1c;
+	font-size: 13px;
+}
+
+.PrintLoading {
+	padding: 8px 12px;
+	background: #eff6ff;
+	border: 1px solid #93c5fd;
+	border-radius: $radius2;
+	color: $color3;
+	font-size: 13px;
+	text-align: center;
+}
+
+.PrintA4Wrapper {
+	flex: 1;
+	overflow: auto;
+	background: #404040;
+	border-radius: $radius2;
+	padding: 20px;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+}
+
+.PrintPagesGrid {
+	display: grid;
+	gap: 20px;
+	justify-content: center;
+	justify-items: center;
+}
+
+.PrintPageSlot {
+	// Контейнер для одной масштабированной страницы
+	// Ширина и высота задаются inline (A4 * scale)
+	position: relative;
+	overflow: hidden;
+}
+
+.PrintA4Page {
+	// Точные размеры A4 в px (задаются inline)
+	background: #fff;
+	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.3);
+	padding: 76px; // ≈ 20mm
+	box-sizing: border-box;
+	overflow: hidden;
+	// Стили для контента внутри A4
+	font-family: "Times New Roman", serif;
+	font-size: 14px;
+	line-height: 1.6;
+	color: #000;
+}
+
+.PrintPageViewport {
+	// Окно контента страницы — высота = высота содержимого A4 (без padding)
+	overflow: hidden;
+	position: relative;
+}
+
+.PrintPageInfo {
+	font-size: 12px;
+	color: $color5;
+	white-space: nowrap;
+	margin-left: 6px;
+}
+
+.PrintContent {
+	// Стили для HTML-контента из mammoth
+	h1 {
+		font-size: 18px;
+		font-weight: bold;
+		margin: 0 0 12px 0;
+	}
+	h2 {
+		font-size: 16px;
+		font-weight: bold;
+		margin: 0 0 10px 0;
+	}
+	h3 {
+		font-size: 14px;
+		font-weight: bold;
+		margin: 0 0 8px 0;
+	}
+	p {
+		margin: 0 0 8px 0;
+	}
+	table {
+		border-collapse: collapse;
+		width: 100%;
+		margin: 8px 0;
+	}
+	td, th {
+		border: 1px solid #000;
+		padding: 4px 8px;
+		font-size: 13px;
+	}
+	th {
+		background: #f3f4f6;
+		font-weight: bold;
+	}
+	ul, ol {
+		margin: 4px 0 8px 20px;
+		padding: 0;
+	}
+	li {
+		margin: 2px 0;
+	}
+	img {
+		max-width: 100%;
+		height: auto;
+	}
+	strong, b {
+		font-weight: bold;
+	}
+	em, i {
+		font-style: italic;
+	}
+}
+
+.PrintPlaceholder {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 200px;
+	color: $color5;
+	font-size: 14px;
+	font-style: italic;
+	text-align: center;
+}
+
+// Медиа-запрос для печати — скрываем всё кроме области A4
+@media print {
+	.PrintPreview {
+		overflow: visible;
+	}
+	.PrintPanel,
+	.PrintPanelCenter,
+	.PrintError,
+	.PrintLoading {
+		display: none !important;
+	}
+	.PrintA4Wrapper {
+		overflow: visible;
+		background: none;
+		padding: 0;
+	}
+	.PrintPagesGrid {
+		display: block;
+	}
+	.PrintPageSlot {
+		width: 100% !important;
+		height: auto !important;
+		overflow: visible;
+		page-break-after: always;
+	}
+	.PrintA4Page {
+		box-shadow: none;
+		width: 100% !important;
+		height: auto !important;
+		padding: 0;
+		transform: none !important;
+	}
+	.PrintPageViewport {
+		height: auto !important;
+		overflow: visible;
+	}
+	.PrintContent {
+		transform: none !important;
+	}
 }

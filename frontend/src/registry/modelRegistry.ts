@@ -251,6 +251,22 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
     storageKey: "access-rights-form",
     label: "Права доступа",
   },
+  {
+    endpoint: "payroll-calculations",
+    module: () => import("src/models/PayrollCalculations"),
+    formName: "PayrollCalculationsForm",
+    listName: "PayrollCalculationsList",
+    storageKey: "payroll-calculations-form",
+    label: "Начисление ЗП",
+  },
+  {
+    endpoint: "payroll-payments",
+    module: () => import("src/models/PayrollPayments"),
+    formName: "PayrollPaymentsForm",
+    listName: "PayrollPaymentsList",
+    storageKey: "payroll-payments-form",
+    label: "Выплата ЗП",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════

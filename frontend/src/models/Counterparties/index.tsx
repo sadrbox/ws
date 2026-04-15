@@ -12,6 +12,7 @@ import BankAccountsTable from "../BankAccounts/BankAccountsTable";
 import ContractsTable from "../Contracts/ContractsTable";
 import ContactsTable from "../Contacts/ContactsTable";
 import { useFormStore } from "src/hooks/useFormStore";
+import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -22,6 +23,7 @@ interface TFields { id?: number; uuid?: string; bin: string; shortName: string; 
 const DEFAULT_FIELDS: TFields = { bin: "", shortName: "", displayName: "" };
 
 const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
+  const { canWrite } = useAccessRight("Counterparty");
   const queryClient = useQueryClient();
 
   const invalidateSubTables = useCallback(() => {
@@ -68,13 +70,13 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
         </div></Group></>)}
       </div>
     )},
-    { id: "tab1", label: "Банковские счета", component: (
+    { id: "tab1", label: translate("BankAccountsList") || "Банковские счета", component: (
       <BankAccountsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={bankAccounts.pending} onItemsChange={bankAccounts.onItemsChange} />
     )},
-    { id: "tab2", label: "Договора", component: (
+    { id: "tab2", label: translate("ContractsList") || "Договора", component: (
       <ContractsTable deferRemoteChanges parentKey="counterpartyUuid" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contracts.pending} onItemsChange={contracts.onItemsChange} />
     )},
-    { id: "tab3", label: "Контакты", component: (
+    { id: "tab3", label: translate("ContactsList") || "Контакты", component: (
       <ContactsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} />
     )},
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts]);
@@ -82,7 +84,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
-      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} isDirty={form.isDirty} />
+      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );
 };
 CounterpartiesForm.displayName = "CounterpartiesForm";

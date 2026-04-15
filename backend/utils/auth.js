@@ -123,6 +123,8 @@ const ROUTE_TO_MODEL = {
 	"employee-histories": "EmployeeHistory",
 	"access-rights": "AccessRight",
 	currencies: "Currency",
+	"payroll-calculations": "PayrollCalculation",
+	"payroll-payments": "PayrollPayment",
 	users: "User",
 	files: "AttachedFile",
 	todofiles: "Todo",

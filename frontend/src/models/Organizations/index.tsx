@@ -121,7 +121,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       ),
     },
     {
-      id: "tab1", label: "Банковские счета", component: (
+      id: "tab1", label: translate("BankAccountsList") || "Банковские счета", component: (
         <BankAccountsTable
           deferRemoteChanges={true}
           ownerType="organization"
@@ -133,7 +133,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       ),
     },
     {
-      id: "tab2", label: "Договора", component: (
+      id: "tab2", label: translate("ContractsList") || "Договора", component: (
         <ContractsTable
           deferRemoteChanges={true}
           parentKey="organizationUuid"
@@ -145,7 +145,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       ),
     },
     {
-      id: "tab3", label: "Контакты", component: (
+      id: "tab3", label: translate("ContactsList") || "Контакты", component: (
         <ContactsTable
           deferRemoteChanges={true}
           ownerType="organization"
@@ -157,7 +157,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       ),
     },
     {
-      id: "tab4", label: "История действий", component: (
+      id: "tab4", label: translate("ActivityHistoriesList") || "История действий", component: (
         <ActivityHistoriesList ownerUuid={form.fields.uuid} ownerField="organizationUuid" />
       ),
     },

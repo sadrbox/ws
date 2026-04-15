@@ -50,6 +50,9 @@ import employeesRouter from "./api/router/employees.js";
 import positionsRouter from "./api/router/positions.js";
 import employeeHistoriesRouter from "./api/router/employeehistories.js";
 import accessRightsRouter from "./api/router/accessrights.js";
+import payrollCalculationsRouter from "./api/router/payrollcalculations.js";
+import payrollPaymentsRouter from "./api/router/payrollpayments.js";
+import syncRouter from "./api/router/sync.js";
 
 const app = express();
 
@@ -78,8 +81,22 @@ app.use(
 			return callback(new Error("Запрещено CORS-политикой"));
 		},
 		credentials: true,
+		methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+		allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Force-Overwrite"],
 	}),
 );
+
+// Явный обработчик preflight для всех маршрутов
+app.options("*", cors({
+	origin: (origin, callback) => {
+		if (!origin) return callback(null, true);
+		if (allowedOrigins.includes(origin)) return callback(null, true);
+		return callback(new Error("Запрещено CORS-политикой"));
+	},
+	credentials: true,
+	methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+	allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Force-Overwrite"],
+}));
 
 // Rate limiting — защита от brute-force и DDoS
 const apiLimiter = rateLimit({
@@ -188,6 +205,9 @@ app.use("/api/v1", employeesRouter);
 app.use("/api/v1", positionsRouter);
 app.use("/api/v1", employeeHistoriesRouter);
 app.use("/api/v1", accessRightsRouter);
+app.use("/api/v1", payrollCalculationsRouter);
+app.use("/api/v1", payrollPaymentsRouter);
+app.use("/api/v1", syncRouter);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. ОБРАБОТКА 404

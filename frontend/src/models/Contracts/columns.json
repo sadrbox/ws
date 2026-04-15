@@ -28,7 +28,7 @@
 	{
 		"identifier": "shortName",
 		"type": "string",
-		"name": "Short Name",
+		"name": "Наименование",
 		"width": "400px",
 		"minWidth": "400px",
 		"alignment": "left",
@@ -41,7 +41,7 @@
 	{
 		"identifier": "contractNumber",
 		"type": "string",
-		"name": "Contract Number",
+		"name": "Номер договора",
 		"width": "200px",
 		"minWidth": "200px",
 		"alignment": "left",
@@ -54,7 +54,7 @@
 	{
 		"identifier": "contractText",
 		"type": "string",
-		"name": "Contract Text",
+		"name": "Текст договора",
 		"width": "400px",
 		"minWidth": "400px",
 		"alignment": "left",
@@ -67,7 +67,7 @@
 	{
 		"identifier": "startDate",
 		"type": "date",
-		"name": "Start Date",
+		"name": "Дата начала",
 		"width": "130px",
 		"minWidth": "130px",
 		"alignment": "left",
@@ -80,7 +80,7 @@
 	{
 		"identifier": "endDate",
 		"type": "date",
-		"name": "End Date",
+		"name": "Дата окончания",
 		"width": "130px",
 		"minWidth": "130px",
 		"alignment": "left",

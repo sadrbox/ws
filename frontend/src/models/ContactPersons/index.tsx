@@ -13,6 +13,7 @@ import ContactsTable from "../Contacts/ContactsTable";
 import AvatarUpload from "src/components/AvatarUpload";
 import { resolveOwnerName } from "src/utils/resolveOwnerName";
 import { useFormStore } from "src/hooks/useFormStore";
+import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -32,6 +33,7 @@ const DEFAULT_FIELDS: TFields = {
 
 const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
   const queryClient = useQueryClient();
+  const { canWrite } = useAccessRight("ContactPerson");
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;
@@ -100,7 +102,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
       )},
     ];
     if (form.isEditMode && form.fields.uuid) {
-      t.push({ id: "contacts", label: "Контакты", component: (
+      t.push({ id: "contacts", label: translate("ContactsList") || "Контакты", component: (
         <ContactsTable deferRemoteChanges ownerType="contactperson" parentUuid={form.fields.uuid}
           parentName={form.fields.fullName} initialPendingRows={contacts.pending}
           onItemsChange={contacts.onItemsChange} />
@@ -112,7 +114,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
-      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} isDirty={form.isDirty} />
+      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );
 };
 ContactPersonsForm.displayName = "ContactPersonsForm";

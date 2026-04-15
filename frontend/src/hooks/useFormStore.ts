@@ -8,6 +8,7 @@ import { useAppContext } from "src/app";
 import apiClient from "src/services/api/client";
 import { isNetworkError } from "src/services/offlineQueue";
 import { commitPendingRows } from "src/services/commitPendingRows";
+import { fetchOne, isSyncableEndpoint } from "src/services/offlineDataService";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import useUID from "./useUID";
@@ -305,17 +306,42 @@ function createFormStore<F extends object>(
 		setMeta({ isLoading: true });
 		setError(null);
 		try {
-			const response = await apiClient.get(
-				`/${endpoint}/${entityUuid}`,
-			);
-			const d = response.data?.item ?? response.data;
+			// ── Offline-first: пробуем сервер, при ошибке сети → Dexie ──
+			let d: any;
+			let fromCache = false;
+
+			try {
+				const response = await apiClient.get(
+					`/${endpoint}/${entityUuid}`,
+				);
+				d = response.data?.item ?? response.data;
+
+				// Кэшируем в Dexie для будущего offline-доступа
+				if (isSyncableEndpoint(endpoint) && d) {
+					import("src/services/offlineDb").then(({ upsertRecords }) =>
+						upsertRecords(endpoint, [d]).catch(() => {}),
+					);
+				}
+			} catch (networkErr: any) {
+				// Если ошибка сети и таблица синхронизируемая → читаем из Dexie
+				if (isNetworkError(networkErr) && isSyncableEndpoint(endpoint)) {
+					const cached = await fetchOne(endpoint, entityUuid);
+					if (cached) {
+						d = cached.item;
+						fromCache = true;
+					} else {
+						throw networkErr; // нет кэша — показываем ошибку
+					}
+				} else {
+					throw networkErr;
+				}
+			}
+
 			const mapped = await Promise.resolve(
 				mapServerToForm(d, state.fields),
 			);
 
 			if (snapshotOnly) {
-				// Только обновляем «серверный» snapshot — fields остаются из sessionStorage.
-				// isDirty() будет сравнивать текущие fields с реальными серверными данными.
 				savedSnapshot = JSON.stringify({
 					fields: mapped,
 					tables: emptyTables,
@@ -329,6 +355,11 @@ function createFormStore<F extends object>(
 				setMeta({ isLoading: false, isEditMode: true, uuid: entityUuid });
 				markClean();
 			}
+
+			if (fromCache) {
+				setError("Данные загружены из локального кэша (offline-режим).");
+			}
+
 			afterLoad?.();
 		} catch (err: any) {
 			if (isNetworkError(err)) {
@@ -376,14 +407,39 @@ function createFormStore<F extends object>(
 
 			// ── Offline-interceptor вернул заглушку ──
 			if (response.data?._offline) {
-				setMeta({ isLoading: false });
-				setError(null);
+				// Сохраняем в Dexie + pendingChanges через offlineDataService
+				if (isSyncableEndpoint(endpoint)) {
+					const { createRecord, updateRecord } = await import("src/services/offlineDataService");
+					if (isEdit && entityUuid) {
+						await updateRecord(endpoint, entityUuid, payloadOrError as Record<string, unknown>);
+					} else {
+						await createRecord(endpoint, payloadOrError as Record<string, unknown>);
+					}
+				}
+				const offlineSaved = { ...payloadOrError, uuid: entityUuid || (payloadOrError as any).uuid };
+				const mapped = await Promise.resolve(
+					mapServerToForm(offlineSaved, state.fields),
+				);
+				replaceFields(mapped);
+				setMeta({
+					isLoading: false,
+					isEditMode: true,
+					uuid: offlineSaved.uuid,
+				});
 				markClean();
-				// Не обновляем поля — данные не были сохранены на сервере
-				return { success: true, savedData: null };
+				if (uniqId) updatePaneLabel(uniqId, buildPaneLabel(offlineSaved));
+				return { success: true, savedData: offlineSaved };
 			}
 
 			const saved = response.data?.item ?? response.data;
+
+			// Кэшируем серверный ответ в Dexie
+			if (isSyncableEndpoint(endpoint) && saved) {
+				import("src/services/offlineDb").then(({ upsertRecords }) =>
+					upsertRecords(endpoint, [saved]).catch(() => {}),
+				);
+			}
+
 			const mapped = await Promise.resolve(
 				mapServerToForm(saved, state.fields),
 			);
@@ -396,6 +452,41 @@ function createFormStore<F extends object>(
 			if (uniqId) updatePaneLabel(uniqId, buildPaneLabel(saved));
 			return { success: true, savedData: saved };
 		} catch (err: any) {
+			// ── Сеть упала — сохраняем локально ──
+			if (isNetworkError(err) && isSyncableEndpoint(endpoint)) {
+				try {
+					const { createRecord, updateRecord } = await import("src/services/offlineDataService");
+					const isEdit =
+						state.meta.isEditMode &&
+						(state.meta.uuid || (state.fields as any).uuid);
+					const entityUuid =
+						state.meta.uuid || (state.fields as any).uuid;
+
+					if (isEdit && entityUuid) {
+						await updateRecord(endpoint, entityUuid, payloadOrError as Record<string, unknown>);
+					} else {
+						await createRecord(endpoint, payloadOrError as Record<string, unknown>);
+					}
+
+					const offlineSaved = { ...payloadOrError, uuid: entityUuid || (payloadOrError as any).uuid };
+					const mapped = await Promise.resolve(
+						mapServerToForm(offlineSaved, state.fields),
+					);
+					replaceFields(mapped);
+					setMeta({
+						isLoading: false,
+						isEditMode: true,
+						uuid: offlineSaved.uuid,
+					});
+					markClean();
+					setError("Сохранено локально. Синхронизация произойдёт при восстановлении связи.");
+					if (uniqId) updatePaneLabel(uniqId, buildPaneLabel(offlineSaved));
+					return { success: true, savedData: offlineSaved };
+				} catch (offlineErr) {
+					console.error("[FormStore] Offline save failed:", offlineErr);
+				}
+			}
+
 			let msg = "Не удалось сохранить";
 			if (isNetworkError(err))
 				msg = "Нет связи с сервером. Изменения сохранены локально и будут отправлены при восстановлении соединения.";

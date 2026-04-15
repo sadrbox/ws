@@ -1,5 +1,4 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosError } from "axios";
-import { isNetworkError, buildEntryFromAxiosConfig, enqueue } from "src/services/offlineQueue";
 
 const LOCAL_API_URL = "http://192.168.1.112:3000/api/v1";
 const REMOTE_API_URL = "https://api.gidra.kz/api/v1";
@@ -95,60 +94,67 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Interceptor: offline queue — при ошибке сети сохраняем мутирующие запросы
+// Interceptor: offline — при ошибке сети мутирующие запросы получают _offline заглушку
+// Фактическое сохранение в IndexedDB делает useFormStore / offlineDataService
 // ═══════════════════════════════════════════════════════════════════════════
 apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
-	// Только ошибки сети (нет response / timeout / ERR_NETWORK)
-	if (!isNetworkError(error)) {
+	// Определяем ошибку сети
+	if (!isNetworkLikeError(error)) {
 		return Promise.reject(error);
 	}
 
 	const config = error.config;
 	if (!config) return Promise.reject(error);
 
-	// Если это уже retry-запрос из sync engine — не ставим в очередь повторно
+	// Если это retry-запрос из sync engine — не оборачиваем
 	if ((config as any)._fromSyncEngine) {
 		return Promise.reject(error);
 	}
 
-	// Auth-запросы не ставим в очередь — у них своя offline-логика
+	// Health-check запросы не оборачиваем — они используются для определения статуса сети
+	if ((config as any)._healthCheck) {
+		return Promise.reject(error);
+	}
+
+	// Auth-запросы не оборачиваем
 	const url = config.url || "";
-	if (url.includes("/auth/")) {
+	if (url.includes("/auth/") || url.includes("/sync/")) {
 		return Promise.reject(error);
 	}
 
-	// Формируем запись для очереди
-	const entry = buildEntryFromAxiosConfig(config);
-	if (!entry) {
-		// GET-запросы и FormData не сохраняем — просто отбрасываем
+	const method = (config.method || "").toUpperCase();
+	// Только мутирующие запросы (POST, PUT, DELETE)
+	if (!["POST", "PUT", "DELETE"].includes(method)) {
 		return Promise.reject(error);
 	}
 
-	// Сохраняем в IndexedDB
-	try {
-		const id = await enqueue(entry);
-		console.warn(
-			`[Offline] Запрос сохранён в очередь (id=${id}): ${entry.method} ${entry.url}`,
-		);
-
-		// Возвращаем "успешный" ответ с offline-меткой,
-		// чтобы форма не показывала ошибку, а показала уведомление
-		return {
-			data: {
-				_offline: true,
-				_queueId: id,
-				message: "Данные сохранены локально. Синхронизация произойдёт при восстановлении связи.",
-			},
-			status: 202,
-			statusText: "Accepted (Offline)",
-			headers: {},
-			config,
-		};
-	} catch (enqueueError) {
-		console.error("[Offline] Не удалось сохранить в очередь:", enqueueError);
+	// FormData не сериализуем
+	if (config.data instanceof FormData) {
 		return Promise.reject(error);
 	}
+
+	// Возвращаем "успешный" ответ с offline-меткой,
+	// чтобы вызывающий код (useFormStore) обработал offline-сохранение
+	return {
+		data: {
+			_offline: true,
+			message: "Данные сохранены локально. Синхронизация произойдёт при восстановлении связи.",
+		},
+		status: 202,
+		statusText: "Accepted (Offline)",
+		headers: {},
+		config,
+	};
 });
+
+/** Проверяет, является ли ошибка сетевой */
+function isNetworkLikeError(error: any): boolean {
+	if (!error) return false;
+	if (error.code === "ERR_NETWORK" || error.code === "ECONNABORTED") return true;
+	if (error.message === "Network Error") return true;
+	if (error.isAxiosError && !error.response) return true;
+	return false;
+}
 
 /** Типизированные сокращения для удобства */
 export const api = {

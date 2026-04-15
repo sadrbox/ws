@@ -1,28 +1,18 @@
 /**
- * networkStatus — сервис отслеживания состояния сети + движок синхронизации.
+ * networkStatus — сервис отслеживания состояния сети + интеграция с syncManager.
+ *
+ * Ключевые принципы:
+ *  - НЕ спамить запросы при оффлайне (exponential backoff)
+ *  - Сначала проверять navigator.onLine, и только если true — делать ping
+ *  - При переходе online → автозапуск syncManager.fullSync()
+ *  - Единая очередь изменений через _pendingChanges в Dexie (offlineDb)
  *
  * Подписки:
  *  - subscribeNetwork(listener) — уведомление при смене online/offline
- *  - subscribeQueue (из offlineQueue) — уведомление при изменении очереди
- *
- * Синхронизация:
- *  - При переходе в online → автозапуск processQueue()
- *  - processQueue() обходит pending-записи и воспроизводит их через apiClient
- *  - При 409 (Conflict) — загружает серверную версию и помечает entry «conflict»
+ *  - subscribeSyncStatus(listener) — уведомление при смене статуса синхронизации
  */
 
 import apiClient from "src/services/api/client";
-import {
-  getEntriesByStatus,
-  updateEntry,
-  removeEntry,
-  clearSynced,
-  type QueueEntry,
-  subscribeQueue,
-  getQueueRevision,
-  getQueueSummary,
-  type QueueSummary,
-} from "./offlineQueue";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ONLINE / OFFLINE STATE
@@ -32,6 +22,9 @@ type Listener = () => void;
 const networkListeners = new Set<Listener>();
 
 let _isOnline: boolean = navigator.onLine;
+
+/** Счётчик последовательных неудачных health-check */
+let _consecutiveFailures = 0;
 
 function notifyNetwork(): void {
   for (const l of networkListeners) l();
@@ -50,50 +43,114 @@ export function getIsOnline(): boolean {
 function handleOnline(): void {
   if (_isOnline) return;
   _isOnline = true;
+  _consecutiveFailures = 0;
   notifyNetwork();
-  // Автоматический запуск синхронизации
-  processQueue().catch(console.error);
+  console.info("[Network] 🟢 Онлайн — запуск синхронизации");
+  // Автоматический запуск синхронизации через syncManager
+  triggerSync().catch(() => {});
 }
 function handleOffline(): void {
   if (!_isOnline) return;
   _isOnline = false;
   notifyNetwork();
+  console.info("[Network] 🔴 Оффлайн — работаем локально");
 }
 
 window.addEventListener("online", handleOnline);
 window.addEventListener("offline", handleOffline);
 
-// Периодический health-check (navigator.onLine ненадёжен)
-let healthCheckTimer: ReturnType<typeof setInterval> | null = null;
+// ═══════════════════════════════════════════════════════════════════════════
+// HEALTH-CHECK с intelligent backoff
+// ═══════════════════════════════════════════════════════════════════════════
+
+let healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Базовый интервал (передаётся в startHealthCheck) */
+let _baseInterval = 30_000;
+
+/**
+ * Вычисляет следующий интервал с exponential backoff:
+ *  - Если онлайн: используем базовый интервал
+ *  - Если оффлайн: backoff до макс. 5 мин (base * 2^failures, cap 300s)
+ */
+function getNextInterval(): number {
+  if (_isOnline && _consecutiveFailures === 0) return _baseInterval;
+  const backoff = Math.min(_baseInterval * Math.pow(2, _consecutiveFailures), 300_000);
+  return backoff;
+}
+
+/** Запланировать следующую проверку */
+function scheduleNextCheck(): void {
+  if (healthCheckTimer) clearTimeout(healthCheckTimer);
+  const interval = getNextInterval();
+  healthCheckTimer = setTimeout(doHealthCheck, interval);
+}
+
+async function doHealthCheck(): Promise<void> {
+  // 1. Быстрая проверка: если navigator.onLine = false → не делаем запрос
+  if (!navigator.onLine) {
+    if (_isOnline) handleOffline();
+    _consecutiveFailures++;
+    scheduleNextCheck();
+    return;
+  }
+
+  // 2. Реальный ping к API (через fetch вместо axios — меньше шума в консоли)
+  try {
+    const base = apiClient.defaults.baseURL || "/api/v1";
+    const healthUrl = base.replace(/\/v1\/?$/, "/health");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch(healthUrl, {
+      method: "HEAD",
+      signal: controller.signal,
+      // Не добавляем credentials/headers — минимальный ping
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok || res.status === 204) {
+      // Успех — сервер доступен
+      _consecutiveFailures = 0;
+      if (!_isOnline) handleOnline();
+    } else {
+      // Сервер ответил, но с ошибкой (4xx/5xx) — всё равно "онлайн" (связь есть)
+      _consecutiveFailures = 0;
+      if (!_isOnline) handleOnline();
+    }
+  } catch {
+    // Неудача — сервер недоступен
+    _consecutiveFailures++;
+    // Не переключаемся в offline сразу при одном сбое — нужно 2+ подряд
+    if (_consecutiveFailures >= 2 && _isOnline) {
+      handleOffline();
+    }
+  }
+
+  scheduleNextCheck();
+}
 
 export function startHealthCheck(intervalMs = 30_000): void {
   stopHealthCheck();
-  healthCheckTimer = setInterval(async () => {
-    try {
-      // Лёгкий ping к API (HEAD на /health — относительно базового URL без /v1)
-      const base = apiClient.defaults.baseURL || "/api/v1";
-      const healthUrl = base.replace(/\/v1\/?$/, "/health");
-      await apiClient.head(healthUrl, { baseURL: "" , timeout: 5000 });
-      if (!_isOnline) handleOnline();
-    } catch {
-      if (_isOnline && !navigator.onLine) handleOffline();
-    }
-  }, intervalMs);
+  _baseInterval = intervalMs;
+  _consecutiveFailures = 0;
+  // Первую проверку делаем сразу (через 0ms), чтобы быстро определить
+  // доступность сервера ДО того, как UI начнёт слать запросы
+  doHealthCheck();
 }
 
 export function stopHealthCheck(): void {
   if (healthCheckTimer) {
-    clearInterval(healthCheckTimer);
+    clearTimeout(healthCheckTimer);
     healthCheckTimer = null;
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SYNC ENGINE
+// SYNC STATUS
 // ═══════════════════════════════════════════════════════════════════════════
 
 let isSyncing = false;
-let syncAborted = false;
 
 const syncListeners = new Set<Listener>();
 
@@ -111,189 +168,62 @@ export function getIsSyncing(): boolean {
 }
 
 /**
- * Воспроизвести очередь отложенных операций.
+ * Запустить полную синхронизацию через syncManager.
  * Вызывается автоматически при переходе в online, или вручную из UI.
- * Возвращает сводку результатов.
  */
-export async function processQueue(): Promise<QueueSummary> {
-  if (isSyncing) return getQueueSummary();
+export async function triggerSync(): Promise<void> {
+  if (isSyncing || !_isOnline) return;
   isSyncing = true;
-  syncAborted = false;
   notifySyncStatus();
 
   try {
-    const pending = await getEntriesByStatus("pending");
-    // Также ретрай failed-записей (до 5 попыток)
-    const failed = (await getEntriesByStatus("failed")).filter(e => e.attempts < 5);
-    const toProcess = [...pending, ...failed];
-
-    for (const entry of toProcess) {
-      if (syncAborted || !_isOnline) break;
-      await processSingleEntry(entry);
-    }
-
-    // Автоочистка: удаляем synced старше 24ч
-    await clearSynced();
+    const { fullSync } = await import("./syncManager");
+    await fullSync();
+  } catch (err) {
+    console.error("[NetworkStatus] Sync failed:", err);
   } finally {
     isSyncing = false;
     notifySyncStatus();
   }
-
-  return getQueueSummary();
 }
 
-/** Отменить текущую синхронизацию */
-export function abortSync(): void {
-  syncAborted = true;
-}
-
-/** Обработать одну запись очереди */
-async function processSingleEntry(entry: QueueEntry): Promise<void> {
-  if (!entry.id) return;
-
-  await updateEntry(entry.id, { status: "syncing", attempts: entry.attempts + 1 });
-
-  try {
-    switch (entry.method) {
-      case "POST":
-        await apiClient.post(entry.url, entry.payload, { _fromSyncEngine: true } as any);
-        break;
-      case "PUT":
-        await apiClient.put(entry.url, entry.payload, { _fromSyncEngine: true } as any);
-        break;
-      case "DELETE":
-        await apiClient.delete(entry.url, { _fromSyncEngine: true } as any);
-        break;
-    }
-
-    // Успех — помечаем synced
-    await updateEntry(entry.id, {
-      status: "synced",
-      lastError: undefined,
-    });
-  } catch (err: any) {
-    // Нет сети — ставим обратно pending (не считаем это попыткой)
-    if (isNetworkLike(err)) {
-      await updateEntry(entry.id, {
-        status: "pending",
-        attempts: entry.attempts, // не увеличиваем
-      });
-      handleOffline();
-      return;
-    }
-
-    // 409 Conflict — загружаем серверную версию
-    if (err.response?.status === 409) {
-      let serverData: Record<string, unknown> | undefined;
-      try {
-        if (entry.entityUuid) {
-          const res = await apiClient.get(`/${entry.endpoint}/${entry.entityUuid}`);
-          serverData = res.data?.item ?? res.data;
-        }
-      } catch {
-        // Не удалось загрузить серверную версию — не страшно
-      }
-      await updateEntry(entry.id, {
-        status: "conflict",
-        lastError: err.response?.data?.message || "Конфликт: данные были изменены на сервере",
-        serverData,
-      });
-      return;
-    }
-
-    // Другая ошибка сервера
-    const msg = err.response?.data?.message || err.message || "Неизвестная ошибка";
-    await updateEntry(entry.id, {
-      status: "failed",
-      lastError: msg,
-    });
-  }
-}
-
-function isNetworkLike(err: any): boolean {
-  if (!err) return false;
-  if (err.code === "ERR_NETWORK" || err.code === "ECONNABORTED") return true;
-  if (err.message === "Network Error") return true;
-  if (err.isAxiosError && !err.response) return true;
-  return false;
+/**
+ * @deprecated Используйте triggerSync(). Оставлено для обратной совместимости.
+ */
+export async function processQueue(): Promise<any> {
+  await triggerSync();
+  // Возвращаем совместимый формат
+  const { getPendingChangesCount } = await import("./offlineDb");
+  const pending = await getPendingChangesCount();
+  return { pending, syncing: 0, synced: 0, failed: 0, conflict: 0, total: pending };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CONFLICT RESOLUTION
+// CONFLICT RESOLUTION (делегируем syncManager)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Принять локальную версию — повторить запрос с force-флагом.
- * Если сервер поддерживает X-Force-Overwrite, используем его;
- * иначе просто повторяем PUT.
+ * Принять локальную версию — повторить запрос.
  */
-export async function resolveConflictLocal(entryId: number): Promise<boolean> {
-  const { getEntry } = await import("./offlineQueue");
-  const entry = await getEntry(entryId);
-  if (!entry || entry.status !== "conflict") return false;
-
+export async function resolveConflictLocal(conflict: any): Promise<boolean> {
   try {
-    switch (entry.method) {
-      case "PUT":
-        await apiClient.put(entry.url, entry.payload, {
-          headers: { "X-Force-Overwrite": "true" },
-        });
-        break;
-      case "POST":
-        await apiClient.post(entry.url, entry.payload);
-        break;
-      case "DELETE":
-        await apiClient.delete(entry.url);
-        break;
-    }
-    await updateEntry(entryId, { status: "synced", lastError: undefined, serverData: undefined });
-    return true;
-  } catch (err: any) {
-    await updateEntry(entryId, {
-      status: "failed",
-      lastError: err.response?.data?.message || err.message,
-    });
+    const { resolveConflictKeepLocal } = await import("./syncManager");
+    return await resolveConflictKeepLocal(conflict);
+  } catch (err) {
+    console.error("[NetworkStatus] resolveConflictLocal failed:", err);
     return false;
   }
 }
 
 /**
- * Принять серверную версию — отбросить локальные изменения, удалить запись из очереди.
+ * Принять серверную версию — обновить локальную.
  */
-export async function resolveConflictServer(entryId: number): Promise<void> {
-  await removeEntry(entryId);
-}
-
-/**
- * Принять пользовательский мёрж — отправить смёрженные данные.
- */
-export async function resolveConflictMerge(
-  entryId: number,
-  mergedPayload: Record<string, unknown>,
-): Promise<boolean> {
-  const { getEntry } = await import("./offlineQueue");
-  const entry = await getEntry(entryId);
-  if (!entry || entry.status !== "conflict") return false;
-
+export async function resolveConflictServer(conflict: any): Promise<boolean> {
   try {
-    if (entry.method === "PUT") {
-      await apiClient.put(entry.url, mergedPayload, {
-        headers: { "X-Force-Overwrite": "true" },
-      });
-    } else if (entry.method === "POST") {
-      await apiClient.post(entry.url, mergedPayload);
-    }
-    await updateEntry(entryId, { status: "synced", lastError: undefined, serverData: undefined });
-    return true;
-  } catch (err: any) {
-    await updateEntry(entryId, {
-      status: "failed",
-      lastError: err.response?.data?.message || err.message,
-    });
+    const { resolveConflictKeepServer } = await import("./syncManager");
+    return await resolveConflictKeepServer(conflict);
+  } catch (err) {
+    console.error("[NetworkStatus] resolveConflictServer failed:", err);
     return false;
   }
 }
-
-// Реэкспортируем нужные функции из offlineQueue для удобства
-export { subscribeQueue, getQueueRevision, getQueueSummary };
-export type { QueueSummary, QueueEntry };

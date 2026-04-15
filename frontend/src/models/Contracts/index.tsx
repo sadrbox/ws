@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback } from "react";
+import { FC, useMemo, useCallback, useState } from "react";
 import { useAppContext } from "src/app";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
@@ -7,6 +7,7 @@ import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import FilesPanel from "src/models/Files";
+import PrintPreview from "./PrintPreview";
 import { Divider, Field, FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
@@ -14,6 +15,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
 import { useFormStore } from "src/hooks/useFormStore";
+import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import { useModelListState } from "src/hooks/useModelListState";
 
@@ -43,8 +45,11 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
+  const { canWrite } = useAccessRight("Contract");
   const data = paneProps.data;
   const defaultOrg = useDefaultOrganization();
+  const [filesRevision, setFilesRevision] = useState(0);
+  const handleFilesChange = useCallback(() => setFilesRevision(r => r + 1), []);
 
   const initialFields: TFields | undefined = (() => {
     if (!data || data.uuid) return undefined;
@@ -130,10 +135,11 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
       },
     ];
     if (form.isEditMode && form.fields.uuid) {
-      t.push({ id: "files", label: translate("files") || "Файлы", component: <FilesPanel ownerType="contract" ownerUuid={form.fields.uuid} /> });
+      t.push({ id: "files", label: translate("files") || "Файлы", component: <FilesPanel ownerType="contract" ownerUuid={form.fields.uuid} onFilesChange={handleFilesChange} /> });
+      t.push({ id: "print", label: "Печать", component: <PrintPreview ownerUuid={form.fields.uuid} filesRevision={filesRevision} /> });
     }
     return t;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, filesRevision, handleFilesChange]);
 
   return (
     <ModelFormWrapper
@@ -147,6 +153,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
       error={form.error}
       errorRevision={form.errorRevision}
       onErrorDismiss={() => form.setError(null)}
+      readonly={!canWrite}
       isDirty={form.isDirty}
     />
   );

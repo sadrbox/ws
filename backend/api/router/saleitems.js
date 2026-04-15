@@ -51,7 +51,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { saleUuid, productUuid, quantity, price, lineNumber } = req.body;
+		const { saleUuid, productUuid, quantity, price, lineNumber, unitOfMeasure, vatRate, discountPercent } = req.body;
 		if (!saleUuid)
 			return res
 				.status(400)
@@ -59,7 +59,14 @@ router.post(`/${ROUTE}`, async (req, res) => {
 
 		const qty = quantity != null ? parseFloat(quantity) : 0;
 		const prc = price != null ? parseFloat(price) : 0;
-		const amt = Math.round(qty * prc * 100) / 100;
+		const discPct = discountPercent != null ? parseFloat(discountPercent) : 0;
+		const vRate = vatRate != null ? parseFloat(vatRate) : 12;
+
+		const baseAmount = Math.round(qty * prc * 100) / 100;
+		const discAmt = Math.round(baseAmount * discPct / 100 * 100) / 100;
+		const amountAfterDiscount = baseAmount - discAmt;
+		const vat = Math.round(amountAfterDiscount * vRate / 112 * 100) / 100;
+		const amt = amountAfterDiscount;
 
 		// Определяем номер строки если не указан
 		let ln = lineNumber != null ? Number(lineNumber) : null;
@@ -79,6 +86,11 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				quantity: qty,
 				price: prc,
 				amount: amt,
+				unitOfMeasure: unitOfMeasure?.trim?.() ?? null,
+				vatRate: vRate,
+				vatAmount: vat,
+				discountPercent: discPct,
+				discountAmount: discAmt,
 				lineNumber: ln,
 			},
 			include: { product: { include: { brand: true } } },
@@ -107,6 +119,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			data.productUuid = req.body.productUuid || null;
 		if (req.body.lineNumber !== undefined)
 			data.lineNumber = Number(req.body.lineNumber) || 0;
+		if (req.body.unitOfMeasure !== undefined)
+			data.unitOfMeasure = req.body.unitOfMeasure?.trim?.() ?? null;
 
 		const qty =
 			req.body.quantity !== undefined
@@ -114,18 +128,34 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				: undefined;
 		const prc =
 			req.body.price !== undefined ? parseFloat(req.body.price) : undefined;
+		const discPct =
+			req.body.discountPercent !== undefined ? parseFloat(req.body.discountPercent) : undefined;
+		const vRate =
+			req.body.vatRate !== undefined ? parseFloat(req.body.vatRate) : undefined;
 
 		if (qty !== undefined) data.quantity = qty;
 		if (prc !== undefined) data.price = prc;
+		if (discPct !== undefined) data.discountPercent = discPct;
+		if (vRate !== undefined) data.vatRate = vRate;
 
-		// Если обновились кол-во или цена — пересчитать сумму
-		if (qty !== undefined || prc !== undefined) {
+		// Если обновились кол-во, цена, скидка или НДС — пересчитать суммы
+		if (qty !== undefined || prc !== undefined || discPct !== undefined || vRate !== undefined) {
 			const existing = await prisma[MODEL].findUnique({ where: w });
 			if (!existing)
 				return res.status(404).json({ success: false, message: "Не найдено" });
 			const finalQty = qty !== undefined ? qty : Number(existing.quantity);
 			const finalPrc = prc !== undefined ? prc : Number(existing.price);
-			data.amount = Math.round(finalQty * finalPrc * 100) / 100;
+			const finalDiscPct = discPct !== undefined ? discPct : Number(existing.discountPercent);
+			const finalVatRate = vRate !== undefined ? vRate : Number(existing.vatRate);
+
+			const baseAmount = Math.round(finalQty * finalPrc * 100) / 100;
+			const discAmt = Math.round(baseAmount * finalDiscPct / 100 * 100) / 100;
+			const amountAfterDiscount = baseAmount - discAmt;
+			const vatAmt = Math.round(amountAfterDiscount * finalVatRate / 112 * 100) / 100;
+
+			data.amount = amountAfterDiscount;
+			data.discountAmount = discAmt;
+			data.vatAmount = vatAmt;
 		}
 
 		const item = await prisma[MODEL].update({
@@ -177,12 +207,20 @@ async function recalcSaleAmount(saleUuid) {
 	try {
 		const result = await prisma[MODEL].aggregate({
 			where: { saleUuid },
-			_sum: { amount: true },
+			_sum: { amount: true, vatAmount: true, discountAmount: true },
 		});
-		const total = result._sum.amount ? Number(result._sum.amount) : 0;
+		const totalAmount = result._sum.amount ? Number(result._sum.amount) : 0;
+		const totalVat = result._sum.vatAmount ? Number(result._sum.vatAmount) : 0;
+		const totalDiscount = result._sum.discountAmount ? Number(result._sum.discountAmount) : 0;
+		const amountWithoutVat = Math.round((totalAmount - totalVat) * 100) / 100;
 		await prisma.sale.update({
 			where: { uuid: saleUuid },
-			data: { amount: total },
+			data: {
+				amount: totalAmount,
+				vatAmount: totalVat,
+				discountAmount: totalDiscount,
+				amountWithoutVat: amountWithoutVat,
+			},
 		});
 	} catch (err) {
 		console.error("recalcSaleAmount error:", err);
