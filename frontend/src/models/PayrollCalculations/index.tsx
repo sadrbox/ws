@@ -11,6 +11,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -95,12 +96,12 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
       ...(prev ?? DEFAULT_FIELDS), ...d,
       documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 10) ?? "",
       description: d.description ?? "", period: d.period ?? "",
-      employeeUuid: d.employeeUuid ?? prev?.employeeUuid ?? "",
-      employeeName: d.employee?.fullName ?? prev?.employeeName ?? "",
-      organizationUuid: d.organizationUuid ?? prev?.organizationUuid ?? "",
-      organizationName: d.organization?.shortName ?? prev?.organizationName ?? "",
-      positionUuid: d.positionUuid ?? prev?.positionUuid ?? "",
-      positionName: d.position?.shortName ?? prev?.positionName ?? "",
+      employeeUuid: d.employeeUuid ?? "",
+      employeeName: d.employee?.fullName ?? "",
+      organizationUuid: d.organizationUuid ?? "",
+      organizationName: d.organization?.shortName ?? "",
+      positionUuid: d.positionUuid ?? "",
+      positionName: d.position?.shortName ?? "",
       baseSalary: d.baseSalary != null ? String(d.baseSalary) : "",
       opv: d.opv != null ? String(d.opv) : "",
       ipn: d.ipn != null ? String(d.ipn) : "",
@@ -128,7 +129,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
       totalExpense: fd.totalExpense ? parseFloat(fd.totalExpense) : 0,
       status: fd.status || "draft",
     }),
-    buildPaneLabel: (saved) => `${translate(LIST_NAME) || FORM_LABEL}: ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, FORM_LABEL, saved),
   });
 
   /** При изменении оклада — автоматический пересчёт всех удержаний */
@@ -145,7 +146,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.setFields]);
 
   const tabs = useMemo(() => [
-    { id: "tab-details", label: translate("general") || "Общие сведения", component: (
+    { id: "tab-details", label: translate("general") || "Основное", component: (
       <div className={styles.FormBodyParts}>
         <Group align="row" gap="12px" className={styles.Form}>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 700 }}>
@@ -192,7 +193,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleSalaryChange]);
 
   return (
-    <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );

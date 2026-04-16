@@ -168,7 +168,7 @@ const SaleItemsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
       <div className={styles.FormBody}><Tabs tabs={[
         {
-          id: "general", label: translate("general") || "Общие сведения", component: (
+          id: "general", label: translate("general") || "Основное", component: (
             <div className={styles.FormBodyParts}>
               <Group align="row" gap="12px" className={styles.Form}>
                 <LookupField label="Номенклатура" name={`${formUid}_product`} width="339px"

@@ -8,6 +8,7 @@ import SaleItemsForm from "./SaleItemsForm";
 import { translate } from "src/i18";
 import columnsJson from "./saleItemsColumns.json";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
+import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "saleitems";
 const COMPONENT_NAME = "SaleItemsList_part";
@@ -208,9 +209,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
       _ctx.refetch();
     };
     addPane({
-      label: isEdit
-        ? `${t("SaleItemsList")}: ${(data as any)?.product?.shortName || t("noName")} • ${data?.id ?? "?"}`
-        : `${t("SaleItemsList")}: ${t("new")}`,
+      label: makePaneLabelFromData("SaleItemsList", "Товары реализации", isEdit ? data as any : null),
       component: SaleItemsForm,
       data: { ...(data ?? {}), saleUuid } as any,
       onSave: refresh,

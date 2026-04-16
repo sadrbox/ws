@@ -203,7 +203,7 @@ const LookupField: FC<LookupFieldProps> = ({
     if (disabled) return;
     addPane({
       component: SelectPaneWrapper,
-      label: `Выбор: ${typeof label === "string" ? label : endpoint}`,
+      label: `Выбор: ${typeof label === "string" ? label : getByEndpoint(endpoint)?.label ?? endpoint}`,
       isSelector: true,
       data: { endpoint, listComponent, extraParams } as any,
       onSelectResult: (item: Record<string, any>) => {
@@ -242,7 +242,7 @@ const LookupField: FC<LookupFieldProps> = ({
       if (!FormComp) return;
       const t = translate;
       addPane({
-        label: `${t(entry.formName) || endpoint}: ${displayValue || value}`,
+        label: `${t(entry.formName) || endpoint}`,
         component: FormComp,
         data: { uuid: value } as any,
       });

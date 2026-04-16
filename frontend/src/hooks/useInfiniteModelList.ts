@@ -9,6 +9,7 @@ import apiClient from "src/services/api/client";
 import { useRequestQueue } from "./useRequestQueue";
 import { fetchList, isSyncableEndpoint } from "src/services/offlineDataService";
 import { getIsOnline } from "src/services/networkStatus";
+import { isNetworkError as isNetworkLikeError } from "src/services/networkUtils";
 
 // ⚠️ ГЛОБАЛЬНЫЙ REF для хранения adaptiveLimit
 export const GLOBAL_ADAPTIVE_LIMIT_REF = { current: 200 };
@@ -306,13 +307,4 @@ export function useInfiniteModelList<TData = unknown>({
 	}, [cancelAll]);
 
 	return { ...result, allItems, total, isAnythingLoading, cancelAllRequests: cancelAll, dataUpdatedAt };
-}
-
-/** Определяет, является ли ошибка проблемой сети */
-function isNetworkLikeError(err: any): boolean {
-	if (!err) return false;
-	if (err.code === "ERR_NETWORK" || err.code === "ECONNABORTED") return true;
-	if (err.message === "Network Error") return true;
-	if (err.isAxiosError && !err.response) return true;
-	return false;
 }

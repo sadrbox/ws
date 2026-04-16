@@ -16,6 +16,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "organizations";
 const LIST_NAME = "OrganizationsList";
@@ -72,7 +73,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       ...d,
-      bin: d.bin ?? prev?.bin ?? "",
+      bin: d.bin ?? "",
       shortName: d.shortName ?? "",
       displayName: d.displayName ?? "",
     }),
@@ -82,7 +83,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       return { bin, shortName: fd.shortName?.trim() || null, displayName: fd.displayName?.trim() || null };
     },
     buildPaneLabel: (saved) =>
-      `${translate(LIST_NAME) || "Организации"}: ${saved.shortName || saved.bin || "?"} • ${saved.id ?? "?"}`,
+      makePaneLabel(LIST_NAME, "Организации", saved, saved.shortName || saved.bin),
     afterLoad: invalidateSubTables,
     afterSave: async () => {
       // commitAllTables уже вызван автоматически внутри useFormStore.submit()
@@ -97,7 +98,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     {
-      id: "tab0", label: translate("general") || "Общие сведения", component: (
+      id: "tab0", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
@@ -165,6 +166,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <ModelFormWrapper
+      paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}

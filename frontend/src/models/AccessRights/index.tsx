@@ -13,6 +13,7 @@ import SubTable, { type SubTableContext } from "src/components/SubTable";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 
 const MODEL_ENDPOINT = "access-rights";
@@ -84,13 +85,12 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
         userUuid: fd.userUuid,
       };
     },
-    buildPaneLabel: (saved) =>
-      `Право доступа: ${saved.modelName || "?"} • ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel("AccessRightsList", "Право доступа", saved),
   });
 
   const tabs = useMemo(() => [
     {
-      id: "general", label: translate("general") || "Общие сведения", component: (
+      id: "general", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
@@ -130,6 +130,7 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <ModelFormWrapper
+      paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
@@ -247,9 +248,7 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
       _ctx.refetch();
     };
     addPane({
-      label: isEdit
-        ? `Право доступа: ${data?.modelName || t("noName")} • ${data?.id ?? "?"}`
-        : `Право доступа: ${t("new")}`,
+      label: makePaneLabelFromData("AccessRightsList", "Право доступа", isEdit ? data as any : null),
       component: AccessRightsForm,
       data: newData,
       onSave: refresh,

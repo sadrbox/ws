@@ -5,7 +5,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
-import { Field } from "src/components/Field";
+import { Divider, Field } from "src/components/Field";
 import { Group } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import ContactsTable from "../Contacts/ContactsTable";
@@ -13,6 +13,7 @@ import EmployeeHistoryTable from "./EmployeeHistoryTable";
 import AvatarUpload from "src/components/AvatarUpload";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -59,7 +60,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
       ...(prev ?? DEFAULT_FIELDS),
       lastName: d.lastName ?? "", firstName: d.firstName ?? "",
       middleName: d.middleName ?? "", fullName: d.fullName ?? "", iin: d.iin ?? "",
-      avatarPath: d.avatarPath ?? prev?.avatarPath ?? "",
+      avatarPath: d.avatarPath ?? "",
       id: d.id, uuid: d.uuid,
     }),
     buildPayload: (fd) => {
@@ -69,8 +70,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
         middleName: fd.middleName.trim(), fullName: fd.fullName.trim(), iin: fd.iin.trim(),
       };
     },
-    buildPaneLabel: (saved) =>
-      `${translate(LIST_NAME) || "Сотрудники"}: ${saved.fullName || saved.lastName || "?"} • ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Сотрудники", saved),
     afterLoad: invalidateSubTables,
     afterSave: async () => { setTimeout(invalidateSubTables, 0); },
   });
@@ -90,7 +90,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general") || "Общие сведения", component: (
+      { id: "general", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, maxWidth: 640 }}>
@@ -106,10 +106,13 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
                 <Field label="ИИН" name={`${form.formUid}_iin`} minWidth="200px" value={form.fields.iin} onChange={e => form.setField("iin", e.target.value)} disabled={form.isLoading} />
               </Group>
               {form.isEditMode && (
+                <><Divider />
                 <Group align="row" gap="12px" className={styles.Form}>
-                  <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-                </Group>
+                  <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                    <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                    <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+                  </div>
+                </Group></>
               )}
             </div>
             {form.isEditMode && form.fields.uuid && (
@@ -133,7 +136,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, handleNameFieldChange, contacts, history]);
 
   return (
-    <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );

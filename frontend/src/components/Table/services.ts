@@ -113,13 +113,10 @@ export function getModelColumns(
 	if (storageColumns !== null) {
 		try {
 			const cached: TColumn[] = JSON.parse(storageColumns);
-			// Проверяем актуальность кэша: набор identifier-ов должен совпадать
-			const initIds = new Set(defaults.map((c) => c.identifier));
-			const cachedIds = new Set(cached.map((c) => c.identifier));
-			const isValid =
-				initIds.size === cachedIds.size &&
-				[...initIds].every((id) => cachedIds.has(id));
-			if (isValid) {
+			// Проверяем актуальность кэша: набор identifier + type должен совпадать
+			const initSig = defaults.map((c) => `${c.identifier}:${c.type}`).sort().join(",");
+			const cachedSig = cached.map((c) => `${c.identifier}:${c.type}`).sort().join(",");
+			if (initSig === cachedSig) {
 				columns = cached;
 			} else {
 				// Столбцы изменились — сбрасываем устаревший кэш

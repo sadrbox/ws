@@ -8,6 +8,7 @@ import { ContractsForm } from "./index";
 import { translate } from "src/i18";
 import columnsJson from "./columns.json";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "contracts";
 const COMPONENT_NAME = "ContractsList_part";
@@ -139,9 +140,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
     // Формируем имя-поле для формы: organizationUuid → organizationName, counterpartyUuid → counterpartyName
     const nameKey = parentKey.replace(/Uuid$/, "Name");
     addPane({
-      label: isEdit
-        ? `${t("ContractsList")}: ${data?.shortName || data?.contractNumber || t("noName")} • ${data?.id ?? "?"}`
-        : `${t("ContractsList")}: ${t("new")}`,
+      label: makePaneLabelFromData("ContractsList", "Договора", isEdit ? data as any : null, (data?.shortName || data?.contractNumber) as string),
       component: ContractsForm,
       data: isEdit ? data : { [parentKey]: parentUuid, [nameKey]: parentName } as any,
       onSave: refresh,

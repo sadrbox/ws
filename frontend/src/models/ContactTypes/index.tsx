@@ -11,6 +11,7 @@ import styles from "src/styles/main.module.scss";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import { useModelListState } from "src/hooks/useModelListState";
 import { useAppContext } from "src/app";
@@ -46,13 +47,12 @@ const ContactTypesForm: FC<Partial<TPane>> = (paneProps) => {
       if (!fd.shortName?.trim()) return "Наименование обязательно";
       return { shortName: fd.shortName.trim() };
     },
-    buildPaneLabel: (saved) =>
-      `${translate("ContactTypesList") || "ContactTypesList"}: ${saved.shortName || "?"} • ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel("ContactTypesList", "Типы контактов", saved),
   });
 
   const tabs = useMemo(() => [
     {
-      id: "general", label: translate("general") || "Общие сведения", component: (
+      id: "general", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
@@ -77,6 +77,7 @@ const ContactTypesForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <ModelFormWrapper
+      paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
@@ -111,7 +112,7 @@ const ContactTypesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
     const d = formProps.data;
     const isEdit = !!d?.uuid;
     addPane({
-      label: isEdit ? `${t(componentName)}: ${d?.shortName || t("noName")} • ${d?.id ?? "?"}` : `${t(componentName)}: ${t("new")}`,
+      label: makePaneLabelFromData("ContactTypesList", "Типы контактов", isEdit ? d as any : null, d?.shortName as string),
       component: ContactTypesForm, data: d, onSave: () => refetch(), onClose: () => refetch(),
     });
   }, [addPane, t, refetch, componentName]);

@@ -42,7 +42,7 @@ body {
 .NavbarWrapper {
 	position: sticky;
 	top: 0px;
-	z-index: 4;
+	z-index: 5;
 	border-bottom: 0px solid $color10;
 	display: flex;
 	align-items: center;
@@ -50,6 +50,7 @@ body {
 	box-shadow: 0px 0px 3px rgba(#000, 0.4);
 	height: $heightFieldInput + 21px;
 	flex-wrap: nowrap;
+	flex-shrink: 0;
 	overflow: visible;
 	// position: relative нужен для абсолютного позиционирования мобильного меню
 	// sticky уже задаёт containing block, но на мобильных нужен явный relative
@@ -234,11 +235,6 @@ body {
 		to   { opacity: 1; transform: translateY(0); }
 	}
 
-	// Overlay — подстраиваем top под авторазмер навбара
-	.NavbarOverlayWrapper {
-		top: $heightFieldInput + 21px;
-	}
-
 	// NavListWrapper — одна колонка
 	.NavListWrapper {
 		h1 {
@@ -298,17 +294,30 @@ body {
 }
 .NavbarOverlayWrapper {
 	position: absolute;
-	display: flex;
-	flex: 1;
-	top: $heightFieldInput + 21px;
-	bottom: 0;
-	left: 0px;
+	top: var(--navbar-h, #{$heightFieldInput + 21px}); // динамически через ResizeObserver, fallback на SCSS-переменную
+	left: 0;
 	right: 0;
+	bottom: 0;
+	display: flex;
 	padding: 6px;
 	z-index: 4;
 	background-color: #fff;
 	overflow-y: auto;
 	-webkit-overflow-scrolling: touch;
+}
+
+// Невидимый backdrop — клик закрывает overlay
+.NavbarBackdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 3;
+}
+
+// Backdrop для мобильного выпадающего меню
+.NavbarMobileBackdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 9; // ниже NavbarMobileMenu (z:10), но выше остального
 }
 .NavListWrapper {
 	display: flex;
@@ -427,27 +436,208 @@ body {
 	display: flex;
 	gap: 6px;
 	align-items: center;
-	justify-content: space-between;
-	height: $heightFieldInput + 2px;
-	padding-right:2px;
+	justify-content: flex-start;
+	min-height: $heightFieldInput + 2px;
+	padding-right: 2px;
+	flex-shrink: 0;
 }
 .PaneHeaderLabel {
-	margin: 0px 0 0px 0px;
-	padding: 0px 0px;
+	margin: 0;
+	padding: 0;
 	font-weight: bold;
-	// font-family: Arial, Helvetica, sans-serif;
 	font-size: 110%;
 	color: $color6;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	flex-shrink: 1;
+	min-width: 0;
+}
+.PaneHeaderToolbar {
 	display: flex;
-	// flex: 1;
-	// line-height: $heightFieldInput + 2;
-	// border-top: 1px dotted $color5;
-	// border-bottom: 1px dotted $color5;
-	// border-radius: 3px;
-	// text-decoration: underline;
-	// user-select: default;
-	// color: #fff;
-	// background-color: #073989;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+	margin-left: auto;
+}
+.PaneHeaderToolbarSlot {
+	display: contents; // дочерние элементы портала участвуют в flex-раскладке родителя
+}
+.PaneHeaderDirtyDot {
+	display: inline-block;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #d48806;
+	margin-left: 6px;
+	flex-shrink: 0;
+	vertical-align: middle;
+	box-shadow: 0 0 4px 1px rgba(#d48806, 0.5);
+	animation: dirtyPulse 2s ease-in-out infinite;
+}
+.PaneHeaderLabelDirty {
+	color: #c27400;
+}
+@keyframes dirtyPulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.4; }
+}
+.PaneHeaderControl {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	margin: 0;
+	color: $color51;
+	width: $heightFieldInput - 2px;
+	height: $heightFieldInput - 2px;
+	flex-shrink: 0;
+	border-radius: $radius2;
+	font-size: 13px;
+	&:hover {
+		background: rgba($color51, 0.12);
+		color: $color6;
+	}
+}
+.PaneHeaderControlClose {
+	&:hover {
+		background: rgba(#c00, 0.1);
+		color: #c00;
+	}
+}
+
+// ── Pane Notifications ──
+.PaneNoteBellWrap {
+	position: relative;
+}
+.PaneNoteBell {
+	color: #d48806 !important;
+	&:hover {
+		background: rgba(#d48806, 0.12) !important;
+	}
+}
+.NavbarBellBtn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	color: #d48806;
+	width: 30px;
+	height: 30px;
+	border-radius: $radius2;
+	position: relative;
+	&:hover {
+		background: rgba(#d48806, 0.12);
+	}
+}
+.PaneNoteBadge {
+	position: absolute;
+	top: 1px;
+	right: 1px;
+	min-width: 14px;
+	height: 14px;
+	border-radius: 7px;
+	background: #d48806;
+	color: #fff;
+	font-size: 9px;
+	font-weight: 700;
+	line-height: 14px;
+	text-align: center;
+	padding: 0 3px;
+	pointer-events: none;
+}
+.PaneNotePopover {
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	z-index: 100;
+	width: 360px;
+	max-height: 320px;
+	overflow-y: auto;
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	border-radius: $radius2;
+	box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+.PaneNotePopoverHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 12px;
+	font-weight: 700;
+	font-size: 12px;
+	color: #555;
+	border-bottom: 1px solid #eee;
+}
+.PaneNoteJournalLink {
+	border: none;
+	background: transparent;
+	color: #1677ff;
+	cursor: pointer;
+	font-size: 11px;
+	padding: 2px 6px;
+	border-radius: $radius2;
+	&:hover {
+		background: rgba(#1677ff, 0.08);
+	}
+}
+.PaneNoteItem {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 10px 12px;
+	font-size: 12px;
+	line-height: 1.45;
+	color: #333;
+	border-bottom: 1px solid #f5f5f5;
+	&:last-child { border-bottom: none; }
+}
+.PaneNoteWarning {
+	background: #fffbe6;
+}
+.PaneNoteInfo {
+	background: #f6ffed;
+}
+.PaneNoteIcon {
+	flex-shrink: 0;
+	font-size: 14px;
+	line-height: 1;
+	margin-top: 1px;
+}
+.PaneNoteText {
+	flex: 1;
+	min-width: 0;
+}
+.PaneNoteDismiss {
+	flex-shrink: 0;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	color: #999;
+	font-size: 11px;
+	padding: 0 2px;
+	line-height: 1;
+	&:hover { color: #333; }
+}
+.PaneNoteActions {
+	display: flex;
+	gap: 6px;
+	margin-top: 6px;
+}
+.PaneNoteActionBtn {
+	border: 1px solid #d48806;
+	background: #fffbe6;
+	color: #ad6800;
+	font-size: 11px;
+	padding: 2px 10px;
+	border-radius: 3px;
+	cursor: pointer;
+	font-weight: 500;
+	&:hover { background: #fff1b8; }
 }
 .PaneHeaderClose {
 	display: flex;
@@ -764,17 +954,8 @@ body {
 .FormPanel {
 	margin: 0px 0 0 0;
 	width: auto;
-	// margin-top: 20px;
-	// container-type: size;
 	flex-direction: column;
-	// flex: 1;
-	display: flex; // border: 1px solid red;
-	// height: 50cqi;
-	// position: sticky;
-	// top: 0;
-	// background: $color33;
-	// box-shadow: 1px 1px 3px rgba($color6, 0.8);
-	// padding-bottom: 12px;
+	display: flex;
 }
 
 .DirtyBadge {
@@ -1472,7 +1653,7 @@ body {
 
 .SyncDashStorageHeader {
 	display: flex;
-	justify-content: space-between;
+	align-items: center;
 	font-size: 11px;
 	font-weight: 600;
 	text-transform: uppercase;
@@ -1480,37 +1661,46 @@ body {
 	letter-spacing: 0.5px;
 	padding: 6px 0;
 	border-bottom: 2px solid #e0e0e0;
-	span:last-child { text-align: right; }
 }
 
 .SyncDashStorageRow {
 	display: flex;
-	justify-content: space-between;
+	align-items: center;
 	font-size: 13px;
 	padding: 5px 0;
 	border-bottom: 1px solid #f5f5f5;
 	color: #333;
 	&:last-child { border-bottom: none; }
-	span:last-child {
-		font-weight: 600;
-		color: #1565c0;
-	}
+}
+
+.SyncDashInlineBtn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	padding: 2px 6px;
+	border-radius: 4px;
+	opacity: 0.5;
+	transition: opacity 0.15s;
+	&:hover { opacity: 1; background: #f5f5f5; }
+	&:disabled { opacity: 0.2; cursor: default; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PrintPreview — предпросмотр и печать документов A4
+// PrintPreview — предпросмотр и печать документов
 // ═══════════════════════════════════════════════════════════════════════════
 
 .PrintPreview {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: 0;
 	flex: 1;
 	min-height: 0;
 	overflow: hidden;
 }
 
-.PrintPanel {
+// ── Тулбар ────────────────────────────────────────────────────────────────
+.PrintToolbar {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -1519,37 +1709,10 @@ body {
 	flex-wrap: wrap;
 }
 
-.PrintPanelLeft {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex: 1 1 0%;
-	min-width: 160px;
-	justify-content: flex-start;
-}
-
-.PrintPanelCenter {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	flex: 0 0 auto;
-	justify-content: center;
-}
-
-.PrintPanelRight {
+.PrintToolbarActions {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	flex: 1 1 0%;
-	min-width: 160px;
-	justify-content: flex-end;
-}
-
-.PrintLabel {
-	font-size: 13px;
-	font-weight: 600;
-	color: $color6;
-	white-space: nowrap;
 }
 
 .PrintSelect {
@@ -1565,37 +1728,14 @@ body {
 	color: $color6;
 	outline: none;
 	cursor: pointer;
-	&:focus {
-		border-color: $color3;
-	}
-	&:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
+	&:focus { border-color: $color3; }
+	&:disabled { opacity: 0.5; cursor: default; }
 }
 
-.PrintZoomLabel {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 46px;
-	height: $heightFieldInput;
-	font-size: 12px;
-	font-weight: 600;
-	color: $color6;
-	background: $color30;
-	border: 1px solid $color33;
-	border-radius: $radius2;
-	cursor: pointer;
-	padding: 0 4px;
-	user-select: none;
-	&:hover {
-		background: $color33;
-	}
-}
-
+// ── Статусы ───────────────────────────────────────────────────────────────
 .PrintError {
 	padding: 8px 12px;
+	margin: 0 0 4px;
 	background: #fef2f2;
 	border: 1px solid #fca5a5;
 	border-radius: $radius2;
@@ -1605,6 +1745,7 @@ body {
 
 .PrintLoading {
 	padding: 8px 12px;
+	margin: 0 0 4px;
 	background: #eff6ff;
 	border: 1px solid #93c5fd;
 	border-radius: $radius2;
@@ -1613,159 +1754,60 @@ body {
 	text-align: center;
 }
 
-.PrintA4Wrapper {
+// ── Область просмотра — тёмный фон как в нативном PDF-viewer ──────────────
+.PrintViewport {
 	flex: 1;
-	overflow: auto;
-	background: #404040;
+	min-height: 0;
+	overflow: hidden;
+	background: #2b2b2b;
 	border-radius: $radius2;
-	padding: 20px;
 	display: flex;
+	align-items: stretch;
 	justify-content: center;
-	align-items: flex-start;
 }
 
-.PrintPagesGrid {
-	display: grid;
-	gap: 20px;
-	justify-content: center;
-	justify-items: center;
+// PDF — нативный viewer: растягиваем на всю область
+.PrintIframePdf {
+	flex: 1;
+	width: 100%;
+	height: 100%;
+	border: none;
+	background: #525659;
 }
 
-.PrintPageSlot {
-	// Контейнер для одной масштабированной страницы
-	// Ширина и высота задаются inline (A4 * scale)
-	position: relative;
-	overflow: hidden;
-}
-
-.PrintA4Page {
-	// Точные размеры A4 в px (задаются inline)
+// Документы (HTML/DOCX/TXT/IMG) — белый «лист» с тенью по центру тёмного фона
+.PrintIframeDoc {
+	width: 100%;
+	max-width: 900px;
+	height: 100%;
+	border: none;
+	margin: 16px auto;
 	background: #fff;
-	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.3);
-	padding: 76px; // ≈ 20mm
-	box-sizing: border-box;
-	overflow: hidden;
-	// Стили для контента внутри A4
-	font-family: "Times New Roman", serif;
-	font-size: 14px;
-	line-height: 1.6;
-	color: #000;
-}
-
-.PrintPageViewport {
-	// Окно контента страницы — высота = высота содержимого A4 (без padding)
-	overflow: hidden;
-	position: relative;
-}
-
-.PrintPageInfo {
-	font-size: 12px;
-	color: $color5;
-	white-space: nowrap;
-	margin-left: 6px;
-}
-
-.PrintContent {
-	// Стили для HTML-контента из mammoth
-	h1 {
-		font-size: 18px;
-		font-weight: bold;
-		margin: 0 0 12px 0;
-	}
-	h2 {
-		font-size: 16px;
-		font-weight: bold;
-		margin: 0 0 10px 0;
-	}
-	h3 {
-		font-size: 14px;
-		font-weight: bold;
-		margin: 0 0 8px 0;
-	}
-	p {
-		margin: 0 0 8px 0;
-	}
-	table {
-		border-collapse: collapse;
-		width: 100%;
-		margin: 8px 0;
-	}
-	td, th {
-		border: 1px solid #000;
-		padding: 4px 8px;
-		font-size: 13px;
-	}
-	th {
-		background: #f3f4f6;
-		font-weight: bold;
-	}
-	ul, ol {
-		margin: 4px 0 8px 20px;
-		padding: 0;
-	}
-	li {
-		margin: 2px 0;
-	}
-	img {
-		max-width: 100%;
-		height: auto;
-	}
-	strong, b {
-		font-weight: bold;
-	}
-	em, i {
-		font-style: italic;
-	}
+	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+	border-radius: 2px;
 }
 
 .PrintPlaceholder {
+	flex: 1;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	min-height: 200px;
-	color: $color5;
+	color: #999;
 	font-size: 14px;
 	font-style: italic;
 	text-align: center;
 }
 
-// Медиа-запрос для печати — скрываем всё кроме области A4
+// ── Печать ────────────────────────────────────────────────────────────────
 @media print {
-	.PrintPreview {
-		overflow: visible;
-	}
-	.PrintPanel,
-	.PrintPanelCenter,
-	.PrintError,
-	.PrintLoading {
-		display: none !important;
-	}
-	.PrintA4Wrapper {
-		overflow: visible;
-		background: none;
-		padding: 0;
-	}
-	.PrintPagesGrid {
-		display: block;
-	}
-	.PrintPageSlot {
+	.PrintPreview { overflow: visible; }
+	.PrintToolbar, .PrintError, .PrintLoading { display: none !important; }
+	.PrintViewport { overflow: visible; background: none; padding: 0; }
+	.PrintIframePdf, .PrintIframeDoc {
 		width: 100% !important;
-		height: auto !important;
-		overflow: visible;
-		page-break-after: always;
-	}
-	.PrintA4Page {
+		height: 100vh !important;
+		max-width: none;
+		margin: 0;
 		box-shadow: none;
-		width: 100% !important;
-		height: auto !important;
-		padding: 0;
-		transform: none !important;
-	}
-	.PrintPageViewport {
-		height: auto !important;
-		overflow: visible;
-	}
-	.PrintContent {
-		transform: none !important;
 	}
 }

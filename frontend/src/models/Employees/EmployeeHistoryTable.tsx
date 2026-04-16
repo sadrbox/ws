@@ -8,6 +8,7 @@ import EmployeeHistoryForm from "./EmployeeHistoryForm";
 import { translate } from "src/i18";
 import columnsJson from "./historyColumns.json";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
+import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "employee-histories";
 const COMPONENT_NAME = "EmployeeHistoryList_part";
@@ -165,9 +166,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({ employeeUuid, dis
       _ctx.refetch();
     };
     addPane({
-      label: isEdit
-        ? `${t("EmployeeHistoriesList")}: ${eventTypeMap[(data as any)?.eventType] || t("noName")} • ${data?.id ?? "?"}`
-        : `${t("EmployeeHistoriesList")}: ${t("new")}`,
+      label: makePaneLabelFromData("EmployeeHistoriesList", "Кадровая история", isEdit ? data as any : null),
       component: EmployeeHistoryForm,
       data: { ...(data ?? {}), employeeUuid } as any,
       onSave: refresh,

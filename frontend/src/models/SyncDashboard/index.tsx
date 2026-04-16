@@ -11,8 +11,9 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import { useOfflineSync, type OfflineStats } from "src/hooks/useOfflineSync";
 import { type SyncConflict } from "src/services/syncManager";
+import { pullSingleTable, fullSync } from "src/services/syncManager";
 import { resolveConflictLocal, resolveConflictServer } from "src/services/networkStatus";
-import { clearOfflineDb, type PendingChange } from "src/services/offlineDb";
+import { clearOfflineDb, SYNCABLE_TABLES, type SyncableTable, type PendingChange } from "src/services/offlineDb";
 import { Button } from "src/components/Button";
 import styles from "src/styles/main.module.scss";
 
@@ -376,9 +377,14 @@ const ConflictsTab: FC<{
 const StorageTab: FC<{
   offlineStats: OfflineStats | null;
   refreshStats: () => Promise<void>;
-}> = ({ offlineStats, refreshStats }) => {
+  isOnline: boolean;
+}> = ({ offlineStats, refreshStats, isOnline }) => {
   const [confirmClear, setConfirmClear] = useState(false);
   const [dbSize, setDbSize] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState("");
+  const [clearingTable, setClearingTable] = useState<string | null>(null);
 
   // Оценка размера IndexedDB
   useEffect(() => {
@@ -395,15 +401,87 @@ const StorageTab: FC<{
     await refreshStats();
   }, [refreshStats]);
 
-  const sortedTables = useMemo(() => {
-    if (!offlineStats) return [];
-    return Object.entries(offlineStats.tables)
-      .filter(([, count]) => count > 0)
-      .sort(([, a], [, b]) => b - a);
+  // Все таблицы (включая пустые) для выбора загрузки
+  const allTables = useMemo(() => {
+    const counts = offlineStats?.tables ?? {};
+    return [...SYNCABLE_TABLES].map(t => ({
+      table: t,
+      label: getTableLabel(t),
+      count: counts[t] ?? 0,
+    })).sort((a, b) => a.label.localeCompare(b.label, "ru"));
   }, [offlineStats]);
+
+  const sortedTables = useMemo(() => {
+    return allTables.filter(t => t.count > 0).sort((a, b) => b.count - a.count);
+  }, [allTables]);
+
+  const toggleSelect = useCallback((table: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(table)) next.delete(table); else next.add(table);
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelected(new Set(SYNCABLE_TABLES));
+  }, []);
+
+  const selectNone = useCallback(() => {
+    setSelected(new Set());
+  }, []);
+
+  // Загрузка выбранных таблиц для оффлайна
+  const handleDownloadSelected = useCallback(async () => {
+    if (selected.size === 0) return;
+    setDownloading(true);
+    const tables = [...selected] as SyncableTable[];
+    let done = 0;
+    let totalPulled = 0;
+    for (const t of tables) {
+      setDownloadProgress(`${getTableLabel(t)} (${done + 1}/${tables.length})…`);
+      try {
+        const pulled = await pullSingleTable(t);
+        totalPulled += pulled;
+      } catch { /* continue with next */ }
+      done++;
+    }
+    setDownloadProgress(`Готово: загружено ${totalPulled} записей из ${tables.length} таблиц`);
+    setDownloading(false);
+    await refreshStats();
+    setTimeout(() => setDownloadProgress(""), 5000);
+  }, [selected, refreshStats]);
+
+  // Загрузить ВСЁ для оффлайна
+  const handleDownloadAll = useCallback(async () => {
+    setDownloading(true);
+    setDownloadProgress("Полная загрузка всех данных…");
+    try {
+      const result = await fullSync();
+      setDownloadProgress(`Готово: загружено ${result.pulled} записей, отправлено ${result.pushed}`);
+    } catch {
+      setDownloadProgress("Ошибка загрузки");
+    }
+    setDownloading(false);
+    await refreshStats();
+    setTimeout(() => setDownloadProgress(""), 5000);
+  }, [refreshStats]);
+
+  // Очистить одну таблицу
+  const handleClearTable = useCallback(async (table: string) => {
+    setClearingTable(table);
+    try {
+      const { offlineDb } = await import("src/services/offlineDb");
+      const t = offlineDb.getTable(table);
+      if (t) await t.clear();
+    } catch { /* ignore */ }
+    setClearingTable(null);
+    await refreshStats();
+  }, [refreshStats]);
 
   return (
     <div className={styles.SyncDashSection}>
+      {/* Общая информация */}
       <div className={styles.SyncDashCard}>
         <div className={styles.SyncDashCardTitle}>Локальное хранилище</div>
         <div className={styles.SyncDashCardBody}>
@@ -423,6 +501,9 @@ const StorageTab: FC<{
             <Button onClick={refreshStats}>
               <span>🔄 Обновить</span>
             </Button>
+            <Button variant="primary" onClick={handleDownloadAll} disabled={downloading || !isOnline}>
+              <span>{downloading ? "⏳ Загрузка…" : "📥 Загрузить всё для оффлайна"}</span>
+            </Button>
             {!confirmClear ? (
               <Button onClick={() => setConfirmClear(true)}>
                 <span>🗑 Очистить всё хранилище</span>
@@ -441,25 +522,93 @@ const StorageTab: FC<{
               </>
             )}
           </div>
+          {downloadProgress && (
+            <div className={styles.SyncDashRow} style={{ marginTop: 8 }}>
+              <span className={styles.SyncDashLabel}>📥</span>
+              <span>{downloadProgress}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Таблицы */}
+      {/* Выборочная загрузка */}
       <div className={styles.SyncDashCard}>
-        <div className={styles.SyncDashCardTitle}>Записи по таблицам</div>
+        <div className={styles.SyncDashCardTitle}>
+          Загрузка данных для оффлайн-работы
+        </div>
+        <div className={styles.SyncDashCardBody}>
+          <div className={styles.SyncDashActions} style={{ marginBottom: 8 }}>
+            <Button onClick={selectAll} disabled={downloading}>
+              <span>☑ Выбрать все</span>
+            </Button>
+            <Button onClick={selectNone} disabled={downloading || selected.size === 0}>
+              <span>☐ Снять все</span>
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleDownloadSelected}
+              disabled={downloading || selected.size === 0 || !isOnline}
+            >
+              <span>{downloading ? "⏳ Загрузка…" : `📥 Загрузить выбранные (${selected.size})`}</span>
+            </Button>
+          </div>
+          <div className={styles.SyncDashStorageTable}>
+            <div className={styles.SyncDashStorageHeader}>
+              <span style={{ width: 28 }} />
+              <span style={{ flex: 1 }}>Таблица</span>
+              <span style={{ width: 80, textAlign: "right" }}>Записей</span>
+            </div>
+            {allTables.map(({ table, label, count }) => (
+              <div
+                key={table}
+                className={styles.SyncDashStorageRow}
+                style={{ cursor: "pointer" }}
+                onClick={() => !downloading && toggleSelect(table)}
+              >
+                <span style={{ width: 28, textAlign: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(table)}
+                    onChange={() => toggleSelect(table)}
+                    disabled={downloading}
+                    style={{ cursor: "pointer" }}
+                  />
+                </span>
+                <span style={{ flex: 1 }}>{label}</span>
+                <span style={{ width: 80, textAlign: "right" }}>{count || "—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Таблицы с данными (с кнопкой очистки) */}
+      <div className={styles.SyncDashCard}>
+        <div className={styles.SyncDashCardTitle}>Загруженные данные</div>
         <div className={styles.SyncDashCardBody}>
           {sortedTables.length === 0 ? (
             <div className={styles.SyncDashEmpty}>Локальное хранилище пустое</div>
           ) : (
             <div className={styles.SyncDashStorageTable}>
               <div className={styles.SyncDashStorageHeader}>
-                <span>Таблица</span>
-                <span>Записей</span>
+                <span style={{ flex: 1 }}>Таблица</span>
+                <span style={{ width: 80, textAlign: "right" }}>Записей</span>
+                <span style={{ width: 64, textAlign: "center" }}>Действие</span>
               </div>
-              {sortedTables.map(([table, count]) => (
+              {sortedTables.map(({ table, label, count }) => (
                 <div key={table} className={styles.SyncDashStorageRow}>
-                  <span>{getTableLabel(table)}</span>
-                  <span>{count}</span>
+                  <span style={{ flex: 1 }}>{label}</span>
+                  <span style={{ width: 80, textAlign: "right" }}>{count}</span>
+                  <span style={{ width: 64, textAlign: "center" }}>
+                    <button
+                      className={styles.SyncDashInlineBtn}
+                      title="Очистить таблицу"
+                      disabled={clearingTable === table}
+                      onClick={() => handleClearTable(table)}
+                    >
+                      🗑
+                    </button>
+                  </span>
                 </div>
               ))}
             </div>
@@ -548,6 +697,7 @@ const SyncDashboard: FC = () => {
           <StorageTab
             offlineStats={offlineStats}
             refreshStats={refreshStats}
+            isOnline={isOnline}
           />
         )}
       </div>

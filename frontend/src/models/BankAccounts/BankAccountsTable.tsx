@@ -7,6 +7,7 @@ import { BankAccountsForm } from "./index";
 import { translate } from "src/i18";
 import columnsJson from "./columns.json";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "bankaccounts";
 const COMPONENT_NAME = "BankAccountsList_part";
@@ -112,9 +113,7 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
       _ctx.refetch();
     };
     addPane({
-      label: isEdit
-        ? `${t("BankAccountsList")}: ${data?.shortName || data?.iban || t("noName")} • ${data?.id ?? "?"}`
-        : `${t("BankAccountsList")}: ${t("new")}`,
+      label: makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? data as any : null, (data?.shortName || data?.iban) as string),
       component: BankAccountsForm,
       data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
       onSave: refresh,

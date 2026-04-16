@@ -4,7 +4,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field } from "src/components/Field";
+import { Divider, Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -12,6 +12,7 @@ import { AccessRightsList } from "src/models/AccessRights";
 import AvatarUpload from "src/components/AvatarUpload";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { useFormStore } from "src/hooks/useFormStore";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -38,7 +39,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
       username: d.username ?? "", password: "",
       employeeUuid: d.employeeUuid ?? d.employee?.uuid ?? "",
       employeeName: d.employee?.fullName ?? "",
-      avatarPath: d.avatarPath ?? prev?.avatarPath ?? "",
+      avatarPath: d.avatarPath ?? "",
       id: d.id, uuid: d.uuid,
     }),
     buildPayload: (fd) => {
@@ -50,12 +51,12 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
       if (fd.password?.trim()) payload.password = fd.password.trim();
       return payload;
     },
-    buildPaneLabel: (saved) => `${translate("UsersList") || "UsersList"}: ${saved.username || saved.fullName || "?"} • ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel("UsersList", "Пользователи", saved),
   });
 
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general") || "Общие сведения", component: (
+      { id: "general", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
@@ -74,10 +75,13 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
                   onClear={() => form.setFields({ employeeUuid: "", employeeName: "" } as Partial<TFields>)} />
               </Group>
               {form.isEditMode && (
+                <><Divider />
                 <Group align="row" gap="12px" className={styles.Form}>
-                  <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-                </Group>
+                  <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+                    <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                    <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+                  </div>
+                </Group></>
               )}
             </div>
           </div>
@@ -91,7 +95,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields]);
 
   return (
-    <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );

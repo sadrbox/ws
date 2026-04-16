@@ -13,6 +13,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -92,14 +93,14 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 10) ?? "",
       description: d.description ?? "", amount: d.amount != null ? String(d.amount) : "",
       status: d.status ?? "draft", posted: d.posted === true,
-      organizationUuid: d.organizationUuid ?? prev?.organizationUuid ?? "",
-      organizationName: d.organization?.shortName ?? prev?.organizationName ?? "",
-      counterpartyUuid: d.counterpartyUuid ?? prev?.counterpartyUuid ?? "",
-      counterpartyName: d.counterparty?.shortName ?? prev?.counterpartyName ?? "",
-      contractUuid: d.contractUuid ?? prev?.contractUuid ?? "",
-      contractName: d.contract?.shortName ?? prev?.contractName ?? "",
-      warehouseUuid: d.warehouseUuid ?? prev?.warehouseUuid ?? "",
-      warehouseName: d.warehouse?.shortName ?? prev?.warehouseName ?? "",
+      organizationUuid: d.organizationUuid ?? "",
+      organizationName: d.organization?.shortName ?? "",
+      counterpartyUuid: d.counterpartyUuid ?? "",
+      counterpartyName: d.counterparty?.shortName ?? "",
+      contractUuid: d.contractUuid ?? "",
+      contractName: d.contract?.shortName ?? "",
+      warehouseUuid: d.warehouseUuid ?? "",
+      warehouseName: d.warehouse?.shortName ?? "",
       vatAmount: d.vatAmount != null ? String(d.vatAmount) : "0",
       discountAmount: d.discountAmount != null ? String(d.discountAmount) : "0",
       amountWithoutVat: d.amountWithoutVat != null ? String(d.amountWithoutVat) : "0",
@@ -116,7 +117,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       discountAmount: fd.discountAmount ? parseFloat(fd.discountAmount) : 0,
       amountWithoutVat: fd.amountWithoutVat ? parseFloat(fd.amountWithoutVat) : 0,
     }),
-    buildPaneLabel: (saved) => `${translate(LIST_NAME) || FORM_LABEL}: ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, FORM_LABEL, saved),
     afterLoad: invalidateSubTables,
     afterSave: async () => { setTimeout(invalidateSubTables, 0); },
   });
@@ -155,7 +156,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.setFields]);
 
   const tabs = useMemo(() => [
-    { id: "tab-details", label: translate("general") || "Общие сведения", component: (
+    { id: "tab-details", label: translate("general") || "Основное", component: (
       <div className={styles.FormBodyParts}>
         <Group align="row" gap="12px" className={styles.Form}>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
@@ -213,7 +214,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, saleItems]);
 
   return (
-    <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );

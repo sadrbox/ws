@@ -3,6 +3,7 @@ import FormPanel from "src/components/FormPanel";
 import FormError from "src/components/FormError";
 import Tabs from "src/components/Tabs";
 import styles from "src/styles/main.module.scss";
+import { usePaneToolbar } from "src/hooks/usePaneToolbar";
 
 /**
  * Универсальная обёртка формы модели.
@@ -37,13 +38,15 @@ interface ModelFormWrapperProps {
   readonly?: boolean;
   /** Есть ли несохранённые изменения? */
   isDirty?: boolean;
+  /** uniqId панели для регистрации тулбара */
+  paneId?: string;
 }
 
 const ModelFormWrapper: FC<ModelFormWrapperProps> = ({
   tabs,
   onSave,
   onSaveAndClose,
-  onClose,
+  onClose: _onClose, // закрытие теперь через ✕ в PaneHeaderControls
   onReload,
   isLoading,
   showReload,
@@ -51,20 +54,25 @@ const ModelFormWrapper: FC<ModelFormWrapperProps> = ({
   errorRevision,
   onErrorDismiss,
   readonly,
-  isDirty,
+  isDirty: _isDirty, // индикатор теперь через usePaneDirty в PaneItem
+  paneId,
 }) => {
+  // Рендерим кнопки формы в заголовок панели через портал
+  const toolbarPortal = usePaneToolbar(
+    paneId,
+    <FormPanel
+      readonly={readonly}
+      onSaveAndClose={onSaveAndClose}
+      onSave={onSave}
+      onReload={onReload}
+      isLoading={isLoading}
+      showReload={showReload}
+    />,
+  );
+
   return (
     <div className={styles.FormWrapper}>
-      <FormPanel
-        readonly={readonly}
-        onSaveAndClose={onSaveAndClose}
-        onSave={onSave}
-        onClose={onClose}
-        onReload={onReload}
-        isLoading={isLoading}
-        showReload={showReload}
-        isDirty={isDirty}
-      />
+      {toolbarPortal}
       <FormError
         message={error}
         revision={errorRevision}

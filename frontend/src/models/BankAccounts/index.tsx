@@ -17,6 +17,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import { useModelListState } from "src/hooks/useModelListState";
+import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "bankaccounts";
 
@@ -101,12 +102,12 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
       };
     },
     buildPaneLabel: (saved) =>
-      `${translate("BankAccountsList") || "BankAccountsList"}: ${saved.shortName || saved.iban || "?"} • ${saved.id ?? "?"}`,
+      makePaneLabel("BankAccountsList", "Банковские счета", saved, saved.shortName || saved.iban),
   });
 
   const tabs = useMemo(() => [
     {
-      id: "general", label: translate("general") || "Общие сведения", component: (
+      id: "general", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
@@ -159,6 +160,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <ModelFormWrapper
+      paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
@@ -212,7 +214,7 @@ const BankAccountsList: FC<BankAccountsListProps> = ({ variant = 'default', onSe
       ? { [ownerField]: ownerUuid } as unknown as TDataItem
       : d;
     addPane({
-      label: isEdit ? `${t(componentName)}: ${d?.shortName || d?.iban || t("noName")} • ${d?.id ?? "?"}` : `${t(componentName)}: ${t("new")}`,
+      label: makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? d as any : null, (d?.shortName || d?.iban) as string),
       component: BankAccountsForm, data: newData, onSave: () => refetch(), onClose: () => refetch(),
     });
   }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);

@@ -16,6 +16,7 @@
  */
 
 import apiClient from "src/services/api/client";
+import { isNetworkError } from "./networkUtils";
 import {
   ensureOfflineDb,
   SYNCABLE_TABLES,
@@ -536,17 +537,6 @@ function emptyResult(): SyncResult {
     finishedAt: new Date().toISOString(),
     durationMs: 0,
   };
-}
-
-/** Проверяет, является ли ошибка сетевой (нет связи / таймаут) */
-function isNetworkError(err: any): boolean {
-  if (!err) return false;
-  if (err.code === "ERR_NETWORK" || err.code === "ECONNABORTED") return true;
-  if (err.message === "Network Error") return true;
-  if (err.isAxiosError && !err.response) return true;
-  // offline interceptor возвращает _offline: true
-  if (err?.data?._offline) return true;
-  return false;
 }
 
 export default {

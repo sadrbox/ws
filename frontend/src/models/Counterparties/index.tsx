@@ -15,6 +15,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "counterparties";
 const LIST_NAME = "CounterpartiesList";
@@ -39,13 +40,13 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
       bankAccounts: { endpoint: "bankaccounts", parentField: "ownerUuid", label: translate("BankAccountsList") || "Банковские счета", extraFields: { ownerType: "counterparty" } },
       contracts:    { endpoint: "contracts",    parentField: "ownerUuid", label: translate("ContractsList") || "Договора",          extraFields: { ownerType: "counterparty" } },
     },
-    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? prev?.bin ?? "", shortName: d.shortName ?? "", displayName: d.displayName ?? "" }),
+    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", shortName: d.shortName ?? "", displayName: d.displayName ?? "" }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
       if (!bin || !/^\d{12}$/.test(bin)) return "БИН должен состоять ровно из 12 цифр";
       return { bin, shortName: fd.shortName?.trim() || null, displayName: fd.displayName?.trim() || null };
     },
-    buildPaneLabel: (saved) => `${translate(LIST_NAME) || "Контрагенты"}: ${saved.shortName || saved.bin || "?"} • ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Контрагенты", saved, saved.shortName || saved.bin),
     afterLoad: invalidateSubTables,
     afterSave: async () => { setTimeout(invalidateSubTables, 0); },
   });
@@ -55,7 +56,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   const contracts = form.useTable("contracts");
 
   const tabs = useMemo(() => [
-    { id: "tab0", label: translate("general") || "Общие сведения", component: (
+    { id: "tab0", label: translate("general") || "Основное", component: (
       <div className={styles.FormBodyParts}>
         <Group align="row" gap="12px" className={styles.Form}>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
@@ -82,7 +83,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts]);
 
   return (
-    <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );

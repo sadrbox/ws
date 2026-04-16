@@ -14,6 +14,7 @@ import AvatarUpload from "src/components/AvatarUpload";
 import { resolveOwnerName } from "src/utils/resolveOwnerName";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -68,7 +69,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
       fullName: fd.fullName?.trim() || null, comment: fd.comment?.trim() || null,
       ownerType: fd.ownerType || null, ownerUuid: fd.ownerUuid || null,
     }),
-    buildPaneLabel: (saved) => `${translate("ContactPersonsList") || "Контактные лица"}: ${saved.fullName || "?"} • ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel("ContactPersonsList", "Контактные лица", saved),
     afterLoad: invalidateSubTables,
     afterSave: async () => {
       setTimeout(invalidateSubTables, 0);
@@ -80,7 +81,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general") || "Общие сведения", component: (
+      { id: "general", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
@@ -112,7 +113,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.uuid, paneProps.data, contacts]);
 
   return (
-    <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );

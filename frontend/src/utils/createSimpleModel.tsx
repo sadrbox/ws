@@ -23,6 +23,7 @@ import { Group } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -89,10 +90,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
   for (const f of fields) DEFAULT_FIELDS[f.key] = "";
 
   // buildPaneLabel по умолчанию
-  const buildPaneLabel = opts.buildPaneLabel ?? ((saved: Record<string, any>) => {
-    const primary = saved[fields[0]?.key] || "?";
-    return `${translate(listName) || formLabel}: ${primary} • ${saved.id ?? "?"}`;
-  });
+  const buildPaneLabel = opts.buildPaneLabel ?? ((saved: Record<string, any>) => makePaneLabel(listName, formLabel, saved));
 
   // getLabel по умолчанию
   const getLabel = opts.getLabel ?? ((d: TDataItem | undefined) =>
@@ -138,7 +136,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
     const tabs = useMemo(() => [
       {
         id: "general",
-        label: translate("general") || "Общие сведения",
+        label: translate("general") || "Основное",
         component: (
           <div className={styles.FormBodyParts}>
             <Group align="row" gap="12px" className={styles.Form}>
@@ -174,6 +172,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
 
     return (
       <ModelFormWrapper
+        paneId={form.paneId}
         tabs={tabs}
         onSave={form.handleSave}
         onSaveAndClose={form.handleSaveAndClose}

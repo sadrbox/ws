@@ -1,4 +1,6 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosError } from "axios";
+import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from "../auth";
+import { isNetworkError as isNetworkLikeError } from "../networkUtils";
 
 const LOCAL_API_URL = "http://192.168.1.112:3000/api/v1";
 const REMOTE_API_URL = "https://api.gidra.kz/api/v1";
@@ -34,10 +36,12 @@ apiClient.interceptors.request.use((config) => {
 		delete config.headers["Content-Type"];
 	}
 
-	const token = localStorage.getItem("auth_token");
-	if (token) {
-		config.headers.Authorization = `Bearer ${token}`;
-	}
+	try {
+		const token = localStorage.getItem(AUTH_TOKEN_KEY);
+		if (token) {
+			config.headers.Authorization = `Bearer ${token}`;
+		}
+	} catch { /* localStorage недоступен (private browsing и т.д.) */ }
 
 	return config;
 });
@@ -50,8 +54,10 @@ apiClient.interceptors.response.use(
 			// Не обрабатываем 401 при самом запросе логина
 			const url = error.config?.url || "";
 			if (!url.includes("/auth/login")) {
-				localStorage.removeItem("auth_token");
-				localStorage.removeItem("auth_user");
+				try {
+					localStorage.removeItem(AUTH_TOKEN_KEY);
+					localStorage.removeItem(AUTH_USER_KEY);
+				} catch { /* ignore */ }
 				// Диспатчим событие чтобы App перерисовался
 				window.dispatchEvent(new Event("auth_logout"));
 			}
@@ -146,15 +152,6 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 		config,
 	};
 });
-
-/** Проверяет, является ли ошибка сетевой */
-function isNetworkLikeError(error: any): boolean {
-	if (!error) return false;
-	if (error.code === "ERR_NETWORK" || error.code === "ECONNABORTED") return true;
-	if (error.message === "Network Error") return true;
-	if (error.isAxiosError && !error.response) return true;
-	return false;
-}
 
 /** Типизированные сокращения для удобства */
 export const api = {

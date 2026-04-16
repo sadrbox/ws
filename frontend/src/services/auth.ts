@@ -1,5 +1,5 @@
 import apiClient from "./api/client";
-import { isNetworkError } from "./offlineQueue";
+import { isNetworkError } from "./networkUtils";
 
 export interface AuthUser {
 	uuid: string;
@@ -35,8 +35,8 @@ export interface LoginResponse {
 	message?: string;
 }
 
-const AUTH_TOKEN_KEY = "auth_token";
-const AUTH_USER_KEY = "auth_user";
+export const AUTH_TOKEN_KEY = "auth_token";
+export const AUTH_USER_KEY = "auth_user";
 /** Ключ для хранения хэша пароля (SHA-256) для offline-входа */
 const AUTH_OFFLINE_HASH_KEY = "auth_offline_hash";
 /** Ключ для хранения username для offline-входа */

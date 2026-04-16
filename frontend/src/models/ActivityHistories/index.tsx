@@ -14,6 +14,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "activityhistories";
@@ -76,58 +77,57 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
       actionType: fd.actionType, objectId: fd.objectId,
       objectType: fd.objectType, objectName: fd.objectName,
     }),
-    buildPaneLabel: (saved) =>
-      `${translate("ActivityHistoriesList") || "Журнал"}: ${saved.actionType || "?"} • ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel("ActivityHistoriesList", "Журнал", saved),
   });
 
   const tabs = useMemo(() => [
-    { id: "general", label: translate("general") || "Общие сведения", component: (
+    { id: "general", label: translate("general") || "Основное", component: (
       <div className={styles.FormBodyParts}>
         <Group align="row" gap="12px" className={styles.Form}>
-          <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-            <Field label="Тип действия" name={`${form.formUid}_actionType`} minWidth="200px"
-              value={form.fields.actionType} disabled />
-            <Field label="Дата действия" name={`${form.formUid}_actionDate`} minWidth="200px"
-              value={getFormatDate(form.fields.actionDate)} disabled />
-          </div>
-          <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-            <Field label="Тип объекта" name={`${form.formUid}_objectType`} minWidth="200px"
-              value={form.fields.objectType} disabled />
-            <Field label="Название объекта" name={`${form.formUid}_objectName`} minWidth="200px"
-              value={form.fields.objectName} disabled />
-            <Field label="ID объекта" name={`${form.formUid}_objectId`} minWidth="120px"
-              value={form.fields.objectId} disabled />
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+              <Field label="Тип действия" name={`${form.formUid}_actionType`} minWidth="200px"
+                value={form.fields.actionType} disabled />
+              <Field label="Дата действия" name={`${form.formUid}_actionDate`} minWidth="200px"
+                value={getFormatDate(form.fields.actionDate)} disabled />
+            </div>
+            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+              <Field label="Тип объекта" name={`${form.formUid}_objectType`} minWidth="200px"
+                value={form.fields.objectType} disabled />
+              <Field label="Название объекта" name={`${form.formUid}_objectName`} minWidth="200px"
+                value={form.fields.objectName} disabled />
+              <Field label="ID объекта" name={`${form.formUid}_objectId`} minWidth="120px"
+                value={form.fields.objectId} disabled />
+            </div>
+            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+              <Field label="Организация" name={`${form.formUid}_organizationShortName`} minWidth="200px"
+                value={form.fields.organizationShortName} disabled />
+              <Field label="БИН" name={`${form.formUid}_bin`} minWidth="150px"
+                value={form.fields.bin} disabled />
+            </div>
+            <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+              <Field label="Пользователь" name={`${form.formUid}_userName`} minWidth="200px"
+                value={form.fields.userName} disabled />
+              <Field label="Хост" name={`${form.formUid}_host`} minWidth="200px"
+                value={form.fields.host} disabled />
+              <Field label="IP" name={`${form.formUid}_ip`} minWidth="120px"
+                value={form.fields.ip || ""} disabled />
+              <Field label="Город" name={`${form.formUid}_city`} minWidth="120px"
+                value={form.fields.city || ""} disabled />
+            </div>
           </div>
         </Group>
-
-        <Group align="row" gap="12px" className={styles.Form}>
-          <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-            <Field label="Организация" name={`${form.formUid}_organizationShortName`} minWidth="200px"
-              value={form.fields.organizationShortName} disabled />
-            <Field label="БИН" name={`${form.formUid}_bin`} minWidth="150px"
-              value={form.fields.bin} disabled />
-          </div>
-          <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-            <Field label="Пользователь" name={`${form.formUid}_userName`} minWidth="200px"
-              value={form.fields.userName} disabled />
-            <Field label="Хост" name={`${form.formUid}_host`} minWidth="200px"
-              value={form.fields.host} disabled />
-            <Field label="IP" name={`${form.formUid}_ip`} minWidth="120px"
-              value={form.fields.ip || ""} disabled />
-            <Field label="Город" name={`${form.formUid}_city`} minWidth="120px"
-              value={form.fields.city || ""} disabled />
-          </div>
-
-          {form.isEditMode && (
-            <>
-              <Divider />
+        {form.isEditMode && (
+          <>
+            <Divider />
+            <Group align="row" gap="12px" className={styles.Form}>
               <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
                 <Field label="ID" name={`${form.formUid}_id`} width="80px" value={String(form.fields.id ?? "-")} disabled />
                 <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
               </div>
-            </>
-          )}
-        </Group>
+            </Group>
+          </>
+        )}
 
         {form.fields.props && (
           <div style={{ padding: "0 0 12px 0" }}>
@@ -146,7 +146,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid]);
 
   return (
-    <ModelFormWrapper tabs={tabs} readonly={!canWrite}
+    <ModelFormWrapper paneId={form.paneId} tabs={tabs} readonly={!canWrite}
       onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading} showReload={form.isEditMode}
@@ -189,7 +189,7 @@ const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant = 'defa
     const d = formProps.data;
     const isEdit = !!d?.uuid;
     addPane({
-      label: isEdit ? `${t(componentName)}: ${d?.objectName || t("noName")} • ${d?.id ?? "?"}` : `${t(componentName)}: ${t("new")}`,
+      label: makePaneLabelFromData("ActivityHistoriesList", "Журнал", isEdit ? d as any : null),
       component: ActivityHistoriesForm, data: d, onSave: () => refetch(), onClose: () => refetch(),
     });
   }, [addPane, t, refetch, componentName]);

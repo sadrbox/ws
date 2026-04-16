@@ -83,7 +83,7 @@ const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
     if (!n.todo?.uuid) return;
     import("src/models/Todos").then(({ TodosForm }) => {
       addPane({
-        label: `${t("TodosList")}: ${n.todo!.shortName || "?"} • ${n.todo!.id}`,
+        label: `${t("TodosList")} №${n.todo!.id}`,
         component: TodosForm,
         data: { uuid: n.todo!.uuid } as any,
       });

@@ -8,9 +8,11 @@ import { Divider } from '../Field';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app';
+import type { TPane } from 'src/app/types';
+import { usePaneToolbarSlot } from 'src/hooks/usePaneToolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
-import { usePaneDirty } from 'src/hooks/useFormStore';
+import { usePaneDirty, usePaneNotifications, dismissPaneNotification } from 'src/hooks/useFormStore';
 import { CounterpartiesList } from 'src/models/Counterparties';
 import { ContactTypesList } from 'src/models/ContactTypes';
 import { ContactsList } from 'src/models/Contacts';
@@ -184,33 +186,44 @@ export const PaneGroup = () => {
   const context = useAppContext();
   const { panes, activePane, requestClose } = context?.windows;
 
-
-
-
   return (
     <div className={styles.PaneGroupWrapper}>
-      {panes.map(p => {
-        const Component = p.component as FC<any>;
-        // console.log(p.uniqId)
-        return (
-          <div key={`PaneGroup-${p.uniqId}`}
-            className={[styles.Pane, (p.uniqId === activePane) && styles.ActivePane].join(" ")}>
-            <div className={styles.PaneHeaderContainer} >
-              {/* <Divider /> */}
-              <h2 className={styles.PaneHeaderLabel}>{p.label}</h2>
-              <button
-                className={styles.PaneHeaderClose}
-                onClick={() => requestClose(p.uniqId)}
-                title="Закрыть"
-                type="button"
-              >✕</button>
-            </div>
-            <Component {...p} />
-          </div>
-        )
-      })}
+      {panes.map(p => (
+        <PaneItem key={`PaneGroup-${p.uniqId}`} pane={p} isActive={p.uniqId === activePane} onClose={() => requestClose(p.uniqId)} />
+      ))}
     </div>
   )
+}
+
+/** Отдельный компонент панели — позволяет вызывать хуки */
+const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({ pane: p, isActive, onClose }) => {
+  const slotRef = usePaneToolbarSlot(p.uniqId);
+  const isDirty = usePaneDirty(p.uniqId);
+  const Component = p.component as FC<any>;
+
+  return (
+    <div className={[styles.Pane, isActive && styles.ActivePane].filter(Boolean).join(" ")}>
+      <div className={styles.PaneHeaderContainer}>
+        <h2
+          className={[styles.PaneHeaderLabel, isDirty && styles.PaneHeaderLabelDirty].filter(Boolean).join(" ")}
+          title={isDirty ? "Форма содержит несохранённые изменения" : undefined}
+        >
+          {p.label}
+          {isDirty && <span className={styles.PaneHeaderDirtyDot} />}
+        </h2>
+        <div className={styles.PaneHeaderToolbar}>
+          <div ref={slotRef} className={styles.PaneHeaderToolbarSlot} />
+          <button
+            className={[styles.PaneHeaderControl, styles.PaneHeaderControlClose].join(" ")}
+            onClick={onClose}
+            title="Закрыть"
+            type="button"
+          >✕</button>
+        </div>
+      </div>
+      <Component {...p} />
+    </div>
+  );
 }
 
 type TypeOverFormProps = PropsWithChildren<{}>;
@@ -283,14 +296,165 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(({ children }, ref
   );
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// NavbarPaneBell — колокольчик уведомлений активной панели в Navbar
+// ═══════════════════════════════════════════════════════════════════════════
 
+const NavbarPaneBell: FC = () => {
+  const { windows: { activePane, addPane } } = useAppContext();
+  const isDirty = usePaneDirty(activePane ?? "");
+  const notifications = usePaneNotifications(activePane ?? "");
+  const [showNotes, setShowNotes] = useState(false);
+  const bellRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const prevCountRef = useRef(notifications.length);
+  const autoOpenRef = useRef(false);
+
+  // Закрыть попover при смене панели
+  useEffect(() => { setShowNotes(false); }, [activePane]);
+
+  // Авто-открыть попover при появлении новых уведомлений
+  useEffect(() => {
+    if (notifications.length > prevCountRef.current) {
+      setShowNotes(true);
+      autoOpenRef.current = true;
+    }
+    prevCountRef.current = notifications.length;
+  }, [notifications.length]);
+
+  // Авто-скрыть через 6 сек если открыт автоматически
+  useEffect(() => {
+    if (!showNotes || !autoOpenRef.current) return;
+    const t = setTimeout(() => {
+      setShowNotes(false);
+      autoOpenRef.current = false;
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [showNotes]);
+
+  // Закрыть попover при клике вне
+  useEffect(() => {
+    if (!showNotes) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        bellRef.current && !bellRef.current.contains(e.target as Node) &&
+        popoverRef.current && !popoverRef.current.contains(e.target as Node)
+      ) {
+        setShowNotes(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showNotes]);
+
+  const showBell = isDirty || notifications.length > 0;
+
+  const openJournal = useCallback(() => {
+    setShowNotes(false);
+    addPane({ component: NotificationsList, label: "Журнал уведомлений" });
+  }, [addPane]);
+
+  if (!activePane || !showBell) return null;
+
+  return (
+    <div className={styles.PaneNoteBellWrap}>
+      <button
+        ref={bellRef}
+        className={[styles.NavbarBellBtn, styles.PaneNoteBell].join(" ")}
+        onClick={() => { autoOpenRef.current = false; setShowNotes((v) => !v); }}
+        title="Уведомления активной панели"
+        type="button"
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 1.5a4 4 0 0 0-4 4v2.7L2.7 10.5a.75.75 0 0 0 .53 1.28h9.54a.75.75 0 0 0 .53-1.28L12 8.2V5.5a4 4 0 0 0-4-4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
+          <path d="M6.5 12.5a1.5 1.5 0 0 0 3 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
+        </svg>
+        {notifications.length > 0 && (
+          <span className={styles.PaneNoteBadge}>{notifications.length}</span>
+        )}
+      </button>
+      {showNotes && (
+        <div ref={popoverRef} className={styles.PaneNotePopover}>
+          <div className={styles.PaneNotePopoverHeader}>
+            <span>Состояние формы</span>
+            <button className={styles.PaneNoteJournalLink} onClick={openJournal} type="button">
+              Журнал ➜
+            </button>
+          </div>
+          {isDirty && (
+            <div className={[styles.PaneNoteItem, styles.PaneNoteInfo].join(" ")}>
+              <span className={styles.PaneNoteIcon}>✏️</span>
+              <span className={styles.PaneNoteText}>
+                Форма содержит несохранённые изменения.
+                Нажмите «Сохранить» чтобы сохранить, или «Обновить» чтобы сбросить.
+              </span>
+            </div>
+          )}
+          {notifications.map((n) => (
+            <div
+              key={n.id}
+              className={[styles.PaneNoteItem, n.type === "warning" ? styles.PaneNoteWarning : styles.PaneNoteInfo].filter(Boolean).join(" ")}
+            >
+              <span className={styles.PaneNoteIcon}>{n.type === "warning" ? "⚠️" : "ℹ️"}</span>
+              <span className={styles.PaneNoteText}>
+                {n.text}
+                {n.actions && n.actions.length > 0 && (
+                  <span className={styles.PaneNoteActions}>
+                    {n.actions.map((a, i) => (
+                      <button
+                        key={i}
+                        className={styles.PaneNoteActionBtn}
+                        type="button"
+                        onClick={() => {
+                          a.onClick();
+                          dismissPaneNotification(activePane, n.id);
+                        }}
+                      >{a.label}</button>
+                    ))}
+                  </span>
+                )}
+              </span>
+              <button
+                className={styles.PaneNoteDismiss}
+                onClick={() => dismissPaneNotification(activePane, n.id)}
+                title="Скрыть"
+                type="button"
+              >✕</button>
+            </div>
+          ))}
+          {!isDirty && notifications.length === 0 && (
+            <div className={[styles.PaneNoteItem, styles.PaneNoteInfo].join(" ")}>
+              <span className={styles.PaneNoteIcon}>✅</span>
+              <span className={styles.PaneNoteText}>Нет уведомлений.</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const Navbar: React.FC = () => {
   const context = useAppContext();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
 
   const { props, setProps } = context?.navbar;
   const activeNav = props.find(nav => nav.isActive);
+
+  // Измеряем высоту навбара → CSS custom property для overlay
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const update = () => {
+      const h = el.getBoundingClientRect().height;
+      el.closest(`.${styles.Screen}`)?.setAttribute("style", `--navbar-h:${h}px`);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const toggleNav = useCallback((id: string) => {
     setProps(prev => prev.map(n =>
@@ -301,13 +465,19 @@ export const Navbar: React.FC = () => {
     setMobileMenuOpen(false);
   }, [setProps]);
 
+  /** Закрыть все меню (overlay + mobile) */
+  const closeAll = useCallback(() => {
+    setProps(prev => prev.map(n => ({ ...n, isActive: false })));
+    setMobileMenuOpen(false);
+  }, [setProps]);
+
   const toggleMobileMenu = useCallback(() => {
     setMobileMenuOpen(prev => !prev);
   }, []);
 
   return (
     <>
-      <div className={styles.NavbarWrapper}>
+      <nav ref={navRef} className={styles.NavbarWrapper}>
         {/* Hamburger — видна только на ≤768px */}
         <button
           className={styles.NavbarBurger}
@@ -329,6 +499,7 @@ export const Navbar: React.FC = () => {
 
         {/* Правая часть: индикаторы, имя, выход */}
         <div className={styles.NavbarRight}>
+          <NavbarPaneBell />
           <OfflineIndicator />
           <NotificationToast />
           {context.auth?.user && (
@@ -350,18 +521,31 @@ export const Navbar: React.FC = () => {
 
         {/* Мобильное раскрывающееся меню */}
         {mobileMenuOpen && (
-          <div className={styles.NavbarMobileMenu}>
-            {props.map(nav => (
-              <a key={nav.id} href="#"
-                onClick={(e) => { e.preventDefault(); toggleNav(nav.id); }}
-                className={nav.isActive ? styles.Active : undefined}>
-                {nav.title}
-              </a>
-            ))}
-          </div>
+          <>
+            <div className={styles.NavbarMobileMenu}>
+              {props.map(nav => (
+                <a key={nav.id} href="#"
+                  onClick={(e) => { e.preventDefault(); toggleNav(nav.id); }}
+                  className={nav.isActive ? styles.Active : undefined}>
+                  {nav.title}
+                </a>
+              ))}
+            </div>
+            {/* Backdrop для мобильного меню */}
+            <div className={styles.NavbarMobileBackdrop} onClick={() => setMobileMenuOpen(false)} />
+          </>
         )}
-      </div>
-      {activeNav && <div className={styles.NavbarOverlayWrapper}>{activeNav?.component}</div>}
+      </nav>
+
+      {/* Overlay — абсолютно поверх Content, ниже навбара */}
+      {activeNav && (
+        <>
+          <div className={styles.NavbarOverlayWrapper}>
+            {activeNav.component}
+          </div>
+          <div className={styles.NavbarBackdrop} onClick={closeAll} />
+        </>
+      )}
     </>
   )
 }
@@ -481,7 +665,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               {can("User") && <li onClick={() => addPane({ component: UsersList })}>Пользователи</li>}
               {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>}
-              {can("Notification") && <li onClick={() => addPane({ component: NotificationsList })}>Уведомления</li>}
+              {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: "Журнал уведомлений" })}>Журнал уведомлений</li>}
               <li onClick={() => addPane({ component: UnsavedFormsList })}>Несохранённые записи</li>
               <li onClick={() => addPane({ component: SyncDashboard, label: 'Синхронизация и оффлайн-данные' })}>Синхронизация и оффлайн-данные</li>
             </ul>

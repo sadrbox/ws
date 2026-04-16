@@ -1,91 +1,79 @@
 import { FC } from "react";
-import { Button, ButtonImage } from "src/components/Button";
-import { Divider } from "src/components/Field";
+import { Button } from "src/components/Button";
 import styles from "src/styles/main.module.scss";
-import reload_16 from "src/assets/reload_16.png";
 
 export interface FormPanelProps {
   onSaveAndClose?: () => void;
   onSave?: () => void;
-  onClose: () => void;
   onReload?: () => void;
   isLoading: boolean;
   showReload?: boolean;
   /** Если true — скрыть кнопки сохранения (режим только чтение по правам доступа) */
   readonly?: boolean;
-  /** Есть ли несохранённые изменения? */
-  isDirty?: boolean;
 }
 
 /**
- * Стандартная панель кнопок формы:
- * [Сохранить и закрыть] | [Сохранить] [Закрыть] | [⟳ Обновить]
+ * Панель действий формы, рендерится в PaneHeaderToolbar через портал.
  *
- * Если onSaveAndClose / onSave не переданы — кнопки сохранения скрываются
- * (readonly-формы, например ActivityHistories).
+ * Содержит только бизнес-действия:
+ *   [Сохранить и закрыть] | [Сохранить] | [⟳ Обновить]
  *
- * Если readonly=true — кнопки сохранения принудительно скрываются
- * (права доступа = "readonly").
+ * Кнопка «Закрыть» (✕) и индикатор isDirty (●) управляются
+ * на уровне PaneItem — они одинаковы для всех панелей.
  */
 const FormPanel: FC<FormPanelProps> = ({
   onSaveAndClose,
   onSave,
-  onClose,
   onReload,
   isLoading,
   showReload = true,
   readonly: isReadonly = false,
-  isDirty = false,
 }) => {
   const effectiveSaveAndClose = isReadonly ? undefined : onSaveAndClose;
   const effectiveSave = isReadonly ? undefined : onSave;
 
+  // Если нечего показывать (readonly без reload) — не рендерим ничего
+  const hasActions = effectiveSaveAndClose || effectiveSave || (showReload && onReload);
+  if (!hasActions) return null;
+
   return (
-  <div className={styles.FormPanel}>
-    <div className={styles.TablePanelLeft}>
-      <div
-        className={[styles.colGroup, styles.gap6].join(" ")}
-        style={{ justifyContent: "flex-start" }}
-      >
-        {effectiveSaveAndClose && (
-          <Button variant="primary" onClick={effectiveSaveAndClose} disabled={isLoading}>
-            <span>Сохранить и закрыть</span>
-          </Button>
-        )}
-        {(effectiveSaveAndClose || effectiveSave) && <Divider />}
-        {effectiveSave && (
-          <Button onClick={effectiveSave} disabled={isLoading}>
-            <span>Сохранить</span>
-          </Button>
-        )}
-        <Button onClick={onClose} disabled={isLoading}>
-          <span>Закрыть</span>
+    <>
+      {effectiveSaveAndClose && (
+        <Button variant="primary" onClick={effectiveSaveAndClose} disabled={isLoading}>
+          <span>Сохранить и закрыть</span>
         </Button>
-        {showReload && onReload && (
-          <>
-            <Divider />
-            <ButtonImage onClick={onReload} title="Обновить" disabled={isLoading}>
-              <img
-                src={reload_16}
-                alt="Reload"
-                height={16}
-                width={16}
-                className={isLoading ? styles.animationLoop : ""}
-              />
-            </ButtonImage>
-          </>
-        )}
-        {isDirty && !isReadonly && (
-          <>
-            <Divider />
-            <span className={styles.DirtyBadge} title="Имеются несохранённые изменения">● Не сохранено</span>
-          </>
-        )}
-      </div>
-    </div>
-    <div className={styles.TablePanelRight} />
-  </div>
-);
+      )}
+      {effectiveSave && (
+        <Button onClick={effectiveSave} disabled={isLoading}>
+          <span>Сохранить</span>
+        </Button>
+      )}
+      {showReload && onReload && (
+        <button
+          className={styles.PaneHeaderControl}
+          onClick={onReload}
+          disabled={isLoading}
+          title="Обновить"
+          type="button"
+        >
+          <svg
+            width="14" height="14" viewBox="0 0 16 16" fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className={isLoading ? styles.animationLoop : undefined}
+          >
+            <path
+              d="M14 1v5h-5"
+              stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"
+            />
+            <path
+              d="M13.3 10a6 6 0 1 1-1.06-5.3L14 6"
+              stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"
+            />
+          </svg>
+        </button>
+      )}
+    </>
+  );
 };
 
 FormPanel.displayName = "FormPanel";

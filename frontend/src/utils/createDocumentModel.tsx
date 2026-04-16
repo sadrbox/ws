@@ -18,6 +18,8 @@ import { Group } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
+import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -48,6 +50,8 @@ interface CreateDocModelOptions {
   formLabel: string;
   storageKey: string;
   columnsJson: any;
+  /** Ключ AccessRight (напр. "Purchase"). Если не указан — readonly не применяется */
+  accessRight?: string;
 }
 
 export function createDocumentModel(opts: CreateDocModelOptions) {
@@ -55,6 +59,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
 
   const DocForm: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
+    const access = opts.accessRight ? useAccessRight(opts.accessRight) : { canWrite: true };
 
     const initialFields: TDocFields = (() => {
       const data = paneProps.data;
@@ -81,12 +86,12 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
         documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 10) ?? "",
         description: d.description ?? "", amount: d.amount != null ? String(d.amount) : "",
         status: d.status ?? "draft",
-        organizationUuid: d.organizationUuid ?? prev?.organizationUuid ?? "",
-        organizationName: d.organization?.shortName ?? prev?.organizationName ?? "",
-        counterpartyUuid: d.counterpartyUuid ?? prev?.counterpartyUuid ?? "",
-        counterpartyName: d.counterparty?.shortName ?? prev?.counterpartyName ?? "",
-        contractUuid: d.contractUuid ?? prev?.contractUuid ?? "",
-        contractName: d.contract?.shortName ?? prev?.contractName ?? "",
+        organizationUuid: d.organizationUuid ?? "",
+        organizationName: d.organization?.shortName ?? "",
+        counterpartyUuid: d.counterpartyUuid ?? "",
+        counterpartyName: d.counterparty?.shortName ?? "",
+        contractUuid: d.contractUuid ?? "",
+        contractName: d.contract?.shortName ?? "",
       }),
       buildPayload: (fd) => ({
         documentNumber: fd.documentNumber?.trim() || null, documentDate: fd.documentDate || null,
@@ -96,7 +101,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
         counterpartyUuid: fd.counterpartyUuid || null,
         contractUuid: fd.contractUuid || null,
       }),
-      buildPaneLabel: (saved) => `${translate(listName) || formLabel}: ${saved.documentNumber || "?"} • ${saved.id ?? "?"}`,
+      buildPaneLabel: (saved) => makePaneLabel(listName, formLabel, saved),
     });
 
     /** При выборе договора — автозаполняем Организацию и Контрагента из данных договора */
@@ -119,7 +124,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
     };
 
     const tabs = useMemo(() => [
-      { id: "general", label: translate("general") || "Общие сведения", component: (
+      { id: "general", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
             <Field label="Номер документа" name={`${form.formUid}_docNum`} minWidth="339px" value={form.fields.documentNumber} onChange={e => form.setField("documentNumber", e.target.value)} disabled={form.isLoading} />
@@ -144,9 +149,9 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
     ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, form.uuid, handleContractSelect]);
 
     return (
-      <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+      <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
-        error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} isDirty={form.isDirty} />
+        error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!access.canWrite} isDirty={form.isDirty} />
     );
   };
   DocForm.displayName = `${listName.replace("List", "")}Form`;

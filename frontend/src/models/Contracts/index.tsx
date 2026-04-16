@@ -6,8 +6,8 @@ import type { TPane } from "src/app/types";
 import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import FilesPanel from "src/models/Files";
-import PrintPreview from "./PrintPreview";
+import FilesPanel from "src/components/FilesPanel";
+import PrintPreview from "src/components/PrintPreview";
 import { Divider, Field, FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
@@ -18,6 +18,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import { useModelListState } from "src/hooks/useModelListState";
+import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "contracts";
 // FORM
@@ -81,10 +82,10 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
       contractText: d.contractText ?? "",
       startDate: d.startDate?.slice(0, 10) ?? "",
       endDate: d.endDate?.slice(0, 10) ?? "",
-      organizationUuid: d.organizationUuid ?? prev?.organizationUuid ?? "",
-      organizationName: d.organization?.shortName ?? prev?.organizationName ?? "",
-      counterpartyUuid: d.counterpartyUuid ?? prev?.counterpartyUuid ?? "",
-      counterpartyName: d.counterparty?.shortName ?? prev?.counterpartyName ?? "",
+      organizationUuid: d.organizationUuid ?? "",
+      organizationName: d.organization?.shortName ?? "",
+      counterpartyUuid: d.counterpartyUuid ?? "",
+      counterpartyName: d.counterparty?.shortName ?? "",
       id: d.id,
       uuid: d.uuid,
     }),
@@ -101,13 +102,13 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
       };
     },
     buildPaneLabel: (saved) =>
-      `${translate("ContractsList") || "ContractsList"}: ${saved.shortName || saved.contractNumber || "?"} • ${saved.id ?? "?"}`,
+      makePaneLabel("ContractsList", "Договора", saved, saved.shortName || saved.contractNumber),
   });
 
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
       {
-        id: "general", label: translate("general") || "Общие сведения", component: (
+        id: "general", label: translate("general") || "Основное", component: (
           <div className={styles.FormBodyParts}>
             <Group align="row" gap="12px" className={styles.Form}>
               <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
@@ -143,6 +144,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <ModelFormWrapper
+      paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
@@ -207,7 +209,7 @@ const ContractsList: FC<ContractsListProps> = ({ variant = 'default', onSelectIt
       ? { [ownerField]: ownerUuid } as unknown as TDataItem
       : d;
     addPane({
-      label: isEdit ? `${t(componentName)}: ${d?.shortName || d?.contractNumber || t("noName")} • ${d?.id ?? "?"}` : `${t(componentName)}: ${t("new")}`,
+      label: makePaneLabelFromData("ContractsList", "Договора", isEdit ? d as any : null, (d?.shortName || d?.contractNumber) as string),
       component: ContractsForm, data: newData, onSave: () => refetch(), onClose: () => refetch(),
     });
   }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);

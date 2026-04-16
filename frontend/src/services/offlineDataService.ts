@@ -16,6 +16,7 @@
  */
 
 import apiClient from "src/services/api/client";
+import { isNetworkError as isNetworkLike } from "./networkUtils";
 import { getIsOnline } from "./networkStatus";
 import {
   offlineDb,
@@ -470,14 +471,6 @@ async function handleOfflineDelete(
 // ═══════════════════════════════════════════════════════════════════════════
 // Helpers
 // ═══════════════════════════════════════════════════════════════════════════
-
-function isNetworkLike(err: any): boolean {
-  if (!err) return false;
-  if (err.code === "ERR_NETWORK" || err.code === "ECONNABORTED") return true;
-  if (err.message === "Network Error") return true;
-  if (err.isAxiosError && !err.response) return true;
-  return false;
-}
 
 export default {
   fetchList,

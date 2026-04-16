@@ -10,6 +10,7 @@ import { Group } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -26,17 +27,17 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       shortName: d.shortName ?? "", sku: d.sku ?? "",
-      brandUuid: d.brandUuid ?? "", brandName: d.brand?.shortName ?? prev?.brandName ?? "",
+      brandUuid: d.brandUuid ?? "", brandName: d.brand?.shortName ?? "",
     }),
     buildPayload: (fd) => {
       if (!fd.shortName?.trim()) return "Наименование обязательно";
       return { shortName: fd.shortName.trim(), sku: fd.sku?.trim() || null, brandUuid: fd.brandUuid || null };
     },
-    buildPaneLabel: (saved) => `${translate(LIST_NAME) || "Номенклатура"}: ${saved.shortName || "?"} • ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
   });
 
   const tabs = useMemo(() => [
-    { id: "general", label: translate("general") || "Общие сведения", component: (
+    { id: "general", label: translate("general") || "Основное", component: (
       <div className={styles.FormBodyParts}>
         <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
           <Field label="Наименование *" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
@@ -55,7 +56,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);
 
   return (
-    <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );

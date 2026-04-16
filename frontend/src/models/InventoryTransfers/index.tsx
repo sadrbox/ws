@@ -11,6 +11,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -58,9 +59,9 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       ...(prev ?? DEFAULT_FIELDS), ...d,
       documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 10) ?? "",
       description: d.description ?? "", status: d.status ?? "draft",
-      fromWarehouseUuid: d.fromWarehouseUuid ?? "", fromWarehouseName: d.fromWarehouse?.shortName ?? prev?.fromWarehouseName ?? "",
-      toWarehouseUuid: d.toWarehouseUuid ?? "", toWarehouseName: d.toWarehouse?.shortName ?? prev?.toWarehouseName ?? "",
-      organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? prev?.organizationName ?? "",
+      fromWarehouseUuid: d.fromWarehouseUuid ?? "", fromWarehouseName: d.fromWarehouse?.shortName ?? "",
+      toWarehouseUuid: d.toWarehouseUuid ?? "", toWarehouseName: d.toWarehouse?.shortName ?? "",
+      organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? "",
     }),
     buildPayload: (fd) => ({
       documentNumber: fd.documentNumber?.trim() || null, documentDate: fd.documentDate || null,
@@ -68,11 +69,11 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       fromWarehouseUuid: fd.fromWarehouseUuid || null, toWarehouseUuid: fd.toWarehouseUuid || null,
       organizationUuid: fd.organizationUuid || null,
     }),
-    buildPaneLabel: (saved) => `${translate(LIST_NAME) || FORM_LABEL}: ${saved.documentNumber || "?"} • ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, FORM_LABEL, saved),
   });
 
   const tabs = useMemo(() => [
-    { id: "general", label: translate("general") || "Общие сведения", component: (
+    { id: "general", label: translate("general") || "Основное", component: (
       <div className={styles.FormBodyParts}>
         <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
           <Field label="Номер документа" name={`${form.formUid}_docNum`} minWidth="339px" value={form.fields.documentNumber} onChange={e => form.setField("documentNumber", e.target.value)} disabled={form.isLoading} />
@@ -92,7 +93,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);
 
   return (
-    <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );

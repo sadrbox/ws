@@ -13,6 +13,14 @@ const COMPONENT_NAME = "FilesList_part";
 // FILES PANEL  (встраиваемая таблица файлов — единый компонент для всех форм)
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Форматирование размера файла: КБ если < 1 МБ, иначе МБ */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return (bytes / 1024).toFixed(1) + " КБ";
+  }
+  return (bytes / (1024 * 1024)).toFixed(2) + " МБ";
+}
+
 interface FilesPanelProps {
   ownerType: string;
   ownerUuid: string;
@@ -56,7 +64,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
     const mapped = rows.map(row => ({
       ...row,
       fileSize: row.fileSize != null
-        ? (Number(row.fileSize) / (1024 * 1024)).toFixed(2)
+        ? formatFileSize(Number(row.fileSize))
         : "",
     } as TDataItem));
 

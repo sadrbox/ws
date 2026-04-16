@@ -14,6 +14,8 @@ import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupFie
 
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
+import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { useModelListState } from "src/hooks/useModelListState";
 
 const MODEL_ENDPOINT = "contacts";
@@ -36,6 +38,7 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
+  const { canWrite } = useAccessRight("Contact");
   const data = paneProps.data;
 
   const initialFields: TFields | undefined = (() => {
@@ -81,13 +84,12 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
         ownerUuid: fd.ownerUuid || null,
       };
     },
-    buildPaneLabel: (saved) =>
-      `${translate("ContactsList") || "ContactsList"}: ${saved.value || "?"} • ${saved.id ?? "?"}`,
+    buildPaneLabel: (saved) => makePaneLabel("ContactsList", "Контакты", saved),
   });
 
   const tabs = useMemo(() => [
     {
-      id: "general", label: translate("general") || "Общие сведения", component: (
+      id: "general", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
@@ -128,6 +130,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <ModelFormWrapper
+      paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
@@ -138,6 +141,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
       error={form.error}
       errorRevision={form.errorRevision}
       onErrorDismiss={() => form.setError(null)}
+      readonly={!canWrite}
       isDirty={form.isDirty}
     />
   );
@@ -180,7 +184,7 @@ const ContactsList: FC<ContactsListProps> = ({ variant = 'default', onSelectItem
       ? { [ownerField]: ownerUuid } as unknown as TDataItem
       : d;
     addPane({
-      label: isEdit ? `${t(componentName)}: ${d?.value || t("noName")} • ${d?.id ?? "?"}` : `${t(componentName)}: ${t("new")}`,
+      label: makePaneLabelFromData("ContactsList", "Контакты", isEdit ? d as any : null),
       component: ContactsForm, data: newData, onSave: () => refetch(), onClose: () => refetch(),
     });
   }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);

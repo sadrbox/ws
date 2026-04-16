@@ -5,6 +5,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TTableVariant } from "src/components/Table";
 import Table, { TOpenModelFormProps } from "src/components/Table";
 import { useModelListState } from "src/hooks/useModelListState";
+import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 /**
  * Универсальный компонент списка модели.
@@ -88,8 +89,8 @@ const ModelList: FC<ModelListProps> = ({
       ? { [ownerField]: ownerUuid } as unknown as TDataItem
       : d;
     const label = isEdit
-      ? `${t(componentName)}: ${getLabel(d)} • ${d?.id ?? "?"}`
-      : `${t(componentName)}: ${t("new")}`;
+      ? makePaneLabelFromData(componentName, componentName, d, getLabel(d))
+      : makePaneLabelFromData(componentName, componentName);
     addPane({
       label,
       component: FormComponent,

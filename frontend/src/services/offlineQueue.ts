@@ -280,18 +280,8 @@ export async function getQueueSummary(): Promise<QueueSummary> {
 // DETECT NETWORK ERROR
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Определяет, является ли ошибка проблемой сети (нет связи / timeout) */
-export function isNetworkError(error: any): boolean {
-  if (!error) return false;
-  // axios network error (нет response)
-  if (error.code === "ERR_NETWORK" || error.code === "ECONNABORTED") return true;
-  if (error.message === "Network Error") return true;
-  // timeout
-  if (error.code === "ETIMEDOUT" || error.code === "ECONNREFUSED") return true;
-  // Нет response = сеть не достижима
-  if (error.isAxiosError && !error.response) return true;
-  return false;
-}
+/** @deprecated Используйте import { isNetworkError } from "src/services/networkUtils" */
+export { isNetworkError } from "./networkUtils";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPER: превратить axios config в QueueEntry

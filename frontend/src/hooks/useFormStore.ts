@@ -6,7 +6,7 @@ import {
 } from "react";
 import { useAppContext } from "src/app";
 import apiClient from "src/services/api/client";
-import { isNetworkError } from "src/services/offlineQueue";
+import { isNetworkError } from "src/services/networkUtils";
 import { commitPendingRows } from "src/services/commitPendingRows";
 import { fetchOne, isSyncableEndpoint } from "src/services/offlineDataService";
 import type { TDataItem } from "src/components/Table/types";
@@ -302,6 +302,7 @@ function createFormStore<F extends object>(
 		mapServerToForm: (data: any, prev?: F) => F | Promise<F>,
 		afterLoad?: () => void,
 		snapshotOnly = false,
+		paneUniqId?: string,
 	): Promise<void> {
 		setMeta({ isLoading: true });
 		setError(null);
@@ -357,13 +358,17 @@ function createFormStore<F extends object>(
 			}
 
 			if (fromCache) {
-				setError("Данные загружены из локального кэша (offline-режим).");
+				const cacheMsg = "Данные загружены из локального кэша (offline-режим).";
+				setError(cacheMsg);
+				if (paneUniqId) addPaneNotification(paneUniqId, "info", cacheMsg);
 			}
 
 			afterLoad?.();
 		} catch (err: any) {
 			if (isNetworkError(err)) {
-				setError("Нет связи с сервером. Работа в режиме offline — данные будут загружены при восстановлении соединения.");
+				const offMsg = "Нет связи с сервером. Работа в режиме offline — данные будут загружены при восстановлении соединения.";
+				setError(offMsg);
+				if (paneUniqId) addPaneNotification(paneUniqId, "warning", offMsg);
 			} else {
 				setError(
 					err.response?.data?.message ||
@@ -479,8 +484,12 @@ function createFormStore<F extends object>(
 						uuid: offlineSaved.uuid,
 					});
 					markClean();
-					setError("Сохранено локально. Синхронизация произойдёт при восстановлении связи.");
-					if (uniqId) updatePaneLabel(uniqId, buildPaneLabel(offlineSaved));
+					const saveMsg = "Сохранено локально. Синхронизация произойдёт при восстановлении связи.";
+					setError(saveMsg);
+					if (uniqId) {
+						addPaneNotification(uniqId, "info", saveMsg);
+						updatePaneLabel(uniqId, buildPaneLabel(offlineSaved));
+					}
 					return { success: true, savedData: offlineSaved };
 				} catch (offlineErr) {
 					console.error("[FormStore] Offline save failed:", offlineErr);
@@ -498,6 +507,7 @@ function createFormStore<F extends object>(
 					err.response.data?.message || "Ошибка валидации";
 			else if (err.message) msg = err.message;
 			setError(msg);
+			if (uniqId && isNetworkError(err)) addPaneNotification(uniqId, "warning", msg);
 			setMeta({ isLoading: false });
 			return { success: false };
 		}
@@ -673,6 +683,152 @@ export function usePaneDirty(uniqId: string): boolean {
 	);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PANE NOTIFICATIONS — уведомления привязанные к конкретной панели.
+// Используется для информирования пользователя о состоянии формы
+// (например: «данные восстановлены из предыдущей сессии»).
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface PaneNotificationAction {
+	label: string;
+	onClick: () => void;
+}
+
+export interface PaneNotification {
+	id: number;
+	type: "info" | "warning";
+	text: string;
+	timestamp: number;
+	actions?: PaneNotificationAction[];
+}
+
+/** Запись в локальном журнале уведомлений (localStorage) */
+export interface NotificationJournalEntry {
+	id: number;
+	type: "info" | "warning";
+	text: string;
+	timestamp: number;
+	/** Заголовок панели (например «Организации: ТОО Строй-Снаб №1») */
+	paneLabel?: string;
+	/** Ссылка на объект: endpoint + uuid, чтобы можно было переоткрыть */
+	ref?: { endpoint: string; uuid: string };
+}
+
+const JOURNAL_KEY = "notification-journal";
+const JOURNAL_MAX = 200;
+
+function loadJournal(): NotificationJournalEntry[] {
+	try {
+		return JSON.parse(localStorage.getItem(JOURNAL_KEY) || "[]");
+	} catch { return []; }
+}
+
+function saveJournal(entries: NotificationJournalEntry[]): void {
+	localStorage.setItem(JOURNAL_KEY, JSON.stringify(entries.slice(-JOURNAL_MAX)));
+}
+
+/** Журнал: подписчики для реактивного обновления */
+const journalListeners = new Set<() => void>();
+let journalCache: NotificationJournalEntry[] | null = null;
+
+function notifyJournalListeners(): void {
+	journalCache = null; // сброс кэша
+	for (const l of journalListeners) l();
+}
+
+function getJournalSnapshot(): NotificationJournalEntry[] {
+	if (!journalCache) journalCache = loadJournal();
+	return journalCache;
+}
+
+function subscribeJournal(listener: () => void): () => void {
+	journalListeners.add(listener);
+	return () => { journalListeners.delete(listener); };
+}
+
+/** Хук: получить журнал уведомлений (реактивный) */
+export function useNotificationJournal(): NotificationJournalEntry[] {
+	return useSyncExternalStore(subscribeJournal, getJournalSnapshot, () => []);
+}
+
+/** Очистить журнал уведомлений */
+export function clearNotificationJournal(): void {
+	localStorage.removeItem(JOURNAL_KEY);
+	notifyJournalListeners();
+}
+
+let nextNoteId = 1;
+const paneNotesMap = new Map<string, PaneNotification[]>();
+const noteListeners = new Set<() => void>();
+
+function notifyNoteListeners(): void {
+	for (const l of noteListeners) l();
+}
+
+/** Добавить уведомление к панели. Также сохраняет в локальный журнал. */
+export function addPaneNotification(
+	uniqId: string,
+	type: PaneNotification["type"],
+	text: string,
+	/** Контекст для журнала: заголовок панели и ссылка на объект */
+	context?: { paneLabel?: string; ref?: { endpoint: string; uuid: string } },
+	/** Кнопки-действия внутри уведомления */
+	actions?: PaneNotificationAction[],
+): void {
+	const ts = Date.now();
+	const id = nextNoteId++;
+	const list = paneNotesMap.get(uniqId) ?? [];
+	list.push({ id, type, text, timestamp: ts, actions });
+	paneNotesMap.set(uniqId, list);
+	notifyNoteListeners();
+
+	// Сохраняем в журнал localStorage
+	const journal = loadJournal();
+	journal.push({
+		id,
+		type,
+		text,
+		timestamp: ts,
+		paneLabel: context?.paneLabel,
+		ref: context?.ref,
+	});
+	saveJournal(journal);
+	notifyJournalListeners();
+}
+
+/** Удалить конкретное уведомление */
+export function dismissPaneNotification(uniqId: string, noteId: number): void {
+	const list = paneNotesMap.get(uniqId);
+	if (!list) return;
+	const filtered = list.filter((n) => n.id !== noteId);
+	if (filtered.length === 0) paneNotesMap.delete(uniqId);
+	else paneNotesMap.set(uniqId, filtered);
+	notifyNoteListeners();
+}
+
+/** Очистить все уведомления панели */
+export function clearPaneNotifications(uniqId: string): void {
+	if (paneNotesMap.has(uniqId)) {
+		paneNotesMap.delete(uniqId);
+		notifyNoteListeners();
+	}
+}
+
+function subscribeNotes(listener: () => void): () => void {
+	noteListeners.add(listener);
+	return () => { noteListeners.delete(listener); };
+}
+
+/** Хук: уведомления конкретной панели */
+export function usePaneNotifications(uniqId: string): PaneNotification[] {
+	return useSyncExternalStore(
+		subscribeNotes,
+		() => paneNotesMap.get(uniqId) ?? emptyNotes,
+		() => emptyNotes,
+	);
+}
+const emptyNotes: PaneNotification[] = [];
+
 function getOrCreate<F extends object>(
 	defaultFields: F,
 	tableDefs: Record<string, TableDef>,
@@ -766,6 +922,8 @@ export interface UseFormStoreReturn<F extends object> {
 	uuid: string | undefined;
 	/** Уникальный ID инстанса для привязки к input name */
 	formUid: string;
+	/** ID панели (для регистрации тулбара) */
+	paneId: string | undefined;
 
 	// ── Совместимость со старым API ──
 	/** handleFieldChange(field, stringValue) — как в useModelForm */
@@ -852,6 +1010,10 @@ export function useFormStore<F extends object>(
 	const onCloseRef = useRef(onClose);
 	onCloseRef.current = onClose;
 
+	// Refs для deferred-доступа из эффектов, создаваемых раньше определения функций
+	const submitRef = useRef<() => Promise<boolean>>(() => Promise.resolve(false));
+	const loadFromServerRef = useRef<(entityUuid: string) => Promise<void>>(async () => {});
+
 	// ── Полная подписка (для meta / error / loading) ──
 	const snapshot = useSyncExternalStore(
 		store.subscribe,
@@ -867,7 +1029,7 @@ export function useFormStore<F extends object>(
 			// Если данные восстановлены из sessionStorage — загружаем серверные данные
 			// только для snapshot (isDirty будет сравнивать с реальным серверным состоянием).
 			// Если sessionStorage пуст — полная загрузка (заменяет fields).
-			store.load(uuid, mapRef.current, afterLoadRef.current, store.hadStoredData);
+			store.load(uuid, mapRef.current, afterLoadRef.current, store.hadStoredData, uniqId);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uuid, store]);
@@ -911,7 +1073,46 @@ export function useFormStore<F extends object>(
 		return () => {
 			unsub();
 			setPaneDirty(uniqId, false);
+			clearPaneNotifications(uniqId);
 		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [uniqId, store]);
+
+	// ── Уведомление при восстановлении dirty-формы из sessionStorage ──
+	useEffect(() => {
+		if (!uniqId || !store.hadStoredData) return;
+		const noteText =
+			"В прошлый раз вы изменили данные в этой форме, но не сохранили их. " +
+			"Текущие поля содержат ваши несохранённые правки.";
+		const noteCtx = {
+			paneLabel: paneProps.label,
+			ref: uuid ? { endpoint, uuid } : undefined,
+		};
+		const noteActions: PaneNotificationAction[] = [
+			{
+				label: "Сохранить",
+				onClick: () => submitRef.current(),
+			},
+			{
+				label: "Обновить",
+				onClick: () => {
+					if (uuid) loadFromServerRef.current(uuid);
+				},
+			},
+		];
+		let fired = false;
+		const fire = () => {
+			if (fired) return;
+			fired = true;
+			addPaneNotification(uniqId, "warning", noteText, noteCtx, noteActions);
+		};
+		// Ждём загрузки серверных данных, после чего проверяем isDirty
+		const unsub = store.subscribe(() => {
+			if (store.isDirty()) { fire(); unsub(); }
+		});
+		// Проверим сразу (если snapshot уже ready)
+		if (store.isDirty()) { fire(); unsub(); }
+		return unsub;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uniqId, store]);
 
@@ -984,9 +1185,11 @@ export function useFormStore<F extends object>(
 				entityUuid,
 				mapRef.current,
 				afterLoadRef.current,
+				false,
+				uniqId,
 			);
 		},
-		[store],
+		[store, uniqId],
 	);
 
 	// ── Submit (fields + tables) ──
@@ -1048,6 +1251,9 @@ export function useFormStore<F extends object>(
 	}, [store, tableDefs, updatePaneLabel, uniqId, storageKey]);
 
 	// ── Actions ──
+	submitRef.current = submit;
+	loadFromServerRef.current = loadFromServer;
+
 	const handleSave = useCallback(() => {
 		submit();
 	}, [submit]);
@@ -1133,6 +1339,7 @@ export function useFormStore<F extends object>(
 
 		uuid,
 		formUid,
+		paneId: uniqId,
 
 		// ── Совместимость ──
 		handleFieldChange,

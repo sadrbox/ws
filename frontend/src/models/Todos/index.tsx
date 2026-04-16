@@ -4,7 +4,8 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import FilesPanel from "src/models/Files";
+import FilesPanel from "src/components/FilesPanel";
+import PrintPreview from "src/components/PrintPreview";
 import { Divider, Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group } from "src/components/UI";
@@ -12,6 +13,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -59,10 +61,10 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       description: d.description ?? "", status: d.status ?? "new",
-      organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? prev?.organizationName ?? "",
-      curatorUuid: d.curatorUuid ?? "", curatorName: d.curator?.employee?.fullName || d.curator?.username || prev?.curatorName || "",
-      executorUuid: d.executorUuid ?? "", executorName: d.executor?.employee?.fullName || d.executor?.username || prev?.executorName || "",
-      createdAt: d.createdAt?.slice(0, 10) ?? prev?.createdAt ?? "",
+      organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? "",
+      curatorUuid: d.curatorUuid ?? "", curatorName: d.curator?.employee?.fullName || d.curator?.username || "",
+      executorUuid: d.executorUuid ?? "", executorName: d.executor?.employee?.fullName || d.executor?.username || "",
+      createdAt: d.createdAt?.slice(0, 10) ?? "",
       deadline: d.deadline?.slice(0, 10) ?? "", deadlineDays: d.deadlineDays?.toString() ?? "",
       id: d.id, uuid: d.uuid,
     }),
@@ -72,10 +74,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
       curatorUuid: fd.curatorUuid || null, executorUuid: fd.executorUuid || null,
       deadline: fd.deadline || null, deadlineDays: fd.deadlineDays || null,
     }),
-    buildPaneLabel: (saved) => {
-      const short = saved.description ? (String(saved.description).slice(0, 50) + (String(saved.description).length > 50 ? "..." : "")) : "?";
-      return `${translate("TodosList") || "Задачи"}: ${short} • ${saved.id ?? "?"}`;
-    },
+    buildPaneLabel: (saved) => makePaneLabel("TodosList", "Задачи", saved),
   });
 
   const handleDeadlineDaysChange = useCallback((value: string) => {
@@ -90,7 +89,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general") || "Общие сведения", component: (
+      { id: "general", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
@@ -121,12 +120,13 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
     ];
     if (form.isEditMode && form.fields.uuid) {
       t.push({ id: "files", label: translate("files") || "Файлы", component: <FilesPanel ownerType="todo" ownerUuid={form.fields.uuid} /> });
+      t.push({ id: "print", label: "Печать", component: <PrintPreview ownerUuid={form.fields.uuid} ownerType="todo" /> });
     }
     return t;
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleDeadlineDaysChange]);
 
   return (
-    <ModelFormWrapper tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
   );

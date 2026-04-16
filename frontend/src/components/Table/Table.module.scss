@@ -262,14 +262,17 @@ tbody {
 				user-select: none;
 				border: 1px solid #fff;
 
-				// Оптимизация ячеек
-				// will-change: contents;
-				// contain: content;
+				// Когда input внутри ячейки получает фокус — подсветить ячейку
+				&:focus-within {
+					// background: red !important;
+					// border-color: $color34;
+				}
 
 				& > input[type="text"] {
 					width: 100%;
 					border: 0px transparent;
 				}
+
 				span {
 					padding: 0 6px;
 					// line-height: 17px;
@@ -291,10 +294,15 @@ tbody {
 			// Оптимизируем активную строку
 			will-change: background-color, box-shadow;
 
-			& > td {
-				& > div {
+			td {
+				.TableBodyCell {
 					background: $color2;
+					& > input[type="text"] {
+						width: 100%;
+						border: 0px transparent;
+					}
 				}
+
 				// border-top: 1px solid $color1;
 				border-bottom: 1px solid $color1;
 				border-right: 1px solid $color1;
@@ -535,10 +543,10 @@ input[type="checkbox"] {
 	div[class*="FieldSelectWrapper"] {
 		border: none !important;
 		box-shadow: none !important;
-		background: transparent !important;
+		background: transparent ;
 		height: 100%;
 		border-radius: 0 !important;
-		
+
 		&:focus-within {
 			border: none !important;
 			box-shadow: none !important;
@@ -549,7 +557,7 @@ input[type="checkbox"] {
 	select {
 		border: none !important;
 		box-shadow: none !important;
-		background: transparent !important;
+		background: transparent ;
 		outline: none !important;
 		height: 100%;
 		&:focus {
@@ -782,9 +790,9 @@ input[type="checkbox"] {
 	// line-height: 1;
 	min-width: 120px;
 	height: $heightFieldInput;
-		text-overflow: ellipsis;
-			white-space: nowrap;
-			overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	overflow: hidden;
 	&::placeholder {
 		color: #aaa;
 		font-size: $fontsize - 1px;

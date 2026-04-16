@@ -8,6 +8,7 @@ import { ContactsForm } from "./index";
 import { translate } from "src/i18";
 import columnsJson from "./columns.json";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "contacts";
 const COMPONENT_NAME = "ContactsList_part";
@@ -89,9 +90,7 @@ const ContactsTable: FC<ContactsTableProps> = ({ ownerType, parentUuid, parentNa
       _ctx.refetch();
     };
     addPane({
-      label: isEdit
-        ? `${t("ContactsList")}: ${data?.value || t("noName")} • ${data?.id ?? "?"}`
-        : `${t("ContactsList")}: ${t("new")}`,
+      label: makePaneLabelFromData("ContactsList", "Контакты", isEdit ? data as any : null),
       component: ContactsForm,
       data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
       onSave: refresh,
