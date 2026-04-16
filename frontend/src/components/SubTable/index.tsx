@@ -16,9 +16,7 @@ import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import { useModelDelete } from "src/hooks/useModelDelete";
-import { Divider } from "src/components/Field";
-import { ButtonImage } from "src/components/Button";
-import editInlineIcon from "src/assets/edit-inline_16.svg";
+import Toolbar from "src/components/Toolbar";
 import { useQueryClient } from "@tanstack/react-query";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -794,14 +792,12 @@ const SubTable: FC<SubTableProps> = ({
   // ── Кнопки ─────────────────────────────────────────────────────────────
   const extraButtons = useMemo(() => (
     <>
-      <Divider />
-      <ButtonImage
+      <Toolbar.Divider />
+      <Toolbar.InlineEditButton
         onClick={toggleInlineEditing}
         active={inlineEditing}
         title={inlineEditing ? "Редактирование через форму" : "Редактирование в таблице"}
-      >
-        <img src={editInlineIcon} alt="Inline edit" height={16} width={16} />
-      </ButtonImage>
+      />
       {extraButtonsProp}
     </>
   ), [toggleInlineEditing, inlineEditing, extraButtonsProp]);

@@ -5,10 +5,9 @@ import {
 	useEffect,
 } from "react";
 import { useAppContext } from "src/app";
-import apiClient from "src/services/api/client";
 import { isNetworkError } from "src/services/networkUtils";
 import { commitPendingRows } from "src/services/commitPendingRows";
-import { fetchOne, isSyncableEndpoint } from "src/services/offlineDataService";
+import { pipeFetchOne, pipeCreate, pipeUpdate, isOfflineFirst } from "src/services/persistencePipe";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import useUID from "./useUID";
@@ -307,34 +306,26 @@ function createFormStore<F extends object>(
 		setMeta({ isLoading: true });
 		setError(null);
 		try {
-			// ── Offline-first: пробуем сервер, при ошибке сети → Dexie ──
 			let d: any;
 			let fromCache = false;
 
-			try {
-				const response = await apiClient.get(
-					`/${endpoint}/${entityUuid}`,
-				);
-				d = response.data?.item ?? response.data;
-
-				// Кэшируем в Dexie для будущего offline-доступа
-				if (isSyncableEndpoint(endpoint) && d) {
-					import("src/services/offlineDb").then(({ upsertRecords }) =>
-						upsertRecords(endpoint, [d]).catch(() => {}),
-					);
-				}
-			} catch (networkErr: any) {
-				// Если ошибка сети и таблица синхронизируемая → читаем из Dexie
-				if (isNetworkError(networkErr) && isSyncableEndpoint(endpoint)) {
-					const cached = await fetchOne(endpoint, entityUuid);
-					if (cached) {
-						d = cached.item;
-						fromCache = true;
-					} else {
-						throw networkErr; // нет кэша — показываем ошибку
-					}
+			if (isOfflineFirst()) {
+				// ── Offline-first pipe: server → Dexie fallback ──
+				const result = await pipeFetchOne(endpoint, entityUuid);
+				if (result) {
+					d = result.item;
+					fromCache = result.fromCache;
 				} else {
-					throw networkErr;
+					throw new Error("Запись не найдена");
+				}
+			} else {
+				// ── Transactional pipe: только сервер ──
+				const result = await pipeFetchOne(endpoint, entityUuid);
+				if (result) {
+					d = result.item;
+					fromCache = false;
+				} else {
+					throw new Error("Запись не найдена");
 				}
 			}
 
@@ -403,46 +394,18 @@ function createFormStore<F extends object>(
 				(state.meta.uuid || (state.fields as any).uuid);
 			const entityUuid =
 				state.meta.uuid || (state.fields as any).uuid;
-			const response = isEdit
-				? await apiClient.put(
-						`/${endpoint}/${entityUuid}`,
-						payloadOrError,
-					)
-				: await apiClient.post(`/${endpoint}`, payloadOrError);
 
-			// ── Offline-interceptor вернул заглушку ──
-			if (response.data?._offline) {
-				// Сохраняем в Dexie + pendingChanges через offlineDataService
-				if (isSyncableEndpoint(endpoint)) {
-					const { createRecord, updateRecord } = await import("src/services/offlineDataService");
-					if (isEdit && entityUuid) {
-						await updateRecord(endpoint, entityUuid, payloadOrError as Record<string, unknown>);
-					} else {
-						await createRecord(endpoint, payloadOrError as Record<string, unknown>);
-					}
-				}
-				const offlineSaved = { ...payloadOrError, uuid: entityUuid || (payloadOrError as any).uuid };
-				const mapped = await Promise.resolve(
-					mapServerToForm(offlineSaved, state.fields),
-				);
-				replaceFields(mapped);
-				setMeta({
-					isLoading: false,
-					isEditMode: true,
-					uuid: offlineSaved.uuid,
-				});
-				markClean();
-				if (uniqId) updatePaneLabel(uniqId, buildPaneLabel(offlineSaved));
-				return { success: true, savedData: offlineSaved };
-			}
+			let saved: any;
+			let wasOffline = false;
 
-			const saved = response.data?.item ?? response.data;
-
-			// Кэшируем серверный ответ в Dexie
-			if (isSyncableEndpoint(endpoint) && saved) {
-				import("src/services/offlineDb").then(({ upsertRecords }) =>
-					upsertRecords(endpoint, [saved]).catch(() => {}),
-				);
+			if (isEdit && entityUuid) {
+				const result = await pipeUpdate(endpoint, entityUuid, payloadOrError as Record<string, unknown>);
+				saved = result.item;
+				wasOffline = result.offline;
+			} else {
+				const result = await pipeCreate(endpoint, payloadOrError as Record<string, unknown>);
+				saved = result.item;
+				wasOffline = result.offline;
 			}
 
 			const mapped = await Promise.resolve(
@@ -454,57 +417,23 @@ function createFormStore<F extends object>(
 				isEditMode: true,
 				uuid: saved.uuid ?? entityUuid,
 			});
+
+			if (wasOffline) {
+				const saveMsg = "Сохранено локально. Синхронизация произойдёт при восстановлении связи.";
+				setError(saveMsg);
+				if (uniqId) addPaneNotification(uniqId, "info", saveMsg);
+			}
+
 			if (uniqId) updatePaneLabel(uniqId, buildPaneLabel(saved));
 			return { success: true, savedData: saved };
 		} catch (err: any) {
-			// ── Сеть упала — сохраняем локально ──
-			if (isNetworkError(err) && isSyncableEndpoint(endpoint)) {
-				try {
-					const { createRecord, updateRecord } = await import("src/services/offlineDataService");
-					const isEdit =
-						state.meta.isEditMode &&
-						(state.meta.uuid || (state.fields as any).uuid);
-					const entityUuid =
-						state.meta.uuid || (state.fields as any).uuid;
-
-					if (isEdit && entityUuid) {
-						await updateRecord(endpoint, entityUuid, payloadOrError as Record<string, unknown>);
-					} else {
-						await createRecord(endpoint, payloadOrError as Record<string, unknown>);
-					}
-
-					const offlineSaved = { ...payloadOrError, uuid: entityUuid || (payloadOrError as any).uuid };
-					const mapped = await Promise.resolve(
-						mapServerToForm(offlineSaved, state.fields),
-					);
-					replaceFields(mapped);
-					setMeta({
-						isLoading: false,
-						isEditMode: true,
-						uuid: offlineSaved.uuid,
-					});
-					markClean();
-					const saveMsg = "Сохранено локально. Синхронизация произойдёт при восстановлении связи.";
-					setError(saveMsg);
-					if (uniqId) {
-						addPaneNotification(uniqId, "info", saveMsg);
-						updatePaneLabel(uniqId, buildPaneLabel(offlineSaved));
-					}
-					return { success: true, savedData: offlineSaved };
-				} catch (offlineErr) {
-					console.error("[FormStore] Offline save failed:", offlineErr);
-				}
-			}
-
 			let msg = "Не удалось сохранить";
 			if (isNetworkError(err))
-				msg = "Нет связи с сервером. Изменения сохранены локально и будут отправлены при восстановлении соединения.";
+				msg = "Нет связи с сервером. Повторите попытку при восстановлении соединения.";
 			else if (err.response?.status === 409)
-				msg =
-					err.response.data?.message || "Запись уже существует";
+				msg = err.response.data?.message || "Запись уже существует";
 			else if (err.response?.status === 400)
-				msg =
-					err.response.data?.message || "Ошибка валидации";
+				msg = err.response.data?.message || "Ошибка валидации";
 			else if (err.message) msg = err.message;
 			setError(msg);
 			if (uniqId && isNetworkError(err)) addPaneNotification(uniqId, "warning", msg);

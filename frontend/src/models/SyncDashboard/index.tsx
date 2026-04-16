@@ -1,11 +1,13 @@
 /**
- * SyncDashboard — модель «Синхронизация и оффлайн-данные».
+ * SyncDashboard — панель «Синхронизация и оффлайн-данные».
+ *
+ * Выполнена в стиле стандартных форм приложения (FormWrapper → Tabs).
  *
  * Вкладки:
- *  1. Статус    — текущее состояние подключения, последняя синхронизация, прогресс
- *  2. Очередь   — pending changes, ожидающие push на сервер
- *  3. Конфликты — записи с конфликтами, требующие ручного разрешения
- *  4. Хранилище — статистика по таблицам, очистка
+ *  1. Основное    — «приборная панель» с понятным состоянием + переключатель режима
+ *  2. Очередь     — неотправленные изменения
+ *  3. Конфликты   — записи, требующие вашего решения
+ *  4. Хранилище   — управление локальными данными
  */
 
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
@@ -14,21 +16,15 @@ import { type SyncConflict } from "src/services/syncManager";
 import { pullSingleTable, fullSync } from "src/services/syncManager";
 import { resolveConflictLocal, resolveConflictServer } from "src/services/networkStatus";
 import { clearOfflineDb, SYNCABLE_TABLES, type SyncableTable, type PendingChange } from "src/services/offlineDb";
+import { usePersistenceMode, type PersistenceMode } from "src/services/persistenceMode";
 import { Button } from "src/components/Button";
+import { Divider } from "src/components/Field";
+import { Group } from "src/components/UI";
+import { usePaneToolbar } from "src/hooks/usePaneToolbar";
+import FormError from "src/components/FormError";
+import Tabs from "src/components/Tabs";
 import styles from "src/styles/main.module.scss";
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Tabs
-// ═══════════════════════════════════════════════════════════════════════════
-
-type Tab = "status" | "queue" | "conflicts" | "storage";
-
-const TAB_LABELS: Record<Tab, string> = {
-  status: "Статус",
-  queue: "Очередь",
-  conflicts: "Конфликты",
-  storage: "Хранилище",
-};
+import type { TPane } from "src/app/types";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Helpers
@@ -37,8 +33,7 @@ const TAB_LABELS: Record<Tab, string> = {
 function formatDate(iso?: string | null): string {
   if (!iso) return "—";
   try {
-    const d = new Date(iso);
-    return d.toLocaleString("ru-RU", {
+    return new Date(iso).toLocaleString("ru-RU", {
       day: "2-digit", month: "2-digit", year: "numeric",
       hour: "2-digit", minute: "2-digit", second: "2-digit",
     });
@@ -51,327 +46,335 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
+function timeAgo(iso?: string | null): string {
+  if (!iso) return "Никогда";
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return "Только что";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} мин. назад`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} ч. назад`;
+  return formatDate(iso);
+}
+
+function pluralChanges(n: number): string {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return "изменений";
+  if (last > 1 && last < 5) return "изменения";
+  if (last === 1) return "изменение";
+  return "изменений";
+}
+
 const ACTION_LABELS: Record<string, string> = {
-  create: "Создание",
-  update: "Изменение",
-  delete: "Удаление",
+  create: "Создание", update: "Изменение", delete: "Удаление",
 };
 
 const TABLE_LABELS: Record<string, string> = {
-  organizations: "Организации",
-  counterparties: "Контрагенты",
-  contracts: "Договора",
-  contacts: "Контакты",
-  contacttypes: "Типы контактов",
-  contactpersons: "Контактные лица",
-  bankaccounts: "Банковские счета",
-  users: "Пользователи",
-  todos: "Задачи",
-  notifications: "Уведомления",
-  warehouses: "Склады",
-  sales: "Реализация",
-  purchases: "Поступления",
-  "outgoing-invoices": "СФ исходящие",
-  "incoming-invoices": "СФ входящие",
-  "payment-invoices": "Счета на оплату",
-  "scheduled-tasks": "Регламентные задачи",
-  "inventory-transfers": "Перемещение ТМЗ",
-  "cash-receipt-orders": "ПКО",
-  "cash-expense-orders": "РКО",
-  brands: "Бренды",
-  products: "Номенклатура",
-  saleitems: "Позиции реализации",
-  employees: "Сотрудники",
-  positions: "Должности",
-  "employee-histories": "Кадровая история",
-  "access-rights": "Права доступа",
-  currencies: "Валюты",
-  "payroll-calculations": "Начисление ЗП",
-  "payroll-payments": "Выплата ЗП",
+  organizations: "Организации", counterparties: "Контрагенты",
+  contracts: "Договора", contacts: "Контакты",
+  contacttypes: "Типы контактов", contactpersons: "Контактные лица",
+  bankaccounts: "Банковские счета", users: "Пользователи",
+  todos: "Задачи", notifications: "Уведомления",
+  warehouses: "Склады", sales: "Реализация",
+  purchases: "Поступления", "outgoing-invoices": "СФ исходящие",
+  "incoming-invoices": "СФ входящие", "payment-invoices": "Счета на оплату",
+  "scheduled-tasks": "Регламентные задачи", "inventory-transfers": "Перемещение ТМЗ",
+  "cash-receipt-orders": "ПКО", "cash-expense-orders": "РКО",
+  brands: "Бренды", products: "Номенклатура",
+  saleitems: "Позиции реализации", employees: "Сотрудники",
+  positions: "Должности", "employee-histories": "Кадровая история",
+  "access-rights": "Права доступа", currencies: "Валюты",
+  "payroll-calculations": "Начисление ЗП", "payroll-payments": "Выплата ЗП",
 };
 
-function getTableLabel(table: string): string {
-  return TABLE_LABELS[table] ?? table;
-}
+function getTableLabel(t: string): string { return TABLE_LABELS[t] ?? t; }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Status Tab
+// StatusBanner — крупный визуальный индикатор «здоровья» данных
 // ═══════════════════════════════════════════════════════════════════════════
 
-const StatusTab: FC<{
-  isOnline: boolean;
-  isSyncing: boolean;
-  syncState: ReturnType<typeof useOfflineSync>["syncState"];
-  pendingCount: number;
-  syncNow: () => Promise<void>;
-  abortSync: () => void;
-}> = ({ isOnline, isSyncing, syncState, pendingCount, syncNow, abortSync }) => {
+const StatusBanner: FC<{
+  isOnline: boolean; isSyncing: boolean; pendingCount: number; mode: PersistenceMode;
+}> = ({ isOnline, isSyncing, pendingCount, mode }) => {
+  let severity: "ok" | "warn" | "error" | "syncing" = "ok";
+  let icon = "✅";
+  let title = "Всё синхронизировано";
+  let subtitle = "Данные актуальны. Все изменения сохранены на сервере.";
+
+  if (isSyncing) {
+    severity = "syncing"; icon = "🔄";
+    title = "Идёт синхронизация…";
+    subtitle = "Данные отправляются на сервер и загружаются обратно.";
+  } else if (!isOnline && pendingCount > 0) {
+    severity = "error"; icon = "📴";
+    title = "Нет связи с сервером";
+    subtitle = `${pendingCount} ${pluralChanges(pendingCount)} ожидают отправки. Будут отправлены автоматически.`;
+  } else if (!isOnline) {
+    severity = "warn"; icon = "📴";
+    title = "Работа без подключения";
+    subtitle = "Вы можете просматривать и редактировать данные. Изменения сохранятся локально.";
+  } else if (pendingCount > 0) {
+    severity = "warn"; icon = "⏳";
+    title = "Есть неотправленные изменения";
+    subtitle = `${pendingCount} ${pluralChanges(pendingCount)} готовы к отправке.`;
+  }
+
+  const modeText = mode === "offline-first"
+    ? "⚡ Офлайн-доступ — данные хранятся на устройстве и синхронизируются"
+    : "🔗 Только сервер — данные загружаются по запросу";
+
   return (
-    <div className={styles.SyncDashSection}>
-      {/* Статус подключения */}
-      <div className={styles.SyncDashCard}>
-        <div className={styles.SyncDashCardTitle}>Подключение</div>
-        <div className={styles.SyncDashCardBody}>
-          <div className={styles.SyncDashRow}>
-            <span className={styles.SyncDashLabel}>Статус:</span>
-            <span className={isOnline ? styles.SyncDashOnline : styles.SyncDashOffline}>
-              {isOnline ? "🟢 Онлайн" : "🔴 Оффлайн"}
-            </span>
-          </div>
-          <div className={styles.SyncDashRow}>
-            <span className={styles.SyncDashLabel}>Синхронизация:</span>
-            <span>{isSyncing ? "⏳ Выполняется…" : "Простой"}</span>
-          </div>
-          {syncState.status !== "idle" && syncState.status !== "done" && (
-            <div className={styles.SyncDashRow}>
-              <span className={styles.SyncDashLabel}>Этап:</span>
-              <span>{syncState.message || syncState.status}</span>
-            </div>
-          )}
-          {syncState.progress != null && syncState.progress > 0 && isSyncing && (
-            <div className={styles.SyncDashProgress}>
-              <div className={styles.SyncDashProgressBar} style={{ width: `${Math.min(100, syncState.progress)}%` }} />
-              <span>{Math.round(syncState.progress)}%</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Последняя синхронизация */}
-      <div className={styles.SyncDashCard}>
-        <div className={styles.SyncDashCardTitle}>Последняя синхронизация</div>
-        <div className={styles.SyncDashCardBody}>
-          <div className={styles.SyncDashRow}>
-            <span className={styles.SyncDashLabel}>Время:</span>
-            <span>{formatDate(syncState.lastSyncAt)}</span>
-          </div>
-          {syncState.lastResult && (
-            <>
-              <div className={styles.SyncDashRow}>
-                <span className={styles.SyncDashLabel}>Получено:</span>
-                <span>{syncState.lastResult.pulled} записей</span>
-              </div>
-              <div className={styles.SyncDashRow}>
-                <span className={styles.SyncDashLabel}>Отправлено:</span>
-                <span>{syncState.lastResult.pushed} записей</span>
-              </div>
-              <div className={styles.SyncDashRow}>
-                <span className={styles.SyncDashLabel}>Конфликтов:</span>
-                <span>{syncState.lastResult.conflicts.length}</span>
-              </div>
-              <div className={styles.SyncDashRow}>
-                <span className={styles.SyncDashLabel}>Ошибок:</span>
-                <span>{syncState.lastResult.errors.length}</span>
-              </div>
-              <div className={styles.SyncDashRow}>
-                <span className={styles.SyncDashLabel}>Длительность:</span>
-                <span>{syncState.lastResult.durationMs}мс</span>
-              </div>
-              <div className={styles.SyncDashRow}>
-                <span className={styles.SyncDashLabel}>Результат:</span>
-                <span>{syncState.lastResult.success ? "✅ Успешно" : "❌ С ошибками"}</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Действия */}
-      <div className={styles.SyncDashCard}>
-        <div className={styles.SyncDashCardTitle}>Действия</div>
-        <div className={styles.SyncDashCardBody}>
-          <div className={styles.SyncDashRow}>
-            <span className={styles.SyncDashLabel}>В очереди:</span>
-            <span>{pendingCount} изменений</span>
-          </div>
-          <div className={styles.SyncDashActions}>
-            {isSyncing ? (
-              <Button onClick={abortSync}>
-                <span>⏹ Остановить</span>
-              </Button>
-            ) : (
-              <Button variant="primary" onClick={syncNow} disabled={!isOnline}>
-                <span>🔄 Синхронизировать сейчас</span>
-              </Button>
-            )}
-          </div>
-        </div>
+    <div className={[styles.SyncBanner, styles[`SyncBanner_${severity}`]].join(" ")}>
+      <div className={styles.SyncBannerIcon}>{icon}</div>
+      <div className={styles.SyncBannerBody}>
+        <div className={styles.SyncBannerTitle}>{title}</div>
+        <div className={styles.SyncBannerSub}>{subtitle}</div>
+        <div className={styles.SyncBannerMode}>{modeText}</div>
       </div>
     </div>
   );
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Queue Tab
+// Tab: Основное
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MainTab: FC<{
+  isOnline: boolean; isSyncing: boolean;
+  syncState: ReturnType<typeof useOfflineSync>["syncState"];
+  pendingCount: number; offlineStats: OfflineStats | null;
+  syncNow: () => Promise<void>; abortSync: () => void;
+  mode: PersistenceMode; setMode: (m: PersistenceMode) => void;
+}> = ({ isOnline, isSyncing, syncState, pendingCount, offlineStats, syncNow, abortSync, mode, setMode }) => (
+  <div className={styles.FormBodyParts}>
+    <StatusBanner isOnline={isOnline} isSyncing={isSyncing} pendingCount={pendingCount} mode={mode} />
+
+    {/* Прогресс */}
+    {isSyncing && syncState.progress != null && syncState.progress > 0 && (
+      <div className={styles.SyncProgressWrap}>
+        <div className={styles.SyncProgressTrack}>
+          <div className={styles.SyncProgressFill} style={{ width: `${Math.min(100, syncState.progress)}%` }} />
+        </div>
+        <span className={styles.SyncProgressLabel}>{syncState.message || `${Math.round(syncState.progress)}%`}</span>
+      </div>
+    )}
+
+    {/* Режим работы */}
+    <Group align="col" label="Режим работы с данными" className={styles.Form}>
+      <div className={styles.SyncModeRow}>
+        <button
+          type="button"
+          className={[styles.SyncModeCard, mode === "offline-first" && styles.SyncModeCard_on].filter(Boolean).join(" ")}
+          onClick={() => setMode("offline-first")}
+        >
+          <span className={styles.SyncModeCardIcon}>⚡</span>
+          <span className={styles.SyncModeCardTitle}>Офлайн-доступ</span>
+          <span className={styles.SyncModeCardDesc}>
+            Данные хранятся на устройстве и синхронизируются с сервером. Можно работать без интернета.
+          </span>
+        </button>
+        <button
+          type="button"
+          className={[styles.SyncModeCard, mode === "transactional" && styles.SyncModeCard_on].filter(Boolean).join(" ")}
+          onClick={() => setMode("transactional")}
+        >
+          <span className={styles.SyncModeCardIcon}>🔗</span>
+          <span className={styles.SyncModeCardTitle}>Только сервер</span>
+          <span className={styles.SyncModeCardDesc}>
+            Все данные загружаются с сервера при каждом обращении. Без интернета работа невозможна.
+          </span>
+        </button>
+      </div>
+    </Group>
+
+    <Divider />
+
+    {/* Метрики */}
+    <Group align="row" gap="12px" className={styles.Form}>
+      <div className={styles.SyncMetricGrid}>
+        <MetricCell value={isOnline ? "🟢" : "🔴"} label={isOnline ? "Подключён" : "Нет связи"} />
+        <MetricCell value={String(pendingCount)} label="Не отправлено" />
+        <MetricCell value={String(offlineStats?.totalRecords ?? 0)} label="Записей на устройстве" />
+        <MetricCell value={timeAgo(syncState.lastSyncAt)} label="Синхронизация" />
+      </div>
+    </Group>
+
+    <Divider />
+
+    {/* Действия */}
+    <Group align="row" gap="8px" className={styles.Form}>
+      {isSyncing ? (
+        <Button onClick={abortSync}><span>⏹ Остановить</span></Button>
+      ) : (
+        <Button variant="primary" onClick={syncNow} disabled={!isOnline}>
+          <span>🔄 Синхронизировать сейчас</span>
+        </Button>
+      )}
+      {!isOnline && <span className={styles.SyncHint}>Запустится автоматически при появлении связи</span>}
+    </Group>
+
+    {/* Последний результат */}
+    {syncState.lastResult && (
+      <>
+        <Divider />
+        <Group align="col" label="Результат последней синхронизации" className={styles.Form}>
+          <div className={styles.SyncResultGrid}>
+            <span>Статус</span><span>{syncState.lastResult.success ? "✅ Успешно" : "❌ С ошибками"}</span>
+            <span>Загружено</span><span>{syncState.lastResult.pulled} записей</span>
+            <span>Отправлено</span><span>{syncState.lastResult.pushed} записей</span>
+            {syncState.lastResult.conflicts.length > 0 && (
+              <><span>Конфликтов</span><span style={{ color: "#e65100" }}>{syncState.lastResult.conflicts.length}</span></>
+            )}
+            {syncState.lastResult.errors.length > 0 && (
+              <><span>Ошибок</span><span style={{ color: "#e53935" }}>{syncState.lastResult.errors.length}</span></>
+            )}
+            <span>Длительность</span><span>{(syncState.lastResult.durationMs / 1000).toFixed(1)} сек.</span>
+          </div>
+        </Group>
+      </>
+    )}
+  </div>
+);
+
+const MetricCell: FC<{ value: string; label: string }> = ({ value, label }) => (
+  <div className={styles.SyncMetric}>
+    <div className={styles.SyncMetricValue}>{value}</div>
+    <div className={styles.SyncMetricLabel}>{label}</div>
+  </div>
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tab: Очередь
 // ═══════════════════════════════════════════════════════════════════════════
 
 const QueueTab: FC<{
-  pendingChanges: PendingChange[];
-  pendingCount: number;
+  pendingChanges: PendingChange[]; pendingCount: number;
   removePending: (id: number) => Promise<void>;
   clearAllPending: () => Promise<void>;
-  syncNow: () => Promise<void>;
-  isSyncing: boolean;
-  isOnline: boolean;
+  syncNow: () => Promise<void>; isSyncing: boolean; isOnline: boolean;
 }> = ({ pendingChanges, pendingCount, removePending, clearAllPending, syncNow, isSyncing, isOnline }) => {
   const [confirmClear, setConfirmClear] = useState(false);
+  const handleClearAll = useCallback(async () => { await clearAllPending(); setConfirmClear(false); }, [clearAllPending]);
 
-  const handleClearAll = useCallback(async () => {
-    await clearAllPending();
-    setConfirmClear(false);
-  }, [clearAllPending]);
+  if (pendingCount === 0) {
+    return (
+      <div className={styles.FormBodyParts}>
+        <EmptyState icon="✅" title="Все данные отправлены" desc="Нет неотправленных изменений. Всё синхронизировано." />
+      </div>
+    );
+  }
 
   return (
-    <div className={styles.SyncDashSection}>
-      <div className={styles.SyncDashCard}>
-        <div className={styles.SyncDashCardTitle}>
-          Очередь отложенных изменений ({pendingCount})
-        </div>
-        <div className={styles.SyncDashActions} style={{ marginBottom: 8 }}>
-          <Button variant="primary" onClick={syncNow} disabled={isSyncing || !isOnline || pendingCount === 0}>
-            <span>{isSyncing ? "⏳ Синхронизация…" : "🔄 Отправить все"}</span>
-          </Button>
-          {pendingCount > 0 && !confirmClear && (
-            <Button onClick={() => setConfirmClear(true)}>
-              <span>🗑 Очистить всё</span>
-            </Button>
-          )}
-          {confirmClear && (
-            <>
-              <span style={{ color: "#e53935", fontSize: 13 }}>Удалить все неотправленные изменения?</span>
-              <Button onClick={handleClearAll}>
-                <span>Да, удалить</span>
-              </Button>
-              <Button onClick={() => setConfirmClear(false)}>
-                <span>Отмена</span>
-              </Button>
-            </>
-          )}
-        </div>
-        <div className={styles.SyncDashCardBody}>
-          {pendingChanges.length === 0 ? (
-            <div className={styles.SyncDashEmpty}>
-              Очередь пуста — все данные синхронизированы ✅
+    <div className={styles.FormBodyParts}>
+      <div className={styles.SyncInfoBox}>
+        Изменения, сделанные вами, которые ещё не отправлены на сервер.
+        {isOnline ? " Нажмите «Отправить все»." : " Будут отправлены при появлении связи."}
+      </div>
+
+      <Group align="row" gap="8px" className={styles.Form}>
+        <Button variant="primary" onClick={syncNow} disabled={isSyncing || !isOnline}>
+          <span>{isSyncing ? "⏳ Отправка…" : `🔄 Отправить все (${pendingCount})`}</span>
+        </Button>
+        {!confirmClear ? (
+          <Button onClick={() => setConfirmClear(true)}><span>🗑 Очистить очередь</span></Button>
+        ) : (
+          <>
+            <span style={{ color: "#e53935", fontSize: 13 }}>Удалить все? Данные будут потеряны.</span>
+            <Button onClick={handleClearAll}><span>Да</span></Button>
+            <Button onClick={() => setConfirmClear(false)}><span>Отмена</span></Button>
+          </>
+        )}
+      </Group>
+
+      <Divider />
+
+      <div className={styles.SyncQueueList}>
+        {pendingChanges.map((c) => (
+          <div key={c.id} className={styles.SyncQueueItem}>
+            <div className={styles.SyncQueueItemIcon}>
+              {c.action === "create" ? "🆕" : c.action === "update" ? "✏️" : "🗑️"}
             </div>
-          ) : (
-            <div className={styles.SyncDashQueue}>
-              {pendingChanges.map((change) => (
-                <div key={change.id} className={styles.SyncDashQueueItem}>
-                  <div className={styles.SyncDashQueueIcon}>
-                    {change.action === "create" ? "🆕" : change.action === "update" ? "✏️" : "🗑"}
-                  </div>
-                  <div className={styles.SyncDashQueueBody}>
-                    <div className={styles.SyncDashQueueLabel}>
-                      {ACTION_LABELS[change.action] || change.action}: {getTableLabel(change.table)}
-                    </div>
-                    <div className={styles.SyncDashQueueMeta}>
-                      UUID: {change.uuid?.slice(0, 12)}… · {formatDate(change.createdAt)}
-                    </div>
-                  </div>
-                  <div className={styles.SyncDashQueueActions}>
-                    <Button onClick={() => change.id != null && removePending(change.id)}>
-                      <span>✕</span>
-                    </Button>
-                  </div>
-                </div>
-              ))}
+            <div className={styles.SyncQueueItemBody}>
+              <div className={styles.SyncQueueItemTitle}>
+                {ACTION_LABELS[c.action] ?? c.action}: {getTableLabel(c.table)}
+              </div>
+              <div className={styles.SyncQueueItemMeta}>
+                {timeAgo(c.createdAt)} · {c.uuid?.slice(0, 8)}…
+              </div>
             </div>
-          )}
-        </div>
+            <button className={styles.SyncQueueItemDel} onClick={() => c.id != null && removePending(c.id)} title="Удалить">✕</button>
+          </div>
+        ))}
       </div>
     </div>
   );
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Conflicts Tab
+// Tab: Конфликты
 // ═══════════════════════════════════════════════════════════════════════════
 
-const ConflictsTab: FC<{
-  conflicts: SyncConflict[];
-}> = ({ conflicts }) => {
+const ConflictsTab: FC<{ conflicts: SyncConflict[] }> = ({ conflicts }) => {
   const [processing, setProcessing] = useState<string | null>(null);
   const [result, setResult] = useState<Record<string, string>>({});
 
-  const handleKeepLocal = useCallback(async (conflict: SyncConflict) => {
-    const key = `${conflict.table}-${conflict.uuid}`;
-    setProcessing(key);
-    const ok = await resolveConflictLocal(conflict);
-    setProcessing(null);
-    setResult(prev => ({
-      ...prev,
-      [key]: ok ? "✅ Локальная версия отправлена" : "❌ Ошибка",
-    }));
+  const handleKeepLocal = useCallback(async (c: SyncConflict) => {
+    const k = `${c.table}-${c.uuid}`; setProcessing(k);
+    const ok = await resolveConflictLocal(c); setProcessing(null);
+    setResult(p => ({ ...p, [k]: ok ? "✅ Ваша версия отправлена" : "❌ Ошибка" }));
   }, []);
 
-  const handleKeepServer = useCallback(async (conflict: SyncConflict) => {
-    const key = `${conflict.table}-${conflict.uuid}`;
-    setProcessing(key);
-    await resolveConflictServer(conflict);
-    setProcessing(null);
-    setResult(prev => ({
-      ...prev,
-      [key]: "✅ Серверная версия принята",
-    }));
+  const handleKeepServer = useCallback(async (c: SyncConflict) => {
+    const k = `${c.table}-${c.uuid}`; setProcessing(k);
+    await resolveConflictServer(c); setProcessing(null);
+    setResult(p => ({ ...p, [k]: "✅ Принята серверная версия" }));
   }, []);
+
+  if (conflicts.length === 0) {
+    return (
+      <div className={styles.FormBodyParts}>
+        <EmptyState icon="✅" title="Конфликтов нет" desc="Все данные согласованы между устройством и сервером." />
+      </div>
+    );
+  }
 
   return (
-    <div className={styles.SyncDashSection}>
-      <div className={styles.SyncDashCard}>
-        <div className={styles.SyncDashCardTitle}>
-          Конфликты ({conflicts.length})
-        </div>
-        <div className={styles.SyncDashCardBody}>
-          {conflicts.length === 0 ? (
-            <div className={styles.SyncDashEmpty}>
-              Конфликтов нет ✅
-            </div>
-          ) : (
-            conflicts.map((conflict) => {
-              const key = `${conflict.table}-${conflict.uuid}`;
-              const isProc = processing === key;
-              return (
-                <div key={key} className={styles.SyncDashConflict}>
-                  <div className={styles.SyncDashConflictHeader}>
-                    ⚠️ {getTableLabel(conflict.table)} — {conflict.uuid.slice(0, 12)}…
-                  </div>
-                  <div className={styles.SyncDashConflictDiff}>
-                    <div className={styles.SyncDashConflictCol}>
-                      <div className={styles.SyncDashConflictColTitle}>Локальные данные</div>
-                      <pre className={styles.SyncDashConflictPre}>
-                        {JSON.stringify(conflict.clientData, null, 2)}
-                      </pre>
-                    </div>
-                    <div className={styles.SyncDashConflictCol}>
-                      <div className={styles.SyncDashConflictColTitle}>Серверные данные</div>
-                      <pre className={styles.SyncDashConflictPre}>
-                        {JSON.stringify(conflict.serverData, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                  {result[key] && (
-                    <div style={{ padding: "4px 0", fontSize: 13 }}>{result[key]}</div>
-                  )}
-                  <div className={styles.SyncDashActions}>
-                    <Button variant="primary" onClick={() => handleKeepLocal(conflict)} disabled={isProc}>
-                      <span>Принять локальную</span>
-                    </Button>
-                    <Button onClick={() => handleKeepServer(conflict)} disabled={isProc}>
-                      <span>Принять серверную</span>
-                    </Button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+    <div className={styles.FormBodyParts}>
+      <div className={styles.SyncInfoBox}>
+        Конфликт — одна и та же запись изменена и на устройстве, и на сервере. Выберите, какую версию оставить.
       </div>
+      {conflicts.map((c) => {
+        const k = `${c.table}-${c.uuid}`;
+        return (
+          <div key={k} className={styles.SyncConflictCard}>
+            <div className={styles.SyncConflictHeader}>⚠️ {getTableLabel(c.table)} — {c.uuid.slice(0, 12)}…</div>
+            <div className={styles.SyncConflictCols}>
+              <div className={styles.SyncConflictCol}>
+                <div className={styles.SyncConflictColHead}>Ваша версия</div>
+                <pre className={styles.SyncConflictPre}>{JSON.stringify(c.clientData, null, 2)}</pre>
+              </div>
+              <div className={styles.SyncConflictCol}>
+                <div className={styles.SyncConflictColHead}>Серверная версия</div>
+                <pre className={styles.SyncConflictPre}>{JSON.stringify(c.serverData, null, 2)}</pre>
+              </div>
+            </div>
+            {result[k] && <div style={{ padding: "6px 0", fontSize: 13 }}>{result[k]}</div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <Button variant="primary" onClick={() => handleKeepLocal(c)} disabled={processing === k}>
+                <span>Оставить мою</span>
+              </Button>
+              <Button onClick={() => handleKeepServer(c)} disabled={processing === k}>
+                <span>Принять серверную</span>
+              </Button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Storage Tab
+// Tab: Хранилище
 // ═══════════════════════════════════════════════════════════════════════════
 
 const StorageTab: FC<{
@@ -383,323 +386,211 @@ const StorageTab: FC<{
   const [dbSize, setDbSize] = useState<number | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState("");
-  const [clearingTable, setClearingTable] = useState<string | null>(null);
+  const [dlMsg, setDlMsg] = useState("");
+  const [clearing, setClearing] = useState<string | null>(null);
 
-  // Оценка размера IndexedDB
   useEffect(() => {
-    if (navigator.storage?.estimate) {
-      navigator.storage.estimate().then(est => {
-        setDbSize(est.usage ?? null);
-      }).catch(() => {});
-    }
+    navigator.storage?.estimate?.().then(e => setDbSize(e.usage ?? null)).catch(() => {});
   }, [offlineStats]);
 
   const handleClearAll = useCallback(async () => {
-    await clearOfflineDb();
-    setConfirmClear(false);
-    await refreshStats();
+    await clearOfflineDb(); setConfirmClear(false); await refreshStats();
   }, [refreshStats]);
 
-  // Все таблицы (включая пустые) для выбора загрузки
   const allTables = useMemo(() => {
-    const counts = offlineStats?.tables ?? {};
-    return [...SYNCABLE_TABLES].map(t => ({
-      table: t,
-      label: getTableLabel(t),
-      count: counts[t] ?? 0,
-    })).sort((a, b) => a.label.localeCompare(b.label, "ru"));
+    const c = offlineStats?.tables ?? {};
+    return [...SYNCABLE_TABLES].map(t => ({ table: t, label: getTableLabel(t), count: c[t] ?? 0 }))
+      .sort((a, b) => a.label.localeCompare(b.label, "ru"));
   }, [offlineStats]);
 
-  const sortedTables = useMemo(() => {
-    return allTables.filter(t => t.count > 0).sort((a, b) => b.count - a.count);
-  }, [allTables]);
+  const withData = useMemo(() => allTables.filter(t => t.count > 0), [allTables]);
 
-  const toggleSelect = useCallback((table: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(table)) next.delete(table); else next.add(table);
-      return next;
-    });
+  const toggle = useCallback((t: string) => {
+    setSelected(p => { const n = new Set(p); n.has(t) ? n.delete(t) : n.add(t); return n; });
   }, []);
 
-  const selectAll = useCallback(() => {
-    setSelected(new Set(SYNCABLE_TABLES));
-  }, []);
-
-  const selectNone = useCallback(() => {
-    setSelected(new Set());
-  }, []);
-
-  // Загрузка выбранных таблиц для оффлайна
-  const handleDownloadSelected = useCallback(async () => {
-    if (selected.size === 0) return;
+  const handleDlSelected = useCallback(async () => {
+    if (!selected.size) return;
     setDownloading(true);
-    const tables = [...selected] as SyncableTable[];
-    let done = 0;
-    let totalPulled = 0;
-    for (const t of tables) {
-      setDownloadProgress(`${getTableLabel(t)} (${done + 1}/${tables.length})…`);
-      try {
-        const pulled = await pullSingleTable(t);
-        totalPulled += pulled;
-      } catch { /* continue with next */ }
-      done++;
+    const arr = [...selected] as SyncableTable[];
+    let done = 0, tot = 0;
+    for (const t of arr) {
+      setDlMsg(`${getTableLabel(t)} (${++done}/${arr.length})…`);
+      try { tot += await pullSingleTable(t); } catch { /* next */ }
     }
-    setDownloadProgress(`Готово: загружено ${totalPulled} записей из ${tables.length} таблиц`);
-    setDownloading(false);
-    await refreshStats();
-    setTimeout(() => setDownloadProgress(""), 5000);
+    setDlMsg(`Готово: ${tot} записей из ${arr.length} таблиц`);
+    setDownloading(false); await refreshStats();
+    setTimeout(() => setDlMsg(""), 5000);
   }, [selected, refreshStats]);
 
-  // Загрузить ВСЁ для оффлайна
-  const handleDownloadAll = useCallback(async () => {
-    setDownloading(true);
-    setDownloadProgress("Полная загрузка всех данных…");
-    try {
-      const result = await fullSync();
-      setDownloadProgress(`Готово: загружено ${result.pulled} записей, отправлено ${result.pushed}`);
-    } catch {
-      setDownloadProgress("Ошибка загрузки");
-    }
-    setDownloading(false);
-    await refreshStats();
-    setTimeout(() => setDownloadProgress(""), 5000);
+  const handleDlAll = useCallback(async () => {
+    setDownloading(true); setDlMsg("Полная загрузка…");
+    try { const r = await fullSync(); setDlMsg(`Готово: загружено ${r.pulled}, отправлено ${r.pushed}`); }
+    catch { setDlMsg("Ошибка загрузки"); }
+    setDownloading(false); await refreshStats();
+    setTimeout(() => setDlMsg(""), 5000);
   }, [refreshStats]);
 
-  // Очистить одну таблицу
-  const handleClearTable = useCallback(async (table: string) => {
-    setClearingTable(table);
-    try {
-      const { offlineDb } = await import("src/services/offlineDb");
-      const t = offlineDb.getTable(table);
-      if (t) await t.clear();
-    } catch { /* ignore */ }
-    setClearingTable(null);
-    await refreshStats();
+  const handleClearTable = useCallback(async (t: string) => {
+    setClearing(t);
+    try { const { offlineDb: db } = await import("src/services/offlineDb"); const tbl = db.getTable(t); if (tbl) await tbl.clear(); } catch { /* */ }
+    setClearing(null); await refreshStats();
   }, [refreshStats]);
 
   return (
-    <div className={styles.SyncDashSection}>
-      {/* Общая информация */}
-      <div className={styles.SyncDashCard}>
-        <div className={styles.SyncDashCardTitle}>Локальное хранилище</div>
-        <div className={styles.SyncDashCardBody}>
-          <div className={styles.SyncDashRow}>
-            <span className={styles.SyncDashLabel}>Общий размер:</span>
-            <span>{dbSize != null ? formatBytes(dbSize) : "—"}</span>
-          </div>
-          <div className={styles.SyncDashRow}>
-            <span className={styles.SyncDashLabel}>Всего записей:</span>
-            <span>{offlineStats?.totalRecords ?? "—"}</span>
-          </div>
-          <div className={styles.SyncDashRow}>
-            <span className={styles.SyncDashLabel}>Ожидают отправки:</span>
-            <span>{offlineStats?.pendingChanges ?? "—"}</span>
-          </div>
-          <div className={styles.SyncDashActions}>
-            <Button onClick={refreshStats}>
-              <span>🔄 Обновить</span>
-            </Button>
-            <Button variant="primary" onClick={handleDownloadAll} disabled={downloading || !isOnline}>
-              <span>{downloading ? "⏳ Загрузка…" : "📥 Загрузить всё для оффлайна"}</span>
-            </Button>
-            {!confirmClear ? (
-              <Button onClick={() => setConfirmClear(true)}>
-                <span>🗑 Очистить всё хранилище</span>
-              </Button>
-            ) : (
-              <>
-                <span style={{ color: "#e53935", fontSize: 13 }}>
-                  Все локальные данные будут удалены и загружены заново при следующей синхронизации.
-                </span>
-                <Button onClick={handleClearAll}>
-                  <span>Да, очистить</span>
-                </Button>
-                <Button onClick={() => setConfirmClear(false)}>
-                  <span>Отмена</span>
-                </Button>
-              </>
-            )}
-          </div>
-          {downloadProgress && (
-            <div className={styles.SyncDashRow} style={{ marginTop: 8 }}>
-              <span className={styles.SyncDashLabel}>📥</span>
-              <span>{downloadProgress}</span>
-            </div>
-          )}
+    <div className={styles.FormBodyParts}>
+      {/* Обзор */}
+      <Group align="row" gap="12px" className={styles.Form}>
+        <div className={styles.SyncMetricGrid}>
+          <MetricCell value={dbSize != null ? formatBytes(dbSize) : "—"} label="Размер" />
+          <MetricCell value={String(offlineStats?.totalRecords ?? 0)} label="Записей" />
+          <MetricCell value={String(withData.length)} label="Таблиц" />
+          <MetricCell value={String(offlineStats?.pendingChanges ?? 0)} label="Ожидают" />
         </div>
-      </div>
+      </Group>
+
+      <Divider />
+
+      {/* Действия */}
+      <Group align="row" gap="8px" className={styles.Form}>
+        <Button onClick={refreshStats}><span>🔄 Обновить</span></Button>
+        <Button variant="primary" onClick={handleDlAll} disabled={downloading || !isOnline}>
+          <span>{downloading ? "⏳ …" : "📥 Загрузить всё для офлайна"}</span>
+        </Button>
+        {!confirmClear ? (
+          <Button onClick={() => setConfirmClear(true)}><span>🗑 Очистить хранилище</span></Button>
+        ) : (
+          <>
+            <span style={{ color: "#e53935", fontSize: 13 }}>Удалить все локальные данные?</span>
+            <Button onClick={handleClearAll}><span>Да</span></Button>
+            <Button onClick={() => setConfirmClear(false)}><span>Отмена</span></Button>
+          </>
+        )}
+      </Group>
+      {dlMsg && <div className={styles.SyncInfoBox}>{dlMsg}</div>}
+
+      <Divider />
 
       {/* Выборочная загрузка */}
-      <div className={styles.SyncDashCard}>
-        <div className={styles.SyncDashCardTitle}>
-          Загрузка данных для оффлайн-работы
+      <Group align="col" label="Подготовить данные для работы без интернета" className={styles.Form}>
+        <div className={styles.SyncInfoBox} style={{ marginBottom: 8 }}>
+          Выберите справочники, которые нужны офлайн, и нажмите «Загрузить».
         </div>
-        <div className={styles.SyncDashCardBody}>
-          <div className={styles.SyncDashActions} style={{ marginBottom: 8 }}>
-            <Button onClick={selectAll} disabled={downloading}>
-              <span>☑ Выбрать все</span>
-            </Button>
-            <Button onClick={selectNone} disabled={downloading || selected.size === 0}>
-              <span>☐ Снять все</span>
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleDownloadSelected}
-              disabled={downloading || selected.size === 0 || !isOnline}
-            >
-              <span>{downloading ? "⏳ Загрузка…" : `📥 Загрузить выбранные (${selected.size})`}</span>
-            </Button>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+          <Button onClick={() => setSelected(new Set(SYNCABLE_TABLES))} disabled={downloading}><span>☑ Все</span></Button>
+          <Button onClick={() => setSelected(new Set())} disabled={downloading || !selected.size}><span>☐ Сброс</span></Button>
+          <Button variant="primary" onClick={handleDlSelected} disabled={downloading || !selected.size || !isOnline}>
+            <span>{downloading ? "⏳" : `📥 Загрузить (${selected.size})`}</span>
+          </Button>
+        </div>
+        <div className={styles.SyncStorageTable}>
+          <div className={styles.SyncStorageHead}>
+            <span style={{ width: 28 }} />
+            <span style={{ flex: 1 }}>Справочник</span>
+            <span style={{ width: 70, textAlign: "right" }}>Записей</span>
+            <span style={{ width: 40 }} />
           </div>
-          <div className={styles.SyncDashStorageTable}>
-            <div className={styles.SyncDashStorageHeader}>
-              <span style={{ width: 28 }} />
-              <span style={{ flex: 1 }}>Таблица</span>
-              <span style={{ width: 80, textAlign: "right" }}>Записей</span>
+          {allTables.map(({ table, label, count }) => (
+            <div key={table} className={styles.SyncStorageRow} onClick={() => !downloading && toggle(table)}>
+              <span style={{ width: 28, textAlign: "center" }}>
+                <input type="checkbox" checked={selected.has(table)} onChange={() => toggle(table)} disabled={downloading} />
+              </span>
+              <span style={{ flex: 1 }}>{label}</span>
+              <span style={{ width: 70, textAlign: "right", color: count ? "#333" : "#bbb" }}>{count || "—"}</span>
+              <span style={{ width: 40, textAlign: "center" }}>
+                {count > 0 && (
+                  <button
+                    className={styles.SyncInlineBtn}
+                    title="Очистить"
+                    disabled={clearing === table}
+                    onClick={e => { e.stopPropagation(); handleClearTable(table); }}
+                  >🗑</button>
+                )}
+              </span>
             </div>
-            {allTables.map(({ table, label, count }) => (
-              <div
-                key={table}
-                className={styles.SyncDashStorageRow}
-                style={{ cursor: "pointer" }}
-                onClick={() => !downloading && toggleSelect(table)}
-              >
-                <span style={{ width: 28, textAlign: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={selected.has(table)}
-                    onChange={() => toggleSelect(table)}
-                    disabled={downloading}
-                    style={{ cursor: "pointer" }}
-                  />
-                </span>
-                <span style={{ flex: 1 }}>{label}</span>
-                <span style={{ width: 80, textAlign: "right" }}>{count || "—"}</span>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
-      </div>
-
-      {/* Таблицы с данными (с кнопкой очистки) */}
-      <div className={styles.SyncDashCard}>
-        <div className={styles.SyncDashCardTitle}>Загруженные данные</div>
-        <div className={styles.SyncDashCardBody}>
-          {sortedTables.length === 0 ? (
-            <div className={styles.SyncDashEmpty}>Локальное хранилище пустое</div>
-          ) : (
-            <div className={styles.SyncDashStorageTable}>
-              <div className={styles.SyncDashStorageHeader}>
-                <span style={{ flex: 1 }}>Таблица</span>
-                <span style={{ width: 80, textAlign: "right" }}>Записей</span>
-                <span style={{ width: 64, textAlign: "center" }}>Действие</span>
-              </div>
-              {sortedTables.map(({ table, label, count }) => (
-                <div key={table} className={styles.SyncDashStorageRow}>
-                  <span style={{ flex: 1 }}>{label}</span>
-                  <span style={{ width: 80, textAlign: "right" }}>{count}</span>
-                  <span style={{ width: 64, textAlign: "center" }}>
-                    <button
-                      className={styles.SyncDashInlineBtn}
-                      title="Очистить таблицу"
-                      disabled={clearingTable === table}
-                      onClick={() => handleClearTable(table)}
-                    >
-                      🗑
-                    </button>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      </Group>
     </div>
   );
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Main Component
+// Shared: Empty state
 // ═══════════════════════════════════════════════════════════════════════════
 
-const SyncDashboard: FC = () => {
+const EmptyState: FC<{ icon: string; title: string; desc: string }> = ({ icon, title, desc }) => (
+  <div className={styles.SyncEmptyState}>
+    <div className={styles.SyncEmptyIcon}>{icon}</div>
+    <div className={styles.SyncEmptyTitle}>{title}</div>
+    <div className={styles.SyncEmptyDesc}>{desc}</div>
+  </div>
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Main — SyncDashboard (стиль формы: FormWrapper → Tabs)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SyncDashboard: FC<Partial<TPane>> = (paneProps) => {
   const {
-    isOnline,
-    isSyncing,
-    pendingChanges,
-    pendingCount,
-    syncState,
-    conflicts,
-    syncNow,
-    abortSync,
-    removePending,
-    clearAllPending,
-    offlineStats,
-    refreshStats,
+    isOnline, isSyncing, pendingChanges, pendingCount,
+    syncState, conflicts, syncNow, abortSync,
+    removePending, clearAllPending, offlineStats, refreshStats,
   } = useOfflineSync();
 
-  const [activeTab, setActiveTab] = useState<Tab>("status");
+  const [mode, setMode] = usePersistenceMode();
+  const [error, setError] = useState<string | null>(null);
+
+  const toolbarPortal = usePaneToolbar(
+    paneProps.uniqId,
+    <>
+      {isSyncing
+        ? <Button onClick={abortSync}><span>⏹ Остановить</span></Button>
+        : <Button variant="primary" onClick={syncNow} disabled={!isOnline}><span>🔄 Синхронизировать</span></Button>}
+    </>,
+  );
+
+  const tabs = useMemo(() => [
+    {
+      id: "main",
+      label: `Основное${!isOnline ? " 🔴" : pendingCount > 0 ? ` ⏳${pendingCount}` : ""}`,
+      component: (
+        <MainTab
+          isOnline={isOnline} isSyncing={isSyncing} syncState={syncState}
+          pendingCount={pendingCount} offlineStats={offlineStats}
+          syncNow={syncNow} abortSync={abortSync} mode={mode} setMode={setMode}
+        />
+      ),
+    },
+    {
+      id: "queue",
+      label: `Очередь${pendingCount > 0 ? ` (${pendingCount})` : ""}`,
+      component: (
+        <QueueTab
+          pendingChanges={pendingChanges} pendingCount={pendingCount}
+          removePending={removePending} clearAllPending={clearAllPending}
+          syncNow={syncNow} isSyncing={isSyncing} isOnline={isOnline}
+        />
+      ),
+    },
+    {
+      id: "conflicts",
+      label: `Конфликты${conflicts.length > 0 ? ` (${conflicts.length})` : ""}`,
+      component: <ConflictsTab conflicts={conflicts} />,
+    },
+    {
+      id: "storage",
+      label: "Хранилище",
+      component: <StorageTab offlineStats={offlineStats} refreshStats={refreshStats} isOnline={isOnline} />,
+    },
+  ], [isOnline, isSyncing, syncState, pendingCount, pendingChanges, conflicts, offlineStats, syncNow, abortSync, removePending, clearAllPending, refreshStats, mode, setMode]);
 
   return (
-    <div className={styles.SyncDashboard}>
-      {/* Tabs */}
-      <div className={styles.SyncDashTabs}>
-        {(Object.keys(TAB_LABELS) as Tab[]).map((tab) => {
-          let badge = 0;
-          if (tab === "queue") badge = pendingCount;
-          if (tab === "conflicts") badge = conflicts.length;
-          return (
-            <button
-              key={tab}
-              className={[
-                styles.SyncDashTab,
-                activeTab === tab && styles.SyncDashTabActive,
-              ].filter(Boolean).join(" ")}
-              onClick={() => setActiveTab(tab)}
-            >
-              {TAB_LABELS[tab]}
-              {badge > 0 && (
-                <span className={styles.SyncDashBadge}>{badge}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Tab Content */}
-      <div className={styles.SyncDashContent}>
-        {activeTab === "status" && (
-          <StatusTab
-            isOnline={isOnline}
-            isSyncing={isSyncing}
-            syncState={syncState}
-            pendingCount={pendingCount}
-            syncNow={syncNow}
-            abortSync={abortSync}
-          />
-        )}
-        {activeTab === "queue" && (
-          <QueueTab
-            pendingChanges={pendingChanges}
-            pendingCount={pendingCount}
-            removePending={removePending}
-            clearAllPending={clearAllPending}
-            syncNow={syncNow}
-            isSyncing={isSyncing}
-            isOnline={isOnline}
-          />
-        )}
-        {activeTab === "conflicts" && (
-          <ConflictsTab conflicts={conflicts} />
-        )}
-        {activeTab === "storage" && (
-          <StorageTab
-            offlineStats={offlineStats}
-            refreshStats={refreshStats}
-            isOnline={isOnline}
-          />
-        )}
+    <div className={styles.FormWrapper}>
+      {toolbarPortal}
+      <FormError message={error} onDismiss={() => setError(null)} />
+      <div className={styles.FormBody}>
+        <Tabs tabs={tabs} />
       </div>
     </div>
   );

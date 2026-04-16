@@ -20,18 +20,3 @@ export const Button: FC<TProps> = ({ variant = 'secondary', children, onClick, a
     </button>
   );
 };
-
-
-export const ButtonImage: FC<TProps> = ({ variant = 'secondary', children, onClick, active, ...props }) => {
-  const classActive = active && styles.Active;
-  return (
-    <button
-      type="button"
-      className={[styles.ButtonImage, styles[variant], classActive].join(" ")}
-      onClick={onClick}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-};

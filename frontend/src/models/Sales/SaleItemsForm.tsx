@@ -3,12 +3,12 @@ import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import apiClient from "src/services/api/client";
 import type { TPane } from "src/app/types";
-import { Button, ButtonImage } from "src/components/Button";
+import { Button } from "src/components/Button";
 import { Divider, Field, FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
+import Toolbar from "src/components/Toolbar";
 import useUID from "src/hooks/useUID";
 import styles from "src/styles/main.module.scss";
-import reload_16 from "src/assets/reload_16.png";
 import { translate } from "src/i18";
 import Tabs from "src/components/Tabs";
 import { Group } from "src/components/UI";
@@ -159,12 +159,14 @@ const SaleItemsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) =>
 
   return (
     <div className={styles.FormWrapper}>
-      <div className={styles.FormPanel}><div className={styles.TablePanelLeft}><div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
-        <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button><Divider />
+      <Toolbar>
+        <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button>
+        <Toolbar.Divider />
         <Button onClick={handleSave} disabled={isLoading}><span>Сохранить</span></Button>
-        <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button><Divider />
-        {isEditMode && <ButtonImage onClick={() => uuid && loadFormData(uuid)} title="Обновить" disabled={isLoading}><img src={reload_16} alt="Reload" height={16} width={16} className={isLoading ? styles.animationLoop : ""} /></ButtonImage>}
-      </div></div><div className={styles.TablePanelRight} /></div>
+        <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button>
+        <Toolbar.Divider />
+        {isEditMode && <Toolbar.ReloadButton onClick={() => uuid && loadFormData(uuid)} disabled={isLoading} />}
+      </Toolbar>
       {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
       <div className={styles.FormBody}><Tabs tabs={[
         {

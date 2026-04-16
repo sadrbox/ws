@@ -12,16 +12,11 @@ import {
 import { getTranslateColumn } from 'src/i18';
 import { getFormatColumnValue, getTextAlignByColumnType } from './services';
 
-import { Divider } from '../Field';
 import Modal from '../Modal';
 import { Group } from 'src/components/UI';
-import { Button, ButtonImage } from '../Button';
+import { Button } from '../Button';
 import { LoadingSpinner } from '../UI';
-
-import settingsForm_16 from '../../assets/form-setting_16.png';
-import reloadImage_16 from '../../assets/reload_16.png';
-import calendar_16 from '../../assets/calendar_16.png';
-import searchField_16 from '../../assets/search-field_16.png';
+import Toolbar from 'src/components/Toolbar';
 
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -199,7 +194,7 @@ const OVERSCAN = 8;
 
 interface TableControlPanelProps {
   variant: TTableVariant;
-  enableDateRange: boolean;
+  showDateRangeButton: boolean;
   isLoading: boolean;
   visibleDateRange: boolean;
   visibleFastSearch: boolean;
@@ -217,7 +212,7 @@ interface TableControlPanelProps {
 
 const TableControlPanel = memo(({
   variant,
-  enableDateRange,
+  showDateRangeButton,
   isLoading,
   visibleDateRange,
   visibleFastSearch,
@@ -234,44 +229,27 @@ const TableControlPanel = memo(({
   const isSelect = variant === 'select';
   const hideWrite = isSelect || isReadonly;
   return (
-    <div className={styles.TablePanel}>
-      <div className={styles.TablePanelLeft}>
-        <div className={[styles.colGroup, styles.gap6].join(' ')} style={{ justifyContent: 'flex-start' }}>
-          {/* <Divider /> */}
-          {!hideWrite && <Button onClick={onAddClick} disabled={isLoading}><span>Добавить</span></Button>}
-          {!hideWrite && <Button onClick={onDeleteClick} disabled={isLoading}><span>Удалить</span></Button>}
-          {!isSelect && extraButtons}
-          {!isSelect && <Divider />}
-          <ButtonImage onClick={onRefresh} disabled={isLoading} title="Обновить">
-            <img src={reloadImage_16} alt="Reload" height={16} width={16}
-              className={isLoading ? styles.animationLoop : ''} />
-          </ButtonImage>
-          <ButtonImage onClick={onConfigOpen} title="Настройки колонок">
-            <img src={settingsForm_16} alt="Settings" height={16} width={16} />
-          </ButtonImage>
-          <Divider />
-          {enableDateRange && (
-            <ButtonImage onClick={onDateRangeToggle} active={visibleDateRange} title="Период">
-              <img src={calendar_16} alt="Calendar" height={16} width={16} />
-            </ButtonImage>
-          )}
-          <ButtonImage onClick={onSearchToggle} active={visibleFastSearch} title="Поиск">
-            <img src={searchField_16} alt="Search" height={16} width={16} />
-          </ButtonImage>
-          <Divider />
-        </div>
-      </div>
-      {visibleFastSearch && (
-        <div className={styles.TablePanelRight}>
-          <FieldFastSearchInternal value={search.value} onChange={search.onChange} />
-        </div>
+    <Toolbar
+      right={visibleFastSearch ? <FieldFastSearchInternal value={search.value} onChange={search.onChange} /> : undefined}
+    >
+      {!hideWrite && <Button onClick={onAddClick} disabled={isLoading}><span>Добавить</span></Button>}
+      {!hideWrite && <Button onClick={onDeleteClick} disabled={isLoading}><span>Удалить</span></Button>}
+      {!isSelect && extraButtons}
+      {!isSelect && <Toolbar.Divider />}
+      <Toolbar.ReloadButton onClick={onRefresh} disabled={isLoading} />
+      <Toolbar.SettingsButton onClick={onConfigOpen} />
+      {/* <Toolbar.Divider /> */}
+      {showDateRangeButton && (
+        <Toolbar.PeriodButton onClick={onDateRangeToggle} active={visibleDateRange} />
       )}
-    </div>
+      <Toolbar.SearchButton onClick={onSearchToggle} active={visibleFastSearch} />
+      {/* <Toolbar.Divider /> */}
+    </Toolbar>
   );
 }, (prevProps, nextProps) => {
   return (
     prevProps.variant === nextProps.variant &&
-    prevProps.enableDateRange === nextProps.enableDateRange &&
+    prevProps.showDateRangeButton === nextProps.showDateRangeButton &&
     prevProps.isLoading === nextProps.isLoading &&
     prevProps.visibleDateRange === nextProps.visibleDateRange &&
     prevProps.visibleFastSearch === nextProps.visibleFastSearch &&
@@ -328,6 +306,10 @@ const Table: FC<TableProps> = memo((props) => {
   const currentStartDate = (filtering.filters?.dateRange as any)?.startDate as string || '';
   const currentEndDate = (filtering.filters?.dateRange as any)?.endDate as string || '';
   const hasDateRange = !!(currentStartDate || currentEndDate);
+  const showDateRangeButton = useMemo(
+    () => enableDateRange && columns.some((column) => column.visible && column.name?.trim() === 'Дата'),
+    [enableDateRange, columns],
+  );
 
   // extendedActions уже включают setAdaptiveLimit от родителя
   const extendedActions = useMemo(
@@ -474,7 +456,7 @@ const Table: FC<TableProps> = memo((props) => {
       <div className={styles.TableWrapper}>
         <TableControlPanel
           variant={variant}
-          enableDateRange={enableDateRange}
+          showDateRangeButton={showDateRangeButton}
           isLoading={isLoading}
           visibleDateRange={hasDateRange}
           visibleFastSearch={visibleFastSearch}
@@ -489,7 +471,7 @@ const Table: FC<TableProps> = memo((props) => {
           readonly={isReadonly}
         />
 
-        {enableDateRange && hasDateRange && (
+        {showDateRangeButton && hasDateRange && (
           <DateRangeBar
             startDate={currentStartDate}
             endDate={currentEndDate}

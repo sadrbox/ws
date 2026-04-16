@@ -1,6 +1,6 @@
 import { FC } from "react";
 import { Button } from "src/components/Button";
-import styles from "src/styles/main.module.scss";
+import { ReloadButton } from "src/components/Toolbar";
 
 export interface FormPanelProps {
   onSaveAndClose?: () => void;
@@ -49,28 +49,7 @@ const FormPanel: FC<FormPanelProps> = ({
         </Button>
       )}
       {showReload && onReload && (
-        <button
-          className={styles.PaneHeaderControl}
-          onClick={onReload}
-          disabled={isLoading}
-          title="Обновить"
-          type="button"
-        >
-          <svg
-            width="14" height="14" viewBox="0 0 16 16" fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className={isLoading ? styles.animationLoop : undefined}
-          >
-            <path
-              d="M14 1v5h-5"
-              stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"
-            />
-            <path
-              d="M13.3 10a6 6 0 1 1-1.06-5.3L14 6"
-              stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"
-            />
-          </svg>
-        </button>
+        <ReloadButton onClick={onReload} disabled={isLoading} />
       )}
     </>
   );

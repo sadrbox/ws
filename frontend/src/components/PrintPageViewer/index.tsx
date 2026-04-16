@@ -1,5 +1,6 @@
 import React, { ReactNode, useEffect, useRef, useState } from "react";
 import styles from './styles.module.scss';
+import Toolbar from "src/components/Toolbar";
 import imgDownloadPdf from 'src/assets/download-pdf.png'
 import imgPrinting from 'src/assets/printing.png'
 import imgReloadData from 'src/assets/reload-data.png'
@@ -42,25 +43,29 @@ const PrintPageViewer: React.FC<PrintPageViewerProps> = ({ children }) => {
 
   return (
     <div className={styles.GridWrapper}>
-      <div className={styles.GridPanel}>
-        <div className={styles.colGroup} style={{ justifyContent: 'left', gap: '5px' }}>
+      <Toolbar
+        className={styles.GridPanel}
+        right={
+          <>
+            <button className={[styles.Button, styles.ButtonImg].join(' ')}>
+              <img src={imgReloadData} />
+              <span>Обновить</span>
+            </button>
+            <button className={[styles.Button].join(' ')}>
+              <span>Еще</span>
+            </button>
+          </>
+        }
+      >
+        <>
           <button className={styles.Button}>
             <img src={imgPrinting} />
             <span>Печать</span></button>
           <button className={styles.Button}>
             <img src={imgDownloadPdf} />
             <span>Скачать файл</span></button>
-        </div>
-        <div className={styles.colGroup} style={{ justifyContent: 'right', gap: '5px' }}>
-          <button className={[styles.Button, styles.ButtonImg].join(' ')}>
-            <img src={imgReloadData} />
-            <span>Обновить</span>
-          </button>
-          <button className={[styles.Button].join(' ')}>
-            <span>Еще</span>
-          </button>
-        </div>
-      </div>
+        </>
+      </Toolbar>
       <div className={styles.GridSrollWrapper} style={{ justifyContent: 'center', }}>
         <A4Page>{children}</A4Page>
       </div>

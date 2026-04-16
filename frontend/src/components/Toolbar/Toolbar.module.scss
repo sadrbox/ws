@@ -1,0 +1,86 @@
+/**
+ * Toolbar — единый компонент панели управления.
+ *
+ * Используется для:
+ *  - Заголовков панелей (через портал usePaneToolbar)
+ *  - Панели таблиц (Table)
+ *  - Панелей произвольных форм (SalesBoardForm, UnsavedForms и т.д.)
+ */
+
+.Toolbar {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 0;
+	flex-shrink: 0;
+}
+
+/* Левая группа — основные действия */
+.ToolbarGroup {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+}
+
+/* Правая часть — поиск и т.п. */
+.ToolbarRight {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1 1 auto;
+	justify-content: flex-start;
+	min-width: 0;
+}
+
+/* Разделитель */
+.ToolbarDivider {
+	border-left: 1px dotted #888;
+	align-self: stretch;
+	min-height: 16px;
+}
+
+/* Портальный слот — невидимый контейнер (children участвуют в flex родителя) */
+.ToolbarSlot {
+	display: contents;
+}
+
+/* Иконочная кнопка внутри тулбара */
+.IconButton {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	margin: 0;
+	padding: 0;
+	color: #555;
+	width: 26px;
+	height: 26px;
+	flex-shrink: 0;
+	border-radius: 4px;
+	font-size: 14px;
+
+	&:hover {
+		background: rgba(#555, 0.12);
+		color: #222;
+	}
+
+	&:disabled {
+		opacity: 0.35;
+		cursor: default;
+		pointer-events: none;
+	}
+}
+
+/* Анимация вращения для reload */
+@keyframes toolbarSpin {
+	from { transform: rotate(0deg); }
+	to   { transform: rotate(360deg); }
+}
+
+.IconButtonLoading img {
+	animation: toolbarSpin 0.8s linear infinite;
+}

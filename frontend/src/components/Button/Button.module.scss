@@ -68,39 +68,3 @@
 		pointer-events: none;
 	}
 }
-
-.ButtonImage {
-	user-select: none;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 28px;
-	border-width: 0px;
-	border-radius: $radius2;
-	background: none;
-	height: $heightFieldInput + 2px;
-
-	&.Active {
-		background-color: rgba($color3, 1);
-		img {
-			filter: brightness(0) saturate(100%) invert(1);
-		}
-	}
-	&:not(:last-child) {
-		// margin-right: 6px;
-	}
-
-	&:enabled {
-		cursor: pointer;
-		color: $color6;
-	}
-	&:hover:not(.Active) {
-		background-color: rgba($color3, 0.1);
-	}
-
-	&:disabled {
-		opacity: 0.4;
-		cursor: default;
-		pointer-events: none;
-	}
-}

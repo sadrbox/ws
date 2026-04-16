@@ -10,6 +10,7 @@ import { useRequestQueue } from "./useRequestQueue";
 import { fetchList, isSyncableEndpoint } from "src/services/offlineDataService";
 import { getIsOnline } from "src/services/networkStatus";
 import { isNetworkError as isNetworkLikeError } from "src/services/networkUtils";
+import { isOfflineFirst } from "src/services/persistenceMode";
 
 // ⚠️ ГЛОБАЛЬНЫЙ REF для хранения adaptiveLimit
 export const GLOBAL_ADAPTIVE_LIMIT_REF = { current: 200 };
@@ -153,7 +154,31 @@ export function useInfiniteModelList<TData = unknown>({
 
 			return new Promise<InfiniteModelPage<TData>>((resolve, reject) => {
 				addRequest(`${model}-page-${pageParam}`, async () => {
-					// ── Offline-first: при offline и syncable → читаем из Dexie ──
+					// ══════════════════════════════════════════════════════════
+					// TRANSACTIONAL MODE — только сервер, без кэша
+					// ══════════════════════════════════════════════════════════
+					if (!isOfflineFirst()) {
+						try {
+							const response = await apiClient.get<InfiniteModelPage<TData>>(
+								model,
+								{ params: query },
+							);
+							resolve(response.data);
+						} catch (err) {
+							if (err instanceof Error && err.name === "CanceledError") {
+								reject(new Error("Request was cancelled"));
+							}
+							onError?.(err as Error);
+							reject(err);
+						}
+						return;
+					}
+
+					// ══════════════════════════════════════════════════════════
+					// OFFLINE-FIRST MODE — сервер с fallback на Dexie
+					// ══════════════════════════════════════════════════════════
+
+					// При offline и syncable → читаем из Dexie напрямую
 					if (!getIsOnline() && isSyncableEndpoint(model)) {
 						try {
 							const result = await fetchList<TData>(model, {
@@ -171,7 +196,6 @@ export function useInfiniteModelList<TData = unknown>({
 							return;
 						} catch (offlineErr) {
 							console.warn(`[InfiniteList] Offline fallback failed for ${model}:`, offlineErr);
-							// Продолжаем попытку онлайн-запроса (на случай если navigator.onLine ошибся)
 						}
 					}
 

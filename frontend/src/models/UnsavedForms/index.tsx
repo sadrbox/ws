@@ -6,10 +6,8 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import Table from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Button, ButtonImage } from "src/components/Button";
-import { Divider } from "src/components/Field";
-import styles from "src/styles/main.module.scss";
-import reload_16 from "src/assets/reload_16.png";
+import { Button } from "src/components/Button";
+import Toolbar from "src/components/Toolbar";
 import {
   getAllFormStoreEntries,
   removeFormStoreEntry,
@@ -284,21 +282,15 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Доп. панель */}
-      <div className={styles.FormPanel} style={{ padding: "4px 8px" }}>
-        <div className={styles.TablePanelLeft}>
-          <div className={[styles.colGroup, styles.gap6].join(" ")} style={{ justifyContent: "flex-start" }}>
-            <ButtonImage onClick={loadEntries} title="Обновить">
-              <img src={reload_16} alt="Reload" height={16} width={16} />
-            </ButtonImage>
-            <Divider />
-            {total > 0 && (
-              <Button variant="danger" onClick={handleClearAll}>
-                <span>Очистить всё ({total})</span>
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+      <Toolbar>
+        <Toolbar.ReloadButton onClick={loadEntries} />
+        <Toolbar.Divider />
+        {total > 0 && (
+          <Button variant="danger" onClick={handleClearAll}>
+            <span>Очистить всё ({total})</span>
+          </Button>
+        )}
+      </Toolbar>
 
       {total === 0 ? (
         <div style={{ padding: "48px 24px", textAlign: "center", color: "#999", fontSize: "14px" }}>

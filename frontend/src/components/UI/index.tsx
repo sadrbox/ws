@@ -10,6 +10,7 @@ import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 import { useAppContext } from 'src/app';
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot } from 'src/hooks/usePaneToolbar';
+import { ToolbarSlot } from 'src/components/Toolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
 import { usePaneDirty, usePaneNotifications, dismissPaneNotification } from 'src/hooks/useFormStore';
@@ -43,6 +44,7 @@ import { SyncDashboard } from 'src/models/SyncDashboard';
 import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
 import { getAccessLevel } from 'src/hooks/useAccessRight';
+import { usePersistenceMode } from 'src/services/persistenceMode';
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -212,7 +214,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
           {isDirty && <span className={styles.PaneHeaderDirtyDot} />}
         </h2>
         <div className={styles.PaneHeaderToolbar}>
-          <div ref={slotRef} className={styles.PaneHeaderToolbarSlot} />
+          <ToolbarSlot ref={slotRef} />
           <button
             className={[styles.PaneHeaderControl, styles.PaneHeaderControlClose].join(" ")}
             onClick={onClose}
@@ -295,6 +297,25 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(({ children }, ref
     </div>
   );
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PersistenceModeToggle — переключатель offline-first / transactional в Navbar
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PersistenceModeToggle: FC = () => {
+  const [mode, setMode] = usePersistenceMode();
+  const isOF = mode === "offline-first";
+  return (
+    <button
+      type="button"
+      className={styles.PersistenceToggle}
+      onClick={() => setMode(isOF ? "transactional" : "offline-first")}
+      title={isOF ? "Режим: Offline-First (данные кэшируются локально)" : "Режим: Транзакционный (только сервер)"}
+    >
+      {isOF ? "⚡ Offline" : "🔗 Online"}
+    </button>
+  );
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // NavbarPaneBell — колокольчик уведомлений активной панели в Navbar
@@ -499,6 +520,7 @@ export const Navbar: React.FC = () => {
 
         {/* Правая часть: индикаторы, имя, выход */}
         <div className={styles.NavbarRight}>
+          <PersistenceModeToggle />
           <NavbarPaneBell />
           <OfflineIndicator />
           <NotificationToast />

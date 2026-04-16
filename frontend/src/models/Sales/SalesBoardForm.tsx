@@ -9,12 +9,13 @@ import { useAppContext } from "src/app";
 import apiClient from "src/services/api/client";
 import type { TPane } from "src/app/types";
 import type { TDataItem } from "src/components/Table/types";
-import { Button, ButtonImage } from "src/components/Button";
-import { Divider, Field, FieldDate, FieldSelect, FieldNumber } from "src/components/Field";
+import { Button } from "src/components/Button";
+import { Field, FieldDate, FieldSelect, FieldNumber } from "src/components/Field";
+import { Divider } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
+import Toolbar from "src/components/Toolbar";
 import useUID from "src/hooks/useUID";
 import styles from "src/styles/main.module.scss";
-import reload_16 from "src/assets/reload_16.png";
 
 // ════════════════════════════════════════════════════════════════════════
 // Types
@@ -523,49 +524,29 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
   return (
     <div className={styles.FormWrapper} style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* ═══ Панель кнопок ═══ */}
-      <div className={styles.FormPanel}>
-        <div className={styles.TablePanelLeft}>
-          <div
-            className={[styles.colGroup, styles.gap6].join(" ")}
-            style={{ justifyContent: "flex-start" }}
-          >
-            <Button variant="primary" onClick={handleNewSale} disabled={saleLoading}>
-              <span>Новый документ</span>
-            </Button>
-            <Divider />
-            <Button onClick={handleSave} disabled={saleLoading}>
-              <span>Сохранить</span>
-            </Button>
-            <Button onClick={handleClose} disabled={saleLoading}>
-              <span>Закрыть</span>
-            </Button>
-            <Divider />
-            {isEditMode && sale.uuid && (
-              <ButtonImage
-                onClick={() => sale.uuid && loadSale(sale.uuid)}
-                title="Обновить"
-                disabled={saleLoading}
-              >
-                <img
-                  src={reload_16}
-                  alt="Reload"
-                  height={16}
-                  width={16}
-                  className={saleLoading ? styles.animationLoop : ""}
-                />
-              </ButtonImage>
-            )}
-            <ButtonImage
-              onClick={() => setCatalogVisible((v) => !v)}
-              title={catalogVisible ? "Скрыть каталог товаров" : "Показать каталог товаров"}
-              active={catalogVisible}
-            >
-              <span style={{ fontSize: 14, fontWeight: 600 }}>☰</span>
-            </ButtonImage>
-          </div>
-        </div>
-        <div className={styles.TablePanelRight} />
-      </div>
+      <Toolbar>
+        <Button variant="primary" onClick={handleNewSale} disabled={saleLoading}>
+          <span>Новый документ</span>
+        </Button>
+        <Toolbar.Divider />
+        <Button onClick={handleSave} disabled={saleLoading}>
+          <span>Сохранить</span>
+        </Button>
+        <Button onClick={handleClose} disabled={saleLoading}>
+          <span>Закрыть</span>
+        </Button>
+        <Toolbar.Divider />
+        {isEditMode && sale.uuid && (
+          <Toolbar.ReloadButton onClick={() => sale.uuid && loadSale(sale.uuid)} disabled={saleLoading} />
+        )}
+        <Toolbar.IconButton
+          onClick={() => setCatalogVisible((v) => !v)}
+          title={catalogVisible ? "Скрыть каталог товаров" : "Показать каталог товаров"}
+          active={catalogVisible}
+        >
+          <span style={{ fontSize: 14, fontWeight: 600 }}>☰</span>
+        </Toolbar.IconButton>
+      </Toolbar>
 
       {saleError && (
         <div
@@ -1018,15 +999,7 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
                 }}
               >
                 <span style={{ fontWeight: 600, fontSize: 13, color: "#333" }}>Каталог товаров</span>
-                <ButtonImage onClick={loadProducts} title="Обновить" disabled={productsLoading}>
-                  <img
-                    src={reload_16}
-                    alt="Reload"
-                    height={14}
-                    width={14}
-                    className={productsLoading ? styles.animationLoop : ""}
-                  />
-                </ButtonImage>
+                <Toolbar.ReloadButton onClick={loadProducts} disabled={productsLoading} />
               </div>
               <input
                 type="text"
