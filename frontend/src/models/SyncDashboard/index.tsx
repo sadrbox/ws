@@ -21,7 +21,6 @@ import { Button } from "src/components/Button";
 import { Divider } from "src/components/Field";
 import { Group } from "src/components/UI";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
-import FormError from "src/components/FormError";
 import Tabs from "src/components/Tabs";
 import styles from "src/styles/main.module.scss";
 import type { TPane } from "src/app/types";
@@ -539,7 +538,6 @@ const SyncDashboard: FC<Partial<TPane>> = (paneProps) => {
   } = useOfflineSync();
 
   const [mode, setMode] = usePersistenceMode();
-  const [error, setError] = useState<string | null>(null);
 
   const toolbarPortal = usePaneToolbar(
     paneProps.uniqId,
@@ -588,7 +586,6 @@ const SyncDashboard: FC<Partial<TPane>> = (paneProps) => {
   return (
     <div className={styles.FormWrapper}>
       {toolbarPortal}
-      <FormError message={error} onDismiss={() => setError(null)} />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
       </div>

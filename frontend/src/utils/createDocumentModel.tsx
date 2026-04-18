@@ -151,7 +151,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
     return (
       <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
-        error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!access.canWrite} isDirty={form.isDirty} />
+        readonly={!access.canWrite} isDirty={form.isDirty} />
     );
   };
   DocForm.displayName = `${listName.replace("List", "")}Form`;

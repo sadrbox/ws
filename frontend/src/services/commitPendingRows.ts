@@ -1,4 +1,5 @@
 import apiClient from "src/services/api/client";
+import { translateError } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 
 /** Поля, которые не учитываются при проверке «пустая ли строка» */
@@ -75,21 +76,29 @@ export async function commitPendingRows(
         await apiClient.delete(`/${endpoint}/${row.uuid}`);
       }
     } catch (err: any) {
+      const serverMsg = translateError(err.response?.data?.message) || translateError(err.message);
       throw new Error(
-        err.response?.data?.message ||
-        err.message ||
-        `Заполните данные в добавленной строке (${tableName}) или удалите пустую строку`,
+        serverMsg
+          ? `${tableName}: ${serverMsg}`
+          : `Заполните данные в добавленной строке (${tableName}) или удалите пустую строку`,
       );
     }
   }
 }
 
-/** Строит payload «как есть», убирая служебные поля */
+/** Строит payload «как есть», убирая служебные поля и вложенные объекты */
 function buildGenericPayload(
   row: TDataItem,
   parentField: string,
   parentUuid: string,
 ): Record<string, unknown> {
-  const { _pendingAction, id, uuid: _u, _tempId, ...rest } = row as any;
-  return { ...rest, [parentField]: parentUuid };
+  const { _pendingAction, _untouched, id, uuid: _u, _tempId, ...rest } = row as any;
+  // Убираем вложенные объекты (relation includes) — они не нужны в payload
+  const payload: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(rest)) {
+    if (v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date)) continue;
+    payload[k] = v;
+  }
+  payload[parentField] = parentUuid;
+  return payload;
 }

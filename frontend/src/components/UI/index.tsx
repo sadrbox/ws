@@ -8,6 +8,7 @@ import { Divider } from '../Field';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app';
+import Toolbar from 'src/components/Toolbar';
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
@@ -144,12 +145,18 @@ const PaneTabItem: FC<{
       aria-disabled={isLocked}
     >
       {!isLocked && (
-        <button
-          className={styles.PaneTabClose}
-          onClick={(e) => { e.stopPropagation(); onClose(); }}
-          title="Закрыть"
-          type="button"
-        >{isDirty ? <span className={styles.PaneTabDirtyDot} /> : "✕"}</button>
+        isDirty
+          ? <button
+              className={styles.PaneTabClose}
+              onClick={(e) => { e.stopPropagation(); onClose(); }}
+              title="Закрыть"
+              type="button"
+            ><span className={styles.PaneTabDirtyDot} /></button>
+          : <Toolbar.CloseButton
+              className={styles.PaneTabCloseBtn}
+              onClick={(e) => { e.stopPropagation(); onClose(); }}
+              size={14}
+            />
       )}
       <span className={styles.PaneTabLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
     </div>
@@ -215,12 +222,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
         </h2>
         <div className={styles.PaneHeaderToolbar}>
           <ToolbarSlot ref={slotRef} />
-          <button
-            className={[styles.PaneHeaderControl, styles.PaneHeaderControlClose].join(" ")}
-            onClick={onClose}
-            title="Закрыть"
-            type="button"
-          >✕</button>
+          <Toolbar.CloseButton onClick={onClose} />
         </div>
       </div>
       <Component {...p} />
@@ -330,6 +332,7 @@ const NavbarPaneBell: FC = () => {
   const popoverRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(notifications.length);
   const autoOpenRef = useRef(false);
+  const hoverRef = useRef(false);
 
   // Закрыть попover при смене панели
   useEffect(() => { setShowNotes(false); }, [activePane]);
@@ -343,14 +346,24 @@ const NavbarPaneBell: FC = () => {
     prevCountRef.current = notifications.length;
   }, [notifications.length]);
 
-  // Авто-скрыть через 6 сек если открыт автоматически
+  // Авто-скрыть через 6 сек если открыт автоматически (но не пока hover)
   useEffect(() => {
     if (!showNotes || !autoOpenRef.current) return;
-    const t = setTimeout(() => {
-      setShowNotes(false);
-      autoOpenRef.current = false;
-    }, 6000);
-    return () => clearTimeout(t);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!hoverRef.current) {
+          setShowNotes(false);
+          autoOpenRef.current = false;
+        } else {
+          // Мышь на поповере — пробуем снова через 2 сек
+          schedule();
+        }
+      }, 6000);
+    };
+    schedule();
+    return () => { if (timer) clearTimeout(timer); };
   }, [showNotes]);
 
   // Закрыть попover при клике вне
@@ -395,31 +408,33 @@ const NavbarPaneBell: FC = () => {
         )}
       </button>
       {showNotes && (
-        <div ref={popoverRef} className={styles.PaneNotePopover}>
+        <div
+          ref={popoverRef}
+          className={styles.PaneNotePopover}
+          onMouseEnter={() => { hoverRef.current = true; }}
+          onMouseLeave={() => { hoverRef.current = false; }}
+        >
           <div className={styles.PaneNotePopoverHeader}>
             <span>Состояние формы</span>
             <button className={styles.PaneNoteJournalLink} onClick={openJournal} type="button">
               Журнал ➜
             </button>
           </div>
-          {isDirty && (
-            <div className={[styles.PaneNoteItem, styles.PaneNoteInfo].join(" ")}>
-              <span className={styles.PaneNoteIcon}>✏️</span>
-              <span className={styles.PaneNoteText}>
-                Форма содержит несохранённые изменения.
-                Нажмите «Сохранить» чтобы сохранить, или «Обновить» чтобы сбросить.
-              </span>
-            </div>
-          )}
           {notifications.map((n) => (
             <div
               key={n.id}
-              className={[styles.PaneNoteItem, n.type === "warning" ? styles.PaneNoteWarning : styles.PaneNoteInfo].filter(Boolean).join(" ")}
+              className={[
+                styles.PaneNoteItem,
+                n.type === "error" ? styles.PaneNoteError
+                  : n.type === "warning" ? styles.PaneNoteWarning
+                  : styles.PaneNoteInfo,
+                n.resolved ? styles.PaneNoteResolved : "",
+              ].filter(Boolean).join(" ")}
             >
-              <span className={styles.PaneNoteIcon}>{n.type === "warning" ? "⚠️" : "ℹ️"}</span>
+              <span className={styles.PaneNoteIcon}>{n.type === "error" ? "❌" : n.type === "warning" ? "⚠️" : "ℹ️"}</span>
               <span className={styles.PaneNoteText}>
                 {n.text}
-                {n.actions && n.actions.length > 0 && (
+                {n.actions && n.actions.length > 0 && !n.resolved && (
                   <span className={styles.PaneNoteActions}>
                     {n.actions.map((a, i) => (
                       <button

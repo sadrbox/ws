@@ -84,3 +84,13 @@
 .IconButtonLoading img {
 	animation: toolbarSpin 0.8s linear infinite;
 }
+
+/* CloseButton — hover переключает синий крестик на красный */
+.CloseButton {
+	.CloseIconHover { display: none; }
+	&:hover {
+		background: rgba(#c00, 0.1);
+		.CloseIcon { display: none; }
+		.CloseIconHover { display: block; }
+	}
+}

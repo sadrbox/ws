@@ -8,6 +8,7 @@ import { useAppContext } from "src/app";
 import { isNetworkError } from "src/services/networkUtils";
 import { commitPendingRows } from "src/services/commitPendingRows";
 import { pipeFetchOne, pipeCreate, pipeUpdate, isOfflineFirst } from "src/services/persistencePipe";
+import { translateError } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import useUID from "./useUID";
@@ -112,6 +113,8 @@ function createFormStore<F extends object>(
 ) {
 	// Мутабельный ключ — может измениться после первого save (new → uuid)
 	let currentStorageKey = storageKey;
+	// Предыдущие ключи (после миграции) — для очистки при закрытии формы
+	const previousStorageKeys: string[] = [];
 
 	// ── Начальное состояние ──
 	const emptyTables: Record<string, TableState> = {};
@@ -137,10 +140,16 @@ function createFormStore<F extends object>(
 	const restored = restoreFromSession<F>(currentStorageKey);
 	if (restored) {
 		state.fields = { ...defaultFields, ...restored.fields };
-		// Восстанавливаем tables, но только те, которые определены в tableDefs
-		for (const key of Object.keys(tableDefs)) {
-			if (restored.tables?.[key]) {
-				state.tables[key] = restored.tables[key];
+		// Для СУЩЕСТВУЮЩИХ записей (uuid) не восстанавливаем tables из sessionStorage:
+		// SubTable данные должны загружаться с сервера как единственный источник истины.
+		// Если пользователь удалил/изменил строки и закрыл форму без сохранения —
+		// эти pending-действия НЕ должны восстанавливаться при повторном открытии.
+		// Для НОВЫХ форм (нет uuid) tables восстанавливаются — данные ещё не на сервере.
+		if (!uuid) {
+			for (const key of Object.keys(tableDefs)) {
+				if (restored.tables?.[key]) {
+					state.tables[key] = restored.tables[key];
+				}
 			}
 		}
 		hadStoredData = true;
@@ -224,6 +233,7 @@ function createFormStore<F extends object>(
 			tables: state.tables,
 		});
 		snapshotReady = true;
+		if (_paneUniqId) resolvePaneNotifications(_paneUniqId);
 		notify(); // Уведомить подписчиков (dirty-индикатор на вкладке)
 	}
 
@@ -278,8 +288,17 @@ function createFormStore<F extends object>(
 		notify();
 	}
 
-	/** Установить ошибку (с инкрементом revision для перемонтирования FormError) */
-	function setError(msg: string | null): void {
+	/** ID панели — устанавливается из хука, используется для push-уведомлений */
+	let _paneUniqId: string | undefined;
+	function setPaneUniqId(id: string | undefined): void {
+		_paneUniqId = id;
+	}
+
+	/** Установить ошибку: пушит уведомление в колокольчик панели */
+	function setError(msg: string | null, noteType?: PaneNotification["type"]): void {
+		if (msg && _paneUniqId) {
+			addPaneNotification(_paneUniqId, noteType ?? "error", msg);
+		}
 		setMeta({
 			error: msg,
 			errorRevision: msg
@@ -301,7 +320,6 @@ function createFormStore<F extends object>(
 		mapServerToForm: (data: any, prev?: F) => F | Promise<F>,
 		afterLoad?: () => void,
 		snapshotOnly = false,
-		paneUniqId?: string,
 	): Promise<void> {
 		setMeta({ isLoading: true });
 		setError(null);
@@ -350,19 +368,17 @@ function createFormStore<F extends object>(
 
 			if (fromCache) {
 				const cacheMsg = "Данные загружены из локального кэша (offline-режим).";
-				setError(cacheMsg);
-				if (paneUniqId) addPaneNotification(paneUniqId, "info", cacheMsg);
+				setError(cacheMsg, "info");
 			}
 
 			afterLoad?.();
 		} catch (err: any) {
 			if (isNetworkError(err)) {
 				const offMsg = "Нет связи с сервером. Работа в режиме offline — данные будут загружены при восстановлении соединения.";
-				setError(offMsg);
-				if (paneUniqId) addPaneNotification(paneUniqId, "warning", offMsg);
+				setError(offMsg, "warning");
 			} else {
 				setError(
-					err.response?.data?.message ||
+					translateError(err.response?.data?.message) ||
 						"Не удалось загрузить данные",
 				);
 			}
@@ -420,23 +436,23 @@ function createFormStore<F extends object>(
 
 			if (wasOffline) {
 				const saveMsg = "Сохранено локально. Синхронизация произойдёт при восстановлении связи.";
-				setError(saveMsg);
-				if (uniqId) addPaneNotification(uniqId, "info", saveMsg);
+				setError(saveMsg, "info");
 			}
 
 			if (uniqId) updatePaneLabel(uniqId, buildPaneLabel(saved));
 			return { success: true, savedData: saved };
 		} catch (err: any) {
 			let msg = "Не удалось сохранить";
-			if (isNetworkError(err))
+			let noteType: PaneNotification["type"] = "error";
+			if (isNetworkError(err)) {
 				msg = "Нет связи с сервером. Повторите попытку при восстановлении соединения.";
-			else if (err.response?.status === 409)
-				msg = err.response.data?.message || "Запись уже существует";
+				noteType = "warning";
+			} else if (err.response?.status === 409)
+				msg = translateError(err.response.data?.message) || "Запись уже существует";
 			else if (err.response?.status === 400)
-				msg = err.response.data?.message || "Ошибка валидации";
-			else if (err.message) msg = err.message;
-			setError(msg);
-			if (uniqId && isNetworkError(err)) addPaneNotification(uniqId, "warning", msg);
+				msg = translateError(err.response.data?.message) || "Ошибка валидации";
+			else if (err.message) msg = translateError(err.message);
+			setError(msg, noteType);
 			setMeta({ isLoading: false });
 			return { success: false };
 		}
@@ -493,6 +509,8 @@ function createFormStore<F extends object>(
 	function destroy(): void {
 		if (persistTimer) clearTimeout(persistTimer);
 		clearSession(currentStorageKey);
+		for (const k of previousStorageKeys) storeCache.delete(k);
+		previousStorageKeys.length = 0;
 		listeners.clear();
 	}
 
@@ -503,7 +521,7 @@ function createFormStore<F extends object>(
 	function migrateStorageKey(newKey: string): void {
 		if (newKey === currentStorageKey) return;
 		clearSession(currentStorageKey);
-		storeCache.delete(currentStorageKey);
+		previousStorageKeys.push(currentStorageKey);
 		currentStorageKey = newKey;
 		storeCache.set(newKey, storeResult as any);
 		schedulePersist();
@@ -533,6 +551,7 @@ function createFormStore<F extends object>(
 		// Meta
 		setMeta,
 		setError,
+		setPaneUniqId,
 
 		// API
 		load,
@@ -557,6 +576,9 @@ function createFormStore<F extends object>(
 				persistTimer = null;
 			}
 			clearSession(currentStorageKey);
+			// Удаляем старые ключи из кэша (после миграции new → uuid)
+			for (const k of previousStorageKeys) storeCache.delete(k);
+			previousStorageKeys.length = 0;
 		},
 	};
 
@@ -625,16 +647,18 @@ export interface PaneNotificationAction {
 
 export interface PaneNotification {
 	id: number;
-	type: "info" | "warning";
+	type: "info" | "warning" | "error";
 	text: string;
 	timestamp: number;
 	actions?: PaneNotificationAction[];
+	/** Уведомление неактуально (форма сохранена/обновлена) — действия заблокированы */
+	resolved?: boolean;
 }
 
 /** Запись в локальном журнале уведомлений (localStorage) */
 export interface NotificationJournalEntry {
 	id: number;
-	type: "info" | "warning";
+	type: "info" | "warning" | "error";
 	text: string;
 	timestamp: number;
 	/** Заголовок панели (например «Организации: ТОО Строй-Снаб №1») */
@@ -741,6 +765,18 @@ export function clearPaneNotifications(uniqId: string): void {
 		paneNotesMap.delete(uniqId);
 		notifyNoteListeners();
 	}
+}
+
+/** Пометить все уведомления панели как неактуальные (resolved).
+ *  Уведомления остаются видимыми, но действия (кнопки) блокируются. */
+export function resolvePaneNotifications(uniqId: string): void {
+	const list = paneNotesMap.get(uniqId);
+	if (!list || list.length === 0) return;
+	let changed = false;
+	for (const n of list) {
+		if (!n.resolved) { n.resolved = true; changed = true; }
+	}
+	if (changed) notifyNoteListeners();
 }
 
 function subscribeNotes(listener: () => void): () => void {
@@ -923,6 +959,9 @@ export function useFormStore<F extends object>(
 		fullStorageKey,
 	);
 
+	// Привязываем uniqId панели к store — для push-уведомлений через setError
+	store.setPaneUniqId(uniqId);
+
 	// ── Стабильные ref-ы для колбэков (не пересоздаются) ──
 	const mapRef = useRef(mapServerToForm);
 	mapRef.current = mapServerToForm;
@@ -958,7 +997,7 @@ export function useFormStore<F extends object>(
 			// Если данные восстановлены из sessionStorage — загружаем серверные данные
 			// только для snapshot (isDirty будет сравнивать с реальным серверным состоянием).
 			// Если sessionStorage пуст — полная загрузка (заменяет fields).
-			store.load(uuid, mapRef.current, afterLoadRef.current, store.hadStoredData, uniqId);
+			store.load(uuid, mapRef.current, afterLoadRef.current, store.hadStoredData);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uuid, store]);
@@ -1115,10 +1154,9 @@ export function useFormStore<F extends object>(
 				mapRef.current,
 				afterLoadRef.current,
 				false,
-				uniqId,
 			);
 		},
-		[store, uniqId],
+		[store],
 	);
 
 	// ── Submit (fields + tables) ──

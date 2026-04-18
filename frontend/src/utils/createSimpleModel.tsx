@@ -180,9 +180,6 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
         onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
         isLoading={form.isLoading}
         showReload={form.isEditMode}
-        error={form.error}
-        errorRevision={form.errorRevision}
-        onErrorDismiss={() => form.setError(null)}
         readonly={!access.canWrite}
         isDirty={form.isDirty}
       />

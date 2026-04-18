@@ -80,7 +80,7 @@ const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
-      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
+      readonly={!canWrite} isDirty={form.isDirty} />
   );
 };
 ScheduledTasksForm.displayName = "ScheduledTasksForm";

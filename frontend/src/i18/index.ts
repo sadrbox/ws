@@ -16,6 +16,43 @@ export function getTranslation(word: string | undefined | null): string {
 
 export const translate = (word: string) => getTranslation(word);
 
+/**
+ * Перевод серверных сообщений об ошибках на понятный пользователю язык.
+ * Принимает строку (часто на английском) и возвращает локализованную версию.
+ * Если перевод не найден — возвращает оригинал.
+ */
+const errorTranslations: [RegExp, string][] = [
+	// ── Общие серверные ошибки ──
+	[/server error/i, "Ошибка сервера"],
+	[/not found/i, "Запись не найдена"],
+	[/already exists/i, "Запись уже существует"],
+	[/unauthorized/i, "Не авторизован"],
+	[/forbidden/i, "Доступ запрещён"],
+	[/invalid credentials/i, "Неверные учётные данные"],
+	// ── Валидация полей (field required) ──
+	[/shortName\s*required/i, "Укажите наименование"],
+	[/contractNumber\s*required/i, "Укажите номер договора"],
+	[/bin\s*required/i, "Укажите БИН"],
+	[/name\s*required/i, "Укажите наименование"],
+	[/username\s*required/i, "Укажите имя пользователя"],
+	[/password\s*required/i, "Укажите пароль"],
+	[/email\s*required/i, "Укажите email"],
+	[/(\w+)\s+required/i, "Поле «$1» обязательно для заполнения"],
+	// ── Prisma / DB ──
+	[/unique constraint/i, "Нарушение уникальности: такая запись уже существует"],
+	[/foreign key constraint/i, "Невозможно удалить: запись используется в других данных"],
+];
+
+export function translateError(message: string): string {
+	if (!message) return message;
+	for (const [pattern, replacement] of errorTranslations) {
+		if (pattern.test(message)) {
+			return message.replace(pattern, replacement);
+		}
+	}
+	return message;
+}
+
 export function getTranslateColumn(column: TColumn): string | undefined {
 	if (column.identifier) {
 		return getTranslation(column.identifier.toString());

@@ -154,6 +154,33 @@ function getRowId(row: TDataItem): string {
   return (row as any).uuid || String((row as any).id);
 }
 
+/**
+ * Мерж серверных строк с pending-строками (update/delete/create).
+ * Возвращает объединённый массив.
+ */
+function mergeServerWithPending(serverItems: TDataItem[], pendingRows: TDataItem[]): TDataItem[] {
+  const serverUuidSet = new Set(serverItems.map((r: any) => r.uuid).filter(Boolean));
+  const merged: TDataItem[] = [];
+
+  // 1. Обходим серверные строки: если есть pending update/delete — подставляем его
+  for (const item of serverItems) {
+    const pendingRow = pendingRows.find((p: any) =>
+      p._pendingAction && p._pendingAction !== "create" &&
+      ((p.uuid && p.uuid === (item as any).uuid) || p.id === (item as any).id)
+    );
+    merged.push(pendingRow ?? item);
+  }
+
+  // 2. Добавляем temp-строки (create), которых нет на сервере
+  for (const p of pendingRows) {
+    if ((p as any)._pendingAction === "create" && !serverUuidSet.has((p as any).uuid)) {
+      merged.unshift(p);
+    }
+  }
+
+  return merged;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Компонент
 // ═══════════════════════════════════════════════════════════════════════════
@@ -241,18 +268,15 @@ const SubTable: FC<SubTableProps> = ({
   const handleDeleteRaw = useModelDelete(model, refetch);
 
   // temp id counter for local rows (negative ids)
-  const tempIdRef = useRef(-1);
+  // Инициализируем СИНХРОННО: если есть initialPendingRows с отрицательными id —
+  // ставим счётчик ниже минимума, чтобы новые строки не получали дублирующиеся ключи.
+  const tempIdRef = useRef(
+    deferRemoteChanges && initialPendingRows?.length
+      ? Math.min(-1, Math.min(...initialPendingRows.map((r: any) => (typeof r.id === "number" ? r.id : 0))) - 1)
+      : -1,
+  );
   // Флаг: были ли initialPendingRows уже применены (мерж выполняется один раз)
   const pendingAppliedRef = useRef(false);
-
-  // Инициализация tempIdRef: если есть initialPendingRows с отрицательными id — ставим счётчик ниже минимума
-  useEffect(() => {
-    if (deferRemoteChanges && initialPendingRows?.length) {
-      const minId = Math.min(...initialPendingRows.map((r: any) => (typeof r.id === "number" ? r.id : 0)));
-      if (minId < tempIdRef.current) tempIdRef.current = minId - 1;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Только при первом монтировании
 
   // Сброс pendingAppliedRef когда pending очищается (после commit) —
   // это позволяет повторный мерж при следующем восстановлении из sessionStorage.
@@ -302,6 +326,15 @@ const SubTable: FC<SubTableProps> = ({
         }
         return r;
       }).filter(Boolean);
+      // Очищаем ошибки валидации для удалённых строк
+      setCellErrors(prev => {
+        const next = { ...prev };
+        for (const id of toDelete) {
+          const row = tableRows.find((r: any) => r.id === id);
+          if (row) delete next[getRowId(row)];
+        }
+        return next;
+      });
       setCacheVersion(v => v + 1);
       notifyParent(cachedRowsRef.current as TDataItem[]);
       return;
@@ -350,33 +383,7 @@ const SubTable: FC<SubTableProps> = ({
     // ── Ветка A: мерж pending-строк из sessionStorage (один раз при восстановлении) ──
     if (deferRemoteChanges && initialPendingRows?.length && !pendingAppliedRef.current) {
       pendingAppliedRef.current = true;
-      const serverItems = [...allItems];
-      const pending = initialPendingRows;
-
-      // Собираем uuid/id серверных строк для быстрого поиска
-      const serverUuidSet = new Set(serverItems.map((r: any) => r.uuid).filter(Boolean));
-
-      const merged: TDataItem[] = [];
-
-      // 1. Применяем update/delete к серверным строкам
-      for (const item of serverItems) {
-        const pendingRow = pending.find((p: any) =>
-          p._pendingAction && p._pendingAction !== "create" &&
-          ((p.uuid && p.uuid === (item as any).uuid) || p.id === (item as any).id)
-        );
-        if (pendingRow) {
-          merged.push(pendingRow);
-        } else {
-          merged.push(item);
-        }
-      }
-
-      // 2. Добавляем temp-строки (create), которых нет на сервере
-      for (const p of pending) {
-        if ((p as any)._pendingAction === "create" && !serverUuidSet.has((p as any).uuid)) {
-          merged.unshift(p);
-        }
-      }
+      const merged = mergeServerWithPending([...allItems], initialPendingRows);
 
       cachedRowsRef.current = merged;
       setCacheVersion(v => v + 1);
@@ -400,24 +407,7 @@ const SubTable: FC<SubTableProps> = ({
     // чтобы не потерять локальные изменения при invalidateQueries (например после
     // сохранения формы открытой из SubTable в режиме "Редактирование в форме").
     if (dirtyRows.length > 0) {
-      const serverUuidSet = new Set(clean.map((r: any) => r.uuid).filter(Boolean));
-      const merged: TDataItem[] = [];
-
-      // 1. Обходим серверные строки: если для строки есть pending update/delete — ставим его
-      for (const item of clean) {
-        const pendingRow = dirtyRows.find((p: any) =>
-          p._pendingAction && p._pendingAction !== "create" &&
-          ((p.uuid && p.uuid === (item as any).uuid) || p.id === (item as any).id)
-        );
-        merged.push(pendingRow ?? item);
-      }
-
-      // 2. Добавляем temp-строки (create) которых нет на сервере
-      for (const p of dirtyRows) {
-        if ((p as any)._pendingAction === "create" && !serverUuidSet.has((p as any).uuid)) {
-          merged.unshift(p);
-        }
-      }
+      const merged = mergeServerWithPending(clean, dirtyRows);
 
       cachedRowsRef.current = merged;
       setCacheVersion(v => v + 1);
@@ -607,6 +597,7 @@ const SubTable: FC<SubTableProps> = ({
     }
     // Немедленный режим — PUT на сервер
     if (!row.uuid) return;
+    setOpCount(c => c + 1);
     try {
       const { default: apiClient } = await import("src/services/api/client");
       await apiClient.put(`/${model}/${row.uuid}`, { [fkField]: value });
@@ -615,6 +606,8 @@ const SubTable: FC<SubTableProps> = ({
       const serverError = err.response?.data?.message || "Ошибка сохранения";
       const rowId = getRowId(row);
       setCellError(rowId, fkField, serverError);
+    } finally {
+      setOpCount(c => c - 1);
     }
   }, [deferRemoteChanges, updateLocalRow, model, refetch, setCellError]);
 

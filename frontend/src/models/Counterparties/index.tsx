@@ -38,7 +38,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
     tables: {
       contacts:     { endpoint: "contacts",     parentField: "ownerUuid", label: translate("ContactsList") || "Контакты",          extraFields: { ownerType: "counterparty" } },
       bankAccounts: { endpoint: "bankaccounts", parentField: "ownerUuid", label: translate("BankAccountsList") || "Банковские счета", extraFields: { ownerType: "counterparty" } },
-      contracts:    { endpoint: "contracts",    parentField: "ownerUuid", label: translate("ContractsList") || "Договора",          extraFields: { ownerType: "counterparty" } },
+      contracts:    { endpoint: "contracts",    parentField: "counterpartyUuid", label: translate("ContractsList") || "Договора" },
     },
     mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", shortName: d.shortName ?? "", displayName: d.displayName ?? "" }),
     buildPayload: (fd) => {
@@ -85,7 +85,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
-      error={form.error} errorRevision={form.errorRevision} onErrorDismiss={() => form.setError(null)} readonly={!canWrite} isDirty={form.isDirty} />
+      readonly={!canWrite} isDirty={form.isDirty} />
   );
 };
 CounterpartiesForm.displayName = "CounterpartiesForm";

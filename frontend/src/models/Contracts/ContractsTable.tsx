@@ -127,6 +127,32 @@ const ContractsTable: FC<ContractsTableProps> = ({
       }
       return <span>{(row.counterparty as any)?.shortName ?? ""}</span>;
     }
+    if (col.identifier === "organization.shortName") {
+      if (ctx.inlineEditing) {
+        return (
+          <LookupField
+            label=""
+            name={`ct_organization_${row.id}`}
+            value={(row.organizationUuid as string) ?? ""}
+            displayValue={(row.organization as any)?.shortName ?? ""}
+            endpoint="organizations"
+            displayField="shortName"
+            onSelect={(uuid, _dv, item) => {
+              ctx.handleLookupChange(row, "organizationUuid", uuid, {
+                organization: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
+              });
+            }}
+            onClear={() => {
+              ctx.handleLookupChange(row, "organizationUuid", null, { organization: null });
+            }}
+            disabled={ctx.disabled}
+            width="100%"
+            variant="table"
+          />
+        );
+      }
+      return <span>{(row.organization as any)?.shortName ?? ""}</span>;
+    }
     return undefined;
   }, []);
 
@@ -154,14 +180,29 @@ const ContractsTable: FC<ContractsTableProps> = ({
     contractNumber: "",
     startDate: null,
     endDate: null,
-    counterpartyUuid: null,
   }), []);
+
+  // Скрываем колонку, соответствующую parentKey (она и так известна),
+  // и гарантируем видимость «другой стороны» (Владелец).
+  const adjustedColumns = useMemo(() => {
+    const hideIdentifier = parentKey === "organizationUuid"
+      ? "organization.shortName"
+      : "counterparty.shortName";
+    const showIdentifier = parentKey === "organizationUuid"
+      ? "counterparty.shortName"
+      : "organization.shortName";
+    return (columnsJson as any[]).map((col: any) => {
+      if (col.identifier === hideIdentifier) return { ...col, visible: false, inlist: false };
+      if (col.identifier === showIdentifier) return { ...col, visible: true, inlist: true };
+      return col;
+    });
+  }, [parentKey]);
 
   return (
     <SubTable
       model={MODEL_ENDPOINT}
       componentName={COMPONENT_NAME}
-      columnsJson={columnsJson}
+      columnsJson={adjustedColumns}
       parentKey={parentKey}
       parentUuid={parentUuid}
       defaultSort={{ id: "asc" }}

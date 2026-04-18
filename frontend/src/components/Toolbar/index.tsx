@@ -30,6 +30,8 @@ import settingsForm_16 from "src/assets/form-setting_16.png";
 import calendar_16 from "src/assets/calendar_16.png";
 import searchField_16 from "src/assets/search-field_16.png";
 import editInlineIcon from "src/assets/edit-inline_16.svg";
+import closeIcon16 from "src/assets/close_16.png";
+import closeRedIcon16 from "src/assets/close_red_16.png";
 import styles from "./Toolbar.module.scss";
 
 // ─── Toolbar (контейнер) ────────────────────────────────────────────────
@@ -125,6 +127,24 @@ const InlineEditButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (prop
 );
 InlineEditButton.displayName = "Toolbar.InlineEditButton";
 
+// ─── Toolbar.CloseButton — кнопка закрытия с hover-эффектом (синий → красный) ───
+
+interface CloseButtonProps extends Omit<IconButtonProps, "children"> {
+  size?: number;
+}
+
+const CloseButton: FC<CloseButtonProps> = ({ size = 16, className, ...props }) => (
+  <IconButton
+    className={[styles.CloseButton, className].filter(Boolean).join(" ")}
+    title="Закрыть"
+    {...props}
+  >
+    <img className={styles.CloseIcon} src={closeIcon16} alt="Закрыть" width={size} height={size} />
+    <img className={styles.CloseIconHover} src={closeRedIcon16} alt="Закрыть" width={size} height={size} />
+  </IconButton>
+);
+CloseButton.displayName = "Toolbar.CloseButton";
+
 // ─── Compound export ────────────────────────────────────────────────────
 
 type ToolbarComponent = typeof ToolbarRoot & {
@@ -138,6 +158,7 @@ type ToolbarComponent = typeof ToolbarRoot & {
   PeriodButton: typeof PeriodButton;
   SearchButton: typeof SearchButton;
   InlineEditButton: typeof InlineEditButton;
+  CloseButton: typeof CloseButton;
 };
 
 const Toolbar = ToolbarRoot as ToolbarComponent;
@@ -151,6 +172,7 @@ Toolbar.SettingsButton = SettingsButton;
 Toolbar.PeriodButton = PeriodButton;
 Toolbar.SearchButton = SearchButton;
 Toolbar.InlineEditButton = InlineEditButton;
+Toolbar.CloseButton = CloseButton;
 
 export {
   Toolbar,
@@ -164,5 +186,6 @@ export {
   PeriodButton,
   SearchButton,
   InlineEditButton,
+  CloseButton,
 };
 export default Toolbar;

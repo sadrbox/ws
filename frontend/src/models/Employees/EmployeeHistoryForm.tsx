@@ -152,9 +152,6 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
       showReload={form.isEditMode}
-      error={form.error}
-      errorRevision={form.errorRevision}
-      onErrorDismiss={() => form.setError(null)}
       readonly={!canWrite}
       isDirty={form.isDirty}
     />

@@ -1,6 +1,5 @@
 import { FC, ReactNode } from "react";
 import FormPanel from "src/components/FormPanel";
-import FormError from "src/components/FormError";
 import Tabs from "src/components/Tabs";
 import styles from "src/styles/main.module.scss";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
@@ -30,10 +29,6 @@ interface ModelFormWrapperProps {
   /** Состояние */
   isLoading: boolean;
   showReload: boolean;
-  /** Ошибка */
-  error: string | null;
-  errorRevision?: number;
-  onErrorDismiss: () => void;
   /** Только чтение (опционально) */
   readonly?: boolean;
   /** Есть ли несохранённые изменения? */
@@ -50,9 +45,6 @@ const ModelFormWrapper: FC<ModelFormWrapperProps> = ({
   onReload,
   isLoading,
   showReload,
-  error,
-  errorRevision,
-  onErrorDismiss,
   readonly,
   isDirty: _isDirty, // индикатор теперь через usePaneDirty в PaneItem
   paneId,
@@ -73,11 +65,6 @@ const ModelFormWrapper: FC<ModelFormWrapperProps> = ({
   return (
     <div className={styles.FormWrapper}>
       {toolbarPortal}
-      <FormError
-        message={error}
-        revision={errorRevision}
-        onDismiss={onErrorDismiss}
-      />
       <div className={styles.FormBody}>
         <Tabs tabs={tabs} />
       </div>

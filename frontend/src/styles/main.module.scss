@@ -36,7 +36,7 @@ body {
 	// display: grid;
 	// grid-template-rows: 7dvh 85dvh 7dvh;
 
-	max-width: 1200px;
+	// max-width: 1200px;
 	min-width: 300px;
 	margin: 0 auto;
 	position: relative;
@@ -523,12 +523,6 @@ body {
 		color: $color6;
 	}
 }
-.PaneHeaderControlClose {
-	&:hover {
-		background: rgba(#c00, 0.1);
-		color: #c00;
-	}
-}
 
 // ── Pane Notifications ──
 .PaneNoteBellWrap {
@@ -621,8 +615,14 @@ body {
 .PaneNoteWarning {
 	background: #fffbe6;
 }
+.PaneNoteError {
+	background: #fff2f0;
+}
 .PaneNoteInfo {
 	background: #f6ffed;
+}
+.PaneNoteResolved {
+	opacity: 0.55;
 }
 .PaneNoteIcon {
 	flex-shrink: 0;
@@ -780,6 +780,12 @@ body {
 				background: rgba(#c00, 0.1);
 				color: #c00;
 			}
+		}
+		.PaneTabCloseBtn {
+			width: 18px !important;
+			height: 18px !important;
+			flex-shrink: 0;
+			margin-right: 3px;
 		}
 
 		.PaneTabLabel {
