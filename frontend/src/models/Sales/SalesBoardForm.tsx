@@ -25,7 +25,7 @@ interface SaleDoc {
   id?: number;
   uuid?: string;
   documentNumber: string;
-  documentDate: string;
+  date: string;
   description: string;
   amount: string;
   status: string;
@@ -38,7 +38,7 @@ interface SaleDoc {
 
 const EMPTY_SALE: SaleDoc = {
   documentNumber: "",
-  documentDate: "",
+  date: "",
   description: "",
   amount: "",
   status: "draft",
@@ -192,7 +192,7 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
           id: d.id,
           uuid: d.uuid,
           documentNumber: d.documentNumber ?? "",
-          documentDate: d.documentDate?.slice(0, 10) ?? "",
+          date: d.date?.slice(0, 10) ?? "",
           description: d.description ?? "",
           amount: d.amount != null ? String(d.amount) : "",
           status: d.status ?? "draft",
@@ -259,7 +259,7 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
     setSaleError(null);
     const payload: Record<string, unknown> = {
       documentNumber: sale.documentNumber?.trim() || null,
-      documentDate: sale.documentDate || null,
+      date: sale.date || null,
       description: sale.description?.trim() || null,
       amount: sale.amount ? parseFloat(sale.amount) : null,
       status: sale.status || "draft",
@@ -278,7 +278,7 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
         id: saved.id,
         uuid: saved.uuid,
         documentNumber: saved.documentNumber ?? "",
-        documentDate: saved.documentDate?.slice(0, 10) ?? "",
+        date: saved.date?.slice(0, 10) ?? "",
         description: saved.description ?? "",
         amount: saved.amount != null ? String(saved.amount) : "",
         status: saved.status ?? "draft",
@@ -645,8 +645,8 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2, color: "#777", fontSize: 12 }}>
                     <span>
-                      {s.documentDate
-                        ? new Date(s.documentDate as string).toLocaleDateString("ru-RU")
+                      {s.date
+                        ? new Date(s.date as string).toLocaleDateString("ru-RU")
                         : "—"}
                     </span>
                     <span>{(s as any).counterparty?.shortName || (s as any)["counterparty.shortName"] || ""}</span>
@@ -705,8 +705,8 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
             <FieldDate
               label="Дата"
               name={`${formUid}_docDate`}
-              value={sale.documentDate}
-              onChange={(e) => handleFieldChange("documentDate", e.target.value)}
+              value={sale.date}
+              onChange={(e) => handleFieldChange("date", e.target.value)}
               disabled={saleLoading}
               width="180px"
             />

@@ -3,6 +3,7 @@ import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { FieldNumber, FieldSelect } from "src/components/Field";
+import { getFormatDateOnly } from "src/utils/main.module";
 import LookupField from "src/components/Field/LookupField";
 import EmployeeHistoryForm from "./EmployeeHistoryForm";
 import { translate } from "src/i18";
@@ -52,7 +53,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({ employeeUuid, dis
           />
         );
       }
-      const val = typeof row.eventDate === "string" ? row.eventDate.slice(0, 10) : "";
+      const val = typeof row.eventDate === "string" ? getFormatDateOnly(row.eventDate) : "";
       return <span>{val}</span>;
     }
     if (col.identifier === "eventType") {

@@ -1,4 +1,4 @@
-import { getFormatDate } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/main.module";
 import { TColumn, TDataItem, TOrder, TypeTableTypes } from "./types";
 import { CSSProperties } from "react";
 
@@ -226,8 +226,7 @@ export function getFormatColumnValue(
 	} else if (column.identifier === "position" && column.type === "position") {
 		return rawValue + "";
 	} else if (column.type === "date") {
-		const date = getFormatDate(rawValue as string);
-		return date;
+		return getFormatDateOnly(rawValue as string);
 	} else if (column.type === "string") {
 		// Для dot-notation rawValue уже разрешён выше — просто возвращаем
 		return rawValue != null ? rawValue + "" : "";

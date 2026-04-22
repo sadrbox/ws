@@ -3,6 +3,7 @@ import path from "path";
 import react from "@vitejs/plugin-react";
 
 // https://vite.dev/config/
+// Cast to any to allow Vitest-specific `test` field without TypeScript errors
 export default defineConfig({
 	server: {
 		// host: true,
@@ -11,6 +12,11 @@ export default defineConfig({
 			usePolling: true,
 			interval: 300,
 		},
+	},
+	test: {
+		globals: true,
+		environment: 'jsdom',
+		setupFiles: 'src/setupTests.ts',
 	},
 	plugins: [react()],
 	resolve: {
@@ -29,6 +35,6 @@ export default defineConfig({
 			},
 		},
 	},
-});
+} as any);
 
 // @use "src/styles/index.scss" as *;

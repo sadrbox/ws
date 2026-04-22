@@ -11,7 +11,8 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { getFormatDateOnly } from "src/utils/main.module";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -27,7 +28,7 @@ const STATUS_OPTIONS = [
 
 interface TFields {
   id?: number; uuid?: string;
-  documentNumber: string; documentDate: string; description: string;
+  documentNumber: string; date: string; description: string;
   period: string;
   employeeUuid: string; employeeName: string;
   organizationUuid: string; organizationName: string;
@@ -40,7 +41,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  documentNumber: "", documentDate: "", description: "",
+  documentNumber: "", date: "", description: "",
   period: "",
   employeeUuid: "", employeeName: "",
   organizationUuid: "", organizationName: "",
@@ -94,7 +95,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
     endpoint: MODEL_ENDPOINT, storageKey: "payroll-calculations-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 10) ?? "",
+      documentNumber: d.documentNumber ?? "", date: d.date?.slice(0, 10) ?? "",
       description: d.description ?? "", period: d.period ?? "",
       employeeUuid: d.employeeUuid ?? "",
       employeeName: d.employee?.fullName ?? "",
@@ -114,7 +115,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
       status: d.status ?? "draft",
     }),
     buildPayload: (fd) => ({
-      documentNumber: fd.documentNumber?.trim() || null, documentDate: fd.documentDate || null,
+      documentNumber: fd.documentNumber?.trim() || null, date: fd.date || null,
       description: fd.description?.trim() || null, period: fd.period?.trim() || null,
       employeeUuid: fd.employeeUuid || null, organizationUuid: fd.organizationUuid || null,
       positionUuid: fd.positionUuid || null,
@@ -129,7 +130,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
       totalExpense: fd.totalExpense ? parseFloat(fd.totalExpense) : 0,
       status: fd.status || "draft",
     }),
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, FORM_LABEL, saved),
+    buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
   });
 
   /** При изменении оклада — автоматический пересчёт всех удержаний */
@@ -151,7 +152,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
         <Group align="row" gap="12px" className={styles.Form}>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 700 }}>
             <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <FieldDate label="Дата документа" name={`${form.formUid}_docDate`} value={form.fields.documentDate} onChange={e => form.setField("documentDate", e.target.value)} disabled={form.isLoading} width="200px" />
+              <FieldDate label="Дата документа" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
               <Field label="Период (ГГГГ-ММ)" name={`${form.formUid}_period`} value={form.fields.period} onChange={e => form.setField("period", e.target.value)} disabled={form.isLoading} width="140px" />
             </div>
             <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
@@ -202,7 +203,7 @@ PayrollCalculationsForm.displayName = "PayrollCalculationsForm";
 
 const PayrollCalculationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={PayrollCalculationsForm}
-    getLabel={(d) => d?.id ? String(d.id) : "?"} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
 );
 PayrollCalculationsList.displayName = "PayrollCalculationsList";

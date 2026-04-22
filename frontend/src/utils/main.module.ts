@@ -1,3 +1,11 @@
+// Форматирование даты (только дд.мм.гггг)
+export const getFormatDateOnly = (dateString?: string | null): string => {
+	if (!dateString) return "";
+	const s = String(dateString).slice(0, 10); // "YYYY-MM-DD"
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+	return `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}`;
+};
+
 // Форматирование даты
 export const getFormatDate = (dateString?: string) => {
 	if (!dateString) return "";

@@ -1,21 +1,21 @@
-import { FC, useCallback, useEffect, useState } from "react";
-import { useAppContext } from "src/app";
-import { useQueryClient } from "@tanstack/react-query";
-import apiClient from "src/services/api/client";
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-misused-promises */
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TPane } from "src/app/types";
-import { Button } from "src/components/Button";
 import { Divider, Field, FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import Toolbar from "src/components/Toolbar";
-import useUID from "src/hooks/useUID";
-import styles from "src/styles/main.module.scss";
-import { translate } from "src/i18";
-import Tabs from "src/components/Tabs";
 import { Group } from "src/components/UI";
+import styles from "src/styles/main.module.scss";
+import { useFormStore, setPaneDirty } from "src/hooks/useFormStore";
+import { useAccessRight } from "src/hooks/useAccessRight";
+import ModelFormWrapper from "src/components/ModelFormWrapper";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { useAppContext } from "src/app";
+import useUID from "src/hooks/useUID";
+import { recalcSaleItemAmounts, withSaleItemRecalc } from "./saleItemDraft";
 
 const MODEL_ENDPOINT = "saleitems";
 
-interface TFormData {
+interface TFields {
   id?: number;
   uuid?: string;
   lineNumber: string;
@@ -24,7 +24,10 @@ interface TFormData {
   quantity: string;
   price: string;
   amount: string;
-  unitOfMeasure: string;
+  unitOfMeasureUuid: string;
+  unitOfMeasureName: string;
+  vatRateUuid: string;
+  vatRateName: string;
   vatRate: string;
   vatAmount: string;
   discountPercent: string;
@@ -32,14 +35,21 @@ interface TFormData {
   saleUuid: string;
 }
 
-const EMPTY_FORM: TFormData = {
+interface EmbeddedSaleItemConfig {
+  applyDraft: (nextRow: Record<string, unknown>) => void;
+}
+
+const DEFAULT_FIELDS: TFields = {
   lineNumber: "",
   productUuid: "",
   productName: "",
   quantity: "",
   price: "",
-  amount: "",
-  unitOfMeasure: "шт",
+  amount: "0",
+  unitOfMeasureUuid: "",
+  unitOfMeasureName: "",
+  vatRateUuid: "",
+  vatRateName: "",
   vatRate: "12",
   vatAmount: "0",
   discountPercent: "0",
@@ -47,189 +57,392 @@ const EMPTY_FORM: TFormData = {
   saleUuid: "",
 };
 
-const SaleItemsForm: FC<Partial<TPane>> = ({ onSave, onClose, data, uniqId }) => {
-  const uuid = data?.uuid as string | undefined;
-  const saleUuid = (data as any)?.saleUuid as string | undefined;
-  const { windows: { removePane, updatePaneLabel } } = useAppContext();
-  const queryClient = useQueryClient();
-  const formUid = useUID();
+function mapDataToFields(data: Record<string, any> | undefined, saleUuid?: string): TFields {
+  if (!data) return { ...DEFAULT_FIELDS, saleUuid: saleUuid ?? "" };
+  return {
+    ...DEFAULT_FIELDS,
+    id: data.id,
+    uuid: data.uuid,
+    lineNumber: data.lineNumber != null ? String(data.lineNumber) : "",
+    productUuid: data.productUuid ?? "",
+    productName: data.product?.shortName ?? data.productName ?? "",
+    quantity: data.quantity != null ? String(Number(data.quantity)) : "",
+    price: data.price != null ? String(Number(data.price)) : "",
+    amount: data.amount != null ? String(Number(data.amount)) : "0",
+    unitOfMeasureUuid: data.unitOfMeasureUuid ?? "",
+    unitOfMeasureName: data.unitOfMeasure?.shortName ?? data.unitOfMeasureName ?? "",
+    vatRateUuid: data.vatRateUuid ?? "",
+    vatRateName: data.vatRateRef?.shortName ?? data.vatRateName ?? "",
+    vatRate: data.vatRate != null ? String(Number(data.vatRate)) : "12",
+    vatAmount: data.vatAmount != null ? String(Number(data.vatAmount)) : "0",
+    discountPercent: data.discountPercent != null ? String(Number(data.discountPercent)) : "0",
+    discountAmount: data.discountAmount != null ? String(Number(data.discountAmount)) : "0",
+    saleUuid: data.saleUuid ?? saleUuid ?? "",
+  };
+}
 
-  const [formData, setFormData] = useState<TFormData>(() => ({
-    ...EMPTY_FORM,
-    saleUuid: saleUuid ?? "",
-  }));
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(!!uuid);
+function fieldsToDraftRow(fields: TFields): Record<string, unknown> {
+  return {
+    lineNumber: fields.lineNumber ? parseInt(fields.lineNumber, 10) : undefined,
+    productUuid: fields.productUuid || null,
+    product: fields.productUuid ? { uuid: fields.productUuid, shortName: fields.productName } : null,
+    quantity: fields.quantity,
+    price: fields.price,
+    amount: fields.amount,
+    unitOfMeasureUuid: fields.unitOfMeasureUuid || null,
+    unitOfMeasure: fields.unitOfMeasureUuid ? { uuid: fields.unitOfMeasureUuid, shortName: fields.unitOfMeasureName } : null,
+    vatRateUuid: fields.vatRateUuid || null,
+    vatRateRef: fields.vatRateUuid
+      ? { uuid: fields.vatRateUuid, shortName: fields.vatRateName, rate: parseFloat(fields.vatRate) || 0 }
+      : null,
+    vatRate: fields.vatRate,
+    vatAmount: fields.vatAmount,
+    discountPercent: fields.discountPercent,
+    discountAmount: fields.discountAmount,
+    saleUuid: fields.saleUuid,
+  };
+}
 
-  const loadFormData = useCallback(async (entityUuid: string) => {
-    setIsLoading(true); setError(null);
-    try {
-      const res = await apiClient.get(`/${MODEL_ENDPOINT}/${entityUuid}`);
-      const d = res.data?.item ?? res.data;
-      setFormData({
-        id: d.id,
-        uuid: d.uuid,
-        lineNumber: d.lineNumber != null ? String(d.lineNumber) : "",
-        productUuid: d.productUuid ?? "",
-        productName: d.product?.shortName ?? "",
-        quantity: d.quantity != null ? String(Number(d.quantity)) : "",
-        price: d.price != null ? String(Number(d.price)) : "",
-        amount: d.amount != null ? String(Number(d.amount)) : "",
-        unitOfMeasure: d.unitOfMeasure ?? "шт",
-        vatRate: d.vatRate != null ? String(Number(d.vatRate)) : "12",
-        vatAmount: d.vatAmount != null ? String(Number(d.vatAmount)) : "0",
-        discountPercent: d.discountPercent != null ? String(Number(d.discountPercent)) : "0",
-        discountAmount: d.discountAmount != null ? String(Number(d.discountAmount)) : "0",
-        saleUuid: d.saleUuid ?? saleUuid ?? "",
-      });
-    } catch (err: any) { setError(err.response?.data?.message || "Ошибка загрузки"); }
-    finally { setIsLoading(false); }
-  }, [saleUuid]);
+interface SaleItemsFieldsFormProps {
+  fields: TFields;
+  setFields: (patch: Partial<TFields>) => void;
+  isLoading: boolean;
+  isEditMode: boolean;
+  formUid: string;
+}
 
-  useEffect(() => { if (uuid) loadFormData(uuid); }, [uuid, loadFormData]);
-
-  const handleFieldChange = useCallback((field: keyof TFormData, value: string) => {
-    setFormData(prev => {
-      const next = { ...prev, [field]: value };
-      if (["quantity", "price", "vatRate", "discountPercent"].includes(field)) {
-        const q = parseFloat(field === "quantity" ? value : prev.quantity) || 0;
-        const p = parseFloat(field === "price" ? value : prev.price) || 0;
-        const vr = parseFloat(field === "vatRate" ? value : prev.vatRate) || 0;
-        const dp = parseFloat(field === "discountPercent" ? value : prev.discountPercent) || 0;
-        const base = q * p;
-        const discAmt = Math.round(base * dp / 100 * 100) / 100;
-        const afterDiscount = base - discAmt;
-        const vatAmt = Math.round(afterDiscount * vr / 100 * 100) / 100;
-        const total = Math.round((afterDiscount + vatAmt) * 100) / 100;
-        next.discountAmount = discAmt.toString();
-        next.vatAmount = vatAmt.toString();
-        next.amount = total.toString();
-      }
-      return next;
-    });
-  }, []);
-
-  const submit = useCallback(async (): Promise<boolean> => {
-    setIsLoading(true); setError(null);
-    if (!formData.saleUuid) { setError("Документ продажи не указан"); setIsLoading(false); return false; }
-    const payload = {
-      saleUuid: formData.saleUuid,
-      productUuid: formData.productUuid || null,
-      quantity: formData.quantity ? parseFloat(formData.quantity) : 0,
-      price: formData.price ? parseFloat(formData.price) : 0,
-      lineNumber: formData.lineNumber ? parseInt(formData.lineNumber) : undefined,
-      unitOfMeasure: formData.unitOfMeasure || "шт",
-      vatRate: formData.vatRate ? parseFloat(formData.vatRate) : 12,
-      discountPercent: formData.discountPercent ? parseFloat(formData.discountPercent) : 0,
-    };
-    try {
-      const res = isEditMode && (uuid || formData.uuid)
-        ? await apiClient.put(`/${MODEL_ENDPOINT}/${uuid || formData.uuid}`, payload)
-        : await apiClient.post(`/${MODEL_ENDPOINT}`, payload);
-      const saved = res.data?.item ?? res.data;
-      setFormData(prev => ({
-        ...prev,
-        id: saved.id,
-        uuid: saved.uuid,
-        lineNumber: saved.lineNumber != null ? String(saved.lineNumber) : "",
-        productUuid: saved.productUuid ?? "",
-        productName: saved.product?.shortName ?? prev.productName,
-        quantity: saved.quantity != null ? String(Number(saved.quantity)) : "",
-        price: saved.price != null ? String(Number(saved.price)) : "",
-        amount: saved.amount != null ? String(Number(saved.amount)) : "",
-        unitOfMeasure: saved.unitOfMeasure ?? prev.unitOfMeasure,
-        vatRate: saved.vatRate != null ? String(Number(saved.vatRate)) : prev.vatRate,
-        vatAmount: saved.vatAmount != null ? String(Number(saved.vatAmount)) : prev.vatAmount,
-        discountPercent: saved.discountPercent != null ? String(Number(saved.discountPercent)) : prev.discountPercent,
-        discountAmount: saved.discountAmount != null ? String(Number(saved.discountAmount)) : prev.discountAmount,
-        saleUuid: saved.saleUuid ?? prev.saleUuid,
-      }));
-      setIsEditMode(true);
-      if (uniqId) updatePaneLabel(uniqId, `${translate("SaleItemsList") || "Товар"}: ${saved.product?.shortName || "?"} • ${saved.id ?? "?"}`);
-      queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
-      onSave?.(); return true;
-    } catch (err: any) { setError(err.response?.data?.message || "Ошибка сохранения"); return false; }
-    finally { setIsLoading(false); }
-  }, [formData, isEditMode, uuid, onSave, uniqId, updatePaneLabel, queryClient]);
-
-  const handleSave = useCallback(() => { submit(); }, [submit]);
-  const handleSaveAndClose = useCallback(async () => { if (await submit()) { onClose?.(); if (uniqId) removePane(uniqId); } }, [submit, onClose, removePane, uniqId]);
-  const handleClose = useCallback(() => { onClose?.(); if (uniqId) removePane(uniqId); }, [onClose, removePane, uniqId]);
+const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
+  fields,
+  setFields,
+  isLoading,
+  isEditMode,
+  formUid,
+}) => {
+  const handleNumericChange = useCallback((field: keyof TFields, value: string) => {
+    setFields(withSaleItemRecalc(fields, { [field]: value }) as Partial<TFields>);
+  }, [fields, setFields]);
 
   return (
-    <div className={styles.FormWrapper}>
-      <Toolbar>
-        <Button variant="primary" onClick={handleSaveAndClose} disabled={isLoading}><span>Сохранить и закрыть</span></Button>
-        <Toolbar.Divider />
-        <Button onClick={handleSave} disabled={isLoading}><span>Сохранить</span></Button>
-        <Button onClick={handleClose} disabled={isLoading}><span>Закрыть</span></Button>
-        <Toolbar.Divider />
-        {isEditMode && <Toolbar.ReloadButton onClick={() => uuid && loadFormData(uuid)} disabled={isLoading} />}
-      </Toolbar>
-      {error && <div style={{ color: "red", padding: "12px", margin: "8px 0", background: "#ffebee", borderRadius: "4px" }}>{error}</div>}
-      <div className={styles.FormBody}><Tabs tabs={[
-        {
-          id: "general", label: translate("general") || "Основное", component: (
-            <div className={styles.FormBodyParts}>
-              <Group align="row" gap="12px" className={styles.Form}>
-                <LookupField label="Номенклатура" name={`${formUid}_product`} width="339px"
-                  value={formData.productUuid} displayValue={formData.productName}
-                  endpoint="products" displayField="shortName"
-                  columns={[
-                    { key: "shortName", label: "Наименование" },
-                    { key: "sku", label: "Артикул" },
-                    { key: "brand.shortName", label: "Бренд" },
-                  ]}
-                  onSelect={(uuid) => {
-                    apiClient.get(`/products/${uuid}`).then(r => {
-                      const o = r.data?.item ?? r.data;
-                      setFormData(prev => ({ ...prev, productUuid: o.uuid, productName: o.shortName ?? "" }));
-                    });
-                  }}
-                  onClear={() => setFormData(prev => ({ ...prev, productUuid: "", productName: "" }))}
-                  disabled={isLoading} />
-              </Group>
-              <Group align="row" gap="12px" className={styles.Form}>
-                <FieldNumber label="Количество" name={`${formUid}_qty`} width="180px"
-                  value={formData.quantity} onChange={e => handleFieldChange("quantity", e.target.value)}
-                  disabled={isLoading} step="0.0001" textAlign="right" />
-                <FieldNumber label="Цена" name={`${formUid}_price`} width="180px"
-                  value={formData.price} onChange={e => handleFieldChange("price", e.target.value)}
-                  disabled={isLoading} step="0.01" textAlign="right" />
-                <Field label="Ед. изм." name={`${formUid}_uom`} width="80px"
-                  value={formData.unitOfMeasure} onChange={e => handleFieldChange("unitOfMeasure", e.target.value)}
-                  disabled={isLoading} />
-              </Group>
-              <Group align="row" gap="12px" className={styles.Form}>
-                <FieldNumber label="Ставка НДС %" name={`${formUid}_vatRate`} width="120px"
-                  value={formData.vatRate} onChange={e => handleFieldChange("vatRate", e.target.value)}
-                  disabled={isLoading} step="0.01" textAlign="right" />
-                <FieldNumber label="Скидка %" name={`${formUid}_discPct`} width="120px"
-                  value={formData.discountPercent} onChange={e => handleFieldChange("discountPercent", e.target.value)}
-                  disabled={isLoading} step="0.01" textAlign="right" />
-              </Group>
-              <Group align="row" gap="12px" className={styles.Form}>
-                <FieldNumber label="Сумма НДС" name={`${formUid}_vatAmt`} width="150px"
-                  value={formData.vatAmount} disabled textAlign="right" />
-                <FieldNumber label="Сумма скидки" name={`${formUid}_discAmt`} width="150px"
-                  value={formData.discountAmount} disabled textAlign="right" />
-                <FieldNumber label="Итого" name={`${formUid}_amount`} width="180px"
-                  value={formData.amount} disabled textAlign="right" />
-              </Group>
-              {isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-                  <Field label="N строки" name={`${formUid}_lineNum`} width="80px" value={String(formData.lineNumber ?? "-")} disabled />
-                  <Field label="ID" name={`${formUid}_id`} width="100px" value={String(formData.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${formUid}_uuid`} width="300px" value={String(formData.uuid ?? "-")} disabled />
-                </div>
-              </Group></>}
+    <div className={styles.FormBodyParts}>
+      <Group align="row" gap="12px" className={styles.Form}>
+        <LookupField
+          label="Номенклатура"
+          name={`${formUid}_product`}
+          value={fields.productUuid}
+          displayValue={fields.productName}
+          endpoint="products"
+          displayField="shortName"
+          columns={[
+            { key: "shortName", label: "Наименование" },
+            { key: "sku", label: "Артикул" },
+            { key: "brand.shortName", label: "Бренд" },
+          ]}
+          onSelect={(uuid, display) =>
+            setFields({ productUuid: uuid, productName: display })
+          }
+          onClear={() =>
+            setFields({ productUuid: "", productName: "" })
+          }
+          disabled={isLoading}
+          width="400px"
+        />
+      </Group>
+
+      <Group align="row" gap="12px" className={styles.Form}>
+        <FieldNumber
+          label="Количество"
+          name={`${formUid}_qty`}
+          value={fields.quantity}
+          onChange={e => handleNumericChange("quantity", e.target.value)}
+          disabled={isLoading}
+          step="0.0001"
+          textAlign="right"
+          width="160px"
+        />
+        <FieldNumber
+          label="Цена"
+          name={`${formUid}_price`}
+          value={fields.price}
+          onChange={e => handleNumericChange("price", e.target.value)}
+          disabled={isLoading}
+          step="0.01"
+          textAlign="right"
+          width="160px"
+        />
+        <LookupField
+          label="Ед. изм."
+          name={`${formUid}_uom`}
+          value={fields.unitOfMeasureUuid}
+          displayValue={fields.unitOfMeasureName}
+          endpoint="unit-of-measures"
+          displayField="shortName"
+          columns={[
+            { key: "shortName", label: "Наименование" },
+            { key: "code", label: "Код" },
+          ]}
+          onSelect={(uuid, display) =>
+            setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display })
+          }
+          onClear={() =>
+            setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" })
+          }
+          disabled={isLoading}
+          width="160px"
+        />
+      </Group>
+
+      <Group align="row" gap="12px" className={styles.Form}>
+        <LookupField
+          label="Ставка НДС"
+          name={`${formUid}_vatRate`}
+          value={fields.vatRateUuid}
+          displayValue={fields.vatRateName}
+          endpoint="vat-rates"
+          displayField="shortName"
+          columns={[
+            { key: "shortName", label: "Наименование" },
+            { key: "rate", label: "%" },
+          ]}
+          onSelect={(uuid, display, item) => {
+            const rate = item?.rate != null ? String(Number(item.rate)) : fields.vatRate;
+            setFields({
+              vatRateUuid: uuid,
+              vatRateName: display,
+              vatRate: rate,
+              ...recalcSaleItemAmounts(fields.quantity, fields.price, rate, fields.discountPercent),
+            });
+          }}
+          onClear={() => {
+            setFields({
+              vatRateUuid: "",
+              vatRateName: "",
+              vatRate: "0",
+              ...recalcSaleItemAmounts(fields.quantity, fields.price, "0", fields.discountPercent),
+            });
+          }}
+          disabled={isLoading}
+          width="200px"
+        />
+        <FieldNumber
+          label="Скидка %"
+          name={`${formUid}_discPct`}
+          value={fields.discountPercent}
+          onChange={e => handleNumericChange("discountPercent", e.target.value)}
+          disabled={isLoading}
+          step="0.01"
+          textAlign="right"
+          width="120px"
+        />
+      </Group>
+
+      <Group align="row" gap="12px" className={styles.Form}>
+        <FieldNumber
+          label="Сумма скидки"
+          name={`${formUid}_discAmt`}
+          value={fields.discountAmount}
+          disabled
+          textAlign="right"
+          width="150px"
+        />
+        <FieldNumber
+          label="НДС (в т.ч.)"
+          name={`${formUid}_vatAmt`}
+          value={fields.vatAmount}
+          disabled
+          textAlign="right"
+          width="150px"
+        />
+        <FieldNumber
+          label="Итого"
+          name={`${formUid}_amount`}
+          value={fields.amount}
+          disabled
+          textAlign="right"
+          width="180px"
+        />
+      </Group>
+
+      {isEditMode && (
+        <>
+          <Divider />
+          <Group align="row" gap="12px" className={styles.Form}>
+            <div style={{ display: "flex", flexDirection: "row", gap: "12px", flexWrap: "wrap" }}>
+              <Field
+                label="N строки"
+                name={`${formUid}_lineNum`}
+                value={String(fields.lineNumber ?? "-")}
+                disabled
+                width="80px"
+              />
+              <Field
+                label="ID"
+                name={`${formUid}_id`}
+                value={String(fields.id ?? "-")}
+                disabled
+                width="100px"
+              />
+              <Field
+                label="UUID"
+                name={`${formUid}_uuid`}
+                value={String(fields.uuid ?? "-")}
+                disabled
+                width="300px"
+              />
             </div>
-          )
-        },
-      ]} /></div>
+          </Group>
+        </>
+      )}
     </div>
   );
+};
+
+const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
+  const { canWrite } = useAccessRight("Sale");
+  const data = paneProps.data;
+  const saleUuid = (data as any)?.saleUuid as string | undefined;
+
+  const initialFields: TFields | undefined = (() => {
+    if (!data || data.uuid) return undefined;
+    return { ...DEFAULT_FIELDS, saleUuid: saleUuid ?? "" };
+  })();
+
+  const form = useFormStore<TFields>({
+    endpoint: MODEL_ENDPOINT,
+    storageKey: "sale-items-form",
+    defaultFields: DEFAULT_FIELDS,
+    initialFields,
+    paneProps,
+
+    mapServerToForm: (d) => mapDataToFields(d, saleUuid),
+
+    buildPayload: (fd) => {
+      if (!fd.saleUuid) return "Документ продажи не указан";
+      return {
+        saleUuid: fd.saleUuid,
+        productUuid: fd.productUuid || null,
+        quantity: fd.quantity ? parseFloat(fd.quantity) : 0,
+        price: fd.price ? parseFloat(fd.price) : 0,
+        lineNumber: fd.lineNumber ? parseInt(fd.lineNumber, 10) : undefined,
+        unitOfMeasureUuid: fd.unitOfMeasureUuid || null,
+        vatRateUuid: fd.vatRateUuid || null,
+        vatRate: fd.vatRate ? parseFloat(fd.vatRate) : 0,
+        discountPercent: fd.discountPercent ? parseFloat(fd.discountPercent) : 0,
+      };
+    },
+
+    buildPaneLabel: (saved) =>
+      makePaneLabel(
+        "SaleItemsList",
+        "Товар",
+        saved,
+        saved.product?.shortName || String(saved.id ?? "?"),
+      ),
+  });
+
+  const tabs = useMemo(() => [
+    {
+      id: "general",
+      label: "Основное",
+      component: (
+        <SaleItemsFieldsForm
+          fields={form.fields}
+          setFields={form.setFields}
+          isLoading={form.isLoading}
+          isEditMode={form.isEditMode}
+          formUid={form.formUid}
+        />
+      ),
+    },
+  ], [form.fields, form.setFields, form.isLoading, form.isEditMode, form.formUid]);
+
+  return (
+    <ModelFormWrapper
+      paneId={form.paneId}
+      tabs={tabs}
+      onSave={form.handleSave}
+      onSaveAndClose={form.handleSaveAndClose}
+      onClose={form.handleClose}
+      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
+      isLoading={form.isLoading}
+      showReload={form.isEditMode}
+      readonly={!canWrite}
+      isDirty={form.isDirty}
+    />
+  );
+};
+
+const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
+  const { canWrite } = useAccessRight("Sale");
+  const { windows: { removePane } } = useAppContext();
+  const formUid = useUID();
+  const uniqId = paneProps.uniqId;
+  const data = paneProps.data as Record<string, any> | undefined;
+  const embedded = data?._embeddedSaleItem as EmbeddedSaleItemConfig | undefined;
+  const initialFields = useMemo(() => mapDataToFields(data, data?.saleUuid as string | undefined), [data]);
+  const [fields, setFieldsState] = useState<TFields>(initialFields);
+  const initialSnapshotRef = useRef(JSON.stringify(initialFields));
+  const isDirty = JSON.stringify(fields) !== initialSnapshotRef.current;
+
+  const setFields = useCallback((patch: Partial<TFields>) => {
+    setFieldsState((prev) => {
+      const next = { ...prev, ...patch };
+      embedded?.applyDraft(fieldsToDraftRow(next));
+      return next;
+    });
+  }, [embedded]);
+
+  useEffect(() => {
+    if (!uniqId) return;
+    setPaneDirty(uniqId, isDirty);
+  }, [uniqId, isDirty]);
+
+  useEffect(() => {
+    if (!uniqId) return undefined;
+    return () => {
+      setPaneDirty(uniqId, false);
+    };
+  }, [uniqId]);
+
+  const handleClose = useCallback(() => {
+    if (paneProps.onClose) paneProps.onClose();
+    if (uniqId) removePane(uniqId);
+  }, [paneProps, uniqId, removePane]);
+
+  const tabs = useMemo(() => [
+    {
+      id: "general",
+      label: "Основное",
+      component: (
+        <SaleItemsFieldsForm
+          fields={fields}
+          setFields={setFields}
+          isLoading={false}
+          isEditMode={!!(fields.uuid || fields.id)}
+          formUid={formUid}
+        />
+      ),
+    },
+  ], [fields, setFields, formUid]);
+
+  return (
+    <ModelFormWrapper
+      paneId={uniqId}
+      tabs={tabs}
+      onSave={handleClose}
+      onSaveAndClose={handleClose}
+      onClose={handleClose}
+      isLoading={false}
+      showReload={false}
+      readonly={!canWrite}
+      isDirty={isDirty}
+    />
+  );
+};
+
+const SaleItemsForm: FC<Partial<TPane>> = (paneProps) => {
+  const embedded = !!(paneProps.data as any)?._embeddedSaleItem;
+  if (embedded) return <SaleItemsEmbeddedForm {...paneProps} />;
+  return <SaleItemsStandaloneForm {...paneProps} />;
 };
 
 SaleItemsForm.displayName = "SaleItemsForm";

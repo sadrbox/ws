@@ -267,6 +267,22 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
     storageKey: "payroll-payments-form",
     label: "Выплата ЗП",
   },
+  {
+    endpoint: "unit-of-measures",
+    module: () => import("src/models/UnitOfMeasures"),
+    formName: "UnitOfMeasuresForm",
+    listName: "UnitOfMeasuresList",
+    storageKey: "unit-of-measures-form",
+    label: "Единицы измерения",
+  },
+  {
+    endpoint: "vat-rates",
+    module: () => import("src/models/VatRates"),
+    formName: "VatRatesForm",
+    listName: "VatRatesList",
+    storageKey: "vat-rates-form",
+    label: "Ставки НДС",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════

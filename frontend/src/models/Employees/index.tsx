@@ -75,15 +75,15 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
     afterSave: async () => { setTimeout(invalidateSubTables, 0); },
   });
 
-  // Custom handleFieldChange — автоматическое вычисление fullName
-  const handleNameFieldChange = useCallback((field: keyof TFields, value: string) => {
-    const snap = form.store.getSnapshot().fields;
-    const next = { ...snap, [field]: value };
-    if (field === "lastName" || field === "firstName" || field === "middleName") {
-      next.fullName = [next.lastName, next.firstName, next.middleName].filter(Boolean).join(" ");
-    }
-    form.store.replaceFields(next);
-  }, [form.store]);
+  // При изменении фамилии/имени/отчества — автоматически пересчитывает fullName
+  const handleNameFieldChange = useCallback((field: "lastName" | "firstName" | "middleName", value: string) => {
+    const current = form.store.getSnapshot().fields;
+    const last    = field === "lastName"   ? value : current.lastName;
+    const first   = field === "firstName"  ? value : current.firstName;
+    const middle  = field === "middleName" ? value : current.middleName;
+    const fullName = [last, first, middle].filter(Boolean).join(" ");
+    form.setFields({ [field]: value, fullName } as Partial<TFields>);
+  }, [form.store, form.setFields]);
 
   const contacts = form.useTable("contacts");
   const history = form.useTable("history");

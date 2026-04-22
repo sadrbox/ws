@@ -31,7 +31,6 @@ import calendar_16 from "src/assets/calendar_16.png";
 import searchField_16 from "src/assets/search-field_16.png";
 import editInlineIcon from "src/assets/edit-inline_16.svg";
 import closeIcon16 from "src/assets/close_16.png";
-import closeRedIcon16 from "src/assets/close_red_16.png";
 import styles from "./Toolbar.module.scss";
 
 // ─── Toolbar (контейнер) ────────────────────────────────────────────────
@@ -140,7 +139,7 @@ const CloseButton: FC<CloseButtonProps> = ({ size = 16, className, ...props }) =
     {...props}
   >
     <img className={styles.CloseIcon} src={closeIcon16} alt="Закрыть" width={size} height={size} />
-    <img className={styles.CloseIconHover} src={closeRedIcon16} alt="Закрыть" width={size} height={size} />
+    <img className={styles.CloseIconHover} src={closeIcon16} alt="Закрыть" width={size} height={size} style={{ filter: "invert(19%) sepia(95%) saturate(7477%) hue-rotate(359deg) brightness(98%) contrast(113%)" }} />
   </IconButton>
 );
 CloseButton.displayName = "Toolbar.CloseButton";

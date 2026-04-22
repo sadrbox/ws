@@ -67,13 +67,26 @@ type Listener = () => void;
 
 const STORAGE_PREFIX = "formStore:";
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SESSION TOKEN
+// Уникальный токен, создаётся один раз при загрузке страницы (в памяти JS).
+// Сбрасывается при перезагрузке / закрытии вкладки.
+// Позволяет отличить данные sessionStorage текущей сессии от данных прошлой.
+// ═══════════════════════════════════════════════════════════════════════════
+const CURRENT_SESSION_TOKEN = Math.random().toString(36).slice(2) + Date.now().toString(36);
+const SESSION_TOKEN_KEY = "_st";
+
 function persistToSession<F extends object>(
 	storageKey: string,
 	state: FormStoreState<F>,
 ): void {
 	try {
-		// Сохраняем только fields + tables (meta не нужна)
-		const payload = { fields: state.fields, tables: state.tables };
+		// Сохраняем fields + tables + токен текущей сессии
+		const payload = {
+			fields: state.fields,
+			tables: state.tables,
+			[SESSION_TOKEN_KEY]: CURRENT_SESSION_TOKEN,
+		};
 		sessionStorage.setItem(storageKey, JSON.stringify(payload));
 	} catch {
 		/* quota exceeded */
@@ -82,11 +95,17 @@ function persistToSession<F extends object>(
 
 function restoreFromSession<F extends object>(
 	storageKey: string,
-): { fields: F; tables: Record<string, TableState> } | null {
+): { fields: F; tables: Record<string, TableState>; fromCurrentSession: boolean } | null {
 	try {
 		const raw = sessionStorage.getItem(storageKey);
 		if (!raw) return null;
-		return JSON.parse(raw) as { fields: F; tables: Record<string, TableState> };
+		const parsed = JSON.parse(raw) as {
+			fields: F;
+			tables: Record<string, TableState>;
+			[SESSION_TOKEN_KEY]?: string;
+		};
+		const fromCurrentSession = parsed[SESSION_TOKEN_KEY] === CURRENT_SESSION_TOKEN;
+		return { fields: parsed.fields, tables: parsed.tables, fromCurrentSession };
 	} catch {
 		return null;
 	}
@@ -137,27 +156,37 @@ function createFormStore<F extends object>(
 
 	// Пробуем восстановить из sessionStorage
 	let hadStoredData = false;
+	// true — данные из ПРОШЛОЙ загрузки страницы (токен не совпадает).
+	// Только в этом случае показываем уведомление «несохранённые данные».
+	let hadPreviousSessionData = false;
 	const restored = restoreFromSession<F>(currentStorageKey);
 	if (restored) {
 		state.fields = { ...defaultFields, ...restored.fields };
-		// Для СУЩЕСТВУЮЩИХ записей (uuid) не восстанавливаем tables из sessionStorage:
-		// SubTable данные должны загружаться с сервера как единственный источник истины.
-		// Если пользователь удалил/изменил строки и закрыл форму без сохранения —
-		// эти pending-действия НЕ должны восстанавливаться при повторном открытии.
-		// Для НОВЫХ форм (нет uuid) tables восстанавливаются — данные ещё не на сервере.
-		if (!uuid) {
-			for (const key of Object.keys(tableDefs)) {
-				if (restored.tables?.[key]) {
-					state.tables[key] = restored.tables[key];
-				}
+		// Восстанавливаем таблицы из sessionStorage независимо от наличия uuid.
+		// При uuid !== "" SubTable сам слияет pending-строки с серверными данными
+		// через mergeServerWithPending (ветка A в SubTable), поэтому ограничение
+		// "только при создании" было излишним и приводило к потере pending-строк.
+		for (const key of Object.keys(tableDefs)) {
+			if (restored.tables?.[key]) {
+				state.tables[key] = restored.tables[key];
 			}
 		}
 		hadStoredData = true;
+		// Данные из прошлой сессии (страница была перезагружена)
+		hadPreviousSessionData = !restored.fromCurrentSession;
 	}
 
 	// snapshotReady = false пока серверный snapshot не загружен (при hadStoredData).
 	// Блокирует isDirty() чтобы не мерцал индикатор «Не сохранено».
 	let snapshotReady = !hadStoredData;
+
+	// Флаг: уведомление о несохранённых данных прошлой сессии уже показывалось.
+	// Хранится в store (а не в React-состоянии), поэтому не сбрасывается при
+	// перемонтировании компонента (закрыл/открыл панель без перезагрузки страницы).
+	let prevSessionNotifShown = false;
+	function markPrevSessionNotifShown(): void { prevSessionNotifShown = true; }
+	function isPrevSessionNotifShown(): boolean { return prevSessionNotifShown; }
+	function isSnapshotReady(): boolean { return snapshotReady; }
 
 	// ── Подписчики ──
 	const listeners = new Set<Listener>();
@@ -246,6 +275,25 @@ function createFormStore<F extends object>(
 			tables: state.tables,
 		});
 		return current !== savedSnapshot;
+	}
+
+	/**
+	 * Детализация несохранённых изменений.
+	 * Возвращает отдельно: есть ли изменения в полях формы и/или в строках таблиц.
+	 */
+	function getDirtyDetails(): { fields: boolean; tables: boolean } {
+		if (!snapshotReady) return { fields: false, tables: false };
+		let parsed: { fields: unknown; tables: Record<string, TableState> } | null = null;
+		try { parsed = JSON.parse(savedSnapshot); } catch { /* ignore */ }
+		const savedFields = parsed?.fields;
+		const savedTables = parsed?.tables ?? {};
+		const fieldsDirty = JSON.stringify(state.fields) !== JSON.stringify(savedFields);
+		const tablesDirty = Object.keys(state.tables).some(
+			(key) =>
+				JSON.stringify(state.tables[key]) !==
+				JSON.stringify(savedTables[key] ?? { pending: [] }),
+		);
+		return { fields: fieldsDirty, tables: tablesDirty };
 	}
 
 	/** Обновить pending-строки вложенной таблицы */
@@ -537,6 +585,10 @@ function createFormStore<F extends object>(
 		subscribe,
 		getSnapshot,
 		hadStoredData,
+		hadPreviousSessionData,
+		markPrevSessionNotifShown,
+		isPrevSessionNotifShown,
+		isSnapshotReady,
 
 		// Мутации fields
 		setField,
@@ -561,6 +613,7 @@ function createFormStore<F extends object>(
 
 		// Dirty tracking
 		isDirty,
+		getDirtyDetails,
 		markClean,
 
 		// Storage key migration
@@ -951,6 +1004,8 @@ export function useFormStore<F extends object>(
 	const fullStorageKey = (data as any)?._formStorageKey as string
 		|| `${STORAGE_PREFIX}${storageKey}:${uuid ?? uniqId ?? "new"}`;
 	const effectiveDefaults = initialFields ?? defaultFields;
+
+	// Создаём/получаем store из кэша
 	const store = getOrCreate<F>(
 		effectiveDefaults,
 		tableDefs,
@@ -1015,7 +1070,7 @@ export function useFormStore<F extends object>(
 				return true;
 			}
 			const answer = await confirm(
-				"Имеются несохранённые изменения. Закрыть без сохранения?",
+				`Имеются несохранённые изменения.\nЗакрыть без сохранения ? `,
 			);
 			if (!answer) return false;
 			// Очистка при подтверждённом закрытии
@@ -1046,40 +1101,65 @@ export function useFormStore<F extends object>(
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uniqId, store]);
 
-	// ── Уведомление при восстановлении dirty-формы из sessionStorage ──
+	// ── Уведомление при восстановлении dirty-формы из ПРОШЛОЙ сессии ──
+	// Показываем ТОЛЬКО когда данные в sessionStorage были записаны при предыдущей
+	// загрузке страницы (hadPreviousSessionData = true) — т.е. пользователь закрыл
+	// вкладку/перезагрузил страницу не сохранив данные.
+	// При работе в текущей сессии (открыл, редактировал, закрыл, открыл снова)
+	// sessionStorage содержит токен текущей сессии → hadPreviousSessionData = false → не показываем.
 	useEffect(() => {
-		if (!uniqId || !store.hadStoredData) return;
-		const noteText =
-			"В прошлый раз вы изменили данные в этой форме, но не сохранили их. " +
-			"Текущие поля содержат ваши несохранённые правки.";
+		if (!uniqId || !store.hadPreviousSessionData) return;
+		// Если уже показывали (например при перемонтировании панели) — не дублируем
+		if (store.isPrevSessionNotifShown()) return;
 		const noteCtx = {
 			paneLabel: paneProps.label,
 			ref: uuid ? { endpoint, uuid } : undefined,
 		};
 		const noteActions: PaneNotificationAction[] = [
 			{
-				label: "Сохранить",
+				label: "Сохранить несохранённые правки",
 				onClick: () => submitRef.current(),
 			},
 			{
-				label: "Обновить",
+				label: "Обновить (несохранённые правки будут потеряны)",
 				onClick: () => {
 					if (uuid) loadFromServerRef.current(uuid);
 				},
 			},
 		];
+		// Флаг живёт внутри эффекта — не сбрасывается между re-renders (closure)
 		let fired = false;
-		const fire = () => {
+		const fire = (unsubscribe: () => void) => {
 			if (fired) return;
+			// Ждём, пока серверный снапшот не загрузится (snapshotReady = true).
+			// Уведомление проверяется ровно ОДИН РАЗ после загрузки — до этого момента
+			// пользователь ещё не редактировал, поэтому не будет ложных срабатываний.
+			if (!store.isSnapshotReady()) return;
 			fired = true;
+			unsubscribe(); // сразу отписываемся: дальнейшее редактирование не триггерит уведомление
+			// Если данные сессии совпадают с серверными — уведомление не нужно
+			if (!store.isDirty()) return;
+			// Формируем текст с указанием что именно несохранено
+			const { fields: fieldsDirty, tables: tablesDirty } = store.getDirtyDetails();
+			let what: string;
+			if (fieldsDirty && tablesDirty) {
+				what = "поля формы и строки вложенных таблиц содержат несохранённые правки.";
+			} else if (tablesDirty) {
+				what = "строки вложенных таблиц содержат несохранённые правки.";
+			} else {
+				what = "поля формы содержат несохранённые правки.";
+			}
+			const noteText =
+				"В прошлый раз вы изменили данные в этой форме, но не сохранили их. " + what;
+			store.markPrevSessionNotifShown(); // запомним в store — не показывать повторно
 			addPaneNotification(uniqId, "warning", noteText, noteCtx, noteActions);
 		};
-		// Ждём загрузки серверных данных, после чего проверяем isDirty
-		const unsub = store.subscribe(() => {
-			if (store.isDirty()) { fire(); unsub(); }
-		});
-		// Проверим сразу (если snapshot уже ready)
-		if (store.isDirty()) { fire(); unsub(); }
+		// Ждём загрузки серверных данных (snapshotReady=true → markClean → notify).
+		// isDirty() возвращает false пока snapshotReady=false, поэтому
+		// преждевременного срабатывания во время заполнения формы не будет.
+		const unsub = store.subscribe(() => fire(unsub));
+		// Проверим сразу (если snapshot уже ready к моменту монтирования)
+		fire(() => unsub());
 		return unsub;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uniqId, store]);
@@ -1244,7 +1324,7 @@ export function useFormStore<F extends object>(
 			// Нет uniqId — прямое закрытие с проверкой
 			if (store.isDirty()) {
 				const answer = await confirm(
-					"Имеются несохранённые изменения. Закрыть без сохранения?",
+					`Имеются несохранённые изменения.\nЗакрыть без сохранения?`,
 				);
 				if (!answer) return;
 			}

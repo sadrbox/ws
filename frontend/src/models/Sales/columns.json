@@ -2,54 +2,46 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"name": "Id",
+		"name": "ID",
 		"width": "80px",
 		"minWidth": "80px",
 		"alignment": "left",
-		"hint": "Номер",
+		"hint": "Внутренний номер",
 		"visible": true,
-		"position": 1,
-		"filter": false,
-		"inlist": true
+		"position": 1
 	},
 	{
-		"identifier": "documentNumber",
+		"identifier": "uuid",
+		"name": "UUID",
+		"hint": "Уникальный идентификатор",
 		"type": "string",
-		"name": "Номер документа",
-		"width": "130px",
-		"minWidth": "90px",
-		"alignment": "left",
-		"hint": "Номер документа",
-		"visible": true,
 		"position": 2,
-		"filter": false,
-		"inlist": true
+		"visible": false,
+		"width": "300px",
+		"minWidth": "80px",
+		"alignment": "left"
 	},
 	{
-		"identifier": "documentDate",
+		"identifier": "date",
 		"type": "date",
 		"name": "Дата",
 		"width": "150px",
-		"minWidth": "100px",
+		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Дата документа",
 		"visible": true,
-		"position": 2,
-		"filter": false,
-		"inlist": true
+		"position": 3
 	},
 	{
 		"identifier": "description",
 		"type": "string",
 		"name": "Описание",
 		"width": "200px",
-		"minWidth": "100px",
+		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Описание",
 		"visible": true,
-		"position": 3,
-		"filter": false,
-		"inlist": true
+		"position": 4
 	},
 	{
 		"identifier": "amount",
@@ -60,9 +52,7 @@
 		"alignment": "right",
 		"hint": "Сумма",
 		"visible": true,
-		"position": 4,
-		"filter": false,
-		"inlist": true
+		"position": 5
 	},
 	{
 		"identifier": "status",
@@ -73,9 +63,7 @@
 		"alignment": "left",
 		"hint": "Статус документа",
 		"visible": true,
-		"position": 5,
-		"filter": false,
-		"inlist": true
+		"position": 6
 	},
 	{
 		"identifier": "posted",
@@ -86,47 +74,39 @@
 		"alignment": "center",
 		"hint": "Документ проведён",
 		"visible": true,
-		"position": 6,
-		"filter": false,
-		"inlist": true
+		"position": 7
 	},
 	{
 		"identifier": "organization.shortName",
 		"type": "string",
 		"name": "Организация",
 		"width": "200px",
-		"minWidth": "100px",
+		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Организация",
 		"visible": true,
-		"position": 7,
-		"filter": false,
-		"inlist": true
+		"position": 8
 	},
 	{
 		"identifier": "counterparty.shortName",
 		"type": "string",
 		"name": "Контрагент",
 		"width": "200px",
-		"minWidth": "100px",
+		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Контрагент",
 		"visible": true,
-		"position": 8,
-		"filter": false,
-		"inlist": true
+		"position": 9
 	},
 	{
 		"identifier": "warehouse.shortName",
 		"type": "string",
 		"name": "Склад",
 		"width": "180px",
-		"minWidth": "100px",
+		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Склад",
 		"visible": true,
-		"position": 9,
-		"filter": false,
-		"inlist": true
+		"position": 10
 	}
 ]

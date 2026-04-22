@@ -52,6 +52,8 @@ import employeeHistoriesRouter from "./api/router/employeehistories.js";
 import accessRightsRouter from "./api/router/accessrights.js";
 import payrollCalculationsRouter from "./api/router/payrollcalculations.js";
 import payrollPaymentsRouter from "./api/router/payrollpayments.js";
+import unitOfMeasuresRouter from "./api/router/unitofmeasures.js";
+import vatRatesRouter from "./api/router/vatrates.js";
 import syncRouter from "./api/router/sync.js";
 
 const app = express();
@@ -207,6 +209,8 @@ app.use("/api/v1", employeeHistoriesRouter);
 app.use("/api/v1", accessRightsRouter);
 app.use("/api/v1", payrollCalculationsRouter);
 app.use("/api/v1", payrollPaymentsRouter);
+app.use("/api/v1", unitOfMeasuresRouter);
+app.use("/api/v1", vatRatesRouter);
 app.use("/api/v1", syncRouter);
 
 // ═══════════════════════════════════════════════════════════════════════════

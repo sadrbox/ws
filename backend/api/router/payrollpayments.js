@@ -126,7 +126,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 	try {
 		const {
 			documentNumber,
-			documentDate,
+			date,
 			description,
 			period,
 			employeeUuid,
@@ -138,7 +138,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		const item = await prisma[MODEL].create({
 			data: {
 				documentNumber: documentNumber?.trim() ?? null,
-				documentDate: documentDate ? new Date(documentDate) : new Date(),
+				date: date ? new Date(date) : new Date(),
 				description: description?.trim() ?? null,
 				period: period?.trim() ?? null,
 				employeeUuid: employeeUuid || null,
@@ -176,9 +176,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
-		if (req.body.documentDate !== undefined)
-			data.documentDate = req.body.documentDate
-				? new Date(req.body.documentDate)
+		if (req.body.date !== undefined)
+			data.date = req.body.date
+				? new Date(req.body.date)
 				: null;
 		if (req.body.amount !== undefined)
 			data.amount = req.body.amount != null ? parseFloat(req.body.amount) : 0;

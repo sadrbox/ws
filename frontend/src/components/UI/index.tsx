@@ -1,13 +1,14 @@
-import React, { CSSProperties, FC, PropsWithChildren, useContext, useEffect, useState, useCallback, forwardRef, useRef, useImperativeHandle, ReactNode, ReactElement, ComponentType, Component, isValidElement, JSX, ErrorInfo } from 'react';
+import React, { CSSProperties, FC, PropsWithChildren, useEffect, useState, useCallback, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo } from 'react';
 import styles from "../../styles/main.module.scss"
+import modalManager from 'src/components/Modal/modalManager';
 import { createPortal } from 'react-dom';
 import { ContractsList } from 'src/models/Contracts';
-import { Divider } from '../Field';
+// Divider is imported in components that use it; not used here
 // import { getTranslation } from 'src/i18';
 // import { CounterpartiesList } from 'src/models/Organizations';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
-import { useAppContext } from 'src/app';
+import { useAppContext } from 'src/app/context';
 import Toolbar from 'src/components/Toolbar';
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot } from 'src/hooks/usePaneToolbar';
@@ -35,6 +36,8 @@ import { CashReceiptOrdersList } from 'src/models/CashReceiptOrders';
 import { CashExpenseOrdersList } from 'src/models/CashExpenseOrders';
 import { BrandsList } from 'src/models/Brands';
 import { ProductsList } from 'src/models/Products';
+import { UnitOfMeasuresList } from 'src/models/UnitOfMeasures';
+import { VatRatesList } from 'src/models/VatRates';
 import { CurrenciesList } from 'src/models/Currencies';
 import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
@@ -293,6 +296,11 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(({ children }, ref
 
   useImperativeHandle(ref, () => internalRef.current!, []);
 
+  // Register screen ref with modalManager so blur toggling is centralized
+  useEffect(() => {
+    modalManager.setScreenRef(internalRef);
+    return () => { modalManager.setScreenRef(null); };
+  }, []);
   return (
     <div ref={internalRef} className={styles.Screen}>
       {children}
@@ -637,6 +645,15 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList })}>Расходный кассовый ордер</li>}
             </ul>
           </div>
+          <div className={styles.NavGroup}>
+            <h3>Справочники</h3>
+            <ul className={styles.NavList}>
+              {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>}
+              {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList })}>Единицы измерения</li>}
+              {can("VatRate") && <li onClick={() => addPane({ component: VatRatesList })}>Ставки НДС</li>}
+              {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>}
+            </ul>
+          </div>
         </div>
       </div>
     )
@@ -692,8 +709,6 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("ContactType") && <li onClick={() => addPane({ component: ContactTypesList })}>Типы контактов</li>}
               {can("Contact") && <li onClick={() => addPane({ component: ContactsList })}>Контакты</li>}
               {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>}
-              {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>}
-              {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>}
               {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList })}>Валюты</li>}
             </ul>
           </div>

@@ -1,0 +1,47 @@
+[
+	{
+		"identifier": "id",
+		"name": "ID",
+		"hint": "Внутренний номер",
+		"type": "number",
+		"position": 1,
+		"visible": true,
+		"width": "70px",
+		"minWidth": "70px",
+		"alignment": "left"
+	},
+	{
+		"identifier": "uuid",
+		"name": "UUID",
+		"hint": "UUID",
+		"type": "string",
+		"position": 2,
+		"visible": false,
+		"inlist": false,
+		"width": "0px",
+		"minWidth": "0px",
+		"alignment": "left"
+	},
+	{
+		"identifier": "shortName",
+		"name": "Наименование",
+		"hint": "Наименование единицы измерения",
+		"type": "string",
+		"position": 3,
+		"visible": true,
+		"width": "250px",
+		"minWidth": "80px",
+		"alignment": "left"
+	},
+	{
+		"identifier": "code",
+		"name": "Код",
+		"hint": "Код единицы измерения",
+		"type": "string",
+		"position": 4,
+		"visible": true,
+		"width": "100px",
+		"minWidth": "70px",
+		"alignment": "left"
+	}
+]

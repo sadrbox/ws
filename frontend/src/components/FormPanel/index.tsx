@@ -38,14 +38,14 @@ const FormPanel: FC<FormPanelProps> = ({
 
   return (
     <>
-      {effectiveSave && (
-        <Button onClick={effectiveSave} disabled={isLoading}>
-          <span>Сохранить</span>
-        </Button>
-      )}
       {effectiveSaveAndClose && (
         <Button variant="primary" onClick={effectiveSaveAndClose} disabled={isLoading}>
           <span>Сохранить и закрыть</span>
+        </Button>
+      )}
+      {effectiveSave && (
+        <Button onClick={effectiveSave} disabled={isLoading}>
+          <span>Сохранить</span>
         </Button>
       )}
       {showReload && onReload && (

@@ -2,7 +2,7 @@
  * Фабрика для создания типовых документных форм и списков.
  *
  * Используется для: Purchases, PaymentInvoices, OutgoingInvoices, IncomingInvoices, CashExpenseOrders, CashReceiptOrders.
- * Все эти модели имеют одинаковую структуру: documentNumber, documentDate, description, amount, status,
+ * Все эти модели имеют одинаковую структуру: date, description, amount, status,
  * organizationUuid, counterpartyUuid, contractUuid.
  * При выборе договора — автозаполняются Организация и Контрагент из значений договора.
  */
@@ -19,7 +19,8 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { getFormatDateOnly } from "src/utils/main.module";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -31,14 +32,14 @@ const STATUS_OPTIONS = [
 
 interface TDocFields {
   id?: number; uuid?: string;
-  documentNumber: string; documentDate: string; description: string; amount: string; status: string;
+  date: string; description: string; amount: string; status: string;
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
 }
 
 const DEFAULT_FIELDS: TDocFields = {
-  documentNumber: "", documentDate: "", description: "", amount: "", status: "draft",
+  date: "", description: "", amount: "", status: "draft",
   organizationUuid: "", organizationName: "",
   counterpartyUuid: "", counterpartyName: "",
   contractUuid: "", contractName: "",
@@ -83,7 +84,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
       endpoint, storageKey, defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
       mapServerToForm: (d, prev) => ({
         ...(prev ?? DEFAULT_FIELDS), ...d,
-        documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 10) ?? "",
+        date: d.date?.slice(0, 10) ?? "",
         description: d.description ?? "", amount: d.amount != null ? String(d.amount) : "",
         status: d.status ?? "draft",
         organizationUuid: d.organizationUuid ?? "",
@@ -94,14 +95,14 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
         contractName: d.contract?.shortName ?? "",
       }),
       buildPayload: (fd) => ({
-        documentNumber: fd.documentNumber?.trim() || null, documentDate: fd.documentDate || null,
+        date: fd.date || null,
         description: fd.description?.trim() || null, amount: fd.amount ? parseFloat(fd.amount) : null,
         status: fd.status || "draft",
         organizationUuid: fd.organizationUuid || null,
         counterpartyUuid: fd.counterpartyUuid || null,
         contractUuid: fd.contractUuid || null,
       }),
-      buildPaneLabel: (saved) => makePaneLabel(listName, formLabel, saved),
+      buildPaneLabel: (saved) => makeDocLabel(listName, formLabel, saved, "date"),
     });
 
     /** При выборе договора — автозаполняем Организацию и Контрагента из данных договора */
@@ -127,13 +128,17 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
       { id: "general", label: translate("general") || "Основное", component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-            <Field label="Номер документа" name={`${form.formUid}_docNum`} minWidth="339px" value={form.fields.documentNumber} onChange={e => form.setField("documentNumber", e.target.value)} disabled={form.isLoading} />
-            <FieldDate label="Дата документа" name={`${form.formUid}_docDate`} minWidth="200px" value={form.fields.documentDate} onChange={e => form.setField("documentDate", e.target.value)} disabled={form.isLoading} />
+            <FieldDate label="Дата" name={`${form.formUid}_docDate`} minWidth="200px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
             <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
               <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TDocFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TDocFields>)} disabled={form.isLoading} width="300px" />
               <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TDocFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TDocFields>)} disabled={form.isLoading} width="300px" />
             </div>
-            <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TDocFields>)} disabled={form.isLoading} width="300px" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+            <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TDocFields>)} disabled={form.isLoading} width="300px"
+              extraParams={{
+                ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
+                ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
+              }}
+            />
             <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
               <Field label="Сумма" name={`${form.formUid}_amount`} minWidth="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
               <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
@@ -158,7 +163,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
 
   const DocList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
     <ModelList endpoint={endpoint} listName={listName} columnsJson={columnsJson} FormComponent={DocForm}
-      getLabel={(d) => d?.documentNumber ? String(d.documentNumber).slice(0, 50) : "?"} variant={variant} onSelectItem={onSelectItem}
+      getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
       ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
   );
   DocList.displayName = `${listName}`;

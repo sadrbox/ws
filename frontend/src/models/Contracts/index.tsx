@@ -1,9 +1,7 @@
-import { FC, useMemo, useCallback, useState } from "react";
-import { useAppContext } from "src/app";
+import { FC, useCallback, useMemo, useState } from "react";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
-import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import FilesPanel from "src/components/FilesPanel";
@@ -17,8 +15,8 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
-import { useModelListState } from "src/hooks/useModelListState";
-import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
+import ModelList from "src/components/ModelList";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "contracts";
 // FORM
@@ -172,58 +170,20 @@ interface ContractsListProps {
   extraParams?: Record<string, string>;
 }
 
-const ContractsList: FC<ContractsListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField, extraParams } = {}) => {
-  const isPartOf = !!ownerUuid;
-  const componentName = isPartOf ? "ContractsList_part" : "ContractsList";
-  const { addPane } = useAppContext().windows;
-  const t = (key: string) => translate(key) || key;
-
-  const ownerFilter = useMemo(() => {
-    const f: Record<string, { value: unknown; operator: string }> = {};
-    if (ownerUuid && ownerField) {
-      f[ownerField] = { value: ownerUuid, operator: "equals" };
-    }
-    // extraParams → превращаем в ownerFilter (напр. organizationUuid=abc → filter)
-    if (extraParams) {
-      for (const [key, val] of Object.entries(extraParams)) {
-        if (val) f[key] = { value: val, operator: "equals" };
-      }
-    }
-    return Object.keys(f).length > 0 ? f : undefined;
-  }, [ownerUuid, ownerField, extraParams]);
-
-  const { error, refetch, buildTableProps } = useModelListState({
-    model: MODEL_ENDPOINT, componentName, columnsJson,
-    defaultSort: { id: "asc" },
-    columnsVariant: isPartOf ? "part" : undefined,
-    ownerFilter,
-  });
-
-  const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
-    const d = formProps.data;
-    const isEdit = !!d?.uuid;
-    const newData = !isEdit && ownerUuid && ownerField
-      ? { [ownerField]: ownerUuid } as unknown as TDataItem
-      : d;
-    addPane({
-      label: makePaneLabelFromData("ContractsList", "Договора", isEdit ? d as any : null, (d?.shortName || d?.contractNumber) as string),
-      component: ContractsForm, data: newData, onSave: () => refetch(), onClose: () => refetch(),
-    });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
-
-  if (error) {
-    return (
-      <div className="error-container"><div className="error-message">
-        <h3>{t("errorTitle") || "Ошибка загрузки"}</h3>
-        <p>{(error as Error)?.message || "Неизвестная ошибка"}</p>
-        <button onClick={() => refetch()} className="retry-button">{t("retry") || "Повторить"}</button>
-      </div></div>
-    );
-  }
-
-  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange: false })} />;
-};
+const ContractsList: FC<ContractsListProps> = ({ variant, onSelectItem, ownerUuid, ownerField, extraParams }) => (
+  <ModelList
+    endpoint={MODEL_ENDPOINT}
+    listName="ContractsList"
+    columnsJson={columnsJson}
+    FormComponent={ContractsForm}
+    getLabel={(d) => String(d?.shortName || d?.contractNumber || "")}
+    variant={variant}
+    onSelectItem={onSelectItem}
+    ownerUuid={ownerUuid}
+    ownerField={ownerField}
+    extraFilter={extraParams}
+  />
+);
 
 ContractsList.displayName = "ContractsList";
 export { ContractsList, ContractsForm };
-// export default memo(ContractsList);

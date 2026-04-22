@@ -84,7 +84,7 @@ const INCLUDE_MAP = {
 	employeeHistory: { employee: true, position: true, organization: true },
 	accessRight: {},
 	currency: {},
-	user: { employee: { include: { organization: true, accessRights: true } }, accessRights: true },
+	user: { employee: { include: { organization: true } }, accessRights: true },
 	payrollCalculation: { employee: true, organization: true, position: true },
 	payrollPayment: { employee: true, organization: true },
 };

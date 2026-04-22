@@ -1,0 +1,47 @@
+[
+	{
+		"identifier": "id",
+		"name": "ID",
+		"hint": "Внутренний номер",
+		"type": "number",
+		"position": 1,
+		"visible": true,
+		"width": "70px",
+		"minWidth": "70px",
+		"alignment": "left"
+	},
+	{
+		"identifier": "uuid",
+		"name": "UUID",
+		"hint": "UUID",
+		"type": "string",
+		"position": 2,
+		"visible": false,
+		"inlist": false,
+		"width": "0px",
+		"minWidth": "0px",
+		"alignment": "left"
+	},
+	{
+		"identifier": "shortName",
+		"name": "Наименование",
+		"hint": "Наименование ставки НДС",
+		"type": "string",
+		"position": 3,
+		"visible": true,
+		"width": "200px",
+		"minWidth": "80px",
+		"alignment": "left"
+	},
+	{
+		"identifier": "rate",
+		"name": "Ставка, %",
+		"hint": "Процент ставки НДС",
+		"type": "number",
+		"position": 4,
+		"visible": true,
+		"width": "110px",
+		"minWidth": "80px",
+		"alignment": "right"
+	}
+]

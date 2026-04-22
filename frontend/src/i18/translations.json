@@ -121,6 +121,11 @@
 
 	"actiondate": "Дата действия",
 	"actiontype": "Тип действия",
+	"actionDate": "Дата действия",
+	"actionType": "Тип действия",
+	"objectId": "ID объекта",
+	"objectName": "Объект",
+	"objectType": "Тип объекта",
 	"host": "Хост",
 	"ip": "IP адрес",
 	"city": "Город",
@@ -233,6 +238,7 @@
 
 	"documentNumber": "Номер документа",
 	"documentDate": "Дата документа",
+	"date": "Дата",
 	"amount": "Сумма",
 	"cronExpr": "Cron выражение",
 	"lastRunAt": "Последний запуск",
@@ -270,8 +276,12 @@
 
 	"EmployeeHistoriesList": "Кадровая история",
 	"EmployeeHistoriesList_part": "Кадровая история",
+	"position.shortName": "Должность",
 
 	"UnsavedFormsList": "Несохранённые записи",
+	"formLabel": "Тип объекта",
+	"entityId": "ID записи",
+	"pendingSummary": "Вложенные таблицы",
 
 	"AccessRightsList": "Права доступа",
 	"AccessRightsList_part": "Права доступа",
@@ -280,11 +290,33 @@
 	"SaleItemsList_part": "Товары",
 	"lineNumber": "N",
 	"product.shortName": "Номенклатура",
+	"unitOfMeasure": "Ед. изм.",
+	"discountPercent": "Скидка %",
+	"discountAmount": "Скидка",
+	"vatRate": "НДС %",
+	"vatAmount": "НДС",
+	"warehouse.shortName": "Склад",
 
 	"PayrollCalculationsList": "Начисление ЗП",
 	"PayrollCalculationsList_part": "Начисление ЗП",
 	"PayrollPaymentsList": "Выплата ЗП",
 	"PayrollPaymentsList_part": "Выплата ЗП",
+
+	"UnitOfMeasuresList": "Единицы измерения",
+	"UnitOfMeasuresList_part": "Единицы измерения",
+	"UnitOfMeasureList": "Единицы измерения",
+	"VatRatesList": "Ставки НДС",
+	"VatRatesList_part": "Ставки НДС",
+	"VatRateList": "Ставки НДС",
+
+	"unitOfMeasure.shortName": "Ед. изм.",
+	"vatRateRef.shortName": "Ставка НДС",
+	"rate": "Ставка %",
+
+	"period": "Период",
+	"baseSalary": "Оклад",
+	"netSalary": "К выплате",
+	"paymentMethod": "Способ выплаты",
 
 	"userName": "Пользователь",
 	"salary": "Оклад",

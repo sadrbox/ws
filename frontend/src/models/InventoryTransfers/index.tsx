@@ -11,7 +11,8 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { getFormatDateOnly } from "src/utils/main.module";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -27,14 +28,14 @@ const STATUS_OPTIONS = [
 
 interface TFields {
   id?: number; uuid?: string;
-  documentNumber: string; documentDate: string; description: string; status: string;
+  documentNumber: string; date: string; description: string; status: string;
   fromWarehouseUuid: string; fromWarehouseName: string;
   toWarehouseUuid: string; toWarehouseName: string;
   organizationUuid: string; organizationName: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
-  documentNumber: "", documentDate: "", description: "", status: "draft",
+  documentNumber: "", date: "", description: "", status: "draft",
   fromWarehouseUuid: "", fromWarehouseName: "",
   toWarehouseUuid: "", toWarehouseName: "",
   organizationUuid: "", organizationName: "",
@@ -57,19 +58,19 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     endpoint: MODEL_ENDPOINT, storageKey: "inventory-transfers-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 10) ?? "",
+      documentNumber: d.documentNumber ?? "", date: d.date?.slice(0, 10) ?? "",
       description: d.description ?? "", status: d.status ?? "draft",
       fromWarehouseUuid: d.fromWarehouseUuid ?? "", fromWarehouseName: d.fromWarehouse?.shortName ?? "",
       toWarehouseUuid: d.toWarehouseUuid ?? "", toWarehouseName: d.toWarehouse?.shortName ?? "",
       organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? "",
     }),
     buildPayload: (fd) => ({
-      documentNumber: fd.documentNumber?.trim() || null, documentDate: fd.documentDate || null,
+      documentNumber: fd.documentNumber?.trim() || null, date: fd.date || null,
       description: fd.description?.trim() || null, status: fd.status || "draft",
       fromWarehouseUuid: fd.fromWarehouseUuid || null, toWarehouseUuid: fd.toWarehouseUuid || null,
       organizationUuid: fd.organizationUuid || null,
     }),
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, FORM_LABEL, saved),
+    buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
   });
 
   const tabs = useMemo(() => [
@@ -77,11 +78,11 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       <div className={styles.FormBodyParts}>
         <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
           <Field label="Номер документа" name={`${form.formUid}_docNum`} minWidth="339px" value={form.fields.documentNumber} onChange={e => form.setField("documentNumber", e.target.value)} disabled={form.isLoading} />
-          <FieldDate label="Дата документа" name={`${form.formUid}_docDate`} minWidth="200px" value={form.fields.documentDate} onChange={e => form.setField("documentDate", e.target.value)} disabled={form.isLoading} />
+          <FieldDate label="Дата документа" name={`${form.formUid}_docDate`} minWidth="200px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
           <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
-          <LookupField label="Со склада" name={`${form.formUid}_fromWh`} value={form.fields.fromWarehouseUuid} displayValue={form.fields.fromWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ fromWarehouseUuid: u, fromWarehouseName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-          <LookupField label="На склад" name={`${form.formUid}_toWh`} value={form.fields.toWarehouseUuid} displayValue={form.fields.toWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ toWarehouseUuid: u, toWarehouseName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-          <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+          <LookupField label="Со склада" name={`${form.formUid}_fromWh`} value={form.fields.fromWarehouseUuid} displayValue={form.fields.fromWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ fromWarehouseUuid: u, fromWarehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ fromWarehouseUuid: "", fromWarehouseName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+          <LookupField label="На склад" name={`${form.formUid}_toWh`} value={form.fields.toWarehouseUuid} displayValue={form.fields.toWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ toWarehouseUuid: u, toWarehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ toWarehouseUuid: "", toWarehouseName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+          <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
           <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
         </div></Group>
         {form.isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
@@ -102,7 +103,7 @@ InventoryTransfersForm.displayName = "InventoryTransfersForm";
 
 const InventoryTransfersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={InventoryTransfersForm}
-    getLabel={(d) => d?.documentNumber ? String(d.documentNumber).slice(0, 50) : "?"} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
 );
 InventoryTransfersList.displayName = "InventoryTransfersList";

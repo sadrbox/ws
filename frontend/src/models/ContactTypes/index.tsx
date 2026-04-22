@@ -1,8 +1,7 @@
-import { FC, useMemo, useCallback } from "react";
+import { FC, useMemo } from "react";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
-import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Divider, Field } from "src/components/Field";
@@ -11,10 +10,9 @@ import styles from "src/styles/main.module.scss";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
-import { useModelListState } from "src/hooks/useModelListState";
-import { useAppContext } from "src/app";
+import ModelList from "src/components/ModelList";
 
 const MODEL_ENDPOINT = "contacttypes";
 
@@ -96,37 +94,17 @@ ContactTypesForm.displayName = "ContactTypesForm";
 // LIST
 // ═══════════════════════════════════════════════════════════════════════════
 
-const ContactTypesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant = 'default', onSelectItem } = {}) => {
-  const componentName = "ContactTypesList";
-  const { addPane } = useAppContext().windows;
-  const t = (key: string) => translate(key) || key;
-
-  const { error, refetch, buildTableProps } = useModelListState({
-    model: MODEL_ENDPOINT, componentName, columnsJson, defaultSort: { id: "asc" },
-  });
-
-  const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
-    const d = formProps.data;
-    const isEdit = !!d?.uuid;
-    addPane({
-      label: makePaneLabelFromData("ContactTypesList", "Типы контактов", isEdit ? d as any : null, d?.shortName as string),
-      component: ContactTypesForm, data: d, onSave: () => refetch(), onClose: () => refetch(),
-    });
-  }, [addPane, t, refetch, componentName]);
-
-  if (error) {
-    return (
-      <div className="error-container"><div className="error-message">
-        <h3>{t("errorTitle") || "Ошибка загрузки"}</h3>
-        <p>{(error as Error)?.message || "Неизвестная ошибка"}</p>
-        <button onClick={() => refetch()} className="retry-button">{t("retry") || "Повторить"}</button>
-      </div></div>
-    );
-  }
-
-  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange: false })} />;
-};
+const ContactTypesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => (
+  <ModelList
+    endpoint={MODEL_ENDPOINT}
+    listName="ContactTypesList"
+    columnsJson={columnsJson}
+    FormComponent={ContactTypesForm}
+    getLabel={(d) => String(d?.shortName || "")}
+    variant={variant}
+    onSelectItem={onSelectItem}
+  />
+);
 
 ContactTypesList.displayName = "ContactTypesList";
 export { ContactTypesList, ContactTypesForm };
-// export default memo(ContactTypesList);

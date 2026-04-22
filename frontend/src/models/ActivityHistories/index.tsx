@@ -1,9 +1,7 @@
-import { FC, useMemo, useCallback } from "react";
-import { useAppContext } from "src/app";
+import { FC, useMemo } from "react";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
-import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Divider, Field } from "src/components/Field";
@@ -13,9 +11,9 @@ import styles from "src/styles/main.module.scss";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelList from "src/components/ModelList";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
-import { useModelListState } from "src/hooks/useModelListState";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "activityhistories";
 
@@ -166,46 +164,19 @@ interface ActivityHistoriesListProps {
   ownerField?: string;
 }
 
-const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField } = {}) => {
-  const isPartOf = !!ownerUuid;
-  const componentName = isPartOf ? "ActivityHistoriesList_part" : "ActivityHistoriesList";
-
-  const { addPane } = useAppContext().windows;
-  const t = (key: string) => translate(key) || key;
-
-  const ownerFilter = useMemo(() => {
-    if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } };
-    return undefined;
-  }, [ownerUuid, ownerField]);
-
-  const { error, refetch, buildTableProps } = useModelListState({
-    model: MODEL_ENDPOINT, componentName, columnsJson,
-    defaultSort: { id: "asc" },
-    columnsVariant: isPartOf ? "part" : undefined,
-    ownerFilter,
-  });
-
-  const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
-    const d = formProps.data;
-    const isEdit = !!d?.uuid;
-    addPane({
-      label: makePaneLabelFromData("ActivityHistoriesList", "Журнал", isEdit ? d as any : null),
-      component: ActivityHistoriesForm, data: d, onSave: () => refetch(), onClose: () => refetch(),
-    });
-  }, [addPane, t, refetch, componentName]);
-
-  if (error) {
-    return (
-      <div className="error-container"><div className="error-message">
-        <h3>{t("errorTitle") || "Ошибка загрузки"}</h3>
-        <p>{(error as Error)?.message || "Неизвестная ошибка"}</p>
-        <button onClick={() => refetch()} className="retry-button">{t("retry") || "Повторить"}</button>
-      </div></div>
-    );
-  }
-
-  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm })} />;
-};
+const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+  <ModelList
+    endpoint={MODEL_ENDPOINT}
+    listName="ActivityHistoriesList"
+    columnsJson={columnsJson}
+    FormComponent={ActivityHistoriesForm}
+    getLabel={(d) => String(d?.actionType || "")}
+    variant={variant}
+    onSelectItem={onSelectItem}
+    ownerUuid={ownerUuid}
+    ownerField={ownerField}
+  />
+);
 
 ActivityHistoriesList.displayName = "ActivityHistoriesList";
-export { ActivityHistoriesList, ActivityHistoriesForm }; 
+export { ActivityHistoriesList, ActivityHistoriesForm };

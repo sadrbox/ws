@@ -1,9 +1,7 @@
-import { FC, useMemo, useCallback } from "react";
-import { useAppContext } from "src/app";
+import { FC, useMemo } from "react";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
-import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Divider, Field } from "src/components/Field";
@@ -14,9 +12,9 @@ import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupFie
 
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelList from "src/components/ModelList";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
-import { useModelListState } from "src/hooks/useModelListState";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "contacts";
 // ═══════════════════════════════════════════════════════════════════════════
@@ -156,48 +154,18 @@ interface ContactsListProps {
   ownerField?: string;
 }
 
-const ContactsList: FC<ContactsListProps> = ({ variant = 'default', onSelectItem, ownerUuid, ownerField } = {}) => {
-  const isPartOf = !!ownerUuid;
-  const componentName = isPartOf ? "ContactsList_part" : "ContactsList";
-  const { addPane } = useAppContext().windows;
-  const t = (key: string) => translate(key) || key;
-
-  const ownerFilter = useMemo(() => {
-    if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } };
-    return undefined;
-  }, [ownerUuid, ownerField]);
-
-  const { error, refetch, buildTableProps } = useModelListState({
-    model: MODEL_ENDPOINT, componentName, columnsJson,
-    defaultSort: { id: "asc" },
-    columnsVariant: isPartOf ? "part" : undefined,
-    ownerFilter,
-  });
-
-  const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
-    const d = formProps.data;
-    const isEdit = !!d?.uuid;
-    const newData = !isEdit && ownerUuid && ownerField
-      ? { [ownerField]: ownerUuid } as unknown as TDataItem
-      : d;
-    addPane({
-      label: makePaneLabelFromData("ContactsList", "Контакты", isEdit ? d as any : null),
-      component: ContactsForm, data: newData, onSave: () => refetch(), onClose: () => refetch(),
-    });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField]);
-
-  if (error) {
-    return (
-      <div className="error-container"><div className="error-message">
-        <h3>{t("errorTitle") || "Ошибка загрузки"}</h3>
-        <p>{(error as Error)?.message || "Неизвестная ошибка"}</p>
-        <button onClick={() => refetch()} className="retry-button">{t("retry") || "Повторить"}</button>
-      </div></div>
-    );
-  }
-
-  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange: false })} />;
-};
+const ContactsList: FC<ContactsListProps> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+  <ModelList
+    endpoint={MODEL_ENDPOINT}
+    listName="ContactsList"
+    columnsJson={columnsJson}
+    FormComponent={ContactsForm}
+    variant={variant}
+    onSelectItem={onSelectItem}
+    ownerUuid={ownerUuid}
+    ownerField={ownerField}
+  />
+);
 
 ContactsList.displayName = "ContactsList";
 export { ContactsList, ContactsForm };

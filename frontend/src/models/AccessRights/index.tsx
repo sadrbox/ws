@@ -36,6 +36,7 @@ const MODEL_NAME_OPTIONS = [
     "BankAccounts", "Currencies", "Todos", "Notifications",
     "OutgoingInvoices", "IncomingInvoices", "PaymentInvoices",
     "CashReceiptOrders", "CashExpenseOrders", "InventoryTransfers",
+    "UnitOfMeasures", "VatRates",
     "ScheduledTasks", "Users", "ActivityHistories", "EmployeeHistories",
   ].map(v => ({ value: v, label: translate(v + "List") || v })),
 ];

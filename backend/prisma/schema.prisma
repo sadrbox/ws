@@ -304,8 +304,7 @@ model Warehouse {
 model Sale {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  documentNumber   String?
-  documentDate     DateTime      @default(now())
+  date     DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   amountWithoutVat Decimal?      @db.Decimal(18, 2)
@@ -329,7 +328,7 @@ model Sale {
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([warehouseUuid])
-  @@index([documentDate])
+  @@index([date])
   @@index([updatedAt])
   @@map("sales")
 }
@@ -337,8 +336,7 @@ model Sale {
 model Purchase {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  documentNumber   String?
-  documentDate     DateTime      @default(now())
+  date     DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -354,7 +352,7 @@ model Purchase {
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
-  @@index([documentDate])
+  @@index([date])
   @@index([updatedAt])
   @@map("purchases")
 }
@@ -362,8 +360,7 @@ model Purchase {
 model OutgoingInvoice {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  documentNumber   String?
-  documentDate     DateTime      @default(now())
+  date     DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -379,7 +376,7 @@ model OutgoingInvoice {
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
-  @@index([documentDate])
+  @@index([date])
   @@index([updatedAt])
   @@map("outgoing_invoices")
 }
@@ -387,8 +384,7 @@ model OutgoingInvoice {
 model IncomingInvoice {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  documentNumber   String?
-  documentDate     DateTime      @default(now())
+  date     DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -404,7 +400,7 @@ model IncomingInvoice {
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
-  @@index([documentDate])
+  @@index([date])
   @@index([updatedAt])
   @@map("incoming_invoices")
 }
@@ -412,8 +408,7 @@ model IncomingInvoice {
 model PaymentInvoice {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  documentNumber   String?
-  documentDate     DateTime      @default(now())
+  date     DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -429,7 +424,7 @@ model PaymentInvoice {
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
-  @@index([documentDate])
+  @@index([date])
   @@index([updatedAt])
   @@map("payment_invoices")
 }
@@ -457,8 +452,7 @@ model ScheduledTask {
 model InventoryTransfer {
   id                Int           @id @default(autoincrement())
   uuid              String        @unique @default(uuid())
-  documentNumber    String?
-  documentDate      DateTime      @default(now())
+  date      DateTime      @default(now())
   description       String?
   status            String        @default("draft")
   fromWarehouseUuid String?
@@ -473,7 +467,7 @@ model InventoryTransfer {
   @@index([fromWarehouseUuid])
   @@index([toWarehouseUuid])
   @@index([organizationUuid])
-  @@index([documentDate])
+  @@index([date])
   @@index([updatedAt])
   @@map("inventory_transfers")
 }
@@ -481,8 +475,7 @@ model InventoryTransfer {
 model CashReceiptOrder {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  documentNumber   String?
-  documentDate     DateTime      @default(now())
+  date     DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -498,7 +491,7 @@ model CashReceiptOrder {
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
-  @@index([documentDate])
+  @@index([date])
   @@index([updatedAt])
   @@map("cash_receipt_orders")
 }
@@ -506,8 +499,7 @@ model CashReceiptOrder {
 model CashExpenseOrder {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  documentNumber   String?
-  documentDate     DateTime      @default(now())
+  date     DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -523,7 +515,7 @@ model CashExpenseOrder {
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
-  @@index([documentDate])
+  @@index([date])
   @@index([updatedAt])
   @@map("cash_expense_orders")
 }
@@ -541,42 +533,50 @@ model Brand {
 }
 
 model Product {
-  id        Int        @id @default(autoincrement())
-  uuid      String     @unique @default(uuid())
-  shortName String
-  sku       String?
-  brandUuid String?
-  updatedAt DateTime   @default(now()) @updatedAt
-  deletedAt DateTime?
-  brand     Brand?     @relation(fields: [brandUuid], references: [uuid])
-  saleItems SaleItem[]
+  id                  Int            @id @default(autoincrement())
+  uuid                String         @unique @default(uuid())
+  shortName           String
+  sku                 String?
+  brandUuid           String?
+  unitOfMeasureUuid   String?
+  updatedAt           DateTime       @default(now()) @updatedAt
+  deletedAt           DateTime?
+  brand               Brand?         @relation(fields: [brandUuid], references: [uuid])
+  unitOfMeasure       UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
+  saleItems           SaleItem[]
 
   @@index([brandUuid])
+  @@index([unitOfMeasureUuid])
   @@index([updatedAt])
   @@map("products")
 }
 
 model SaleItem {
-  id              Int       @id @default(autoincrement())
-  uuid            String    @unique @default(uuid())
-  lineNumber      Int       @default(0)
-  quantity        Decimal   @default(0) @db.Decimal(18, 4)
-  price           Decimal   @default(0) @db.Decimal(18, 2)
-  amount          Decimal   @default(0) @db.Decimal(18, 2)
-  unitOfMeasure   String?
-  vatRate         Decimal   @default(12) @db.Decimal(5, 2)
-  vatAmount       Decimal   @default(0) @db.Decimal(18, 2)
-  discountPercent Decimal   @default(0) @db.Decimal(5, 2)
-  discountAmount  Decimal   @default(0) @db.Decimal(18, 2)
-  productUuid     String?
-  saleUuid        String
-  updatedAt       DateTime  @default(now()) @updatedAt
-  deletedAt       DateTime?
-  product         Product?  @relation(fields: [productUuid], references: [uuid])
-  sale            Sale      @relation(fields: [saleUuid], references: [uuid], onDelete: Cascade)
+  id                Int            @id @default(autoincrement())
+  uuid              String         @unique @default(uuid())
+  lineNumber        Int            @default(0)
+  quantity          Decimal        @default(0) @db.Decimal(18, 4)
+  price             Decimal        @default(0) @db.Decimal(18, 2)
+  amount            Decimal        @default(0) @db.Decimal(18, 2)
+  unitOfMeasureUuid String?
+  vatRateUuid       String?
+  vatRate           Decimal        @default(12) @db.Decimal(5, 2)
+  vatAmount         Decimal        @default(0) @db.Decimal(18, 2)
+  discountPercent   Decimal        @default(0) @db.Decimal(5, 2)
+  discountAmount    Decimal        @default(0) @db.Decimal(18, 2)
+  productUuid       String?
+  saleUuid          String
+  updatedAt         DateTime       @default(now()) @updatedAt
+  deletedAt         DateTime?
+  product           Product?       @relation(fields: [productUuid], references: [uuid])
+  sale              Sale           @relation(fields: [saleUuid], references: [uuid], onDelete: Cascade)
+  unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
+  vatRateRef        VatRate?       @relation(fields: [vatRateUuid], references: [uuid])
 
   @@index([saleUuid])
   @@index([productUuid])
+  @@index([unitOfMeasureUuid])
+  @@index([vatRateUuid])
   @@index([updatedAt])
   @@map("sale_items")
 }
@@ -673,8 +673,7 @@ model Currency {
 model PayrollCalculation {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  documentNumber   String?
-  documentDate     DateTime      @default(now())
+  date     DateTime      @default(now())
   description      String?
   period           String?       @db.VarChar(7)
   employeeUuid     String?
@@ -699,7 +698,7 @@ model PayrollCalculation {
   @@index([employeeUuid])
   @@index([organizationUuid])
   @@index([positionUuid])
-  @@index([documentDate])
+  @@index([date])
   @@index([period])
   @@index([updatedAt])
   @@map("payroll_calculations")
@@ -708,8 +707,7 @@ model PayrollCalculation {
 model PayrollPayment {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  documentNumber   String?
-  documentDate     DateTime      @default(now())
+  date     DateTime      @default(now())
   description      String?
   period           String?       @db.VarChar(7)
   employeeUuid     String?
@@ -724,8 +722,35 @@ model PayrollPayment {
 
   @@index([employeeUuid])
   @@index([organizationUuid])
-  @@index([documentDate])
+  @@index([date])
   @@index([period])
   @@index([updatedAt])
   @@map("payroll_payments")
+}
+
+model UnitOfMeasure {
+  id        Int        @id @default(autoincrement())
+  uuid      String     @unique @default(uuid())
+  shortName String
+  code      String?
+  updatedAt DateTime   @default(now()) @updatedAt
+  deletedAt DateTime?
+  products  Product[]
+  saleItems SaleItem[]
+
+  @@index([updatedAt])
+  @@map("units_of_measure")
+}
+
+model VatRate {
+  id        Int        @id @default(autoincrement())
+  uuid      String     @unique @default(uuid())
+  shortName String
+  rate      Decimal    @db.Decimal(5, 2)
+  updatedAt DateTime   @default(now()) @updatedAt
+  deletedAt DateTime?
+  saleItems SaleItem[]
+
+  @@index([updatedAt])
+  @@map("vat_rates")
 }

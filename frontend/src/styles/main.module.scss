@@ -1,6 +1,11 @@
 // перенесено в index.html
 // @import url("https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap");
 // @import url("https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,100..900;1,100..900&display=swap");
+// Глобальный класс размытия фона (добавляется на Screen при открытии модального окна)
+:global(.blur5) {
+	filter: blur(5px);
+	transition: filter 0.2s ease;
+}
 
 * {
 	font-family: "PT Sans", sans-serif;
@@ -51,11 +56,12 @@ body {
 	display: flex;
 	align-items: center;
 	background-color: #fff;
-	box-shadow: 0px 0px 3px rgba(#000, 0.4);
-	height: $heightFieldInput + 21px;
+	// box-shadow: 0px 0px 3px rgba(#000, 0.4);
+	height: $heightFieldInput + 12px;
 	flex-wrap: nowrap;
 	flex-shrink: 0;
 	overflow: visible;
+	background: $color33;
 	// position: relative нужен для абсолютного позиционирования мобильного меню
 	// sticky уже задаёт containing block, но на мобильных нужен явный relative
 
@@ -63,9 +69,9 @@ body {
 		height: 100%;
 		user-select: none;
 		color: $color3;
-		font-weight: 500;
+		font-weight: 600;
 		margin: 0px;
-		padding: 0 24px;
+		padding: 0 12px;
 		display: flex;
 		flex-direction: row;
 		align-items: center;
@@ -75,9 +81,10 @@ body {
 		flex-shrink: 0;
 		transition: background 0.15s, color 0.15s;
 	}
+
 	.Active {
-		background-color: rgba($color3, 0.8);
-		color: #fff;
+		background-color: $color60;
+		// color: $colorPrimaryDark;
 		text-decoration: none;
 	}
 }
@@ -104,6 +111,7 @@ body {
 		border-radius: 1px;
 		position: relative;
 		transition: background 0.2s;
+
 		&::before,
 		&::after {
 			content: "";
@@ -115,8 +123,14 @@ body {
 			border-radius: 1px;
 			transition: transform 0.2s;
 		}
-		&::before { top: -6px; }
-		&::after  { top: 6px; }
+
+		&::before {
+			top: -6px;
+		}
+
+		&::after {
+			top: 6px;
+		}
 	}
 }
 
@@ -153,6 +167,7 @@ body {
 	white-space: nowrap;
 	text-decoration: none;
 	flex-shrink: 0;
+
 	&:hover {
 		color: $color3;
 	}
@@ -170,6 +185,7 @@ body {
 	white-space: nowrap;
 	flex-shrink: 0;
 	transition: background 0.15s, border-color 0.15s;
+
 	&:hover {
 		background: rgba(255, 255, 255, 0.2);
 		border-color: rgba(255, 255, 255, 0.4);
@@ -187,6 +203,7 @@ body {
 		padding: 0;
 		position: sticky;
 		top: 0;
+		background: $color33;
 
 		// Скрываем десктопные навигационные ссылки
 		.NavbarItem {
@@ -241,11 +258,13 @@ body {
 			&:last-child {
 				border-bottom: none;
 			}
+
 			&:hover,
 			&:active {
 				background: rgba($color3, 0.06);
 			}
 		}
+
 		.Active {
 			background-color: rgba($color3, 0.8);
 			color: #fff;
@@ -253,8 +272,15 @@ body {
 	}
 
 	@keyframes navSlideDown {
-		from { opacity: 0; transform: translateY(-8px); }
-		to   { opacity: 1; transform: translateY(0); }
+		from {
+			opacity: 0;
+			transform: translateY(-8px);
+		}
+
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
 	// NavListWrapper — одна колонка
@@ -275,7 +301,7 @@ body {
 
 	.NavList li {
 		padding: 8px 12px;
-		font-size: $fontsize + 1px; 
+		font-size: $fontsize + 1px;
 	}
 }
 
@@ -314,6 +340,7 @@ body {
 		font-size: $fontsize + 1px;
 	}
 }
+
 .NavbarOverlayWrapper {
 	position: absolute;
 	top: var(--navbar-h, #{$heightFieldInput + 21px}); // динамически через ResizeObserver, fallback на SCSS-переменную
@@ -341,6 +368,7 @@ body {
 	inset: 0;
 	z-index: 9; // ниже NavbarMobileMenu (z:10), но выше остального
 }
+
 .NavListWrapper {
 	display: flex;
 	flex-direction: column;
@@ -408,6 +436,7 @@ body {
 		&:hover {
 			background: rgba($color3, 0.08);
 		}
+
 		&:active {
 			background: rgba($color3, 0.15);
 		}
@@ -416,6 +445,7 @@ body {
 	li.disabled {
 		color: $color5;
 		cursor: default;
+
 		&:hover {
 			background: transparent;
 		}
@@ -442,11 +472,12 @@ body {
 		overflow-y: auto;
 		// padding: 0px 6px;
 		// margin-bottom: 6px;
-		padding: 6px 6px 0px 6px;
+		// padding: 6px 6px 0px 6px;
 		// overflow-y: auto;
 		display: none;
-		gap: 6px;
+		gap: 0px;
 	}
+
 	.ActivePane {
 		display: flex;
 		flex-direction: column;
@@ -454,6 +485,7 @@ body {
 		height: -webkit-fill-available;
 	}
 }
+
 .PaneHeaderContainer {
 	display: flex;
 	gap: 6px;
@@ -462,7 +494,11 @@ body {
 	min-height: $heightFieldInput + 2px;
 	padding-right: 2px;
 	flex-shrink: 0;
+	padding: 6px;
+	background: $color33;
+	border-bottom: 1px solid #aaa;
 }
+
 .PaneHeaderLabel {
 	margin: 0;
 	padding: 0;
@@ -475,6 +511,7 @@ body {
 	flex-shrink: 1;
 	min-width: 0;
 }
+
 .PaneHeaderToolbar {
 	display: flex;
 	align-items: center;
@@ -482,9 +519,11 @@ body {
 	flex-shrink: 0;
 	margin-left: auto;
 }
+
 .PaneHeaderToolbarSlot {
 	display: contents; // дочерние элементы портала участвуют в flex-раскладке родителя
 }
+
 .PaneHeaderDirtyDot {
 	display: inline-block;
 	width: 7px;
@@ -497,13 +536,23 @@ body {
 	box-shadow: 0 0 4px 1px rgba(#d48806, 0.5);
 	animation: dirtyPulse 2s ease-in-out infinite;
 }
+
 .PaneHeaderLabelDirty {
 	color: #c27400;
 }
+
 @keyframes dirtyPulse {
-	0%, 100% { opacity: 1; }
-	50% { opacity: 0.4; }
+
+	0%,
+	100% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.4;
+	}
 }
+
 .PaneHeaderControl {
 	display: flex;
 	align-items: center;
@@ -518,6 +567,7 @@ body {
 	flex-shrink: 0;
 	border-radius: $radius2;
 	font-size: $fontsize;
+
 	&:hover {
 		background: rgba($color51, 0.12);
 		color: $color6;
@@ -528,12 +578,15 @@ body {
 .PaneNoteBellWrap {
 	position: relative;
 }
+
 .PaneNoteBell {
 	color: #d48806 !important;
+
 	&:hover {
 		background: rgba(#d48806, 0.12) !important;
 	}
 }
+
 .NavbarBellBtn {
 	display: flex;
 	align-items: center;
@@ -546,10 +599,12 @@ body {
 	height: 30px;
 	border-radius: $radius2;
 	position: relative;
+
 	&:hover {
 		background: rgba(#d48806, 0.12);
 	}
 }
+
 .PaneNoteBadge {
 	position: absolute;
 	top: 1px;
@@ -566,6 +621,7 @@ body {
 	padding: 0 3px;
 	pointer-events: none;
 }
+
 .PaneNotePopover {
 	position: absolute;
 	top: calc(100% + 6px);
@@ -577,8 +633,9 @@ body {
 	background: #fff;
 	border: 1px solid #e0e0e0;
 	border-radius: $radius2;
-	box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
 }
+
 .PaneNotePopoverHeader {
 	display: flex;
 	align-items: center;
@@ -589,6 +646,7 @@ body {
 	color: #555;
 	border-bottom: 1px solid #eee;
 }
+
 .PaneNoteJournalLink {
 	border: none;
 	background: transparent;
@@ -597,10 +655,12 @@ body {
 	font-size: $fontsize - 2px;
 	padding: 2px 6px;
 	border-radius: $radius2;
+
 	&:hover {
 		background: rgba(#1677ff, 0.08);
 	}
 }
+
 .PaneNoteItem {
 	display: flex;
 	align-items: flex-start;
@@ -610,30 +670,40 @@ body {
 	line-height: 1.45;
 	color: #333;
 	border-bottom: 1px solid #f5f5f5;
-	&:last-child { border-bottom: none; }
+
+	&:last-child {
+		border-bottom: none;
+	}
 }
+
 .PaneNoteWarning {
 	background: #fffbe6;
 }
+
 .PaneNoteError {
 	background: #fff2f0;
 }
+
 .PaneNoteInfo {
 	background: #f6ffed;
 }
+
 .PaneNoteResolved {
 	opacity: 0.55;
 }
+
 .PaneNoteIcon {
 	flex-shrink: 0;
 	font-size: $fontsize + 1px;
 	line-height: 1;
 	margin-top: 1px;
 }
+
 .PaneNoteText {
 	flex: 1;
 	min-width: 0;
 }
+
 .PaneNoteDismiss {
 	flex-shrink: 0;
 	border: none;
@@ -643,13 +713,18 @@ body {
 	font-size: $fontsize - 2px;
 	padding: 0 2px;
 	line-height: 1;
-	&:hover { color: #333; }
+
+	&:hover {
+		color: #333;
+	}
 }
+
 .PaneNoteActions {
 	display: flex;
 	gap: 6px;
 	margin-top: 6px;
 }
+
 .PaneNoteActionBtn {
 	border: 1px solid #d48806;
 	background: #fffbe6;
@@ -659,8 +734,12 @@ body {
 	border-radius: 3px;
 	cursor: pointer;
 	font-weight: 500;
-	&:hover { background: #fff1b8; }
+
+	&:hover {
+		background: #fff1b8;
+	}
 }
+
 .PaneHeaderClose {
 	display: flex;
 	align-items: center;
@@ -675,11 +754,13 @@ body {
 	height: $heightFieldInput - 4px;
 	flex-shrink: 0;
 	border-radius: $radius2;
+
 	&:hover {
 		background: rgba(#c00, 0.1);
 		color: #c00;
 	}
 }
+
 .PaneTabWrapper {
 	overflow-x: auto;
 	overflow-y: hidden;
@@ -687,7 +768,8 @@ body {
 	// height: 50px;
 	display: flex;
 	// border-top: 1px solid $color10; /* Линия под вкладками */
-	position: relative; /* Для корректного позиционирования вкладок */
+	position: relative;
+	/* Для корректного позиционирования вкладок */
 	flex-direction: row;
 	flex-wrap: nowrap;
 	background-color: #fff;
@@ -700,12 +782,15 @@ body {
 	// Тонкий скроллбар
 	scrollbar-width: thin;
 	scrollbar-color: rgba($color5, 0.3) transparent;
+
 	&::-webkit-scrollbar {
 		height: 3px;
 	}
+
 	&::-webkit-scrollbar-track {
 		background: transparent;
 	}
+
 	&::-webkit-scrollbar-thumb {
 		background: rgba($color5, 0.3);
 		border-radius: 2px;
@@ -724,6 +809,7 @@ body {
 		z-index: 2;
 		border-bottom: 1px solid $color10;
 	}
+
 	// padding-bottom: 12px;
 	.PaneTab {
 		// box-sizing: content-box;
@@ -748,7 +834,8 @@ body {
 		/* Используем SVG для скошенного угла */
 		padding: 6px 12px 6px 3px;
 		cursor: pointer;
-		margin-right: -1px; /* Наложение краев с учетом границы */
+		margin-right: -1px;
+		/* Наложение краев с учетом границы */
 		// font-weight: bold;
 		z-index: 1;
 		user-select: none;
@@ -776,11 +863,13 @@ body {
 			flex-shrink: 0;
 			border-radius: $radius2;
 			margin-right: 3px;
+
 			&:hover {
 				background: rgba(#c00, 0.1);
 				color: #c00;
 			}
 		}
+
 		.PaneTabCloseBtn {
 			width: 18px !important;
 			height: 18px !important;
@@ -807,6 +896,7 @@ body {
 			// z-index: 1;
 		}
 	}
+
 	.PaneTabActive {
 		border-top: 1px solid transparent;
 		box-shadow: inset 0px -2px 0px 0px $color3;
@@ -829,24 +919,29 @@ body {
 			// color: $color3;
 		}
 	}
+
 	.PaneTabSelector {
 		border-left: 2px solid $color3;
 		font-style: italic;
 	}
+
 	.PaneTabDisabled {
 		opacity: 0.4;
 		cursor: not-allowed;
 		pointer-events: none;
 	}
+
 	.PaneTabDirty {
 		.PaneTabLabel {
 			font-style: italic;
 			color: #c77600;
 		}
+
 		.PaneTabClose {
 			color: #c77600;
 		}
 	}
+
 	.PaneTabDirtyDot {
 		display: block;
 		width: 8px;
@@ -863,6 +958,7 @@ body {
 	// grid-template-rows: min-content auto;
 	// margin-top: 6px;
 	// overflow: clip;
+	padding:6px;
 	gap: 6px;
 	display: flex;
 	container-type: size;
@@ -873,6 +969,7 @@ body {
 	transition: all 0.5ms ease;
 	border-radius: $radius2;
 }
+
 .FormHeader {
 	// line-height: 27px;
 	// margin: 12px 0;
@@ -896,6 +993,7 @@ body {
 	padding: 0px;
 	color: $color6;
 }
+
 .FormHeaderLabel {
 	margin: 0px 0 0px 0px;
 	padding: 0px 0px;
@@ -914,6 +1012,7 @@ body {
 	// color: #fff;
 	// background-color: #073989;
 }
+
 .FormIdentifier {
 	font-size: $fontsize + 2px;
 	// color: #fff;
@@ -929,9 +1028,10 @@ body {
 	// flex: 1;
 	// font-family: sans-serif;
 }
+
 .FormBody {
 	// gap: 12px;
-	padding: 12px 0 0 0;
+	// padding: 12px 0 0 0;
 	gap: 6px;
 	flex-direction: column;
 	display: flex;
@@ -944,6 +1044,7 @@ body {
 	// padding-top: 18px;
 	// max-width: 600px;
 }
+
 .FormBodyParts {
 	display: flex;
 	flex: 1;
@@ -954,31 +1055,35 @@ body {
 	// grid-template-columns: min-content 1fr;
 	// grid-template-rows: 1fr;
 	// container-type: size;
-	margin-bottom: 6px;
+	// margin-bottom: 6px;
 	border-bottom: 1px dotted $color5;
+
 	@container (min-width: 900px) {
 		flex-direction: row;
 		gap: 12px;
 		// grid-template-columns: min-content 1fr;
 		// grid-template-rows: 1fr;
 	}
+
 	@container (max-width: 900px) {
 		flex-direction: column;
 		// grid-template-columns: 1fr;
 		// grid-template-rows: min-content;
 	}
 }
+
 .Form {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	padding: 12px 0;
+	padding:  0;
 	// margin-top: 12px;
 	min-width: 315px;
 	// max-width: 300px;
 	// border-top: 1px dotted $color5;
 	// border-bottom: 1px dotted $color5;
 }
+
 .FormPanel {
 	margin: 0px 0 0 0;
 	width: auto;
@@ -999,8 +1104,15 @@ body {
 }
 
 @keyframes dirtyFadeIn {
-	from { opacity: 0; transform: translateX(-4px); }
-	to   { opacity: 1; transform: translateX(0); }
+	from {
+		opacity: 0;
+		transform: translateX(-4px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
 }
 
 
@@ -1014,20 +1126,24 @@ body {
 	display: flex; // border: 1px solid red;
 	// height: 50cqi;
 }
+
 .HorizontalLine {
 	border-radius: 2px;
 	background: linear-gradient(to bottom, $silverDark 50%, $silverLightest 50%);
 	height: 3px;
 	width: 100%;
 }
+
 @keyframes fadeIn {
 	from {
 		opacity: 0;
 	}
+
 	to {
 		opacity: 1;
 	}
 }
+
 .OverFormWrapper {
 	// top: 16px;
 	z-index: 1;
@@ -1039,15 +1155,18 @@ body {
 	box-shadow: 0px 6px 12px 3px rgba($color6, 0.8);
 	animation: fadeIn 0.3s ease;
 }
+
 .OverFormNest {
 	z-index: 9;
 	position: relative;
 }
+
 .OverFormTringleIcon {
 	z-index: 2;
 	position: absolute;
 	top: 6px;
 	right: 50%;
+
 	&::after {
 		content: "";
 		position: absolute;
@@ -1092,6 +1211,7 @@ body {
 		// backdrop-filter: blur(6px) brightness(0.9);
 	}
 }
+
 .PortalWrapper {
 	z-index: 9;
 	position: relative;
@@ -1173,9 +1293,11 @@ body {
 	&.OfflineStatus {
 		color: #e53935;
 	}
+
 	&.OnlineStatus {
 		color: #43a047;
 	}
+
 	&.SyncingStatus {
 		color: #fb8c00;
 	}
@@ -1194,8 +1316,15 @@ body {
 }
 
 @keyframes offlinePulse {
-	0%, 100% { opacity: 1; }
-	50% { opacity: 0.3; }
+
+	0%,
+	100% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.3;
+	}
 }
 
 .OfflineBadge {
@@ -1291,11 +1420,30 @@ body {
 	border-radius: 50%;
 	font-size: $fontsize;
 
-	&.StatusPending { background: #fff3e0; color: #fb8c00; }
-	&.StatusSyncing { background: #e3f2fd; color: #1976d2; }
-	&.StatusSynced  { background: #e8f5e9; color: #43a047; }
-	&.StatusFailed  { background: #fce4ec; color: #e53935; }
-	&.StatusConflict { background: #fff8e1; color: #f9a825; }
+	&.StatusPending {
+		background: #fff3e0;
+		color: #fb8c00;
+	}
+
+	&.StatusSyncing {
+		background: #e3f2fd;
+		color: #1976d2;
+	}
+
+	&.StatusSynced {
+		background: #e8f5e9;
+		color: #43a047;
+	}
+
+	&.StatusFailed {
+		background: #fce4ec;
+		color: #e53935;
+	}
+
+	&.StatusConflict {
+		background: #fff8e1;
+		color: #f9a825;
+	}
 }
 
 .SyncEntryBody {
@@ -1452,6 +1600,7 @@ body {
 
 .SyncDashTabActive {
 	color: #1565c0;
+
 	&::after {
 		content: "";
 		position: absolute;
@@ -1519,7 +1668,10 @@ body {
 	font-size: $fontsize;
 	color: #333;
 	border-bottom: 1px solid #f5f5f5;
-	&:last-child { border-bottom: none; }
+
+	&:last-child {
+		border-bottom: none;
+	}
 }
 
 .SyncDashLabel {
@@ -1527,15 +1679,27 @@ body {
 	flex-shrink: 0;
 }
 
-.SyncDashOnline { color: #43a047; font-weight: 600; }
-.SyncDashOffline { color: #e53935; font-weight: 600; }
+.SyncDashOnline {
+	color: #43a047;
+	font-weight: 600;
+}
+
+.SyncDashOffline {
+	color: #e53935;
+	font-weight: 600;
+}
 
 .SyncDashProgress {
 	display: flex;
 	align-items: center;
 	gap: 10px;
 	padding: 8px 0;
-	span { font-size: $fontsize - 2px; color: #666; flex-shrink: 0; }
+
+	span {
+		font-size: $fontsize - 2px;
+		color: #666;
+		flex-shrink: 0;
+	}
 }
 
 .SyncDashProgressBar {
@@ -1545,6 +1709,7 @@ body {
 	border-radius: 3px;
 	position: relative;
 	overflow: hidden;
+
 	&::after {
 		content: "";
 		position: absolute;
@@ -1588,7 +1753,10 @@ body {
 	gap: 10px;
 	padding: 8px 0;
 	border-bottom: 1px solid #f0f0f0;
-	&:last-child { border-bottom: none; }
+
+	&:last-child {
+		border-bottom: none;
+	}
 }
 
 .SyncDashQueueIcon {
@@ -1624,7 +1792,10 @@ body {
 .SyncDashConflict {
 	padding: 12px 0;
 	border-bottom: 1px solid #f0f0f0;
-	&:last-child { border-bottom: none; }
+
+	&:last-child {
+		border-bottom: none;
+	}
 }
 
 .SyncDashConflictHeader {
@@ -1698,20 +1869,31 @@ body {
 	padding: 5px 0;
 	border-bottom: 1px solid #f5f5f5;
 	color: #333;
-	&:last-child { border-bottom: none; }
+
+	&:last-child {
+		border-bottom: none;
+	}
 }
 
 .SyncDashInlineBtn {
 	background: none;
 	border: none;
 	cursor: pointer;
-	font-size: $fontsize + 1px ;
+	font-size: $fontsize + 1px;
 	padding: 2px 6px;
 	border-radius: 4px;
 	opacity: 0.5;
 	transition: opacity 0.15s;
-	&:hover { opacity: 1; background: #f5f5f5; }
-	&:disabled { opacity: 0.2; cursor: default; }
+
+	&:hover {
+		opacity: 1;
+		background: #f5f5f5;
+	}
+
+	&:disabled {
+		opacity: 0.2;
+		cursor: default;
+	}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1719,104 +1901,369 @@ body {
 // ═══════════════════════════════════════════════════════════════════════════
 
 .SyncBanner {
-	display: flex; gap: 16px; align-items: flex-start;
-	padding: 20px; border-radius: 10px; margin-bottom: 8px;
+	display: flex;
+	gap: 16px;
+	align-items: flex-start;
+	padding: 20px;
+	border-radius: 10px;
+	margin-bottom: 8px;
 	transition: background .2s;
 }
-.SyncBanner_ok      { background: #e8f5e9; }
-.SyncBanner_warn    { background: #fff8e1; }
-.SyncBanner_error   { background: #fbe9e7; }
-.SyncBanner_syncing { background: #e3f2fd; }
-.SyncBannerIcon { font-size: 36px; line-height: 1; flex-shrink: 0; }
-.SyncBannerBody { display: flex; flex-direction: column; gap: 4px; }
-.SyncBannerTitle { font-size: 17px; font-weight: 600; color: #222; }
-.SyncBannerSub   { font-size: 13px; color: #555; line-height: 1.4; }
-.SyncBannerMode  { font-size: 12px; color: #888; margin-top: 2px; }
 
-.SyncProgressWrap  { display: flex; align-items: center; gap: 10px; padding: 0 4px 8px; }
-.SyncProgressTrack { flex: 1; height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden; }
-.SyncProgressFill  { height: 100%; background: #1976d2; border-radius: 3px; transition: width .3s; }
-.SyncProgressLabel { font-size: 12px; color: #666; white-space: nowrap; }
-
-.SyncModeRow { display: flex; gap: 12px; flex-wrap: wrap; }
-.SyncModeCard {
-	flex: 1; min-width: 200px; padding: 16px; border: 2px solid #e0e0e0;
-	border-radius: 10px; background: #fafafa; cursor: pointer;
-	display: flex; flex-direction: column; gap: 6px; text-align: left;
-	transition: border-color .2s, background .2s;
-	&:hover { border-color: #90caf9; }
+.SyncBanner_ok {
+	background: #e8f5e9;
 }
+
+.SyncBanner_warn {
+	background: #fff8e1;
+}
+
+.SyncBanner_error {
+	background: #fbe9e7;
+}
+
+.SyncBanner_syncing {
+	background: #e3f2fd;
+}
+
+.SyncBannerIcon {
+	font-size: 36px;
+	line-height: 1;
+	flex-shrink: 0;
+}
+
+.SyncBannerBody {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.SyncBannerTitle {
+	font-size: 17px;
+	font-weight: 600;
+	color: #222;
+}
+
+.SyncBannerSub {
+	font-size: 13px;
+	color: #555;
+	line-height: 1.4;
+}
+
+.SyncBannerMode {
+	font-size: 12px;
+	color: #888;
+	margin-top: 2px;
+}
+
+.SyncProgressWrap {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 4px 8px;
+}
+
+.SyncProgressTrack {
+	flex: 1;
+	height: 6px;
+	background: #e0e0e0;
+	border-radius: 3px;
+	overflow: hidden;
+}
+
+.SyncProgressFill {
+	height: 100%;
+	background: #1976d2;
+	border-radius: 3px;
+	transition: width .3s;
+}
+
+.SyncProgressLabel {
+	font-size: 12px;
+	color: #666;
+	white-space: nowrap;
+}
+
+.SyncModeRow {
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.SyncModeCard {
+	flex: 1;
+	min-width: 200px;
+	padding: 16px;
+	border: 2px solid #e0e0e0;
+	border-radius: 10px;
+	background: #fafafa;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	text-align: left;
+	transition: border-color .2s, background .2s;
+
+	&:hover {
+		border-color: #90caf9;
+	}
+}
+
 .SyncModeCard_on {
-	border-color: #1976d2; background: #e3f2fd;
+	border-color: #1976d2;
+	background: #e3f2fd;
 	box-shadow: 0 0 0 1px #1976d2;
 }
-.SyncModeCardIcon  { font-size: 24px; }
-.SyncModeCardTitle { font-size: 14px; font-weight: 600; color: #222; }
-.SyncModeCardDesc  { font-size: 12px; color: #666; line-height: 1.4; }
+
+.SyncModeCardIcon {
+	font-size: 24px;
+}
+
+.SyncModeCardTitle {
+	font-size: 14px;
+	font-weight: 600;
+	color: #222;
+}
+
+.SyncModeCardDesc {
+	font-size: 12px;
+	color: #666;
+	line-height: 1.4;
+}
 
 .SyncMetricGrid {
-	display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; width: 100%;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+	gap: 12px;
+	width: 100%;
 }
-.SyncMetric      { text-align: center; padding: 12px 8px; background: #f5f5f5; border-radius: 8px; }
-.SyncMetricValue { font-size: 20px; font-weight: 700; color: #333; }
-.SyncMetricLabel { font-size: 11px; color: #888; margin-top: 4px; }
 
-.SyncHint { font-size: 12px; color: #999; align-self: center; }
+.SyncMetric {
+	text-align: center;
+	padding: 12px 8px;
+	background: #f5f5f5;
+	border-radius: 8px;
+}
+
+.SyncMetricValue {
+	font-size: 20px;
+	font-weight: 700;
+	color: #333;
+}
+
+.SyncMetricLabel {
+	font-size: 11px;
+	color: #888;
+	margin-top: 4px;
+}
+
+.SyncHint {
+	font-size: 12px;
+	color: #999;
+	align-self: center;
+}
 
 .SyncResultGrid {
-	display: grid; grid-template-columns: auto 1fr; gap: 4px 16px;
-	font-size: 13px; color: #555;
-	& > span:nth-child(odd) { font-weight: 500; color: #333; }
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 4px 16px;
+	font-size: 13px;
+	color: #555;
+
+	&>span:nth-child(odd) {
+		font-weight: 500;
+		color: #333;
+	}
 }
 
 .SyncInfoBox {
-	background: #f5f7fa; border-left: 3px solid #90caf9; padding: 10px 14px;
-	font-size: 13px; color: #555; border-radius: 0 6px 6px 0; line-height: 1.5;
+	background: #f5f7fa;
+	border-left: 3px solid #90caf9;
+	padding: 10px 14px;
+	font-size: 13px;
+	color: #555;
+	border-radius: 0 6px 6px 0;
+	line-height: 1.5;
 }
 
-.SyncQueueList { display: flex; flex-direction: column; gap: 4px; }
+.SyncQueueList {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
 .SyncQueueItem {
-	display: flex; align-items: center; gap: 10px;
-	padding: 8px 12px; background: #fafafa; border-radius: 6px;
-	&:hover { background: #f0f0f0; }
-}
-.SyncQueueItemIcon { font-size: 18px; flex-shrink: 0; }
-.SyncQueueItemBody { flex: 1; min-width: 0; }
-.SyncQueueItemTitle { font-size: 13px; font-weight: 500; color: #333; }
-.SyncQueueItemMeta  { font-size: 11px; color: #999; }
-.SyncQueueItemDel {
-	background: none; border: none; cursor: pointer; font-size: 16px;
-	color: #bbb; padding: 2px 6px; border-radius: 4px;
-	&:hover { color: #e53935; background: #fce4ec; }
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 12px;
+	background: #fafafa;
+	border-radius: 6px;
+
+	&:hover {
+		background: #f0f0f0;
+	}
 }
 
-.SyncEmptyState { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; gap: 8px; }
-.SyncEmptyIcon  { font-size: 48px; }
-.SyncEmptyTitle { font-size: 16px; font-weight: 600; color: #333; }
-.SyncEmptyDesc  { font-size: 13px; color: #888; text-align: center; max-width: 320px; line-height: 1.5; }
+.SyncQueueItemIcon {
+	font-size: 18px;
+	flex-shrink: 0;
+}
+
+.SyncQueueItemBody {
+	flex: 1;
+	min-width: 0;
+}
+
+.SyncQueueItemTitle {
+	font-size: 13px;
+	font-weight: 500;
+	color: #333;
+}
+
+.SyncQueueItemMeta {
+	font-size: 11px;
+	color: #999;
+}
+
+.SyncQueueItemDel {
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 16px;
+	color: #bbb;
+	padding: 2px 6px;
+	border-radius: 4px;
+
+	&:hover {
+		color: #e53935;
+		background: #fce4ec;
+	}
+}
+
+.SyncEmptyState {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 40px 20px;
+	gap: 8px;
+}
+
+.SyncEmptyIcon {
+	font-size: 48px;
+}
+
+.SyncEmptyTitle {
+	font-size: 16px;
+	font-weight: 600;
+	color: #333;
+}
+
+.SyncEmptyDesc {
+	font-size: 13px;
+	color: #888;
+	text-align: center;
+	max-width: 320px;
+	line-height: 1.5;
+}
 
 .SyncConflictCard {
-	border: 1px solid #ffcc80; border-radius: 8px; padding: 16px; background: #fffde7;
-	& + & { margin-top: 12px; }
-}
-.SyncConflictHeader  { font-size: 14px; font-weight: 600; color: #e65100; margin-bottom: 10px; }
-.SyncConflictCols    { display: flex; gap: 12px; flex-wrap: wrap; }
-.SyncConflictCol     { flex: 1; min-width: 220px; }
-.SyncConflictColHead { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px; }
-.SyncConflictPre     { font-size: 11px; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 8px; overflow: auto; max-height: 200px; white-space: pre-wrap; word-break: break-all; }
+	border: 1px solid #ffcc80;
+	border-radius: 8px;
+	padding: 16px;
+	background: #fffde7;
 
-.SyncStorageTable { border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden; font-size: 13px; }
-.SyncStorageHead  { display: flex; gap: 4px; padding: 6px 10px; background: #f5f5f5; font-weight: 600; color: #666; font-size: 12px; }
-.SyncStorageRow   {
-	display: flex; gap: 4px; padding: 6px 10px; align-items: center; cursor: pointer;
-	border-top: 1px solid #f0f0f0;
-	&:hover { background: #f9f9f9; }
+	&+& {
+		margin-top: 12px;
+	}
 }
+
+.SyncConflictHeader {
+	font-size: 14px;
+	font-weight: 600;
+	color: #e65100;
+	margin-bottom: 10px;
+}
+
+.SyncConflictCols {
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.SyncConflictCol {
+	flex: 1;
+	min-width: 220px;
+}
+
+.SyncConflictColHead {
+	font-size: 12px;
+	font-weight: 600;
+	color: #666;
+	margin-bottom: 4px;
+}
+
+.SyncConflictPre {
+	font-size: 11px;
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	border-radius: 4px;
+	padding: 8px;
+	overflow: auto;
+	max-height: 200px;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.SyncStorageTable {
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	overflow: hidden;
+	font-size: 13px;
+}
+
+.SyncStorageHead {
+	display: flex;
+	gap: 4px;
+	padding: 6px 10px;
+	background: #f5f5f5;
+	font-weight: 600;
+	color: #666;
+	font-size: 12px;
+}
+
+.SyncStorageRow {
+	display: flex;
+	gap: 4px;
+	padding: 6px 10px;
+	align-items: center;
+	cursor: pointer;
+	border-top: 1px solid #f0f0f0;
+
+	&:hover {
+		background: #f9f9f9;
+	}
+}
+
 .SyncInlineBtn {
-	background: none; border: none; cursor: pointer; font-size: 13px; padding: 2px 4px;
-	opacity: 0.4; border-radius: 4px;
-	&:hover { opacity: 1; background: #fce4ec; }
-	&:disabled { opacity: 0.15; cursor: default; }
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 13px;
+	padding: 2px 4px;
+	opacity: 0.4;
+	border-radius: 4px;
+
+	&:hover {
+		opacity: 1;
+		background: #fce4ec;
+	}
+
+	&:disabled {
+		opacity: 0.15;
+		cursor: default;
+	}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1861,8 +2308,15 @@ body {
 	color: $color6;
 	outline: none;
 	cursor: pointer;
-	&:focus { border-color: $color3; }
-	&:disabled { opacity: 0.5; cursor: default; }
+
+	&:focus {
+		border-color: $color3;
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
 }
 
 // ── Статусы ───────────────────────────────────────────────────────────────
@@ -1933,10 +2387,24 @@ body {
 
 // ── Печать ────────────────────────────────────────────────────────────────
 @media print {
-	.PrintPreview { overflow: visible; }
-	.PrintToolbar, .PrintError, .PrintLoading { display: none !important; }
-	.PrintViewport { overflow: visible; background: none; padding: 0; }
-	.PrintIframePdf, .PrintIframeDoc {
+	.PrintPreview {
+		overflow: visible;
+	}
+
+	.PrintToolbar,
+	.PrintError,
+	.PrintLoading {
+		display: none !important;
+	}
+
+	.PrintViewport {
+		overflow: visible;
+		background: none;
+		padding: 0;
+	}
+
+	.PrintIframePdf,
+	.PrintIframeDoc {
 		width: 100% !important;
 		height: 100vh !important;
 		max-width: none;

@@ -13,7 +13,6 @@ import { getTranslateColumn } from 'src/i18';
 import { getFormatColumnValue, getTextAlignByColumnType } from './services';
 
 import Modal from '../Modal';
-import { Group } from 'src/components/UI';
 import { Button } from '../Button';
 import { LoadingSpinner } from '../UI';
 import Toolbar from 'src/components/Toolbar';
@@ -57,7 +56,6 @@ import {
   useState,
 } from 'react';
 import { TPane } from 'src/app/types';
-import { last } from 'lodash';
 
 export type TOpenModelFormProps = Partial<TPane>;
 export type TypeModelProps = TableContextProps;
@@ -1248,7 +1246,7 @@ const TableConfigColumns: FC<TypeTableConfigColumnsProps> = ({ columns, setColum
       <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd} onDragStart={onDragStart}>
         <SortableContext items={dndItems} strategy={verticalListSortingStrategy}>
           <ul className={styles.CheckboxList}>
-            {columns.filter(col => col.inlist).map(column => (
+            {columns.filter(col => col.inlist !== false).map(column => (
               <TableConfigColumnsItem
                 key={column.identifier}
                 column={column}

@@ -3,6 +3,7 @@ import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { Field } from "src/components/Field";
+import { getFormatDateOnly } from "src/utils/main.module";
 import LookupField from "src/components/Field/LookupField";
 import { ContractsForm } from "./index";
 import { translate } from "src/i18";
@@ -84,7 +85,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
           />
         );
       }
-      return <span>{typeof row.startDate === "string" ? row.startDate.slice(0, 10) : ""}</span>;
+      return <span>{typeof row.startDate === "string" ? getFormatDateOnly(row.startDate) : ""}</span>;
     }
     if (col.identifier === "endDate") {
       if (ctx.inlineEditing) {
@@ -99,7 +100,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
           />
         );
       }
-      return <span>{typeof row.endDate === "string" ? row.endDate.slice(0, 10) : ""}</span>;
+      return <span>{typeof row.endDate === "string" ? getFormatDateOnly(row.endDate) : ""}</span>;
     }
     if (col.identifier === "counterparty.shortName") {
       if (ctx.inlineEditing) {

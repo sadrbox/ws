@@ -17,8 +17,8 @@ import ModelList from "src/components/ModelList";
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
 
-interface TFields { id?: number; uuid?: string; shortName: string; sku: string; brandUuid: string; brandName: string; }
-const DEFAULT_FIELDS: TFields = { shortName: "", sku: "", brandUuid: "", brandName: "" };
+interface TFields { id?: number; uuid?: string; shortName: string; sku: string; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; }
+const DEFAULT_FIELDS: TFields = { shortName: "", sku: "", brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "" };
 
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Product");
@@ -28,10 +28,11 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       ...(prev ?? DEFAULT_FIELDS), ...d,
       shortName: d.shortName ?? "", sku: d.sku ?? "",
       brandUuid: d.brandUuid ?? "", brandName: d.brand?.shortName ?? "",
+      unitOfMeasureUuid: d.unitOfMeasureUuid ?? "", unitOfMeasureName: d.unitOfMeasure?.shortName ?? "",
     }),
     buildPayload: (fd) => {
       if (!fd.shortName?.trim()) return "Наименование обязательно";
-      return { shortName: fd.shortName.trim(), sku: fd.sku?.trim() || null, brandUuid: fd.brandUuid || null };
+      return { shortName: fd.shortName.trim(), sku: fd.sku?.trim() || null, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
   });
@@ -46,6 +47,10 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
             columns={[{ key: "shortName", label: "Наименование" }]}
             onSelect={(uuid, display) => form.setFields({ brandUuid: uuid, brandName: display } as Partial<TFields>)}
             onClear={() => form.setFields({ brandUuid: "", brandName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+          <LookupField label="Ед. изм." name={`${form.formUid}_unitOfMeasure`} minWidth="200px" value={form.fields.unitOfMeasureUuid} displayValue={form.fields.unitOfMeasureName} endpoint="unit-of-measures" displayField="shortName"
+            columns={[{ key: "shortName", label: "Наименование" }, { key: "code", label: "Код" }]}
+            onSelect={(uuid, display) => form.setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display } as Partial<TFields>)}
+            onClear={() => form.setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" } as Partial<TFields>)} disabled={form.isLoading} />
         </div></Group>
         {form.isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
           <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />

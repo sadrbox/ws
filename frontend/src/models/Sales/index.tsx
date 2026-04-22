@@ -13,7 +13,8 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { getFormatDateOnly } from "src/utils/main.module";
 import ModelFormWrapper from "src/components/ModelFormWrapper";
 import ModelList from "src/components/ModelList";
 
@@ -29,7 +30,7 @@ const STATUS_OPTIONS = [
 
 interface TFields {
   id?: number; uuid?: string;
-  documentNumber: string; documentDate: string; description: string; amount: string; status: string; posted: boolean;
+  documentNumber: string; date: string; description: string; amount: string; status: string; posted: boolean;
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
@@ -38,7 +39,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  documentNumber: "", documentDate: "", description: "", amount: "", status: "draft", posted: false,
+  documentNumber: "", date: "", description: "", amount: "", status: "draft", posted: false,
   organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "", contractUuid: "", contractName: "",
   warehouseUuid: "", warehouseName: "",
   vatAmount: "0", discountAmount: "0", amountWithoutVat: "0",
@@ -73,16 +74,18 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
-          unitOfMeasure: r.unitOfMeasure ?? "шт",
-          vatRate: r.vatRate ?? 12,
+          unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
+          vatRateUuid: r.vatRateUuid ?? null,
+          vatRate: r.vatRate ?? 0,
           discountPercent: r.discountPercent ?? 0,
         }),
         updatePayload: (r: any) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
-          unitOfMeasure: r.unitOfMeasure ?? "шт",
-          vatRate: r.vatRate ?? 12,
+          unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
+          vatRateUuid: r.vatRateUuid ?? null,
+          vatRate: r.vatRate ?? 0,
           discountPercent: r.discountPercent ?? 0,
         }),
         extraSkipFields: ["saleUuid"],
@@ -90,7 +93,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      documentNumber: d.documentNumber ?? "", documentDate: d.documentDate?.slice(0, 10) ?? "",
+      documentNumber: d.documentNumber ?? "", date: d.date?.slice(0, 10) ?? "",
       description: d.description ?? "", amount: d.amount != null ? String(d.amount) : "",
       status: d.status ?? "draft", posted: d.posted === true,
       organizationUuid: d.organizationUuid ?? "",
@@ -106,7 +109,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       amountWithoutVat: d.amountWithoutVat != null ? String(d.amountWithoutVat) : "0",
     }),
     buildPayload: (fd) => ({
-      documentNumber: fd.documentNumber?.trim() || null, documentDate: fd.documentDate || null,
+      documentNumber: fd.documentNumber?.trim() || null, date: fd.date || null,
       description: fd.description?.trim() || null, amount: fd.amount ? parseFloat(fd.amount) : null,
       status: fd.status || "draft", posted: fd.posted === true,
       organizationUuid: fd.organizationUuid || null,
@@ -117,7 +120,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       discountAmount: fd.discountAmount ? parseFloat(fd.discountAmount) : 0,
       amountWithoutVat: fd.amountWithoutVat ? parseFloat(fd.amountWithoutVat) : 0,
     }),
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, FORM_LABEL, saved),
+    buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
     afterLoad: invalidateSubTables,
     afterSave: async () => { setTimeout(invalidateSubTables, 0); },
   });
@@ -138,7 +141,31 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     }
   }, [form.setField, form.setFields]);
 
-  /** При выборе договора — автозаполняем Организацию и Контрагента из данных договора */
+  /** extraParams для LookupField Договор:
+   * - Организация выбрана → фильтруем по ней
+   * - Организация НЕ выбрана, Контрагент НЕ выбран → только договора без орг (organizationUuid=null)
+   * - Организация НЕ выбрана, Контрагент выбран → не фильтруем по орг (показываем договора контрагента из любой орг)
+   * - Контрагент выбран → фильтруем по нему (бэкенд добавит OR null)
+   * - Контрагент НЕ выбран → только договора без контрагента (counterpartyUuid=null)
+   */
+  const contractExtraParams = useMemo(() => {
+    const hasOrg = !!form.fields.organizationUuid;
+    const hasCpty = !!form.fields.counterpartyUuid;
+    const p: Record<string, string> = {};
+    if (hasOrg) {
+      p.organizationUuid = form.fields.organizationUuid;
+    } else if (!hasCpty) {
+      // нет ни орг, ни контрагента → только общие договора без организации
+      p.organizationUuid = "null";
+    }
+    // hasCpty && !hasOrg → не передаём organizationUuid (договора контрагента из любой орг)
+    if (hasCpty) {
+      p.counterpartyUuid = form.fields.counterpartyUuid;
+    } else {
+      p.counterpartyUuid = "null";
+    }
+    return p;
+  }, [form.fields.organizationUuid, form.fields.counterpartyUuid]);
   const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
     const updates: Partial<TFields> = {
       contractUuid: uuid,
@@ -157,38 +184,68 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     { id: "tab-details", label: translate("general") || "Основное", component: (
-      <div className={styles.FormBodyParts}>
-        <Group align="row" gap="12px" className={styles.Form}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "flex-end" }}>
-              <FieldDate label="Дата" name={`${form.formUid}_docDate`} value={form.fields.documentDate} onChange={e => form.setField("documentDate", e.target.value)} disabled={form.isLoading} width="200px" />
-              <div style={{ display: "flex", alignItems: "center", gap: 6, height: 28, whiteSpace: "nowrap" }}>
-                <input type="checkbox" id={`${form.formUid}_posted`} checked={form.fields.posted} onChange={e => form.setField("posted", e.target.checked as any)} disabled={form.isLoading} />
-                <label htmlFor={`${form.formUid}_posted`} style={{ cursor: "pointer", userSelect: "none" }}>Проведён</label>
+      <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+        <div className={styles.FormBodyParts}>
+          {/* ── Левая колонка: поля ── */}
+          <Group align="row" gap="12px" className={styles.Form} style={{ flex: 1 }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+
+              {/* Строка 1: Дата · Проведён · Статус */}
+              <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
+                <FieldDate label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="140px" />
+                <label style={{ display: "flex", alignItems: "center", gap: 6, height: 28, cursor: "pointer", userSelect: "none", whiteSpace: "nowrap", paddingBottom: 1 }}>
+                  <input type="checkbox" id={`${form.formUid}_posted`} checked={form.fields.posted} onChange={e => form.setField("posted", e.target.checked as any)} disabled={form.isLoading} />
+                  Проведён
+                </label>
+                <div style={{ flex: 1, minWidth: 120, maxWidth: 160 }}>
+                  <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+                </div>
+              </div>
+
+              {/* Организация — во всю ширину */}
+              <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} width="100%" />
+
+              {/* Контрагент — во всю ширину */}
+              <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} width="100%" />
+
+              {/* Склад | Договор — в одну строку, по 50% */}
+              <div style={{ display: "flex", flexDirection: "row", gap: "12px", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <LookupField label="Склад" name={`${form.formUid}_wh`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} width="100%" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                </div>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} width="100%" extraParams={contractExtraParams} />
+                </div>
+              </div>
+
+              {/* Комментарий */}
+              <Field label="Комментарий" name={`${form.formUid}_desc`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
+            </div>
+          </Group>
+
+          {/* ── Правая колонка: итоги ── */}
+          <div style={{ display: "flex", flexDirection: "column", width: 168, flexShrink: 0, padding: "12px 0 0 0" }}>
+            <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13 }}>
+              {([
+                { label: "Без НДС", value: form.fields.amountWithoutVat },
+                { label: "НДС",     value: form.fields.vatAmount },
+                { label: "Скидка",  value: form.fields.discountAmount },
+              ] as const).map(({ label, value }) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
+                  <span>{label}</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{value || "0"}</span>
+                </div>
+              ))}
+              <div style={{ borderTop: "1px solid #e5e7eb", margin: "2px 0 0" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
+                <span>Итого</span>
+                <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" />
-              <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" />
-            </div>
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-              <LookupField label="Склад" name={`${form.formUid}_wh`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-            </div>
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "flex-end" }}>
-              <div style={{ width: 160 }}>
-                <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
-              <Field label="Сумма без НДС" name={`${form.formUid}_amtNoVat`} value={form.fields.amountWithoutVat} disabled width="140px" />
-              <Field label="НДС" name={`${form.formUid}_vatAmt`} value={form.fields.vatAmount} disabled width="120px" />
-              <Field label="Скидка" name={`${form.formUid}_discAmt`} value={form.fields.discountAmount} disabled width="120px" />
-              <Field label="Итого" name={`${form.formUid}_amount`} value={form.fields.amount} disabled width="140px" />
-            </div>
-            <Field label="Комментарий" name={`${form.formUid}_desc`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
           </div>
-        </Group>
+        </div>
+
+        {/* ID / UUID — только в режиме редактирования */}
         {form.isEditMode && (
           <>
             <Divider />
@@ -211,7 +268,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         Сохраните документ для добавления товаров
       </div>
     )},
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, saleItems]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems]);
 
   return (
     <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
@@ -223,7 +280,9 @@ SalesForm.displayName = "SalesForm";
 
 const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={SalesForm}
-    getLabel={(d) => d?.id ? String(d.id) : "?"} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => {
+      return d?.date ? getFormatDateOnly(String(d.date)) : "";
+    }} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
 );
 SalesList.displayName = "SalesList";

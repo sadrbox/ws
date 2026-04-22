@@ -30,7 +30,7 @@
 		"type": "string",
 		"name": "Наименование",
 		"width": "300px",
-		"minWidth": "150px",
+		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Наименование бренда",
 		"visible": true,

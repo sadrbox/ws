@@ -34,8 +34,8 @@ interface ModelListProps {
   columnsJson: any;
   /** Компонент формы */
   FormComponent: FC<any>;
-  /** Извлечение метки для панели из данных строки */
-  getLabel: (data: TDataItem | undefined) => string;
+  /** Извлечение метки для панели из данных строки (необязательно — по умолчанию `() => ""`) */
+  getLabel?: (data: TDataItem | undefined) => string;
   /** Сортировка по умолчанию */
   defaultSort?: Record<string, "asc" | "desc">;
   /** variant таблицы */
@@ -46,6 +46,12 @@ interface ModelListProps {
   ownerUuid?: string;
   /** Фильтр по владельцу — имя FK-поля */
   ownerField?: string;
+  /**
+   * Дополнительные фильтры (помимо ownerUuid/ownerField).
+   * Каждый ключ — имя поля, значение — строка для сравнения `equals`.
+   * Используется, например, для LookupField extraParams в ContractsList.
+   */
+  extraFilter?: Record<string, string>;
   /** Включить фильтр по дате */
   enableDateRange?: boolean;
 }
@@ -55,12 +61,13 @@ const ModelList: FC<ModelListProps> = ({
   listName,
   columnsJson,
   FormComponent,
-  getLabel,
+  getLabel = () => "",
   defaultSort = { id: "asc" } as Record<string, "asc" | "desc">,
   variant = "default",
   onSelectItem,
   ownerUuid,
   ownerField,
+  extraFilter,
   enableDateRange = false,
 }) => {
   const isPartOf = !!ownerUuid;
@@ -69,9 +76,15 @@ const ModelList: FC<ModelListProps> = ({
   const t = (key: string) => translate(key) || key;
 
   const ownerFilter = useMemo(() => {
-    if (ownerUuid && ownerField) return { [ownerField]: { value: ownerUuid, operator: "equals" } };
-    return undefined;
-  }, [ownerUuid, ownerField]);
+    const f: Record<string, { value: unknown; operator: string }> = {};
+    if (ownerUuid && ownerField) f[ownerField] = { value: ownerUuid, operator: "equals" };
+    if (extraFilter) {
+      for (const [key, val] of Object.entries(extraFilter)) {
+        if (val) f[key] = { value: val, operator: "equals" };
+      }
+    }
+    return Object.keys(f).length > 0 ? f : undefined;
+  }, [ownerUuid, ownerField, extraFilter]);
 
   const { error, refetch, buildTableProps } = useModelListState({
     model: endpoint,
@@ -88,9 +101,10 @@ const ModelList: FC<ModelListProps> = ({
     const newData = !isEdit && ownerUuid && ownerField
       ? { [ownerField]: ownerUuid } as unknown as TDataItem
       : d;
+    const listTitle = t(componentName) || componentName;
     const label = isEdit
-      ? makePaneLabelFromData(componentName, componentName, d, getLabel(d))
-      : makePaneLabelFromData(componentName, componentName);
+      ? makePaneLabelFromData(componentName, listTitle, d, getLabel(d))
+      : makePaneLabelFromData(componentName, listTitle);
     addPane({
       label,
       component: FormComponent,
@@ -114,7 +128,9 @@ const ModelList: FC<ModelListProps> = ({
     );
   }
 
-  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange })} />;
+  return <div style={{ padding: "6px", height: '100%' }}>
+    <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange })} />
+  </div>;
 };
 
 ModelList.displayName = "ModelList";

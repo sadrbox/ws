@@ -43,28 +43,29 @@ const Tabs: React.FC<TypeTabs> = ({
       className={styles.TabsWrapper}
       role="tablist"
     >
-      {/* Tab Headers */}
-      <div className={styles.TabsHeader}>
-        {/* <Divider /> */}
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
+      {/* Tab Headers — скрываем если таб только один */}
+      {tabs.length > 1 && (
+        <div className={styles.TabsHeader}>
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
 
-          return (
-            <button
-              key={tab.id}
-              id={`tab-${tab.id}`}
-              className={`${styles.TabsLabel} ${isActive ? styles.active : ''}`}
-              role="tab"
-              aria-selected={isActive}
-              aria-controls={`panel-${tab.id}`}
-              tabIndex={isActive ? 0 : -1}
-              onClick={() => handleTabClick(tab.id)}
-            >
-              <span className={styles.labelText}>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+            return (
+              <button
+                key={tab.id}
+                id={`tab-${tab.id}`}
+                className={`${styles.TabsLabel} ${isActive ? styles.active : ''}`}
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`panel-${tab.id}`}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => handleTabClick(tab.id)}
+              >
+                <span className={styles.labelText}>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Tab Content */}
       <div className={styles.TabsBody}>

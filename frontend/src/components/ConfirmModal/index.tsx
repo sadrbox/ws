@@ -1,41 +1,29 @@
 import { FC } from "react";
-import ReactDOM from "react-dom";
 import type { ConfirmState } from "src/hooks/useConfirm";
-import { Button } from "src/components/Button";
-import styles from "src/components/Modal/Modal.module.scss";
+// Button is provided by Modal's buttons area
+import Modal from "src/components/Modal";
 
 /**
- * Модальное окно подтверждения — замена window.confirm().
- * Используется в паре с хуком useConfirm.
+ * ConfirmModal now uses shared Modal component so it benefits from
+ * focus-trap, centralized ESC handling and body scroll lock.
  */
 const ConfirmModal: FC<ConfirmState> = ({ isOpen, message, onConfirm, onCancel }) => {
   if (!isOpen) return null;
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onCancel();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onCancel();
-    }
-  };
-
-  return ReactDOM.createPortal(
-    <div className={styles.ModalBackground} onClick={handleBackdropClick} onKeyDown={handleKeyDown}>
-      <div className={styles.ModalWrapper} style={{ maxWidth: 420 }}>
-        <div className={styles.ModalButtons}>
-          <Button onClick={onConfirm} variant="primary">Да</Button>
-          <Button onClick={onCancel} variant="secondary">Отмена</Button>
-        </div>
-        <div className={styles.ModalTitle}>Подтверждение</div>
-        <div className={styles.ModalBody}>
-          <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{message}</p>
-        </div>
+  return (
+    <Modal
+      title="Подтверждение"
+      onClose={onCancel}
+      style={{ maxWidth: 420 }}
+      buttons={[
+        { label: "Да", onClick: onConfirm, variant: "secondary" },
+        { label: "Отмена", onClick: onCancel, variant: "secondary" },
+      ]}
+    >
+      <div>
+        <p style={{ margin: 0, whiteSpace: "pre-wrap" }} dangerouslySetInnerHTML={{ __html: message }} />
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 };
 

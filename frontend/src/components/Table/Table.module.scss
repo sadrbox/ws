@@ -30,11 +30,6 @@
 	}
 }
 
-/* Blur utility */
-.blur5 {
-	filter: blur(5px);
-}
-
 /* Table layout containers */
 .TableWrapper {
 	container-type: size;
@@ -42,6 +37,7 @@
 	flex-direction: column;
 	flex: 1;
 	gap: 6px;
+	// padding:6px;
 	height: 100%;
 	overflow: hidden;
 	min-height: 296px;
@@ -262,11 +258,7 @@ tbody {
 				user-select: none;
 				border: 1px solid #fff;
 
-				// Когда input внутри ячейки получает фокус — подсветить ячейку
-				&:focus-within {
-					// background: red !important;
-					// border-color: $color34;
-				}
+
 
 				& > input[type="text"] {
 					width: 100%;

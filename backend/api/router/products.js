@@ -82,7 +82,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			orderBy,
-			include: { brand: true },
+			include: { brand: true, unitOfMeasure: true },
 		};
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };
@@ -118,7 +118,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const item = await prisma[MODEL].findUnique({
 			where: w,
-			include: { brand: true },
+			include: { brand: true, unitOfMeasure: true },
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
@@ -132,7 +132,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { shortName, sku, brandUuid } = req.body;
+		const { shortName, sku, brandUuid, unitOfMeasureUuid } = req.body;
 		if (!shortName?.trim())
 			return res
 				.status(400)
@@ -142,8 +142,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				shortName: shortName.trim(),
 				sku: sku?.trim() || null,
 				brandUuid: brandUuid || null,
+				unitOfMeasureUuid: unitOfMeasureUuid || null,
 			},
-			include: { brand: true },
+			include: { brand: true, unitOfMeasure: true },
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -160,7 +161,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
-		const strFields = ["shortName", "sku", "brandUuid"];
+		const strFields = ["shortName", "sku", "brandUuid", "unitOfMeasureUuid"];
 		for (const f of strFields) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
@@ -168,7 +169,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
-			include: { brand: true },
+			include: { brand: true, unitOfMeasure: true },
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

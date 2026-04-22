@@ -6,7 +6,7 @@ const router = express.Router();
 
 const MODEL = "sale";
 const ROUTE = "sales";
-const TEXT_FIELDS = ["documentNumber", "description"];
+const TEXT_FIELDS = ["description"];
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -131,8 +131,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
 		const {
-			documentNumber,
-			documentDate,
+			date,
 			description,
 			amount,
 			amountWithoutVat,
@@ -147,8 +146,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
-				documentNumber: documentNumber?.trim() ?? null,
-				documentDate: documentDate ? new Date(documentDate) : new Date(),
+				date: date ? new Date(date) : new Date(),
 				description: description?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
 				amountWithoutVat: amountWithoutVat != null ? parseFloat(amountWithoutVat) : null,
@@ -178,7 +176,6 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
 		const strFields = [
-			"documentNumber",
 			"description",
 			"status",
 			"organizationUuid",
@@ -191,9 +188,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
 		if (req.body.posted !== undefined) data.posted = req.body.posted === true;
-		if (req.body.documentDate !== undefined)
-			data.documentDate = req.body.documentDate
-				? new Date(req.body.documentDate)
+		if (req.body.date !== undefined)
+			data.date = req.body.date
+				? new Date(req.body.date)
 				: null;
 		if (req.body.amount !== undefined)
 			data.amount =

@@ -107,12 +107,26 @@ router.get("/contracts", async (req, res) => {
 		}
 
 		// ── Фильтрация по organizationUuid / counterpartyUuid ────
+		// Значение "null" (строка) означает «только записи без значения» (IS NULL).
+		// Значение uuid → фильтр по конкретной записи.
+		// Не передан параметр → нет фильтра.
 		const fkFilter = {};
 		if (typeof req.query.organizationUuid === "string" && req.query.organizationUuid.trim()) {
-			fkFilter.organizationUuid = req.query.organizationUuid.trim();
+			const orgVal = req.query.organizationUuid.trim();
+			fkFilter.organizationUuid = orgVal === "null" ? null : orgVal;
 		}
 		if (typeof req.query.counterpartyUuid === "string" && req.query.counterpartyUuid.trim()) {
-			fkFilter.counterpartyUuid = req.query.counterpartyUuid.trim();
+			const cptyVal = req.query.counterpartyUuid.trim();
+			if (cptyVal === "null") {
+				// только договора без контрагента
+				fkFilter.counterpartyUuid = null;
+			} else {
+				// договора этого контрагента ИЛИ общие (без контрагента)
+				fkFilter.OR = [
+					{ counterpartyUuid: cptyVal },
+					{ counterpartyUuid: null },
+				];
+			}
 		}
 
 		const baseWhere = {

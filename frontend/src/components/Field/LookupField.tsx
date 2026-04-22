@@ -1,7 +1,7 @@
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styles from "./Field.module.scss";
-import { apiClient } from "src/services/api/client";
+import { fetchList } from "src/services/offlineDataService";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
 import { useAppContext } from "src/app";
 import SelectPaneWrapper from "./SelectPaneWrapper";
@@ -11,6 +11,8 @@ import type { FieldVariant } from "./index";
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
+
+export type LookupActionType = "clear" | "open" | "quickselect" | "list";
 
 export interface LookupFieldProps {
   /** Заголовок поля */
@@ -50,6 +52,9 @@ export interface LookupFieldProps {
   /** Дополнительные query-параметры для фильтрации (передаются в autocomplete и SelectPaneWrapper).
    *  Например: { organizationUuid: "abc-123" } → ?organizationUuid=abc-123 */
   extraParams?: Record<string, string>;
+  /** Какие кнопки показывать. По умолчанию — все доступные.
+   *  Пример: ["quickselect"] — только кнопка быстрого выбора. */
+  visibleActions?: LookupActionType[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -101,6 +106,7 @@ const LookupField: FC<LookupFieldProps> = ({
   variant = 'default',
   secondaryFields,
   extraParams,
+  visibleActions,
 }) => {
   // Подавляем неиспользуемые переменные совместимости
   void _columns;
@@ -162,12 +168,10 @@ const LookupField: FC<LookupFieldProps> = ({
     }
     let cancelled = false;
     setIsLoading(true);
-    apiClient
-      .get(`/${endpoint}`, { params: { search: debouncedText, limit: 10, ...extraParams } })
-      .then((res) => {
+    fetchList(endpoint, undefined, { search: debouncedText, limit: 10, ...extraParams })
+      .then((result) => {
         if (cancelled) return;
-        const items = res.data?.items ?? res.data?.data ?? res.data ?? [];
-        setSuggestions(Array.isArray(items) ? items : []);
+        setSuggestions(result.items as any[]);
         setIsDropdownOpen(true);
         setActiveIndex(-1);
       })
@@ -215,6 +219,20 @@ const LookupField: FC<LookupFieldProps> = ({
       },
     });
   }, [disabled, addPane, label, endpoint, listComponent, displayField, onSelect, extraParams]);
+
+  // ── Быстрый выбор — загружает все записи и открывает inline dropdown ──
+  const handleQuickSelect = useCallback(() => {
+    if (disabled) return;
+    setIsLoading(true);
+    fetchList(endpoint, undefined, { limit: 200, ...extraParams })
+      .then((result) => {
+        setSuggestions(result.items as any[]);
+        setIsDropdownOpen(true);
+        setActiveIndex(-1);
+      })
+      .catch(() => setSuggestions([]))
+      .finally(() => setIsLoading(false));
+  }, [disabled, endpoint, extraParams]);
 
   const handleSelectItem = useCallback((item: Record<string, any>) => {
     const uuid = item.uuid as string;
@@ -309,16 +327,24 @@ const LookupField: FC<LookupFieldProps> = ({
   // Действия для кнопок
   const fieldActions = useMemo(() => {
     if (disabled) return [];
-    const acts: { type: "clear" | "list" | "open"; onClick: () => void }[] = [];
-    if (value || inputText) {
+    const acts: { type: LookupActionType; onClick: () => void }[] = [];
+    const allowed = visibleActions; // undefined = показывать все
+    const show = (t: LookupActionType) => !allowed || allowed.includes(t);
+
+    if (show("clear") && (value || inputText)) {
       acts.push({ type: "clear", onClick: handleClear });
     }
-    if (value && getByEndpoint(endpoint)) {
+    if (show("open") && value && getByEndpoint(endpoint)) {
       acts.push({ type: "open", onClick: handleOpenItemForm });
     }
-    acts.push({ type: "list", onClick: handleOpenModal });
+    if (show("quickselect")) {
+      acts.push({ type: "quickselect", onClick: handleQuickSelect });
+    }
+    if (show("list")) {
+      acts.push({ type: "list", onClick: handleOpenModal });
+    }
     return acts;
-  }, [disabled, value, inputText, endpoint, handleClear, handleOpenItemForm, handleOpenModal]);
+  }, [disabled, visibleActions, value, inputText, endpoint, handleClear, handleOpenItemForm, handleQuickSelect, handleOpenModal]);
 
   // Получить отображаемое поле элемента
   const getItemDisplay = useCallback((item: Record<string, any>) => {
@@ -411,6 +437,14 @@ const LookupField: FC<LookupFieldProps> = ({
                       </svg>
                     ),
                     alt: "Очистить",
+                  },
+                  quickselect: {
+                    img: (
+                      <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4,6 L8,10 L12,6" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ),
+                    alt: "Быстрый выбор",
                   },
                   list: {
                     img: (

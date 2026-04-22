@@ -1,10 +1,7 @@
 import React, {
-  createContext,
   isValidElement,
-  PropsWithChildren,
   ReactElement,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -35,6 +32,9 @@ import ConfirmModal from "src/components/ConfirmModal";
 import { startHealthCheck, stopHealthCheck } from "src/services/networkStatus";
 import { clearAllFormStores } from "src/hooks/useFormSessionStore";
 import { clearAllEntries as clearOfflineQueue } from "src/services/offlineQueue";
+import { useAppContext, AppContextProvider } from "src/app/context";
+import { SalesList } from "src/models/Sales";
+export { useAppContext, AppContextProvider };
 
 export const getComponentName = (node: TComponentNode): string => {
   if (node == null) return "Unknown";
@@ -67,20 +67,6 @@ export const getUniqId = (component: TComponentNode, data?: TDataItem): string =
   return `${name}-${idPart}`;
 };
 
-const AppContext = createContext<TypeAppContextProps | undefined>(undefined);
-
-export const useAppContext = (): TypeAppContextProps => {
-  const ctx = useContext(AppContext);
-  if (!ctx) {
-    throw new Error("useAppContext must be used within AppContextProvider");
-  }
-  return ctx;
-};
-
-const AppContextProvider: React.FC<PropsWithChildren<{ value: TypeAppContextProps }>> = ({
-  children,
-  value,
-}) => <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 
 // ────────────────────────────────────────────────
 // Главный компонент приложения
@@ -377,8 +363,8 @@ const App: React.FC = () => {
   useEffect(() => {
     // Открываем ActivityHistoriesList при монтировании приложения
     addPane({
-      component: ActivityHistoriesList,
-      label: getTranslation("ActivityHistoriesList") || "ActivityHistoriesList",
+      component: SalesList,
+      // label: getTranslation("ActivityHistoriesList") || "ActivityHistoriesList",
     });
   }, []);
 

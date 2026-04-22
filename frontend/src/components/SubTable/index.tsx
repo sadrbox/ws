@@ -600,7 +600,13 @@ const SubTable: FC<SubTableProps> = ({
     setOpCount(c => c + 1);
     try {
       const { default: apiClient } = await import("src/services/api/client");
-      await apiClient.put(`/${model}/${row.uuid}`, { [fkField]: value });
+      // Включаем примитивные значения из extraPatch (числа, строки, null)
+      // Вложенные объекты (relations) не отправляем на сервер
+      const primitiveExtras: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(extraPatch ?? {})) {
+        if (v === null || typeof v !== "object") primitiveExtras[k] = v;
+      }
+      await apiClient.put(`/${model}/${row.uuid}`, { [fkField]: value, ...primitiveExtras });
       refetch();
     } catch (err: any) {
       const serverError = err.response?.data?.message || "Ошибка сохранения";

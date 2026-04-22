@@ -67,8 +67,20 @@ function createFormStore<T>(storageKey: string, initialValue: T) {
     listeners.clear();
   }
 
-  /** Были ли данные восстановлены из sessionStorage при создании store? */
-  const hadStoredData = currentValue !== initialValue;
+  /** Были ли данные восстановлены из sessionStorage при создании store?
+   *  Ранее использовалось простое сравнение по ссылке (currentValue !== initialValue),
+   *  что давало true если значения равны по содержимому, но были разными объектами
+   *  (например после восстановления из sessionStorage). Это приводило к ложным
+   *  уведомлениям "несохранённых правок" при открытии формы, которая на самом деле
+   *  не была изменена. Теперь сравниваем через сериализацию JSON (по содержимому).
+   */
+  let hadStoredData = false;
+  try {
+    hadStoredData = JSON.stringify(currentValue) !== JSON.stringify(initialValue);
+  } catch {
+    // Если сериализация не удалась, fallback на ссылочное сравнение
+    hadStoredData = currentValue !== initialValue;
+  }
 
   return { subscribe, getSnapshot, setState, cleanup, hadStoredData };
 }
