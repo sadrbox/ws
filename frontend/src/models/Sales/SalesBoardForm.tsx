@@ -890,7 +890,7 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
                           value={row.quantity}
                           onChange={(e) => updateItemRow(idx, "quantity", e.target.value)}
                           disabled={saleLoading || isSaving}
-                          step="0.0001"
+                          step="0.1"
                           textAlign="right"
                           width="100%"
                           actions={[]}
@@ -903,7 +903,7 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
                           value={row.price}
                           onChange={(e) => updateItemRow(idx, "price", e.target.value)}
                           disabled={saleLoading || isSaving}
-                          step="0.01"
+                          step="0.1"
                           textAlign="right"
                           width="100%"
                           actions={[]}

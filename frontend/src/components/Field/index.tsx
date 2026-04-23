@@ -188,7 +188,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       onChange={onChange}
       inputRef={inputRef}
       style={{
-        width: width ?? 'auto',
+        width: width ?? '100%',
         maxWidth: maxWidth ?? 'none',
         minWidth: minWidth ?? 'none'
       }}

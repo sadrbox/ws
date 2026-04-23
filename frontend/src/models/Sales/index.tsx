@@ -5,10 +5,10 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDate, FieldSelect, Divider } from "src/components/Field";
+import { Field, FieldDate, FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import SaleItemsTable from "./SaleItemsTable";
-import { Group } from "src/components/UI";
+import { Group, GroupRow, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -183,24 +183,29 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.setFields]);
 
   const tabs = useMemo(() => [
-    { id: "tab-details", label: translate("general") || "Основное", component: (
-      <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-        <div className={styles.FormBodyParts}>
-          {/* ── Левая колонка: поля ── */}
-          <Group align="row" gap="12px" className={styles.Form} style={{ flex: 1 }}>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+    {
+      id: "tab-details", label: translate("general") || "Основное", component: (
+        <div className={styles.FormContainer}>
+          <div className={styles.Form}>
+            {/* ID / UUID — только в режиме редактирования */}
+            {form.isEditMode && (
+              <GroupRow>
+                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
+              </GroupRow>
+            )}
+            <GroupCol>
+              {/* ── Левая колонка: поля ── */}
+
 
               {/* Строка 1: Дата · Проведён · Статус */}
-              <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
-                <FieldDate label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="140px" />
-                <label style={{ display: "flex", alignItems: "center", gap: 6, height: 28, cursor: "pointer", userSelect: "none", whiteSpace: "nowrap", paddingBottom: 1 }}>
-                  <input type="checkbox" id={`${form.formUid}_posted`} checked={form.fields.posted} onChange={e => form.setField("posted", e.target.checked as any)} disabled={form.isLoading} />
-                  Проведён
-                </label>
-                <div style={{ flex: 1, minWidth: 120, maxWidth: 160 }}>
-                  <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
-                </div>
-              </div>
+              <GroupRow>
+                <FieldDate label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
+
+
+
+                <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+              </GroupRow>
 
               {/* Организация — во всю ширину */}
               <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} width="100%" />
@@ -220,16 +225,15 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
               {/* Комментарий */}
               <Field label="Комментарий" name={`${form.formUid}_desc`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
-            </div>
-          </Group>
-
+            </GroupCol>
+          </div>
           {/* ── Правая колонка: итоги ── */}
           <div style={{ display: "flex", flexDirection: "column", width: 168, flexShrink: 0, padding: "12px 0 0 0" }}>
             <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13 }}>
               {([
                 { label: "Без НДС", value: form.fields.amountWithoutVat },
-                { label: "НДС",     value: form.fields.vatAmount },
-                { label: "Скидка",  value: form.fields.discountAmount },
+                { label: "НДС", value: form.fields.vatAmount },
+                { label: "Скидка", value: form.fields.discountAmount },
               ] as const).map(({ label, value }) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
                   <span>{label}</span>
@@ -244,30 +248,19 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             </div>
           </div>
         </div>
-
-        {/* ID / UUID — только в режиме редактирования */}
-        {form.isEditMode && (
-          <>
-            <Divider />
-            <Group align="row" gap="12px" className={styles.Form}>
-              <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-              </div>
-            </Group>
-          </>
-        )}
-      </div>
-    )},
-    { id: "tab-items", label: translate("SaleItemsList") || "Товары", component: form.isEditMode && form.fields.uuid ? (
-      <SaleItemsTable saleUuid={form.fields.uuid} disabled={form.isLoading} deferRemoteChanges
-        initialPendingRows={saleItems.pending} onTotalChange={handleTotalChange}
-        onItemsChange={saleItems.onItemsChange} />
-    ) : (
-      <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
-        Сохраните документ для добавления товаров
-      </div>
-    )},
+      )
+    },
+    {
+      id: "tab-items", label: translate("SaleItemsList") || "Товары", component: form.isEditMode && form.fields.uuid ? (
+        <SaleItemsTable saleUuid={form.fields.uuid} disabled={form.isLoading} deferRemoteChanges
+          initialPendingRows={saleItems.pending} onTotalChange={handleTotalChange}
+          onItemsChange={saleItems.onItemsChange} />
+      ) : (
+        <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
+          Сохраните документ для добавления товаров
+        </div>
+      )
+    },
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems]);
 
   return (

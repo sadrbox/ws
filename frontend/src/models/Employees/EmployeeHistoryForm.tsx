@@ -128,7 +128,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading} />
               <FieldNumber label="Оклад" name={`${form.formUid}_salary`} width="180px"
                 value={form.fields.salary} onChange={e => form.setField("salary", e.target.value)}
-                disabled={form.isLoading} step="0.01" textAlign="right" />
+                disabled={form.isLoading} step="0.1" textAlign="right" />
             </div>
           </Group>
           {form.isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}>

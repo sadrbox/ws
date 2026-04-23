@@ -4,8 +4,8 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Divider, Field } from "src/components/Field";
-import { Group } from "src/components/UI";
+import { Field } from "src/components/Field";
+import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 
 import { useFormStore } from "src/hooks/useFormStore";
@@ -51,23 +51,16 @@ const ContactTypesForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => [
     {
       id: "general", label: translate("general") || "Основное", component: (
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-              <Field label="Наименование *" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
-            </div>
-          </Group>
+        <div className={styles.Form}>
           {form.isEditMode && (
-            <>
-              <Divider />
-              <Group align="row" gap="12px" className={styles.Form}>
-                <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                  <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-                </div>
-              </Group>
-            </>
+            <GroupRow>
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+            </GroupRow>
           )}
+          <GroupCol>
+            <Field label="Наименование *" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
+          </GroupCol>
         </div>
       ),
     },

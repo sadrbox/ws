@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Floppy disk body -->
+  <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" fill="#4a7fc1" />
+  <!-- Top notch (label area) -->
+  <rect x="4" y="1.5" width="7" height="5" rx="0.5" fill="#d0e4f7" />
+  <!-- Write-protect slot on label -->
+  <rect x="8.5" y="2.5" width="1.5" height="3" rx="0.5" fill="#4a7fc1" />
+  <!-- Bottom disk read area -->
+  <rect x="3" y="9" width="10" height="5" rx="0.5" fill="#d0e4f7" />
+  <!-- Center slot on disk -->
+  <rect x="5.5" y="10.5" width="5" height="2" rx="0.5" fill="#a0b8d8" />
+  <!-- Checkmark overlay (top-right) -->
+  <circle cx="12" cy="4" r="3.5" fill="#28a745" />
+  <polyline points="10,4 11.3,5.3 14,2.5" fill="none" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

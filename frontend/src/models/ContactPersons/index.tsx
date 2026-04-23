@@ -5,9 +5,9 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Divider, Field } from "src/components/Field";
+import { Field } from "src/components/Field";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
-import { Group } from "src/components/UI";
+import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import ContactsTable from "../Contacts/ContactsTable";
 import AvatarUpload from "src/components/AvatarUpload";
@@ -82,8 +82,14 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
       { id: "general", label: translate("general") || "Основное", component: (
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}>
+        <div className={styles.Form}>
+          {form.isEditMode && (
+            <GroupRow>
+              <Field label="ID" name={`${form.formUid}_id`} width="80px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} width="260px" value={String(form.fields.uuid ?? "-")} disabled />
+            </GroupRow>
+          )}
+          <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
               <Field label="ФИО" name={`${form.formUid}_fullName`} value={form.fields.fullName} onChange={e => form.setField("fullName", e.target.value)} disabled={form.isLoading} />
               <OwnerLookupField name={`${form.formUid}_owner`} ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
@@ -94,11 +100,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
             {form.isEditMode && form.fields.uuid && (
               <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
             )}
-          </Group>
-          {form.isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-            <Field label="ID" name={`${form.formUid}_id`} width="80px" value={String(form.fields.id ?? "-")} disabled />
-            <Field label="UUID" name={`${form.formUid}_uuid`} width="260px" value={String(form.fields.uuid ?? "-")} disabled />
-          </div></Group></>}
+          </div>
         </div>
       )},
     ];

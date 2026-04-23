@@ -65,9 +65,9 @@ const ModelFormWrapper: FC<ModelFormWrapperProps> = ({
   return (
     <div className={styles.FormWrapper}>
       {toolbarPortal}
-      <div className={styles.FormBody}>
+      {/* <div className={styles.FormBody}> */}
         <Tabs tabs={tabs} />
-      </div>
+      {/* </div> */}
     </div>
   );
 };

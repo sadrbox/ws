@@ -4,9 +4,9 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Divider, Field } from "src/components/Field";
+import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { Group } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
@@ -39,8 +39,14 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     { id: "general", label: translate("general") || "Основное", component: (
-      <div className={styles.FormBodyParts}>
-        <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+      <div className={styles.Form}>
+        {form.isEditMode && (
+          <GroupRow>
+            <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+            <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+          </GroupRow>
+        )}
+        <GroupCol>
           <Field label="Наименование *" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
           <Field label="Артикул" name={`${form.formUid}_sku`} minWidth="200px" value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
           <LookupField label="Бренд" name={`${form.formUid}_brand`} minWidth="339px" value={form.fields.brandUuid} displayValue={form.fields.brandName} endpoint="brands" displayField="shortName"
@@ -51,11 +57,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
             columns={[{ key: "shortName", label: "Наименование" }, { key: "code", label: "Код" }]}
             onSelect={(uuid, display) => form.setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display } as Partial<TFields>)}
             onClear={() => form.setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" } as Partial<TFields>)} disabled={form.isLoading} />
-        </div></Group>
-        {form.isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-          <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-          <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-        </div></Group></>}
+        </GroupCol>
       </div>
     )},
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);

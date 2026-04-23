@@ -17,12 +17,15 @@
 	// border-bottom: 1px dotted $color51;
 	background-color: $color30;
 	overflow-x: auto;
-	scrollbar-width: none; /* Firefox */
-	-ms-overflow-style: none; /* IE and Edge */
+	scrollbar-width: none;
+	/* Firefox */
+	-ms-overflow-style: none;
+	/* IE and Edge */
 }
 
 .TabsHeader::-webkit-scrollbar {
-	display: none; /* Chrome, Safari, Opera */
+	display: none;
+	/* Chrome, Safari, Opera */
 }
 
 .TabsLabel {
@@ -105,6 +108,7 @@
 		opacity: 0;
 		transform: translateY(10px);
 	}
+
 	to {
 		opacity: 1;
 		transform: translateY(0);

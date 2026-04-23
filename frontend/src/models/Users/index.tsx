@@ -4,9 +4,9 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Divider, Field } from "src/components/Field";
+import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { Group } from "src/components/UI";
+import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { AccessRightsList } from "src/models/AccessRights";
 import AvatarUpload from "src/components/AvatarUpload";
@@ -57,32 +57,29 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
       { id: "general", label: translate("general") || "Основное", component: (
-        <div className={styles.FormBodyParts}>
+        <div className={styles.Form}>
+          {form.isEditMode && (
+            <GroupRow>
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+            </GroupRow>
+          )}
           <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
-              <Group align="row" gap="12px" className={styles.Form}>
-                <Group align="col" gap="12px">
-                  <Group align="row" gap="12px" className={styles.Form}>
+              <GroupRow>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <GroupRow>
                     <Field label="Логин *" name={`${form.formUid}_username`} minWidth="150px" value={form.fields.username} onChange={e => form.setField("username", e.target.value)} disabled={form.isLoading} />
                     <Field label={form.isEditMode ? "Новый пароль" : "Пароль"} name={`${form.formUid}_password`} minWidth="150px" value={form.fields.password} onChange={e => form.setField("password", e.target.value)} disabled={form.isLoading} />
-                  </Group>
+                  </GroupRow>
                   {form.isEditMode && form.fields.uuid && (
                     <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
                   )}
-                </Group>
+                </div>
                 <LookupField label="Сотрудник" name={`${form.formUid}_employee`} value={form.fields.employeeUuid} displayValue={form.fields.employeeName} endpoint="employees" displayField="fullName" minWidth="400px" disabled={form.isLoading}
                   onSelect={(uuid, displayValue) => form.setFields({ employeeUuid: uuid, employeeName: displayValue } as Partial<TFields>)}
                   onClear={() => form.setFields({ employeeUuid: "", employeeName: "" } as Partial<TFields>)} />
-              </Group>
-              {form.isEditMode && (
-                <><Divider />
-                <Group align="row" gap="12px" className={styles.Form}>
-                  <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                    <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                    <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-                  </div>
-                </Group></>
-              )}
+              </GroupRow>
             </div>
           </div>
         </div>

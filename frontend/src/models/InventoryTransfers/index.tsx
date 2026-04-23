@@ -4,9 +4,9 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Divider, Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
+import { Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { Group } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -75,8 +75,14 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     { id: "general", label: translate("general") || "Основное", component: (
-      <div className={styles.FormBodyParts}>
-        <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+      <div className={styles.Form}>
+        {form.isEditMode && (
+          <GroupRow>
+            <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+            <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+          </GroupRow>
+        )}
+        <GroupCol>
           <Field label="Номер документа" name={`${form.formUid}_docNum`} minWidth="339px" value={form.fields.documentNumber} onChange={e => form.setField("documentNumber", e.target.value)} disabled={form.isLoading} />
           <FieldDate label="Дата документа" name={`${form.formUid}_docDate`} minWidth="200px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
           <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
@@ -84,11 +90,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           <LookupField label="На склад" name={`${form.formUid}_toWh`} value={form.fields.toWarehouseUuid} displayValue={form.fields.toWarehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ toWarehouseUuid: u, toWarehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ toWarehouseUuid: "", toWarehouseName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
           <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
           <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
-        </div></Group>
-        {form.isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-          <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-          <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-        </div></Group></>}
+        </GroupCol>
       </div>
     )},
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);

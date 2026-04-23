@@ -303,6 +303,9 @@ body {
 		padding: 8px 12px;
 		font-size: $fontsize + 1px;
 	}
+
+
+
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1045,7 +1048,7 @@ body {
 	// max-width: 600px;
 }
 
-.FormBodyParts {
+.FormContainer {
 	display: flex;
 	flex: 1;
 	flex-direction: row;
@@ -1060,15 +1063,16 @@ body {
 
 	@container (min-width: 900px) {
 		flex-direction: row;
-		gap: 12px;
-		// grid-template-columns: min-content 1fr;
-		// grid-template-rows: 1fr;
+		.Form{
+			max-width: 400px;
+		}
 	}
 
 	@container (max-width: 900px) {
 		flex-direction: column;
-		// grid-template-columns: 1fr;
-		// grid-template-rows: min-content;
+		.Form{
+			max-width: 600px;
+		}
 	}
 }
 
@@ -1078,7 +1082,8 @@ body {
 	gap: 12px;
 	padding:  0;
 	// margin-top: 12px;
-	min-width: 315px;
+	// max-width: 300px;
+	flex:1;
 	// max-width: 300px;
 	// border-top: 1px dotted $color5;
 	// border-bottom: 1px dotted $color5;

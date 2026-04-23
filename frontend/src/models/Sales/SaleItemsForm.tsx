@@ -155,7 +155,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
           value={fields.quantity}
           onChange={e => handleNumericChange("quantity", e.target.value)}
           disabled={isLoading}
-          step="0.0001"
+          step="0.1"
           textAlign="right"
           width="160px"
         />
@@ -165,7 +165,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
           value={fields.price}
           onChange={e => handleNumericChange("price", e.target.value)}
           disabled={isLoading}
-          step="0.01"
+          step="0.1"
           textAlign="right"
           width="160px"
         />
@@ -229,7 +229,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
           value={fields.discountPercent}
           onChange={e => handleNumericChange("discountPercent", e.target.value)}
           disabled={isLoading}
-          step="0.01"
+          step="0.1"
           textAlign="right"
           width="120px"
         />

@@ -10,6 +10,8 @@ import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app/context';
 import Toolbar from 'src/components/Toolbar';
+import { Button } from 'src/components/Button';
+import closeIcon from 'src/assets/close_16.png';
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
@@ -93,6 +95,9 @@ export const Group: FC<TypeGroupProps> = ({ align, gap, type, className, style, 
   );
 };
 
+export const GroupRow: FC<PropsWithChildren> = ({ children }) => <div className={[styles.GroupRow, styles.gap12].filter(Boolean).join(" ")}>{children}</div>
+export const GroupCol: FC<PropsWithChildren> = ({ children }) => <div className={[styles.GroupCol, styles.gap12].filter(Boolean).join(" ")}>{children}</div>
+
 
 
 export const HorizontalLine = () => {
@@ -150,16 +155,16 @@ const PaneTabItem: FC<{
       {!isLocked && (
         isDirty
           ? <button
-              className={styles.PaneTabClose}
-              onClick={(e) => { e.stopPropagation(); onClose(); }}
-              title="Закрыть"
-              type="button"
-            ><span className={styles.PaneTabDirtyDot} /></button>
+            className={styles.PaneTabClose}
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            title="Закрыть"
+            type="button"
+          ><span className={styles.PaneTabDirtyDot} /></button>
           : <Toolbar.CloseButton
-              className={styles.PaneTabCloseBtn}
-              onClick={(e) => { e.stopPropagation(); onClose(); }}
-              size={14}
-            />
+            className={styles.PaneTabCloseBtn}
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            size={14}
+          />
       )}
       <span className={styles.PaneTabLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
     </div>
@@ -225,7 +230,10 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
         </h2>
         <div className={styles.PaneHeaderToolbar}>
           <ToolbarSlot ref={slotRef} />
-          <Toolbar.CloseButton onClick={onClose} />
+          <Button variant="secondary" onClick={onClose}>
+              <img src={closeIcon} width={16} height={16} alt="" />
+              <span>Закрыть</span>
+          </Button>
         </div>
       </div>
       <Component {...p} />
@@ -435,7 +443,7 @@ const NavbarPaneBell: FC = () => {
                 styles.PaneNoteItem,
                 n.type === "error" ? styles.PaneNoteError
                   : n.type === "warning" ? styles.PaneNoteWarning
-                  : styles.PaneNoteInfo,
+                    : styles.PaneNoteInfo,
                 n.resolved ? styles.PaneNoteResolved : "",
               ].filter(Boolean).join(" ")}
             >

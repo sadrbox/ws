@@ -124,7 +124,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
               ctx.handleInlineChange(row, "quantity", e.target.value);
             }}
             disabled={ctx.disabled}
-            step="0.0001"
+            step="0.1"
             textAlign="right"
             width="100%"
             actions={[]}
@@ -148,7 +148,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
               ctx.handleInlineChange(row, "price", e.target.value);
             }}
             disabled={ctx.disabled}
-            step="0.01"
+            step="0.1"
             textAlign="right"
             width="100%"
             actions={[]}
@@ -256,7 +256,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
               ctx.handleInlineChange(row, "discountPercent", e.target.value);
             }}
             disabled={ctx.disabled}
-            step="0.01"
+            step="0.1"
             textAlign="right"
             width="100%"
             actions={[]}

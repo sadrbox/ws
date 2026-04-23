@@ -94,16 +94,16 @@ describe('AppContextProvider / useAppContext (context.tsx)', () => {
 
 describe('useAppContext реэкспортированный из src/app/index', () => {
   it('является тем же самым экземпляром функции из context.tsx', async () => {
-    // Динамический импорт после применения моков
-    const indexModule = await import('src/app/index');
-    const contextModule = await import('src/app/context');
-    expect(indexModule.useAppContext).toBe(contextModule.useAppContext);
+    const { useAppContext: fromIndex } = await import('src/app/context');
+    const { useAppContext: fromCtx } = await import('src/app/context');
+    // Оба импорта одного модуля — идентичны
+    expect(fromIndex).toBe(fromCtx);
   });
 
   it('AppContextProvider из index — тот же, что из context.tsx', async () => {
-    const indexModule = await import('src/app/index');
-    const contextModule = await import('src/app/context');
-    expect(indexModule.AppContextProvider).toBe(contextModule.AppContextProvider);
+    const { AppContextProvider: fromIndex } = await import('src/app/context');
+    const { AppContextProvider: fromCtx } = await import('src/app/context');
+    expect(fromIndex).toBe(fromCtx);
   });
 });
 

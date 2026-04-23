@@ -6,9 +6,9 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import FilesPanel from "src/components/FilesPanel";
 import PrintPreview from "src/components/PrintPreview";
-import { Divider, Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
+import { Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { Group } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -90,10 +90,15 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
       { id: "general", label: translate("general") || "Основное", component: (
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-              <FieldSelect label="Статус" name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} style={{ minWidth: 200 }} />
+        <div className={styles.Form}>
+          {form.isEditMode && (
+            <GroupRow>
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+            </GroupRow>
+          )}
+          <GroupCol>
+            <FieldSelect label="Статус" name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} style={{ minWidth: 200 }} />
               <LookupField label="Организация" name={`${form.formUid}_organization`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
                 onSelect={(uuid, display) => form.setFields({ organizationUuid: uuid, organizationName: display } as Partial<TFields>)}
                 onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
@@ -109,12 +114,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                 <FieldDate label="Дедлайн" name={`${form.formUid}_deadline`} width="200px" value={form.fields.deadline} onChange={e => form.setField("deadline", e.target.value)} disabled={form.isLoading} />
               </div>
               <FieldTextarea label="Описание задачи" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="120px" rows={6} />
-            </div>
-          </Group>
-          {form.isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-            <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-            <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-          </div></Group></>}
+          </GroupCol>
         </div>
       )},
     ];

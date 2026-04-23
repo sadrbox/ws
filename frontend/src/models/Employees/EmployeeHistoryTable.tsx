@@ -131,7 +131,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({ employeeUuid, dis
             value={row.salary != null ? String(Number(row.salary)) : ""}
             onChange={e => ctx.handleInlineChange(row, "salary", e.target.value)}
             disabled={ctx.disabled}
-            step="0.01"
+            step="0.1"
             textAlign="right"
             width="100%"
             actions={[]}

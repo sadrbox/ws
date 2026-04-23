@@ -69,8 +69,8 @@ describe('nested modals behavior', () => {
     // body still locked
     expect(document.body.style.overflow).toBe('hidden');
 
-    // close inner by clicking its Close button (Modal provides a Close button text 'Закрыть')
-    const closeButtons = screen.getAllByText('Закрыть');
+    // close inner by clicking its Cancel button (Modal provides a Cancel button text 'Отмена')
+    const closeButtons = screen.getAllByText('Отмена');
     // the last close button corresponds to inner modal
     await userEvent.click(closeButtons[closeButtons.length - 1]);
 

@@ -5,8 +5,8 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
-import { Divider, Field } from "src/components/Field";
-import { Group } from "src/components/UI";
+import { Field } from "src/components/Field";
+import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import ContactsTable from "../Contacts/ContactsTable";
 import EmployeeHistoryTable from "./EmployeeHistoryTable";
@@ -91,29 +91,26 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
       { id: "general", label: translate("general") || "Основное", component: (
-        <div className={styles.FormBodyParts}>
+        <div className={styles.Form}>
+          {form.isEditMode && (
+            <GroupRow>
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+            </GroupRow>
+          )}
           <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, maxWidth: 640 }}>
-              <Group align="row" gap="12px" className={styles.Form}>
+              <GroupRow>
                 <Field label="Фамилия *" name={`${form.formUid}_lastName`} minWidth="200px" value={form.fields.lastName} onChange={e => handleNameFieldChange("lastName", e.target.value)} disabled={form.isLoading} />
                 <Field label="Имя" name={`${form.formUid}_firstName`} minWidth="180px" value={form.fields.firstName} onChange={e => handleNameFieldChange("firstName", e.target.value)} disabled={form.isLoading} />
                 <Field label="Отчество" name={`${form.formUid}_middleName`} minWidth="180px" value={form.fields.middleName} onChange={e => handleNameFieldChange("middleName", e.target.value)} disabled={form.isLoading} />
-              </Group>
-              <Group align="row" gap="12px" className={styles.Form}>
+              </GroupRow>
+              <GroupRow>
                 <Field label="ФИО" name={`${form.formUid}_fullName`} minWidth="400px" value={form.fields.fullName} disabled />
-              </Group>
-              <Group align="row" gap="12px" className={styles.Form}>
+              </GroupRow>
+              <GroupRow>
                 <Field label="ИИН" name={`${form.formUid}_iin`} minWidth="200px" value={form.fields.iin} onChange={e => form.setField("iin", e.target.value)} disabled={form.isLoading} />
-              </Group>
-              {form.isEditMode && (
-                <><Divider />
-                <Group align="row" gap="12px" className={styles.Form}>
-                  <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-                    <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                    <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-                  </div>
-                </Group></>
-              )}
+              </GroupRow>
             </div>
             {form.isEditMode && form.fields.uuid && (
               <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
