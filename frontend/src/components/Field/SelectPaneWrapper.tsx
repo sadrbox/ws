@@ -4,7 +4,7 @@ import type { TPane } from "src/app/types";
 
 /**
  * SelectPaneWrapper — обёртка для отображения List-компонента
- * внутри Pane как форму выбора.
+ * внутри PaneItem как форму выбора.
  *
  * Получает:
  *  - data.endpoint — для динамической загрузки List-компонента

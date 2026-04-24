@@ -7,7 +7,7 @@ import { Group } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore, setPaneDirty } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { useAppContext } from "src/app";
 import useUID from "src/hooks/useUID";
@@ -356,7 +356,7 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.setFields, form.isLoading, form.isEditMode, form.formUid]);
 
   return (
-    <ModelFormWrapper
+    <ModelForm
       paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}
@@ -425,7 +425,7 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
   ], [fields, setFields, formUid]);
 
   return (
-    <ModelFormWrapper
+    <ModelForm
       paneId={uniqId}
       tabs={tabs}
       onSave={handleClose}

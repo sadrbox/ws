@@ -13,7 +13,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 
@@ -150,7 +150,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, form.uuid, data?.ownerType]);
 
   return (
-    <ModelFormWrapper
+    <ModelForm
       paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}

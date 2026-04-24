@@ -13,7 +13,7 @@ import ContractsTable from "../Contracts/ContractsTable";
 import ContactsTable from "../Contacts/ContactsTable";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 
@@ -83,7 +83,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts]);
 
   return (
-    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       readonly={!canWrite} isDirty={form.isDirty} />
   );

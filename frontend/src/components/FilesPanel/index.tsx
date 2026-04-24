@@ -234,11 +234,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
     [displayRows, columns, isLoading, isUploading, loadFiles, customOpenModelForm, extraButtons, handleTableDelete, searchValue, sortState],
   );
 
-  return (
-    // <div className={styles.FormWrapper}>
-      <Table {...(tableProps as any)} />
-    // </div>
-  );
+  return <Table {...(tableProps as any)} />
 };
 
 FilesPanel.displayName = "FilesPanel";

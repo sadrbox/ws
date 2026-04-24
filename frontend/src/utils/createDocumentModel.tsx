@@ -21,7 +21,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 
 const STATUS_OPTIONS = [
@@ -154,7 +154,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
     ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, form.uuid, handleContractSelect]);
 
     return (
-      <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+      <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
         readonly={!access.canWrite} isDirty={form.isDirty} />
     );

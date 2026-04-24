@@ -14,7 +14,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 
 const MODEL_ENDPOINT = "todos";
@@ -126,7 +126,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleDeadlineDaysChange]);
 
   return (
-    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       readonly={!canWrite} isDirty={form.isDirty} />
   );

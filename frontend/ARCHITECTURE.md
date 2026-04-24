@@ -59,7 +59,7 @@ src/
 │   ├── FormPanel/          # Панель кнопок формы (Сохранить, Сохранить и закрыть, Обновить)
 │   ├── FormError/          # Отображение ошибок формы
 │   ├── Tabs/               # Табы формы
-│   ├── ModelFormWrapper.tsx # Универсальная обёртка: FormPanel + FormError + Tabs
+│   ├── ModelForm.tsx # Универсальная обёртка: FormPanel + FormError + Tabs
 │   ├── ModelList.tsx        # Универсальный список: useModelListState + Table
 │   ├── SubTable/           # Вложенные таблицы (contacts, bankaccounts, etc.)
 │   ├── Modal/              # Модальные окна
@@ -251,7 +251,7 @@ src/
 | **Dirty Panes Store** | Глобальный `Set<uniqId>` для индикации несохранённых изменений на вкладках |
 | `setPaneDirty(id, bool)` | Отметить панель dirty/clean |
 | `usePaneDirty(id)` | Хук подписки на dirty-состояние |
-| **Pane Notifications** | Уведомления привязанные к панели |
+| **PaneItem Notifications** | Уведомления привязанные к панели |
 | `addPaneNotification(id, type, text, ctx?, actions?)` | Добавить уведомление (+ localStorage журнал) |
 | `dismissPaneNotification(id, noteId)` | Удалить уведомление |
 | `usePaneNotifications(id)` | Хук подписки на уведомления панели |
@@ -587,11 +587,11 @@ commitPendingRows("contacts", rows, parentUuid, "ownerUuid", "Контакты",
 | `ErrorBoundary` | Обёртка ошибок с fallback |
 | `LoadingSpinner` / `LoadingFallback` | Индикаторы загрузки |
 
-### `ModelFormWrapper` — обёртка формы
+### `ModelForm` — обёртка формы
 
 ```
 ┌─────────────────────────────────────────┐
-│ [Portal → PaneHeader: FormPanel кнопки] │
+│ [Portal → PaneItemHeader: FormPanel кнопки] │
 │ ┌─────────────────────────────────────┐ │
 │ │ FormError (auto-dismiss)            │ │
 │ ├─────────────────────────────────────┤ │
@@ -764,7 +764,7 @@ openFormByEndpoint("organizations", uuid, addPane);
       - mapServerToForm → replaceFields
       - markClean → savedSnapshot
    d. registerBeforeClose(guard: isDirty? → confirm)
-6. Рендер: ModelFormWrapper → usePaneToolbar → FormPanel (в заголовке) + Tabs
+6. Рендер: ModelForm → usePaneToolbar → FormPanel (в заголовке) + Tabs
 ```
 
 ### Сохранение формы

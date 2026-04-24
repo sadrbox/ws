@@ -15,7 +15,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 
 const MODEL_ENDPOINT = "sales";
@@ -185,7 +185,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general") || "Основное", component: (
-        <div className={styles.FormContainer}>
+        <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             {/* ID / UUID — только в режиме редактирования */}
             {form.isEditMode && (
@@ -207,19 +207,23 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
               </GroupRow>
 
-              {/* Организация — во всю ширину */}
-              <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} width="100%" />
+              <Group>
+                {/* Организация — во всю ширину */}
+                <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+
+                <LookupField label="Склад" name={`${form.formUid}_wh`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+              </Group>
 
               {/* Контрагент — во всю ширину */}
-              <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} width="100%" />
+              <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
 
               {/* Склад | Договор — в одну строку, по 50% */}
               <div style={{ display: "flex", flexDirection: "row", gap: "12px", flexWrap: "wrap" }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
-                  <LookupField label="Склад" name={`${form.formUid}_wh`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} width="100%" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+
                 </div>
                 <div style={{ flex: 1, minWidth: 200 }}>
-                  <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} width="100%" extraParams={contractExtraParams} />
+                  <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
                 </div>
               </div>
 
@@ -228,8 +232,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
           </div>
           {/* ── Правая колонка: итоги ── */}
-          <div style={{ display: "flex", flexDirection: "column", width: 168, flexShrink: 0, padding: "12px 0 0 0" }}>
-            <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13 }}>
+          <div className={styles.Form}>
+            <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
               {([
                 { label: "Без НДС", value: form.fields.amountWithoutVat },
                 { label: "НДС", value: form.fields.vatAmount },
@@ -264,7 +268,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems]);
 
   return (
-    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       readonly={!canWrite} isDirty={form.isDirty} />
   );

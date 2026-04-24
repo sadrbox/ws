@@ -84,7 +84,7 @@ import { getByEndpoint } from "src/registry/modelRegistry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOOKUP FIELD — поле с кнопками "выбор" и "очистить"
-// Форма выбора открывается как отдельная Pane-вкладка через SelectPaneWrapper
+// Форма выбора открывается как отдельная PaneItem-вкладка через SelectPaneWrapper
 // ═══════════════════════════════════════════════════════════════════════════
 
 const LookupField: FC<LookupFieldProps> = ({
@@ -386,7 +386,7 @@ const LookupField: FC<LookupFieldProps> = ({
       <div
         className={wrapperClass}
         style={{
-          width: width ?? "auto",
+          width: width ?? "100%",
           maxWidth: maxWidth ?? "none",
           minWidth: minWidth ?? "none",
         }}

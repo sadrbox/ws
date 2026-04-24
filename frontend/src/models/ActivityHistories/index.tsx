@@ -10,7 +10,7 @@ import { getFormatDate } from "src/utils/main.module";
 import styles from "src/styles/main.module.scss";
 
 import { useFormStore } from "src/hooks/useFormStore";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
@@ -126,7 +126,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid]);
 
   return (
-    <ModelFormWrapper paneId={form.paneId} tabs={tabs} readonly={!canWrite}
+    <ModelForm paneId={form.paneId} tabs={tabs} readonly={!canWrite}
       onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading} showReload={form.isEditMode}

@@ -18,7 +18,7 @@ import { usePaneToolbar } from "src/hooks/usePaneToolbar";
  * ```
  */
 
-interface ModelFormWrapperProps {
+interface ModelFormProps {
   /** Табы формы */
   tabs: { id: string; label: string; component: ReactNode }[];
   /** Обработчики действий */
@@ -37,7 +37,7 @@ interface ModelFormWrapperProps {
   paneId?: string;
 }
 
-const ModelFormWrapper: FC<ModelFormWrapperProps> = ({
+const ModelForm: FC<ModelFormProps> = ({
   tabs,
   onSave,
   onSaveAndClose,
@@ -63,14 +63,12 @@ const ModelFormWrapper: FC<ModelFormWrapperProps> = ({
   );
 
   return (
-    <div className={styles.FormWrapper}>
+    <>
       {toolbarPortal}
-      {/* <div className={styles.FormBody}> */}
-        <Tabs tabs={tabs} />
-      {/* </div> */}
-    </div>
+      <Tabs tabs={tabs} />
+    </>
   );
 };
 
-ModelFormWrapper.displayName = "ModelFormWrapper";
-export default ModelFormWrapper;
+ModelForm.displayName = "ModelForm";
+export default ModelForm;

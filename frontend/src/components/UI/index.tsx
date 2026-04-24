@@ -9,7 +9,7 @@ import { ContractsList } from 'src/models/Contracts';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app/context';
-import Toolbar from 'src/components/Toolbar';
+import Toolbar, { CloseButton } from 'src/components/Toolbar';
 import { Button } from 'src/components/Button';
 import closeIcon from 'src/assets/close_16.png';
 import type { TPane } from 'src/app/types';
@@ -61,43 +61,10 @@ type TypeGroupProps = {
   style?: CSSProperties;
 } & PropsWithChildren;
 
-export const Group: FC<TypeGroupProps> = ({ align, gap, type, className, style, children }) => {
+export const Group: FC<TypeGroupProps> = ({ style, children }) => <div style={style} className={[styles.Group, styles.gap12].filter(Boolean).join(" ")}>{children}</div>
 
-  let visibleType: string;
-  if (type === 'easy') {
-    visibleType = styles.BG_EASY;
-  } else if (type === 'medium') {
-    visibleType = styles.BG_MEDIUM;
-  } else if (type === 'hard') {
-    visibleType = styles.BG_HARD;
-  } else {
-    visibleType = "";
-  }
-
-  const reStyle = {
-    ...({ borderRadius: '2px', paddingTop: "6px" }), ...style
-  }
-  return (
-    <div className={className || ""} style={{
-      display: 'flex', flexDirection: 'column', position: 'relative'
-    }}>
-      <div className={[align === 'row'
-        ?
-        styles.RowGroup
-        :
-        styles.ColGroup,
-        , (visibleType && visibleType)].filter(s => s && s).join(" ")}
-        style={{ ...reStyle, ...({ gap: gap ? gap : undefined }) }}
-      >
-        {children}
-      </div>
-    </div >
-  );
-};
-
-export const GroupRow: FC<PropsWithChildren> = ({ children }) => <div className={[styles.GroupRow, styles.gap12].filter(Boolean).join(" ")}>{children}</div>
-export const GroupCol: FC<PropsWithChildren> = ({ children }) => <div className={[styles.GroupCol, styles.gap12].filter(Boolean).join(" ")}>{children}</div>
-
+export const GroupRow: FC<TypeGroupProps> = ({ style, children }) => <div style={style} className={[styles.GroupRow, styles.gap12].filter(Boolean).join(" ")}>{children}</div>
+export const GroupCol: FC<TypeGroupProps> = ({ style, children }) => <div style={style} className={[styles.GroupCol, styles.gap12].filter(Boolean).join(" ")}>{children}</div>
 
 
 export const HorizontalLine = () => {
@@ -116,19 +83,19 @@ export const HorizontalLine = () => {
   )
 }
 
-export const Content = () => {
+export const Container: FC = () => {
   const context = useAppContext();
   const isPaneShow = context.windows.panes.length > 0;
 
   return (
     <>
-      {isPaneShow && <><PaneGroup /><PaneTab /></>}
+      {isPaneShow && <><Panes /><PanesTabs /></>}
     </>
   );
 }
 
 /** Одна вкладка — отдельный компонент, чтобы можно было использовать хук usePaneDirty */
-const PaneTabItem: FC<{
+const PanesTabsItem: FC<{
   pane: { uniqId: string; label: string; isSelector?: boolean; selectorPaneId?: string };
   isActive: boolean;
   isLocked: boolean;
@@ -140,11 +107,11 @@ const PaneTabItem: FC<{
   return (
     <div
       className={[
-        styles.PaneTab,
-        isActive && styles.PaneTabActive,
-        pane.isSelector && styles.PaneTabSelector,
-        isLocked && styles.PaneTabDisabled,
-        isDirty && styles.PaneTabDirty,
+        styles.PanesTabsItem,
+        isActive && styles.PanesTabsItemActive,
+        pane.isSelector && styles.PanesTabsItemSelector,
+        isLocked && styles.PanesTabsItemDisabled,
+        isDirty && styles.PanesTabsItemDirty,
       ].filter(Boolean).join(" ")}
       onClick={isLocked ? undefined : onActivate}
       title={pane.label}
@@ -155,23 +122,23 @@ const PaneTabItem: FC<{
       {!isLocked && (
         isDirty
           ? <button
-            className={styles.PaneTabClose}
+            className={styles.PanesTabsItemClose}
             onClick={(e) => { e.stopPropagation(); onClose(); }}
             title="Закрыть"
             type="button"
-          ><span className={styles.PaneTabDirtyDot} /></button>
+          ><span className={styles.PanesTabsItemDirtyDot} /></button>
           : <Toolbar.CloseButton
-            className={styles.PaneTabCloseBtn}
+            className={styles.PanesTabsItemClose}
             onClick={(e) => { e.stopPropagation(); onClose(); }}
             size={14}
           />
       )}
-      <span className={styles.PaneTabLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
+      <span className={styles.PanesTabsItemLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
     </div>
   );
 };
 
-export const PaneTab: FC = () => {
+export const PanesTabs: FC = () => {
 
   const context = useAppContext();
   const panes = context?.windows.panes;
@@ -181,12 +148,12 @@ export const PaneTab: FC = () => {
   const selectorPane = panes.find((p) => p.isSelector);
 
   return (
-    <div className={styles.PaneTabWrapper}>
+    <div className={styles.PanesTabs}>
       {panes.map(p => {
         const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
         return (
-          <PaneTabItem
-            key={`PaneTab-${p.uniqId}`}
+          <PanesTabsItem
+            key={`PanesTabs-${p.uniqId}`}
             pane={p}
             isActive={p.uniqId === activePane}
             isLocked={isLocked}
@@ -199,14 +166,14 @@ export const PaneTab: FC = () => {
   );
 };
 
-export const PaneGroup = () => {
+export const Panes: FC = () => {
   const context = useAppContext();
   const { panes, activePane, requestClose } = context?.windows;
 
   return (
-    <div className={styles.PaneGroupWrapper}>
+    <div className={styles.Panes}>
       {panes.map(p => (
-        <PaneItem key={`PaneGroup-${p.uniqId}`} pane={p} isActive={p.uniqId === activePane} onClose={() => requestClose(p.uniqId)} />
+        <PaneItem key={`Panes-${p.uniqId}`} pane={p} isActive={p.uniqId === activePane} onClose={() => requestClose(p.uniqId)} />
       ))}
     </div>
   )
@@ -219,21 +186,18 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
   const Component = p.component as FC<any>;
 
   return (
-    <div className={[styles.Pane, isActive && styles.ActivePane].filter(Boolean).join(" ")}>
-      <div className={styles.PaneHeaderContainer}>
+    <div className={[styles.PaneItem, isActive && styles.PaneItemActive].filter(Boolean).join(" ")}>
+      <div className={styles.PaneItemHeader}>
         <h2
-          className={[styles.PaneHeaderLabel, isDirty && styles.PaneHeaderLabelDirty].filter(Boolean).join(" ")}
+          className={[styles.PaneItemHeaderLabel, isDirty && styles.PaneItemHeaderLabelDirty].filter(Boolean).join(" ")}
           title={isDirty ? "Форма содержит несохранённые изменения" : undefined}
         >
           {p.label}
-          {isDirty && <span className={styles.PaneHeaderDirtyDot} />}
+          {isDirty && <span className={styles.PaneItemHeaderDirtyDot} />}
         </h2>
-        <div className={styles.PaneHeaderToolbar}>
+        <div className={styles.PaneItemHeaderToolbar}>
           <ToolbarSlot ref={slotRef} />
-          <Button variant="secondary" onClick={onClose}>
-              <img src={closeIcon} width={16} height={16} alt="" />
-              <span>Закрыть</span>
-          </Button>
+          <CloseButton  onClick={onClose}/>
         </div>
       </div>
       <Component {...p} />

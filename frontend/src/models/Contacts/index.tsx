@@ -11,7 +11,7 @@ import LookupField from "src/components/Field/LookupField";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 
 import { useFormStore } from "src/hooks/useFormStore";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
@@ -120,7 +120,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, form.uuid, data?.ownerType]);
 
   return (
-    <ModelFormWrapper
+    <ModelForm
       paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}

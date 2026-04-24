@@ -14,7 +14,7 @@ import ContactsTable from "../Contacts/ContactsTable";
 import { ActivityHistoriesList } from "../ActivityHistories";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 
@@ -157,7 +157,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts]);
 
   return (
-    <ModelFormWrapper
+    <ModelForm
       paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}

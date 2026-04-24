@@ -46,6 +46,11 @@ a {
 .blur5 {
 	filter: blur(5px);
 }
+
+.Group {
+	display: flex;
+	width:100%;
+}
 // доступ через styles.rowGroup
 .GroupCol {
 	display: flex;

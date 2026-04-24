@@ -13,7 +13,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 
 const MODEL_ENDPOINT = "inventory-transfers";
@@ -96,7 +96,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);
 
   return (
-    <ModelFormWrapper paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
       readonly={!canWrite} isDirty={form.isDirty} />
   );

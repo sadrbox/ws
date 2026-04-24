@@ -11,7 +11,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 
 const MODEL_ENDPOINT = "contacttypes";
@@ -67,7 +67,7 @@ const ContactTypesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField]);
 
   return (
-    <ModelFormWrapper
+    <ModelForm
       paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}

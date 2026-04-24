@@ -55,13 +55,12 @@ body {
 	border-bottom: 0px solid $color10;
 	display: flex;
 	align-items: center;
-	background-color: #fff;
 	// box-shadow: 0px 0px 3px rgba(#000, 0.4);
 	height: $heightFieldInput + 12px;
 	flex-wrap: nowrap;
 	flex-shrink: 0;
 	overflow: visible;
-	background: $color33;
+	background: $color30;
 	// position: relative нужен для абсолютного позиционирования мобильного меню
 	// sticky уже задаёт containing block, но на мобильных нужен явный relative
 
@@ -79,7 +78,7 @@ body {
 		font-size: $fontsize;
 		text-decoration: none;
 		flex-shrink: 0;
-		transition: background 0.15s, color 0.15s;
+		// transition: background 0.15s, color 0.15s;
 	}
 
 	.Active {
@@ -455,7 +454,7 @@ body {
 	}
 }
 
-.PaneGroupWrapper {
+.Panes {
 	position: relative;
 	z-index: 3;
 	border: 0px solid $color10;
@@ -466,43 +465,46 @@ body {
 	height: inherit;
 	// padding: 0px 12px;
 
-	.Pane {
-		// padding-top: 12px;
-		// height:-webkit-fill-available;
-		// min-height: 100vh;
-		height: inherit;
-		flex: 1;
-		overflow-y: auto;
-		// padding: 0px 6px;
-		// margin-bottom: 6px;
-		// padding: 6px 6px 0px 6px;
-		// overflow-y: auto;
-		display: none;
-		gap: 0px;
-	}
 
-	.ActivePane {
-		display: flex;
-		flex-direction: column;
-		// position: inherit;
-		height: -webkit-fill-available;
-	}
 }
 
-.PaneHeaderContainer {
+.PaneItem {
+	// padding-top: 12px;
+	// height:-webkit-fill-available;
+	// min-height: 100vh;
+	height: inherit;
+	flex: 1;
+	overflow: auto;
+	// padding: 0px 6px;
+	// margin-bottom: 6px;
+	padding: 6px ;
+	// overflow-y: auto;
+	display: none;
+	gap: 6px;
+}
+
+.PaneItemActive {
+	display: flex;
+	flex-direction: column;
+	// position: inherit;
+	height: -webkit-fill-available;
+}
+
+.PaneItemHeader {
 	display: flex;
 	gap: 6px;
 	align-items: center;
 	justify-content: flex-start;
-	min-height: $heightFieldInput + 2px;
+	min-height: $heightFieldInput;
 	padding-right: 2px;
 	flex-shrink: 0;
-	padding: 6px;
-	background: $color33;
-	border-bottom: 1px solid #aaa;
+	// padding: 6px;
+	background: $color30;
+	// border-bottom: 1px solid #aaa;
+	// box-shadow:0 0 12px 1px rgba($color5, 0.2);
 }
 
-.PaneHeaderLabel {
+.PaneItemHeaderLabel {
 	margin: 0;
 	padding: 0;
 	font-weight: bold;
@@ -515,7 +517,7 @@ body {
 	min-width: 0;
 }
 
-.PaneHeaderToolbar {
+.PaneItemHeaderToolbar {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -527,7 +529,7 @@ body {
 	display: contents; // дочерние элементы портала участвуют в flex-раскладке родителя
 }
 
-.PaneHeaderDirtyDot {
+.PaneItemHeaderDirtyDot {
 	display: inline-block;
 	width: 7px;
 	height: 7px;
@@ -540,7 +542,7 @@ body {
 	animation: dirtyPulse 2s ease-in-out infinite;
 }
 
-.PaneHeaderLabelDirty {
+.PaneItemHeaderLabelDirty {
 	color: #c27400;
 }
 
@@ -577,7 +579,7 @@ body {
 	}
 }
 
-// ── Pane Notifications ──
+// ── PaneItem Notifications ──
 .PaneNoteBellWrap {
 	position: relative;
 }
@@ -764,7 +766,7 @@ body {
 	}
 }
 
-.PaneTabWrapper {
+.PanesTabs {
 	overflow-x: auto;
 	overflow-y: hidden;
 	padding: 6px 6px;
@@ -814,7 +816,7 @@ body {
 	}
 
 	// padding-bottom: 12px;
-	.PaneTab {
+	.PanesTabsItem {
 		// box-sizing: content-box;
 		border-top: 1px solid $color10;
 		border-left: 1px solid $color10;
@@ -852,7 +854,7 @@ body {
 		min-width: 0;
 		flex-shrink: 0;
 
-		.PaneTabClose {
+		.PanesTabsClose {
 			display: flex;
 			align-items: center;
 			justify-content: center;
@@ -873,14 +875,14 @@ body {
 			}
 		}
 
-		.PaneTabCloseBtn {
+		.PanesTabsCloseBtn {
 			width: 18px !important;
 			height: 18px !important;
 			flex-shrink: 0;
 			margin-right: 3px;
 		}
 
-		.PaneTabLabel {
+		.PanesTabsLabel {
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
@@ -900,7 +902,7 @@ body {
 		}
 	}
 
-	.PaneTabActive {
+	.PanesTabsItemActive {
 		border-top: 1px solid transparent;
 		box-shadow: inset 0px -2px 0px 0px $color3;
 		// border-bottom: 9px solid $color80;
@@ -923,29 +925,29 @@ body {
 		}
 	}
 
-	.PaneTabSelector {
+	.PanesTabsItemSelector {
 		border-left: 2px solid $color3;
 		font-style: italic;
 	}
 
-	.PaneTabDisabled {
+	.PanesTabsItemDisabled {
 		opacity: 0.4;
 		cursor: not-allowed;
 		pointer-events: none;
 	}
 
-	.PaneTabDirty {
-		.PaneTabLabel {
+	.PanesTabsItemDirty {
+		.PanesTabsItemLabel {
 			font-style: italic;
 			color: #c77600;
 		}
 
-		.PaneTabClose {
+		.PanesTabsItemClose {
 			color: #c77600;
 		}
 	}
 
-	.PaneTabDirtyDot {
+	.PanesTabsItemDirtyDot {
 		display: block;
 		width: 8px;
 		height: 8px;
@@ -954,23 +956,23 @@ body {
 	}
 }
 
-.FormWrapper {
+.FormWrapper_test {
 	// gap: 6px;
 	// display: grid;
 	// grid-template-columns: 1fr;
 	// grid-template-rows: min-content auto;
 	// margin-top: 6px;
 	// overflow: clip;
-	padding:6px;
-	gap: 6px;
-	display: flex;
-	container-type: size;
-	flex-direction: column;
-	flex: 1;
-	min-height: 300px;
-	overflow: auto;
-	transition: all 0.5ms ease;
-	border-radius: $radius2;
+	// padding: 6px;
+	// gap: 6px;
+	// display: flex;
+	// container-type: size;
+	// flex-direction: column;
+	// flex: 1;
+	// min-height: 300px;
+	// overflow: auto;
+	// transition: all 0.5ms ease;
+	// border-radius: $radius2;
 }
 
 .FormHeader {
@@ -1048,45 +1050,44 @@ body {
 	// max-width: 600px;
 }
 
-.FormContainer {
+.FormWrapper {
+	container-type: size;
 	display: flex;
 	flex: 1;
-	flex-direction: row;
-	// transition: all 2s ease;
-
-	// display: grid;
-	// grid-template-columns: min-content 1fr;
-	// grid-template-rows: 1fr;
-	// container-type: size;
-	// margin-bottom: 6px;
-	border-bottom: 1px dotted $color5;
-
-	@container (min-width: 900px) {
-		flex-direction: row;
-		.Form{
-			max-width: 400px;
-		}
-	}
-
-	@container (max-width: 900px) {
-		flex-direction: column;
-		.Form{
-			max-width: 600px;
-		}
-	}
+	gap: 12px;
+	overflow: clip;
+	// padding: 6px;
+	overflow: auto;
 }
 
 .Form {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	padding:  0;
-	// margin-top: 12px;
-	// max-width: 300px;
-	flex:1;
-	// max-width: 300px;
-	// border-top: 1px dotted $color5;
-	// border-bottom: 1px dotted $color5;
+	padding: 0;
+	max-width: 600px;
+
+
+}
+
+@container (min-width: 600px) {
+	.FormContainer {
+		flex-direction: row;
+	}
+
+	.Group {
+		flex-direction: row;
+	}
+}
+
+@container (max-width: 900px) {
+	.FormContainer {
+		flex-direction: column;
+	}
+
+	.Group {
+		flex-direction: column;
+	}
 }
 
 .FormPanel {

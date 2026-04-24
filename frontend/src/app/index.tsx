@@ -8,23 +8,20 @@ import React, {
   useState,
 } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { restoreQueryCache, persistQueryCache, clearPersistedCache } from "src/services/queryPersist";
 import { initialSync, startPeriodicSync, stopPeriodicSync } from "src/services/syncManager";
 import { clearOfflineDb } from "src/services/offlineDb";
 import { registerServiceWorker } from "src/services/registerSW";
 
 import { getTranslation } from "src/i18";
-import { Content, Navbar, NavList, ErrorBoundary, LoadingFallback, Screen, LoadingSpinner } from "../components/UI";
+import {  Navbar, NavList, ErrorBoundary,  Screen, LoadingSpinner,  Container } from "../components/UI";
 import { TComponentNode, TPane, TypeAppContextProps, TypeNavbarProps } from "./types";
 import useUID from "src/hooks/useUID";
 import { TDataItem } from "src/components/Table/types";
 // import { OrganizationsList } from "src/models/Organizations";
 // import { CounterpartiesList } from 'src/models/Counterparties';
 
-import { ActivityHistoriesList } from "src/models/ActivityHistories";
-import { CounterpartiesList } from "src/models/Counterparties";
-import { ContactPersonsList } from "src/models/ContactPersons";
+
 import LoginForm from "src/components/LoginForm";
 import { isAuthenticated, verifyToken, logout, getCurrentUser, type AuthUser } from "src/services/auth";
 import { useConfirm } from "src/hooks/useConfirm";
@@ -417,7 +414,7 @@ const App: React.FC = () => {
             ) : (
               <Screen ref={screenRef}>
                 <Navbar />
-                <Content />
+                <Container />
               </Screen>
             )}
           </React.Suspense>

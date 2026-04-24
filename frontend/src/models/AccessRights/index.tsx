@@ -14,7 +14,7 @@ import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
-import ModelFormWrapper from "src/components/ModelFormWrapper";
+import ModelForm from "src/components/ModelForm";
 
 const MODEL_ENDPOINT = "access-rights";
 
@@ -123,7 +123,7 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField]);
 
   return (
-    <ModelFormWrapper
+    <ModelForm
       paneId={form.paneId}
       tabs={tabs}
       onSave={form.handleSave}

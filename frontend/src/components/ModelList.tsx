@@ -128,9 +128,7 @@ const ModelList: FC<ModelListProps> = ({
     );
   }
 
-  return <div style={{ padding: "6px", height: '100%' }}>
-    <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange })} />
-  </div>;
+  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange })} />;
 };
 
 ModelList.displayName = "ModelList";
