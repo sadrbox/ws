@@ -9,6 +9,7 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { AccessRightsList } from "src/models/AccessRights";
+import UserOrganizationsTable from "./UserOrganizationsTable";
 import AvatarUpload from "src/components/AvatarUpload";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -34,6 +35,18 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "users-form", defaultFields: DEFAULT_FIELDS, paneProps,
+    tables: {
+      accessRights: {
+        endpoint: "access-rights",
+        parentField: "userUuid",
+        label: "Права доступа",
+      },
+      userOrgs: {
+        endpoint: "user-organizations",
+        parentField: "userUuid",
+        label: "Организации пользователя",
+      },
+    },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       username: d.username ?? "", password: "",
@@ -53,6 +66,9 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
     },
     buildPaneLabel: (saved) => makePaneLabel("UsersList", "Пользователи", saved),
   });
+
+  const accessRights = form.useTable("accessRights");
+  const userOrgs = form.useTable("userOrgs");
 
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
@@ -86,14 +102,15 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
       )},
     ];
     if (form.isEditMode && form.fields.uuid) {
-      result.push({ id: "access", label: translate("accessLevel") || "Права доступа", component: <AccessRightsList userUuid={form.fields.uuid} /> });
+      result.push({ id: "access", label: translate("accessLevel") || "Права доступа", component: <AccessRightsList userUuid={form.fields.uuid} deferRemoteChanges initialPendingRows={accessRights.pending} onItemsChange={accessRights.onItemsChange} /> });
+      result.push({ id: "organizations", label: "Организации", component: <UserOrganizationsTable userUuid={form.fields.uuid} deferRemoteChanges initialPendingRows={userOrgs.pending} onItemsChange={userOrgs.onItemsChange} /> });
     }
     return result;
-  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields]);
+  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields, accessRights, userOrgs]);
 
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
+      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading}
       readonly={!canWrite} isDirty={form.isDirty} />
   );
 };

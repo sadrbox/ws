@@ -32,6 +32,8 @@ const DEFAULT_FIELDS: TFields = {
 
 const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Employee");
+  const { canRead: canReadContacts }        = useAccessRight("Contact");
+  const { canRead: canReadEmployeeHistory } = useAccessRight("EmployeeHistory");
   const queryClient = useQueryClient();
 
   const invalidateSubTables = useCallback(() => {
@@ -121,16 +123,16 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
     ];
 
     if (form.isEditMode && form.fields.uuid) {
-      result.push({ id: "history", label: translate("EmployeeHistoriesList") || "Кадровая история", component: (
+      if (canReadEmployeeHistory) result.push({ id: "history", label: translate("EmployeeHistoriesList") || "Кадровая история", component: (
         <EmployeeHistoryTable employeeUuid={form.fields.uuid} disabled={form.isLoading} deferRemoteChanges initialPendingRows={history.pending} onItemsChange={history.onItemsChange} />
       )});
-      result.push({ id: "contacts", label: translate("ContactsList") || "Контакты", component: (
+      if (canReadContacts) result.push({ id: "contacts", label: translate("ContactsList") || "Контакты", component: (
         <ContactsTable deferRemoteChanges ownerType="employee" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.fullName || form.fields.lastName} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} />
       )});
     }
 
     return result;
-  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, handleNameFieldChange, contacts, history]);
+  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, handleNameFieldChange, contacts, history, canReadContacts, canReadEmployeeHistory]);
 
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}

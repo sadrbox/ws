@@ -2,12 +2,14 @@
 import React, { useState } from "react";
 import styles from "./Tabs.module.scss";
 
-
+export type TabAccessLevel = "full" | "readonly" | "none";
 
 interface Tab {
   id: string;
   label: string;
   component: React.ReactNode;
+  /** Уровень доступа к данным вкладки. "readonly" — показывает иконку замка */
+  accessLevel?: TabAccessLevel;
 }
 
 interface TypeTabs {
@@ -61,6 +63,11 @@ const Tabs: React.FC<TypeTabs> = ({
                 onClick={() => handleTabClick(tab.id)}
               >
                 <span className={styles.labelText}>{tab.label}</span>
+                {tab.accessLevel === "readonly" && (
+                  <span className={styles.labelReadonly} title="Только чтение">
+                    🔒
+                  </span>
+                )}
               </button>
             );
           })}

@@ -30,15 +30,42 @@ const ACCESS_LEVEL_OPTIONS = [
 
 const MODEL_NAME_OPTIONS = [
   { value: "", label: "— " + (translate("select") || "Выберите") + " —" },
-  ...["Organizations", "Counterparties", "Contracts", "Sales", "Purchases",
-    "Warehouses", "Products", "Brands", "Employees", "Contacts",
-    "ContactPersons", "ContactTypes", "Positions",
-    "BankAccounts", "Currencies", "Todos", "Notifications",
-    "OutgoingInvoices", "IncomingInvoices", "PaymentInvoices",
-    "CashReceiptOrders", "CashExpenseOrders", "InventoryTransfers",
-    "UnitOfMeasures", "VatRates",
-    "ScheduledTasks", "Users", "ActivityHistories", "EmployeeHistories",
-  ].map(v => ({ value: v, label: translate(v + "List") || v })),
+  // value = singular PascalCase (как в Prisma-модели и ROUTE_TO_MODEL)
+  // label = translate(pluralKey) — используем plural ключи i18 для отображения
+  ...[
+    { value: "Organization",       i18: "OrganizationsList" },
+    { value: "Counterparty",       i18: "CounterpartiesList" },
+    { value: "Contract",           i18: "ContractsList" },
+    { value: "Sale",               i18: "SalesList" },
+    { value: "Purchase",           i18: "PurchasesList" },
+    { value: "Warehouse",          i18: "WarehousesList" },
+    { value: "Product",            i18: "ProductsList" },
+    { value: "Brand",              i18: "BrandsList" },
+    { value: "Employee",           i18: "EmployeesList" },
+    { value: "Contact",            i18: "ContactsList" },
+    { value: "ContactPerson",      i18: "ContactPersonsList" },
+    { value: "ContactType",        i18: "ContactTypesList" },
+    { value: "Position",           i18: "PositionsList" },
+    { value: "BankAccount",        i18: "BankAccountsList" },
+    { value: "Currency",           i18: "CurrenciesList" },
+    { value: "Todo",               i18: "TodosList" },
+    { value: "Notification",       i18: "NotificationsList" },
+    { value: "OutgoingInvoice",    i18: "OutgoingInvoicesList" },
+    { value: "IncomingInvoice",    i18: "IncomingInvoicesList" },
+    { value: "PaymentInvoice",     i18: "PaymentInvoicesList" },
+    { value: "CashReceiptOrder",   i18: "CashReceiptOrdersList" },
+    { value: "CashExpenseOrder",   i18: "CashExpenseOrdersList" },
+    { value: "InventoryTransfer",  i18: "InventoryTransfersList" },
+    { value: "UnitOfMeasure",      i18: "UnitOfMeasuresList" },
+    { value: "VatRate",            i18: "VatRatesList" },
+    { value: "ScheduledTask",      i18: "ScheduledTasksList" },
+    { value: "PayrollCalculation", i18: "PayrollCalculationsList" },
+    { value: "PayrollPayment",     i18: "PayrollPaymentsList" },
+    { value: "User",               i18: "UsersList" },
+    { value: "ActivityHistory",    i18: "ActivityHistoriesList" },
+    { value: "EmployeeHistory",    i18: "EmployeeHistoriesList" },
+    { value: "AccessRight",        i18: "AccessRightsList" },
+  ].map(({ value, i18 }) => ({ value, label: translate(i18) || value })),
 ];
 
 interface TFields {
@@ -131,7 +158,6 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
       onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
-      showReload={form.isEditMode}
       readonly={!canWrite}
       isDirty={form.isDirty}
     />
@@ -145,12 +171,22 @@ AccessRightsForm.displayName = "AccessRightsForm";
 
 interface AccessRightsListProps {
   userUuid?: string;
+  /** Если true — все изменения хранятся локально, на сервер отправляются только после сохранения родителя */
+  deferRemoteChanges?: boolean;
+  /** Колбэк при изменении строк (для parent form) */
+  onItemsChange?: (items: TDataItem[]) => void;
+  /** Начальные pending-строки (восстановленные из sessionStorage) */
+  initialPendingRows?: TDataItem[];
 }
 
-const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
+const AccessRightsList: FC<AccessRightsListProps> = ({
+  userUuid,
+  deferRemoteChanges = false,
+  onItemsChange,
+  initialPendingRows,
+}) => {
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
-  const t = (key: string) => translate(key) || key;
 
   // ── Маппинги для отображения/поиска ────────────────────────────────────
   const modelNameMap = useMemo(
@@ -179,7 +215,7 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
     });
   }, [modelNameMap, accessLevelMap]);
 
-  // ── Inline-change с обновлением кэша React Query ──────────────────────
+  // ── Inline-change (только при !deferRemoteChanges — прямое сохранение на сервер) ──
   const customInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
     if (!row.uuid) return;
     await apiClient.put(`/${MODEL_ENDPOINT}/${row.uuid}`, { [field]: value });
@@ -230,8 +266,9 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
     return undefined;
   }, [modelNameMap, accessLevelMap]);
 
-  // ── openFormFor ────────────────────────────────────────────────────────
+  // ── openFormFor — только при !deferRemoteChanges ──────────────────────
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
+    if (deferRemoteChanges) return; // в deferred-режиме редактируем inline
     const isEdit = !!data?.uuid;
     const newData = !isEdit && userUuid ? { userUuid } as unknown as TDataItem : data;
     const refresh = () => {
@@ -245,15 +282,14 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
       onSave: refresh,
       onClose: refresh,
     });
-  }, [addPane, t, userUuid, queryClient]);
+  }, [addPane, deferRemoteChanges, userUuid, queryClient]);
 
-  // ── onInlineAdd ────────────────────────────────────────────────────────
+  // ── onInlineAdd — только при !deferRemoteChanges (прямая запись на сервер) ──
   const addingRef = useRef(false);
   const onInlineAdd = useCallback(async () => {
     if (!userUuid || addingRef.current) return;
     addingRef.current = true;
     try {
-      // Получаем актуальный список с сервера, чтобы не полагаться на кэш
       const resp = await apiClient.get(`/${MODEL_ENDPOINT}`, { params: { userUuid, limit: 100 } });
       const serverRows: TDataItem[] = resp.data?.items ?? resp.data ?? [];
       const existingModels = new Set(serverRows.map((r: TDataItem) => r.modelName as string));
@@ -264,7 +300,6 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
       }
       await apiClient.post(`/${MODEL_ENDPOINT}`, { modelName: available.value, accessLevel: "none", userUuid });
     } catch (err: any) {
-      // 409 = дубликат, не показываем ошибку — refetch обновит таблицу
       if (err.response?.status !== 409) {
         alert(err.response?.data?.message || "Ошибка создания");
       }
@@ -272,6 +307,12 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
       addingRef.current = false;
     }
   }, [userUuid]);
+
+  // ── defaultNewRow — используется SubTable в deferred-режиме ──────────
+  const defaultNewRow = useMemo(() => ({
+    modelName: "",
+    accessLevel: "none",
+  }), []);
 
   return (
     <SubTable
@@ -281,14 +322,17 @@ const AccessRightsList: FC<AccessRightsListProps> = ({ userUuid }) => {
       parentKey="userUuid"
       parentUuid={userUuid ?? ""}
       defaultSort={{ id: "asc" }}
-      defaultInlineEditing={false}
+      defaultInlineEditing={deferRemoteChanges ? true : false}
       disabled={false}
+      deferRemoteChanges={deferRemoteChanges}
+      initialPendingRows={initialPendingRows}
+      onItemsChange={onItemsChange}
       emptyMessage="Сохраните пользователя, чтобы управлять правами доступа."
       renderCell={renderCell}
       openFormFor={openFormFor}
-      onInlineAdd={onInlineAdd}
+      defaultNewRow={defaultNewRow}
+      {...(!deferRemoteChanges ? { onInlineAdd, customInlineChange } : {})}
       filterRows={filterRows}
-      customInlineChange={customInlineChange}
     />
   );
 };

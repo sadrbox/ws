@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback } from "react";
+import React, { FC, useMemo, useCallback } from "react";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -37,6 +37,9 @@ const DEFAULT_FIELDS: TFields = { bin: "", shortName: "", displayName: "" };
 
 const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Organization");
+  const { canRead: canReadBankAccounts } = useAccessRight("BankAccount");
+  const { canRead: canReadContracts }    = useAccessRight("Contract");
+  const { canRead: canReadContacts }     = useAccessRight("Contact");
   const queryClient = useQueryClient();
 
   const invalidateSubTables = useCallback(() => {
@@ -95,7 +98,8 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const bankAccounts = form.useTable("bankAccounts");
   const contracts = form.useTable("contracts");
 
-  const tabs = useMemo(() => [
+  const tabs = useMemo(() => {
+    const result: { id: string; label: string; component: React.ReactNode }[] = [
     {
       id: "tab0", label: translate("general") || "Основное", component: (
         <div className={styles.FormContainer}>
@@ -113,7 +117,8 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
         </div>
       ),
     },
-    {
+    ];
+    if (canReadBankAccounts) result.push({
       id: "tab1", label: translate("BankAccountsList") || "Банковские счета", component: (
         <BankAccountsTable
           deferRemoteChanges={true}
@@ -124,8 +129,8 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           onItemsChange={bankAccounts.onItemsChange}
         />
       ),
-    },
-    {
+    });
+    if (canReadContracts) result.push({
       id: "tab2", label: translate("ContractsList") || "Договора", component: (
         <ContractsTable
           deferRemoteChanges={true}
@@ -136,8 +141,8 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           onItemsChange={contracts.onItemsChange}
         />
       ),
-    },
-    {
+    });
+    if (canReadContacts) result.push({
       id: "tab3", label: translate("ContactsList") || "Контакты", component: (
         <ContactsTable
           deferRemoteChanges={true}
@@ -148,13 +153,9 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           onItemsChange={contacts.onItemsChange}
         />
       ),
-    },
-    // {
-    //   id: "tab4", label: translate("ActivityHistoriesList") || "История действий", component: (
-    //     <ActivityHistoriesList ownerUuid={form.fields.uuid} ownerField="organizationUuid" />
-    //   ),
-    // },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts]);
+    });
+    return result;
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts]);
 
   return (
     <ModelForm

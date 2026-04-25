@@ -37,6 +37,10 @@ const ALL_MODEL_NAMES = [
 	"EmployeeHistory",
 	"AccessRight",
 	"Currency",
+	"UnitOfMeasure",
+	"VatRate",
+	"PayrollCalculation",
+	"PayrollPayment",
 	"User",
 ];
 
@@ -79,6 +83,9 @@ router.post("/auth/login", async (req, res) => {
 				organizationUuid: true,
 				isSuperAdmin: true,
 				avatarPath: true,
+				userOrganizations: {
+					select: { organizationUuid: true, role: true },
+				},
 				employee: {
 					select: {
 						uuid: true,
@@ -170,6 +177,10 @@ router.post("/auth/login", async (req, res) => {
 			? generateFullAccessRights()
 			: accessRights;
 
+		const allowedOrgUuids = (user.userOrganizations || []).map(
+			(uo) => uo.organizationUuid,
+		);
+
 		let employeeData = user.employee || null;
 		if (employeeData) {
 			employeeData = { ...employeeData, accessRights: rights };
@@ -183,6 +194,8 @@ router.post("/auth/login", async (req, res) => {
 				username: user.username,
 				organizationUuid: user.organizationUuid,
 				isSuperAdmin: user.isSuperAdmin,
+				allowedOrgUuids,
+				userOrganizations: user.userOrganizations || [],
 				employee: employeeData,
 				accessRights: rights,
 			},
@@ -217,6 +230,9 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 				employeeUuid: true,
 				organizationUuid: true,
 				isSuperAdmin: true,
+				userOrganizations: {
+					select: { organizationUuid: true, role: true },
+				},
 				employee: {
 					include: { organization: true },
 				},
@@ -246,6 +262,10 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 			? generateFullAccessRights()
 			: accessRights;
 
+		const allowedOrgUuids = (user.userOrganizations || []).map(
+			(uo) => uo.organizationUuid,
+		);
+
 		let employeeData = user.employee || null;
 		if (employeeData) {
 			employeeData = { ...employeeData, accessRights: rights };
@@ -253,7 +273,12 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 
 		return res.status(200).json({
 			success: true,
-			user: { ...user, employee: employeeData, accessRights: rights },
+			user: {
+				...user,
+				employee: employeeData,
+				accessRights: rights,
+				allowedOrgUuids,
+			},
 		});
 	} catch (error) {
 		console.error("GET /auth/me error:", error);

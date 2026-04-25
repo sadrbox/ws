@@ -60,6 +60,12 @@ export interface SubTableProps {
   defaultInlineEditing?: boolean;
   /** Отключить все действия (в режиме loading родителя) */
   disabled?: boolean;
+  /**
+   * Режим "только чтение" (права доступа).
+   * Скрывает кнопки Добавить/Удалить, отключает inline-editing,
+   * блокирует открытие форм редактирования.
+   */
+  readonly?: boolean;
   /** Сообщение если parentUuid ещё не задан */
   emptyMessage?: string;
 
@@ -194,6 +200,7 @@ const SubTable: FC<SubTableProps> = ({
   defaultSort = { id: "asc" },
   defaultInlineEditing = true,
   disabled = false,
+  readonly = false,
   emptyMessage = "Сохраните запись для добавления данных.",
   renderCell: renderCellProp,
   openFormFor,
@@ -247,7 +254,7 @@ const SubTable: FC<SubTableProps> = ({
   const [sort, setSort] = useState<Record<string, "asc" | "desc">>(defaultSort);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Record<string, { value: unknown; operator: string }> | undefined>(undefined);
-  const [inlineEditing, setInlineEditing] = useState(defaultInlineEditing);
+  const [inlineEditing, setInlineEditing] = useState(readonly ? false : defaultInlineEditing);
   // Счётчик активных операций (add / inline-change / delete)
   const [opCount, setOpCount] = useState(0);
   const opLoading = opCount > 0;
@@ -791,15 +798,19 @@ const SubTable: FC<SubTableProps> = ({
   // ── Кнопки ─────────────────────────────────────────────────────────────
   const extraButtons = useMemo(() => (
     <>
-      <Toolbar.Divider />
-      <Toolbar.InlineEditButton
-        onClick={toggleInlineEditing}
-        active={inlineEditing}
-        title={inlineEditing ? "Редактирование через форму" : "Редактирование в таблице"}
-      />
+      {!readonly && (
+        <>
+          <Toolbar.Divider />
+          <Toolbar.InlineEditButton
+            onClick={toggleInlineEditing}
+            active={inlineEditing}
+            title={inlineEditing ? "Редактирование через форму" : "Редактирование в таблице"}
+          />
+        </>
+      )}
       {extraButtonsProp}
     </>
-  ), [toggleInlineEditing, inlineEditing, extraButtonsProp]);
+  ), [toggleInlineEditing, inlineEditing, extraButtonsProp, readonly]);
 
   // ── Table props ────────────────────────────────────────────────────────
   const combinedLoading = isAnythingLoading || opLoading;
@@ -820,12 +831,13 @@ const SubTable: FC<SubTableProps> = ({
     sorting: { sort, onSortChange: handleSortChange },
     filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
     search: { value: search, onChange: handleSearch },
-    actions: { openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
+    actions: { openModelForm: readonly ? undefined : openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
     onDelete: handleDelete,
     extraButtons,
     inlineEditing,
     renderCell,
-    onInlineAdd: inlineEditing && (onInlineAddProp || defaultNewRow) ? handleInlineAdd : undefined,
+    onInlineAdd: !readonly && inlineEditing && (onInlineAddProp || defaultNewRow) ? handleInlineAdd : undefined,
+    readonly,
   }), [
     componentName, displayRows, columns, adaptiveLimit, combinedLoading, error,
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,

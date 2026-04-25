@@ -52,8 +52,13 @@ export function authMiddleware(req, res, next) {
 
 /**
  * Middleware мультитенантности.
- * Загружает organizationUuid и isSuperAdmin из БД и добавляет в req.user.
+ * Загружает organizationUuid, isSuperAdmin и роль в активной орг из БД.
  * Должен вызываться ПОСЛЕ authMiddleware.
+ *
+ * Устанавливает req.user:
+ *   - organizationUuid  — активная организация (из User.organizationUuid)
+ *   - isSuperAdmin      — глобальный суперадмин (видит всё)
+ *   - isOrgAdmin        — администратор активной организации
  */
 export async function tenantMiddleware(req, res, next) {
 	if (req.method === "OPTIONS") return next();
@@ -62,15 +67,42 @@ export async function tenantMiddleware(req, res, next) {
 	try {
 		const dbUser = await prisma.user.findUnique({
 			where: { uuid: req.user.uuid },
-			select: { organizationUuid: true, isSuperAdmin: true },
+			select: {
+				organizationUuid: true,
+				isSuperAdmin: true,
+				userOrganizations: {
+					select: { organizationUuid: true, role: true },
+				},
+			},
 		});
+
 		if (dbUser) {
-			req.user.organizationUuid = dbUser.organizationUuid;
 			req.user.isSuperAdmin = dbUser.isSuperAdmin || false;
+			req.user.organizationUuid = dbUser.organizationUuid || null;
+
+			// Список UUID организаций, доступных пользователю
+			req.user.allowedOrgUuids = dbUser.userOrganizations.map(
+				(uo) => uo.organizationUuid,
+			);
+
+			// Роль в активной организации
+			const activeOrgEntry = dbUser.userOrganizations.find(
+				(uo) => uo.organizationUuid === dbUser.organizationUuid,
+			);
+			req.user.isOrgAdmin = activeOrgEntry?.role === "admin" || false;
+
+			// Безопасность: если активная орг не входит в список разрешённых — сбрасываем
+			if (
+				dbUser.organizationUuid &&
+				!req.user.isSuperAdmin &&
+				!req.user.allowedOrgUuids.includes(dbUser.organizationUuid)
+			) {
+				req.user.organizationUuid = null;
+				req.user.isOrgAdmin = false;
+			}
 		}
 	} catch (err) {
 		console.error("tenantMiddleware error:", err);
-		// Не блокируем запрос, если поля ещё не существуют (миграция)
 	}
 	next();
 }
@@ -78,15 +110,21 @@ export async function tenantMiddleware(req, res, next) {
 /**
  * Формирует WHERE-фильтр для изоляции данных по организации.
  * - Суперадмин: без фильтра (видит всё)
- * - Обычный пользователь: фильтр по organizationUuid
+ * - Обычный пользователь: фильтр по organizationUuid активной орг
  * @param {object} req - Express request с req.user
- * @param {string} field - название поля organizationUuid в модели (по умолчанию "organizationUuid")
- * @returns {object} prisma where-clause для добавления через spread
+ * @param {string} field - название поля organizationUuid в модели
+ * @returns {object} prisma where-clause
  */
 export function tenantFilter(req, field = "organizationUuid") {
 	if (!req.user) return {};
 	if (req.user.isSuperAdmin) return {}; // суперадмин видит все данные
-	if (!req.user.organizationUuid) return {}; // пользователь не привязан к организации — без фильтра
+	if (!req.user.organizationUuid) {
+		// нет активной орг — показываем данные всех разрешённых организаций
+		if (req.user.allowedOrgUuids?.length) {
+			return { [field]: { in: req.user.allowedOrgUuids } };
+		}
+		return { [field]: null }; // нет ни активной, ни разрешённых — ничего не видит
+	}
 	return { [field]: req.user.organizationUuid };
 }
 
@@ -123,6 +161,8 @@ const ROUTE_TO_MODEL = {
 	"employee-histories": "EmployeeHistory",
 	"access-rights": "AccessRight",
 	currencies: "Currency",
+	"unit-of-measures": "UnitOfMeasure",
+	"vat-rates": "VatRate",
 	"payroll-calculations": "PayrollCalculation",
 	"payroll-payments": "PayrollPayment",
 	users: "User",
@@ -154,32 +194,35 @@ export async function accessRightMiddleware(req, res, next) {
 	if (isDev && req.user?.username?.toLowerCase() === "admin") return next();
 
 	// Определяем имя модели из URL
-	// URL вида: /api/v1/<route>/... — нам нужен первый сегмент пути
 	const pathSegments = req.path.replace(/^\/+/, "").split("/");
-	const routeSegment = pathSegments[0]; // например "organizations", "access-rights"
+	const routeSegment = pathSegments[0];
 
 	const modelName = ROUTE_TO_MODEL[routeSegment];
-	if (!modelName) {
-		// Маршрут не найден в маппинге — пропускаем (например v1.js)
-		return next();
-	}
+	if (!modelName) return next();
 
 	try {
-		const accessRight = await prisma.accessRight.findFirst({
-			where: {
-				userUuid: req.user.uuid,
-				modelName,
-			},
-			select: { accessLevel: true },
-		});
+		// Ищем права с учётом активной организации пользователя.
+		// Приоритет: org-specific право > глобальное (organizationUuid = null)
+		const orgUuid = req.user?.organizationUuid || null;
 
-		const level = accessRight?.accessLevel || "none";
+		const [orgRight, globalRight] = await Promise.all([
+			orgUuid
+				? prisma.accessRight.findFirst({
+					where: { userUuid: req.user.uuid, modelName, organizationUuid: orgUuid },
+					select: { accessLevel: true },
+				  })
+				: null,
+			prisma.accessRight.findFirst({
+				where: { userUuid: req.user.uuid, modelName, organizationUuid: null },
+				select: { accessLevel: true },
+			}),
+		]);
 
-		// GET-запросы требуют "readonly" или "full"
+		const level = orgRight?.accessLevel ?? globalRight?.accessLevel ?? "none";
+
 		if (req.method === "GET") {
 			if (level === "readonly" || level === "full") return next();
 		} else {
-			// POST, PUT, DELETE, PATCH — требуют "full"
 			if (level === "full") return next();
 		}
 
@@ -189,7 +232,6 @@ export async function accessRightMiddleware(req, res, next) {
 		});
 	} catch (err) {
 		console.error("accessRightMiddleware error:", err);
-		// Если таблица access_rights ещё не создана — пропускаем
 		return next();
 	}
 }

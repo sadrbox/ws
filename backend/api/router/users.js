@@ -402,4 +402,251 @@ router.delete("/users/:id/avatar", async (req, res) => {
 	}
 });
 
+// ════════════════════════════════════════════════════════════════════════
+// USER ORGANIZATIONS — вложенная таблица орг пользователя
+// Доступно: суперадмин или org-admin своей организации
+// ════════════════════════════════════════════════════════════════════════
+
+// GET /users/:id/organizations — список орг пользователя
+router.get("/users/:id/organizations", async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+
+		// Проверяем права: суперадмин или org-admin видит пользователей своей орг
+		const isSuperAdmin = req.user?.isSuperAdmin;
+		const isOrgAdmin = req.user?.isOrgAdmin;
+
+		const items = await prisma.userOrganization.findMany({
+			where: {
+				user: w,
+				// Org-admin видит только своих пользователей
+				...(!isSuperAdmin && isOrgAdmin
+					? { organizationUuid: req.user.organizationUuid }
+					: {}),
+			},
+			include: {
+				organization: {
+					select: { uuid: true, bin: true, shortName: true, displayName: true },
+				},
+			},
+			orderBy: { createdAt: "asc" },
+		});
+
+		return res.json({ success: true, items });
+	} catch (error) {
+		console.error("GET /users/:id/organizations error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// POST /users/:id/organizations — добавить организацию пользователю
+router.post("/users/:id/organizations", async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const { organizationUuid, role = "member" } = req.body;
+
+		if (!organizationUuid) {
+			return res.status(400).json({ success: false, message: "organizationUuid обязателен" });
+		}
+
+		// Только суперадмин может назначать admin-роль в чужих орг
+		const isSuperAdmin = req.user?.isSuperAdmin;
+		const isOrgAdmin = req.user?.isOrgAdmin;
+		const callerOrgUuid = req.user?.organizationUuid;
+
+		if (!isSuperAdmin) {
+			// Org-admin может добавлять пользователей только в свою орг
+			if (!isOrgAdmin || organizationUuid !== callerOrgUuid) {
+				return res.status(403).json({ success: false, message: "Нет доступа" });
+			}
+			// Org-admin не может назначить роль выше своей
+			if (role === "admin" && !isSuperAdmin) {
+				return res.status(403).json({
+					success: false,
+					message: "Назначить роль admin может только суперадмин",
+				});
+			}
+		}
+
+		const targetUser = await prisma.user.findUnique({ where: w, select: { uuid: true } });
+		if (!targetUser) {
+			return res.status(404).json({ success: false, message: "Пользователь не найден" });
+		}
+
+		const item = await prisma.userOrganization.upsert({
+			where: {
+				userUuid_organizationUuid: {
+					userUuid: targetUser.uuid,
+					organizationUuid,
+				},
+			},
+			update: { role },
+			create: { userUuid: targetUser.uuid, organizationUuid, role },
+			include: {
+				organization: {
+					select: { uuid: true, bin: true, shortName: true, displayName: true },
+				},
+			},
+		});
+
+		return res.status(201).json({ success: true, item });
+	} catch (error) {
+		console.error("POST /users/:id/organizations error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// PUT /users/:id/organizations/:orgUuid — изменить роль
+router.put("/users/:id/organizations/:orgUuid", async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const { orgUuid } = req.params;
+		const { role } = req.body;
+
+		if (!role) {
+			return res.status(400).json({ success: false, message: "role обязателен" });
+		}
+
+		const isSuperAdmin = req.user?.isSuperAdmin;
+		if (!isSuperAdmin && role === "admin") {
+			return res.status(403).json({
+				success: false,
+				message: "Назначить роль admin может только суперадмин",
+			});
+		}
+
+		const targetUser = await prisma.user.findUnique({ where: w, select: { uuid: true } });
+		if (!targetUser) {
+			return res.status(404).json({ success: false, message: "Пользователь не найден" });
+		}
+
+		const item = await prisma.userOrganization.update({
+			where: {
+				userUuid_organizationUuid: {
+					userUuid: targetUser.uuid,
+					organizationUuid: orgUuid,
+				},
+			},
+			data: { role },
+			include: {
+				organization: {
+					select: { uuid: true, bin: true, shortName: true, displayName: true },
+				},
+			},
+		});
+
+		return res.json({ success: true, item });
+	} catch (error) {
+		if (error.code === "P2025")
+			return res.status(404).json({ success: false, message: "Запись не найдена" });
+		console.error("PUT /users/:id/organizations/:orgUuid error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// DELETE /users/:id/organizations/:orgUuid — убрать организацию у пользователя
+router.delete("/users/:id/organizations/:orgUuid", async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const { orgUuid } = req.params;
+
+		const isSuperAdmin = req.user?.isSuperAdmin;
+		const isOrgAdmin = req.user?.isOrgAdmin;
+		const callerOrgUuid = req.user?.organizationUuid;
+
+		if (!isSuperAdmin && (!isOrgAdmin || orgUuid !== callerOrgUuid)) {
+			return res.status(403).json({ success: false, message: "Нет доступа" });
+		}
+
+		const targetUser = await prisma.user.findUnique({ where: w, select: { uuid: true } });
+		if (!targetUser) {
+			return res.status(404).json({ success: false, message: "Пользователь не найден" });
+		}
+
+		await prisma.userOrganization.delete({
+			where: {
+				userUuid_organizationUuid: {
+					userUuid: targetUser.uuid,
+					organizationUuid: orgUuid,
+				},
+			},
+		});
+
+		// Если удалили активную орг — сбрасываем её у пользователя
+		const currentUser = await prisma.user.findUnique({
+			where: { uuid: targetUser.uuid },
+			select: { organizationUuid: true },
+		});
+		if (currentUser?.organizationUuid === orgUuid) {
+			await prisma.user.update({
+				where: { uuid: targetUser.uuid },
+				data: { organizationUuid: null },
+			});
+		}
+
+		return res.json({ success: true });
+	} catch (error) {
+		if (error.code === "P2025")
+			return res.status(404).json({ success: false, message: "Запись не найдена" });
+		console.error("DELETE /users/:id/organizations/:orgUuid error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// POST /users/:id/switch-organization — переключить активную организацию
+router.post("/users/:id/switch-organization", async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const { organizationUuid } = req.body;
+
+		// Проверяем что пользователь переключает только себя (или суперадмин)
+		const callerUuid = req.user?.uuid;
+		const targetUser = await prisma.user.findUnique({
+			where: w,
+			select: { uuid: true, userOrganizations: { select: { organizationUuid: true } } },
+		});
+		if (!targetUser) {
+			return res.status(404).json({ success: false, message: "Пользователь не найден" });
+		}
+
+		if (!req.user?.isSuperAdmin && targetUser.uuid !== callerUuid) {
+			return res.status(403).json({ success: false, message: "Нет доступа" });
+		}
+
+		// Проверяем что организация входит в список доступных
+		if (organizationUuid) {
+			const allowed = targetUser.userOrganizations.some(
+				(uo) => uo.organizationUuid === organizationUuid,
+			);
+			if (!allowed && !req.user?.isSuperAdmin) {
+				return res.status(403).json({
+					success: false,
+					message: "Эта организация недоступна для данного пользователя",
+				});
+			}
+		}
+
+		const item = await prisma.user.update({
+			where: { uuid: targetUser.uuid },
+			data: { organizationUuid: organizationUuid || null },
+			select: { uuid: true, organizationUuid: true },
+		});
+
+		return res.json({ success: true, item });
+	} catch (error) {
+		console.error("POST /users/:id/switch-organization error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 export default router;
