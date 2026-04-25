@@ -1,13 +1,13 @@
-import {
-	useCallback,
-	useRef,
-	useSyncExternalStore,
-	useEffect,
-} from "react";
+import { useCallback, useRef, useSyncExternalStore, useEffect } from "react";
 import { useAppContext } from "src/app";
 import { isNetworkError } from "src/services/networkUtils";
 import { commitPendingRows } from "src/services/commitPendingRows";
-import { pipeFetchOne, pipeCreate, pipeUpdate, isOfflineFirst } from "src/services/persistencePipe";
+import {
+	pipeFetchOne,
+	pipeCreate,
+	pipeUpdate,
+	isOfflineFirst,
+} from "src/services/persistencePipe";
 import { translateError } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -73,7 +73,8 @@ const STORAGE_PREFIX = "formStore:";
 // Сбрасывается при перезагрузке / закрытии вкладки.
 // Позволяет отличить данные sessionStorage текущей сессии от данных прошлой.
 // ═══════════════════════════════════════════════════════════════════════════
-const CURRENT_SESSION_TOKEN = Math.random().toString(36).slice(2) + Date.now().toString(36);
+const CURRENT_SESSION_TOKEN =
+	Math.random().toString(36).slice(2) + Date.now().toString(36);
 const SESSION_TOKEN_KEY = "_st";
 
 function persistToSession<F extends object>(
@@ -95,7 +96,11 @@ function persistToSession<F extends object>(
 
 function restoreFromSession<F extends object>(
 	storageKey: string,
-): { fields: F; tables: Record<string, TableState>; fromCurrentSession: boolean } | null {
+): {
+	fields: F;
+	tables: Record<string, TableState>;
+	fromCurrentSession: boolean;
+} | null {
 	try {
 		const raw = sessionStorage.getItem(storageKey);
 		if (!raw) return null;
@@ -104,7 +109,8 @@ function restoreFromSession<F extends object>(
 			tables: Record<string, TableState>;
 			[SESSION_TOKEN_KEY]?: string;
 		};
-		const fromCurrentSession = parsed[SESSION_TOKEN_KEY] === CURRENT_SESSION_TOKEN;
+		const fromCurrentSession =
+			parsed[SESSION_TOKEN_KEY] === CURRENT_SESSION_TOKEN;
 		return { fields: parsed.fields, tables: parsed.tables, fromCurrentSession };
 	} catch {
 		return null;
@@ -184,9 +190,15 @@ function createFormStore<F extends object>(
 	// Хранится в store (а не в React-состоянии), поэтому не сбрасывается при
 	// перемонтировании компонента (закрыл/открыл панель без перезагрузки страницы).
 	let prevSessionNotifShown = false;
-	function markPrevSessionNotifShown(): void { prevSessionNotifShown = true; }
-	function isPrevSessionNotifShown(): boolean { return prevSessionNotifShown; }
-	function isSnapshotReady(): boolean { return snapshotReady; }
+	function markPrevSessionNotifShown(): void {
+		prevSessionNotifShown = true;
+	}
+	function isPrevSessionNotifShown(): boolean {
+		return prevSessionNotifShown;
+	}
+	function isSnapshotReady(): boolean {
+		return snapshotReady;
+	}
 
 	// ── Подписчики ──
 	const listeners = new Set<Listener>();
@@ -283,11 +295,17 @@ function createFormStore<F extends object>(
 	 */
 	function getDirtyDetails(): { fields: boolean; tables: boolean } {
 		if (!snapshotReady) return { fields: false, tables: false };
-		let parsed: { fields: unknown; tables: Record<string, TableState> } | null = null;
-		try { parsed = JSON.parse(savedSnapshot); } catch { /* ignore */ }
+		let parsed: { fields: unknown; tables: Record<string, TableState> } | null =
+			null;
+		try {
+			parsed = JSON.parse(savedSnapshot);
+		} catch {
+			/* ignore */
+		}
 		const savedFields = parsed?.fields;
 		const savedTables = parsed?.tables ?? {};
-		const fieldsDirty = JSON.stringify(state.fields) !== JSON.stringify(savedFields);
+		const fieldsDirty =
+			JSON.stringify(state.fields) !== JSON.stringify(savedFields);
 		const tablesDirty = Object.keys(state.tables).some(
 			(key) =>
 				JSON.stringify(state.tables[key]) !==
@@ -343,7 +361,10 @@ function createFormStore<F extends object>(
 	}
 
 	/** Установить ошибку: пушит уведомление в колокольчик панели */
-	function setError(msg: string | null, noteType?: PaneNotification["type"]): void {
+	function setError(
+		msg: string | null,
+		noteType?: PaneNotification["type"],
+	): void {
 		if (msg && _paneUniqId) {
 			addPaneNotification(_paneUniqId, noteType ?? "error", msg);
 		}
@@ -395,9 +416,7 @@ function createFormStore<F extends object>(
 				}
 			}
 
-			const mapped = await Promise.resolve(
-				mapServerToForm(d, state.fields),
-			);
+			const mapped = await Promise.resolve(mapServerToForm(d, state.fields));
 
 			if (snapshotOnly) {
 				savedSnapshot = JSON.stringify({
@@ -422,7 +441,8 @@ function createFormStore<F extends object>(
 			afterLoad?.();
 		} catch (err: any) {
 			if (isNetworkError(err)) {
-				const offMsg = "Нет связи с сервером. Работа в режиме offline — данные будут загружены при восстановлении соединения.";
+				const offMsg =
+					"Нет связи с сервером. Работа в режиме offline — данные будут загружены при восстановлении соединения.";
 				setError(offMsg, "warning");
 			} else {
 				setError(
@@ -456,18 +476,24 @@ function createFormStore<F extends object>(
 			const isEdit =
 				state.meta.isEditMode &&
 				(state.meta.uuid || (state.fields as any).uuid);
-			const entityUuid =
-				state.meta.uuid || (state.fields as any).uuid;
+			const entityUuid = state.meta.uuid || (state.fields as any).uuid;
 
 			let saved: any;
 			let wasOffline = false;
 
 			if (isEdit && entityUuid) {
-				const result = await pipeUpdate(endpoint, entityUuid, payloadOrError as Record<string, unknown>);
+				const result = await pipeUpdate(
+					endpoint,
+					entityUuid,
+					payloadOrError as Record<string, unknown>,
+				);
 				saved = result.item;
 				wasOffline = result.offline;
 			} else {
-				const result = await pipeCreate(endpoint, payloadOrError as Record<string, unknown>);
+				const result = await pipeCreate(
+					endpoint,
+					payloadOrError as Record<string, unknown>,
+				);
 				saved = result.item;
 				wasOffline = result.offline;
 			}
@@ -483,7 +509,8 @@ function createFormStore<F extends object>(
 			});
 
 			if (wasOffline) {
-				const saveMsg = "Сохранено локально. Синхронизация произойдёт при восстановлении связи.";
+				const saveMsg =
+					"Сохранено локально. Синхронизация произойдёт при восстановлении связи.";
 				setError(saveMsg, "info");
 			}
 
@@ -493,10 +520,12 @@ function createFormStore<F extends object>(
 			let msg = "Не удалось сохранить";
 			let noteType: PaneNotification["type"] = "error";
 			if (isNetworkError(err)) {
-				msg = "Нет связи с сервером. Повторите попытку при восстановлении соединения.";
+				msg =
+					"Нет связи с сервером. Повторите попытку при восстановлении соединения.";
 				noteType = "warning";
 			} else if (err.response?.status === 409)
-				msg = translateError(err.response.data?.message) || "Запись уже существует";
+				msg =
+					translateError(err.response.data?.message) || "Запись уже существует";
 			else if (err.response?.status === 400)
 				msg = translateError(err.response.data?.message) || "Ошибка валидации";
 			else if (err.message) msg = translateError(err.message);
@@ -639,15 +668,54 @@ function createFormStore<F extends object>(
 }
 
 /** Тип store, возвращаемого createFormStore */
-export type FormStore<F extends object> = ReturnType<
-	typeof createFormStore<F>
->;
+export type FormStore<F extends object> = ReturnType<typeof createFormStore<F>>;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // КЭШИРОВАНИЕ STORE (синглтон на storageKey)
 // ═══════════════════════════════════════════════════════════════════════════
 
 const storeCache = new Map<string, FormStore<any>>();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GLOBAL FORM API REGISTRY
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Глобальный реестр API-функций форм, привязанных к paneId.
+ * Позволяет вызывать reload/save извне, зная только ID панели.
+ */
+export const formStoreAPI = (() => {
+	const apiMap = new Map<string, { reload?: () => void }>();
+	const listeners = new Map<string, Set<() => void>>();
+
+	function subscribe(paneId: string, cb: () => void) {
+		if (!listeners.has(paneId)) listeners.set(paneId, new Set());
+		listeners.get(paneId)!.add(cb);
+		return () => unsubscribe(paneId, cb);
+	}
+
+	function unsubscribe(paneId: string, cb: () => void) {
+		listeners.get(paneId)?.delete(cb);
+	}
+
+	function notify(paneId: string) {
+		listeners.get(paneId)?.forEach(l => l());
+	}
+
+	return {
+		register: (paneId: string, api: { reload?: () => void }) => {
+			apiMap.set(paneId, api);
+			notify(paneId);
+		},
+		unregister: (paneId: string) => {
+			apiMap.delete(paneId);
+			notify(paneId);
+		},
+		get: (paneId: string) => apiMap.get(paneId),
+		subscribe,
+		unsubscribe,
+	};
+})();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DIRTY PANES STORE — глобальный реактивный Set<uniqId> для индикации
@@ -675,7 +743,9 @@ export function setPaneDirty(uniqId: string, dirty: boolean): void {
 
 function subscribeDirty(listener: () => void): () => void {
 	dirtyListeners.add(listener);
-	return () => { dirtyListeners.delete(listener); };
+	return () => {
+		dirtyListeners.delete(listener);
+	};
 }
 
 /** Хук: подписка на dirty-состояние конкретной панели. */
@@ -726,11 +796,16 @@ const JOURNAL_MAX = 200;
 function loadJournal(): NotificationJournalEntry[] {
 	try {
 		return JSON.parse(localStorage.getItem(JOURNAL_KEY) || "[]");
-	} catch { return []; }
+	} catch {
+		return [];
+	}
 }
 
 function saveJournal(entries: NotificationJournalEntry[]): void {
-	localStorage.setItem(JOURNAL_KEY, JSON.stringify(entries.slice(-JOURNAL_MAX)));
+	localStorage.setItem(
+		JOURNAL_KEY,
+		JSON.stringify(entries.slice(-JOURNAL_MAX)),
+	);
 }
 
 /** Журнал: подписчики для реактивного обновления */
@@ -749,7 +824,9 @@ function getJournalSnapshot(): NotificationJournalEntry[] {
 
 function subscribeJournal(listener: () => void): () => void {
 	journalListeners.add(listener);
-	return () => { journalListeners.delete(listener); };
+	return () => {
+		journalListeners.delete(listener);
+	};
 }
 
 /** Хук: получить журнал уведомлений (реактивный) */
@@ -827,14 +904,19 @@ export function resolvePaneNotifications(uniqId: string): void {
 	if (!list || list.length === 0) return;
 	let changed = false;
 	for (const n of list) {
-		if (!n.resolved) { n.resolved = true; changed = true; }
+		if (!n.resolved) {
+			n.resolved = true;
+			changed = true;
+		}
 	}
 	if (changed) notifyNoteListeners();
 }
 
 function subscribeNotes(listener: () => void): () => void {
 	noteListeners.add(listener);
-	return () => { noteListeners.delete(listener); };
+	return () => {
+		noteListeners.delete(listener);
+	};
 }
 
 /** Хук: уведомления конкретной панели */
@@ -845,6 +927,7 @@ export function usePaneNotifications(uniqId: string): PaneNotification[] {
 		() => emptyNotes,
 	);
 }
+
 const emptyNotes: PaneNotification[] = [];
 
 function getOrCreate<F extends object>(
@@ -935,6 +1018,7 @@ export interface UseFormStoreReturn<F extends object> {
 	handleSave: () => void;
 	handleSaveAndClose: () => Promise<void>;
 	handleClose: () => Promise<void>;
+	handleReload: () => Promise<void>;
 
 	/** UUID текущей записи */
 	uuid: string | undefined;
@@ -986,12 +1070,7 @@ export function useFormStore<F extends object>(
 	const { onSave, onClose, data, uniqId } = paneProps;
 	const uuid = data?.uuid as string | undefined;
 	const {
-		windows: {
-			removePane,
-			updatePaneLabel,
-			requestClose,
-			registerBeforeClose,
-		},
+		windows: { updatePaneLabel, requestClose, registerBeforeClose },
 		actions: { confirm },
 	} = useAppContext();
 	const formUid = useUID();
@@ -1001,8 +1080,9 @@ export function useFormStore<F extends object>(
 	// Для НОВЫХ форм ключ привязан к uniqId панели: "formStore:<storageKey>:<uniqId>"
 	// Это гарантирует что каждая новая форма имеет свой собственный store.
 	// При восстановлении из UnsavedForms — data._formStorageKey содержит оригинальный ключ.
-	const fullStorageKey = (data as any)?._formStorageKey as string
-		|| `${STORAGE_PREFIX}${storageKey}:${uuid ?? uniqId ?? "new"}`;
+	const fullStorageKey =
+		((data as any)?._formStorageKey as string) ||
+		`${STORAGE_PREFIX}${storageKey}:${uuid ?? uniqId ?? "new"}`;
 	const effectiveDefaults = initialFields ?? defaultFields;
 
 	// Создаём/получаем store из кэша
@@ -1034,8 +1114,12 @@ export function useFormStore<F extends object>(
 	onCloseRef.current = onClose;
 
 	// Refs для deferred-доступа из эффектов, создаваемых раньше определения функций
-	const submitRef = useRef<() => Promise<boolean>>(() => Promise.resolve(false));
-	const loadFromServerRef = useRef<(entityUuid: string) => Promise<void>>(async () => {});
+	const submitRef = useRef<() => Promise<boolean>>(() =>
+		Promise.resolve(false),
+	);
+	const loadFromServerRef = useRef<(entityUuid: string) => Promise<void>>(
+		async () => {},
+	);
 
 	// ── Полная подписка (для meta / error / loading) ──
 	const snapshot = useSyncExternalStore(
@@ -1052,7 +1136,12 @@ export function useFormStore<F extends object>(
 			// Если данные восстановлены из sessionStorage — загружаем серверные данные
 			// только для snapshot (isDirty будет сравнивать с реальным серверным состоянием).
 			// Если sessionStorage пуст — полная загрузка (заменяет fields).
-			store.load(uuid, mapRef.current, afterLoadRef.current, store.hadStoredData);
+			store.load(
+				uuid,
+				mapRef.current,
+				afterLoadRef.current,
+				store.hadStoredData,
+			);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uuid, store]);
@@ -1131,7 +1220,7 @@ export function useFormStore<F extends object>(
 		let fired = false;
 		const fire = (unsubscribe: () => void) => {
 			if (fired) return;
-			// Ждём, пока серверный снапшот не загрузится (snapshotReady = true).
+			// Ждём, пока серверный снапшот не загружится (snapshotReady = true).
 			// Уведомление проверяется ровно ОДИН РАЗ после загрузки — до этого момента
 			// пользователь ещё не редактировал, поэтому не будет ложных срабатываний.
 			if (!store.isSnapshotReady()) return;
@@ -1140,17 +1229,20 @@ export function useFormStore<F extends object>(
 			// Если данные сессии совпадают с серверными — уведомление не нужно
 			if (!store.isDirty()) return;
 			// Формируем текст с указанием что именно несохранено
-			const { fields: fieldsDirty, tables: tablesDirty } = store.getDirtyDetails();
+			const { fields: fieldsDirty, tables: tablesDirty } =
+				store.getDirtyDetails();
 			let what: string;
 			if (fieldsDirty && tablesDirty) {
-				what = "поля формы и строки вложенных таблиц содержат несохранённые правки.";
+				what =
+					"поля формы и строки вложенных таблиц содержат несохранённые правки.";
 			} else if (tablesDirty) {
 				what = "строки вложенных таблиц содержат несохранённые правки.";
 			} else {
 				what = "поля формы содержат несохранённые правки.";
 			}
 			const noteText =
-				"В прошлый раз вы изменили данные в этой форме, но не сохранили их. " + what;
+				"В прошлый раз вы изменили данные в этой форме, но не сохранили их. " +
+				what;
 			store.markPrevSessionNotifShown(); // запомним в store — не показывать повторно
 			addPaneNotification(uniqId, "warning", noteText, noteCtx, noteActions);
 		};
@@ -1196,8 +1288,7 @@ export function useFormStore<F extends object>(
 
 			// eslint-disable-next-line react-hooks/rules-of-hooks
 			const setPending = useCallback(
-				(rows: TDataItem[]) =>
-					store.setTablePending(tableKey, rows),
+				(rows: TDataItem[]) => store.setTablePending(tableKey, rows),
 				// eslint-disable-next-line react-hooks/exhaustive-deps
 				[tableKey],
 			);
@@ -1208,9 +1299,7 @@ export function useFormStore<F extends object>(
 			const onItemsChange = useCallback(
 				(items: TDataItem[] | undefined) => {
 					const all = items ?? [];
-					const pending = all.filter(
-						(r: any) => r._pendingAction,
-					);
+					const pending = all.filter((r: any) => r._pendingAction);
 					store.setTablePending(tableKey, pending);
 				},
 				// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1229,12 +1318,7 @@ export function useFormStore<F extends object>(
 	// ── loadFromServer ──
 	const loadFromServer = useCallback(
 		async (entityUuid: string) => {
-			await store.load(
-				entityUuid,
-				mapRef.current,
-				afterLoadRef.current,
-				false,
-			);
+			await store.load(entityUuid, mapRef.current, afterLoadRef.current, false);
 		},
 		[store],
 	);
@@ -1251,18 +1335,12 @@ export function useFormStore<F extends object>(
 		if (!success) return false;
 
 		// Коммит всех pending-таблиц
-		const parentUuid =
-			savedData?.uuid ??
-			store.getSnapshot().meta.uuid ??
-			"";
+		const parentUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid ?? "";
 		if (Object.keys(tableDefs).length > 0 && parentUuid) {
 			try {
 				await store.commitAllTables(parentUuid);
 			} catch (e: any) {
-				store.setError(
-					e?.message ||
-						"Не удалось сохранить вложенные данные",
-				);
+				store.setError(e?.message || "Не удалось сохранить вложенные данные");
 				return false;
 			}
 		}
@@ -1272,10 +1350,7 @@ export function useFormStore<F extends object>(
 			try {
 				await afterSaveRef.current(savedData);
 			} catch (e: any) {
-				store.setError(
-					e?.message ||
-						"Ошибка после сохранения",
-				);
+				store.setError(e?.message || "Ошибка после сохранения");
 				return false;
 			}
 		}
@@ -1311,9 +1386,9 @@ export function useFormStore<F extends object>(
 			store.clearStorage();
 			storeCache.delete(currentKey);
 			onCloseRef.current?.();
-			if (uniqId) removePane(uniqId);
+			if (uniqId) requestClose(uniqId, { force: true });
 		}
-	}, [submit, store, uniqId, removePane]);
+	}, [submit, store, uniqId, requestClose]);
 
 	const handleClose = useCallback(async () => {
 		if (uniqId) {
@@ -1333,6 +1408,25 @@ export function useFormStore<F extends object>(
 			onCloseRef.current?.();
 		}
 	}, [store, uniqId, requestClose, confirm]);
+
+	const handleReload = useCallback(async () => {
+		if (store.isDirty()) {
+			const answer = await confirm(
+				`Имеются несохранённые изменения.\nПерезагрузить данные с сервера и потерять правки?`,
+			);
+			if (!answer) return;
+		}
+		// Перезагрузка данных с сервера по uuid записи (если она не новая)
+		const currentUuid = store.getSnapshot().meta.uuid;
+		if (currentUuid) await loadFromServer(currentUuid);
+	}, [store, confirm, loadFromServer]);
+
+	// ── Регистрация в глобальном API ──
+	useEffect(() => {
+		if (!uniqId) return;
+		formStoreAPI.register(uniqId, { reload: handleReload });
+		return () => formStoreAPI.unregister(uniqId);
+	}, [uniqId, handleReload]);
 
 	// ── Совместимость со старым API ──
 	const handleFieldChange = useCallback(
@@ -1383,6 +1477,7 @@ export function useFormStore<F extends object>(
 		handleSave,
 		handleSaveAndClose,
 		handleClose,
+		handleReload,
 
 		uuid,
 		formUid,
@@ -1401,3 +1496,6 @@ export function useFormStore<F extends object>(
 		submit,
 	};
 }
+
+
+

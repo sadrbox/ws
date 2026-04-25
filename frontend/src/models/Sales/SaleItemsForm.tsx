@@ -364,7 +364,6 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
       onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
-      showReload={form.isEditMode}
       readonly={!canWrite}
       isDirty={form.isDirty}
     />
@@ -373,7 +372,7 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
 
 const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Sale");
-  const { windows: { removePane } } = useAppContext();
+  const { windows: { requestClose } } = useAppContext();
   const formUid = useUID();
   const uniqId = paneProps.uniqId;
   const data = paneProps.data as Record<string, any> | undefined;
@@ -405,8 +404,8 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
 
   const handleClose = useCallback(() => {
     if (paneProps.onClose) paneProps.onClose();
-    if (uniqId) removePane(uniqId);
-  }, [paneProps, uniqId, removePane]);
+    if (uniqId) requestClose(uniqId, { force: true });
+  }, [paneProps, uniqId, requestClose]);
 
   const tabs = useMemo(() => [
     {
@@ -432,7 +431,6 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
       onSaveAndClose={handleClose}
       onClose={handleClose}
       isLoading={false}
-      showReload={false}
       readonly={!canWrite}
       isDirty={isDirty}
     />

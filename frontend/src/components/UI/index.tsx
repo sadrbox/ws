@@ -9,11 +9,11 @@ import { ContractsList } from 'src/models/Contracts';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app/context';
-import Toolbar, { CloseButton } from 'src/components/Toolbar';
+import Toolbar, { ReloadButton, CloseButton } from 'src/components/Toolbar';
 import { Button } from 'src/components/Button';
 import closeIcon from 'src/assets/close_16.png';
 import type { TPane } from 'src/app/types';
-import { usePaneToolbarSlot } from 'src/hooks/usePaneToolbar';
+import { usePaneToolbarSlot, useHasToolbar } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
@@ -51,6 +51,7 @@ import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
 import { getAccessLevel } from 'src/hooks/useAccessRight';
 import { usePersistenceMode } from 'src/services/persistenceMode';
+// import { usePaneDirty, usePaneNotifications, dismissPaneNotification, usePaneReload } from 'src/hooks/useFormStore';
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -95,7 +96,7 @@ export const Container: FC = () => {
 }
 
 /** Одна вкладка — отдельный компонент, чтобы можно было использовать хук usePaneDirty */
-const PanesTabsItem: FC<{
+const PaneTabItem: FC<{
   pane: { uniqId: string; label: string; isSelector?: boolean; selectorPaneId?: string };
   isActive: boolean;
   isLocked: boolean;
@@ -107,11 +108,11 @@ const PanesTabsItem: FC<{
   return (
     <div
       className={[
-        styles.PanesTabsItem,
-        isActive && styles.PanesTabsItemActive,
-        pane.isSelector && styles.PanesTabsItemSelector,
-        isLocked && styles.PanesTabsItemDisabled,
-        isDirty && styles.PanesTabsItemDirty,
+        styles.PaneTabItem,
+        isActive && styles.PaneTabItemActive,
+        pane.isSelector && styles.PaneTabItemSelector,
+        isLocked && styles.PaneTabItemDisabled,
+        isDirty && styles.PaneTabItemDirty,
       ].filter(Boolean).join(" ")}
       onClick={isLocked ? undefined : onActivate}
       title={pane.label}
@@ -122,18 +123,18 @@ const PanesTabsItem: FC<{
       {!isLocked && (
         isDirty
           ? <button
-            className={styles.PanesTabsItemClose}
+            className={styles.PaneTabItemClose}
             onClick={(e) => { e.stopPropagation(); onClose(); }}
             title="Закрыть"
             type="button"
-          ><span className={styles.PanesTabsItemDirtyDot} /></button>
-          : <Toolbar.CloseButton
-            className={styles.PanesTabsItemClose}
+          ><span className={styles.PaneTabItemDirtyDot} /></button>
+          : <CloseButton
+            className={styles.PaneTabItemClose}
             onClick={(e) => { e.stopPropagation(); onClose(); }}
             size={14}
           />
       )}
-      <span className={styles.PanesTabsItemLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
+      <span className={styles.PaneTabItemLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
     </div>
   );
 };
@@ -152,8 +153,8 @@ export const PanesTabs: FC = () => {
       {panes.map(p => {
         const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
         return (
-          <PanesTabsItem
-            key={`PanesTabs-${p.uniqId}`}
+          <PaneTabItem
+            key={`PaneTabItem-${p.uniqId}`}
             pane={p}
             isActive={p.uniqId === activePane}
             isLocked={isLocked}
@@ -172,19 +173,21 @@ export const Panes: FC = () => {
 
   return (
     <div className={styles.Panes}>
-      {panes.map(p => (
-        <PaneItem key={`Panes-${p.uniqId}`} pane={p} isActive={p.uniqId === activePane} onClose={() => requestClose(p.uniqId)} />
-      ))}
+      {panes.map(p => <PaneItem key={`Panes-${p.uniqId}`} pane={p} isActive={p.uniqId === activePane} onClose={() => requestClose(p.uniqId)} />
+        )}
     </div>
   )
 }
 
 /** Отдельный компонент панели — позволяет вызывать хуки */
 const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({ pane: p, isActive, onClose }) => {
-  const slotRef = usePaneToolbarSlot(p.uniqId);
+  const { refCallback: slot } = usePaneToolbarSlot(p.uniqId);
   const isDirty = usePaneDirty(p.uniqId);
+  const hasToolbar = useHasToolbar(p.uniqId);
+  const onReload = usePaneReload(p.uniqId);
   const Component = p.component as FC<any>;
 
+  // console.log('data:', p.data);
   return (
     <div className={[styles.PaneItem, isActive && styles.PaneItemActive].filter(Boolean).join(" ")}>
       <div className={styles.PaneItemHeader}>
@@ -196,11 +199,14 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
           {isDirty && <span className={styles.PaneItemHeaderDirtyDot} />}
         </h2>
         <div className={styles.PaneItemHeaderToolbar}>
-          <ToolbarSlot ref={slotRef} />
-          <CloseButton  onClick={onClose}/>
+          {hasToolbar && <ReloadButton onClick={onReload} />}
+          <CloseButton onClick={onClose} />
         </div>
       </div>
       <Component {...p} />
+      {hasToolbar && <div className={styles.PaneItemBottomToolbar}>
+        <ToolbarSlot ref={slot} />
+      </div>}
     </div>
   );
 }
@@ -749,3 +755,33 @@ export const LoadingSpinner: React.FC<{ variant?: 'default' | 'overlay' }> = ({ 
     </div>
   );
 };
+
+/**
+ * Возвращает callback для перезагрузки данных в панели.
+ * В настоящее время это просто заглушка, которая выводит сообщение в консоль.
+ * Реальная реализация будет зависеть от того, как управляется состояние данных (например, SWR, React Query, или кастомный стор).
+ * @param uniqId - Уникальный идентификатор сущности в панели.
+ */
+function usePaneReload(uniqId?: string): () => void {
+  const ctx = useAppContext();
+  const reloadPane = (ctx?.windows as any)?.reloadPane;
+
+  const handleReload = useCallback(() => {
+    if (!uniqId) return;
+
+    if (typeof reloadPane === "function") {
+      try {
+        reloadPane(uniqId);
+      } catch (err) {
+        console.error("Error while reloading pane:", err);
+      }
+    } else {
+      // Fallback behavior — dispatch an event that consumers can listen to,
+      // or at least log so developers can add a reload handler if needed.
+      console.warn("reloadPane not available in context — dispatching 'pane:reload' event as fallback");
+      window.dispatchEvent(new CustomEvent("pane:reload", { detail: { uniqId } }));
+    }
+  }, [uniqId, reloadPane]);
+
+  return handleReload;
+}

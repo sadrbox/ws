@@ -268,8 +268,14 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems]);
 
   return (
-    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
+    <ModelForm paneId={form.paneId} tabs={tabs}
+      onSave={form.handleSave}
+      onSaveAndClose={form.handleSaveAndClose}
+      onClose={form.handleClose}
+      // onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
+      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
+      isLoading={form.isLoading}
+      // showReload={form.isEditMode}
       readonly={!canWrite} isDirty={form.isDirty} />
   );
 };

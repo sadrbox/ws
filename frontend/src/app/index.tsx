@@ -29,6 +29,7 @@ import ConfirmModal from "src/components/ConfirmModal";
 import { startHealthCheck, stopHealthCheck } from "src/services/networkStatus";
 import { clearAllFormStores } from "src/hooks/useFormSessionStore";
 import { clearAllEntries as clearOfflineQueue } from "src/services/offlineQueue";
+import { formStoreAPI } from "src/hooks/useFormStore";
 import { useAppContext, AppContextProvider } from "src/app/context";
 import { SalesList } from "src/models/Sales";
 export { useAppContext, AppContextProvider };
@@ -284,7 +285,21 @@ const App: React.FC = () => {
     return uniqId;
   }, [panes, activePaneId]);
 
-  const removePane = useCallback((uniqId: string) => {
+  /** Закрытие панели.
+   * force=true — принудительно, без guards (после сохранения).
+   * force=false (по умолчанию) — с проверкой beforeClose guards (из UI).
+   */
+  const requestClose = useCallback(async (uniqId: string, { force = false }: { force?: boolean } = {}) => {
+    if (!force) {
+      const guards = beforeCloseGuardsRef.current.get(uniqId);
+      if (guards && guards.size > 0) {
+        for (const guard of guards) {
+          const canClose = await guard();
+          if (!canClose) return;
+        }
+      }
+    }
+    beforeCloseGuardsRef.current.delete(uniqId);
     setPanes((prev) => {
       const index = prev.findIndex((p) => p.uniqId === uniqId);
       if (index === -1) return prev;
@@ -292,26 +307,21 @@ const App: React.FC = () => {
       const next = prev.filter((_, i) => i !== index);
       const remainingIds = new Set(next.map((p) => p.uniqId));
 
-      // Убираем закрываемую панель из истории
       paneHistoryRef.current = paneHistoryRef.current.filter(
         (h) => h !== uniqId && remainingIds.has(h)
       );
 
-      // Если закрываем активную панель → переключаемся
       _setActivePaneId((currentActive) => {
         if (currentActive !== uniqId) return currentActive;
         if (next.length === 0) return "";
 
-        // Приоритет: если есть открытая selector-панель → возвращаемся к ней
         const selectorPane = next.find((p) => p.isSelector);
         if (selectorPane) return selectorPane.uniqId;
 
-        // Иначе — последняя из истории
         const history = paneHistoryRef.current;
         if (history.length > 0) {
           return history.pop()!;
         }
-        // fallback
         const newIndex = index > 0 ? index - 1 : 0;
         return next[Math.min(newIndex, next.length - 1)].uniqId;
       });
@@ -319,20 +329,6 @@ const App: React.FC = () => {
       return next;
     });
   }, []);
-
-  /** Закрытие панели с проверкой beforeClose guards. Если guard вернул false — закрытие отменяется. */
-  const requestClose = useCallback(async (uniqId: string) => {
-    const guards = beforeCloseGuardsRef.current.get(uniqId);
-    if (guards && guards.size > 0) {
-      for (const guard of guards) {
-        const canClose = await guard();
-        if (!canClose) return; // guard отменил закрытие
-      }
-    }
-    // Все guards разрешили (или их нет) — закрываем
-    beforeCloseGuardsRef.current.delete(uniqId);
-    removePane(uniqId);
-  }, [removePane]);
 
   const setActivePane = useCallback((uniqId: string) => {
     // Блокировка: если есть selector-панель, разрешаем переключение
@@ -370,6 +366,13 @@ const App: React.FC = () => {
   // ────────────────────────────────────────────────
   const { confirm, confirmState } = useConfirm();
 
+  const reloadPane = useCallback(async (uniqId: string) => {
+    const api = formStoreAPI.get(uniqId);
+    if (api?.reload) {
+      await api.reload();
+    }
+  }, []);
+
   // ────────────────────────────────────────────────
   // Контекстное значение (мемоизировано)
   // ────────────────────────────────────────────────
@@ -381,8 +384,8 @@ const App: React.FC = () => {
         panes,
         activePane: activePaneId,
         addPane,
-        removePane,
         requestClose,
+        reloadPane,
         setActivePane,
         updatePaneLabel,
         registerBeforeClose,
@@ -399,7 +402,7 @@ const App: React.FC = () => {
         logout: handleLogout,
       },
     }),
-    [panes, activePaneId, addPane, removePane, requestClose, setActivePane, updatePaneLabel, registerBeforeClose, navbarItems, currentUser, handleLogout, confirm]
+    [panes, activePaneId, addPane, requestClose, reloadPane, setActivePane, updatePaneLabel, registerBeforeClose, navbarItems, currentUser, handleLogout, confirm]
   );
 
   return (

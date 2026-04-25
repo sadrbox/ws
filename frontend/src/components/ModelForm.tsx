@@ -28,7 +28,7 @@ interface ModelFormProps {
   onReload?: () => void;
   /** Состояние */
   isLoading: boolean;
-  showReload: boolean;
+  // showReload: boolean;
   /** Только чтение (опционально) */
   readonly?: boolean;
   /** Есть ли несохранённые изменения? */
@@ -41,10 +41,10 @@ const ModelForm: FC<ModelFormProps> = ({
   tabs,
   onSave,
   onSaveAndClose,
-  onClose: _onClose, // закрытие теперь через ✕ в PaneHeaderControls
+  onClose , // закрытие теперь через ✕ в PaneHeaderControls
   onReload,
   isLoading,
-  showReload,
+  // showReload,
   readonly,
   isDirty: _isDirty, // индикатор теперь через usePaneDirty в PaneItem
   paneId,
@@ -53,19 +53,20 @@ const ModelForm: FC<ModelFormProps> = ({
   const toolbarPortal = usePaneToolbar(
     paneId,
     <FormPanel
-      readonly={readonly}
       onSaveAndClose={onSaveAndClose}
       onSave={onSave}
       onReload={onReload}
+      onClose={onClose}
+      readonly={readonly}
       isLoading={isLoading}
-      showReload={showReload}
+      // showReload={showReload}
     />,
   );
 
   return (
     <>
-      {toolbarPortal}
       <Tabs tabs={tabs} />
+      {toolbarPortal}
     </>
   );
 };

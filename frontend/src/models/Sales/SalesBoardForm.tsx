@@ -94,7 +94,7 @@ const calcRowAmount = (qty: string, prc: string): string => {
 
 const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
   const {
-    windows: { removePane },
+    windows: { requestClose },
   } = useAppContext();
   const formUid = useUID();
 
@@ -514,8 +514,8 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
 
   const handleClose = useCallback(() => {
     onClose?.();
-    if (uniqId) removePane(uniqId);
-  }, [onClose, removePane, uniqId]);
+    if (uniqId) requestClose(uniqId, { force: true });
+  }, [onClose, requestClose, uniqId]);
 
   // ════════════════════════════════════════════════════════════════════
   // Render

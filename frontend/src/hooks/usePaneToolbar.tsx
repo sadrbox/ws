@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 // ─── Store: paneId → DOM-элемент слота тулбара ──────────────────────────
@@ -6,9 +6,11 @@ type Listener = () => void;
 
 class PaneToolbarStore {
   private slots = new Map<string, HTMLDivElement>();
+  private toolbars = new Set<string>();
   private listeners = new Set<Listener>();
 
   getSlot = (paneId: string): HTMLDivElement | undefined => this.slots.get(paneId);
+  hasToolbar = (paneId: string): boolean => this.toolbars.has(paneId);
 
   registerSlot = (paneId: string, el: HTMLDivElement) => {
     this.slots.set(paneId, el);
@@ -17,6 +19,15 @@ class PaneToolbarStore {
 
   unregisterSlot = (paneId: string) => {
     if (this.slots.delete(paneId)) this.emit();
+  };
+
+  registerToolbar = (paneId: string) => {
+    this.toolbars.add(paneId);
+    this.emit();
+  };
+
+  unregisterToolbar = (paneId: string) => {
+    if (this.toolbars.delete(paneId)) this.emit();
   };
 
   subscribe = (cb: Listener) => {
@@ -39,14 +50,16 @@ const store = new PaneToolbarStore();
 export function usePaneToolbarSlot(paneId: string) {
   const elRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (elRef.current) {
-      store.registerSlot(paneId, elRef.current);
+  const refCallback = useCallback((el: HTMLDivElement | null) => {
+    elRef.current = el;
+    if (el) {
+      store.registerSlot(paneId, el);
+    } else {
+      store.unregisterSlot(paneId);
     }
-    return () => { store.unregisterSlot(paneId); };
   }, [paneId]);
 
-  return elRef;
+  return { elRef, refCallback };
 }
 
 // ─── Хук для ФОРМЫ: рендерить тулбар через портал ───────────────────────
@@ -61,14 +74,32 @@ export function usePaneToolbar(paneId: string | undefined, toolbar: ReactNode): 
 
   useEffect(() => {
     if (!paneId) return;
-    // Слот может появиться позже — подписываемся
     const update = () => setSlot(store.getSlot(paneId));
     update();
     return store.subscribe(update);
   }, [paneId]);
 
+  useEffect(() => {
+    if (!paneId) return;
+    store.registerToolbar(paneId);
+    return () => { store.unregisterToolbar(paneId); };
+  }, [paneId]);
+
   if (!slot) return null;
   return createPortal(toolbar, slot);
+}
+
+/**
+ * Возвращает true, если для данной панели зарегистрирован тулбар.
+ * Реактивно обновляется при mount/unmount FormPanel.
+ */
+export function useHasToolbar(paneId: string): boolean {
+  const [has, setHas] = useState(() => store.hasToolbar(paneId));
+  useEffect(() => {
+    setHas(store.hasToolbar(paneId));
+    return store.subscribe(() => setHas(store.hasToolbar(paneId)));
+  }, [paneId]);
+  return has;
 }
 
 export { store as paneToolbarStore };

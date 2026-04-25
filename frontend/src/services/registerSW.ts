@@ -7,7 +7,6 @@
 
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) {
-    console.warn("[SW] Service Worker не поддерживается этим браузером");
     return null;
   }
 

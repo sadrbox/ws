@@ -24,7 +24,7 @@ import type { TPane } from "src/app/types";
 import { getByEndpoint } from "src/registry/modelRegistry";
 
 const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId }) => {
-  const { windows: { removePane } } = useAppContext();
+  const { windows: { requestClose } } = useAppContext();
 
   const endpoint = (data as any)?.endpoint as string | undefined;
   const ListComponentProp = (data as any)?.listComponent as FC<any> | undefined;
@@ -64,12 +64,12 @@ const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId })
 
   const handleSelectItem = useCallback((item: Record<string, any>) => {
     onSelectResult?.(item);
-    if (uniqId) removePane(uniqId);
-  }, [onSelectResult, uniqId, removePane]);
+    if (uniqId) requestClose(uniqId, { force: true });
+  }, [onSelectResult, uniqId, requestClose]);
 
   const handleCancel = useCallback(() => {
-    if (uniqId) removePane(uniqId);
-  }, [uniqId, removePane]);
+    if (uniqId) requestClose(uniqId, { force: true });
+  }, [uniqId, requestClose]);
 
   if (loadError) {
     return (

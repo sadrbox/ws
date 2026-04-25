@@ -477,7 +477,7 @@ body {
 	overflow: auto;
 	// padding: 0px 6px;
 	// margin-bottom: 6px;
-	padding: 6px ;
+	padding: 0 6px;
 	// overflow-y: auto;
 	display: none;
 	gap: 6px;
@@ -496,7 +496,7 @@ body {
 	align-items: center;
 	justify-content: flex-start;
 	min-height: $heightFieldInput;
-	padding-right: 2px;
+	// padding-right: 2px;
 	flex-shrink: 0;
 	// padding: 6px;
 	background: $color30;
@@ -544,6 +544,13 @@ body {
 
 .PaneItemHeaderLabelDirty {
 	color: #c27400;
+}
+
+.PaneItemBottomToolbar {
+	display: flex;
+	flex-direction: row;
+	gap: 6px;
+	justify-content: flex-end;
 }
 
 @keyframes dirtyPulse {
@@ -816,7 +823,7 @@ body {
 	}
 
 	// padding-bottom: 12px;
-	.PanesTabsItem {
+	.PaneTabItem {
 		// box-sizing: content-box;
 		border-top: 1px solid $color10;
 		border-left: 1px solid $color10;
@@ -854,7 +861,7 @@ body {
 		min-width: 0;
 		flex-shrink: 0;
 
-		.PanesTabsClose {
+		.PaneTabClose {
 			display: flex;
 			align-items: center;
 			justify-content: center;
@@ -875,7 +882,7 @@ body {
 			}
 		}
 
-		.PanesTabsCloseBtn {
+		.PaneTabCloseBtn {
 			width: 18px !important;
 			height: 18px !important;
 			flex-shrink: 0;
@@ -902,7 +909,7 @@ body {
 		}
 	}
 
-	.PanesTabsItemActive {
+	.PaneTabItemActive {
 		border-top: 1px solid transparent;
 		box-shadow: inset 0px -2px 0px 0px $color3;
 		// border-bottom: 9px solid $color80;
@@ -925,29 +932,39 @@ body {
 		}
 	}
 
-	.PanesTabsItemSelector {
+	.PaneTabItemSelector {
 		border-left: 2px solid $color3;
 		font-style: italic;
 	}
 
-	.PanesTabsItemDisabled {
+	.PaneTabItemDisabled {
 		opacity: 0.4;
 		cursor: not-allowed;
 		pointer-events: none;
 	}
 
-	.PanesTabsItemDirty {
-		.PanesTabsItemLabel {
+	.PaneTabItemDirty {
+		.PaneTabItemLabel{
 			font-style: italic;
-			color: #c77600;
-		}
-
-		.PanesTabsItemClose {
-			color: #c77600;
+				color: #c77600;
 		}
 	}
 
-	.PanesTabsItemDirtyDot {
+	.PaneTabItemLabel {
+		
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		overflow: hidden;
+	}
+
+	.PaneTabItemClose {
+		color: #c77600;
+		margin-right: 3px;
+		width: $heightFieldInput - 8px;
+		height: $heightFieldInput - 8px;
+	}
+
+	.PaneTabItemDirtyDot {
 		display: block;
 		width: 8px;
 		height: 8px;
