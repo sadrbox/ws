@@ -129,7 +129,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
     <ModelForm paneId={form.paneId} tabs={tabs} readonly={!canWrite}
       onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
-      isLoading={form.isLoading} showReload={form.isEditMode}
+      isLoading={form.isLoading}
       isDirty={form.isDirty} />
   );
 };

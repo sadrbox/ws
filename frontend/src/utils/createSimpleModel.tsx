@@ -19,7 +19,6 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { Divider, Field } from "src/components/Field";
-import { Group } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
@@ -138,33 +137,29 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
         id: "general",
         label: translate("general") || "Основное",
         component: (
-          <div className={styles.FormBodyParts}>
-            <Group align="row" gap="12px" className={styles.Form}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-                {fields.map((f) => (
-                  <Field
-                    key={f.key}
-                    label={f.label}
-                    name={`${form.formUid}_${f.key}`}
-                    minWidth={f.minWidth ?? "339px"}
-                    value={form.fields[f.key] ?? ""}
-                    onChange={(e) => form.setField(f.key, e.target.value)}
-                    disabled={form.isLoading}
-                  />
-                ))}
-              </div>
-            </Group>
-            {form.isEditMode && (
-              <>
-                <Divider />
-                <Group align="row" gap="12px" className={styles.Form}>
+          <div className={styles.FormWrapper}>
+            <div className={styles.Form}>
+              {fields.map((f) => (
+                <Field
+                  key={f.key}
+                  label={f.label}
+                  name={`${form.formUid}_${f.key}`}
+                  minWidth={f.minWidth ?? "339px"}
+                  value={form.fields[f.key] ?? ""}
+                  onChange={(e) => form.setField(f.key, e.target.value)}
+                  disabled={form.isLoading}
+                />
+              ))}
+              {form.isEditMode && (
+                <>
+                  <Divider />
                   <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
                     <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
                     <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
                   </div>
-                </Group>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
         ),
       },
@@ -179,7 +174,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
         onClose={form.handleClose}
         onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
         isLoading={form.isLoading}
-        showReload={form.isEditMode}
+       
         readonly={!access.canWrite}
         isDirty={form.isDirty}
       />

@@ -88,13 +88,14 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => [
     {
       id: "general", label: translate("general") || "Основное", component: (
-        <div className={styles.Form}>
-          {form.isEditMode && (
-            <GroupRow>
-              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-            </GroupRow>
-          )}
+        <div className={styles.FormWrapper}>
+          <div className={styles.Form}>
+            {form.isEditMode && (
+              <GroupRow>
+                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+              </GroupRow>
+            )}
           <GroupCol>
             <Field label="Значение *" name={`${form.formUid}_value`} minWidth="339px" value={form.fields.value} onChange={e => form.setField("value", e.target.value)} disabled={form.isLoading} />
               <LookupField
@@ -114,6 +115,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading}
               />
           </GroupCol>
+          </div>
         </div>
       ),
     },
@@ -128,7 +130,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
       onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
-      showReload={form.isEditMode}
+     
       readonly={!canWrite}
       isDirty={form.isDirty}
     />

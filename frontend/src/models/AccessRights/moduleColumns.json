@@ -1,17 +1,5 @@
 [
 	{
-		"identifier": "_expand",
-		"type": "string",
-		"name": "",
-		"width": "36px",
-		"minWidth": "36px",
-		"alignment": "center",
-		"visible": true,
-		"position": 0,
-		"filter": false,
-		"inlist": true
-	},
-	{
 		"identifier": "id",
 		"type": "number",
 		"name": "Id",
@@ -25,6 +13,19 @@
 		"inlist": true
 	},
 	{
+		"identifier": "user.username",
+		"type": "string",
+		"name": "Пользователь",
+		"width": "200px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"hint": "Логин пользователя",
+		"visible": true,
+		"position": 2,
+		"filter": false,
+		"inlist": true
+	},
+	{
 		"identifier": "organization.shortName",
 		"type": "string",
 		"name": "Организация",
@@ -33,7 +34,7 @@
 		"alignment": "left",
 		"hint": "Краткое наименование организации",
 		"visible": true,
-		"position": 2,
+		"position": 3,
 		"filter": false,
 		"inlist": true
 	},
@@ -46,7 +47,7 @@
 		"alignment": "left",
 		"hint": "БИН или ИНН организации",
 		"visible": true,
-		"position": 3,
+		"position": 4,
 		"filter": false,
 		"inlist": true
 	},
@@ -54,12 +55,12 @@
 		"identifier": "role",
 		"type": "string",
 		"name": "Роль",
-		"width": "180px",
-		"minWidth": "120px",
+		"width": "160px",
+		"minWidth": "100px",
 		"alignment": "left",
 		"hint": "Роль пользователя в организации",
 		"visible": true,
-		"position": 4,
+		"position": 5,
 		"filter": false,
 		"inlist": true
 	}

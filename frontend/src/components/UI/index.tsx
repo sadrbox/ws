@@ -47,6 +47,7 @@ import { PayrollCalculationsList } from 'src/models/PayrollCalculations';
 import { PayrollPaymentsList } from 'src/models/PayrollPayments';
 import { UnsavedFormsList } from 'src/models/UnsavedForms';
 import { SyncDashboard } from 'src/models/SyncDashboard';
+// AccessRightsModuleList загружается динамически (разрыв цикла UI→AccessRights→app→UI)
 import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
 import { getAccessLevel } from 'src/hooks/useAccessRight';
@@ -694,6 +695,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>Администрирование</h3>
             <ul className={styles.NavList}>
               {can("User") && <li onClick={() => addPane({ component: UsersList })}>Пользователи</li>}
+              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/AccessRights"); addPane({ component: m.AccessRightsModuleList, label: "Права доступа" }); }}>Права доступа</li>}
               {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>}
               {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: "Журнал уведомлений" })}>Журнал уведомлений</li>}
               <li onClick={() => addPane({ component: UnsavedFormsList })}>Несохранённые записи</li>

@@ -4,8 +4,8 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Divider, Field } from "src/components/Field";
-import { Group, GroupRow } from "src/components/UI";
+import { Field } from "src/components/Field";
+import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
@@ -54,14 +54,15 @@ const VatRatesForm: FC<Partial<TPane>> = (paneProps) => {
       id: "general",
       label: translate("general") || "Основное",
       component: (
-        <div className={styles.Form}>
-          {form.isEditMode && (
-              <GroupRow>
-                  <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                  <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-              </GroupRow>
-          )}
-          <GroupRow>
+        <div className={styles.FormWrapper}>
+          <div className={styles.Form}>
+            {form.isEditMode && (
+                <GroupRow>
+                    <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                    <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+                </GroupRow>
+            )}
+            <GroupRow>
               <Field
                 label="Наименование *"
                 name={`${form.formUid}_shortName`}
@@ -79,6 +80,7 @@ const VatRatesForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading}
               />
           </GroupRow>
+          </div>
         </div>
       ),
     },
@@ -93,7 +95,7 @@ const VatRatesForm: FC<Partial<TPane>> = (paneProps) => {
       onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
-      showReload={form.isEditMode}
+     
       readonly={!canWrite}
       isDirty={form.isDirty}
     />

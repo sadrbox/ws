@@ -1,20 +1,18 @@
 import { FC, useCallback, useMemo } from "react";
+import { useAppContext } from "src/app";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import columnsJson from "./userOrganizationsColumns.json";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import OrgRightsPanel, { ROLE_OPTIONS } from "./OrgRightsPanel";
+import { AccessRightsTable } from "src/models/AccessRights";
 
 const MODEL_ENDPOINT = "user-organizations";
 const COMPONENT_NAME = "UserOrganizationsList_part";
 
-export const ROLE_OPTIONS = [
-  { value: "member", label: "Участник" },
-  { value: "admin", label: "Администратор" },
-];
-
 interface UserOrganizationsTableProps {
-  /** UUID пользователя */
+  /** UUID пользователя (нужен для открытия прав доступа в дочерней панели) */
   userUuid: string;
   disabled?: boolean;
   /** Если true — не отправлять изменения на сервер, хранить локально */
@@ -28,10 +26,12 @@ interface UserOrganizationsTableProps {
 const UserOrganizationsTable: FC<UserOrganizationsTableProps> = ({
   userUuid,
   disabled = false,
-  deferRemoteChanges = false,
+  deferRemoteChanges = true,
   onItemsChange,
   initialPendingRows,
 }) => {
+  const { addPane } = useAppContext().windows;
+
   const roleMap = useMemo(
     () => Object.fromEntries(ROLE_OPTIONS.map(o => [o.value, o.label])),
     [],
@@ -39,6 +39,27 @@ const UserOrganizationsTable: FC<UserOrganizationsTableProps> = ({
 
   // ── renderCell ──────────────────────────────────────────────────────────
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
+    // Expand toggle button
+    if (col.identifier === "_expand") {
+      const rowId = String((row as any).uuid || (row as any).id);
+      const orgUuid = row.organizationUuid as string | undefined;
+      if (!orgUuid) return <span style={{ color: "#ccc", fontSize: 12, display: "block", textAlign: "center" }}>—</span>;
+      const isExpanded = ctx.expandedRowIds?.has(rowId);
+      return (
+        <button
+          title={isExpanded ? "Свернуть" : "Доступ к разделам"}
+          onClick={e => { e.stopPropagation(); ctx.toggleExpandRow(rowId); }}
+          style={{
+            background: "none", border: "none", cursor: "pointer",
+            fontSize: 14, width: 28, height: 28,
+            color: isExpanded ? "var(--color-primary, #1976d2)" : "#888",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          {isExpanded ? "▼" : "▶"}
+        </button>
+      );
+    }
     if (col.identifier === "organization.shortName") {
       if (ctx.inlineEditing) {
         return (
@@ -88,11 +109,43 @@ const UserOrganizationsTable: FC<UserOrganizationsTableProps> = ({
     return undefined;
   }, [roleMap]);
 
-  // ── openFormFor (просмотр/редактирование через форму) ────────────────
-  const openFormFor = useCallback((_data: TDataItem | undefined, _ctx: SubTableContext) => {
-    // UserOrganization редактируется inline — форма не нужна
-    // Оставляем заглушку для совместимости с SubTable API
-  }, []);
+  // ── openFormFor — открыть форму прав доступа для орг ────────────────
+  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
+    const orgUuid = data?.organizationUuid as string | undefined;
+    const orgName = (data?.organization as any)?.shortName as string | undefined;
+    if (!orgUuid || !userUuid) return;
+    addPane({
+      label: `Права доступа: ${orgName ?? orgUuid}`,
+      component: OrgRightsPanel,
+      // Передаём полные данные строки (uuid нужен для useFormStore — режим edit)
+      data: {
+        uuid:             data?.uuid,           // synthetic uuid = String(id) из бэкенда
+        id:               data?.id,
+        userUuid,
+        organizationUuid: orgUuid,
+        orgName,
+        role:             data?.role ?? "member",
+      } as any,
+    });
+  }, [addPane, userUuid]);
+
+  // ── renderExpandedRow — AccessRightsTable вложенная под строкой ───────
+  const renderExpandedRow = useCallback((row: TDataItem, _ctx: SubTableContext) => {
+    const orgUuid = row.organizationUuid as string | undefined;
+    if (!orgUuid || !userUuid) return null;
+    return (
+      <div style={{ padding: "8px 16px 12px", background: "var(--bg-secondary, #f5f7fa)" }}>
+        <div style={{ fontSize: 12, color: "#888", marginBottom: 6, fontWeight: 500 }}>
+          Доступ к разделам
+        </div>
+        <AccessRightsTable
+          userUuid={userUuid}
+          organizationUuid={orgUuid}
+          deferRemoteChanges={false}
+        />
+      </div>
+    );
+  }, [userUuid]);
 
   // ── defaultNewRow ────────────────────────────────────────────────────
   const defaultNewRow = useMemo(() => ({
@@ -117,6 +170,9 @@ const UserOrganizationsTable: FC<UserOrganizationsTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
+      showEditModeToggle={false}
+      defaultInlineEditing={true}
+      renderExpandedRow={renderExpandedRow}
     />
   );
 };

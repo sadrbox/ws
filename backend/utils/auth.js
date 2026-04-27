@@ -189,6 +189,9 @@ export async function accessRightMiddleware(req, res, next) {
 	// Суперадмин — пропускаем
 	if (req.user?.isSuperAdmin) return next();
 
+	// Org admin — полный доступ ко всем разделам своей организации
+	if (req.user?.isOrgAdmin) return next();
+
 	// Dev-режим: admin пропускается
 	const isDev = process.env.NODE_ENV !== "production";
 	if (isDev && req.user?.username?.toLowerCase() === "admin") return next();

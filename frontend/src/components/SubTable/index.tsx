@@ -77,6 +77,11 @@ export interface SubTableProps {
   openFormFor?: (data: TDataItem | undefined, ctx: SubTableContext) => void;
   /** Колбэк для создания новой inline-записи */
   onInlineAdd?: (ctx: SubTableContext) => void | Promise<void>;
+  /**
+   * Показывать ли кнопку переключения режима редактирования (таблица ↔ форма).
+   * По умолчанию true. Передайте false чтобы скрыть кнопку.
+   */
+  showEditModeToggle?: boolean;
   /** Дополнительные кнопки в панель (кроме toggle inline edit) */
   extraButtons?: ReactNode;
   /** Колбэк при изменении allItems (например для пересчёта суммы) */
@@ -113,6 +118,12 @@ export interface SubTableProps {
    * Пример: `{ ownerType: "organization" }`
    */
   extraQueryParams?: Record<string, string>;
+  /**
+   * Функция рендера содержимого раскрытой строки.
+   * Если задана — SubTable поддерживает expand/collapse строк.
+   * Используй ctx.toggleExpandRow и ctx.expandedRowIds в renderCell для кнопок.
+   */
+  renderExpandedRow?: (row: TDataItem, ctx: SubTableContext) => ReactNode;
 }
 
 /** Контекст, передаваемый в кастомные колбэки */
@@ -153,6 +164,10 @@ export interface SubTableContext {
     value: string | null,
     extraPatch?: Record<string, unknown>,
   ) => Promise<void>;
+  /** Набор rowId (uuid || String(id)) раскрытых строк */
+  expandedRowIds: Set<string>;
+  /** Переключить раскрытие строки */
+  toggleExpandRow: (rowId: string) => void;
 }
 
 /** Получить rowId для идентификации строки в cellErrors */
@@ -201,6 +216,7 @@ const SubTable: FC<SubTableProps> = ({
   defaultInlineEditing = true,
   disabled = false,
   readonly = false,
+  showEditModeToggle = true,
   emptyMessage = "Сохраните запись для добавления данных.",
   renderCell: renderCellProp,
   openFormFor,
@@ -214,6 +230,7 @@ const SubTable: FC<SubTableProps> = ({
   validationRules,
   defaultNewRow,
   extraQueryParams,
+  renderExpandedRow: renderExpandedRowProp,
 }) => {
   const queryClient = useQueryClient();
 
@@ -258,6 +275,17 @@ const SubTable: FC<SubTableProps> = ({
   // Счётчик активных операций (add / inline-change / delete)
   const [opCount, setOpCount] = useState(0);
   const opLoading = opCount > 0;
+
+  // ── Expand rows ────────────────────────────────────────────────────────
+  const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(new Set());
+  const toggleExpandRow = useCallback((rowId: string) => {
+    setExpandedRowIds(prev => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  }, []);
 
   const [adaptiveLimit, setAdaptiveLimit] = useState(500);
   useEffect(() => { GLOBAL_ADAPTIVE_LIMIT_REF.current = adaptiveLimit; }, [adaptiveLimit]);
@@ -587,6 +615,10 @@ const SubTable: FC<SubTableProps> = ({
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
 
+  // const definedModels = new Set(rowsRef.current.map(r => r.modelName).filter(Boolean));
+  // const toAddModels = 
+  // console.log(rowsRef.current.filter(r => r.modelName && r.modelName !== model).map(r => r.modelName));
+
   // Ref для cellErrors — чтобы ctx.cellErrors не вызывал пересоздание useMemo
   const cellErrorsRef = useRef(cellErrors);
   cellErrorsRef.current = cellErrors;
@@ -631,7 +663,9 @@ const SubTable: FC<SubTableProps> = ({
     get cellErrors() { return cellErrorsRef.current; },
     setCellError,
     handleLookupChange,
-  }), [refetch, inlineEditing, disabled, opLoading, handleInlineChange, updateLocalRow, deferRemoteChanges, setCellError, handleLookupChange]);
+    expandedRowIds,
+    toggleExpandRow,
+  }), [refetch, inlineEditing, disabled, opLoading, handleInlineChange, updateLocalRow, deferRemoteChanges, setCellError, handleLookupChange, expandedRowIds, toggleExpandRow]);
 
   // ── Фронтенд-фильтрация (всегда на фронте) ─────────────────────────────
   const displayRows = useMemo(() => {
@@ -745,6 +779,7 @@ const SubTable: FC<SubTableProps> = ({
 
   // ── handleInlineAdd wrapper ────────────────────────────────────────────
   const handleInlineAdd = useCallback(async () => {
+    console.log("handleInlineAdd")
     if (deferRemoteChanges) {
       // создаём локальную временную строку и не отправляем на сервер
       const tmpId = tempIdRef.current--;
@@ -756,13 +791,17 @@ const SubTable: FC<SubTableProps> = ({
       });
       // Применяем defaultNewRow поверх (если задан) — чтобы дефолтные значения были в строке
       if (defaultNewRow) {
+        // console.log({newRow, defaultNewRow})
         Object.assign(newRow, defaultNewRow);
       }
       newRow._pendingAction = "create";
-      // Маркер: строка ещё не была отредактирована пользователем.
-      // При обновлении данных (ветка B) или при передаче pending родителю
-      // такие строки игнорируются — не сохраняются и не мержатся.
-      newRow._untouched = true;
+      // Маркер «нетронутая»: строка создана кнопкой «+» без пользовательских данных.
+      // Снимается при первом редактировании ячейки (handleInlineChange).
+      // НЕ ставим маркер если задан defaultNewRow — там уже есть осмысленные значения,
+      // строка должна сохраняться даже без дополнительного редактирования.
+      if (!defaultNewRow) {
+        newRow._untouched = true;
+      }
       cachedRowsRef.current = [newRow as TDataItem, ...cachedRowsRef.current];
       setCacheVersion(v => v + 1);
       notifyParent(cachedRowsRef.current as TDataItem[]);
@@ -798,7 +837,8 @@ const SubTable: FC<SubTableProps> = ({
   // ── Кнопки ─────────────────────────────────────────────────────────────
   const extraButtons = useMemo(() => (
     <>
-      {!readonly && (
+      {!readonly && showEditModeToggle && inlineEditing && (
+
         <>
           <Toolbar.Divider />
           <Toolbar.InlineEditButton
@@ -810,7 +850,7 @@ const SubTable: FC<SubTableProps> = ({
       )}
       {extraButtonsProp}
     </>
-  ), [toggleInlineEditing, inlineEditing, extraButtonsProp, readonly]);
+  ), [toggleInlineEditing, inlineEditing, extraButtonsProp, readonly, showEditModeToggle]);
 
   // ── Table props ────────────────────────────────────────────────────────
   const combinedLoading = isAnythingLoading || opLoading;
@@ -838,11 +878,16 @@ const SubTable: FC<SubTableProps> = ({
     renderCell,
     onInlineAdd: !readonly && inlineEditing && (onInlineAddProp || defaultNewRow) ? handleInlineAdd : undefined,
     readonly,
+    expandedRowIds: renderExpandedRowProp ? expandedRowIds : undefined,
+    renderExpandedRow: renderExpandedRowProp
+      ? (row: TDataItem) => renderExpandedRowProp(row, ctx)
+      : undefined,
   }), [
     componentName, displayRows, columns, adaptiveLimit, combinedLoading, error,
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
     openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
     handleCleanRefresh, handleDelete, extraButtons, inlineEditing, renderCell, handleInlineAdd, onInlineAddProp, defaultNewRow,
+    renderExpandedRowProp, expandedRowIds, ctx,
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────

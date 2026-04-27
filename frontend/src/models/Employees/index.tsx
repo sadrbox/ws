@@ -93,14 +93,15 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
       { id: "general", label: translate("general") || "Основное", component: (
-        <div className={styles.Form}>
-          {form.isEditMode && (
-            <GroupRow>
-              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-            </GroupRow>
-          )}
-          <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
+        <div className={styles.FormWrapper}>
+          <div className={styles.Form}>
+            {form.isEditMode && (
+              <GroupRow>
+                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+              </GroupRow>
+            )}
+            <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, maxWidth: 640 }}>
               <GroupRow>
                 <Field label="Фамилия *" name={`${form.formUid}_lastName`} minWidth="200px" value={form.fields.lastName} onChange={e => handleNameFieldChange("lastName", e.target.value)} disabled={form.isLoading} />
@@ -117,6 +118,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
             {form.isEditMode && form.fields.uuid && (
               <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
             )}
+          </div>
           </div>
         </div>
       )},
@@ -136,7 +138,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
+      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading}
       readonly={!canWrite} isDirty={form.isDirty} />
   );
 };

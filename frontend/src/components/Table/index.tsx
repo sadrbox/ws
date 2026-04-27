@@ -44,6 +44,7 @@ import {
   createContext,
   Dispatch,
   FC,
+  Fragment,
   memo,
   PropsWithChildren,
   SetStateAction,
@@ -122,6 +123,12 @@ export interface TableContextProps {
   renderCellRef?: React.RefObject<((row: TDataItem, col: TColumn) => React.ReactNode | undefined) | undefined>;
   inlineEditingRef?: React.RefObject<boolean | undefined>;
 
+  // ── Expandable rows ────────────────────────────────────────────────────
+  /** UUID строк, которые сейчас раскрыты */
+  expandedRowIds?: Set<string>;
+  /** Функция для рендера содержимого раскрытой строки */
+  renderExpandedRow?: (row: TDataItem) => React.ReactNode;
+
   states: {
     selectedRows: Set<number>;
     setSelectedRows: Dispatch<SetStateAction<Set<number>>>;
@@ -181,6 +188,10 @@ export interface TableProps {
   onInlineAdd?: () => void;
   /** Если true — скрыть кнопки «Добавить»/«Удалить» (режим только чтение по правам доступа) */
   readonly?: boolean;
+  /** Раскрытые строки (expand) */
+  expandedRowIds?: Set<string>;
+  /** Рендер содержимого раскрытой строки */
+  renderExpandedRow?: (row: TDataItem) => React.ReactNode;
 }
 
 const ROW_HEIGHT = 30;  // ← ИСПРАВИЛ: было 28, должно быть 30
@@ -280,6 +291,8 @@ const Table: FC<TableProps> = memo((props) => {
     renderCell,
     onInlineAdd,
     readonly: isReadonly = false,
+    expandedRowIds,
+    renderExpandedRow,
   } = props;
 
 
@@ -328,6 +341,8 @@ const Table: FC<TableProps> = memo((props) => {
       inlineEditing, renderCell, onInlineAdd,
       renderCellRef, inlineEditingRef,
       scrollRef,
+      expandedRowIds,
+      renderExpandedRow,
       states: {
         selectedRows, setSelectedRows,
         isAllSelectedMode, setIsAllSelectedMode,
@@ -1050,6 +1065,8 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     rows,
     renderCellRef,
     inlineEditingRef,
+    expandedRowIds,
+    renderExpandedRow,
     states: {
       activeRow, setActiveRow,
       selectedRows, setSelectedRows,
@@ -1125,7 +1142,12 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     }
   }, [inlineEditingRef, onSelectItem, openModelForm, row, refetch]);
 
+  const rowUuid = (row as any).uuid || String((row as any).id);
+  const isExpanded = expandedRowIds?.has(rowUuid) ?? false;
+  const visibleColCount = columns.filter(c => c.visible).length + (variant !== 'select' ? 1 : 0);
+
   return (
+    <Fragment>
     <tr
       onClick={handleRowClick}
       onDoubleClick={handleDoubleClick}
@@ -1178,6 +1200,17 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         );
       })}
     </tr>
+    {isExpanded && renderExpandedRow && (
+      <tr>
+        <td
+          colSpan={visibleColCount}
+          style={{ padding: 0, background: 'var(--bg-secondary, #f8f9fa)', borderBottom: '2px solid var(--border-color, #e0e0e0)' }}
+        >
+          {renderExpandedRow(row)}
+        </td>
+      </tr>
+    )}
+    </Fragment>
   );
 });
 

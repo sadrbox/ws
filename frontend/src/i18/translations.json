@@ -256,6 +256,9 @@
 	"code": "Код",
 
 	"modelName": "Модель",
+	"accessRight": "Права доступа",
+	"accessRights": "Права доступа",
+	"modelRights": "Права к разделам",
 	"accessLevel": "Уровень доступа",
 	"accessLevelFull": "Полный",
 	"accessLevelReadonly": "Только чтение",
@@ -285,6 +288,8 @@
 
 	"AccessRightsList": "Права доступа",
 	"AccessRightsList_part": "Права доступа",
+	"AccessRightsTable": "Права доступа",
+	"AccessRightsTable_part": "Права доступа",
 
 	"SaleItemsList": "Товары",
 	"SaleItemsList_part": "Товары",
@@ -320,6 +325,5 @@
 
 	"userName": "Пользователь",
 	"salary": "Оклад",
-	"accessRights": "Права доступа",
 	"bankAccounts": "Банковские счета"
 }

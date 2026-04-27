@@ -275,7 +275,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       // onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
-      // showReload={form.isEditMode}
+      //
       readonly={!canWrite} isDirty={form.isDirty} />
   );
 };

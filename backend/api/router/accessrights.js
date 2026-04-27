@@ -12,7 +12,7 @@ const TEXT_FIELDS = ["modelName", "accessLevel"];
 // ── GET list (курсорная пагинация, фильтр по userUuid) ──────────────
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { userUuid } = req.query;
+		const { userUuid, organizationUuid } = req.query;
 		if (!userUuid)
 			return res.status(400).json({
 				success: false,
@@ -114,6 +114,10 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		// ── Итоговый where ────────────────────────────────────────────────
 		const baseWhere = {
 			userUuid,
+			// Фильтр по организации: "null" → NULL, uuid → конкретная орг, undefined → без фильтра
+			...(organizationUuid !== undefined
+				? { organizationUuid: organizationUuid === "null" ? null : organizationUuid }
+				: {}),
 			...searchWhereClause,
 			...filterWhereClause,
 		};

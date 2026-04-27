@@ -5,13 +5,12 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
-import { Divider, Field } from "src/components/Field";
-import { Group, GroupCol, GroupRow } from "src/components/UI";
+import { Field } from "src/components/Field";
+import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import BankAccountsTable from "../BankAccounts/BankAccountsTable";
 import ContractsTable from "../Contracts/ContractsTable";
 import ContactsTable from "../Contacts/ContactsTable";
-import { ActivityHistoriesList } from "../ActivityHistories";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import ModelForm from "src/components/ModelForm";
@@ -102,18 +101,20 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
     {
       id: "tab0", label: translate("general") || "Основное", component: (
-        <div className={styles.FormContainer}>
-          {form.isEditMode && (
-            <GroupRow>
-              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-              <Field label="UUID" name={`${form.formUid}_uuid`}  value={String(form.fields.uuid ?? "-")} disabled />
-            </GroupRow>
-          )}
-          <GroupCol>
+        <div className={styles.FormWrapper}>
+          <div className={styles.Form}>
+            {form.isEditMode && (
+              <GroupRow>
+                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                <Field label="UUID" name={`${form.formUid}_uuid`}  value={String(form.fields.uuid ?? "-")} disabled />
+              </GroupRow>
+            )}
+            <GroupCol>
             <Field label="Наименование" name={`${form.formUid}_shortName`}  value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
             <Field label="Полное наименование" name={`${form.formUid}_displayName`}  value={form.fields.displayName} onChange={e => form.setField("displayName", e.target.value)} disabled={form.isLoading} />
             <Field label="БИН / ИНН *" name={`${form.formUid}_bin`}  value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} />
           </GroupCol>
+          </div>
         </div>
       ),
     },
@@ -166,7 +167,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
-      showReload={form.isEditMode}
+     
       readonly={!canWrite}
       isDirty={form.isDirty}
     />

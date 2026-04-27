@@ -8,14 +8,13 @@ import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
-import { AccessRightsList } from "src/models/AccessRights";
-import UserOrganizationsTable from "./UserOrganizationsTable";
 import AvatarUpload from "src/components/AvatarUpload";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { useFormStore } from "src/hooks/useFormStore";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import { AccessRightsTable } from "src/models/AccessRights";
 
 const MODEL_ENDPOINT = "users";
 
@@ -35,18 +34,6 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "users-form", defaultFields: DEFAULT_FIELDS, paneProps,
-    tables: {
-      accessRights: {
-        endpoint: "access-rights",
-        parentField: "userUuid",
-        label: "Права доступа",
-      },
-      userOrgs: {
-        endpoint: "user-organizations",
-        parentField: "userUuid",
-        label: "Организации пользователя",
-      },
-    },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       username: d.username ?? "", password: "",
@@ -67,19 +54,17 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makePaneLabel("UsersList", "Пользователи", saved),
   });
 
-  const accessRights = form.useTable("accessRights");
-  const userOrgs = form.useTable("userOrgs");
-
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
       { id: "general", label: translate("general") || "Основное", component: (
-        <div className={styles.Form}>
-          {form.isEditMode && (
-            <GroupRow>
-              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-            </GroupRow>
-          )}
+        <div className={styles.FormWrapper}>
+          <div className={styles.Form}>
+            {form.isEditMode && (
+              <GroupRow>
+                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+              </GroupRow>
+            )}
           <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
               <GroupRow>
@@ -98,15 +83,24 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
               </GroupRow>
             </div>
           </div>
+          </div>
         </div>
       )},
     ];
     if (form.isEditMode && form.fields.uuid) {
-      result.push({ id: "access", label: translate("accessLevel") || "Права доступа", component: <AccessRightsList userUuid={form.fields.uuid} deferRemoteChanges initialPendingRows={accessRights.pending} onItemsChange={accessRights.onItemsChange} /> });
-      result.push({ id: "organizations", label: "Организации", component: <UserOrganizationsTable userUuid={form.fields.uuid} deferRemoteChanges initialPendingRows={userOrgs.pending} onItemsChange={userOrgs.onItemsChange} /> });
+      result.push({
+        id: "accessRights",
+        label: translate("accessRights") || "Права доступа",
+        component: (
+          <AccessRightsTable
+            userUuid={form.fields.uuid}
+            deferRemoteChanges={false}
+          />
+        ),
+      });
     }
     return result;
-  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields, accessRights, userOrgs]);
+  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields]);
 
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
