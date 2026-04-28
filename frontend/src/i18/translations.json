@@ -258,7 +258,7 @@
 	"modelName": "Модель",
 	"accessRight": "Права доступа",
 	"accessRights": "Права доступа",
-	"modelRights": "Права к разделам",
+	"modelRights": "Разрешения",
 	"accessLevel": "Уровень доступа",
 	"accessLevelFull": "Полный",
 	"accessLevelReadonly": "Только чтение",

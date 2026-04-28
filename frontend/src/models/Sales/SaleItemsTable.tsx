@@ -344,4 +344,5 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
 };
 
 SaleItemsTable.displayName = "SaleItemsTable";
+export { SaleItemsTable };
 export default SaleItemsTable;

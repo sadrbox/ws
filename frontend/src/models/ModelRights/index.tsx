@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback, useRef } from "react";
+import { FC, useMemo, useCallback } from "react";
 import { useAppContext } from "src/app";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -8,7 +8,6 @@ import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
 import { Field, FieldSelect } from "src/components/Field";
 import { GroupCol, GroupRow } from "src/components/UI/Group";
-import apiClient from "src/services/api/client";
 import styles from "src/styles/main.module.scss";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import ModelList from "src/components/ModelList";
@@ -19,7 +18,7 @@ import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 
 const MODEL_ENDPOINT = "access-rights";
-
+const COMPONENT_NAME = "ModelRightsTable_part";
 // ─── Shared Options ───────────────────────────────────────────────────────────
 
 export const ACCESS_LEVEL_OPTIONS = [
@@ -250,23 +249,6 @@ const ModelRightsTable: FC<ModelRightsTableProps> = ({
     });
   }, [modelNameMap, accessLevelMap]);
 
-  const customInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
-    if (!row.uuid) return;
-    await apiClient.put(`/${MODEL_ENDPOINT}/${row.uuid}`, { [field]: value });
-    queryClient.setQueriesData({ queryKey: [MODEL_ENDPOINT] }, (oldData: any) => {
-      if (!oldData?.pages) return oldData;
-      return {
-        ...oldData,
-        pages: oldData.pages.map((page: any) => ({
-          ...page,
-          items: page.items.map((item: any) =>
-            item.uuid === row.uuid ? { ...item, [field]: value } : item
-          ),
-        })),
-      };
-    });
-  }, [queryClient]);
-
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     if (col.identifier === "modelName") {
       if (ctx.inlineEditing) {
@@ -300,7 +282,6 @@ const ModelRightsTable: FC<ModelRightsTableProps> = ({
   }, [modelNameMap, accessLevelMap]);
 
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
-    if (deferRemoteChanges) return;
     const isEdit = !!data?.uuid;
     const newData = !isEdit && userUuid
       ? { userUuid, ...(organizationUuid ? { organizationUuid } : {}) } as unknown as TDataItem
@@ -316,37 +297,7 @@ const ModelRightsTable: FC<ModelRightsTableProps> = ({
       onSave: refresh,
       onClose: refresh,
     });
-  }, [addPane, deferRemoteChanges, userUuid, organizationUuid, queryClient]);
-
-  const addingRef = useRef(false);
-  const onInlineAdd = useCallback(async () => {
-    if (!userUuid || addingRef.current) return;
-    addingRef.current = true;
-    try {
-      const params: Record<string, string> = { userUuid, limit: "100" };
-      if (organizationUuid) params.organizationUuid = organizationUuid;
-      const resp = await apiClient.get(`/${MODEL_ENDPOINT}`, { params });
-      const serverRows: TDataItem[] = resp.data?.items ?? resp.data ?? [];
-      const existingModels = new Set(serverRows.map((r: TDataItem) => r.modelName as string));
-      const available = MODEL_NAME_OPTIONS.find(o => o.value && !existingModels.has(o.value));
-      if (!available) {
-        alert("Все модели уже добавлены");
-        return;
-      }
-      await apiClient.post(`/${MODEL_ENDPOINT}`, {
-        modelName: available.value,
-        accessLevel: "none",
-        userUuid,
-        ...(organizationUuid ? { organizationUuid } : {}),
-      });
-    } catch (err: any) {
-      if (err.response?.status !== 409) {
-        alert(err.response?.data?.message || "Ошибка создания");
-      }
-    } finally {
-      addingRef.current = false;
-    }
-  }, [userUuid, organizationUuid]);
+  }, [addPane, userUuid, organizationUuid, queryClient]);
 
   const firstModelName = useMemo(
     () => MODEL_NAME_OPTIONS.find(o => o.value !== "")?.value ?? "",
@@ -365,7 +316,7 @@ const ModelRightsTable: FC<ModelRightsTableProps> = ({
   return (
     <SubTable
       model={MODEL_ENDPOINT}
-      componentName="ModelRightsTable_part"
+      componentName={COMPONENT_NAME}
       columnsJson={columnsJson}
       parentKey="userUuid"
       parentUuid={userUuid ?? ""}
@@ -384,7 +335,6 @@ const ModelRightsTable: FC<ModelRightsTableProps> = ({
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
       extraQueryParams={organizationUuid ? { organizationUuid } : undefined}
-      {...(!deferRemoteChanges ? { onInlineAdd, customInlineChange } : {})}
       filterRows={filterRows}
     />
   );

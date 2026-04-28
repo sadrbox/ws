@@ -18,6 +18,7 @@
 import apiClient from "src/services/api/client";
 import { isNetworkError as isNetworkLike } from "./networkUtils";
 import { getIsOnline } from "./networkStatus";
+import { crypto } from "src/utils/main.module";
 import {
   offlineDb,
   SYNCABLE_TABLES,

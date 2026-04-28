@@ -1,6 +1,6 @@
 import { FC, useCallback, useMemo, useState } from "react";
 import { translate } from "src/i18";
-import type { TDataItem } from "src/components/Table/types";
+import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
@@ -11,6 +11,11 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
+import { useAppContext } from "src/app";
+import { useQueryClient } from "@tanstack/react-query";
+import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { getFormatDateOnly } from "src/utils/main.module";
+import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
@@ -181,4 +186,124 @@ const ContractsList: FC<ContractsListProps> = ({ variant, onSelectItem, ownerUui
 );
 
 ContractsList.displayName = "ContractsList";
-export { ContractsList, ContractsForm };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLE — SubTable для вложенного списка договоров
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CR_TABLE_ENDPOINT = "contracts";
+const CR_TABLE_COMPONENT = "ContractsList_part";
+
+export interface ContractsTableProps {
+  /** Ключ FK — "organizationUuid" или "counterpartyUuid" */
+  parentKey: "organizationUuid" | "counterpartyUuid";
+  /** UUID владельца */
+  parentUuid: string;
+  /** Имя владельца */
+  parentName?: string;
+  disabled?: boolean;
+  deferRemoteChanges?: boolean;
+  onItemsChange?: (items: TDataItem[]) => void;
+  initialPendingRows?: TDataItem[];
+}
+
+const ContractsTable: FC<ContractsTableProps> = ({
+  parentKey, parentUuid, parentName = "", disabled = false,
+  deferRemoteChanges = false, onItemsChange, initialPendingRows,
+}) => {
+  const { addPane } = useAppContext().windows;
+  const queryClient = useQueryClient();
+
+  const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
+    if (col.identifier === "shortName") {
+      if (ctx.inlineEditing) return <Field label="" name={`ct_shortName_${row.id}`} value={(row.shortName as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "shortName", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <span>{(row.shortName as string) ?? ""}</span>;
+    }
+    if (col.identifier === "contractNumber") {
+      if (ctx.inlineEditing) return <Field label="" name={`ct_num_${row.id}`} value={(row.contractNumber as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "contractNumber", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <span>{(row.contractNumber as string) ?? ""}</span>;
+    }
+    if (col.identifier === "startDate") {
+      const val = typeof row.startDate === "string" ? row.startDate.slice(0, 10) : "";
+      if (ctx.inlineEditing) return <input type="date" value={val} onChange={e => ctx.handleInlineChange(row, "startDate", e.target.value)} disabled={ctx.disabled} style={{ border: "none", background: "transparent", padding: "2px 4px", width: "100%", fontSize: 13 }} />;
+      return <span>{val ? getFormatDateOnly(val) : ""}</span>;
+    }
+    if (col.identifier === "endDate") {
+      const val = typeof row.endDate === "string" ? row.endDate.slice(0, 10) : "";
+      if (ctx.inlineEditing) return <input type="date" value={val} onChange={e => ctx.handleInlineChange(row, "endDate", e.target.value)} disabled={ctx.disabled} style={{ border: "none", background: "transparent", padding: "2px 4px", width: "100%", fontSize: 13 }} />;
+      return <span>{val ? getFormatDateOnly(val) : ""}</span>;
+    }
+    if (col.identifier === "counterparty.shortName") {
+      if (ctx.inlineEditing) return (
+        <LookupField label="" name={`ct_cpty_${row.id}`} value={(row.counterpartyUuid as string) ?? ""} displayValue={(row.counterparty as any)?.shortName ?? ""} endpoint="counterparties" displayField="shortName"
+          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "counterpartyUuid", uuid, { counterparty: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null })}
+          onClear={() => ctx.handleLookupChange(row, "counterpartyUuid", null, { counterparty: null })}
+          disabled={ctx.disabled} width="100%" variant="table" />
+      );
+      return <span>{(row.counterparty as any)?.shortName ?? ""}</span>;
+    }
+    if (col.identifier === "organization.shortName") {
+      if (ctx.inlineEditing) return (
+        <LookupField label="" name={`ct_org_${row.id}`} value={(row.organizationUuid as string) ?? ""} displayValue={(row.organization as any)?.shortName ?? ""} endpoint="organizations" displayField="shortName"
+          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "organizationUuid", uuid, { organization: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null })}
+          onClear={() => ctx.handleLookupChange(row, "organizationUuid", null, { organization: null })}
+          disabled={ctx.disabled} width="100%" variant="table" />
+      );
+      return <span>{(row.organization as any)?.shortName ?? ""}</span>;
+    }
+    return undefined;
+  }, []);
+
+  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
+    const isEdit = !!data?.uuid;
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: [CR_TABLE_ENDPOINT] });
+      _ctx.refetch();
+    };
+    const nameKey = parentKey.replace(/Uuid$/, "Name");
+    addPane({
+      label: makePaneLabelFromData("ContractsList", "Договора", isEdit ? data as any : null, (data?.shortName || data?.contractNumber) as string),
+      component: ContractsForm,
+      data: isEdit ? data : { [parentKey]: parentUuid, [nameKey]: parentName } as any,
+      onSave: refresh,
+      onClose: refresh,
+    });
+  }, [addPane, parentKey, parentUuid, parentName, queryClient]);
+
+  const defaultNewRow = useMemo(() => ({
+    shortName: "", contractNumber: "", startDate: null, endDate: null,
+  }), []);
+
+  // Скрываем колонку «другой стороны» — родительская и так известна
+  const adjustedColumns = useMemo(() => {
+    const hideId = parentKey === "organizationUuid" ? "organization.shortName" : "counterparty.shortName";
+    const showId = parentKey === "organizationUuid" ? "counterparty.shortName" : "organization.shortName";
+    return (columnsJson as any[]).map((col: any) => {
+      if (col.identifier === hideId) return { ...col, visible: false, inlist: false };
+      if (col.identifier === showId) return { ...col, visible: true, inlist: true };
+      return col;
+    });
+  }, [parentKey]);
+
+  return (
+    <SubTable
+      model={CR_TABLE_ENDPOINT}
+      componentName={CR_TABLE_COMPONENT}
+      columnsJson={adjustedColumns}
+      parentKey={parentKey}
+      parentUuid={parentUuid}
+      defaultSort={{ id: "asc" }}
+      disabled={disabled}
+      deferRemoteChanges={deferRemoteChanges}
+      initialPendingRows={initialPendingRows}
+      onItemsChange={onItemsChange}
+      emptyMessage={translate("saveToContracts") || "Сохраните запись для управления договорами."}
+      renderCell={renderCell}
+      openFormFor={openFormFor}
+      defaultNewRow={defaultNewRow}
+    />
+  );
+};
+
+ContractsTable.displayName = "ContractsTable";
+export { ContractsList, ContractsForm, ContractsTable };

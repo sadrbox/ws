@@ -178,4 +178,5 @@ const UserOrganizationsTable: FC<UserOrganizationsTableProps> = ({
 };
 
 UserOrganizationsTable.displayName = "UserOrganizationsTable";
+export { UserOrganizationsTable };
 export default UserOrganizationsTable;

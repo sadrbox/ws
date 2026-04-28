@@ -1,6 +1,6 @@
-import { FC, useMemo } from "react";
+import { FC, useCallback, useMemo } from "react";
 import { translate } from "src/i18";
-import type { TDataItem } from "src/components/Table/types";
+import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
@@ -10,6 +10,10 @@ import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupFie
 import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
+import { useAppContext } from "src/app";
+import { useQueryClient } from "@tanstack/react-query";
+import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
@@ -194,4 +198,104 @@ const BankAccountsList: FC<BankAccountsListProps> = ({ variant, onSelectItem, ow
 );
 
 BankAccountsList.displayName = "BankAccountsList";
-export { BankAccountsList, BankAccountsForm };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLE — SubTable для вложенного списка счетов внутри форм
+// ═══════════════════════════════════════════════════════════════════════════
+
+const BA_TABLE_ENDPOINT = "bankaccounts";
+const BA_TABLE_COMPONENT = "BankAccountsList_part";
+
+export interface BankAccountsTableProps {
+  /** Тип владельца: "organization", "counterparty" */
+  ownerType: string;
+  /** UUID владельца */
+  parentUuid: string;
+  /** Имя владельца (для передачи в форму) */
+  parentName?: string;
+  disabled?: boolean;
+  /** Если true — не отправлять изменения на сервер, хранить их локально */
+  deferRemoteChanges?: boolean;
+  /** Колбэк при изменении строк */
+  onItemsChange?: (items: TDataItem[]) => void;
+  /** Начальные pending-строки */
+  initialPendingRows?: TDataItem[];
+}
+
+const BankAccountsTable: FC<BankAccountsTableProps> = ({
+  ownerType, parentUuid, parentName = "", disabled = false,
+  deferRemoteChanges = false, onItemsChange, initialPendingRows,
+}) => {
+  const { addPane } = useAppContext().windows;
+  const queryClient = useQueryClient();
+
+  const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
+    if (col.identifier === "shortName") {
+      if (ctx.inlineEditing) return <Field label="" name={`ba_shortName_${row.id}`} value={(row.shortName as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "shortName", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <span>{(row.shortName as string) ?? ""}</span>;
+    }
+    if (col.identifier === "iban") {
+      if (ctx.inlineEditing) return <Field label="" name={`ba_iban_${row.id}`} value={(row.iban as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "iban", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <span>{(row.iban as string) ?? ""}</span>;
+    }
+    if (col.identifier === "bankName") {
+      if (ctx.inlineEditing) return <Field label="" name={`ba_bankName_${row.id}`} value={(row.bankName as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "bankName", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <span>{(row.bankName as string) ?? ""}</span>;
+    }
+    if (col.identifier === "bik") {
+      if (ctx.inlineEditing) return <Field label="" name={`ba_bik_${row.id}`} value={(row.bik as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "bik", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <span>{(row.bik as string) ?? ""}</span>;
+    }
+    return undefined;
+  }, []);
+
+  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
+    const isEdit = !!data?.uuid;
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: [BA_TABLE_ENDPOINT] });
+      _ctx.refetch();
+    };
+    addPane({
+      label: makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? data as any : null, (data?.shortName || data?.iban) as string),
+      component: BankAccountsForm,
+      data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
+      onSave: refresh,
+      onClose: refresh,
+    });
+  }, [addPane, ownerType, parentUuid, parentName, queryClient]);
+
+  const defaultNewRow = useMemo(() => ({
+    shortName: "", iban: "", bik: "", bankName: "", currencyUuid: null,
+  }), []);
+
+  // Скрываем колонку ownerName в SubTable (владелец известен из контекста)
+  const adjustedColumns = useMemo(
+    () => (columnsJson as any[]).map((col: any) =>
+      col.identifier === "ownerName" ? { ...col, visible: false, inlist: false } : col,
+    ),
+    [],
+  );
+
+  return (
+    <SubTable
+      model={BA_TABLE_ENDPOINT}
+      componentName={BA_TABLE_COMPONENT}
+      columnsJson={adjustedColumns}
+      parentKey="ownerUuid"
+      parentUuid={parentUuid}
+      extraQueryParams={{ ownerType }}
+      defaultSort={{ id: "asc" }}
+      disabled={disabled}
+      deferRemoteChanges={deferRemoteChanges}
+      initialPendingRows={initialPendingRows}
+      onItemsChange={onItemsChange}
+      emptyMessage={translate("saveToBankAccounts") || "Сохраните запись для управления банковскими счетами."}
+      renderCell={renderCell}
+      openFormFor={openFormFor}
+      defaultNewRow={defaultNewRow}
+    />
+  );
+};
+
+BankAccountsTable.displayName = "BankAccountsTable";
+export { BankAccountsList, BankAccountsForm, BankAccountsTable };

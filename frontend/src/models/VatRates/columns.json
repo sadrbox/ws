@@ -6,6 +6,7 @@
 		"type": "number",
 		"position": 1,
 		"visible": true,
+		"inlist": true,
 		"width": "70px",
 		"minWidth": "70px",
 		"alignment": "left"
@@ -29,6 +30,7 @@
 		"type": "string",
 		"position": 3,
 		"visible": true,
+		"inlist": true,
 		"width": "200px",
 		"minWidth": "80px",
 		"alignment": "left"
@@ -40,6 +42,7 @@
 		"type": "number",
 		"position": 4,
 		"visible": true,
+		"inlist": true,
 		"width": "110px",
 		"minWidth": "80px",
 		"alignment": "right"

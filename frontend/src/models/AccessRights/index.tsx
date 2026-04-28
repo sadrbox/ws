@@ -12,7 +12,6 @@ import { GroupCol, GroupRow } from "src/components/UI/Group";
 import styles from "src/styles/main.module.scss";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
-import apiClient from "src/services/api/client";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useFormStore } from "src/hooks/useFormStore";
@@ -31,7 +30,7 @@ export const ROLE_OPTIONS = [
 // ═══════════════════════════════════════════════════════════════════════════
 // ACCESS RIGHTS FORM — форма user-organizations
 // Вкладка "Основное": Организация + Пользователь + Роль
-// Вкладка "Права к разделам": ModelRightsTable (access-rights)
+// Вкладка "Разрешения": ModelRightsTable (access-rights)
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface TFormFields {
@@ -144,7 +143,7 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
     if (form.isEditMode && form.fields.userUuid && form.fields.organizationUuid) {
       result.push({
         id: "modelRights",
-        label: translate("modelRights") || "Права к разделам",
+        label: translate("modelRights") || "Разрешения",
         component: (
           <ModelRightsTable
             userUuid={form.fields.userUuid}
@@ -247,7 +246,6 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
   }, [roleMap]);
 
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
-    if (deferRemoteChanges) return;
     const isEdit = !!data?.uuid;
     const newData = !isEdit && userUuid
       ? { userUuid } as unknown as TDataItem
@@ -263,24 +261,7 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
       onSave: refresh,
       onClose: refresh,
     });
-  }, [addPane, deferRemoteChanges, userUuid, queryClient]);
-
-  const customInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
-    if (!row.uuid) return;
-    await apiClient.put(`/${USER_ORG_ENDPOINT}/${row.uuid}`, { [field]: value });
-    queryClient.setQueriesData({ queryKey: [USER_ORG_ENDPOINT] }, (oldData: any) => {
-      if (!oldData?.pages) return oldData;
-      return {
-        ...oldData,
-        pages: oldData.pages.map((page: any) => ({
-          ...page,
-          items: page.items.map((item: any) =>
-            item.uuid === row.uuid ? { ...item, [field]: value } : item
-          ),
-        })),
-      };
-    });
-  }, [queryClient]);
+  }, [addPane, userUuid, queryClient]);
 
   const onInlineAdd = useCallback(async (ctx: SubTableContext) => {
     openFormFor(undefined, ctx);
@@ -308,7 +289,6 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       onInlineAdd={onInlineAdd}
-      {...(!deferRemoteChanges ? { customInlineChange } : {})}
     />
   );
 };

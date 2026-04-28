@@ -6,6 +6,7 @@
 		"type": "number",
 		"position": 1,
 		"visible": true,
+		"inlist": true,
 		"width": "80px",
 		"minWidth": "80px",
 		"alignment": "left"
@@ -29,6 +30,7 @@
 		"type": "string",
 		"position": 3,
 		"visible": true,
+		"inlist": true,
 		"width": "250px",
 		"minWidth": "80px",
 		"alignment": "left"
@@ -40,6 +42,7 @@
 		"type": "string",
 		"position": 4,
 		"visible": true,
+		"inlist": true,
 		"width": "130px",
 		"minWidth": "80px",
 		"alignment": "left"
@@ -51,6 +54,7 @@
 		"type": "string",
 		"position": 5,
 		"visible": true,
+		"inlist": true,
 		"width": "150px",
 		"minWidth": "80px",
 		"alignment": "left"
@@ -62,6 +66,7 @@
 		"type": "string",
 		"position": 6,
 		"visible": true,
+		"inlist": true,
 		"width": "100px",
 		"minWidth": "70px",
 		"alignment": "left"

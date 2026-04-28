@@ -7,7 +7,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDate, FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import SaleItemsTable from "./SaleItemsTable";
+import { SaleItemsTable } from "./SaleItemsTable";
 import { Group, GroupRow, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -290,4 +290,4 @@ const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
 );
 SalesList.displayName = "SalesList";
 
-export { SalesList, SalesForm };
+export { SalesList, SalesForm, SaleItemsTable };

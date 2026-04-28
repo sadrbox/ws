@@ -91,6 +91,11 @@ export async function tenantMiddleware(req, res, next) {
 			);
 			req.user.isOrgAdmin = activeOrgEntry?.role === "admin" || false;
 
+			// Является ли администратором хотя бы одной организации
+			req.user.isAnyOrgAdmin = dbUser.userOrganizations.some(
+				(uo) => uo.role === "admin",
+			);
+
 			// Безопасность: если активная орг не входит в список разрешённых — сбрасываем
 			if (
 				dbUser.organizationUuid &&
@@ -190,7 +195,7 @@ export async function accessRightMiddleware(req, res, next) {
 	if (req.user?.isSuperAdmin) return next();
 
 	// Org admin — полный доступ ко всем разделам своей организации
-	if (req.user?.isOrgAdmin) return next();
+	if (req.user?.isOrgAdmin || req.user?.isAnyOrgAdmin) return next();
 
 	// Dev-режим: admin пропускается
 	const isDev = process.env.NODE_ENV !== "production";
@@ -205,14 +210,24 @@ export async function accessRightMiddleware(req, res, next) {
 
 	try {
 		// Ищем права с учётом активной организации пользователя.
-		// Приоритет: org-specific право > глобальное (organizationUuid = null)
+		// Приоритет: org-specific право для активной орг > право для любой allowedOrg > глобальное (organizationUuid = null)
 		const orgUuid = req.user?.organizationUuid || null;
+		const allowedOrgUuids = req.user?.allowedOrgUuids || [];
 
-		const [orgRight, globalRight] = await Promise.all([
-			orgUuid
+		// Все организации для поиска прав: активная + все разрешённые
+		const orgsToCheck = orgUuid
+			? [orgUuid, ...allowedOrgUuids.filter((u) => u !== orgUuid)]
+			: allowedOrgUuids;
+
+		const [anyOrgRight, globalRight] = await Promise.all([
+			orgsToCheck.length > 0
 				? prisma.accessRight.findFirst({
-					where: { userUuid: req.user.uuid, modelName, organizationUuid: orgUuid },
-					select: { accessLevel: true },
+					where: { userUuid: req.user.uuid, modelName, organizationUuid: { in: orgsToCheck } },
+					// Приоритет: активная org выше, чем любая другая
+					orderBy: orgUuid
+						? [{ organizationUuid: "asc" }]  // активная будет найдена через in
+						: undefined,
+					select: { accessLevel: true, organizationUuid: true },
 				  })
 				: null,
 			prisma.accessRight.findFirst({
@@ -220,6 +235,18 @@ export async function accessRightMiddleware(req, res, next) {
 				select: { accessLevel: true },
 			}),
 		]);
+
+		// Если несколько org-прав — ищем активную отдельно для точного приоритета
+		let orgRight = anyOrgRight;
+		if (orgUuid && anyOrgRight && anyOrgRight.organizationUuid !== orgUuid) {
+			// Есть право для другой орг, но не для активной — оставляем как fallback
+			// Дополнительно ищем именно для активной
+			const activeOrgRight = await prisma.accessRight.findFirst({
+				where: { userUuid: req.user.uuid, modelName, organizationUuid: orgUuid },
+				select: { accessLevel: true },
+			});
+			orgRight = activeOrgRight ?? anyOrgRight;
+		}
 
 		const level = orgRight?.accessLevel ?? globalRight?.accessLevel ?? "none";
 
@@ -231,7 +258,7 @@ export async function accessRightMiddleware(req, res, next) {
 
 		return res.status(403).json({
 			success: false,
-			message: `Нет доступа к ${modelName} (уровень: ${level})`,
+			message: `Нет доступа к ${modelName}`,
 		});
 	} catch (err) {
 		console.error("accessRightMiddleware error:", err);

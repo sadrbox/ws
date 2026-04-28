@@ -8,6 +8,7 @@
 		"alignment": "left",
 		"hint": "Внутренний номер",
 		"visible": true,
+		"inlist": true,
 		"position": 1
 	},
 	{
@@ -17,6 +18,7 @@
 		"type": "string",
 		"position": 2,
 		"visible": false,
+		"inlist": true,
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left"
@@ -30,6 +32,7 @@
 		"alignment": "left",
 		"hint": "Дата документа",
 		"visible": true,
+		"inlist": true,
 		"position": 3
 	},
 	{
@@ -41,6 +44,7 @@
 		"alignment": "left",
 		"hint": "Описание",
 		"visible": true,
+		"inlist": true,
 		"position": 4
 	},
 	{
@@ -52,6 +56,7 @@
 		"alignment": "right",
 		"hint": "Сумма",
 		"visible": true,
+		"inlist": true,
 		"position": 5
 	},
 	{
@@ -63,6 +68,7 @@
 		"alignment": "left",
 		"hint": "Статус документа",
 		"visible": true,
+		"inlist": true,
 		"position": 6
 	},
 	{
@@ -74,6 +80,7 @@
 		"alignment": "left",
 		"hint": "Организация",
 		"visible": true,
+		"inlist": true,
 		"position": 7
 	},
 	{
@@ -85,6 +92,7 @@
 		"alignment": "left",
 		"hint": "Контрагент",
 		"visible": true,
+		"inlist": true,
 		"position": 8
 	}
 ]

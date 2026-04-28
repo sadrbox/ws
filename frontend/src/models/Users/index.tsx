@@ -94,7 +94,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
         component: (
           <AccessRightsTable
             userUuid={form.fields.uuid}
-            deferRemoteChanges={false}
+            // deferRemoteChanges={false}
           />
         ),
       });
@@ -117,3 +117,4 @@ const UsersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
 UsersList.displayName = "UsersList";
 
 export { UsersList, UsersForm };
+export { UserOrganizationsTable } from "./UserOrganizationsTable";

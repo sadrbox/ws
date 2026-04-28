@@ -177,7 +177,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { modelName, accessLevel, userUuid } = req.body;
+		const { modelName, accessLevel, userUuid, organizationUuid } = req.body;
 		if (!userUuid)
 			return res.status(400).json({
 				success: false,
@@ -193,6 +193,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				modelName: modelName.trim(),
 				accessLevel: accessLevel?.trim() || "none",
 				userUuid,
+				organizationUuid: organizationUuid ?? null,
 			},
 		});
 		return res.status(201).json({ success: true, item });

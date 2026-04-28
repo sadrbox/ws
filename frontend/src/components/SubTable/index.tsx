@@ -560,6 +560,15 @@ const SubTable: FC<SubTableProps> = ({
     if (error) return;
 
     if (!row.uuid) return;
+
+    // Оптимистичный локальный апдейт — немедленный отклик UI без мигания
+    cachedRowsRef.current = cachedRowsRef.current.map((r: any) => {
+      if (!r) return r;
+      const idMatch = ((r.uuid && r.uuid === (row as any).uuid) || r.id === (row as any).id);
+      return idMatch ? { ...r, [field]: value } : r;
+    });
+    setCacheVersion(v => v + 1);
+
     setOpCount(c => c + 1);
     try {
       if (customInlineChange) {
@@ -568,15 +577,12 @@ const SubTable: FC<SubTableProps> = ({
       }
       const { default: apiClient } = await import("src/services/api/client");
       await apiClient.put(`/${model}/${row.uuid}`, { [field]: value });
-      refetch();
+      // refetch не нужен — оптимистичный кэш уже актуален
     } catch (err: any) {
-      // Сервер вернул ошибку — показываем её в ячейке
+      // Сервер вернул ошибку — откатываем через refetch и показываем ошибку в ячейке
       const serverError = err.response?.data?.message || "Ошибка сохранения";
       setCellError(rowId, field, serverError);
-      // 409 = конфликт уникальности — тихо откатываем через refetch
-      if (err.response?.status === 409) {
-        refetch();
-      }
+      refetch();
     } finally {
       setOpCount(c => c - 1);
     }
@@ -634,8 +640,15 @@ const SubTable: FC<SubTableProps> = ({
       updateLocalRow(row, { [fkField]: value, ...(extraPatch ?? {}) });
       return;
     }
-    // Немедленный режим — PUT на сервер
+    // Немедленный режим — оптимистичный апдейт + PUT на сервер
     if (!row.uuid) return;
+    // Оптимистичный локальный апдейт — включаем relation-объекты для правильного отображения
+    cachedRowsRef.current = cachedRowsRef.current.map((r: any) => {
+      if (!r) return r;
+      const idMatch = ((r.uuid && r.uuid === (row as any).uuid) || r.id === (row as any).id);
+      return idMatch ? { ...r, [fkField]: value, ...(extraPatch ?? {}) } : r;
+    });
+    setCacheVersion(v => v + 1);
     setOpCount(c => c + 1);
     try {
       const { default: apiClient } = await import("src/services/api/client");
@@ -646,11 +659,12 @@ const SubTable: FC<SubTableProps> = ({
         if (v === null || typeof v !== "object") primitiveExtras[k] = v;
       }
       await apiClient.put(`/${model}/${row.uuid}`, { [fkField]: value, ...primitiveExtras });
-      refetch();
+      // refetch не нужен — оптимистичный кэш актуален
     } catch (err: any) {
       const serverError = err.response?.data?.message || "Ошибка сохранения";
       const rowId = getRowId(row);
       setCellError(rowId, fkField, serverError);
+      refetch(); // откатываем к серверному состоянию
     } finally {
       setOpCount(c => c - 1);
     }
@@ -658,14 +672,14 @@ const SubTable: FC<SubTableProps> = ({
 
   const ctx: SubTableContext = useMemo(() => ({
     get rows() { return rowsRef.current; },
-    refetch, inlineEditing, disabled: disabled || opLoading, handleInlineChange,
+    refetch, inlineEditing, disabled, handleInlineChange,
     updateLocalRow, deferRemoteChanges,
     get cellErrors() { return cellErrorsRef.current; },
     setCellError,
     handleLookupChange,
     expandedRowIds,
     toggleExpandRow,
-  }), [refetch, inlineEditing, disabled, opLoading, handleInlineChange, updateLocalRow, deferRemoteChanges, setCellError, handleLookupChange, expandedRowIds, toggleExpandRow]);
+  }), [refetch, inlineEditing, disabled, handleInlineChange, updateLocalRow, deferRemoteChanges, setCellError, handleLookupChange, expandedRowIds, toggleExpandRow]);
 
   // ── Фронтенд-фильтрация (всегда на фронте) ─────────────────────────────
   const displayRows = useMemo(() => {
@@ -837,8 +851,7 @@ const SubTable: FC<SubTableProps> = ({
   // ── Кнопки ─────────────────────────────────────────────────────────────
   const extraButtons = useMemo(() => (
     <>
-      {!readonly && showEditModeToggle && inlineEditing && (
-
+      {!readonly && showEditModeToggle && (
         <>
           <Toolbar.Divider />
           <Toolbar.InlineEditButton

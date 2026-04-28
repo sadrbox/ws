@@ -12,7 +12,7 @@
  */
 import { FC, useMemo } from "react";
 import type { TPane } from "src/app/types";
-import { AccessRightsTable } from "src/models/AccessRights";
+import { ModelRightsTable } from "src/models/ModelRights";
 import { translate } from "src/i18";
 import { Field, FieldSelect } from "src/components/Field";
 import { GroupCol, GroupRow } from "src/components/UI";
@@ -78,7 +78,7 @@ const OrgRightsPanel: FC<Partial<TPane>> = (paneProps) => {
       if (!fd.organizationUuid) return "Организация обязательна";
       return { role: fd.role || "member" };
     },
-    buildPaneLabel: (saved) => makePaneLabel("OrgRightsPanel", "Права к разделам", saved),
+    buildPaneLabel: (saved) => makePaneLabel("OrgRightsPanel", "Разрешения", saved),
   });
 
   const tabs = useMemo(() => {
@@ -124,11 +124,12 @@ const OrgRightsPanel: FC<Partial<TPane>> = (paneProps) => {
     if (form.isEditMode && form.fields.userUuid && form.fields.organizationUuid) {
       result.push({
         id: "modelRights",
-        label: translate("modelRights") || "Права к разделам",
+        label: translate("modelRights") || "Разрешения",
         component: (
-          <AccessRightsTable
+          <ModelRightsTable
             userUuid={form.fields.userUuid}
             organizationUuid={form.fields.organizationUuid}
+            deferRemoteChanges={false}
           />
         ),
       });

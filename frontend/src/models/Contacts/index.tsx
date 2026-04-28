@@ -1,6 +1,6 @@
-import { FC, useMemo } from "react";
+import { FC, useCallback, useMemo } from "react";
 import { translate } from "src/i18";
-import type { TDataItem } from "src/components/Table/types";
+import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
@@ -9,6 +9,10 @@ import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import LookupField from "src/components/Field/LookupField";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
+import { useAppContext } from "src/app";
+import { useQueryClient } from "@tanstack/react-query";
+import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelForm from "src/components/ModelForm";
@@ -163,4 +167,104 @@ const ContactsList: FC<ContactsListProps> = ({ variant, onSelectItem, ownerUuid,
 );
 
 ContactsList.displayName = "ContactsList";
-export { ContactsList, ContactsForm };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLE — SubTable для вложенного списка контактов
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CT_TABLE_ENDPOINT = "contacts";
+const CT_TABLE_COMPONENT = "ContactsList_part";
+
+export interface ContactsTableProps {
+  /** Тип владельца: "organization", "counterparty", "employee", "contactperson", "user" */
+  ownerType: string;
+  /** UUID владельца */
+  parentUuid: string;
+  /** Имя владельца (для передачи в форму) */
+  parentName?: string;
+  disabled?: boolean;
+  deferRemoteChanges?: boolean;
+  onItemsChange?: (items: TDataItem[]) => void;
+  initialPendingRows?: TDataItem[];
+}
+
+const ContactsTable: FC<ContactsTableProps> = ({
+  ownerType, parentUuid, parentName = "", disabled = false,
+  deferRemoteChanges = false, onItemsChange, initialPendingRows,
+}) => {
+  const { addPane } = useAppContext().windows;
+  const queryClient = useQueryClient();
+
+  const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
+    if (col.identifier === "value") {
+      if (ctx.inlineEditing) return <Field label="" name={`contact_val_${row.id}`} value={(row.value as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "value", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <span>{(row.value as string) ?? ""}</span>;
+    }
+    if (col.identifier === "contactType.shortName") {
+      if (ctx.inlineEditing) return (
+        <LookupField
+          label="" name={`contact_type_${row.id}`}
+          value={(row.contactTypeUuid as string) ?? ""}
+          displayValue={(row.contactType as any)?.shortName ?? ""}
+          endpoint="contacttypes" displayField="shortName"
+          columns={[{ key: "shortName", label: "Наименование" }]}
+          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "contactTypeUuid", uuid, {
+            contactType: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
+          })}
+          onClear={() => ctx.handleLookupChange(row, "contactTypeUuid", null, { contactType: null })}
+          disabled={ctx.disabled} width="100%" variant="table"
+        />
+      );
+      return <span>{(row.contactType as any)?.shortName ?? ""}</span>;
+    }
+    return undefined;
+  }, []);
+
+  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
+    const isEdit = !!data?.uuid;
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: [CT_TABLE_ENDPOINT] });
+      _ctx.refetch();
+    };
+    addPane({
+      label: makePaneLabelFromData("ContactsList", "Контакты", isEdit ? data as any : null),
+      component: ContactsForm,
+      data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
+      onSave: refresh,
+      onClose: refresh,
+    });
+  }, [addPane, ownerType, parentUuid, parentName, queryClient]);
+
+  const defaultNewRow = useMemo(() => ({ value: "", contactTypeUuid: null }), []);
+
+  // Скрываем ownerName в SubTable — владелец известен из контекста
+  const adjustedColumns = useMemo(
+    () => (columnsJson as any[]).map((col: any) =>
+      col.identifier === "ownerName" ? { ...col, visible: false, inlist: false } : col,
+    ),
+    [],
+  );
+
+  return (
+    <SubTable
+      model={CT_TABLE_ENDPOINT}
+      componentName={CT_TABLE_COMPONENT}
+      columnsJson={adjustedColumns}
+      parentKey="ownerUuid"
+      parentUuid={parentUuid}
+      extraQueryParams={{ ownerType }}
+      defaultSort={{ id: "asc" }}
+      disabled={disabled}
+      deferRemoteChanges={deferRemoteChanges}
+      initialPendingRows={initialPendingRows}
+      onItemsChange={onItemsChange}
+      emptyMessage={translate("saveToContacts") || "Сохраните запись для управления контактами."}
+      renderCell={renderCell}
+      openFormFor={openFormFor}
+      defaultNewRow={defaultNewRow}
+    />
+  );
+};
+
+ContactsTable.displayName = "ContactsTable";
+export { ContactsList, ContactsForm, ContactsTable };
