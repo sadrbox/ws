@@ -1,12 +1,25 @@
 import apiClient from "./api/client";
 import { isNetworkError } from "./networkUtils";
 
+export interface OrgEntry {
+	organizationUuid: string;
+	role: "admin" | "member" | string;
+	organization?: {
+		uuid: string;
+		shortName: string | null;
+		displayName?: string | null;
+		bin?: string | null;
+	} | null;
+}
+
 export interface AuthUser {
 	uuid: string;
 	username: string;
 	email: string | null;
 	organizationUuid?: string | null;
 	isSuperAdmin?: boolean;
+	allowedOrgUuids?: string[];
+	userOrganizations?: OrgEntry[];
 	accessRights?: {
 		modelName: string;
 		accessLevel: string;
@@ -257,5 +270,28 @@ export async function verifyToken(): Promise<AuthUser | null> {
 		localStorage.removeItem(AUTH_TOKEN_KEY);
 		localStorage.removeItem(AUTH_USER_KEY);
 		return null;
+	}
+}
+
+/**
+ * Переключение активной организации без перелогина.
+ * Отправляет PATCH /auth/switch-org, получает новый JWT и обновлённого пользователя.
+ * Диспатчит событие "auth_org_switched" для обновления контекста.
+ */
+export async function switchOrganization(
+	organizationUuid: string | null,
+): Promise<{ success: boolean; user?: AuthUser; message?: string }> {
+	try {
+		const res = await apiClient.patch<LoginResponse>("/auth/switch-org", { organizationUuid });
+		const d = res.data;
+		if (d.success && d.token && d.user) {
+			localStorage.setItem(AUTH_TOKEN_KEY, d.token);
+			localStorage.setItem(AUTH_USER_KEY, JSON.stringify(d.user));
+			window.dispatchEvent(new CustomEvent("auth_org_switched", { detail: d.user }));
+			return { success: true, user: d.user };
+		}
+		return { success: false, message: d.message || "Ошибка переключения организации" };
+	} catch (err: any) {
+		return { success: false, message: err.response?.data?.message || err.message || "Ошибка соединения" };
 	}
 }

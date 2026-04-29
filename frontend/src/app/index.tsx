@@ -137,6 +137,20 @@ const App: React.FC = () => {
     return () => window.removeEventListener("auth_logout", handleLogout);
   }, []);
 
+  // Слушаем переключение организации — обновляем currentUser без перелогина
+  useEffect(() => {
+    const handleOrgSwitch = (e: Event) => {
+      const user = (e as CustomEvent<AuthUser>).detail;
+      if (user) {
+        setCurrentUser(user);
+        // Инвалидируем кэш React Query — данные теперь от другой орг
+        queryClient.clear();
+      }
+    };
+    window.addEventListener("auth_org_switched", handleOrgSwitch);
+    return () => window.removeEventListener("auth_org_switched", handleOrgSwitch);
+  }, [queryClient]);
+
   // Запускаем health-check для определения реальной доступности сервера
   useEffect(() => {
     if (isLoggedIn) {

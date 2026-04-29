@@ -1,6 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { enrichWithOwnerName } from "../../utils/resolveOwnerName.js";
+import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -124,6 +125,7 @@ router.get("/contacts", async (req, res) => {
 			...dateRangeFilter,
 			...filterWhereClause,
 			...fkFilter,
+			...(fkFilter.ownerUuid ? {} : tenantFilter(req)),
 		};
 
 		const queryOptions = {
@@ -218,6 +220,7 @@ router.post("/contacts", async (req, res) => {
 				contactTypeUuid: contactTypeUuid || null,
 				ownerType: ownerType?.trim() || null,
 				ownerUuid: ownerUuid?.trim() || null,
+				organizationUuid: req.user?.organizationUuid ?? null,
 			},
 			include: {
 				contactType: true,

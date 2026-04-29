@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import { prisma } from "../../prisma/prisma-client.js";
 import { enrichWithOwnerName } from "../../utils/resolveOwnerName.js";
+import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -117,7 +118,12 @@ router.get("/contactpersons", async (req, res) => {
 			fkFilter.ownerUuid = req.query.ownerUuid.trim();
 		}
 
-		const baseWhere = { ...searchWhereClause, ...filterWhereClause, ...fkFilter };
+		const baseWhere = {
+			...searchWhereClause,
+			...filterWhereClause,
+			...fkFilter,
+			...(fkFilter.ownerUuid ? {} : tenantFilter(req)),
+		};
 
 		const queryOptions = { take: limitNumber, where: baseWhere, orderBy };
 		if (cursorNumber !== null) {
@@ -200,6 +206,7 @@ router.post("/contactpersons", async (req, res) => {
 				ownerType: ownerType?.trim() || null,
 				ownerUuid: ownerUuid?.trim() || null,
 				comment: comment?.trim() || null,
+				organizationUuid: req.user?.organizationUuid ?? null,
 			},
 		});
 		return res.status(201).json({ success: true, item });

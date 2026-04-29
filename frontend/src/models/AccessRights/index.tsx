@@ -4,158 +4,161 @@ import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TTableVariant } from "src/components/Table";
 import type { TPane } from "src/app/types";
-import moduleColumnsJson from "./moduleColumns.json";
-import subColumnsJson from "./subColumns.json";
+import columnsJson from "./columns.json";
+import { useQueryClient } from "@tanstack/react-query";
 import { Field, FieldSelect } from "src/components/Field";
-import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI/Group";
 import styles from "src/styles/main.module.scss";
-import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
-import { useQueryClient } from "@tanstack/react-query";
+import ModelList from "src/components/ModelList";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
-import { ModelRightsTable } from "src/models/ModelRights";
 
-const USER_ORG_ENDPOINT = "user-organizations";
+const ENDPOINT = "access-rights";
+const SUBTABLE_COMPONENT_NAME = "AccessRightsTable_part";
+// ─── Shared Options ───────────────────────────────────────────────────────────
 
-export const ROLE_OPTIONS = [
-  { value: "member", label: translate("roleMember") || "Участник" },
-  { value: "admin",  label: translate("roleAdmin")  || "Администратор" },
+export const ACCESS_LEVEL_OPTIONS = [
+  { value: "full",     label: translate("accessLevelFull")     || "Полный" },
+  { value: "readonly", label: translate("accessLevelReadonly") || "Только чтение" },
+  { value: "none",     label: translate("accessLevelNone")     || "Нет доступа" },
+];
+
+export const MODEL_NAME_OPTIONS = [
+  { value: "", label: "— " + (translate("select") || "Выберите") + " —" },
+  ...[
+    { value: "Organization",       i18: "OrganizationsList" },
+    { value: "Counterparty",       i18: "CounterpartiesList" },
+    { value: "Contract",           i18: "ContractsList" },
+    { value: "Sale",               i18: "SalesList" },
+    { value: "Purchase",           i18: "PurchasesList" },
+    { value: "Warehouse",          i18: "WarehousesList" },
+    { value: "Product",            i18: "ProductsList" },
+    { value: "Brand",              i18: "BrandsList" },
+    { value: "Employee",           i18: "EmployeesList" },
+    { value: "Contact",            i18: "ContactsList" },
+    { value: "ContactPerson",      i18: "ContactPersonsList" },
+    { value: "ContactType",        i18: "ContactTypesList" },
+    { value: "Position",           i18: "PositionsList" },
+    { value: "BankAccount",        i18: "BankAccountsList" },
+    { value: "Currency",           i18: "CurrenciesList" },
+    { value: "Todo",               i18: "TodosList" },
+    { value: "Notification",       i18: "NotificationsList" },
+    { value: "OutgoingInvoice",    i18: "OutgoingInvoicesList" },
+    { value: "IncomingInvoice",    i18: "IncomingInvoicesList" },
+    { value: "PaymentInvoice",     i18: "PaymentInvoicesList" },
+    { value: "CashReceiptOrder",   i18: "CashReceiptOrdersList" },
+    { value: "CashExpenseOrder",   i18: "CashExpenseOrdersList" },
+    { value: "InventoryTransfer",  i18: "InventoryTransfersList" },
+    { value: "UnitOfMeasure",      i18: "UnitOfMeasuresList" },
+    { value: "VatRate",            i18: "VatRatesList" },
+    { value: "ScheduledTask",      i18: "ScheduledTasksList" },
+    { value: "PayrollCalculation", i18: "PayrollCalculationsList" },
+    { value: "PayrollPayment",     i18: "PayrollPaymentsList" },
+    { value: "User",               i18: "UsersList" },
+    { value: "ActivityHistory",    i18: "ActivityHistoriesList" },
+    { value: "EmployeeHistory",    i18: "EmployeeHistoriesList" },
+    { value: "AccessRight",        i18: "AccessRightsList" },
+  ].map(({ value, i18 }) => ({ value, label: translate(i18) || value })),
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ACCESS RIGHTS FORM — форма user-organizations
-// Вкладка "Основное": Организация + Пользователь + Роль
-// Вкладка "Разрешения": ModelRightsTable (access-rights)
+// MODEL RIGHTS FORM — форма одной записи access-rights
+// Endpoint: access-rights
+// Поля: modelName + accessLevel
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface TFormFields {
+interface TItemFields {
   id?: number;
   uuid?: string;
+  modelName: string;
+  accessLevel: string;
   userUuid: string;
-  userDisplayName: string;
-  organizationUuid: string;
-  orgShortName: string;
-  role: string;
+  organizationUuid?: string | null;
 }
 
-const DEFAULT_FORM_FIELDS: TFormFields = {
-  userUuid: "", userDisplayName: "", organizationUuid: "", orgShortName: "", role: "member",
+const DEFAULT_ITEM_FIELDS: TItemFields = {
+  modelName: "", accessLevel: "none", userUuid: "", organizationUuid: null,
 };
 
 const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("AccessRight");
 
-  const initialFields: TFormFields | undefined = (() => {
-    const d = paneProps.data;
-    if (!d || d.uuid) return undefined;
-    return {
-      ...DEFAULT_FORM_FIELDS,
-      userUuid:         (d.userUuid         as string) ?? "",
-      userDisplayName:  (d.userDisplayName  as string) ?? "",
-      organizationUuid: (d.organizationUuid as string) ?? "",
-      orgShortName:     (d.orgShortName     as string) ?? "",
-      role:             (d.role             as string) ?? "member",
+  const initialFields: TItemFields | undefined = (() => {
+    const data = paneProps.data;
+    if (!data || data.uuid) return undefined;
+    if (data.userUuid) return {
+      ...DEFAULT_ITEM_FIELDS,
+      userUuid: data.userUuid as string,
+      organizationUuid: (data.organizationUuid as string | null) ?? null,
     };
+    return undefined;
   })();
 
-  const form = useFormStore<TFormFields>({
-    endpoint: USER_ORG_ENDPOINT,
+  const form = useFormStore<TItemFields>({
+    endpoint: ENDPOINT,
     storageKey: "access-rights-form",
-    defaultFields: DEFAULT_FORM_FIELDS,
+    defaultFields: DEFAULT_ITEM_FIELDS,
     initialFields,
     paneProps,
     mapServerToForm: (d, prev) => ({
-      ...(prev ?? DEFAULT_FORM_FIELDS),
-      id:               d.id,
-      uuid:             d.uuid ?? String(d.id),
-      userUuid:         d.userUuid                ?? "",
-      userDisplayName:  d.user?.username          ?? prev?.userDisplayName ?? "",
-      organizationUuid: d.organizationUuid        ?? "",
-      orgShortName:     d.organization?.shortName ?? prev?.orgShortName ?? "",
-      role:             d.role ?? "member",
+      ...(prev ?? DEFAULT_ITEM_FIELDS),
+      ...d,
+      modelName: d.modelName ?? "",
+      accessLevel: d.accessLevel ?? "none",
+      userUuid: d.userUuid ?? "",
+      organizationUuid: d.organizationUuid ?? null,
     }),
     buildPayload: (fd) => {
-      if (!fd.userUuid)         return "Пользователь обязателен";
-      if (!fd.organizationUuid) return "Организация обязательна";
-      return { userUuid: fd.userUuid, organizationUuid: fd.organizationUuid, role: fd.role };
+      if (!fd.modelName?.trim()) return "Модель обязательна";
+      if (!fd.userUuid) return "userUuid обязателен";
+      return {
+        modelName: fd.modelName.trim(),
+        accessLevel: fd.accessLevel || "none",
+        userUuid: fd.userUuid,
+        organizationUuid: fd.organizationUuid ?? null,
+      };
     },
-    buildPaneLabel: (saved) =>
-      makePaneLabel("AccessRightsList", translate("accessRight") || "Права доступа", saved),
+    buildPaneLabel: (saved) => makePaneLabel("AccessRightsList", "Право доступа к разделу", saved),
   });
 
-  const tabs = useMemo(() => {
-    const result: { id: string; label: string; component: React.ReactNode }[] = [
-      {
-        id: "general",
-        label: translate("general") || "Основное",
-        component: (
-          <div className={styles.FormWrapper}>
-            <div className={styles.Form}>
-              {form.isEditMode && (
-                <GroupRow>
-                  <Field label="ID"   name={`${form.formUid}_id`}   width="80px"  value={String(form.fields.id ?? "-")}   disabled />
-                  <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-                </GroupRow>
-              )}
-              <GroupCol>
-                <LookupField
-                  label={translate("OrganizationsList") || "Организация"}
-                  name={`${form.formUid}_org`}
-                  endpoint="organizations"
-                  displayField="shortName"
-                  value={form.fields.organizationUuid}
-                  displayValue={form.fields.orgShortName}
-                  onSelect={(uuid, dv) => form.setFields({ organizationUuid: uuid, orgShortName: dv })}
-                  onClear={() => form.setFields({ organizationUuid: "", orgShortName: "" })}
-                  disabled={form.isLoading || !canWrite}
-                />
-                <LookupField
-                  label={translate("UsersList") || "Пользователь"}
-                  name={`${form.formUid}_user`}
-                  endpoint="users"
-                  displayField="username"
-                  value={form.fields.userUuid}
-                  displayValue={form.fields.userDisplayName}
-                  onSelect={(uuid, dv) => form.setFields({ userUuid: uuid, userDisplayName: dv })}
-                  onClear={() => form.setFields({ userUuid: "", userDisplayName: "" })}
-                  disabled={form.isLoading || !canWrite}
-                />
-                <FieldSelect
-                  label={translate("role") || "Роль"}
-                  name={`${form.formUid}_role`}
-                  options={ROLE_OPTIONS}
-                  value={form.fields.role}
-                  onChange={e => form.setField("role", e.target.value)}
-                  disabled={form.isLoading}
-                />
-              </GroupCol>
-            </div>
+  const tabs = useMemo(() => [
+    {
+      id: "general", label: translate("general") || "Основное", component: (
+        <div className={styles.FormWrapper}>
+          <div className={styles.Form}>
+            {form.isEditMode && (
+              <GroupRow>
+                <Field label="ID"   name={`${form.formUid}_id`}   width="100px" value={String(form.fields.id ?? "-")} disabled />
+                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+              </GroupRow>
+            )}
+            <GroupCol>
+              <FieldSelect
+                label={translate("model") || "Модель *"}
+                name={`${form.formUid}_modelName`}
+                options={MODEL_NAME_OPTIONS}
+                value={form.fields.modelName}
+                onChange={e => form.setField("modelName", e.target.value)}
+                disabled={form.isLoading || form.isEditMode}
+              />
+              <FieldSelect
+                label={translate("accessLevel") || "Уровень доступа"}
+                name={`${form.formUid}_accessLevel`}
+                options={ACCESS_LEVEL_OPTIONS}
+                value={form.fields.accessLevel}
+                onChange={e => form.setField("accessLevel", e.target.value)}
+                disabled={form.isLoading}
+              />
+            </GroupCol>
           </div>
-        ),
-      },
-    ];
-
-    if (form.isEditMode && form.fields.userUuid && form.fields.organizationUuid) {
-      result.push({
-        id: "modelRights",
-        label: translate("modelRights") || "Разрешения",
-        component: (
-          <ModelRightsTable
-            userUuid={form.fields.userUuid}
-            organizationUuid={form.fields.organizationUuid}
-            deferRemoteChanges={false}
-          />
-        ),
-      });
-    }
-
-    return result;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields]);
+        </div>
+      ),
+    },
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField]);
 
   return (
     <ModelForm
@@ -174,7 +177,7 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
 AccessRightsForm.displayName = "AccessRightsForm";
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ACCESS RIGHTS LIST — список user-organizations для NavList / ModelList
+// MODEL RIGHTS LIST — список записей access-rights
 // ═══════════════════════════════════════════════════════════════════════════
 
 const AccessRightsList: FC<{
@@ -182,15 +185,14 @@ const AccessRightsList: FC<{
   onSelectItem?: (item: TDataItem) => void;
 }> = ({ variant, onSelectItem }) => (
   <ModelList
-    endpoint={USER_ORG_ENDPOINT}
+    endpoint={ENDPOINT}
     listName="AccessRightsList"
-    columnsJson={moduleColumnsJson}
+    columnsJson={columnsJson}
     FormComponent={AccessRightsForm}
     getLabel={(d) => {
       const item = d as any;
-      return item?.user?.username
-        ? `${String(item.user.username)} / ${String(item.organization?.shortName ?? "")}`
-        : "";
+      const modelLabel = MODEL_NAME_OPTIONS.find(o => o.value === item?.modelName)?.label ?? (item?.modelName ?? "");
+      return modelLabel;
     }}
     variant={variant}
     onSelectItem={onSelectItem}
@@ -200,12 +202,13 @@ const AccessRightsList: FC<{
 AccessRightsList.displayName = "AccessRightsList";
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ACCESS RIGHTS TABLE — SubTable user-organizations, вложенная в UsersForm
-// Показывает организации пользователя + роль (inline editing)
+// MODEL RIGHTS TABLE — SubTable access-rights, вложенная в AccessRightsForm
+// Endpoint: access-rights
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface AccessRightsTableProps {
+export interface AccessRightsTableProps {
   userUuid?: string;
+  organizationUuid?: string;
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
   initialPendingRows?: TDataItem[];
@@ -213,6 +216,7 @@ interface AccessRightsTableProps {
 
 const AccessRightsTable: FC<AccessRightsTableProps> = ({
   userUuid,
+  organizationUuid,
   deferRemoteChanges = true,
   onItemsChange,
   initialPendingRows,
@@ -220,58 +224,100 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
 
-  const roleMap = useMemo(
-    () => Object.fromEntries(ROLE_OPTIONS.map(o => [o.value, o.label])),
+  const modelNameMap = useMemo(
+    () => Object.fromEntries(MODEL_NAME_OPTIONS.filter(o => o.value).map(o => [o.value, o.label])),
+    [],
+  );
+  const accessLevelMap = useMemo(
+    () => Object.fromEntries(ACCESS_LEVEL_OPTIONS.map(o => [o.value, o.label])),
     [],
   );
 
+  const filterRows = useCallback((rows: TDataItem[], search: string): TDataItem[] => {
+    const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+    return rows.filter((row: TDataItem) => {
+      const modelLabel = (modelNameMap[row.modelName as string] ?? (row.modelName as string) ?? "").toLowerCase();
+      const levelLabel = (accessLevelMap[row.accessLevel as string] ?? (row.accessLevel as string) ?? "").toLowerCase();
+      const modelKey = ((row.modelName as string) ?? "").toLowerCase();
+      const levelKey = ((row.accessLevel as string) ?? "").toLowerCase();
+      const idStr = String(row.id ?? "");
+      return words.every((w: string) =>
+        modelLabel.includes(w) || modelKey.includes(w) ||
+        levelLabel.includes(w) || levelKey.includes(w) ||
+        idStr.includes(w)
+      );
+    });
+  }, [modelNameMap, accessLevelMap]);
+
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
-    if (col.identifier === "role") {
+    if (col.identifier === "modelName") {
       if (ctx.inlineEditing) {
         return (
           <FieldSelect
-            name={`inline_role_${row.id}`}
-            options={ROLE_OPTIONS}
-            value={(row.role as string) ?? "member"}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-              ctx.handleInlineChange(row, "role", e.target.value)
-            }
+            name={`inline_model_${row.id}`}
+            options={MODEL_NAME_OPTIONS}
+            value={(row.modelName as string) ?? ""}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => ctx.handleInlineChange(row, "modelName", e.target.value)}
             variant="table"
           />
         );
       }
-      return <span>{roleMap[row.role as string] ?? row.role}</span>;
+      return <span>{modelNameMap[row.modelName as string] ?? row.modelName}</span>;
+    }
+    if (col.identifier === "accessLevel") {
+      if (ctx.inlineEditing) {
+        return (
+          <FieldSelect
+            name={`inline_level_${row.id}`}
+            options={ACCESS_LEVEL_OPTIONS}
+            value={(row.accessLevel as string) ?? "none"}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => ctx.handleInlineChange(row, "accessLevel", e.target.value)}
+            variant="table"
+          />
+        );
+      }
+      return <span>{accessLevelMap[row.accessLevel as string] ?? row.accessLevel}</span>;
     }
     return undefined;
-  }, [roleMap]);
+  }, [modelNameMap, accessLevelMap]);
 
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     const newData = !isEdit && userUuid
-      ? { userUuid } as unknown as TDataItem
+      ? { userUuid, ...(organizationUuid ? { organizationUuid } : {}) } as unknown as TDataItem
       : data;
     const refresh = () => {
-      queryClient.invalidateQueries({ queryKey: [USER_ORG_ENDPOINT] });
+      queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
       _ctx.refetch();
     };
     addPane({
-      label: makePaneLabelFromData("AccessRightsTable", "Права доступа", isEdit ? data as any : null),
+      label: makePaneLabelFromData("AccessRightsTable", "Право доступа к разделу", isEdit ? data as any : null),
       component: AccessRightsForm,
       data: newData,
       onSave: refresh,
       onClose: refresh,
     });
-  }, [addPane, userUuid, queryClient]);
+  }, [addPane, userUuid, organizationUuid, queryClient]);
 
-  const onInlineAdd = useCallback(async (ctx: SubTableContext) => {
-    openFormFor(undefined, ctx);
-  }, [openFormFor]);
+  const firstModelName = useMemo(
+    () => MODEL_NAME_OPTIONS.find(o => o.value !== "")?.value ?? "",
+    [],
+  );
+  const defaultNewRow = useMemo(() => {
+    if (!userUuid) return undefined;
+    return {
+      modelName: firstModelName,
+      accessLevel: "none" as const,
+      userUuid,
+      ...(organizationUuid ? { organizationUuid } : {}),
+    };
+  }, [firstModelName, userUuid, organizationUuid]);
 
   return (
     <SubTable
-      model={USER_ORG_ENDPOINT}
-      componentName="AccessRightsTable_part"
-      columnsJson={subColumnsJson}
+      model={ENDPOINT}
+      componentName={SUBTABLE_COMPONENT_NAME}
+      columnsJson={columnsJson}
       parentKey="userUuid"
       parentUuid={userUuid ?? ""}
       defaultSort={{ id: "asc" }}
@@ -281,19 +327,18 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
       onItemsChange={onItemsChange}
-      emptyMessage={
-        userUuid
-          ? (translate("noAccessRights") || "Нет организаций с правами доступа.")
-          : (translate("saveUserFirst") || "Сохраните пользователя, чтобы управлять правами доступа.")
+      emptyMessage={userUuid
+        ? (translate("noAccessRights") || "Нет настроенных прав доступа.")
+        : (translate("saveUserFirst") || "Сохраните запись, чтобы управлять правами доступа.")
       }
       renderCell={renderCell}
       openFormFor={openFormFor}
-      onInlineAdd={onInlineAdd}
+      defaultNewRow={defaultNewRow}
+      extraQueryParams={organizationUuid ? { organizationUuid } : undefined}
+      filterRows={filterRows}
     />
   );
 };
 AccessRightsTable.displayName = "AccessRightsTable";
 
 export { AccessRightsForm, AccessRightsList, AccessRightsTable };
-// alias для NavList (UI/index.tsx)
-export { AccessRightsList as AccessRightsModuleList };

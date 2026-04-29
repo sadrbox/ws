@@ -33,6 +33,7 @@ import { OutgoingInvoicesList } from 'src/models/OutgoingInvoices';
 import { IncomingInvoicesList } from 'src/models/IncomingInvoices';
 import { PaymentInvoicesList } from 'src/models/PaymentInvoices';
 import { ScheduledTasksList } from 'src/models/ScheduledTasks';
+import OrgSwitcher from 'src/components/OrgSwitcher';
 import { InventoryTransfersList } from 'src/models/InventoryTransfers';
 import { CashReceiptOrdersList } from 'src/models/CashReceiptOrders';
 import { CashExpenseOrdersList } from 'src/models/CashExpenseOrders';
@@ -50,6 +51,7 @@ import { SyncDashboard } from 'src/models/SyncDashboard';
 // AccessRightsModuleList загружается динамически (разрыв цикла UI→AccessRights→app→UI)
 import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
+import UIToast from 'src/components/UIToast';
 import { getAccessLevel } from 'src/hooks/useAccessRight';
 import { usePersistenceMode } from 'src/services/persistenceMode';
 // import { usePaneDirty, usePaneNotifications, dismissPaneNotification, usePaneReload } from 'src/hooks/useFormStore';
@@ -283,6 +285,7 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(({ children }, ref
   return (
     <div ref={internalRef} className={styles.Screen}>
       {children}
+      <UIToast />
     </div>
   );
 });
@@ -526,6 +529,7 @@ export const Navbar: React.FC = () => {
           <NavbarPaneBell />
           <OfflineIndicator />
           <NotificationToast />
+          <OrgSwitcher />
           {context.auth?.user && (
             <span className={styles.NavbarUserName}>
               {context.auth.user.employee?.fullName || context.auth.user.username}
@@ -695,7 +699,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>Администрирование</h3>
             <ul className={styles.NavList}>
               {can("User") && <li onClick={() => addPane({ component: UsersList })}>Пользователи</li>}
-              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/AccessRights"); addPane({ component: m.AccessRightsModuleList, label: "Права доступа" }); }}>Права доступа</li>}
+              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/UserPermissions"); addPane({ component: m.UserPermissionsModuleList, label: "Права пользователей" }); }}>Права пользователей</li>}
+              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/AccessRights"); addPane({ component: m.AccessRightsList, label: "Права доступа" }); }}>Права доступа</li>}
               {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>}
               {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: "Журнал уведомлений" })}>Журнал уведомлений</li>}
               <li onClick={() => addPane({ component: UnsavedFormsList })}>Несохранённые записи</li>

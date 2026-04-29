@@ -1,0 +1,131 @@
+.OrgSwitcher {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.OrgButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 5px;
+  color: #ddd;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 180px;
+  transition: background 0.15s;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+.OrgIcon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.OrgName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+.OrgChevron {
+  font-size: 10px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+// ── Dropdown ─────────────────────────────────────────────────────────────────
+
+.OrgDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  max-width: 300px;
+  background: #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.OrgDropdownHeader {
+  padding: 8px 12px 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #888;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.OrgDropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &.Active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+
+.OrgItemName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.OrgItemRole {
+  font-size: 11px;
+  color: #666;
+  flex-shrink: 0;
+}
+
+.OrgActiveCheck {
+  color: #4caf50;
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.OrgError {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #e57373;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}

@@ -14,7 +14,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { AccessRightsTable } from "src/models/AccessRights";
+import { UserPermissionsTable } from "src/models/UserPermissions";
 
 const MODEL_ENDPOINT = "users";
 
@@ -89,10 +89,10 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
     ];
     if (form.isEditMode && form.fields.uuid) {
       result.push({
-        id: "accessRights",
-        label: translate("accessRights") || "Права доступа",
+        id: "userPermissions",
+        label: translate("userPermissions") || "Права пользователя",
         component: (
-          <AccessRightsTable
+          <UserPermissionsTable
             userUuid={form.fields.uuid}
             // deferRemoteChanges={false}
           />
@@ -117,4 +117,3 @@ const UsersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
 UsersList.displayName = "UsersList";
 
 export { UsersList, UsersForm };
-export { UserOrganizationsTable } from "./UserOrganizationsTable";

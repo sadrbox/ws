@@ -291,6 +291,12 @@
 	"AccessRightsTable": "Права доступа",
 	"AccessRightsTable_part": "Права доступа",
 
+	"userPermissions": "Права пользователя",
+	"UserPermissionsList": "Права пользователей",
+	"UserPermissionsList_part": "Права пользователей",
+	"UserPermissionsTable": "Права пользователей",
+	"UserPermissionsTable_part": "Права пользователей",
+
 	"SaleItemsList": "Товары",
 	"SaleItemsList_part": "Товары",
 	"lineNumber": "N",

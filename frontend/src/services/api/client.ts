@@ -31,6 +31,7 @@ export const apiClient: AxiosInstance = axios.create({
 // Interceptor: при отправке FormData удаляем Content-Type,
 // чтобы браузер сам выставил multipart/form-data с правильным boundary
 // + добавляем JWT-токен из localStorage
+// + добавляем X-Organization-ID для multi-tenant изоляции
 apiClient.interceptors.request.use((config) => {
 	if (config.data instanceof FormData) {
 		delete config.headers["Content-Type"];
@@ -41,6 +42,16 @@ apiClient.interceptors.request.use((config) => {
 		if (token) {
 			config.headers.Authorization = `Bearer ${token}`;
 		}
+
+		// Читаем organizationUuid из кэшированного пользователя и добавляем как заголовок
+		// Бэкенд ДОВЕРЯЕТ только JWT-токену, заголовок — для аудита и дополнительного контроля
+		const userJson = localStorage.getItem(AUTH_USER_KEY);
+		if (userJson) {
+			const user = JSON.parse(userJson) as { organizationUuid?: string | null };
+			if (user.organizationUuid) {
+				config.headers["X-Organization-ID"] = user.organizationUuid;
+			}
+		}
 	} catch { /* localStorage недоступен (private browsing и т.д.) */ }
 
 	return config;
@@ -50,7 +61,9 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
 	(response) => response,
 	(error) => {
-		if (error.response?.status === 401) {
+		const status = error.response?.status;
+
+		if (status === 401) {
 			// Не обрабатываем 401 при самом запросе логина
 			const url = error.config?.url || "";
 			if (!url.includes("/auth/login")) {
@@ -62,6 +75,17 @@ apiClient.interceptors.response.use(
 				window.dispatchEvent(new Event("auth_logout"));
 			}
 		}
+
+		if (status === 403) {
+			const serverMessage: string | undefined = error.response?.data?.message;
+			const message = serverMessage && serverMessage.length < 200
+				? serverMessage
+				: "У вас недостаточно прав для выполнения этого действия";
+			window.dispatchEvent(
+				new CustomEvent("ui_toast", { detail: { message, type: "error", duration: 6000 } }),
+			);
+		}
+
 		return Promise.reject(error);
 	},
 );

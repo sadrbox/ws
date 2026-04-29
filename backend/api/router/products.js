@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -77,7 +78,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 
-		const baseWhere = { ...searchWhere, ...filterWhere };
+		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
 		const opts = {
 			take: limitNumber,
 			where: baseWhere,
@@ -143,6 +144,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				sku: sku?.trim() || null,
 				brandUuid: brandUuid || null,
 				unitOfMeasureUuid: unitOfMeasureUuid || null,
+				organizationUuid: req.user?.organizationUuid ?? null,
 			},
 			include: { brand: true, unitOfMeasure: true },
 		});

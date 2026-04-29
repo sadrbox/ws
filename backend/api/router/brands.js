@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -77,7 +78,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 
-		const baseWhere = { ...searchWhere, ...filterWhere };
+		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
 		const opts = { take: limitNumber, where: baseWhere, orderBy };
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };
@@ -130,7 +131,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
 		const item = await prisma[MODEL].create({
-			data: { shortName: shortName.trim() },
+			data: { shortName: shortName.trim(), organizationUuid: req.user?.organizationUuid ?? null },
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {

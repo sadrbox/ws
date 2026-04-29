@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -77,7 +78,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 
-		const baseWhere = { ...searchWhere, ...filterWhere };
+		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
 		const opts = { take: limitNumber, where: baseWhere, orderBy };
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };
@@ -134,6 +135,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			data: {
 				shortName: shortName.trim(),
 				description: description?.trim() ?? null,
+				organizationUuid: req.user?.organizationUuid ?? null,
 			},
 		});
 		return res.status(201).json({ success: true, item });

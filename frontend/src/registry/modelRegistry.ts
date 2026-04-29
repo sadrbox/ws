@@ -244,6 +244,14 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
     label: "Регламентные задачи",
   },
   {
+    endpoint: "user-permissions",
+    module: () => import("src/models/UserPermissions"),
+    formName: "UserPermissionsForm",
+    listName: "UserPermissionsList",
+    storageKey: "user-permissions-form",
+    label: "Уровень доступа пользователей",
+  },
+  {
     endpoint: "access-rights",
     module: () => import("src/models/AccessRights"),
     formName: "AccessRightsForm",

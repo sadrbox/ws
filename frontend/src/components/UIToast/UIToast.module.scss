@@ -1,0 +1,102 @@
+@import "src/styles/variables.scss";
+
+.Container {
+	position: fixed;
+	bottom: 24px;
+	right: 24px;
+	z-index: 99999;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	pointer-events: none;
+	max-width: 380px;
+}
+
+.Toast {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 12px 14px 12px 14px;
+	border-radius: 8px;
+	font-size: 14px;
+	line-height: 1.4;
+	color: #fff;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+	pointer-events: all;
+	animation: slideIn 0.22s ease-out both;
+	min-width: 260px;
+
+	&.closing {
+		animation: slideOut 0.26s ease-in both;
+	}
+
+	&.error {
+		background: #c0392b;
+		border-left: 4px solid #e74c3c;
+	}
+
+	&.warning {
+		background: #d68910;
+		border-left: 4px solid #f39c12;
+	}
+
+	&.info {
+		background: #1a6fa8;
+		border-left: 4px solid #3498db;
+	}
+
+	&.success {
+		background: #1e8449;
+		border-left: 4px solid #27ae60;
+	}
+}
+
+.Icon {
+	font-size: 16px;
+	flex-shrink: 0;
+	margin-top: 1px;
+}
+
+.Message {
+	flex: 1;
+	word-break: break-word;
+}
+
+.Close {
+	background: none;
+	border: none;
+	color: rgba(255, 255, 255, 0.8);
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+	padding: 0 0 0 6px;
+	flex-shrink: 0;
+	align-self: flex-start;
+	margin-top: -2px;
+
+	&:hover {
+		color: #fff;
+	}
+}
+
+@keyframes slideIn {
+	from {
+		opacity: 0;
+		transform: translateX(40px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+@keyframes slideOut {
+	from {
+		opacity: 1;
+		transform: translateX(0);
+	}
+	to {
+		opacity: 0;
+		transform: translateX(40px);
+	}
+}

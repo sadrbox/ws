@@ -10,6 +10,7 @@ import {
 	FC,
 } from "react";
 import { TDataItem } from "src/components/Table/types";
+import type { OrgEntry } from "src/services/auth";
 // import { OverlayProps } from ".";
 
 export type TypeAppContextProps = {
@@ -43,6 +44,8 @@ export type TypeAppContextProps = {
 			email?: string | null;
 			organizationUuid?: string | null;
 			isSuperAdmin?: boolean;
+			allowedOrgUuids?: string[];
+			userOrganizations?: OrgEntry[];
 			accessRights?: { modelName: string; accessLevel: string }[];
 			employee?: {
 				uuid: string;

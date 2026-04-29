@@ -2,7 +2,7 @@
 import express from "express";
 // import { querySchema } from "../utils/module.js";
 import { prisma } from "../../prisma/prisma-client.js";
-// import { success } from "zod";
+import { tenantFilter } from "../../utils/auth.js";
 const router = express.Router();
 
 // Валидация БИН
@@ -88,8 +88,9 @@ router.post("/counterparties", async (req, res) => {
 			return tx.counterparty.create({
 				data: {
 					bin: normalizedBin,
-					shortName: shortName?.trim() ?? null, // или "" — решите сами
+					shortName: shortName?.trim() ?? null,
 					displayName: displayName?.trim() ?? null,
+					organizationUuid: req.user?.organizationUuid ?? null,
 				},
 			});
 		});
@@ -230,11 +231,12 @@ router.get("/counterparties", async (req, res) => {
 			}
 		}
 
-		// ── Итоговый where ────────────────────────────────────────────────────
+		// ── Итоговый where ────────────────────────────────────────────────────────
 		const baseWhere = {
 			...searchWhereClause,
 			...dateRangeFilter,
 			...filterWhereClause,
+			...tenantFilter(req),
 		};
 
 		// ── Курсорная пагинация ───────────────────────────────────────────────

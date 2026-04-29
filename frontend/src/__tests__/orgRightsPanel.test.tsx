@@ -109,7 +109,7 @@ vi.mock('src/models/AccessRights', () => ({
     }, 'mock'),
 }));
 
-import OrgRightsPanel from 'src/models/Users/OrgRightsPanel';
+import { UserPermissionsForm as OrgRightsPanel } from 'src/models/UserPermissions';
 
 describe('OrgRightsPanel', () => {
   it('рендерится без ошибок (без data)', () => {

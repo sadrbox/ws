@@ -13,7 +13,8 @@ const TEXT_FIELDS = ["modelName", "accessLevel"];
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
 		const { userUuid, organizationUuid } = req.query;
-		if (!userUuid)
+		const isSuperAdmin = req.user?.isSuperAdmin;
+		if (!userUuid && !isSuperAdmin)
 			return res.status(400).json({
 				success: false,
 				message: "Параметр userUuid обязателен",
@@ -113,7 +114,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 
 		// ── Итоговый where ────────────────────────────────────────────────
 		const baseWhere = {
-			userUuid,
+			...(userUuid ? { userUuid } : {}),
 			// Фильтр по организации: "null" → NULL, uuid → конкретная орг, undefined → без фильтра
 			...(organizationUuid !== undefined
 				? { organizationUuid: organizationUuid === "null" ? null : organizationUuid }

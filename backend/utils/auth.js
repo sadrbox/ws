@@ -70,7 +70,7 @@ export async function tenantMiddleware(req, res, next) {
 			select: {
 				organizationUuid: true,
 				isSuperAdmin: true,
-				userOrganizations: {
+				userPermissions: {
 					select: { organizationUuid: true, role: true },
 				},
 			},
@@ -81,18 +81,18 @@ export async function tenantMiddleware(req, res, next) {
 			req.user.organizationUuid = dbUser.organizationUuid || null;
 
 			// Список UUID организаций, доступных пользователю
-			req.user.allowedOrgUuids = dbUser.userOrganizations.map(
+			req.user.allowedOrgUuids = dbUser.userPermissions.map(
 				(uo) => uo.organizationUuid,
 			);
 
 			// Роль в активной организации
-			const activeOrgEntry = dbUser.userOrganizations.find(
+			const activeOrgEntry = dbUser.userPermissions.find(
 				(uo) => uo.organizationUuid === dbUser.organizationUuid,
 			);
 			req.user.isOrgAdmin = activeOrgEntry?.role === "admin" || false;
 
 			// Является ли администратором хотя бы одной организации
-			req.user.isAnyOrgAdmin = dbUser.userOrganizations.some(
+			req.user.isAnyOrgAdmin = dbUser.userPermissions.some(
 				(uo) => uo.role === "admin",
 			);
 
@@ -255,6 +255,12 @@ export async function accessRightMiddleware(req, res, next) {
 		} else {
 			if (level === "full") return next();
 		}
+
+		// Логируем попытку несанкционированного доступа
+		const orgCtx = orgUuid || allowedOrgUuids.join(",") || "no-org";
+		console.warn(
+			`[AccessDenied] user=${req.user?.username} org=${orgCtx} model=${modelName} method=${req.method} level=${level} ip=${req.ip}`,
+		);
 
 		return res.status(403).json({
 			success: false,

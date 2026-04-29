@@ -83,8 +83,14 @@ router.post("/auth/login", async (req, res) => {
 				organizationUuid: true,
 				isSuperAdmin: true,
 				avatarPath: true,
-				userOrganizations: {
-					select: { organizationUuid: true, role: true },
+				userPermissions: {
+					select: {
+						organizationUuid: true,
+						role: true,
+						organization: {
+							select: { uuid: true, shortName: true, displayName: true, bin: true },
+						},
+					},
 				},
 				employee: {
 					select: {
@@ -177,7 +183,7 @@ router.post("/auth/login", async (req, res) => {
 			? generateFullAccessRights()
 			: accessRights;
 
-		const allowedOrgUuids = (user.userOrganizations || []).map(
+		const allowedOrgUuids = (user.userPermissions || []).map(
 			(uo) => uo.organizationUuid,
 		);
 
@@ -195,7 +201,7 @@ router.post("/auth/login", async (req, res) => {
 				organizationUuid: user.organizationUuid,
 				isSuperAdmin: user.isSuperAdmin,
 				allowedOrgUuids,
-				userOrganizations: user.userOrganizations || [],
+				userPermissions: user.userPermissions || [],
 				employee: employeeData,
 				accessRights: rights,
 			},
@@ -230,8 +236,14 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 				employeeUuid: true,
 				organizationUuid: true,
 				isSuperAdmin: true,
-				userOrganizations: {
-					select: { organizationUuid: true, role: true },
+				userPermissions: {
+					select: {
+						organizationUuid: true,
+						role: true,
+						organization: {
+							select: { uuid: true, shortName: true, displayName: true, bin: true },
+						},
+					},
 				},
 				employee: {
 					include: { organization: true },
@@ -262,7 +274,7 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 			? generateFullAccessRights()
 			: accessRights;
 
-		const allowedOrgUuids = (user.userOrganizations || []).map(
+		const allowedOrgUuids = (user.userPermissions || []).map(
 			(uo) => uo.organizationUuid,
 		);
 
@@ -526,6 +538,100 @@ router.post("/auth/join", async (req, res) => {
 		});
 	} catch (error) {
 		console.error("POST /auth/join error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ============================================
+// PATCH /auth/switch-org — Переключение активной организации (без перелогина)
+// ============================================
+router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
+	try {
+		if (!req.user?.uuid) {
+			return res.status(401).json({ success: false, message: "Не авторизован" });
+		}
+
+		const { organizationUuid } = req.body;
+
+		// Загружаем пользователя с организациями
+		const user = await prisma.user.findUnique({
+			where: { uuid: req.user.uuid },
+			select: {
+				uuid: true,
+				username: true,
+				isSuperAdmin: true,
+				organizationUuid: true,
+				userPermissions: {
+					select: {
+						organizationUuid: true,
+						role: true,
+						organization: {
+							select: { uuid: true, shortName: true, displayName: true, bin: true },
+						},
+					},
+				},
+				employee: {
+					include: { organization: true },
+				},
+			},
+		});
+
+		if (!user) {
+			return res.status(404).json({ success: false, message: "Пользователь не найден" });
+		}
+
+		// Суперадмин может переключаться в любую орг
+		// Обычный — только в разрешённые
+		if (!user.isSuperAdmin) {
+			const allowed = user.userPermissions.map((uo) => uo.organizationUuid);
+			if (organizationUuid !== null && !allowed.includes(organizationUuid)) {
+				console.warn(
+					`[Security] User ${user.username} (${user.uuid}) attempted to switch to unauthorized org ${organizationUuid}`,
+				);
+				return res.status(403).json({ success: false, message: "Нет доступа к этой организации" });
+			}
+		}
+
+		// Обновляем активную организацию в БД
+		await prisma.user.update({
+			where: { uuid: user.uuid },
+			data: { organizationUuid: organizationUuid ?? null },
+		});
+
+		// Подгружаем права для новой орг
+		let accessRights = [];
+		try {
+			accessRights = await prisma.accessRight.findMany({
+				where: { userUuid: user.uuid },
+				orderBy: { modelName: "asc" },
+			});
+		} catch (_) {}
+
+		const isDev = process.env.NODE_ENV !== "production";
+		const isSuperOrDevAdmin =
+			user.isSuperAdmin || (isDev && user.username?.toLowerCase() === "admin");
+		const rights = isSuperOrDevAdmin ? generateFullAccessRights() : accessRights;
+
+		const allowedOrgUuids = user.userPermissions.map((uo) => uo.organizationUuid);
+
+		// Формируем обновлённый объект пользователя
+		const updatedUser = {
+			uuid: user.uuid,
+			username: user.username,
+			organizationUuid: organizationUuid ?? null,
+			isSuperAdmin: user.isSuperAdmin,
+			allowedOrgUuids,
+			userPermissions: user.userPermissions,
+			employee: user.employee,
+			accessRights: rights,
+		};
+
+		// Выдаём новый JWT с обновлённым uuid (organizationUuid не в токене, берётся из БД)
+		const token = generateToken(updatedUser);
+
+		return res.status(200).json({ success: true, token, user: updatedUser });
+	} catch (error) {
+		console.error("PATCH /auth/switch-org error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

@@ -50,7 +50,7 @@ import employeesRouter from "./api/router/employees.js";
 import positionsRouter from "./api/router/positions.js";
 import employeeHistoriesRouter from "./api/router/employeehistories.js";
 import accessRightsRouter from "./api/router/accessrights.js";
-import userOrganizationsRouter from "./api/router/userorganizations.js";
+import userPermissionsRouter from "./api/router/userpermissions.js";
 import payrollCalculationsRouter from "./api/router/payrollcalculations.js";
 import payrollPaymentsRouter from "./api/router/payrollpayments.js";
 import unitOfMeasuresRouter from "./api/router/unitofmeasures.js";
@@ -85,7 +85,7 @@ app.use(
 		},
 		credentials: true,
 		methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-		allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Force-Overwrite"],
+		allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Force-Overwrite", "X-Organization-ID"],
 	}),
 );
 
@@ -98,7 +98,7 @@ app.options("*", cors({
 	},
 	credentials: true,
 	methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-	allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Force-Overwrite"],
+	allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Force-Overwrite", "X-Organization-ID"],
 }));
 
 // Rate limiting — защита от brute-force и DDoS
@@ -113,6 +113,27 @@ const apiLimiter = rateLimit({
 	},
 });
 app.use("/api/", apiLimiter);
+
+// Rate limiting по организации — дополнительная защита от утечки данных между тенантами
+const orgLimiter = rateLimit({
+	windowMs: 1 * 60 * 1000, // 1 минута
+	max: 600, // 600 запросов от одной организации в минуту
+	standardHeaders: true,
+	legacyHeaders: false,
+	keyGenerator: (req) => {
+		// Ключ: organizationUuid из middleware (если доступен) или нормализованный IP
+		if (req.user?.organizationUuid) return `org:${req.user.organizationUuid}`;
+		// Нормализуем IPv6 mapped IPv4 (::ffff:x.x.x.x → x.x.x.x)
+		const ip = (req.ip || "").replace(/^::ffff:/, "");
+		return `ip:${ip}`;
+	},
+	skip: (req) => !req.user, // пропускаем неаутентифицированные запросы
+	message: {
+		success: false,
+		message: "Слишком много запросов от организации, попробуйте позже",
+	},
+});
+app.use("/api/v1", orgLimiter);
 
 // Более жёсткий лимит для авторизации (защита от brute-force паролей)
 const authLimiter = rateLimit({
@@ -208,7 +229,7 @@ app.use("/api/v1", employeesRouter);
 app.use("/api/v1", positionsRouter);
 app.use("/api/v1", employeeHistoriesRouter);
 app.use("/api/v1", accessRightsRouter);
-app.use("/api/v1", userOrganizationsRouter);
+app.use("/api/v1", userPermissionsRouter);
 app.use("/api/v1", payrollCalculationsRouter);
 app.use("/api/v1", payrollPaymentsRouter);
 app.use("/api/v1", unitOfMeasuresRouter);
