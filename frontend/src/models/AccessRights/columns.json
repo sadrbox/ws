@@ -39,6 +39,32 @@
 		"inlist": true
 	},
 	{
+		"identifier": "organization.shortName",
+		"type": "string",
+		"name": "Организация",
+		"width": "260px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"hint": "Организация",
+		"visible": true,
+		"position": 4,
+		"filter": false,
+		"inlist": true
+	},
+	{
+		"identifier": "user.username",
+		"type": "string",
+		"name": "Пользователь",
+		"width": "220px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"hint": "Пользователь",
+		"visible": true,
+		"position": 5,
+		"filter": false,
+		"inlist": true
+	},
+	{
 		"identifier": "accessLevel",
 		"type": "string",
 		"name": "Уровень доступа",
@@ -47,7 +73,7 @@
 		"alignment": "left",
 		"hint": "Уровень доступа",
 		"visible": true,
-		"position": 4,
+		"position": 6,
 		"filter": true,
 		"inlist": true
 	}

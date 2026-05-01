@@ -147,7 +147,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.setFields]);
 
   const tabs = useMemo(() => [
-    { id: "tab-details", label: translate("general") || "Основное", component: (
+    { id: "tab-details", label: translate("general"), component: (
       <div className={styles.FormWrapper}>
         <div className={styles.Form}>
           {form.isEditMode && (

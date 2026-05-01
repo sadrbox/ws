@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import useQueryParams from "src/hooks/useQueryParams";
@@ -143,6 +144,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
       onSelectItem?: (item: TDataItem) => void;
       openModelForm: (formProps: any) => void;
       enableDateRange?: boolean;
+      renderCell?: (row: TDataItem, col: TColumn) => ReactNode | undefined;
     }) => ({
       variant: extra.variant,
       onSelectItem: extra.onSelectItem,
@@ -170,6 +172,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
       },
       onDelete: handleDelete,
       readonly: !canWrite,
+      renderCell: extra.renderCell,
     }),
     [
       componentName, rows, columns, total, adaptiveLimit,

@@ -413,14 +413,14 @@ export const FieldString: FC<TypeFieldStringProps> = ({ label, name }) => {
   };
 
   const handleList = () => {
-    console.log("List action");
+    // TODO: implement list action
   };
 
 
   const actions: TypeFieldActions = [
     { type: "clear", onClick: handleClear },
     { type: "list", onClick: handleList },
-    { type: "open", onClick: () => { console.log("Open action"); } },
+    { type: "open", onClick: () => {} },
   ];
   return (
     <FieldGroup

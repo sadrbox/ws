@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useAppContext } from "src/app";
@@ -14,6 +15,7 @@ import { Field, FieldDate, FieldSelect, FieldNumber } from "src/components/Field
 import { Divider } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import Toolbar from "src/components/Toolbar";
+import { setPaneDirty } from "src/hooks/useFormStore";
 import useUID from "src/hooks/useUID";
 import styles from "src/styles/main.module.scss";
 
@@ -94,7 +96,8 @@ const calcRowAmount = (qty: string, prc: string): string => {
 
 const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
   const {
-    windows: { requestClose },
+    windows: { requestClose, registerBeforeClose },
+    actions: { confirm },
   } = useAppContext();
   const formUid = useUID();
 
@@ -119,6 +122,10 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
 
   // ── State: панели (можно сворачивать каталог) ──
   const [catalogVisible, setCatalogVisible] = useState(true);
+  const cleanSaleSnapshotRef = useRef(JSON.stringify(EMPTY_SALE));
+  const hasDirtyItems = useMemo(() => saleItems.some((r) => r.isDirty), [saleItems]);
+  const isSaleDirty = JSON.stringify(sale) !== cleanSaleSnapshotRef.current;
+  const isDirty = isSaleDirty || hasDirtyItems;
 
   // ════════════════════════════════════════════════════════════════════
   // API: загрузка списка продаж
@@ -188,7 +195,7 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
       try {
         const res = await apiClient.get(`/sales/${uuid}`);
         const d = res.data?.item ?? res.data;
-        setSale({
+        const nextSale = {
           id: d.id,
           uuid: d.uuid,
           documentNumber: d.documentNumber ?? "",
@@ -201,7 +208,9 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
           organizationName: d.organization?.shortName ?? "",
           counterpartyUuid: d.counterpartyUuid ?? "",
           counterpartyName: d.counterparty?.shortName ?? "",
-        });
+        };
+        setSale(nextSale);
+        cleanSaleSnapshotRef.current = JSON.stringify(nextSale);
         setIsEditMode(true);
         // Загружаем строки
         const itemsRes = await apiClient.get(`/saleitems?saleUuid=${uuid}`);
@@ -229,26 +238,41 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
 
   // ── Выбор документа из списка ──
   const handleSelectSale = useCallback(
-    (item: TDataItem) => {
+    async (item: TDataItem) => {
       const uuid = item.uuid as string;
       if (uuid === selectedSaleUuid) return;
+      const hasUnsaved = JSON.stringify(sale) !== cleanSaleSnapshotRef.current || hasDirtyItems;
+      if (hasUnsaved) {
+        const answer = await confirm(
+          "Имеются несохранённые изменения.\nПерейти к другому документу без сохранения?",
+        );
+        if (!answer) return;
+      }
       setSelectedSaleUuid(uuid);
       loadSale(uuid);
     },
-    [selectedSaleUuid, loadSale]
+    [selectedSaleUuid, loadSale, sale, hasDirtyItems, confirm]
   );
 
   // ════════════════════════════════════════════════════════════════════
   // Новый документ продажи
   // ════════════════════════════════════════════════════════════════════
 
-  const handleNewSale = useCallback(() => {
+  const handleNewSale = useCallback(async () => {
+    const hasUnsaved = JSON.stringify(sale) !== cleanSaleSnapshotRef.current || hasDirtyItems;
+    if (hasUnsaved) {
+      const answer = await confirm(
+        "Имеются несохранённые изменения.\nСоздать новый документ без сохранения текущего?",
+      );
+      if (!answer) return;
+    }
     setSelectedSaleUuid(null);
     setSale({ ...EMPTY_SALE });
+    cleanSaleSnapshotRef.current = JSON.stringify(EMPTY_SALE);
     setSaleItems([]);
     setIsEditMode(false);
     setSaleError(null);
-  }, []);
+  }, [sale, hasDirtyItems, confirm]);
 
   // ════════════════════════════════════════════════════════════════════
   // Сохранение документа
@@ -273,21 +297,25 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
           ? await apiClient.put(`/sales/${sale.uuid}`, payload)
           : await apiClient.post("/sales", payload);
       const saved = res.data?.item ?? res.data;
-      setSale((prev) => ({
-        ...prev,
-        id: saved.id,
-        uuid: saved.uuid,
-        documentNumber: saved.documentNumber ?? "",
-        date: saved.date?.slice(0, 10) ?? "",
-        description: saved.description ?? "",
-        amount: saved.amount != null ? String(saved.amount) : "",
-        status: saved.status ?? "draft",
-        posted: saved.posted === true,
-        organizationUuid: saved.organizationUuid ?? prev.organizationUuid,
-        organizationName: saved.organization?.shortName ?? prev.organizationName,
-        counterpartyUuid: saved.counterpartyUuid ?? prev.counterpartyUuid,
-        counterpartyName: saved.counterparty?.shortName ?? prev.counterpartyName,
-      }));
+      setSale((prev) => {
+        const nextSale = {
+          ...prev,
+          id: saved.id,
+          uuid: saved.uuid,
+          documentNumber: saved.documentNumber ?? "",
+          date: saved.date?.slice(0, 10) ?? "",
+          description: saved.description ?? "",
+          amount: saved.amount != null ? String(saved.amount) : "",
+          status: saved.status ?? "draft",
+          posted: saved.posted === true,
+          organizationUuid: saved.organizationUuid ?? prev.organizationUuid,
+          organizationName: saved.organization?.shortName ?? prev.organizationName,
+          counterpartyUuid: saved.counterpartyUuid ?? prev.counterpartyUuid,
+          counterpartyName: saved.counterparty?.shortName ?? prev.counterpartyName,
+        };
+        cleanSaleSnapshotRef.current = JSON.stringify(nextSale);
+        return nextSale;
+      });
       setIsEditMode(true);
       setSelectedSaleUuid(saved.uuid);
       loadSalesList();
@@ -503,7 +531,6 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
     () => saleItems.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0),
     [saleItems]
   );
-  const hasDirtyItems = useMemo(() => saleItems.some((r) => r.isDirty), [saleItems]);
 
   const handleFieldChange = useCallback(
     (field: keyof SaleDoc, value: string) => {
@@ -512,10 +539,47 @@ const SalesBoardForm: FC<Partial<TPane>> = ({ onClose, uniqId }) => {
     []
   );
 
-  const handleClose = useCallback(() => {
+  useEffect(() => {
+    if (!uniqId) return;
+    setPaneDirty(uniqId, isDirty);
+  }, [uniqId, isDirty]);
+
+  useEffect(() => {
+    if (!uniqId) return undefined;
+    return registerBeforeClose(uniqId, async () => {
+      if (!isDirty) {
+        setPaneDirty(uniqId, false);
+        onClose?.();
+        return true;
+      }
+      const answer = await confirm(
+        "Имеются несохранённые изменения.\nЗакрыть без сохранения?",
+      );
+      if (!answer) return false;
+      setPaneDirty(uniqId, false);
+      onClose?.();
+      return true;
+    });
+  }, [uniqId, isDirty, confirm, onClose, registerBeforeClose]);
+
+  useEffect(() => {
+    if (!uniqId) return undefined;
+    return () => setPaneDirty(uniqId, false);
+  }, [uniqId]);
+
+  const handleClose = useCallback(async () => {
+    if (uniqId) {
+      await requestClose(uniqId);
+      return;
+    }
+    if (isDirty) {
+      const answer = await confirm(
+        "Имеются несохранённые изменения.\nЗакрыть без сохранения?",
+      );
+      if (!answer) return;
+    }
     onClose?.();
-    if (uniqId) requestClose(uniqId, { force: true });
-  }, [onClose, requestClose, uniqId]);
+  }, [onClose, requestClose, uniqId, isDirty, confirm]);
 
   // ════════════════════════════════════════════════════════════════════
   // Render

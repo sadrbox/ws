@@ -34,6 +34,13 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "users-form", defaultFields: DEFAULT_FIELDS, paneProps,
+    tables: {
+      userPermissions: {
+        endpoint: "user-permissions",
+        parentField: "userUuid",
+        label: translate("userPermissions"),
+      },
+    },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       username: d.username ?? "", password: "",
@@ -54,9 +61,11 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makePaneLabel("UsersList", "Пользователи", saved),
   });
 
+  const userPermissions = form.useTable("userPermissions");
+
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general") || "Основное", component: (
+      { id: "general", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             {form.isEditMode && (
@@ -90,17 +99,19 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
     if (form.isEditMode && form.fields.uuid) {
       result.push({
         id: "userPermissions",
-        label: translate("userPermissions") || "Права пользователя",
+        label: translate("userPermissions"),
         component: (
           <UserPermissionsTable
             userUuid={form.fields.uuid}
-            // deferRemoteChanges={false}
+            deferRemoteChanges={true}
+            initialPendingRows={userPermissions.pending}
+            onItemsChange={userPermissions.onItemsChange}
           />
         ),
       });
     }
     return result;
-  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields]);
+  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields, userPermissions]);
 
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}

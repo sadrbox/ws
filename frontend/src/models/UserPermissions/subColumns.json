@@ -26,19 +26,6 @@
 		"inlist": true
 	},
 	{
-		"identifier": "organization.bin",
-		"type": "string",
-		"name": "БИН / ИНН",
-		"width": "160px",
-		"minWidth": "100px",
-		"alignment": "left",
-		"hint": "БИН или ИНН организации",
-		"visible": true,
-		"position": 3,
-		"filter": false,
-		"inlist": true
-	},
-	{
 		"identifier": "role",
 		"type": "string",
 		"name": "Роль",
@@ -47,7 +34,7 @@
 		"alignment": "left",
 		"hint": "Роль пользователя в организации",
 		"visible": true,
-		"position": 4,
+		"position": 3,
 		"filter": false,
 		"inlist": true
 	}

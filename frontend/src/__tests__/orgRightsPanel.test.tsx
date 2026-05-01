@@ -14,7 +14,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 // ── Базовые сервисные моки ───────────────────────────────────────────────
-vi.mock('src/services/queryPersist', () => ({ restoreQueryCache: vi.fn(), persistQueryCache: vi.fn(() => () => {}), clearPersistedCache: vi.fn() }));
+vi.mock('src/services/queryPersist', () => ({ restoreQueryCache: vi.fn(), persistQueryCache: vi.fn(() => () => { }), clearPersistedCache: vi.fn() }));
 vi.mock('src/services/syncManager', () => ({ initialSync: vi.fn(), startPeriodicSync: vi.fn(), stopPeriodicSync: vi.fn() }));
 vi.mock('src/services/offlineDb', () => ({ clearOfflineDb: vi.fn() }));
 vi.mock('src/services/registerSW', () => ({ registerServiceWorker: vi.fn() }));
@@ -28,15 +28,20 @@ vi.mock('src/services/auth', () => ({
 }));
 
 // ── Мок useAppContext (требуется useFormStore) ───────────────────────────
+const mockAppContext = {
+  windows: {
+    updatePaneLabel: vi.fn(),
+    requestClose: vi.fn(),
+    registerBeforeClose: vi.fn(() => () => { }),
+    addPane: vi.fn(),
+  },
+  actions: { confirm: vi.fn(async () => true) },
+};
 vi.mock('src/app/AppContext', () => ({
-  useAppContext: () => ({
-    windows: {
-      updatePaneLabel: vi.fn(),
-      requestClose: vi.fn(),
-      registerBeforeClose: vi.fn(() => () => {}),
-    },
-    actions: { confirm: vi.fn(async () => true) },
-  }),
+  useAppContext: () => mockAppContext,
+}));
+vi.mock('src/app', () => ({
+  useAppContext: () => mockAppContext,
 }));
 
 // ── Мок useFormStore — возвращает стабильное состояние ──────────────────
@@ -60,10 +65,16 @@ vi.mock('src/hooks/useFormStore', () => ({
       isDirty: false,
       uuid: d?.uuid ?? null,
       setField: vi.fn(),
+      setFields: vi.fn(),
       handleSave: vi.fn(),
       handleSaveAndClose: vi.fn(),
       handleClose: vi.fn(),
       loadFromServer: vi.fn(),
+      useTable: (_key: string) => ({
+        pending: [],
+        setPending: vi.fn(),
+        onItemsChange: vi.fn(),
+      }),
     };
   },
 }));
@@ -86,24 +97,35 @@ vi.mock('src/components/Field', () => ({
     React.createElement('div', { 'data-testid': 'field-select', 'data-label': label ?? '', 'data-value': value ?? '' }, value ?? ''),
 }));
 
+vi.mock('src/components/Field/LookupField', () => ({
+  default: ({ value, displayValue }: { value?: string; displayValue?: string }) =>
+    React.createElement('div', { 'data-testid': 'lookup-field', 'data-value': value ?? '', 'data-display': displayValue ?? '' }),
+}));
+
 vi.mock('src/components/UI', () => ({
   GroupCol: ({ children }: any) => React.createElement('div', null, children),
   GroupRow: ({ children }: any) => React.createElement('div', null, children),
 }));
 
 vi.mock('src/styles/main.module.scss', () => ({
-  default: { FormWrapper: 'FormWrapper', Form: 'Form', FormContainer: 'FormContainer' },
+  default: { FormWrapper: 'FormWrapper', Form: 'Form' },
 }));
 
 vi.mock('src/i18', () => ({ translate: (key: string) => key }));
 vi.mock('src/utils/buildPaneLabel', () => ({ makePaneLabel: () => 'label' }));
 vi.mock('src/hooks/useAccessRight', () => ({ useAccessRight: () => ({ canWrite: true }) }));
 
-// ── Мок AccessRightsList ──────────────────────────────────────────────────
+// ── Мок AccessRightsList + AccessRightsTable ─────────────────────────────
 vi.mock('src/models/AccessRights', () => ({
   AccessRightsList: ({ userUuid, organizationUuid }: { userUuid?: string; organizationUuid?: string }) =>
     React.createElement('div', {
       'data-testid': 'access-rights-list',
+      'data-user': userUuid ?? '',
+      'data-org': organizationUuid ?? '',
+    }, 'mock'),
+  AccessRightsTable: ({ userUuid, organizationUuid }: { userUuid?: string; organizationUuid?: string }) =>
+    React.createElement('div', {
+      'data-testid': 'access-rights-table',
       'data-user': userUuid ?? '',
       'data-org': organizationUuid ?? '',
     }, 'mock'),
@@ -141,16 +163,18 @@ describe('OrgRightsPanel', () => {
     render(React.createElement(OrgRightsPanel, {
       data: { userUuid: 'u1', organizationUuid: 'o1', orgName: 'Рога и Копыта' },
     }));
-    // Field рендерит value как text content
-    expect(screen.getAllByText('Рога и Копыта').length).toBeGreaterThan(0);
+    // LookupField мокирован — выводит displayValue в data-display
+    const lookups = document.querySelectorAll('[data-testid="lookup-field"]');
+    const orgLookup = Array.from(lookups).find(el => el.getAttribute('data-display') === 'Рога и Копыта');
+    expect(orgLookup).toBeTruthy();
   });
 
-  it('AccessRightsList рендерится в edit-mode с правильными пропсами', () => {
+  it('AccessRightsTable рендерится в edit-mode с правильными пропсами', () => {
     render(React.createElement(OrgRightsPanel, {
       data: { uuid: '7', userUuid: 'user-42', organizationUuid: 'org-99', orgName: 'Тест' },
     }));
-    const list = screen.getByTestId('access-rights-list');
-    expect(list.getAttribute('data-user')).toBe('user-42');
-    expect(list.getAttribute('data-org')).toBe('org-99');
+    const table = screen.getByTestId('access-rights-table');
+    expect(table.getAttribute('data-user')).toBe('user-42');
+    expect(table.getAttribute('data-org')).toBe('org-99');
   });
 });

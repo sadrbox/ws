@@ -111,7 +111,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
       {
-        id: "general", label: translate("general") || "Основное", component: (
+        id: "general", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               {form.isEditMode && (
@@ -134,7 +134,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
       },
     ];
     if (form.isEditMode && form.fields.uuid) {
-      t.push({ id: "files", label: translate("files") || "Файлы", component: <FilesPanel ownerType="contract" ownerUuid={form.fields.uuid} onFilesChange={handleFilesChange} /> });
+      t.push({ id: "files", label: translate("files"), component: <FilesPanel ownerType="contract" ownerUuid={form.fields.uuid} onFilesChange={handleFilesChange} /> });
       t.push({ id: "print", label: "Печать", component: <PrintPreview ownerUuid={form.fields.uuid} filesRevision={filesRevision} /> });
     }
     return t;
@@ -297,7 +297,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
       onItemsChange={onItemsChange}
-      emptyMessage={translate("saveToContracts") || "Сохраните запись для управления договорами."}
+      emptyMessage={translate("saveToContracts")}
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}

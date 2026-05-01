@@ -34,8 +34,8 @@ const ENDPOINT = "user-permissions";
 // ─── Shared constants ────────────────────────────────────────────────────────
 
 export const ROLE_OPTIONS = [
-  { value: "member", label: translate("roleMember") || "Участник" },
-  { value: "admin",  label: translate("roleAdmin")  || "Администратор" },
+  { value: "member", label: translate("roleMember")},
+  { value: "admin",  label: translate("roleAdmin")},
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -81,6 +81,13 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
     defaultFields: DEFAULT_FORM_FIELDS,
     initialFields,
     paneProps,
+    tables: {
+      accessRights: {
+        endpoint: "access-rights",
+        parentField: "userUuid",
+        label: translate("accessRights"),
+      },
+    },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FORM_FIELDS),
       id:               d.id,
@@ -97,14 +104,15 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
       return { userUuid: fd.userUuid, organizationUuid: fd.organizationUuid, role: fd.role };
     },
     buildPaneLabel: (saved) =>
-      makePaneLabel("UserPermissionsList", translate("userPermission") || "Пользователь / Организация", saved),
+      makePaneLabel("UserPermissionsList", translate("userPermission"), saved),
   });
 
+  const accessRights = form.useTable("accessRights");
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
       {
         id: "general",
-        label: translate("general") || "Основное",
+        label: translate("general"),
         component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
@@ -116,7 +124,7 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
               )}
               <GroupCol>
                 <LookupField
-                  label={translate("OrganizationsList") || "Организация"}
+                  label={translate("OrganizationsList")}
                   name={`${form.formUid}_org`}
                   endpoint="organizations"
                   displayField="shortName"
@@ -127,7 +135,7 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
                   disabled={form.isLoading || !canWrite}
                 />
                 <LookupField
-                  label={translate("UsersList") || "Пользователь"}
+                  label={translate("UsersList")}
                   name={`${form.formUid}_user`}
                   endpoint="users"
                   displayField="username"
@@ -138,7 +146,7 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
                   disabled={form.isLoading || !canWrite}
                 />
                 <FieldSelect
-                  label={translate("role") || "Роль"}
+                  label={translate("role")}
                   name={`${form.formUid}_role`}
                   options={ROLE_OPTIONS}
                   value={form.fields.role}
@@ -155,12 +163,14 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
     if (form.isEditMode && form.fields.userUuid && form.fields.organizationUuid) {
       result.push({
         id: "accessRights",
-        label: translate("accessRights") || "Права доступа",
+        label: translate("accessRights"),
         component: (
           <AccessRightsTable
             userUuid={form.fields.userUuid}
             organizationUuid={form.fields.organizationUuid}
-            deferRemoteChanges={false}
+            deferRemoteChanges={true}
+            initialPendingRows={accessRights.pending}
+            onItemsChange={accessRights.onItemsChange}
           />
         ),
       });
@@ -271,10 +281,6 @@ const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
         );
       }
       return <span>{(row.organization as any)?.shortName ?? ""}</span>;
-    }
-
-    if (col.identifier === "organization.bin") {
-      return <span>{(row.organization as any)?.bin ?? ""}</span>;
     }
 
     if (col.identifier === "role") {

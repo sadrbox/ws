@@ -1148,68 +1148,68 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
 
   return (
     <Fragment>
-    <tr
-      onClick={handleRowClick}
-      onDoubleClick={handleDoubleClick}
-      className={[isActive && styles.activeRow].filter(r => !!r).join(' ')}
-      data-active={isActive || undefined}
-      style={{
-        willChange: isActive ? 'background-color, box-shadow' : 'auto',
-        transform: 'translate3d(0, 0, 0)',
-        opacity: isLoading ? 0.3 : 1,
-        pointerEvents: isLoading ? 'none' : 'auto',
-      }}
-    >
-      {variant !== 'select' && (
-        <td style={{ textAlign: 'center' }}>
-          <div className={styles.TableBodyCell} style={{ justifyContent: 'center' }}>
-            <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading} />
-          </div>
-        </td>
-      )}
-      {columns.map(col => {
-        // Кастомный рендер ячейки (переводы, спецзначения) — работает в любом режиме
-        const currentRenderCell = renderCellRef?.current;
-        if (currentRenderCell) {
-          const customCell = currentRenderCell(row, col);
-          if (customCell !== undefined) {
-            return (
-              <td key={col.identifier}>
-                <div className={styles.TableBodyCell} style={{ willChange: 'contents', transform: 'translate3d(0, 0, 0)' }}>
-                  {customCell}
-                </div>
-              </td>
-            );
-          }
-        }
-        const value = getFormatColumnValue(row, col);
-        const align = getTextAlignByColumnType(col);
-        return (
-          <td key={col.identifier}>
-            <div
-              style={{
-                ...align,
-                willChange: 'contents',
-                transform: 'translate3d(0, 0, 0)',
-              }}
-              className={styles.TableBodyCell}
-            >
-              <span>{value}</span>
+      <tr
+        onClick={handleRowClick}
+        onDoubleClick={handleDoubleClick}
+        className={[isActive && styles.activeRow].filter(r => !!r).join(' ')}
+        data-active={isActive || undefined}
+        style={{
+          willChange: isActive ? 'background-color, box-shadow' : 'auto',
+          transform: 'translate3d(0, 0, 0)',
+          opacity: isLoading ? 0.3 : 1,
+          pointerEvents: isLoading ? 'none' : 'auto',
+        }}
+      >
+        {variant !== 'select' && (
+          <td style={{ textAlign: 'center' }}>
+            <div className={styles.TableBodyCell} style={{ justifyContent: 'center' }}>
+              <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading} />
             </div>
           </td>
-        );
-      })}
-    </tr>
-    {isExpanded && renderExpandedRow && (
-      <tr>
-        <td
-          colSpan={visibleColCount}
-          style={{ padding: 0, background: 'var(--bg-secondary, #f8f9fa)', borderBottom: '2px solid var(--border-color, #e0e0e0)' }}
-        >
-          {renderExpandedRow(row)}
-        </td>
+        )}
+        {columns.map(col => {
+          // Кастомный рендер ячейки (переводы, спецзначения) — работает в любом режиме
+          const currentRenderCell = renderCellRef?.current;
+          if (currentRenderCell) {
+            const customCell = currentRenderCell(row, col);
+            if (customCell !== undefined) {
+              return (
+                <td key={col.identifier}>
+                  <div className={styles.TableBodyCell} style={{ willChange: 'contents', transform: 'translate3d(0, 0, 0)' }}>
+                    {customCell}
+                  </div>
+                </td>
+              );
+            }
+          }
+          const value = getFormatColumnValue(row, col);
+          const align = getTextAlignByColumnType(col);
+          return (
+            <td key={col.identifier}>
+              <div
+                style={{
+                  ...align,
+                  willChange: 'contents',
+                  transform: 'translate3d(0, 0, 0)',
+                }}
+                className={styles.TableBodyCell}
+              >
+                <span>{value}</span>
+              </div>
+            </td>
+          );
+        })}
       </tr>
-    )}
+      {isExpanded && renderExpandedRow && (
+        <tr>
+          <td
+            colSpan={visibleColCount}
+            style={{ padding: 0, background: 'var(--bg-secondary, #f8f9fa)', borderBottom: '2px solid var(--border-color, #e0e0e0)' }}
+          >
+            {renderExpandedRow(row)}
+          </td>
+        </tr>
+      )}
     </Fragment>
   );
 });
@@ -1511,7 +1511,7 @@ const FieldFastSearchInternal = memo(({ value, onChange }: {
           type="text"
           value={inputValue}
           onChange={(e) => handleChange(e.target.value)}
-          placeholder="Быстрый поиск по всем полям"
+          placeholder="Быстрый поиск"
           className={styles.SearchInput}
           autoFocus
         // title="Быстрый поиск по всем полям"
@@ -1519,7 +1519,7 @@ const FieldFastSearchInternal = memo(({ value, onChange }: {
         <button
           onClick={handleClear}
           className={styles.ClearButton}
-        // title="Очистить поиск"
+          title="Очистить"
         >
           ✕
         </button>

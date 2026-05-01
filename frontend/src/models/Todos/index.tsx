@@ -89,7 +89,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general") || "Основное", component: (
+      { id: "general", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             {form.isEditMode && (
@@ -121,7 +121,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
       )},
     ];
     if (form.isEditMode && form.fields.uuid) {
-      t.push({ id: "files", label: translate("files") || "Файлы", component: <FilesPanel ownerType="todo" ownerUuid={form.fields.uuid} /> });
+      t.push({ id: "files", label: translate("files"), component: <FilesPanel ownerType="todo" ownerUuid={form.fields.uuid} /> });
       t.push({ id: "print", label: "Печать", component: <PrintPreview ownerUuid={form.fields.uuid} ownerType="todo" /> });
     }
     return t;

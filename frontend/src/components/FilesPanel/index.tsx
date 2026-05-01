@@ -4,6 +4,7 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import Table from "src/components/Table";
 import columnsJson from "./columns.json";
 import apiClient from "src/services/api/client";
+import { showToast } from "src/components/UIToast";
 import styles from "src/styles/main.module.scss";
 
 const MODEL_ENDPOINT = "files";
@@ -49,7 +50,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
       );
       setRows(res.data?.items ?? []);
     } catch (e) {
-      console.error("loadFiles error:", e);
+      showToast("Ошибка загрузки списка файлов", "error");
     } finally {
       setIsLoading(false);
     }
@@ -109,7 +110,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
         await loadFiles();
         onFilesChange?.();
       } catch (err) {
-        console.error("upload error:", err);
+        showToast("Ошибка загрузки файла", "error");
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -131,7 +132,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error("download error:", err);
+      showToast("Ошибка скачивания файла", "error");
     }
   }, []);
 
@@ -141,7 +142,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
       try {
         await apiClient.delete(`/${MODEL_ENDPOINT}/${fileUuid}`);
       } catch (err) {
-        console.error("delete error:", err);
+        showToast("Ошибка удаления файла", "error");
       }
     },
     [],

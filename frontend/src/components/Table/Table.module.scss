@@ -153,6 +153,7 @@ thead {
 			border: 0;
 
 			border-right: 1px solid $color34;
+
 			// &:not(:last-child) {
 			// 	border-right: 1px solid transparent !important;
 			// }
@@ -168,6 +169,7 @@ thead {
 			&:first-child {
 				border-left: 0;
 			}
+
 			&:last-child {
 				border-right: 0;
 			}
@@ -185,6 +187,7 @@ thead {
 			cursor: default;
 			justify-content: space-between;
 			border: 1px solid transparent;
+
 			span {
 				padding: 0 5px;
 				overflow: hidden;
@@ -201,6 +204,7 @@ thead {
 			width: 5px;
 			cursor: col-resize;
 			z-index: 3;
+
 			&:hover {
 				background: rgba(#4a90d9, 0.35);
 			}
@@ -225,6 +229,7 @@ tr:has(+ tr.activeRow) {
 		border-bottom: 1px solid $color1 !important;
 	}
 }
+
 tbody {
 	// margin-top: 10px;
 	// position: relative;
@@ -240,7 +245,7 @@ tbody {
 		will-change: auto;
 		transform: translate3d(0, 0, 0);
 
-		& > td {
+		&>td {
 			padding: 0;
 			// border-top: 1px solid $color34;
 			border-bottom: 1px solid $color34;
@@ -260,7 +265,7 @@ tbody {
 
 
 
-				& > input[type="text"] {
+				&>input[type="text"] {
 					width: 100%;
 					border: 0px transparent;
 				}
@@ -273,13 +278,16 @@ tbody {
 					text-overflow: ellipsis;
 				}
 			}
+
 			&:first-child {
 				border-left: 0;
 			}
+
 			&:last-child {
 				border-right: 0;
 			}
 		}
+
 		&.activeRow {
 			// position: static;
 			z-index: 5;
@@ -289,7 +297,8 @@ tbody {
 			td {
 				.TableBodyCell {
 					background: $color2;
-					& > input[type="text"] {
+
+					&>input[type="text"] {
 						width: 100%;
 						border: 0px transparent;
 					}
@@ -298,6 +307,7 @@ tbody {
 				// border-top: 1px solid $color1;
 				border-bottom: 1px solid $color1;
 				border-right: 1px solid $color1;
+
 				// border-left: 0px solid $color1;
 				&:last-child {
 					border-right: 0px;
@@ -342,6 +352,7 @@ tfoot {
 			&:first-child {
 				border-left: 0;
 			}
+
 			&:last-child {
 				border-right: 0;
 			}
@@ -530,12 +541,13 @@ input[type="checkbox"] {
 		height: 100%;
 		margin: 0;
 	}
+
 	div[class*="FieldInputWrapper"],
 	div[class*="FieldDateWrapper"],
 	div[class*="FieldSelectWrapper"] {
 		border: none !important;
 		box-shadow: none !important;
-		background: transparent ;
+		background: transparent;
 		height: 100%;
 		border-radius: 0 !important;
 
@@ -544,19 +556,22 @@ input[type="checkbox"] {
 			box-shadow: none !important;
 		}
 	}
+
 	input[type="text"],
 	input[type="number"],
 	select {
 		border: none !important;
 		box-shadow: none !important;
-		background: transparent ;
+		background: transparent;
 		outline: none !important;
 		height: 100%;
+
 		&:focus {
 			border: none !important;
 			box-shadow: none !important;
 		}
 	}
+
 	label[class*="FieldLabel"] {
 		display: none !important;
 	}
@@ -688,6 +703,7 @@ input[type="checkbox"] {
 	0% {
 		transform: rotate(0deg);
 	}
+
 	100% {
 		transform: rotate(360deg);
 	}
@@ -785,9 +801,10 @@ input[type="checkbox"] {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	overflow: hidden;
+
 	&::placeholder {
 		color: #aaa;
-		font-size: $fontsize - 1px;
+		font-size: $fontsize;
 	}
 }
 
@@ -802,7 +819,7 @@ input[type="checkbox"] {
 	// margin: 2px;
 	// padding: 1px 4px;
 	color: $color51;
-	// font-size: 11px;
+	font-size: $fontsize + 1px;
 	// line-height: 1;
 	width: $heightFieldInput - 4px;
 	height: $heightFieldInput - 4px;
@@ -842,6 +859,7 @@ input[type="checkbox"] {
 	text-decoration: none;
 	white-space: nowrap;
 	font-size: $fontsize + 1px;
+
 	&:hover {
 		text-decoration: underline;
 	}

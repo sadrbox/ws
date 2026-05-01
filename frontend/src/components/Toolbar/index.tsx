@@ -73,7 +73,7 @@ const IconButton: FC<IconButtonProps> = ({ className, active, style, ...props })
   <button
     type="button"
     className={[styles.IconButton, className].filter(Boolean).join(" ")}
-    style={{ ...style, ...(active ? { background: "rgba(25,118,210,0.12)", color: "#1976d2" } : undefined) }}
+    style={{ ...style, ...(active ? { background: "hsla(210, 79%, 46%, 0.12)", color: "#1976d2" } : undefined) }}
     {...props}
   />
 );
@@ -138,8 +138,8 @@ const CloseButton: FC<CloseButtonProps> = ({ size = 16, className, ...props }) =
     title="Закрыть"
     {...props}
   >
-    <img className={styles.CloseIcon} src={closeIcon16} alt="Закрыть" width={size} height={size} />
-    <img className={styles.CloseIconHover} src={closeIcon16} alt="Закрыть" width={size} height={size} style={{ filter: "invert(19%) sepia(95%) saturate(7477%) hue-rotate(359deg) brightness(98%) contrast(113%)" }} />
+    <div className={styles.CloseIcon}>✕</div>
+    <div className={styles.CloseIconHover} style={{ filter: "invert(19%) sepia(95%) saturate(7477%) hue-rotate(359deg) brightness(98%) contrast(113%)" }}>✕</div>
   </IconButton>
 );
 CloseButton.displayName = "Toolbar.CloseButton";

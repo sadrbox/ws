@@ -125,7 +125,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
     };
 
     const tabs = useMemo(() => [
-      { id: "general", label: translate("general") || "Основное", component: (
+      { id: "general", label: translate("general"), component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
             <FieldDate label="Дата" name={`${form.formUid}_docDate`} minWidth="200px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
@@ -155,8 +155,8 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
 
     return (
       <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-        onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading} showReload={form.isEditMode}
-        readonly={!access.canWrite} isDirty={form.isDirty} />
+      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading}
+      readonly={!access.canWrite} isDirty={form.isDirty} />
     );
   };
   DocForm.displayName = `${listName.replace("List", "")}Form`;

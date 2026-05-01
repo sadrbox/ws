@@ -51,14 +51,14 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
     tables: {
       contacts: {
         endpoint: "contacts", parentField: "ownerUuid",
-        label: translate("ContactsList") || "Контакты",
+        label: translate("ContactsList"),
         createPayload: (r: any) => ({ value: r.value ?? "", contactTypeUuid: r.contactTypeUuid ?? null }),
         updatePayload: (r: any) => ({ value: r.value ?? "", contactTypeUuid: r.contactTypeUuid ?? null }),
         extraFields: { ownerType: "employee" },
       },
       history: {
         endpoint: "employee-histories", parentField: "employeeUuid",
-        label: translate("EmployeeHistoriesList") || "Кадровая история",
+        label: translate("EmployeeHistoriesList"),
         createPayload: (r: any) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
         updatePayload: (r: any) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
       },
@@ -97,7 +97,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general") || "Основное", component: (
+      { id: "general", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             {form.isEditMode && (
@@ -130,10 +130,10 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
     ];
 
     if (form.isEditMode && form.fields.uuid) {
-      if (canReadEmployeeHistory) result.push({ id: "history", label: translate("EmployeeHistoriesList") || "Кадровая история", component: (
+      if (canReadEmployeeHistory) result.push({ id: "history", label: translate("EmployeeHistoriesList"), component: (
         <EmployeeHistoryTable employeeUuid={form.fields.uuid} disabled={form.isLoading} deferRemoteChanges initialPendingRows={history.pending} onItemsChange={history.onItemsChange} />
       )});
-      if (canReadContacts) result.push({ id: "contacts", label: translate("ContactsList") || "Контакты", component: (
+      if (canReadContacts) result.push({ id: "contacts", label: translate("ContactsList"), component: (
         <ContactsTable deferRemoteChanges ownerType="employee" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.fullName || form.fields.lastName} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} />
       )});
     }
@@ -275,7 +275,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
       disabled={disabled}
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
-      emptyMessage={translate("saveToEmployeeHistory") || "Сохраните сотрудника для управления кадровой историей."}
+      emptyMessage={translate("saveToEmployeeHistory")}
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}

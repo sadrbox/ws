@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosError } from "axios";
 import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from "../auth";
 import { isNetworkError as isNetworkLikeError } from "../networkUtils";
+import { showToast } from "src/components/UIToast";
 
 const LOCAL_API_URL = "http://192.168.1.112:3000/api/v1";
 const REMOTE_API_URL = "https://api.gidra.kz/api/v1";
@@ -81,9 +82,7 @@ apiClient.interceptors.response.use(
 			const message = serverMessage && serverMessage.length < 200
 				? serverMessage
 				: "У вас недостаточно прав для выполнения этого действия";
-			window.dispatchEvent(
-				new CustomEvent("ui_toast", { detail: { message, type: "error", duration: 6000 } }),
-			);
+			showToast(message, "error", 6000);
 		}
 
 		return Promise.reject(error);
@@ -115,9 +114,7 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 	const jitter = baseDelay * (0.75 + Math.random() * 0.5);
 	const delay = Math.min(jitter, 10_000); // не более 10 сек
 
-	console.warn(
-		`[API] 429 Too Many Requests → retry ${config._retryCount}/${MAX_RETRIES} через ${Math.round(delay)}ms: ${config.url}`,
-	);
+	// silent retry — no user notification needed
 
 	await new Promise((r) => setTimeout(r, delay));
 	return apiClient.request(config);

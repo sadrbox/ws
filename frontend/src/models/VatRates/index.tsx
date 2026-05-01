@@ -52,7 +52,7 @@ const VatRatesForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => [
     {
       id: "general",
-      label: translate("general") || "Основное",
+      label: translate("general"),
       component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>

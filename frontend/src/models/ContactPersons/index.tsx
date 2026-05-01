@@ -51,7 +51,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "contact-persons-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
     tables: {
-      contacts: { endpoint: "contacts", parentField: "ownerUuid", label: translate("ContactsList") || "Контакты", extraFields: { ownerType: "contactperson" } },
+      contacts: { endpoint: "contacts", parentField: "ownerUuid", label: translate("ContactsList"), extraFields: { ownerType: "contactperson" } },
     },
     mapServerToForm: async (d, prev) => {
       const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
@@ -81,7 +81,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general") || "Основное", component: (
+      { id: "general", label: translate("general"), component: (
         <div className={styles.Form}>
           {form.isEditMode && (
             <GroupRow>
@@ -105,7 +105,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
       )},
     ];
     if (form.isEditMode && form.fields.uuid) {
-      t.push({ id: "contacts", label: translate("ContactsList") || "Контакты", component: (
+      t.push({ id: "contacts", label: translate("ContactsList"), component: (
         <ContactsTable deferRemoteChanges ownerType="contactperson" parentUuid={form.fields.uuid}
           parentName={form.fields.fullName} initialPendingRows={contacts.pending}
           onItemsChange={contacts.onItemsChange} />

@@ -60,7 +60,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
-    { id: "tab0", label: translate("general") || "Основное", component: (
+    { id: "tab0", label: translate("general"), component: (
       <div className={styles.FormWrapper}>
         <div className={styles.Form}>
           {form.isEditMode && (
@@ -78,13 +78,13 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
       </div>
     )},
     ];
-    if (canReadBankAccounts) result.push({ id: "tab1", label: translate("BankAccountsList") || "Банковские счета", component: (
+    if (canReadBankAccounts) result.push({ id: "tab1", label: translate("BankAccountsList"), component: (
       <BankAccountsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={bankAccounts.pending} onItemsChange={bankAccounts.onItemsChange} />
     )});
-    if (canReadContracts) result.push({ id: "tab2", label: translate("ContractsList") || "Договора", component: (
+    if (canReadContracts) result.push({ id: "tab2", label: translate("ContractsList"), component: (
       <ContractsTable deferRemoteChanges parentKey="counterpartyUuid" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contracts.pending} onItemsChange={contracts.onItemsChange} />
     )});
-    if (canReadContacts) result.push({ id: "tab3", label: translate("ContactsList") || "Контакты", component: (
+    if (canReadContacts) result.push({ id: "tab3", label: translate("ContactsList"), component: (
       <ContactsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} />
     )});
     return result;

@@ -55,7 +55,7 @@ body {
 	border-bottom: 0px solid $color10;
 	display: flex;
 	align-items: center;
-	// box-shadow: 0px 0px 3px rgba(#000, 0.4);
+	box-shadow: 0px 0px 3px 1px rgba(#000, 0.4);
 	height: $heightFieldInput + 12px;
 	flex-wrap: nowrap;
 	flex-shrink: 0;
@@ -198,11 +198,11 @@ body {
 @media (max-width: 768px) {
 	.NavbarWrapper {
 		flex-wrap: nowrap;
-		height: $heightFieldInput + 21px;
+		height: $heightFieldInput + 12px;
 		padding: 0;
 		position: sticky;
 		top: 0;
-		background: $color33;
+		// background: $color33;
 
 		// Скрываем десктопные навигационные ссылки
 		.NavbarItem {
@@ -495,7 +495,7 @@ body {
 	gap: 6px;
 	align-items: center;
 	justify-content: flex-start;
-	min-height: $heightFieldInput;
+	height: $heightFieldInput + 12px;
 	// padding-right: 2px;
 	flex-shrink: 0;
 	// padding: 6px;
@@ -508,7 +508,7 @@ body {
 	margin: 0;
 	padding: 0;
 	font-weight: bold;
-	font-size: $fontsize + 1px;
+	font-size: $fontsize + 2px;
 	color: $color6;
 	white-space: nowrap;
 	overflow: hidden;
@@ -944,21 +944,21 @@ body {
 	}
 
 	.PaneTabItemDirty {
-		.PaneTabItemLabel{
+		.PaneTabItemLabel {
 			font-style: italic;
-				color: #c77600;
+			color: #c77600;
 		}
 	}
 
 	.PaneTabItemLabel {
-		
+
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		overflow: hidden;
 	}
 
 	.PaneTabItemClose {
-		color: #c77600;
+		color: $color6;
 		margin-right: 3px;
 		width: $heightFieldInput - 8px;
 		height: $heightFieldInput - 8px;
@@ -1068,6 +1068,7 @@ body {
 }
 
 .FormWrapper {
+	// container: form-wrapper / inline-size;
 	container-type: size;
 	display: flex;
 	flex: 1;
@@ -1083,23 +1084,41 @@ body {
 	gap: 12px;
 	padding: 0;
 	max-width: 600px;
-
+	flex: 1;
 
 }
 
-@container (min-width: 600px) {
-	.FormContainer {
-		flex-direction: row;
-	}
-
-	.Group {
-		flex-direction: row;
-	}
-}
-
-@container (max-width: 900px) {
-	.FormContainer {
+@media (max-width: 500px) {
+	.FormWrapper {
 		flex-direction: column;
+
+		.Form {
+			flex-direction: column;
+
+			.Group {
+				flex-direction: column;
+			}
+		}
+	}
+}
+
+@media (min-width: 501px) and (max-width: 600px) {
+	.FormWrapper {
+		flex-direction: column;
+
+		.Form {
+			flex-direction: column;
+		}
+	}
+}
+
+@media (min-width: 601px) {
+	.FormWrapper {
+		flex-direction: row;
+
+		.Form {
+			flex-direction: column;
+		}
 	}
 
 	.Group {

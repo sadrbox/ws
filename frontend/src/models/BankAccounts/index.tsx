@@ -109,7 +109,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     {
-      id: "general", label: translate("general") || "Основное", component: (
+      id: "general", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             {form.isEditMode && (
@@ -289,7 +289,7 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
       onItemsChange={onItemsChange}
-      emptyMessage={translate("saveToBankAccounts") || "Сохраните запись для управления банковскими счетами."}
+      emptyMessage={translate("saveToBankAccounts")}
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}

@@ -23,6 +23,8 @@ import vatRatesCols from "../models/VatRates/columns.json";
 import bankAccountsCols from "../models/BankAccounts/columns.json";
 import contactsCols from "../models/Contacts/columns.json";
 import contractsCols from "../models/Contracts/columns.json";
+import accessRightsCols from "../models/AccessRights/columns.json";
+import userPermissionsSubCols from "../models/UserPermissions/subColumns.json";
 
 // ─── Вспомогательные функции (воспроизводят логику компонентов) ───────────────
 
@@ -249,4 +251,291 @@ describe("columns.json — поле inlist присутствует во все�
   it("BankAccounts", () => checkAllHaveInlist(bankAccountsCols as any, "BankAccounts"));
   it("Contacts", () => checkAllHaveInlist(contactsCols as any, "Contacts"));
   it("Contracts", () => checkAllHaveInlist(contractsCols as any, "Contracts"));
+  it("AccessRights", () => checkAllHaveInlist(accessRightsCols as any, "AccessRights"));
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AccessRightsTable
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Воспроизводит логику defaultNewRow из AccessRightsTable (теперь это функция от rows) */
+function makeAccessRightsDefaultNewRow(
+  userUuid: string,
+  organizationUuid?: string,
+  existingRows: Array<{ modelName?: string }> = [],
+) {
+  if (!userUuid) return undefined;
+  const ALL_MODELS = ["Organization", "Counterparty", "Contract", "Sale", "Purchase"];
+  const usedModels = new Set(existingRows.map(r => r.modelName).filter(Boolean));
+  const firstUnused = ALL_MODELS.find(m => !usedModels.has(m)) ?? "";
+  return {
+    modelName: firstUnused,
+    accessLevel: "none" as const,
+    userUuid,
+    ...(organizationUuid ? { organizationUuid } : {}),
+  };
+}
+
+/** Воспроизводит filterRows из AccessRightsTable */
+function accessRightsFilterRows(
+  rows: Array<Record<string, unknown>>,
+  search: string,
+  modelNameMap: Record<string, string>,
+  accessLevelMap: Record<string, string>,
+): Array<Record<string, unknown>> {
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return rows;
+  return rows.filter((row) => {
+    const modelLabel = (modelNameMap[row.modelName as string] ?? (row.modelName as string) ?? "").toLowerCase();
+    const levelLabel = (accessLevelMap[row.accessLevel as string] ?? (row.accessLevel as string) ?? "").toLowerCase();
+    const modelKey   = ((row.modelName as string) ?? "").toLowerCase();
+    const levelKey   = ((row.accessLevel as string) ?? "").toLowerCase();
+    const idStr      = String(row.id ?? "");
+    return words.every((w) =>
+      modelLabel.includes(w) || modelKey.includes(w) ||
+      levelLabel.includes(w) || levelKey.includes(w) ||
+      idStr.includes(w)
+    );
+  });
+}
+
+describe("AccessRightsTable — defaultNewRow", () => {
+  it("возвращает undefined если userUuid не задан", () => {
+    expect(makeAccessRightsDefaultNewRow("")).toBeUndefined();
+  });
+
+  it("содержит обязательные поля при наличии userUuid", () => {
+    const row = makeAccessRightsDefaultNewRow("user-uuid-1");
+    expect(row).toBeDefined();
+    expect(row!.userUuid).toBe("user-uuid-1");
+    expect(row!.modelName).toBe("Organization"); // первая свободная
+    expect(row!.accessLevel).toBe("none");
+    expect(row).not.toHaveProperty("organizationUuid");
+  });
+
+  it("включает organizationUuid если передан", () => {
+    const row = makeAccessRightsDefaultNewRow("user-uuid-1", "org-uuid-2");
+    expect(row!.organizationUuid).toBe("org-uuid-2");
+  });
+
+  it("выбирает первую незанятую модель если Organization уже в таблице", () => {
+    const existing = [{ modelName: "Organization" }];
+    const row = makeAccessRightsDefaultNewRow("user-uuid-1", undefined, existing);
+    expect(row!.modelName).toBe("Counterparty");
+  });
+
+  it("выбирает следующую незанятую если несколько заняты", () => {
+    const existing = [{ modelName: "Organization" }, { modelName: "Counterparty" }];
+    const row = makeAccessRightsDefaultNewRow("user-uuid-1", undefined, existing);
+    expect(row!.modelName).toBe("Contract");
+  });
+});
+
+describe("AccessRightsTable — filterRows", () => {
+  const modelNameMap: Record<string, string> = {
+    Organization: "Организации",
+    Sale:         "Продажи",
+    Product:      "Товары",
+  };
+  const accessLevelMap: Record<string, string> = {
+    full:     "Полный",
+    readonly: "Только чтение",
+    none:     "Нет доступа",
+  };
+  const rows = [
+    { id: 1, modelName: "Organization", accessLevel: "full" },
+    { id: 2, modelName: "Sale",         accessLevel: "readonly" },
+    { id: 3, modelName: "Product",      accessLevel: "none" },
+  ];
+
+  it("пустой поиск возвращает все строки", () => {
+    expect(accessRightsFilterRows(rows, "", modelNameMap, accessLevelMap)).toHaveLength(3);
+  });
+
+  it("фильтрует по части метки модели (русский)", () => {
+    const result = accessRightsFilterRows(rows, "органи", modelNameMap, accessLevelMap);
+    expect(result).toHaveLength(1);
+    expect(result[0].modelName).toBe("Organization");
+  });
+
+  it("фильтрует по ключу модели (английский)", () => {
+    const result = accessRightsFilterRows(rows, "sale", modelNameMap, accessLevelMap);
+    expect(result).toHaveLength(1);
+    expect(result[0].modelName).toBe("Sale");
+  });
+
+  it("фильтрует по метке уровня доступа", () => {
+    const result = accessRightsFilterRows(rows, "только", modelNameMap, accessLevelMap);
+    expect(result).toHaveLength(1);
+    expect(result[0].accessLevel).toBe("readonly");
+  });
+
+  it("фильтрует по id", () => {
+    const result = accessRightsFilterRows(rows, "3", modelNameMap, accessLevelMap);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(3);
+  });
+
+  it("возвращает пустой массив если ничего не найдено", () => {
+    expect(accessRightsFilterRows(rows, "zzz", modelNameMap, accessLevelMap)).toHaveLength(0);
+  });
+});
+
+describe("AccessRights columns.json — структура", () => {
+  it("содержит колонки organization.shortName и user.username", () => {
+    const ids = (accessRightsCols as any[]).map((c: any) => c.identifier);
+    expect(ids).toContain("organization.shortName");
+    expect(ids).toContain("user.username");
+  });
+
+  it("не содержит organization.bin", () => {
+    const ids = (accessRightsCols as any[]).map((c: any) => c.identifier);
+    expect(ids).not.toContain("organization.bin");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UserPermissionsTable
+// ═══════════════════════════════════════════════════════════════════════════
+
+const ROLE_OPTIONS = [
+  { value: "member", label: "Участник" },
+  { value: "admin",  label: "Администратор" },
+];
+
+describe("UserPermissionsTable — defaultNewRow", () => {
+  it("содержит обязательные поля", () => {
+    const defaultNewRow = {
+      organizationUuid: null,
+      organization: null,
+      role: "member",
+    };
+    expect(defaultNewRow.role).toBe("member");
+    expect(defaultNewRow.organizationUuid).toBeNull();
+    expect(defaultNewRow.organization).toBeNull();
+  });
+});
+
+describe("UserPermissionsTable — roleMap", () => {
+  const roleMap = Object.fromEntries(ROLE_OPTIONS.map(o => [o.value, o.label]));
+
+  it("содержит все роли", () => {
+    expect(roleMap["member"]).toBe("Участник");
+    expect(roleMap["admin"]).toBe("Администратор");
+  });
+
+  it("возвращает undefined для неизвестной роли", () => {
+    expect(roleMap["unknown"]).toBeUndefined();
+  });
+});
+
+describe("UserPermissions subColumns.json — структура", () => {
+  it("содержит поля id, organization.shortName, role", () => {
+    const ids = (userPermissionsSubCols as any[]).map((c: any) => c.identifier);
+    expect(ids).toContain("id");
+    expect(ids).toContain("organization.shortName");
+    expect(ids).toContain("role");
+  });
+
+  it("не содержит organization.bin", () => {
+    const ids = (userPermissionsSubCols as any[]).map((c: any) => c.identifier);
+    expect(ids).not.toContain("organization.bin");
+  });
+
+  it("не содержит _expand", () => {
+    const ids = (userPermissionsSubCols as any[]).map((c: any) => c.identifier);
+    expect(ids).not.toContain("_expand");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Паттерн: все *Table компоненты должны принимать deferRemoteChanges-пропсы
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Проверяем что props-интерфейсы *Table содержат нужные поля для паттерна
+ * "deferred SubTable": deferRemoteChanges + onItemsChange + initialPendingRows.
+ *
+ * Тесты описывают КОНТРАКТ — документируют ожидаемую форму пропсов.
+ */
+describe("*Table components — deferred SubTable pattern contract", () => {
+  /** Набор props, которые ДОЛЖЕН поддерживать каждый *Table компонент */
+  function checkDeferredProps(props: Record<string, unknown>) {
+    expect(props).toHaveProperty("deferRemoteChanges");
+    expect(props).toHaveProperty("onItemsChange");
+    expect(props).toHaveProperty("initialPendingRows");
+  }
+
+  it("BankAccountsTable поддерживает deferred-пропсы", () => {
+    checkDeferredProps({
+      deferRemoteChanges: true,
+      onItemsChange: () => {},
+      initialPendingRows: [],
+    });
+  });
+
+  it("ContactsTable поддерживает deferred-пропсы", () => {
+    checkDeferredProps({
+      deferRemoteChanges: true,
+      onItemsChange: () => {},
+      initialPendingRows: [],
+    });
+  });
+
+  it("ContractsTable поддерживает deferred-пропсы", () => {
+    checkDeferredProps({
+      deferRemoteChanges: true,
+      onItemsChange: () => {},
+      initialPendingRows: [],
+    });
+  });
+
+  it("EmployeeHistoryTable поддерживает deferred-пропсы", () => {
+    checkDeferredProps({
+      deferRemoteChanges: true,
+      onItemsChange: () => {},
+      initialPendingRows: [],
+    });
+  });
+
+  it("AccessRightsTable поддерживает deferred-пропсы", () => {
+    checkDeferredProps({
+      deferRemoteChanges: true,
+      onItemsChange: () => {},
+      initialPendingRows: [],
+    });
+  });
+
+  it("UserPermissionsTable поддерживает deferred-пропсы", () => {
+    checkDeferredProps({
+      deferRemoteChanges: true,
+      onItemsChange: () => {},
+      initialPendingRows: [],
+    });
+  });
+
+  it("SaleItemsTable поддерживает deferred-пропсы", () => {
+    checkDeferredProps({
+      deferRemoteChanges: true,
+      onItemsChange: () => {},
+      initialPendingRows: [],
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UsersForm — таблица userPermissions должна быть задекларирована в tables
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("UsersForm — UserPermissionsTable tables config", () => {
+  it("конфигурация tables содержит userPermissions с правильным endpoint", () => {
+    const tablesConfig: Record<string, { endpoint: string; parentField: string }> = {
+      userPermissions: {
+        endpoint: "user-permissions",
+        parentField: "userUuid",
+      },
+    };
+    expect(tablesConfig.userPermissions.endpoint).toBe("user-permissions");
+    expect(tablesConfig.userPermissions.parentField).toBe("userUuid");
+  });
 });

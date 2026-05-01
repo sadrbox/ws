@@ -69,7 +69,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     tables: {
       saleItems: {
         endpoint: "saleitems", parentField: "saleUuid",
-        label: translate("SaleItemsList") || "Товары",
+        label: translate("SaleItemsList"),
         createPayload: (r: any) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
@@ -184,25 +184,15 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     {
-      id: "tab-details", label: translate("general") || "Основное", component: (
+      id: "tab-details", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            {/* ID / UUID — только в режиме редактирования */}
-            {form.isEditMode && (
-              <GroupRow>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
-              </GroupRow>
-            )}
+
             <GroupCol>
               {/* ── Левая колонка: поля ── */}
-
-
               {/* Строка 1: Дата · Проведён · Статус */}
               <GroupRow>
                 <FieldDate label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
-
-
 
                 <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
               </GroupRow>
@@ -214,22 +204,27 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 <LookupField label="Склад" name={`${form.formUid}_wh`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
 
-              {/* Контрагент — во всю ширину */}
-              <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+              <Group>
+                {/* Контрагент — во всю ширину */}
+                <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
 
-              {/* Склад | Договор — в одну строку, по 50% */}
-              <div style={{ display: "flex", flexDirection: "row", gap: "12px", flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: 200 }}>
+                {/* Склад | Договор — в одну строку, по 50% */}
 
-                </div>
-                <div style={{ flex: 1, minWidth: 200 }}>
-                  <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
-                </div>
-              </div>
+                <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
+              </Group>
 
-              {/* Комментарий */}
-              <Field label="Комментарий" name={`${form.formUid}_desc`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
+              <Group>
+                {/* Комментарий */}
+                <Field label="Комментарий" name={`${form.formUid}_desc`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
+              </Group>
             </GroupCol>
+            {/* ID / UUID — только в режиме редактирования */}
+            {form.isEditMode && (
+              <GroupRow>
+                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                <Field label="UUID" name={`${form.formUid}_uuid`} minWidth="240px" value={String(form.fields.uuid ?? "-")} disabled />
+              </GroupRow>
+            )}
           </div>
           {/* ── Правая колонка: итоги ── */}
           <div className={styles.Form}>
@@ -255,7 +250,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       )
     },
     {
-      id: "tab-items", label: translate("SaleItemsList") || "Товары", component: form.isEditMode && form.fields.uuid ? (
+      id: "tab-items", label: translate("SaleItemsList"), component: form.isEditMode && form.fields.uuid ? (
         <SaleItemsTable saleUuid={form.fields.uuid} disabled={form.isLoading} deferRemoteChanges
           initialPendingRows={saleItems.pending} onTotalChange={handleTotalChange}
           onItemsChange={saleItems.onItemsChange} />
@@ -272,7 +267,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
       onClose={form.handleClose}
-      // onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
       //

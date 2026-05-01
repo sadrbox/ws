@@ -22,46 +22,46 @@ const SUBTABLE_COMPONENT_NAME = "AccessRightsTable_part";
 // ─── Shared Options ───────────────────────────────────────────────────────────
 
 export const ACCESS_LEVEL_OPTIONS = [
-  { value: "full",     label: translate("accessLevelFull")     || "Полный" },
+  { value: "full", label: translate("accessLevelFull") || "Полный" },
   { value: "readonly", label: translate("accessLevelReadonly") || "Только чтение" },
-  { value: "none",     label: translate("accessLevelNone")     || "Нет доступа" },
+  { value: "none", label: translate("accessLevelNone") || "Нет доступа" },
 ];
 
 export const MODEL_NAME_OPTIONS = [
   { value: "", label: "— " + (translate("select") || "Выберите") + " —" },
   ...[
-    { value: "Organization",       i18: "OrganizationsList" },
-    { value: "Counterparty",       i18: "CounterpartiesList" },
-    { value: "Contract",           i18: "ContractsList" },
-    { value: "Sale",               i18: "SalesList" },
-    { value: "Purchase",           i18: "PurchasesList" },
-    { value: "Warehouse",          i18: "WarehousesList" },
-    { value: "Product",            i18: "ProductsList" },
-    { value: "Brand",              i18: "BrandsList" },
-    { value: "Employee",           i18: "EmployeesList" },
-    { value: "Contact",            i18: "ContactsList" },
-    { value: "ContactPerson",      i18: "ContactPersonsList" },
-    { value: "ContactType",        i18: "ContactTypesList" },
-    { value: "Position",           i18: "PositionsList" },
-    { value: "BankAccount",        i18: "BankAccountsList" },
-    { value: "Currency",           i18: "CurrenciesList" },
-    { value: "Todo",               i18: "TodosList" },
-    { value: "Notification",       i18: "NotificationsList" },
-    { value: "OutgoingInvoice",    i18: "OutgoingInvoicesList" },
-    { value: "IncomingInvoice",    i18: "IncomingInvoicesList" },
-    { value: "PaymentInvoice",     i18: "PaymentInvoicesList" },
-    { value: "CashReceiptOrder",   i18: "CashReceiptOrdersList" },
-    { value: "CashExpenseOrder",   i18: "CashExpenseOrdersList" },
-    { value: "InventoryTransfer",  i18: "InventoryTransfersList" },
-    { value: "UnitOfMeasure",      i18: "UnitOfMeasuresList" },
-    { value: "VatRate",            i18: "VatRatesList" },
-    { value: "ScheduledTask",      i18: "ScheduledTasksList" },
+    { value: "Organization", i18: "OrganizationsList" },
+    { value: "Counterparty", i18: "CounterpartiesList" },
+    { value: "Contract", i18: "ContractsList" },
+    { value: "Sale", i18: "SalesList" },
+    { value: "Purchase", i18: "PurchasesList" },
+    { value: "Warehouse", i18: "WarehousesList" },
+    { value: "Product", i18: "ProductsList" },
+    { value: "Brand", i18: "BrandsList" },
+    { value: "Employee", i18: "EmployeesList" },
+    { value: "Contact", i18: "ContactsList" },
+    { value: "ContactPerson", i18: "ContactPersonsList" },
+    { value: "ContactType", i18: "ContactTypesList" },
+    { value: "Position", i18: "PositionsList" },
+    { value: "BankAccount", i18: "BankAccountsList" },
+    { value: "Currency", i18: "CurrenciesList" },
+    { value: "Todo", i18: "TodosList" },
+    { value: "Notification", i18: "NotificationsList" },
+    { value: "OutgoingInvoice", i18: "OutgoingInvoicesList" },
+    { value: "IncomingInvoice", i18: "IncomingInvoicesList" },
+    { value: "PaymentInvoice", i18: "PaymentInvoicesList" },
+    { value: "CashReceiptOrder", i18: "CashReceiptOrdersList" },
+    { value: "CashExpenseOrder", i18: "CashExpenseOrdersList" },
+    { value: "InventoryTransfer", i18: "InventoryTransfersList" },
+    { value: "UnitOfMeasure", i18: "UnitOfMeasuresList" },
+    { value: "VatRate", i18: "VatRatesList" },
+    { value: "ScheduledTask", i18: "ScheduledTasksList" },
     { value: "PayrollCalculation", i18: "PayrollCalculationsList" },
-    { value: "PayrollPayment",     i18: "PayrollPaymentsList" },
-    { value: "User",               i18: "UsersList" },
-    { value: "ActivityHistory",    i18: "ActivityHistoriesList" },
-    { value: "EmployeeHistory",    i18: "EmployeeHistoriesList" },
-    { value: "AccessRight",        i18: "AccessRightsList" },
+    { value: "PayrollPayment", i18: "PayrollPaymentsList" },
+    { value: "User", i18: "UsersList" },
+    { value: "ActivityHistory", i18: "ActivityHistoriesList" },
+    { value: "EmployeeHistory", i18: "EmployeeHistoriesList" },
+    { value: "AccessRight", i18: "AccessRightsList" },
   ].map(({ value, i18 }) => ({ value, label: translate(i18) || value })),
 ];
 
@@ -127,18 +127,18 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     {
-      id: "general", label: translate("general") || "Основное", component: (
+      id: "general", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             {form.isEditMode && (
               <GroupRow>
-                <Field label="ID"   name={`${form.formUid}_id`}   width="100px" value={String(form.fields.id ?? "-")} disabled />
+                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
                 <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
               </GroupRow>
             )}
             <GroupCol>
               <FieldSelect
-                label={translate("model") || "Модель *"}
+                label={translate("model")}
                 name={`${form.formUid}_modelName`}
                 options={MODEL_NAME_OPTIONS}
                 value={form.fields.modelName}
@@ -146,7 +146,7 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading || form.isEditMode}
               />
               <FieldSelect
-                label={translate("accessLevel") || "Уровень доступа"}
+                label={translate("accessLevel")}
                 name={`${form.formUid}_accessLevel`}
                 options={ACCESS_LEVEL_OPTIONS}
                 value={form.fields.accessLevel}
@@ -176,6 +176,31 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
 };
 AccessRightsForm.displayName = "AccessRightsForm";
 
+const RelatedLink: FC<{
+  label: string;
+  endpoint: "organizations" | "users";
+  uuid?: string | null;
+  addPane: (options: any) => void;
+}> = ({ label, endpoint, uuid, addPane }) => {
+  if (!label) return <span />;
+  if (!uuid) return <span>{label}</span>;
+  return (
+    <button
+      type="button"
+      className={styles.PaneNoteJournalLink}
+      onClick={(e) => {
+        e.stopPropagation();
+        import("src/registry/formRegistry").then(({ openFormByEndpoint }) => {
+          openFormByEndpoint(endpoint, uuid, addPane);
+        });
+      }}
+      title="Открыть форму"
+    >
+      {label}
+    </button>
+  );
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MODEL RIGHTS LIST — список записей access-rights
 // ═══════════════════════════════════════════════════════════════════════════
@@ -183,22 +208,52 @@ AccessRightsForm.displayName = "AccessRightsForm";
 const AccessRightsList: FC<{
   variant?: TTableVariant;
   onSelectItem?: (item: TDataItem) => void;
-}> = ({ variant, onSelectItem }) => (
-  <ModelList
-    endpoint={ENDPOINT}
-    listName="AccessRightsList"
-    columnsJson={columnsJson}
-    FormComponent={AccessRightsForm}
-    getLabel={(d) => {
-      const item = d as any;
-      const modelLabel = MODEL_NAME_OPTIONS.find(o => o.value === item?.modelName)?.label ?? (item?.modelName ?? "");
-      return modelLabel;
-    }}
-    variant={variant}
-    onSelectItem={onSelectItem}
-    defaultSort={{ id: "desc" }}
-  />
-);
+}> = ({ variant, onSelectItem }) => {
+  const { addPane } = useAppContext().windows;
+  const renderCell = useCallback((row: TDataItem, col: TColumn) => {
+    if (col.identifier === "organization.shortName") {
+      const org = row.organization as any;
+      return (
+        <RelatedLink
+          label={org?.shortName ?? ""}
+          endpoint="organizations"
+          uuid={org?.uuid ?? (row.organizationUuid as string | undefined)}
+          addPane={addPane}
+        />
+      );
+    }
+    if (col.identifier === "user.username") {
+      const user = row.user as any;
+      return (
+        <RelatedLink
+          label={user?.username ?? ""}
+          endpoint="users"
+          uuid={user?.uuid ?? (row.userUuid as string | undefined)}
+          addPane={addPane}
+        />
+      );
+    }
+    return undefined;
+  }, [addPane]);
+
+  return (
+    <ModelList
+      endpoint={ENDPOINT}
+      listName="AccessRightsList"
+      columnsJson={columnsJson}
+      FormComponent={AccessRightsForm}
+      getLabel={(d) => {
+        const item = d as any;
+        const modelLabel = MODEL_NAME_OPTIONS.find(o => o.value === item?.modelName)?.label ?? (item?.modelName ?? "");
+        return modelLabel;
+      }}
+      variant={variant}
+      onSelectItem={onSelectItem}
+      defaultSort={{ id: "desc" }}
+      renderCell={renderCell}
+    />
+  );
+};
 AccessRightsList.displayName = "AccessRightsList";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -250,12 +305,44 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
   }, [modelNameMap, accessLevelMap]);
 
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
+    if (col.identifier === "organization.shortName") {
+      const org = row.organization as any;
+      return (
+        <RelatedLink
+          label={org?.shortName ?? ""}
+          endpoint="organizations"
+          uuid={org?.uuid ?? (row.organizationUuid as string | undefined)}
+          addPane={addPane}
+        />
+      );
+    }
+    if (col.identifier === "user.username") {
+      const user = row.user as any;
+      return (
+        <RelatedLink
+          label={user?.username ?? ""}
+          endpoint="users"
+          uuid={user?.uuid ?? (row.userUuid as string | undefined)}
+          addPane={addPane}
+        />
+      );
+    }
     if (col.identifier === "modelName") {
       if (ctx.inlineEditing) {
+        // Исключаем из опций модели, уже занятые другими строками таблицы
+        const usedByOthers = new Set(
+          ctx.rows
+            .filter(r => r !== row)
+            .map(r => r.modelName as string)
+            .filter(Boolean),
+        );
+        const availableOptions = MODEL_NAME_OPTIONS.filter(
+          o => !o.value || !usedByOthers.has(o.value),
+        );
         return (
           <FieldSelect
             name={`inline_model_${row.id}`}
-            options={MODEL_NAME_OPTIONS}
+            options={availableOptions}
             value={(row.modelName as string) ?? ""}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => ctx.handleInlineChange(row, "modelName", e.target.value)}
             variant="table"
@@ -279,7 +366,7 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
       return <span>{accessLevelMap[row.accessLevel as string] ?? row.accessLevel}</span>;
     }
     return undefined;
-  }, [modelNameMap, accessLevelMap]);
+  }, [modelNameMap, accessLevelMap, addPane]);
 
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
@@ -299,19 +386,22 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
     });
   }, [addPane, userUuid, organizationUuid, queryClient]);
 
-  const firstModelName = useMemo(
-    () => MODEL_NAME_OPTIONS.find(o => o.value !== "")?.value ?? "",
-    [],
-  );
+  // console.log("Тестирование:", MODEL_NAME_OPTIONS.find(o => o.value)?.value, notAddedModels, initialPendingRows);
+
+  // console.log(onItemsChange);
   const defaultNewRow = useMemo(() => {
     if (!userUuid) return undefined;
-    return {
-      modelName: firstModelName,
-      accessLevel: "none" as const,
-      userUuid,
-      ...(organizationUuid ? { organizationUuid } : {}),
+    return (rows: TDataItem[]) => {
+      const usedModels = new Set(rows.map(r => r.modelName as string).filter(Boolean));
+      const firstUnused = MODEL_NAME_OPTIONS.find(o => o.value && !usedModels.has(o.value))?.value ?? "";
+      return {
+        modelName: firstUnused,
+        accessLevel: "none" as const,
+        userUuid,
+        ...(organizationUuid ? { organizationUuid } : {}),
+      };
     };
-  }, [firstModelName, userUuid, organizationUuid]);
+  }, [userUuid, organizationUuid]);
 
   return (
     <SubTable
@@ -328,8 +418,8 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
       initialPendingRows={initialPendingRows}
       onItemsChange={onItemsChange}
       emptyMessage={userUuid
-        ? (translate("noAccessRights") || "Нет настроенных прав доступа.")
-        : (translate("saveUserFirst") || "Сохраните запись, чтобы управлять правами доступа.")
+        ? (translate("noAccessRights"))
+        : (translate("saveUserFirst"))
       }
       renderCell={renderCell}
       openFormFor={openFormFor}

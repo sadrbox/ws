@@ -91,7 +91,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     {
-      id: "general", label: translate("general") || "Основное", component: (
+      id: "general", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             {form.isEditMode && (
@@ -258,7 +258,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
       onItemsChange={onItemsChange}
-      emptyMessage={translate("saveToContacts") || "Сохраните запись для управления контактами."}
+      emptyMessage={translate("saveToContacts")}
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}

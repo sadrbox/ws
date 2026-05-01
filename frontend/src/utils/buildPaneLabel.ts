@@ -47,7 +47,7 @@ export function makePaneLabelFromData(
   displayValue?: string,
 ): string {
   const name = translate(listName) || fallback;
-  if (!data?.uuid && !data?.id) return `${name}: ${translate("new") || "Новый"}`;
+  if (!data?.uuid && !data?.id) return `${name}: ${translate("new")}`;
   const id = data.id ?? "?";
   const detail = displayValue ?? data.shortName;
   return detail

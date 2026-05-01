@@ -56,19 +56,19 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       contacts: {
         endpoint: "contacts",
         parentField: "ownerUuid",
-        label: translate("ContactsList") || "Контакты",
+        label: translate("ContactsList"),
         extraFields: { ownerType: "organization" },
       },
       bankAccounts: {
         endpoint: "bankaccounts",
         parentField: "ownerUuid",
-        label: translate("BankAccountsList") || "Банковские счета",
+        label: translate("BankAccountsList"),
         extraFields: { ownerType: "organization" },
       },
       contracts: {
         endpoint: "contracts",
         parentField: "organizationUuid",
-        label: translate("ContractsList") || "Договора",
+        label: translate("ContractsList"),
       },
     },
     mapServerToForm: (d, prev) => ({
@@ -100,7 +100,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
     {
-      id: "tab0", label: translate("general") || "Основное", component: (
+      id: "tab0", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             {form.isEditMode && (
@@ -120,7 +120,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
     },
     ];
     if (canReadBankAccounts) result.push({
-      id: "tab1", label: translate("BankAccountsList") || "Банковские счета", component: (
+      id: "tab1", label: translate("BankAccountsList"), component: (
         <BankAccountsTable
           deferRemoteChanges={true}
           ownerType="organization"
@@ -132,7 +132,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       ),
     });
     if (canReadContracts) result.push({
-      id: "tab2", label: translate("ContractsList") || "Договора", component: (
+      id: "tab2", label: translate("ContractsList"), component: (
         <ContractsTable
           deferRemoteChanges={true}
           parentKey="organizationUuid"
@@ -144,7 +144,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       ),
     });
     if (canReadContacts) result.push({
-      id: "tab3", label: translate("ContactsList") || "Контакты", component: (
+      id: "tab3", label: translate("ContactsList"), component: (
         <ContactsTable
           deferRemoteChanges={true}
           ownerType="organization"

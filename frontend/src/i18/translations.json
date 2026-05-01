@@ -279,6 +279,7 @@
 
 	"EmployeeHistoriesList": "Кадровая история",
 	"EmployeeHistoriesList_part": "Кадровая история",
+	"saveToEmployeeHistory": "Сохраните сотрудника для управления кадровой историей",
 	"position.shortName": "Должность",
 
 	"UnsavedFormsList": "Несохранённые записи",
@@ -331,5 +332,13 @@
 
 	"userName": "Пользователь",
 	"salary": "Оклад",
-	"bankAccounts": "Банковские счета"
+	"bankAccounts": "Банковские счета",
+
+	"noAccessRights": "Нет настроенных прав доступа",
+	"saveUserFirst": "Сохраните запись, чтобы управлять правами доступа",
+	"saveToBankAccounts": "Сохраните запись для управления банковскими счетами",
+	"saveToContacts": "Сохраните запись для управления контактами",
+	"saveToContracts": "Сохраните запись для управления договорами"
+
+
 }

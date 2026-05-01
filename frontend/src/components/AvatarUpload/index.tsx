@@ -1,5 +1,6 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import apiClient from "src/services/api/client";
+import { showToast } from "src/components/UIToast";
 import styles from "./AvatarUpload.module.scss";
 
 interface AvatarUploadProps {
@@ -69,7 +70,7 @@ const AvatarUpload: FC<AvatarUploadProps> = ({
         });
         await loadAvatar();
       } catch (err) {
-        console.error("[AvatarUpload] upload error:", err);
+        showToast("Ошибка загрузки аватара", "error");
       } finally {
         setIsUploading(false);
         if (inputRef.current) inputRef.current.value = "";
@@ -87,7 +88,7 @@ const AvatarUpload: FC<AvatarUploadProps> = ({
       blobUrlRef.current = null;
       setAvatarUrl(null);
     } catch (err) {
-      console.error("[AvatarUpload] delete error:", err);
+      showToast("Ошибка удаления аватара", "error");
     }
   }, [endpoint, entityUuid, disabled]);
 

@@ -110,8 +110,10 @@ export interface SubTableProps {
    * без необходимости передавать onInlineAdd.
    * Пример: `{ quantity: 0, price: 0, productUuid: null }`
    * FK родителя (parentKey → parentUuid) добавляется автоматически.
+   * Можно передать функцию `(rows) => {...}` для динамического вычисления дефолтов
+   * на основе текущих строк таблицы (например, чтобы исключить уже выбранные значения).
    */
-  defaultNewRow?: Record<string, unknown>;
+  defaultNewRow?: Record<string, unknown> | ((rows: TDataItem[]) => Record<string, unknown>);
   /**
    * Дополнительные query-параметры, которые отправляются при каждом GET-запросе
    * и добавляются к новым строкам (как дополнение к parentKey / parentUuid).
@@ -322,9 +324,6 @@ const SubTable: FC<SubTableProps> = ({
     prevInitialPendingLenRef.current = curLen;
 
     if (deferRemoteChanges && prevLen > 0 && curLen === 0) {
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`[SubTable:${model}] cleanup: pending cleared (prevLen=${prevLen}→0), resetting cache & invalidating`);
-      }
       // pending очищен после коммита — сбрасываем флаг мержа
       pendingAppliedRef.current = false;
 
@@ -404,17 +403,6 @@ const SubTable: FC<SubTableProps> = ({
   const [cacheVersion, setCacheVersion] = useState(0);
 
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[SubTable:${model}] sync effect`, {
-        allItemsLen: allItems.length,
-        dataUpdatedAt,
-        deferRemoteChanges,
-        pendingApplied: pendingAppliedRef.current,
-        initialPendingLen: initialPendingRows?.length ?? 0,
-        cachedLen: cachedRowsRef.current.length,
-        dirtyCount: cachedRowsRef.current.filter((r: any) => r._pendingAction).length,
-      });
-    }
     // ── Ветка A: мерж pending-строк из sessionStorage (один раз при восстановлении) ──
     if (deferRemoteChanges && initialPendingRows?.length && !pendingAppliedRef.current) {
       pendingAppliedRef.current = true;
@@ -463,13 +451,6 @@ const SubTable: FC<SubTableProps> = ({
       return JSON.stringify(r) !== JSON.stringify(c);
     });
 
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[SubTable:${model}] branch B: clean replace`, {
-        prevLen: prev.length, cleanLen: clean.length,
-        hadDirtyRows, countChanged, contentChanged,
-      });
-    }
-
     cachedRowsRef.current = clean;
     setCacheVersion(v => v + 1);
 
@@ -482,11 +463,7 @@ const SubTable: FC<SubTableProps> = ({
   }, [allItems, dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = useMemo(() => {
-    const r = cachedRowsRef.current;
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[SubTable:${model}] rows memo recalc`, { cacheVersion, rowsLen: r.length, ids: r.slice(0, 5).map((x: any) => x.id) });
-    }
-    return r;
+    return cachedRowsRef.current;
   }, [cacheVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Обработчики ────────────────────────────────────────────────────────
@@ -699,15 +676,6 @@ const SubTable: FC<SubTableProps> = ({
       });
     }
 
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[SubTable:${model}] displayRows`, {
-        rowsLen: rows.length,
-        visibleLen: visible.length,
-        parentUuid: parentUuid?.slice(0, 8),
-        parentKey,
-      });
-    }
-
     if (!search) return visible;
     // Если задан кастомный filterRows — используем его
     if (filterRows) return filterRows(visible, search);
@@ -793,7 +761,11 @@ const SubTable: FC<SubTableProps> = ({
 
   // ── handleInlineAdd wrapper ────────────────────────────────────────────
   const handleInlineAdd = useCallback(async () => {
-    console.log("handleInlineAdd")
+    // Резолвим defaultNewRow: поддерживаем как объект, так и функцию (rows) => {...}
+    const resolvedDefaultNewRow = typeof defaultNewRow === "function"
+      ? defaultNewRow(cachedRowsRef.current as TDataItem[])
+      : defaultNewRow;
+
     if (deferRemoteChanges) {
       // создаём локальную временную строку и не отправляем на сервер
       const tmpId = tempIdRef.current--;
@@ -803,17 +775,16 @@ const SubTable: FC<SubTableProps> = ({
       columns.forEach((c) => {
         if (!(c.identifier in newRow)) newRow[c.identifier] = c.type === "number" ? null : "";
       });
-      // Применяем defaultNewRow поверх (если задан) — чтобы дефолтные значения были в строке
-      if (defaultNewRow) {
-        // console.log({newRow, defaultNewRow})
-        Object.assign(newRow, defaultNewRow);
+      // Применяем resolvedDefaultNewRow поверх (если задан) — чтобы дефолтные значения были в строке
+      if (resolvedDefaultNewRow) {
+        Object.assign(newRow, resolvedDefaultNewRow);
       }
       newRow._pendingAction = "create";
       // Маркер «нетронутая»: строка создана кнопкой «+» без пользовательских данных.
       // Снимается при первом редактировании ячейки (handleInlineChange).
-      // НЕ ставим маркер если задан defaultNewRow — там уже есть осмысленные значения,
+      // НЕ ставим маркер если задан resolvedDefaultNewRow — там уже есть осмысленные значения,
       // строка должна сохраняться даже без дополнительного редактирования.
-      if (!defaultNewRow) {
+      if (!resolvedDefaultNewRow) {
         newRow._untouched = true;
       }
       cachedRowsRef.current = [newRow as TDataItem, ...cachedRowsRef.current];
@@ -833,12 +804,12 @@ const SubTable: FC<SubTableProps> = ({
         refetch();
         setOpCount(c => c - 1);
       }
-    } else if (defaultNewRow) {
+    } else if (resolvedDefaultNewRow) {
       // Стандартное добавление строки через POST с дефолтными значениями
       setOpCount(c => c + 1);
       try {
         const { default: apiClient } = await import("src/services/api/client");
-        await apiClient.post(`/${model}`, { ...defaultNewRow, [parentKey]: parentUuid, ...(extraQueryParams ?? {}) });
+        await apiClient.post(`/${model}`, { ...resolvedDefaultNewRow, [parentKey]: parentUuid, ...(extraQueryParams ?? {}) });
       } catch (err: any) {
         alert(err.response?.data?.message || "Ошибка создания записи");
       } finally {

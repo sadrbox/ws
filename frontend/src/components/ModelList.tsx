@@ -1,7 +1,8 @@
 import { FC, useMemo, useCallback } from "react";
+import type { ReactNode } from "react";
 import { useAppContext } from "src/app";
 import { translate } from "src/i18";
-import type { TDataItem } from "src/components/Table/types";
+import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TTableVariant } from "src/components/Table";
 import Table, { TOpenModelFormProps } from "src/components/Table";
 import { useModelListState } from "src/hooks/useModelListState";
@@ -54,6 +55,8 @@ interface ModelListProps {
   extraFilter?: Record<string, string>;
   /** Включить фильтр по дате */
   enableDateRange?: boolean;
+  /** Кастомный рендер ячеек */
+  renderCell?: (row: TDataItem, col: TColumn) => ReactNode | undefined;
 }
 
 const ModelList: FC<ModelListProps> = ({
@@ -69,6 +72,7 @@ const ModelList: FC<ModelListProps> = ({
   ownerField,
   extraFilter,
   enableDateRange = false,
+  renderCell,
 }) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? `${listName}_part` : listName;
@@ -128,7 +132,7 @@ const ModelList: FC<ModelListProps> = ({
     );
   }
 
-  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange })} />;
+  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange, renderCell })} />;
 };
 
 ModelList.displayName = "ModelList";
