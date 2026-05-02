@@ -192,7 +192,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               {/* ── Левая колонка: поля ── */}
               {/* Строка 1: Дата · Проведён · Статус */}
               <GroupRow>
-                <FieldDate label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
+                <FieldDate label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="120px" />
 
                 <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
               </GroupRow>
@@ -218,13 +218,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 <Field label="Комментарий" name={`${form.formUid}_desc`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
               </Group>
             </GroupCol>
-            {/* ID / UUID — только в режиме редактирования */}
-            {form.isEditMode && (
-              <GroupRow>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} minWidth="240px" value={String(form.fields.uuid ?? "-")} disabled />
-              </GroupRow>
-            )}
+
           </div>
           {/* ── Правая колонка: итоги ── */}
           <div className={styles.Form}>
@@ -246,6 +240,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               </div>
             </div>
           </div>
+          <GroupRow style={{ justifyContent: "left" }}>
+            <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
+            <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
+          </GroupRow>
         </div>
       )
     },

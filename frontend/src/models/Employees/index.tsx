@@ -37,7 +37,7 @@ const DEFAULT_FIELDS: TFields = {
 
 const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Employee");
-  const { canRead: canReadContacts }        = useAccessRight("Contact");
+  const { canRead: canReadContacts } = useAccessRight("Contact");
   const { canRead: canReadEmployeeHistory } = useAccessRight("EmployeeHistory");
   const queryClient = useQueryClient();
 
@@ -85,9 +85,9 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   // При изменении фамилии/имени/отчества — автоматически пересчитывает fullName
   const handleNameFieldChange = useCallback((field: "lastName" | "firstName" | "middleName", value: string) => {
     const current = form.store.getSnapshot().fields;
-    const last    = field === "lastName"   ? value : current.lastName;
-    const first   = field === "firstName"  ? value : current.firstName;
-    const middle  = field === "middleName" ? value : current.middleName;
+    const last = field === "lastName" ? value : current.lastName;
+    const first = field === "firstName" ? value : current.firstName;
+    const middle = field === "middleName" ? value : current.middleName;
     const fullName = [last, first, middle].filter(Boolean).join(" ");
     form.setFields({ [field]: value, fullName } as Partial<TFields>);
   }, [form.store, form.setFields]);
@@ -97,45 +97,49 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general"), component: (
-        <div className={styles.FormWrapper}>
-          <div className={styles.Form}>
-            {form.isEditMode && (
-              <GroupRow>
+      {
+        id: "general", label: translate("general"), component: (
+          <div className={styles.FormWrapper}>
+            <div className={styles.Form}>
+              <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
                 <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+                <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
               </GroupRow>
-            )}
-            <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, maxWidth: 640 }}>
-              <GroupRow>
-                <Field label="Фамилия *" name={`${form.formUid}_lastName`} minWidth="200px" value={form.fields.lastName} onChange={e => handleNameFieldChange("lastName", e.target.value)} disabled={form.isLoading} />
-                <Field label="Имя" name={`${form.formUid}_firstName`} minWidth="180px" value={form.fields.firstName} onChange={e => handleNameFieldChange("firstName", e.target.value)} disabled={form.isLoading} />
-                <Field label="Отчество" name={`${form.formUid}_middleName`} minWidth="180px" value={form.fields.middleName} onChange={e => handleNameFieldChange("middleName", e.target.value)} disabled={form.isLoading} />
-              </GroupRow>
-              <GroupRow>
-                <Field label="ФИО" name={`${form.formUid}_fullName`} minWidth="400px" value={form.fields.fullName} disabled />
-              </GroupRow>
-              <GroupRow>
-                <Field label="ИИН" name={`${form.formUid}_iin`} minWidth="200px" value={form.fields.iin} onChange={e => form.setField("iin", e.target.value)} disabled={form.isLoading} />
-              </GroupRow>
+              <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, maxWidth: 640 }}>
+                  <GroupRow>
+                    <Field label="Фамилия *" name={`${form.formUid}_lastName`} minWidth="200px" value={form.fields.lastName} onChange={e => handleNameFieldChange("lastName", e.target.value)} disabled={form.isLoading} />
+                    <Field label="Имя" name={`${form.formUid}_firstName`} minWidth="180px" value={form.fields.firstName} onChange={e => handleNameFieldChange("firstName", e.target.value)} disabled={form.isLoading} />
+                    <Field label="Отчество" name={`${form.formUid}_middleName`} minWidth="180px" value={form.fields.middleName} onChange={e => handleNameFieldChange("middleName", e.target.value)} disabled={form.isLoading} />
+                  </GroupRow>
+                  <GroupRow>
+                    <Field label="ФИО" name={`${form.formUid}_fullName`} minWidth="400px" value={form.fields.fullName} disabled />
+                  </GroupRow>
+                  <GroupRow>
+                    <Field label="ИИН" name={`${form.formUid}_iin`} minWidth="200px" value={form.fields.iin} onChange={e => form.setField("iin", e.target.value)} disabled={form.isLoading} />
+                  </GroupRow>
+                </div>
+                {form.isEditMode && form.fields.uuid && (
+                  <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
+                )}
+              </div>
             </div>
-            {form.isEditMode && form.fields.uuid && (
-              <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
-            )}
           </div>
-          </div>
-        </div>
-      )},
+        )
+      },
     ];
 
     if (form.isEditMode && form.fields.uuid) {
-      if (canReadEmployeeHistory) result.push({ id: "history", label: translate("EmployeeHistoriesList"), component: (
-        <EmployeeHistoryTable employeeUuid={form.fields.uuid} disabled={form.isLoading} deferRemoteChanges initialPendingRows={history.pending} onItemsChange={history.onItemsChange} />
-      )});
-      if (canReadContacts) result.push({ id: "contacts", label: translate("ContactsList"), component: (
-        <ContactsTable deferRemoteChanges ownerType="employee" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.fullName || form.fields.lastName} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} />
-      )});
+      if (canReadEmployeeHistory) result.push({
+        id: "history", label: translate("EmployeeHistoriesList"), component: (
+          <EmployeeHistoryTable employeeUuid={form.fields.uuid} disabled={form.isLoading} deferRemoteChanges initialPendingRows={history.pending} onItemsChange={history.onItemsChange} />
+        )
+      });
+      if (canReadContacts) result.push({
+        id: "contacts", label: translate("ContactsList"), component: (
+          <ContactsTable deferRemoteChanges ownerType="employee" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.fullName || form.fields.lastName} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} />
+        )
+      });
     }
 
     return result;
@@ -175,8 +179,8 @@ const EH_MODEL = "employee-histories";
 const EH_COMPONENT = "EmployeeHistoryList_part";
 
 const EVENT_TYPE_OPTIONS = [
-  { value: "hire",     label: "Приём" },
-  { value: "fire",     label: "Увольнение" },
+  { value: "hire", label: "Приём" },
+  { value: "fire", label: "Увольнение" },
   { value: "transfer", label: "Перемещение" },
 ];
 

@@ -89,36 +89,36 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general"), component: (
-        <div className={styles.FormWrapper}>
-          <div className={styles.Form}>
-            {form.isEditMode && (
-              <GroupRow>
+      {
+        id: "general", label: translate("general"), component: (
+          <div className={styles.FormWrapper}>
+            <div className={styles.Form}>
+              <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
                 <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+                <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
               </GroupRow>
-            )}
-          <GroupCol>
-            <FieldSelect label="Статус" name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} style={{ minWidth: 200 }} />
-              <LookupField label="Организация" name={`${form.formUid}_organization`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
-                onSelect={(uuid, display) => form.setFields({ organizationUuid: uuid, organizationName: display } as Partial<TFields>)}
-                onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-              <LookupField label="Куратор" name={`${form.formUid}_curator`} value={form.fields.curatorUuid} displayValue={form.fields.curatorName} endpoint="users" displayField="username" secondaryFields={["employee.fullName"]}
-                onSelect={(uuid, display, item) => form.setFields({ curatorUuid: uuid, curatorName: item?.employee?.fullName || display } as Partial<TFields>)}
-                onClear={() => form.setFields({ curatorUuid: "", curatorName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-              <LookupField label="Исполнитель" name={`${form.formUid}_executor`} value={form.fields.executorUuid} displayValue={form.fields.executorName} endpoint="users" displayField="username" secondaryFields={["employee.fullName"]}
-                onSelect={(uuid, display, item) => form.setFields({ executorUuid: uuid, executorName: item?.employee?.fullName || display } as Partial<TFields>)}
-                onClear={() => form.setFields({ executorUuid: "", executorName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                <FieldDate label="Дата создания" name={`${form.formUid}_createdAt`} width="200px" value={form.fields.createdAt} disabled />
-                <Field label="Дней" name={`${form.formUid}_deadlineDays`} width="100px" value={form.fields.deadlineDays} onChange={e => handleDeadlineDaysChange(e.target.value)} disabled={form.isLoading} />
-                <FieldDate label="Дедлайн" name={`${form.formUid}_deadline`} width="200px" value={form.fields.deadline} onChange={e => form.setField("deadline", e.target.value)} disabled={form.isLoading} />
-              </div>
-              <FieldTextarea label="Описание задачи" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="120px" rows={6} />
-          </GroupCol>
+              <GroupCol>
+                <FieldSelect label="Статус" name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} style={{ minWidth: 200 }} />
+                <LookupField label="Организация" name={`${form.formUid}_organization`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
+                  onSelect={(uuid, display) => form.setFields({ organizationUuid: uuid, organizationName: display } as Partial<TFields>)}
+                  onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+                <LookupField label="Куратор" name={`${form.formUid}_curator`} value={form.fields.curatorUuid} displayValue={form.fields.curatorName} endpoint="users" displayField="username" secondaryFields={["employee.fullName"]}
+                  onSelect={(uuid, display, item) => form.setFields({ curatorUuid: uuid, curatorName: item?.employee?.fullName || display } as Partial<TFields>)}
+                  onClear={() => form.setFields({ curatorUuid: "", curatorName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+                <LookupField label="Исполнитель" name={`${form.formUid}_executor`} value={form.fields.executorUuid} displayValue={form.fields.executorName} endpoint="users" displayField="username" secondaryFields={["employee.fullName"]}
+                  onSelect={(uuid, display, item) => form.setFields({ executorUuid: uuid, executorName: item?.employee?.fullName || display } as Partial<TFields>)}
+                  onClear={() => form.setFields({ executorUuid: "", executorName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                  <FieldDate label="Дата создания" name={`${form.formUid}_createdAt`} width="200px" value={form.fields.createdAt} disabled />
+                  <Field label="Дней" name={`${form.formUid}_deadlineDays`} width="100px" value={form.fields.deadlineDays} onChange={e => handleDeadlineDaysChange(e.target.value)} disabled={form.isLoading} />
+                  <FieldDate label="Дедлайн" name={`${form.formUid}_deadline`} width="200px" value={form.fields.deadline} onChange={e => form.setField("deadline", e.target.value)} disabled={form.isLoading} />
+                </div>
+                <FieldTextarea label="Описание задачи" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="120px" rows={6} />
+              </GroupCol>
+            </div>
           </div>
-        </div>
-      )},
+        )
+      },
     ];
     if (form.isEditMode && form.fields.uuid) {
       t.push({ id: "files", label: translate("files"), component: <FilesPanel ownerType="todo" ownerUuid={form.fields.uuid} /> });

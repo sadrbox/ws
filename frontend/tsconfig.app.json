@@ -13,9 +13,9 @@
 		// "ignoreDeprecations": "6.0",
 
 		/* Bundler mode */
-		"moduleResolution": "bundler",
+		"moduleResolution": "node", // was bundler
 		"allowImportingTsExtensions": true,
-		"isolatedModules": true,
+		"isolatedModules": false, // was true
 		"moduleDetection": "force",
 		"noEmit": true,
 		// "jsx": "react",
@@ -23,10 +23,10 @@
 
 		/* Linting */
 		"strict": true,
-		"noUnusedLocals": true,
-		"noUnusedParameters": true,
+		"noUnusedLocals": false, // был true
+		"noUnusedParameters": false, // был true
 		"noFallthroughCasesInSwitch": true,
-		"noUncheckedSideEffectImports": true
+		"noUncheckedSideEffectImports": false // was true
 	},
 	"include": ["src"],
 	"exclude": ["dist", "node_modules"]

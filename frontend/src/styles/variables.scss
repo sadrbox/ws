@@ -31,6 +31,7 @@ $radius4: 4px;
 $heightFieldInput: 27px;
 
 $fontsize: 13px;
+
 .mr10 {
 	padding-right: 10px;
 }
@@ -38,6 +39,7 @@ $fontsize: 13px;
 a {
 	color: $color3;
 }
+
 .h2 {
 	font-size: 20px;
 	font-weight: 400;
@@ -49,8 +51,9 @@ a {
 
 .Group {
 	display: flex;
-	width:100%;
+	width: 100%;
 }
+
 // доступ через styles.rowGroup
 .GroupCol {
 	display: flex;
@@ -59,14 +62,17 @@ a {
 	align-items: start;
 	// flex: 1;
 }
+
 .GroupRow {
 	display: flex;
 	flex-direction: row;
 	align-items: end;
 	width: stretch;
-	justify-content: space-between;
+	// flex: 1;
+	// justify-content: space-between;
 	// flexWrap: wrap;
 }
+
 .rowGroup,
 .RowGroup {
 	/* горизонтально */
@@ -77,6 +83,7 @@ a {
 	// gap: 6px;
 	/* padding: 9px; */
 }
+
 .colGroup,
 .ColGroup {
 	/* вертикально */
@@ -91,9 +98,11 @@ a {
 .gap3 {
 	gap: 3px;
 }
+
 .gap6 {
 	gap: 6px;
 }
+
 .gap12 {
 	gap: 12px;
 }
@@ -102,10 +111,12 @@ a {
 	background: rgba($silver, 0);
 	padding: 12px;
 }
+
 .BG_MEDIUM {
 	background: rgba($silver, 0.2);
 	padding: 12px;
 }
+
 .BG_HARD {
 	background: rgba($silver, 0.3);
 	padding: 12px;
@@ -115,14 +126,15 @@ a {
 	background: linear-gradient(180deg, #ffe240, #caac00) !important;
 	// color: rgb(39, 39, 39) !important;
 }
-.primary:hover {
-}
+
+.primary:hover {}
 
 .secondary {
 	background: linear-gradient(180deg, #fff, #aaa);
 	// color: $color6 !important;
 	// border: 1px solid #7d7d64;
 }
+
 .secondary:hover {
 	// border: 1px solid #3d3400;
 }
@@ -131,6 +143,7 @@ a {
 	background-color: #dc3545 !important;
 	color: white !important;
 }
+
 .danger:hover {
 	background-color: #b02a37 !important;
 }
@@ -140,6 +153,7 @@ a {
 	border: 2px solid #007bff !important;
 	color: #007bff !important;
 }
+
 .outline:hover {
 	background-color: rgba(0, 123, 255, 0.1) !important;
 }

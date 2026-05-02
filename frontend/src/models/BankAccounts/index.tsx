@@ -112,14 +112,12 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
       id: "general", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            {form.isEditMode && (
-              <GroupRow>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-              </GroupRow>
-            )}
-          <GroupCol>
-            <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
+            <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
+            </GroupRow>
+            <GroupCol>
+              <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
               <Field label="IBAN *" name={`${form.formUid}_iban`} minWidth="339px" value={form.fields.iban} onChange={e => form.setField("iban", e.target.value)} disabled={form.isLoading} />
               <Field label="БИК" name={`${form.formUid}_bik`} minWidth="200px" value={form.fields.bik} onChange={e => form.setField("bik", e.target.value)} disabled={form.isLoading} />
               <Field label="Название банка" name={`${form.formUid}_bankName`} minWidth="339px" value={form.fields.bankName} onChange={e => form.setField("bankName", e.target.value)} disabled={form.isLoading} />
@@ -148,7 +146,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
                 allowedTypes={["organization", "counterparty"]}
                 disabled={form.isLoading}
               />
-          </GroupCol>
+            </GroupCol>
           </div>
         </div>
       ),
@@ -164,7 +162,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
       onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
-     
+
       readonly={!canWrite}
       isDirty={form.isDirty}
     />

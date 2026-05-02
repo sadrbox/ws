@@ -130,12 +130,10 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
       id: "general", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            {form.isEditMode && (
-              <GroupRow>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-              </GroupRow>
-            )}
+            <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
+            </GroupRow>
             <GroupCol>
               <FieldSelect
                 label={translate("model")}

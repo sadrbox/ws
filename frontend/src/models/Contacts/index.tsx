@@ -94,14 +94,12 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
       id: "general", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            {form.isEditMode && (
-              <GroupRow>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-              </GroupRow>
-            )}
-          <GroupCol>
-            <Field label="Значение *" name={`${form.formUid}_value`} minWidth="339px" value={form.fields.value} onChange={e => form.setField("value", e.target.value)} disabled={form.isLoading} />
+            <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
+            </GroupRow>
+            <GroupCol>
+              <Field label="Значение *" name={`${form.formUid}_value`} minWidth="339px" value={form.fields.value} onChange={e => form.setField("value", e.target.value)} disabled={form.isLoading} />
               <LookupField
                 label="Тип контакта" name={`${form.formUid}_contactTypeUuid`} minWidth="339px"
                 value={form.fields.contactTypeUuid} displayValue={form.fields.contactTypeName}
@@ -118,7 +116,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
                 typeLocked={!form.uuid && !!data?.ownerType}
                 disabled={form.isLoading}
               />
-          </GroupCol>
+            </GroupCol>
           </div>
         </div>
       ),
@@ -134,7 +132,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
       onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
-     
+
       readonly={!canWrite}
       isDirty={form.isDirty}
     />

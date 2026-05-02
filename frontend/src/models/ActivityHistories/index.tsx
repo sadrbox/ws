@@ -79,50 +79,50 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const tabs = useMemo(() => [
-    { id: "general", label: translate("general"), component: (
-      <div className={styles.Form}>
-        {form.isEditMode && (
-          <GroupRow>
-            <Field label="ID" name={`${form.formUid}_id`} width="80px" value={String(form.fields.id ?? "-")} disabled />
-            <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+    {
+      id: "general", label: translate("general"), component: (
+        <div className={styles.Form}>
+          <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
+            <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+            <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
           </GroupRow>
-        )}
-        <GroupCol>
-          <GroupRow>
-            <Field label="Тип действия" name={`${form.formUid}_actionType`} minWidth="200px" value={form.fields.actionType} disabled />
-            <Field label="Дата действия" name={`${form.formUid}_actionDate`} minWidth="200px" value={getFormatDate(form.fields.actionDate)} disabled />
-          </GroupRow>
-          <GroupRow>
-            <Field label="Тип объекта" name={`${form.formUid}_objectType`} minWidth="200px" value={form.fields.objectType} disabled />
-            <Field label="Название объекта" name={`${form.formUid}_objectName`} minWidth="200px" value={form.fields.objectName} disabled />
-            <Field label="ID объекта" name={`${form.formUid}_objectId`} minWidth="120px" value={form.fields.objectId} disabled />
-          </GroupRow>
-          <GroupRow>
-            <Field label="Организация" name={`${form.formUid}_organizationShortName`} minWidth="200px" value={form.fields.organizationShortName} disabled />
-            <Field label="БИН" name={`${form.formUid}_bin`} minWidth="150px" value={form.fields.bin} disabled />
-          </GroupRow>
-          <GroupRow>
-            <Field label="Пользователь" name={`${form.formUid}_userName`} minWidth="200px" value={form.fields.userName} disabled />
-            <Field label="Хост" name={`${form.formUid}_host`} minWidth="200px" value={form.fields.host} disabled />
-            <Field label="IP" name={`${form.formUid}_ip`} minWidth="120px" value={form.fields.ip || ""} disabled />
-            <Field label="Город" name={`${form.formUid}_city`} minWidth="120px" value={form.fields.city || ""} disabled />
-          </GroupRow>
-        </GroupCol>
+          <GroupCol>
+            <GroupRow>
+              <Field label="Тип действия" name={`${form.formUid}_actionType`} minWidth="200px" value={form.fields.actionType} disabled />
+              <Field label="Дата действия" name={`${form.formUid}_actionDate`} minWidth="200px" value={getFormatDate(form.fields.actionDate)} disabled />
+            </GroupRow>
+            <GroupRow>
+              <Field label="Тип объекта" name={`${form.formUid}_objectType`} minWidth="200px" value={form.fields.objectType} disabled />
+              <Field label="Название объекта" name={`${form.formUid}_objectName`} minWidth="200px" value={form.fields.objectName} disabled />
+              <Field label="ID объекта" name={`${form.formUid}_objectId`} minWidth="120px" value={form.fields.objectId} disabled />
+            </GroupRow>
+            <GroupRow>
+              <Field label="Организация" name={`${form.formUid}_organizationShortName`} minWidth="200px" value={form.fields.organizationShortName} disabled />
+              <Field label="БИН" name={`${form.formUid}_bin`} minWidth="150px" value={form.fields.bin} disabled />
+            </GroupRow>
+            <GroupRow>
+              <Field label="Пользователь" name={`${form.formUid}_userName`} minWidth="200px" value={form.fields.userName} disabled />
+              <Field label="Хост" name={`${form.formUid}_host`} minWidth="200px" value={form.fields.host} disabled />
+              <Field label="IP" name={`${form.formUid}_ip`} minWidth="120px" value={form.fields.ip || ""} disabled />
+              <Field label="Город" name={`${form.formUid}_city`} minWidth="120px" value={form.fields.city || ""} disabled />
+            </GroupRow>
+          </GroupCol>
 
-        {form.fields.props && (
-          <div style={{ padding: "0 0 12px 0" }}>
-            <details style={{ position: "relative", zIndex: 1 }}>
-              <summary style={{ cursor: "pointer", fontSize: "13px", color: "#666", userSelect: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                Данные (props)
-              </summary>
-              <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: "12px", background: "#f5f5f5", padding: "8px", borderRadius: "4px", marginTop: "6px" }}>
-                {JSON.stringify(form.fields.props, null, 2)}
-              </pre>
-            </details>
-          </div>
-        )}
-      </div>
-    )},
+          {form.fields.props && (
+            <div style={{ padding: "0 0 12px 0" }}>
+              <details style={{ position: "relative", zIndex: 1 }}>
+                <summary style={{ cursor: "pointer", fontSize: "13px", color: "#666", userSelect: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  Данные (props)
+                </summary>
+                <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: "12px", background: "#f5f5f5", padding: "8px", borderRadius: "4px", marginTop: "6px" }}>
+                  {JSON.stringify(form.fields.props, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
+        </div>
+      )
+    },
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid]);
 
   return (

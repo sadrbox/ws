@@ -21,8 +21,8 @@ const LIST_NAME = "CashReceiptOrdersList";
 const FORM_LABEL = "ПКО";
 
 const STATUS_OPTIONS = [
-  { value: "draft",     label: translate("statusDraft")     || "Черновик" },
-  { value: "approved",  label: translate("statusApproved")  || "Утверждён" },
+  { value: "draft", label: translate("statusDraft") || "Черновик" },
+  { value: "approved", label: translate("statusApproved") || "Утверждён" },
   { value: "cancelled", label: translate("statusCancelled") || "Отменён" },
 ];
 
@@ -104,7 +104,7 @@ const CashReceiptOrdersForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => [
     {
       id: "general",
-      label: translate("general") || "Основное",
+      label: translate("general"),
       component: (
         <div className={styles.FormBodyParts}>
           <Group align="row" gap="12px" className={styles.Form}>
@@ -153,7 +153,7 @@ const CashReceiptOrdersForm: FC<Partial<TPane>> = (paneProps) => {
               <Divider />
               <Group align="row" gap="12px" className={styles.Form}>
                 <GroupRow>
-                  <Field label="ID"   name={`${form.formUid}_id`}   width="100px" value={String(form.fields.id ?? "-")}   disabled />
+                  <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
                   <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
                 </GroupRow>
               </Group>

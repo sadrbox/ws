@@ -973,24 +973,7 @@ body {
 	}
 }
 
-.FormWrapper_test {
-	// gap: 6px;
-	// display: grid;
-	// grid-template-columns: 1fr;
-	// grid-template-rows: min-content auto;
-	// margin-top: 6px;
-	// overflow: clip;
-	// padding: 6px;
-	// gap: 6px;
-	// display: flex;
-	// container-type: size;
-	// flex-direction: column;
-	// flex: 1;
-	// min-height: 300px;
-	// overflow: auto;
-	// transition: all 0.5ms ease;
-	// border-radius: $radius2;
-}
+
 
 .FormHeader {
 	// line-height: 27px;
@@ -1112,7 +1095,21 @@ body {
 	}
 }
 
-@media (min-width: 601px) {
+@media (min-width: 601px) and (max-width: 900px) {
+	.FormWrapper {
+		flex-direction: column;
+
+		.Form {
+			flex-direction: column;
+		}
+	}
+
+	.Group {
+		flex-direction: row;
+	}
+}
+
+@media (min-width: 901px) and (max-width: 1200px) {
 	.FormWrapper {
 		flex-direction: row;
 
@@ -1122,7 +1119,7 @@ body {
 	}
 
 	.Group {
-		flex-direction: column;
+		flex-direction: row;
 	}
 }
 

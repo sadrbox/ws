@@ -10,13 +10,13 @@ export default defineConfig({
 		allowedHosts: ["sau.gidra.kz"],
 		watch: {
 			usePolling: true,
-			interval: 300,
+			// interval: 10,
 		},
 	},
 	test: {
 		globals: true,
-		environment: 'jsdom',
-		setupFiles: 'src/setupTests.ts',
+		environment: "jsdom",
+		setupFiles: "src/setupTests.ts",
 	},
 	plugins: [react()],
 	resolve: {

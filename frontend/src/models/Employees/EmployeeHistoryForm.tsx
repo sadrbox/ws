@@ -93,12 +93,10 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
       id: "general", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            {form.isEditMode && (
-              <GroupRow>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-              </GroupRow>
-            )}
+            <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
+            </GroupRow>
             <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
               <FieldDate label="Дата события *" name={`${form.formUid}_eventDate`} width="180px"
                 value={form.fields.eventDate} onChange={e => form.setField("eventDate", e.target.value)}
@@ -149,7 +147,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
       onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
       isLoading={form.isLoading}
-     
+
       readonly={!canWrite}
       isDirty={form.isDirty}
     />
