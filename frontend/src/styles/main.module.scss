@@ -1059,11 +1059,12 @@ body {
 	overflow: clip;
 	// padding: 6px;
 	overflow: auto;
+	// flex-direction: column;
 }
 
 .Form {
 	display: flex;
-	flex-direction: column;
+	// flex-direction: column;
 	gap: 12px;
 	padding: 0;
 	max-width: 600px;
@@ -1087,7 +1088,7 @@ body {
 
 @media (min-width: 501px) and (max-width: 600px) {
 	.FormWrapper {
-		flex-direction: column;
+		flex-direction: row;
 
 		.Form {
 			flex-direction: column;
@@ -1097,7 +1098,7 @@ body {
 
 @media (min-width: 601px) and (max-width: 900px) {
 	.FormWrapper {
-		flex-direction: column;
+		flex-direction: row;
 
 		.Form {
 			flex-direction: column;
@@ -1109,7 +1110,7 @@ body {
 	}
 }
 
-@media (min-width: 901px) and (max-width: 1200px) {
+@media (min-width: 901px) {
 	.FormWrapper {
 		flex-direction: row;
 

@@ -148,6 +148,10 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
               />
             </GroupCol>
           </div>
+          <GroupRow style={{ justifyContent: "left" }}>
+            <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
+            <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
+          </GroupRow>
         </div>
       ),
     },

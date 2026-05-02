@@ -25,6 +25,7 @@ import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import { Group, GroupRow } from "src/components/UI";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Типы конфига
@@ -139,26 +140,23 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
         component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
-              {fields.map((f) => (
-                <Field
-                  key={f.key}
-                  label={f.label}
-                  name={`${form.formUid}_${f.key}`}
-                  minWidth={f.minWidth ?? "339px"}
-                  value={form.fields[f.key] ?? ""}
-                  onChange={(e) => form.setField(f.key, e.target.value)}
-                  disabled={form.isLoading}
-                />
-              ))}
-              {form.isEditMode && (
-                <>
-                  <Divider />
-                  <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-                    <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                    <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-                  </div>
-                </>
-              )}
+              <Group>
+                {fields.map((f) => (
+                  <Field
+                    key={f.key}
+                    label={f.label}
+                    name={`${form.formUid}_${f.key}`}
+                    minWidth={f.minWidth ?? "339px"}
+                    value={form.fields[f.key] ?? ""}
+                    onChange={(e) => form.setField(f.key, e.target.value)}
+                    disabled={form.isLoading}
+                  />
+                ))}
+              </Group>
+              <GroupRow style={{ justifyContent: "left" }}>
+                <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
+                <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
+              </GroupRow>
             </div>
           </div>
         ),
@@ -174,7 +172,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
         onClose={form.handleClose}
         onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
         isLoading={form.isLoading}
-       
+
         readonly={!access.canWrite}
         isDirty={form.isDirty}
       />

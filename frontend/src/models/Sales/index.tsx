@@ -218,32 +218,30 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 <Field label="Комментарий" name={`${form.formUid}_desc`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
               </Group>
             </GroupCol>
-
-          </div>
-          {/* ── Правая колонка: итоги ── */}
-          <div className={styles.Form}>
-            <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
-              {([
-                { label: "Без НДС", value: form.fields.amountWithoutVat },
-                { label: "НДС", value: form.fields.vatAmount },
-                { label: "Скидка", value: form.fields.discountAmount },
-              ] as const).map(({ label, value }) => (
-                <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
-                  <span>{label}</span>
-                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{value || "0"}</span>
+            <Group>
+              <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
+                {([
+                  { label: "Без НДС", value: form.fields.amountWithoutVat },
+                  { label: "НДС", value: form.fields.vatAmount },
+                  { label: "Скидка", value: form.fields.discountAmount },
+                ] as const).map(({ label, value }) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
+                    <span>{label}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{value || "0"}</span>
+                  </div>
+                ))}
+                <div style={{ borderTop: "1px solid #e5e7eb", margin: "2px 0 0" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
+                  <span>Итого</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
                 </div>
-              ))}
-              <div style={{ borderTop: "1px solid #e5e7eb", margin: "2px 0 0" }} />
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
-                <span>Итого</span>
-                <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
               </div>
-            </div>
+            </Group>
+            <GroupRow style={{ justifyContent: "left" }}>
+              <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
+              <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
+            </GroupRow>
           </div>
-          <GroupRow style={{ justifyContent: "left" }}>
-            <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-            <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-          </GroupRow>
         </div>
       )
     },

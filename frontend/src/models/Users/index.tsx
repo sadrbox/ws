@@ -92,6 +92,10 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
                 </div>
               </div>
             </div>
+            <GroupRow style={{ justifyContent: "left" }}>
+              <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
+              <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
+            </GroupRow>
           </div>
         )
       },

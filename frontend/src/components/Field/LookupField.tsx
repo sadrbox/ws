@@ -8,6 +8,7 @@ import SelectPaneWrapper from "./SelectPaneWrapper";
 import { translate } from "src/i18";
 import type { FieldVariant } from "./index";
 
+import { imgActions } from "./index"
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -189,7 +190,7 @@ const LookupField: FC<LookupFieldProps> = ({
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
       if (wrapperRef.current && !wrapperRef.current.contains(target) &&
-          (!dropdownRef.current || !dropdownRef.current.contains(target))) {
+        (!dropdownRef.current || !dropdownRef.current.contains(target))) {
         setIsDropdownOpen(false);
         // Если значение не выбрано — восстановить displayValue
         if (!value) {

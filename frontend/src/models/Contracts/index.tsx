@@ -114,10 +114,6 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
         id: "general", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
-              <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
-              </GroupRow>
               <GroupCol>
                 <Field label="Наименование *" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
                 <Field label="Номер договора" name={`${form.formUid}_contractNumber`} minWidth="339px" value={form.fields.contractNumber} onChange={e => form.setField("contractNumber", e.target.value)} disabled={form.isLoading} />
@@ -127,6 +123,10 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
                 <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} minWidth="339px" />
               </GroupCol>
             </div>
+            <GroupRow style={{ justifyContent: "left" }}>
+              <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
+              <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
+            </GroupRow>
           </div>
         ),
       },

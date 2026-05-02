@@ -103,16 +103,15 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
         id: "tab0", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
-              <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-              </GroupRow>
               <GroupCol>
                 <Field label="Наименование" name={`${form.formUid}_shortName`} value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
                 <Field label="Полное наименование" name={`${form.formUid}_displayName`} value={form.fields.displayName} onChange={e => form.setField("displayName", e.target.value)} disabled={form.isLoading} />
                 <Field label="БИН / ИНН *" name={`${form.formUid}_bin`} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} />
               </GroupCol>
-
+              <GroupRow style={{ justifyContent: "left" }}>
+                <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
+                <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
+              </GroupRow>
             </div>
           </div>
         ),

@@ -420,7 +420,7 @@ export const FieldString: FC<TypeFieldStringProps> = ({ label, name }) => {
   const actions: TypeFieldActions = [
     { type: "clear", onClick: handleClear },
     { type: "list", onClick: handleList },
-    { type: "open", onClick: () => {} },
+    { type: "open", onClick: () => { } },
   ];
   return (
     <FieldGroup
@@ -488,6 +488,7 @@ export const FieldAutocomplete: FC<TypeFieldAutocompleteProps> = ({ label, name,
   );
 };
 
+// вероятно не используется, в Table есть свой компонент FieldFastSearch, который работает с глобальным поиском таблицы. Но если нужно универсальное поле для быстрого поиска — можно юзать и это.
 export const FieldFastSearch: FC = () => {
   const { search, filtering, columns } = useTableContext();
 
@@ -573,7 +574,7 @@ export const FieldFastSearch: FC = () => {
             aria-label="Очистить поиск"
           >
             {/* Замените на вашу иконку (например, SVG или Heroicons) */}
-            <span style={{ fontSize: '20px', lineHeight: 1 }}>×</span>
+            {/* <span style={{ fontSize: '20px', lineHeight: 1 }}>×</span> */}
             {/* или: <XMarkIcon width={18} height={18} /> */}
           </button>
         </div>
@@ -672,7 +673,7 @@ export const FieldDateRange: FC = () => {
           title="Сбросить диапазон"
           aria-label="Сбросить диапазон дат"
         >
-          ×
+          ✕
         </button>
       )}
     </div>

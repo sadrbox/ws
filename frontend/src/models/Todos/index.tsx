@@ -93,10 +93,6 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
         id: "general", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
-              <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
-              </GroupRow>
               <GroupCol>
                 <FieldSelect label="Статус" name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} style={{ minWidth: 200 }} />
                 <LookupField label="Организация" name={`${form.formUid}_organization`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
@@ -116,6 +112,10 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                 <FieldTextarea label="Описание задачи" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="120px" rows={6} />
               </GroupCol>
             </div>
+            <GroupRow style={{ justifyContent: "left" }}>
+              <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
+              <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
+            </GroupRow>
           </div>
         )
       },
