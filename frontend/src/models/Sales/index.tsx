@@ -17,6 +17,7 @@ import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import { getFormatNumerical } from "src/components/Table/services";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
@@ -30,19 +31,19 @@ const STATUS_OPTIONS = [
 
 interface TFields {
   id?: number; uuid?: string;
-  documentNumber: string; date: string; description: string; amount: string; status: string; posted: boolean;
+  date: string; description: string; amount: number; status: string; posted: boolean;
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
   warehouseUuid: string; warehouseName: string;
-  vatAmount: string; discountAmount: string; amountWithoutVat: string;
+  vatAmount: number; discountAmount: number; amountWithoutVat: number;
 }
 
 const DEFAULT_FIELDS: TFields = {
-  documentNumber: "", date: "", description: "", amount: "", status: "draft", posted: false,
+  date: "", description: "", amount: 0, status: "draft", posted: false,
   organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "", contractUuid: "", contractName: "",
   warehouseUuid: "", warehouseName: "",
-  vatAmount: "0", discountAmount: "0", amountWithoutVat: "0",
+  vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
 };
 
 const SalesForm: FC<Partial<TPane>> = (paneProps) => {
@@ -93,7 +94,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      documentNumber: d.documentNumber ?? "", date: d.date?.slice(0, 10) ?? "",
+      date: d.date?.slice(0, 10) ?? "",
       description: d.description ?? "", amount: d.amount != null ? String(d.amount) : "",
       status: d.status ?? "draft", posted: d.posted === true,
       organizationUuid: d.organizationUuid ?? "",
@@ -109,16 +110,17 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       amountWithoutVat: d.amountWithoutVat != null ? String(d.amountWithoutVat) : "0",
     }),
     buildPayload: (fd) => ({
-      documentNumber: fd.documentNumber?.trim() || null, date: fd.date || null,
-      description: fd.description?.trim() || null, amount: fd.amount ? parseFloat(fd.amount) : null,
+      date: fd.date || null,
+      description: fd.description?.trim() || null,
+      amount: fd.amount ? fd.amount : null,
       status: fd.status || "draft", posted: fd.posted === true,
       organizationUuid: fd.organizationUuid || null,
       counterpartyUuid: fd.counterpartyUuid || null,
       contractUuid: fd.contractUuid || null,
       warehouseUuid: fd.warehouseUuid || null,
-      vatAmount: fd.vatAmount ? parseFloat(fd.vatAmount) : 0,
-      discountAmount: fd.discountAmount ? parseFloat(fd.discountAmount) : 0,
-      amountWithoutVat: fd.amountWithoutVat ? parseFloat(fd.amountWithoutVat) : 0,
+      vatAmount: fd.vatAmount ? fd.vatAmount : 0,
+      discountAmount: fd.discountAmount ? fd.discountAmount : 0,
+      amountWithoutVat: fd.amountWithoutVat ? fd.amountWithoutVat : 0,
     }),
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
     afterLoad: invalidateSubTables,
@@ -128,15 +130,16 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const saleItems = form.useTable("saleItems");
 
   const handleTotalChange = useCallback((total: number, items?: any[]) => {
-    form.setField("amount", String(total));
+    // console.log(Number(total), total);
+    form.setField("amount", Number(total));
     if (items) {
       const vatSum = items.reduce((s, r) => s + (Number(r.vatAmount) || 0), 0);
       const discSum = items.reduce((s, r) => s + (Number(r.discountAmount) || 0), 0);
       const amtWithoutVat = Math.round((total - vatSum) * 100) / 100;
       form.setFields({
-        vatAmount: String(Math.round(vatSum * 100) / 100),
-        discountAmount: String(Math.round(discSum * 100) / 100),
-        amountWithoutVat: String(amtWithoutVat),
+        vatAmount: Number(Math.round(vatSum * 100) / 100),
+        discountAmount: Number(Math.round(discSum * 100) / 100),
+        amountWithoutVat: Number(amtWithoutVat),
       } as Partial<TFields>);
     }
   }, [form.setField, form.setFields]);
@@ -237,10 +240,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 </div>
               </div>
             </Group>
-            <GroupRow style={{ justifyContent: "left" }}>
+            {/* <GroupRow style={{ justifyContent: "left" }}>
               <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
               <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-            </GroupRow>
+            </GroupRow> */}
           </div>
         </div>
       )
@@ -281,3 +284,4 @@ const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
 SalesList.displayName = "SalesList";
 
 export { SalesList, SalesForm, SaleItemsTable };
+

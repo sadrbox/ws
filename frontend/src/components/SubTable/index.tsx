@@ -665,6 +665,7 @@ const SubTable: FC<SubTableProps> = ({
       ? rows.filter((r: TDataItem) => (r as any)._pendingAction !== "delete")
       : rows;
 
+
     // 2. Фильтруем по владельцу (parentKey) — защитный слой на фронтенде,
     //    даже если сервер вернул лишние строки или данные из кеша
     if (parentUuid && parentKey) {
@@ -697,6 +698,7 @@ const SubTable: FC<SubTableProps> = ({
     });
   }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey]);
 
+  // console.log(displayRows)
   // ── openModelForm ─────────────────────────────────────────────────────
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     if (openFormFor) {
@@ -718,43 +720,43 @@ const SubTable: FC<SubTableProps> = ({
     // Проверяем наличие ошибки для этой ячейки
     const rowId = getRowId(row);
     const errorMsg = cellErrors[rowId]?.[col.identifier];
-    if (errorMsg) {
-      // Оборачиваем ячейку в div с красной рамкой и tooltip
-      return (
-        <div
-          style={{
-            border: "1.5px solid #e53935",
-            borderRadius: 3,
-            padding: "0 2px",
-            margin: "-1px -2px",
-            position: "relative",
-            background: "rgba(229, 57, 53, 0.04)",
-          }}
-          title={errorMsg}
-        >
-          {content}
-          <div style={{
-            position: "absolute",
-            bottom: "100%",
-            left: 0,
-            fontSize: 11,
-            lineHeight: "14px",
-            color: "#e53935",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            padding: "1px 4px",
-            background: "#fff3f3",
-            borderRadius: "3px 3px 0 0",
-            border: "1px solid #e53935",
-            borderBottom: "none",
-            zIndex: 10,
-            maxWidth: 250,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}>{errorMsg}</div>
-        </div>
-      );
-    }
+    // if (errorMsg) {
+    //   // Оборачиваем ячейку в div с красной рамкой и tooltip
+    //   return (
+    //     <div
+    //       style={{
+    //         border: "1px solid #e53935",
+    //         borderRadius: 3,
+    //         padding: "0 2px",
+    //         margin: "-1px -2px",
+    //         position: "relative",
+    //         background: "rgba(229, 57, 53, 0.04)",
+    //       }}
+    //       title={errorMsg}
+    //     >
+    //       {content}
+    //       <div style={{
+    //         position: "absolute",
+    //         bottom: "100%",
+    //         left: 0,
+    //         fontSize: 11,
+    //         lineHeight: "14px",
+    //         color: "#e53935",
+    //         whiteSpace: "nowrap",
+    //         pointerEvents: "none",
+    //         padding: "1px 4px",
+    //         background: "#fff3f3",
+    //         borderRadius: "3px 3px 0 0",
+    //         border: "1px solid #e53935",
+    //         borderBottom: "none",
+    //         zIndex: 10,
+    //         maxWidth: 250,
+    //         overflow: "hidden",
+    //         textOverflow: "ellipsis",
+    //       }}>{errorMsg}</div>
+    //     </div>
+    //   );
+    // }
 
     return content;
   }, [renderCellProp, ctx, deferRemoteChanges, cellErrors]);
@@ -851,7 +853,7 @@ const SubTable: FC<SubTableProps> = ({
     error,
     hasNextPage,
     isFetchingNextPage,
-    pagination: { page: 1, limit: adaptiveLimit, onPageChange: () => {}, onLimitChange: () => {} },
+    pagination: { page: 1, limit: adaptiveLimit, onPageChange: () => { }, onLimitChange: () => { } },
     sorting: { sort, onSortChange: handleSortChange },
     filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
     search: { value: search, onChange: handleSearch },

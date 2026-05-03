@@ -8,10 +8,10 @@ export default defineConfig({
 	server: {
 		// host: true,
 		allowedHosts: ["sau.gidra.kz"],
-		watch: {
-			usePolling: true,
-			// interval: 10,
-		},
+		// watch: {
+		// 	usePolling: true,
+		// 	// interval: 10,
+		// },
 	},
 	test: {
 		globals: true,

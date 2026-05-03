@@ -27,7 +27,7 @@ import { TodosList } from 'src/models/Todos';
 import { NotificationsList } from 'src/models/Notifications';
 import { WarehousesList } from 'src/models/Warehouses';
 import { SalesList } from 'src/models/Sales';
-import { SalesBoardForm } from 'src/models/Sales/SalesBoardForm';
+// import { SalesBoardForm } from 'src/models/Sales/SalesBoardForm';
 import { PurchasesList } from 'src/models/Purchases';
 import { OutgoingInvoicesList } from 'src/models/OutgoingInvoices';
 import { IncomingInvoicesList } from 'src/models/IncomingInvoices';
@@ -177,7 +177,7 @@ export const Panes: FC = () => {
   return (
     <div className={styles.Panes}>
       {panes.map(p => <PaneItem key={`Panes-${p.uniqId}`} pane={p} isActive={p.uniqId === activePane} onClose={() => requestClose(p.uniqId)} />
-        )}
+      )}
     </div>
   )
 }
@@ -601,7 +601,6 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>Продажи</h3>
             <ul className={styles.NavList}>
-              {can("Sale") && <li onClick={() => addPane({ component: SalesBoardForm, label: 'Рабочий стол продаж' })}>Рабочий стол продаж</li>}
               {can("Sale") && <li onClick={() => addPane({ component: SalesList })}>Реализация товара и услуг</li>}
               {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList })}>Электронная счет-фактура (исходящие)</li>}
               {can("PaymentInvoice") && <li onClick={() => addPane({ component: PaymentInvoicesList })}>Счет на оплату</li>}

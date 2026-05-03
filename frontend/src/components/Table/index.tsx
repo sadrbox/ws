@@ -1170,12 +1170,16 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         {columns.map(col => {
           // Кастомный рендер ячейки (переводы, спецзначения) — работает в любом режиме
           const currentRenderCell = renderCellRef?.current;
+          const align = getTextAlignByColumnType(col);
           if (currentRenderCell) {
             const customCell = currentRenderCell(row, col);
             if (customCell !== undefined) {
               return (
                 <td key={col.identifier}>
-                  <div className={styles.TableBodyCell} style={{ willChange: 'contents', transform: 'translate3d(0, 0, 0)' }}>
+                  <div className={styles.TableBodyCell} style={{
+                    ...align,
+                    willChange: 'contents', transform: 'translate3d(0, 0, 0)'
+                  }}>
                     {customCell}
                   </div>
                 </td>
@@ -1183,7 +1187,6 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
             }
           }
           const value = getFormatColumnValue(row, col);
-          const align = getTextAlignByColumnType(col);
           return (
             <td key={col.identifier}>
               <div
@@ -1200,17 +1203,19 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           );
         })}
       </tr>
-      {isExpanded && renderExpandedRow && (
-        <tr>
-          <td
-            colSpan={visibleColCount}
-            style={{ padding: 0, background: 'var(--bg-secondary, #f8f9fa)', borderBottom: '2px solid var(--border-color, #e0e0e0)' }}
-          >
-            {renderExpandedRow(row)}
-          </td>
-        </tr>
-      )}
-    </Fragment>
+      {
+        isExpanded && renderExpandedRow && (
+          <tr>
+            <td
+              colSpan={visibleColCount}
+              style={{ padding: 0, background: 'var(--bg-secondary, #f8f9fa)', borderBottom: '2px solid var(--border-color, #e0e0e0)' }}
+            >
+              {renderExpandedRow(row)}
+            </td>
+          </tr>
+        )
+      }
+    </Fragment >
   );
 });
 

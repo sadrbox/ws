@@ -21,6 +21,7 @@ import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
+import { getFormatNumerical } from "src/components/Table/services";
 
 const MODEL_ENDPOINT = "employees";
 const LIST_NAME = "EmployeesList";
@@ -232,7 +233,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
       return <span>{(row.position as any)?.shortName ?? ""}</span>;
     }
     if (col.identifier === "salary") {
-      if (ctx.inlineEditing) return <FieldNumber name={`hist_salary_${row.id}`} value={row.salary != null ? String(Number(row.salary)) : ""} onChange={e => ctx.handleInlineChange(row, "salary", e.target.value)} disabled={ctx.disabled} step="0.1" textAlign="right" width="100%" actions={[]} variant="table" />;
+      if (ctx.inlineEditing) return <FieldNumber name={`hist_salary_${row.id}`} value={row.salary != null ? Number(row.salary) : 0} onChange={e => ctx.handleInlineChange(row, "salary", e.target.value)} disabled={ctx.disabled} step="0.1" textAlign="right" width="100%" actions={[]} variant="table" />;
       return <span>{row.salary != null ? String(Number(row.salary)) : ""}</span>;
     }
     return undefined;

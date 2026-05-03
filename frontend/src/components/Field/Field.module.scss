@@ -125,6 +125,7 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 			overflow: hidden;
+			padding-right: 6px;
 
 			&:focus {
 				border: none;
@@ -351,4 +352,17 @@
 	&:focus-within {
 		border: 1px solid $color3;
 	}
+}
+
+/* Chrome, Safari, Edge */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	// margin: 0;
+}
+
+/* Firefox */
+input[type="number"] {
+	-moz-appearance: textfield;
+	appearance: textfield;
 }

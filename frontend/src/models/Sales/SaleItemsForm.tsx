@@ -12,26 +12,27 @@ import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { useAppContext } from "src/app";
 import useUID from "src/hooks/useUID";
 import { recalcSaleItemAmounts, withSaleItemRecalc } from "./saleItemDraft";
+import { getFormatNumerical } from "src/components/Table/services";
 
 const MODEL_ENDPOINT = "saleitems";
 
 interface TFields {
   id?: number;
   uuid?: string;
-  lineNumber: string;
+  lineNumber: number;
   productUuid: string;
   productName: string;
-  quantity: string;
-  price: string;
-  amount: string;
+  quantity: number;
+  price: number;
+  amount: number;
   unitOfMeasureUuid: string;
   unitOfMeasureName: string;
   vatRateUuid: string;
   vatRateName: string;
-  vatRate: string;
-  vatAmount: string;
-  discountPercent: string;
-  discountAmount: string;
+  vatRate: number;
+  vatAmount: number;
+  discountPercent: number;
+  discountAmount: number;
   saleUuid: string;
 }
 
@@ -40,20 +41,20 @@ interface EmbeddedSaleItemConfig {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  lineNumber: "",
+  lineNumber: 0,
   productUuid: "",
   productName: "",
-  quantity: "",
-  price: "",
-  amount: "0",
+  quantity: 0,
+  price: 0,
+  amount: 0,
   unitOfMeasureUuid: "",
   unitOfMeasureName: "",
   vatRateUuid: "",
   vatRateName: "",
-  vatRate: "12",
-  vatAmount: "0",
-  discountPercent: "0",
-  discountAmount: "0",
+  vatRate: 0,
+  vatAmount: 0,
+  discountPercent: 0,
+  discountAmount: 0,
   saleUuid: "",
 };
 
@@ -63,27 +64,27 @@ function mapDataToFields(data: Record<string, any> | undefined, saleUuid?: strin
     ...DEFAULT_FIELDS,
     id: data.id,
     uuid: data.uuid,
-    lineNumber: data.lineNumber != null ? String(data.lineNumber) : "",
+    lineNumber: data.lineNumber != null ? Number(data.lineNumber) : 0,
     productUuid: data.productUuid ?? "",
     productName: data.product?.shortName ?? data.productName ?? "",
-    quantity: data.quantity != null ? String(Number(data.quantity)) : "",
-    price: data.price != null ? String(Number(data.price)) : "",
-    amount: data.amount != null ? String(Number(data.amount)) : "0",
+    quantity: data.quantity != null ? Number(data.quantity) : 0,
+    price: data.price != null ? Number(data.price) : 0,
+    amount: data.amount != null ? Number(data.amount) : 0,
     unitOfMeasureUuid: data.unitOfMeasureUuid ?? "",
     unitOfMeasureName: data.unitOfMeasure?.shortName ?? data.unitOfMeasureName ?? "",
     vatRateUuid: data.vatRateUuid ?? "",
     vatRateName: data.vatRateRef?.shortName ?? data.vatRateName ?? "",
-    vatRate: data.vatRate != null ? String(Number(data.vatRate)) : "12",
-    vatAmount: data.vatAmount != null ? String(Number(data.vatAmount)) : "0",
-    discountPercent: data.discountPercent != null ? String(Number(data.discountPercent)) : "0",
-    discountAmount: data.discountAmount != null ? String(Number(data.discountAmount)) : "0",
+    vatRate: data.vatRate != null ? Number(data.vatRate) : 0,
+    vatAmount: data.vatAmount != null ? Number(data.vatAmount) : 0,
+    discountPercent: data.discountPercent != null ? Number(data.discountPercent) : 0,
+    discountAmount: data.discountAmount != null ? Number(data.discountAmount) : 0,
     saleUuid: data.saleUuid ?? saleUuid ?? "",
   };
 }
 
 function fieldsToDraftRow(fields: TFields): Record<string, unknown> {
   return {
-    lineNumber: fields.lineNumber ? parseInt(fields.lineNumber, 10) : undefined,
+    lineNumber: fields.lineNumber ? fields.lineNumber : undefined,
     productUuid: fields.productUuid || null,
     product: fields.productUuid ? { uuid: fields.productUuid, shortName: fields.productName } : null,
     quantity: fields.quantity,
@@ -93,7 +94,7 @@ function fieldsToDraftRow(fields: TFields): Record<string, unknown> {
     unitOfMeasure: fields.unitOfMeasureUuid ? { uuid: fields.unitOfMeasureUuid, shortName: fields.unitOfMeasureName } : null,
     vatRateUuid: fields.vatRateUuid || null,
     vatRateRef: fields.vatRateUuid
-      ? { uuid: fields.vatRateUuid, shortName: fields.vatRateName, rate: parseFloat(fields.vatRate) || 0 }
+      ? { uuid: fields.vatRateUuid, shortName: fields.vatRateName, rate: fields.vatRate || 0 }
       : null,
     vatRate: fields.vatRate,
     vatAmount: fields.vatAmount,
@@ -204,7 +205,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
             { key: "rate", label: "%" },
           ]}
           onSelect={(uuid, display, item) => {
-            const rate = item?.rate != null ? String(Number(item.rate)) : fields.vatRate;
+            const rate = item?.rate != null ? Number(item.rate) : Number(fields.vatRate);
             setFields({
               vatRateUuid: uuid,
               vatRateName: display,
@@ -216,7 +217,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
             setFields({
               vatRateUuid: "",
               vatRateName: "",
-              vatRate: "0",
+              vatRate: 0,
               ...recalcSaleItemAmounts(fields.quantity, fields.price, "0", fields.discountPercent),
             });
           }}
@@ -320,13 +321,13 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
       return {
         saleUuid: fd.saleUuid,
         productUuid: fd.productUuid || null,
-        quantity: fd.quantity ? parseFloat(fd.quantity) : 0,
-        price: fd.price ? parseFloat(fd.price) : 0,
-        lineNumber: fd.lineNumber ? parseInt(fd.lineNumber, 10) : undefined,
+        quantity: fd.quantity ? fd.quantity : 0,
+        price: fd.price ? fd.price : 0,
+        lineNumber: fd.lineNumber ? fd.lineNumber : undefined,
         unitOfMeasureUuid: fd.unitOfMeasureUuid || null,
         vatRateUuid: fd.vatRateUuid || null,
-        vatRate: fd.vatRate ? parseFloat(fd.vatRate) : 0,
-        discountPercent: fd.discountPercent ? parseFloat(fd.discountPercent) : 0,
+        vatRate: fd.vatRate ? fd.vatRate : 0,
+        discountPercent: fd.discountPercent ? fd.discountPercent : 0,
       };
     },
 

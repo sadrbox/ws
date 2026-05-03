@@ -11,6 +11,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
+import { getFormatNumerical } from "src/components/Table/services";
 
 const MODEL_ENDPOINT = "employee-histories";
 
@@ -126,7 +127,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
               onClear={() => form.setFields({ positionUuid: "", positionName: "" } as any)}
               disabled={form.isLoading} />
             <FieldNumber label="Оклад" name={`${form.formUid}_salary`} width="180px"
-              value={form.fields.salary} onChange={e => form.setField("salary", e.target.value)}
+              value={Number(form.fields.salary)} onChange={e => form.setField("salary", e.target.value)}
               disabled={form.isLoading} step="0.1" textAlign="right" />
           </div>
           <GroupRow style={{ justifyContent: "left" }}>

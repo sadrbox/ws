@@ -11,6 +11,7 @@ import columnsJson from "./saleItemsColumns.json";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { withSaleItemRecalc } from "./saleItemDraft";
+import { getFormatNumerical } from "src/components/Table/services";
 
 const MODEL_ENDPOINT = "saleitems";
 const COMPONENT_NAME = "SaleItemsList_part";
@@ -30,6 +31,7 @@ interface SaleItemsTableProps {
 const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, onTotalChange, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
+
 
   // ── Пересчёт общей суммы при изменении строк ──────────────────────────
   const handleItemsChange = useCallback((items: TDataItem[]) => {
@@ -115,16 +117,17 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
         return (
           <FieldNumber
             name={`saleitem_qty_${row.id}`}
-            value={row.quantity != null ? String(Number(row.quantity)) : ""}
+            value={row.quantity != null ? String(row.quantity) : "0"}
             onChange={e => {
               if (ctx.deferRemoteChanges) {
+                // console.log(e.target.v)
                 ctx.updateLocalRow(row, withSaleItemRecalc(row as any, { quantity: e.target.value }));
                 return;
               }
               ctx.handleInlineChange(row, "quantity", e.target.value);
             }}
             disabled={ctx.disabled}
-            step="0.1"
+            // step="0.1"
             textAlign="right"
             width="100%"
             actions={[]}
@@ -132,14 +135,14 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
           />
         );
       }
-      return <span style={{ textAlign: "right", display: "block" }}>{row.quantity != null ? String(Number(row.quantity)) : ""}</span>;
+      return <span>{row.quantity != null ? getFormatNumerical(row.quantity as number) : ""}</span>;
     }
     if (col.identifier === "price") {
       if (ctx.inlineEditing) {
         return (
           <FieldNumber
             name={`saleitem_price_${row.id}`}
-            value={row.price != null ? String(Number(row.price)) : ""}
+            value={row.price != null ? String(row.price) : "0"}
             onChange={e => {
               if (ctx.deferRemoteChanges) {
                 ctx.updateLocalRow(row, withSaleItemRecalc(row as any, { price: e.target.value }));
@@ -156,7 +159,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
           />
         );
       }
-      return <span style={{ textAlign: "right", display: "block" }}>{row.price != null ? String(Number(row.price)) : ""}</span>;
+      return <span>{row.price != null ? getFormatNumerical(row.price as number) : ""}</span>;
     }
     if (col.identifier === "unitOfMeasure.shortName") {
       if (ctx.inlineEditing) {
@@ -187,7 +190,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
           />
         );
       }
-      return <span style={{ textAlign: "center", display: "block" }}>{(row.unitOfMeasure as any)?.shortName ?? ""}</span>;
+      return <span>{(row.unitOfMeasure as any)?.shortName ?? ""}</span>;
     }
     if (col.identifier === "vatRateRef.shortName") {
       if (ctx.inlineEditing) {
@@ -240,14 +243,14 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
           />
         );
       }
-      return <span style={{ textAlign: "center", display: "block" }}>{(row.vatRateRef as any)?.shortName ?? ""}</span>;
+      return <span>{(row.vatRateRef as any)?.shortName ?? ""}</span>;
     }
     if (col.identifier === "discountPercent") {
       if (ctx.inlineEditing) {
         return (
           <FieldNumber
             name={`saleitem_discount_${row.id}`}
-            value={row.discountPercent != null ? String(Number(row.discountPercent)) : "0"}
+            value={row.discountPercent != null ? String(row.discountPercent) : "0"}
             onChange={e => {
               if (ctx.deferRemoteChanges) {
                 ctx.updateLocalRow(row, withSaleItemRecalc(row as any, { discountPercent: e.target.value }));
@@ -264,13 +267,13 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
           />
         );
       }
-      return <span style={{ textAlign: "right", display: "block" }}>{row.discountPercent != null ? String(Number(row.discountPercent)) : "0"}</span>;
+      return <span>{row.discountPercent != null ? getFormatNumerical(row.discountPercent as number) : "0"}</span>;
     }
     if (col.identifier === "vatAmount") {
-      return <span style={{ textAlign: "right", display: "block" }}>{row.vatAmount != null ? String(Number(row.vatAmount)) : "0"}</span>;
+      return <span>{row.vatAmount != null ? getFormatNumerical(row.vatAmount as number) : "0"}</span>;
     }
     if (col.identifier === "discountAmount") {
-      return <span style={{ textAlign: "right", display: "block" }}>{row.discountAmount != null ? String(Number(row.discountAmount)) : "0"}</span>;
+      return <span>{row.discountAmount != null ? getFormatNumerical(row.discountAmount as number) : "0"}</span>;
     }
     return undefined;
   }, []);
@@ -320,6 +323,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
     vatAmount: 0,
     amount: 0,
   }), []);
+
 
   return (
     <SubTable

@@ -7,6 +7,7 @@ import { Group } from 'src/components/UI'
 import useUID from 'src/hooks/useUID'
 import { useDebounceValue } from 'src/hooks/useDebounceValue'
 
+import { getFormatNumerical } from 'src/components/Table/services.ts'
 // type TypeFieldStringProps = {
 //   label: string
 //   name: string
@@ -706,7 +707,7 @@ interface TypeFieldNumberProps {
 export const FieldNumber: FC<TypeFieldNumberProps> = ({
   label,
   name,
-  value = '',
+  value,
   onChange,
   width,
   maxWidth,
@@ -730,8 +731,8 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   // Гарантируем, что value для input[type=number] является числовой строкой
   const safeValue = (() => {
     if (value === '' || value === undefined || value === null) return '';
-    if (!isNaN(Number(value))) return String(value);
-    return ''; // Невалидное значение → пустая строка
+    if (!isNaN(Number(value))) return String(getFormatNumerical(Number(value)));
+    return ""; // Невалидное значение → пустая строка
   })();
 
   const handleClear = () => {
@@ -775,7 +776,9 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
       <div className={styles.FieldInputWrapper}>
         <input
           ref={inputRef}
-          type="number"
+          type="tex"
+          // inputMode="numeric"
+          // inputMode="decimal"
           id={name}
           name={name}
           value={safeValue}

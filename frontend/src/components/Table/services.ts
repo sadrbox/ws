@@ -114,8 +114,14 @@ export function getModelColumns(
 		try {
 			const cached: TColumn[] = JSON.parse(storageColumns);
 			// Проверяем актуальность кэша: набор identifier + type должен совпадать
-			const initSig = defaults.map((c) => `${c.identifier}:${c.type}`).sort().join(",");
-			const cachedSig = cached.map((c) => `${c.identifier}:${c.type}`).sort().join(",");
+			const initSig = defaults
+				.map((c) => `${c.identifier}:${c.type}`)
+				.sort()
+				.join(",");
+			const cachedSig = cached
+				.map((c) => `${c.identifier}:${c.type}`)
+				.sort()
+				.join(",");
 			if (initSig === cachedSig) {
 				columns = cached;
 			} else {
@@ -201,34 +207,38 @@ export function getFormatColumnValue(
 ): string | number {
 	// Разрешаем значение: сначала пробуем прямой ключ, затем точечную нотацию
 	let rawValue = row[column.identifier as keyof TDataItem];
+	// Если значение null или undefined — пустая строка
+	if (rawValue == null) return "";
 
 	if (rawValue == null && column.identifier.includes(".")) {
 		const parts = column.identifier.split(".");
 		let current: any = row;
 		for (const part of parts) {
-			if (current == null || typeof current !== "object") { current = undefined; break; }
+			if (current == null || typeof current !== "object") {
+				current = undefined;
+				break;
+			}
 			current = current[part];
 		}
 		rawValue = current;
 	}
 
-	// Если значение null или undefined — пустая строка
-	if (rawValue == null) return "";
-
 	if (column.identifier === "id" && column.type === "number") {
-		return getFormatNumericalID(+row.id);
+		return getFormatNumericalID(Number(row.id));
+	} else if (column.identifier === "lineNumber" && column.type === "number") {
+		return Math.trunc(Number(row.lineNumber));
 	} else if (
 		column.identifier !== "id" &&
 		column.identifier !== "position" &&
+		column.identifier !== "lineNumber" &&
 		column.type === "number"
 	) {
-		return getFormatNumerical(+(rawValue as number));
+		return getFormatNumerical(rawValue as number);
 	} else if (column.identifier === "position" && column.type === "position") {
 		return rawValue + "";
 	} else if (column.type === "date") {
 		return getFormatDateOnly(rawValue as string);
 	} else if (column.type === "string") {
-		// Для dot-notation rawValue уже разрешён выше — просто возвращаем
 		return rawValue != null ? rawValue + "" : "";
 	} else if (column.type === "boolean") {
 		return rawValue ? "✔" : "";
@@ -246,7 +256,8 @@ export function getFormatNumericalID(n: number): string {
 export function getFormatNumerical(n: number): string {
 	const formater = new Intl.NumberFormat("ru-RU", {
 		style: "decimal",
-		minimumFractionDigits: 1,
+		// minimumFractionDigits: 9,
+		maximumFractionDigits: 9,
 	});
 	return formater.format(n);
 }
