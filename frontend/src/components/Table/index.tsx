@@ -313,6 +313,63 @@ const Table: FC<TableProps> = memo((props) => {
   const [dateRangeModalAction, setDateRangeModalAction] = useState<TypeFormAction>('');
   const [visibleFastSearch, setVisibleFastSearch] = useState(false);
 
+  // ── Авто-активация первой строки и клавиатурная навигация (режим выбора) ──
+  // Stable refs для использования в эффектах без лишних пересозданий
+  const activeRowRef = useRef(activeRow);
+  activeRowRef.current = activeRow;
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const onSelectItemRef = useRef(onSelectItem);
+  onSelectItemRef.current = onSelectItem;
+
+  // Автоматически активировать первую строку когда есть onSelectItem и загрузились данные
+  useEffect(() => {
+    if (!onSelectItem || rows.length === 0) return;
+    setActiveRow(prev => {
+      // Остаёмся на текущей строке если она ещё видна; иначе переходим на первую
+      const stillVisible = prev !== null && rows.some(r => (r.id as number) === prev);
+      return stillVisible ? prev : (rows[0].id as number);
+    });
+  }, [onSelectItem, rows]);
+
+  // Прокрутка к активной строке при изменении activeRow
+  useEffect(() => {
+    if (activeRow === null || !scrollRef.current) return;
+    const el = scrollRef.current.querySelector('[data-active="true"]') as HTMLElement | null;
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [activeRow]);
+
+  // Клавиатурная навигация: ↑ / ↓ / Enter — только когда открыт список для выбора
+  useEffect(() => {
+    if (!onSelectItem) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const currentRows = rowsRef.current;
+      if (currentRows.length === 0) return;
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const currentActive = activeRowRef.current;
+        const row = currentRows.find(r => (r.id as number) === currentActive);
+        if (row) onSelectItemRef.current?.(row);
+        return;
+      }
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveRow(prev => {
+          const idx = prev !== null ? currentRows.findIndex(r => (r.id as number) === prev) : -1;
+          if (e.key === 'ArrowDown') {
+            return currentRows[Math.min(Math.max(idx + 1, 0), currentRows.length - 1)].id as number;
+          } else {
+            return currentRows[Math.max(idx <= 0 ? 0 : idx - 1, 0)].id as number;
+          }
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onSelectItem]);
+
   // Текущие значения dateRange из фильтров
   const currentStartDate = (filtering.filters?.dateRange as any)?.startDate as string || '';
   const currentEndDate = (filtering.filters?.dateRange as any)?.endDate as string || '';
@@ -785,14 +842,15 @@ const TableHeader = memo(() => {
           const isSorting = !!(sort && sort[col.identifier]);
           const dir = isSorting ? sort[col.identifier] : null;
           const isLast = idx === visibleColumns.length - 1;
+          const isSortable = col.sortable !== false;
           return (
             <th
               key={col.identifier}
               style={{
-                cursor: `${isLoading ? 'default' : 'pointer'}`,
+                cursor: `${(isLoading || !isSortable) ? 'default' : 'pointer'}`,
                 width: isLast ? 'auto' : (col.width && col.width !== 'auto' ? col.width : undefined),
               }}
-              onClick={!isLoading ? () => handleSort(col.identifier) : undefined}
+              onClick={(!isLoading && isSortable) ? () => handleSort(col.identifier) : undefined}
             >
               <div className={styles.TableHeaderCell}>
                 <span>{getTranslateColumn(col)}</span>

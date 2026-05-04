@@ -15,7 +15,7 @@
 		// "ignoreDeprecations": "6.0",
 
 		/* Bundler mode */
-		"moduleResolution": "node", // was bundler
+		"moduleResolution": "bundler", // was bundler
 		"allowImportingTsExtensions": true,
 		"isolatedModules": false, // was true
 		"moduleDetection": "force",

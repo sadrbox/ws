@@ -131,8 +131,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
               disabled={form.isLoading} step="0.1" textAlign="right" />
           </div>
           <GroupRow style={{ justifyContent: "left" }}>
-            <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-            <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
+
           </GroupRow>
         </div>
       ),

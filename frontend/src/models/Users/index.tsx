@@ -1,6 +1,5 @@
 import { FC, useMemo } from "react";
 import { translate } from "src/i18";
-import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
@@ -15,6 +14,7 @@ import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { UserPermissionsTable } from "src/models/UserPermissions";
+import { TDataItem } from "src/components/Table/types";
 
 const MODEL_ENDPOINT = "users";
 
@@ -70,8 +70,6 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
               </GroupRow>
               <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
@@ -92,10 +90,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
                 </div>
               </div>
             </div>
-            <GroupRow style={{ justifyContent: "left" }}>
-              <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-              <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-            </GroupRow>
+
           </div>
         )
       },

@@ -34,8 +34,8 @@ const ENDPOINT = "user-permissions";
 // ─── Shared constants ────────────────────────────────────────────────────────
 
 export const ROLE_OPTIONS = [
-  { value: "member", label: translate("roleMember")},
-  { value: "admin",  label: translate("roleAdmin")},
+  { value: "member", label: translate("roleMember") },
+  { value: "admin", label: translate("roleAdmin") },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -67,11 +67,11 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
     if (!d || d.uuid) return undefined;
     return {
       ...DEFAULT_FORM_FIELDS,
-      userUuid:         (d.userUuid         as string) ?? "",
-      userDisplayName:  (d.userDisplayName  as string) ?? "",
+      userUuid: (d.userUuid as string) ?? "",
+      userDisplayName: (d.userDisplayName as string) ?? "",
       organizationUuid: (d.organizationUuid as string) ?? "",
-      orgShortName:     ((d.orgName ?? d.orgShortName) as string) ?? "",
-      role:             (d.role             as string) ?? "member",
+      orgShortName: ((d.orgName ?? d.orgShortName) as string) ?? "",
+      role: (d.role as string) ?? "member",
     };
   })();
 
@@ -86,20 +86,31 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
         endpoint: "access-rights",
         parentField: "userUuid",
         label: translate("accessRights"),
+        skipParentField: true,
+        createPayload: (r: any) => ({
+          userUuid: r.userUuid ?? null,
+          organizationUuid: r.organizationUuid ?? null,
+          modelName: r.modelName ?? "",
+          accessLevel: r.accessLevel || "none",
+        }),
+        updatePayload: (r: any) => ({
+          modelName: r.modelName ?? "",
+          accessLevel: r.accessLevel || "none",
+        }),
       },
     },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FORM_FIELDS),
-      id:               d.id,
-      uuid:             d.uuid ?? String(d.id),
-      userUuid:         d.userUuid                ?? "",
-      userDisplayName:  d.user?.username          ?? prev?.userDisplayName ?? "",
-      organizationUuid: d.organizationUuid        ?? "",
-      orgShortName:     (d.organization as any)?.shortName ?? prev?.orgShortName ?? "",
-      role:             d.role ?? "member",
+      id: d.id,
+      uuid: d.uuid ?? String(d.id),
+      userUuid: d.userUuid ?? "",
+      userDisplayName: d.user?.username ?? prev?.userDisplayName ?? "",
+      organizationUuid: d.organizationUuid ?? "",
+      orgShortName: (d.organization as any)?.shortName ?? prev?.orgShortName ?? "",
+      role: d.role ?? "member",
     }),
     buildPayload: (fd) => {
-      if (!fd.userUuid)         return "Пользователь обязателен";
+      if (!fd.userUuid) return "Пользователь обязателен";
       if (!fd.organizationUuid) return "Организация обязательна";
       return { userUuid: fd.userUuid, organizationUuid: fd.organizationUuid, role: fd.role };
     },
@@ -118,8 +129,6 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
             <div className={styles.Form}>
               {form.isEditMode && (
                 <GroupRow>
-                  <Field label="ID"   name={`${form.formUid}_id`}   width="80px"  value={String(form.fields.id ?? "-")}   disabled />
-                  <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
                 </GroupRow>
               )}
               <GroupCol>
@@ -306,7 +315,7 @@ const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
   const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
     const orgUuid = data?.organizationUuid as string | undefined;
     const orgName = (data?.organization as any)?.shortName as string | undefined;
-    const isEdit  = !!data?.uuid;
+    const isEdit = !!data?.uuid;
 
     const newData = !isEdit && userUuid
       ? { userUuid } as unknown as TDataItem

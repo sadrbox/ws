@@ -19,6 +19,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		// Поля, которые требуют nested-сортировки Prisma
 		const NESTED_SORT_FIELDS = {
 			"product.shortName": { product: { shortName: "asc" } },
+			"unitOfMeasure.shortName": { unitOfMeasure: { shortName: "asc" } },
+			"vatRateRef.shortName": { vatRateRef: { shortName: "asc" } },
 		};
 
 		const orderBy = [];
@@ -48,13 +50,17 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					}
 			} catch {}
 		}
-		if (orderBy.length === 0) orderBy.push({ lineNumber: "asc" });
+		if (orderBy.length === 0) orderBy.push({ id: "asc" });
 		else if (!orderBy.some((o) => "id" in o)) orderBy.push({ id: "asc" });
 
 		const items = await prisma[MODEL].findMany({
 			where: { saleUuid },
 			orderBy,
-			include: { product: { include: { brand: true } }, unitOfMeasure: true, vatRateRef: true },
+			include: {
+				product: { include: { brand: true } },
+				unitOfMeasure: true,
+				vatRateRef: true,
+			},
 		});
 		return res.status(200).json({ success: true, items, total: items.length });
 	} catch (error) {
@@ -72,7 +78,11 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const item = await prisma[MODEL].findUnique({
 			where: w,
-			include: { product: { include: { brand: true } }, unitOfMeasure: true, vatRateRef: true },
+			include: {
+				product: { include: { brand: true } },
+				unitOfMeasure: true,
+				vatRateRef: true,
+			},
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
@@ -86,7 +96,16 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { saleUuid, productUuid, quantity, price, lineNumber, unitOfMeasureUuid, vatRateUuid, vatRate, discountPercent } = req.body;
+		const {
+			saleUuid,
+			productUuid,
+			quantity,
+			price,
+			unitOfMeasureUuid,
+			vatRateUuid,
+			vatRate,
+			discountPercent,
+		} = req.body;
 		if (!saleUuid)
 			return res
 				.status(400)
@@ -98,23 +117,14 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		const vRate = vatRate != null ? parseFloat(vatRate) : 12;
 
 		const baseAmount = Math.round(qty * prc * 100) / 100;
-		const discAmt = Math.round(baseAmount * discPct / 100 * 100) / 100;
+		const discAmt = Math.round(((baseAmount * discPct) / 100) * 100) / 100;
 		const amountAfterDiscount = baseAmount - discAmt;
-		const vat = vRate > 0
-			? Math.round(amountAfterDiscount * vRate / (100 + vRate) * 100) / 100
-			: 0;
+		const vat =
+			vRate > 0
+				? Math.round(((amountAfterDiscount * vRate) / (100 + vRate)) * 100) /
+					100
+				: 0;
 		const amt = amountAfterDiscount;
-
-		// Определяем номер строки если не указан
-		let ln = lineNumber != null ? Number(lineNumber) : null;
-		if (ln == null) {
-			const last = await prisma[MODEL].findFirst({
-				where: { saleUuid },
-				orderBy: { lineNumber: "desc" },
-				select: { lineNumber: true },
-			});
-			ln = (last?.lineNumber ?? 0) + 1;
-		}
 
 		const item = await prisma[MODEL].create({
 			data: {
@@ -129,9 +139,12 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				vatAmount: vat,
 				discountPercent: discPct,
 				discountAmount: discAmt,
-				lineNumber: ln,
 			},
-			include: { product: { include: { brand: true } }, unitOfMeasure: true, vatRateRef: true },
+			include: {
+				product: { include: { brand: true } },
+				unitOfMeasure: true,
+				vatRateRef: true,
+			},
 		});
 
 		// Пересчитываем сумму документа
@@ -168,7 +181,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const prc =
 			req.body.price !== undefined ? parseFloat(req.body.price) : undefined;
 		const discPct =
-			req.body.discountPercent !== undefined ? parseFloat(req.body.discountPercent) : undefined;
+			req.body.discountPercent !== undefined
+				? parseFloat(req.body.discountPercent)
+				: undefined;
 		const vRate =
 			req.body.vatRate !== undefined ? parseFloat(req.body.vatRate) : undefined;
 
@@ -178,21 +193,33 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (vRate !== undefined) data.vatRate = vRate;
 
 		// Если обновились кол-во, цена, скидка или НДС — пересчитать суммы
-		if (qty !== undefined || prc !== undefined || discPct !== undefined || vRate !== undefined) {
+		if (
+			qty !== undefined ||
+			prc !== undefined ||
+			discPct !== undefined ||
+			vRate !== undefined
+		) {
 			const existing = await prisma[MODEL].findUnique({ where: w });
 			if (!existing)
 				return res.status(404).json({ success: false, message: "Не найдено" });
 			const finalQty = qty !== undefined ? qty : Number(existing.quantity);
 			const finalPrc = prc !== undefined ? prc : Number(existing.price);
-			const finalDiscPct = discPct !== undefined ? discPct : Number(existing.discountPercent);
-			const finalVatRate = vRate !== undefined ? vRate : Number(existing.vatRate);
+			const finalDiscPct =
+				discPct !== undefined ? discPct : Number(existing.discountPercent);
+			const finalVatRate =
+				vRate !== undefined ? vRate : Number(existing.vatRate);
 
 			const baseAmount = Math.round(finalQty * finalPrc * 100) / 100;
-			const discAmt = Math.round(baseAmount * finalDiscPct / 100 * 100) / 100;
+			const discAmt =
+				Math.round(((baseAmount * finalDiscPct) / 100) * 100) / 100;
 			const amountAfterDiscount = baseAmount - discAmt;
-			const vatAmt = finalVatRate > 0
-				? Math.round(amountAfterDiscount * finalVatRate / (100 + finalVatRate) * 100) / 100
-				: 0;
+			const vatAmt =
+				finalVatRate > 0
+					? Math.round(
+							((amountAfterDiscount * finalVatRate) / (100 + finalVatRate)) *
+								100,
+						) / 100
+					: 0;
 
 			data.amount = amountAfterDiscount;
 			data.discountAmount = discAmt;
@@ -202,7 +229,11 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
-			include: { product: { include: { brand: true } }, unitOfMeasure: true, vatRateRef: true },
+			include: {
+				product: { include: { brand: true } },
+				unitOfMeasure: true,
+				vatRateRef: true,
+			},
 		});
 
 		// Пересчитываем сумму документа
@@ -233,8 +264,6 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 
 		// Пересчитываем сумму документа
 		await recalcSaleAmount(item.saleUuid);
-		// Пересчитываем lineNumber оставшихся строк (восстанавливаем сплошную нумерацию)
-		await reorderLineNumbers(item.saleUuid);
 
 		return res.status(200).json({ success: true, message: "Удалено" });
 	} catch (error) {
@@ -245,30 +274,6 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
-// ── Пересчёт порядка строк (lineNumber) ────────────────────────────────
-// Вызывается после удаления строки, чтобы восстановить сплошную нумерацию 1..N.
-// Строки сортируются по текущему lineNumber (asc), затем по id (asc) как tiebreaker.
-async function reorderLineNumbers(saleUuid) {
-	try {
-		const rows = await prisma[MODEL].findMany({
-			where: { saleUuid },
-			orderBy: [{ lineNumber: "asc" }, { id: "asc" }],
-			select: { id: true },
-		});
-		// Обновляем каждую строку последовательно (1-based)
-		await Promise.all(
-			rows.map((row, idx) =>
-				prisma[MODEL].update({
-					where: { id: row.id },
-					data: { lineNumber: idx + 1 },
-				}),
-			),
-		);
-	} catch (err) {
-		console.error("reorderLineNumbers error:", err);
-	}
-}
-
 // ── Пересчёт суммы документа Sale ──────────────────────────────────────
 async function recalcSaleAmount(saleUuid) {
 	try {
@@ -278,7 +283,9 @@ async function recalcSaleAmount(saleUuid) {
 		});
 		const totalAmount = result._sum.amount ? Number(result._sum.amount) : 0;
 		const totalVat = result._sum.vatAmount ? Number(result._sum.vatAmount) : 0;
-		const totalDiscount = result._sum.discountAmount ? Number(result._sum.discountAmount) : 0;
+		const totalDiscount = result._sum.discountAmount
+			? Number(result._sum.discountAmount)
+			: 0;
 		const amountWithoutVat = Math.round((totalAmount - totalVat) * 100) / 100;
 		await prisma.sale.update({
 			where: { uuid: saleUuid },

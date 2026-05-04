@@ -123,10 +123,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
                 <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} minWidth="339px" />
               </GroupCol>
             </div>
-            <GroupRow style={{ justifyContent: "left" }}>
-              <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-              <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-            </GroupRow>
+
           </div>
         ),
       },

@@ -153,8 +153,6 @@ const OutgoingInvoicesForm: FC<Partial<TPane>> = (paneProps) => {
               <Divider />
               <Group align="row" gap="12px" className={styles.Form}>
                 <GroupRow>
-                  <Field label="ID"   name={`${form.formUid}_id`}   width="100px" value={String(form.fields.id ?? "-")}   disabled />
-                  <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
                 </GroupRow>
               </Group>
             </>

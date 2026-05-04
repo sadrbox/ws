@@ -153,10 +153,6 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
                   />
                 ))}
               </Group>
-              <GroupRow style={{ justifyContent: "left" }}>
-                <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-                <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-              </GroupRow>
             </div>
           </div>
         ),

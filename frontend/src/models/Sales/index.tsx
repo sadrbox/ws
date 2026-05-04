@@ -95,7 +95,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       date: d.date?.slice(0, 10) ?? "",
-      description: d.description ?? "", amount: d.amount != null ? String(d.amount) : "",
+      description: d.description ?? "", amount: d.amount != null ? Number(d.amount) : 0,
       status: d.status ?? "draft", posted: d.posted === true,
       organizationUuid: d.organizationUuid ?? "",
       organizationName: d.organization?.shortName ?? "",
@@ -105,9 +105,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       contractName: d.contract?.shortName ?? "",
       warehouseUuid: d.warehouseUuid ?? "",
       warehouseName: d.warehouse?.shortName ?? "",
-      vatAmount: d.vatAmount != null ? String(d.vatAmount) : "0",
-      discountAmount: d.discountAmount != null ? String(d.discountAmount) : "0",
-      amountWithoutVat: d.amountWithoutVat != null ? String(d.amountWithoutVat) : "0",
+      vatAmount: d.vatAmount != null ? Number(d.vatAmount) : 0,
+      discountAmount: d.discountAmount != null ? Number(d.discountAmount) : 0,
+      amountWithoutVat: d.amountWithoutVat != null ? Number(d.amountWithoutVat) : 0,
     }),
     buildPayload: (fd) => ({
       date: fd.date || null,
@@ -240,10 +240,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 </div>
               </div>
             </Group>
-            {/* <GroupRow style={{ justifyContent: "left" }}>
-              <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-              <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-            </GroupRow> */}
           </div>
         </div>
       )

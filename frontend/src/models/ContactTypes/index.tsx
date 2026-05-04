@@ -54,8 +54,6 @@ const ContactTypesForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.Form}>
           {form.isEditMode && (
             <GroupRow>
-              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
             </GroupRow>
           )}
           <GroupCol>

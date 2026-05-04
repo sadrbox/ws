@@ -85,8 +85,6 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.Form}>
           {form.isEditMode && (
             <GroupRow>
-              <Field label="ID" name={`${form.formUid}_id`} width="80px" value={String(form.fields.id ?? "-")} disabled />
-              <Field label="UUID" name={`${form.formUid}_uuid`} width="260px" value={String(form.fields.uuid ?? "-")} disabled />
             </GroupRow>
           )}
           <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>

@@ -108,10 +108,6 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
                 <Field label="Полное наименование" name={`${form.formUid}_displayName`} value={form.fields.displayName} onChange={e => form.setField("displayName", e.target.value)} disabled={form.isLoading} />
                 <Field label="БИН / ИНН *" name={`${form.formUid}_bin`} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} />
               </GroupCol>
-              <GroupRow style={{ justifyContent: "left" }}>
-                <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-                <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-              </GroupRow>
             </div>
           </div>
         ),

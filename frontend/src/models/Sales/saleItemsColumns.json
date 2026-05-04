@@ -30,6 +30,7 @@
 		"type": "number",
 		"position": 3,
 		"visible": true,
+		"sortable": false,
 		"width": "50px",
 		"minWidth": "40px",
 		"alignment": "right"

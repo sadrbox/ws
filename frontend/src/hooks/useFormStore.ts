@@ -17,6 +17,23 @@ import useUID from "./useUID";
 // ТИПЫ
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Одно изменённое поле формы (для показа diff пользователю) */
+export interface DirtyFieldEntry {
+	field: string;
+	savedValue: unknown;
+	currentValue: unknown;
+}
+/** Изменения в вложенных таблицах */
+export interface DirtyTableEntry {
+	key: string;
+	pendingCount: number;
+}
+/** Полный diff несохранённых изменений */
+export interface DirtyFieldDiff {
+	fields: DirtyFieldEntry[];
+	tables: DirtyTableEntry[];
+}
+
 /** Описание одной вложенной таблицы */
 export interface TableDef {
 	/** API endpoint SubTable (например "contacts", "saleitems") */
@@ -31,6 +48,8 @@ export interface TableDef {
 	createPayload?: (row: TDataItem) => Record<string, unknown>;
 	updatePayload?: (row: TDataItem) => Record<string, unknown>;
 	extraSkipFields?: string[];
+	/** Если true — не добавлять [parentField]: parentUuid к payload createPayload/updatePayload (createPayload сам отвечает за все поля) */
+	skipParentField?: boolean;
 }
 
 /** Описание полей формы: ключ → значение по умолчанию */
@@ -314,6 +333,56 @@ function createFormStore<F extends object>(
 		return { fields: fieldsDirty, tables: tablesDirty };
 	}
 
+	/**
+	 * Полный diff несохранённых изменений — список изменённых полей с
+	 * сохранёнными (saved) и текущими (current) значениями.
+	 */
+	function getDirtyFieldDiff(): DirtyFieldDiff {
+		if (!snapshotReady) return { fields: [], tables: [] };
+		let parsed: {
+			fields: Record<string, unknown>;
+			tables: Record<string, TableState>;
+		} | null = null;
+		try {
+			parsed = JSON.parse(savedSnapshot);
+		} catch {
+			/* ignore */
+		}
+		const savedFields = (parsed?.fields ?? {}) as Record<string, unknown>;
+		const savedTables = parsed?.tables ?? {};
+		const currentFields = state.fields as Record<string, unknown>;
+
+		const changedFields: DirtyFieldEntry[] = [];
+		const allKeys = new Set([
+			...Object.keys(currentFields),
+			...Object.keys(savedFields),
+		]);
+		for (const key of allKeys) {
+			if (
+				JSON.stringify(currentFields[key]) !== JSON.stringify(savedFields[key])
+			) {
+				changedFields.push({
+					field: key,
+					savedValue: savedFields[key],
+					currentValue: currentFields[key],
+				});
+			}
+		}
+
+		const changedTables: DirtyTableEntry[] = [];
+		for (const key of Object.keys(state.tables)) {
+			const saved = savedTables[key] ?? { pending: [] };
+			if (JSON.stringify(state.tables[key]) !== JSON.stringify(saved)) {
+				changedTables.push({
+					key,
+					pendingCount: state.tables[key].pending.length,
+				});
+			}
+		}
+
+		return { fields: changedFields, tables: changedTables };
+	}
+
 	/** Обновить pending-строки вложенной таблицы */
 	function setTablePending(tableKey: string, pending: TDataItem[]): void {
 		const prev = state.tables[tableKey];
@@ -357,7 +426,9 @@ function createFormStore<F extends object>(
 	/** ID панели — устанавливается из хука, используется для push-уведомлений */
 	let _paneUniqId: string | undefined;
 	function setPaneUniqId(id: string | undefined): void {
+		if (_paneUniqId) unregisterPaneDiff(_paneUniqId);
 		_paneUniqId = id;
+		if (id) registerPaneDiff(id, getDirtyFieldDiff, subscribe);
 	}
 
 	/** Установить ошибку: пушит уведомление в колокольчик панели */
@@ -551,6 +622,7 @@ function createFormStore<F extends object>(
 					updatePayload: tableDef.updatePayload,
 					extraSkipFields: tableDef.extraSkipFields,
 					extraFields: tableDef.extraFields,
+					skipParentField: tableDef.skipParentField,
 				},
 			);
 		}
@@ -577,6 +649,7 @@ function createFormStore<F extends object>(
 				updatePayload: tableDef.updatePayload,
 				extraSkipFields: tableDef.extraSkipFields,
 				extraFields: tableDef.extraFields,
+				skipParentField: tableDef.skipParentField,
 			},
 		);
 		clearTablePending(tableKey);
@@ -589,6 +662,7 @@ function createFormStore<F extends object>(
 		for (const k of previousStorageKeys) storeCache.delete(k);
 		previousStorageKeys.length = 0;
 		listeners.clear();
+		if (_paneUniqId) unregisterPaneDiff(_paneUniqId);
 	}
 
 	/**
@@ -643,6 +717,7 @@ function createFormStore<F extends object>(
 		// Dirty tracking
 		isDirty,
 		getDirtyDetails,
+		getDirtyFieldDiff,
 		markClean,
 
 		// Storage key migration
@@ -699,7 +774,7 @@ export const formStoreAPI = (() => {
 	}
 
 	function notify(paneId: string) {
-		listeners.get(paneId)?.forEach(l => l());
+		listeners.get(paneId)?.forEach((l) => l());
 	}
 
 	return {
@@ -754,6 +829,69 @@ export function usePaneDirty(uniqId: string): boolean {
 		subscribeDirty,
 		() => dirtySet.has(uniqId),
 		() => false,
+	);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DIRTY DIFF REGISTRY — доступ к getDirtyFieldDiff конкретной панели.
+// Позволяет показать пользователю список изменённых полей.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const EMPTY_DIFF: DirtyFieldDiff = { fields: [], tables: [] };
+const EMPTY_DIFF_JSON = JSON.stringify(EMPTY_DIFF);
+
+/** getter по uniqId панели → getDirtyFieldDiff из createFormStore */
+const paneDiffGetterMap = new Map<string, () => DirtyFieldDiff>();
+/** subscribe по uniqId панели → subscribe из createFormStore (для реактивности) */
+const paneDiffSubMap = new Map<string, (listener: () => void) => () => void>();
+
+export function registerPaneDiff(
+	uniqId: string,
+	getter: () => DirtyFieldDiff,
+	subscribe: (listener: () => void) => () => void,
+): void {
+	// Wrap getter with stable-reference caching.
+	// useSyncExternalStore requires getSnapshot to return the same reference
+	// when data hasn't changed — otherwise React loops infinitely.
+	let cachedJson = EMPTY_DIFF_JSON;
+	let cachedResult: DirtyFieldDiff = EMPTY_DIFF;
+	const cachedGetter = (): DirtyFieldDiff => {
+		const next = getter();
+		const json = JSON.stringify(next);
+		if (json !== cachedJson) {
+			cachedJson = json;
+			cachedResult = next;
+		}
+		return cachedResult;
+	};
+	paneDiffGetterMap.set(uniqId, cachedGetter);
+	paneDiffSubMap.set(uniqId, subscribe);
+}
+
+export function unregisterPaneDiff(uniqId: string): void {
+	paneDiffGetterMap.delete(uniqId);
+	paneDiffSubMap.delete(uniqId);
+}
+
+/** Получить текущий diff (не реактивно) */
+export function getPaneDirtyDiff(uniqId: string): DirtyFieldDiff {
+	return paneDiffGetterMap.get(uniqId)?.() ?? EMPTY_DIFF;
+}
+
+/** Хук: реактивная подписка на diff несохранённых изменений панели. */
+export function usePaneDirtyDiff(uniqId: string): DirtyFieldDiff {
+	const stableSubscribe = useCallback(
+		(listener: () => void) => {
+			const sub = paneDiffSubMap.get(uniqId);
+			if (!sub) return () => {};
+			return sub(listener);
+		},
+		[uniqId],
+	);
+	return useSyncExternalStore(
+		stableSubscribe,
+		() => paneDiffGetterMap.get(uniqId)?.() ?? EMPTY_DIFF,
+		() => EMPTY_DIFF,
 	);
 }
 
@@ -1496,6 +1634,3 @@ export function useFormStore<F extends object>(
 		submit,
 	};
 }
-
-
-

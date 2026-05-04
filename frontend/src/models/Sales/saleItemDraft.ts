@@ -50,3 +50,31 @@ export function withSaleItemRecalc<T extends SaleItemCalcInput>(
 		),
 	};
 }
+
+/**
+ * Пересчёт строки при прямом вводе суммы скидки.
+ * Обратная формула: discountPercent = (discountAmount / base) * 100
+ */
+export function withSaleItemRecalcFromDiscountAmount<
+	T extends SaleItemCalcInput,
+>(current: T, discountAmount: unknown): Record<string, unknown> {
+	const q = toNumber(current.quantity);
+	const p = toNumber(current.price);
+	const vr = toNumber(current.vatRate);
+
+	const base = Math.round(q * p * 100) / 100;
+	const discAmt = Math.min(Math.max(toNumber(discountAmount), 0), base);
+	const discPct =
+		base > 0 ? Math.round((discAmt / base) * 100 * 10000) / 10000 : 0;
+
+	const afterDiscount = base - discAmt;
+	const vatAmt =
+		vr > 0 ? Math.round(((afterDiscount * vr) / (100 + vr)) * 100) / 100 : 0;
+
+	return {
+		discountAmount: discAmt,
+		discountPercent: discPct,
+		vatAmount: vatAmt,
+		amount: afterDiscount,
+	};
+}

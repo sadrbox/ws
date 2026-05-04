@@ -123,7 +123,11 @@ export function getModelColumns(
 				.sort()
 				.join(",");
 			if (initSig === cachedSig) {
-				columns = cached;
+				// Берём кэш (ширины, видимость), но sortable всегда из JSON-определения
+				columns = cached.map((c) => {
+					const def = defaults.find((d) => d.identifier === c.identifier);
+					return def ? { ...c, sortable: def.sortable } : c;
+				});
 			} else {
 				// Столбцы изменились — сбрасываем устаревший кэш
 				localStorage.removeItem(storageKey);
@@ -205,32 +209,21 @@ export function getFormatColumnValue(
 	row: TDataItem,
 	column: TColumn,
 ): string | number {
-	// Разрешаем значение: сначала пробуем прямой ключ, затем точечную нотацию
-	let rawValue = row[column.identifier as keyof TDataItem];
+	// Разрешаем значение: точечная нотация (user.username) → вложенный объект
+	let rawValue: any;
+	if (column.identifier.includes(".")) {
+		rawValue = getNestedValue(row, column.identifier);
+	} else {
+		rawValue = row[column.identifier as keyof TDataItem];
+	}
 	// Если значение null или undefined — пустая строка
 	if (rawValue == null) return "";
 
-	if (rawValue == null && column.identifier.includes(".")) {
-		const parts = column.identifier.split(".");
-		let current: any = row;
-		for (const part of parts) {
-			if (current == null || typeof current !== "object") {
-				current = undefined;
-				break;
-			}
-			current = current[part];
-		}
-		rawValue = current;
-	}
-
 	if (column.identifier === "id" && column.type === "number") {
 		return getFormatNumericalID(Number(row.id));
-	} else if (column.identifier === "lineNumber" && column.type === "number") {
-		return Math.trunc(Number(row.lineNumber));
 	} else if (
 		column.identifier !== "id" &&
 		column.identifier !== "position" &&
-		column.identifier !== "lineNumber" &&
 		column.type === "number"
 	) {
 		return getFormatNumerical(rawValue as number);
@@ -260,6 +253,23 @@ export function getFormatNumerical(n: number): string {
 		maximumFractionDigits: 9,
 	});
 	return formater.format(n);
+}
+
+/**
+ * Нормализует форматированную числовую строку к стандартному виду с точкой.
+ *
+ * Удаляет разделители тысяч (пробелы, неразрывные пробелы U+00A0 и U+202F),
+ * заменяет десятичную запятую на точку. Используется для input[type=text]
+ * числовых полей, а также в правилах валидации.
+ *
+ * Примеры: "1 000" → "1000", "3,5" → "3.5", "10 000,75" → "10000.75"
+ * Возвращает null если строку нельзя привести к числу.
+ */
+export function parseNumericInput(value: string): number | null {
+	if (!value || value.trim() === "") return null;
+	const normalized = value.replace(/[\s\u00A0\u202F]/g, "").replace(",", ".");
+	const n = Number(normalized);
+	return isNaN(n) ? null : n;
 }
 
 // // Формат даты /////////////////////////////////////////////////////////////////////////

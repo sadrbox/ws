@@ -67,6 +67,14 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			if (!hasId) orderBy.push({ id: "asc" });
 		}
 
+		// ── Удаляем сортировки по relation-полям (dot-notation) —
+		// они не поддерживаются в AccessRight без include (вызывают 500)
+		const safeOrderBy = orderBy.filter((o) => {
+			const field = Object.keys(o)[0];
+			return !field.includes(".");
+		});
+		const finalOrderBy = safeOrderBy.length > 0 ? safeOrderBy : [{ id: "asc" }];
+
 		// ── Поиск ─────────────────────────────────────────────────────────
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
@@ -117,7 +125,10 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			...(userUuid ? { userUuid } : {}),
 			// Фильтр по организации: "null" → NULL, uuid → конкретная орг, undefined → без фильтра
 			...(organizationUuid !== undefined
-				? { organizationUuid: organizationUuid === "null" ? null : organizationUuid }
+				? {
+						organizationUuid:
+							organizationUuid === "null" ? null : organizationUuid,
+					}
 				: {}),
 			...searchWhereClause,
 			...filterWhereClause,
@@ -127,7 +138,11 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const queryOptions = {
 			take: limitNumber,
 			where: baseWhere,
-			orderBy,
+			orderBy: finalOrderBy,
+			include: {
+				user: { select: { uuid: true, username: true } },
+				organization: { select: { uuid: true, shortName: true } },
+			},
 		};
 
 		if (cursorNumber !== null) {
@@ -165,7 +180,13 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		const n = Number(p);
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
-		const item = await prisma[MODEL].findUnique({ where: w });
+		const item = await prisma[MODEL].findUnique({
+			where: w,
+			include: {
+				user: { select: { uuid: true, username: true } },
+				organization: { select: { uuid: true, shortName: true } },
+			},
+		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		return res.status(200).json({ success: true, item });
@@ -189,22 +210,30 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				success: false,
 				message: "modelName обязателен",
 			});
-		const item = await prisma[MODEL].create({
-			data: {
+		const item = await prisma[MODEL].upsert({
+			where: {
+				userUuid_organizationUuid_modelName: {
+					userUuid,
+					organizationUuid: organizationUuid ?? null,
+					modelName: modelName.trim(),
+				},
+			},
+			update: {
+				accessLevel: accessLevel?.trim() || "none",
+			},
+			create: {
 				modelName: modelName.trim(),
 				accessLevel: accessLevel?.trim() || "none",
 				userUuid,
 				organizationUuid: organizationUuid ?? null,
 			},
+			include: {
+				user: { select: { uuid: true, username: true } },
+				organization: { select: { uuid: true, shortName: true } },
+			},
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
-		// Уникальное ограничение [employeeUuid, modelName]
-		if (error.code === "P2002")
-			return res.status(409).json({
-				success: false,
-				message: "Право доступа для этой модели уже существует",
-			});
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}

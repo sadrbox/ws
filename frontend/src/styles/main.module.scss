@@ -505,10 +505,12 @@ body {
 }
 
 .PaneItemHeaderLabel {
+	display: flex;
+	align-items: center;
 	margin: 0;
 	padding: 0;
 	font-weight: bold;
-	font-size: $fontsize + 2px;
+	font-size: $fontsize + 3px;
 	color: $color6;
 	white-space: nowrap;
 	overflow: hidden;
@@ -530,14 +532,14 @@ body {
 }
 
 .PaneItemHeaderDirtyDot {
-	display: inline-block;
-	width: 7px;
-	height: 7px;
+	display: flex;
+	width: 12px;
+	height: 12px;
 	border-radius: 50%;
 	background: #d48806;
 	margin-left: 6px;
 	flex-shrink: 0;
-	vertical-align: middle;
+	// vertical-align: middle;
 	box-shadow: 0 0 4px 1px rgba(#d48806, 0.5);
 	animation: dirtyPulse 2s ease-in-out infinite;
 }
@@ -752,6 +754,90 @@ body {
 	}
 }
 
+.PaneNoteDirtySection {
+	border-top: 1px solid #ffe58f;
+	background: #fffbe6;
+}
+
+.PaneNoteDirtyToggle {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	padding: 8px 12px;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	font-size: $fontsize - 1px;
+	color: #ad6800;
+	font-weight: 500;
+	gap: 8px;
+
+	&:hover {
+		background: rgba(#d48806, 0.08);
+	}
+}
+
+.PaneNoteDirtyToggleArrow {
+	font-size: $fontsize - 2px;
+	color: #d48806;
+	flex-shrink: 0;
+}
+
+.PaneNoteDirtyDiff {
+	border-top: 1px solid #ffe58f;
+	padding: 4px 0;
+	max-height: 180px;
+	overflow-y: auto;
+}
+
+.PaneNoteDirtyRow {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	padding: 3px 12px;
+	font-size: $fontsize - 2px;
+	flex-wrap: wrap;
+
+	&:hover {
+		background: rgba(#d48806, 0.05);
+	}
+}
+
+.PaneNoteDirtyField {
+	color: #595959;
+	font-weight: 500;
+	min-width: 80px;
+	flex-shrink: 0;
+	font-size: $fontsize - 2px;
+}
+
+.PaneNoteDirtyValues {
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+	flex: 1;
+	min-width: 0;
+	flex-wrap: wrap;
+}
+
+.PaneNoteDirtyOld {
+	color: #cf1322;
+	text-decoration: line-through;
+	word-break: break-all;
+}
+
+.PaneNoteDirtyArrow {
+	color: #8c8c8c;
+	flex-shrink: 0;
+}
+
+.PaneNoteDirtyNew {
+	color: #389e0d;
+	font-weight: 500;
+	word-break: break-all;
+}
+
 .PaneHeaderClose {
 	display: flex;
 	align-items: center;
@@ -958,6 +1044,9 @@ body {
 	}
 
 	.PaneTabItemClose {
+		cursor: pointer;
+		background-color: transparent;
+		border: none;
 		color: $color6;
 		margin-right: 3px;
 		width: $heightFieldInput - 8px;

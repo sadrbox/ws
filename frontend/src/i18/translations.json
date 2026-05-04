@@ -297,6 +297,8 @@
 	"UserPermissionsList_part": "Права пользователей",
 	"UserPermissionsTable": "Права пользователей",
 	"UserPermissionsTable_part": "Права пользователей",
+	"user.username": "Пользователь",
+	"role": "Роль",
 
 	"SaleItemsList": "Товары",
 	"SaleItemsList_part": "Товары",

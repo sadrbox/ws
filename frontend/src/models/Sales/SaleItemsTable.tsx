@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-floating-promises */
-import { FC, useCallback, useMemo } from "react";
+import { FC, useCallback, useMemo, useState } from "react";
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -10,11 +10,85 @@ import SaleItemsForm from "./SaleItemsForm";
 import columnsJson from "./saleItemsColumns.json";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
-import { withSaleItemRecalc } from "./saleItemDraft";
-import { getFormatNumerical } from "src/components/Table/services";
+import { withSaleItemRecalc, withSaleItemRecalcFromDiscountAmount } from "./saleItemDraft";
+import { getFormatNumerical, parseNumericInput } from "src/components/Table/services";
+import fieldStyles from "src/components/Field/Field.module.scss";
 
 const MODEL_ENDPOINT = "saleitems";
 const COMPONENT_NAME = "SaleItemsList_part";
+
+/**
+ * Безопасно форматирует числовое значение любого типа (number | string | null | undefined)
+ * в строку с разделителями групп цифр (формат "999 999 999,99").
+ * Возвращает пустую строку если значение не приводимо к числу.
+ */
+const fmtNum = (value: unknown): string => {
+  if (value == null || value === "") return "";
+  const n = Number(value);
+  return isNaN(n) ? "" : getFormatNumerical(n);
+};
+
+/**
+ * Ячейка только для чтения: при клике в режиме inline-editing мигает красным,
+ * сигнализируя пользователю что поле нередактируемо.
+ */
+const ReadOnlyCell: FC<{ value: string; inlineEditing: boolean }> = ({ value, inlineEditing }) => {
+  const [flashing, setFlashing] = useState(false);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (!inlineEditing) return;
+    e.stopPropagation();
+    setFlashing(false);
+    // Сбрасываем в следующем тике, чтобы повторный клик снова запускал анимацию
+    requestAnimationFrame(() => setFlashing(true));
+    setTimeout(() => setFlashing(false), 600);
+  }, [inlineEditing]);
+
+  return (
+    <span
+      className={flashing ? fieldStyles.flashReadOnly : undefined}
+      onClick={handleClick}
+      style={inlineEditing ? { cursor: "not-allowed", display: "inline-block", width: "100%", textAlign: "right" } : undefined}
+    >
+      {value}
+    </span>
+  );
+};
+
+/**
+ * Переводит фокус на следующий незаблокированный input в той же строке таблицы (<tr>).
+ * Если текущее поле — последнее в строке, переходит на первое поле следующей строки.
+ */
+const focusNextInRow = (currentTarget: EventTarget | null) => {
+  if (!(currentTarget instanceof HTMLElement)) return;
+  const tr = currentTarget.closest("tr");
+  if (!tr) return;
+  const inputs = Array.from(
+    tr.querySelectorAll<HTMLInputElement>('input:not([disabled]):not([type="checkbox"])')
+  );
+  const idx = inputs.indexOf(currentTarget as HTMLInputElement);
+  if (idx >= 0 && idx < inputs.length - 1) {
+    // Есть следующее поле в той же строке
+    const next = inputs[idx + 1];
+    next.focus();
+    try { next.select(); } catch { /* игнорируем */ }
+  } else {
+    // Последнее поле строки → переходим на первое поле следующей строки
+    let nextTr = tr.nextElementSibling as HTMLElement | null;
+    // Пропускаем вспомогательные строки (padding tr без input-ов)
+    while (nextTr && nextTr.tagName === "TR") {
+      const nextInputs = Array.from(
+        nextTr.querySelectorAll<HTMLInputElement>('input:not([disabled]):not([type="checkbox"])')
+      );
+      if (nextInputs.length > 0) {
+        nextInputs[0].focus();
+        try { nextInputs[0].select(); } catch { /* игнорируем */ }
+        return;
+      }
+      nextTr = nextTr.nextElementSibling as HTMLElement | null;
+    }
+  }
+};
 
 interface SaleItemsTableProps {
   saleUuid: string;
@@ -45,25 +119,25 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
   // ── Правила валидации ячеек ────────────────────────────────────────────
   const validationRules = useMemo<Record<string, TCellValidator>>(() => ({
     quantity: (value) => {
-      const n = Number(value);
       if (value === "" || value == null) return undefined;
-      if (isNaN(n)) return "Должно быть числом";
+      const n = parseNumericInput(String(value));
+      if (n === null) return "Должно быть числом";
       if (n < 0) return "Не может быть отрицательным";
       return undefined;
     },
     price: (value) => {
-      const n = Number(value);
       if (value === "" || value == null) return undefined;
-      if (isNaN(n)) return "Должно быть числом";
+      const n = parseNumericInput(String(value));
+      if (n === null) return "Должно быть числом";
       if (n < 0) return "Не может быть отрицательным";
       return undefined;
     },
     vatRate: (_value) => undefined,
     discountPercent: (value) => {
-      const n = Number(value);
       if (value === "" || value == null) return undefined;
-      if (isNaN(n)) return "Должно быть числом";
-      if (n < 0 || n > 100) return "От 0 до 100";
+      const n = parseNumericInput(String(value));
+      if (n === null) return "Должно быть числом";
+      // Зажим 0–100 обрабатывается в FieldNumber (min/max props), ошибка здесь не нужна
       return undefined;
     },
   }), []);
@@ -104,6 +178,8 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
             onClear={() => {
               ctx.handleLookupChange(row, "productUuid", null, { product: null });
             }}
+            onEnterKey={() => focusNextInRow(document.activeElement)}
+            onAfterSelect={() => focusNextInRow(document.activeElement)}
             disabled={ctx.disabled}
             width="100%"
             variant="table"
@@ -120,12 +196,12 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
             value={row.quantity != null ? String(row.quantity) : "0"}
             onChange={e => {
               if (ctx.deferRemoteChanges) {
-                // console.log(e.target.v)
                 ctx.updateLocalRow(row, withSaleItemRecalc(row as any, { quantity: e.target.value }));
                 return;
               }
               ctx.handleInlineChange(row, "quantity", e.target.value);
             }}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
             disabled={ctx.disabled}
             // step="0.1"
             textAlign="right"
@@ -135,7 +211,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
           />
         );
       }
-      return <span>{row.quantity != null ? getFormatNumerical(row.quantity as number) : ""}</span>;
+      return <span>{fmtNum(row.quantity)}</span>;
     }
     if (col.identifier === "price") {
       if (ctx.inlineEditing) {
@@ -150,6 +226,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
               }
               ctx.handleInlineChange(row, "price", e.target.value);
             }}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
             disabled={ctx.disabled}
             step="0.1"
             textAlign="right"
@@ -159,7 +236,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
           />
         );
       }
-      return <span>{row.price != null ? getFormatNumerical(row.price as number) : ""}</span>;
+      return <span>{fmtNum(row.price)}</span>;
     }
     if (col.identifier === "unitOfMeasure.shortName") {
       if (ctx.inlineEditing) {
@@ -183,6 +260,8 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
             onClear={() => {
               ctx.handleLookupChange(row, "unitOfMeasureUuid", null, { unitOfMeasure: null });
             }}
+            onEnterKey={() => focusNextInRow(document.activeElement)}
+            onAfterSelect={() => focusNextInRow(document.activeElement)}
             disabled={ctx.disabled}
             width="100%"
             variant="table"
@@ -236,6 +315,8 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
                 ...withSaleItemRecalc(row as any, { vatRate: 0 }),
               });
             }}
+            onEnterKey={() => focusNextInRow(document.activeElement)}
+            onAfterSelect={() => focusNextInRow(document.activeElement)}
             disabled={ctx.disabled}
             width="100%"
             variant="table"
@@ -258,8 +339,11 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
               }
               ctx.handleInlineChange(row, "discountPercent", e.target.value);
             }}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
             disabled={ctx.disabled}
             step="0.1"
+            min="0"
+            max="100"
             textAlign="right"
             width="100%"
             actions={[]}
@@ -267,13 +351,44 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
           />
         );
       }
-      return <span>{row.discountPercent != null ? getFormatNumerical(row.discountPercent as number) : "0"}</span>;
+      return <span>{fmtNum(row.discountPercent) || "0"}</span>;
     }
     if (col.identifier === "vatAmount") {
-      return <span>{row.vatAmount != null ? getFormatNumerical(row.vatAmount as number) : "0"}</span>;
+      return <ReadOnlyCell value={fmtNum(row.vatAmount) || "0"} inlineEditing={ctx.inlineEditing} />;
     }
     if (col.identifier === "discountAmount") {
-      return <span>{row.discountAmount != null ? getFormatNumerical(row.discountAmount as number) : "0"}</span>;
+      if (ctx.inlineEditing) {
+        return (
+          <FieldNumber
+            name={`saleitem_discamt_${row.id}`}
+            value={row.discountAmount != null ? String(row.discountAmount) : "0"}
+            onChange={e => {
+              if (ctx.deferRemoteChanges) {
+                ctx.updateLocalRow(row, withSaleItemRecalcFromDiscountAmount(row as any, e.target.value));
+                return;
+              }
+              const recalc = withSaleItemRecalcFromDiscountAmount(row as any, e.target.value);
+              ctx.handleInlineChange(row, "discountPercent", String(recalc.discountPercent));
+            }}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
+            disabled={ctx.disabled}
+            step="0.01"
+            min="0"
+            textAlign="right"
+            width="100%"
+            actions={[]}
+            variant="table"
+          />
+        );
+      }
+      return <ReadOnlyCell value={fmtNum(row.discountAmount) || "0"} inlineEditing={ctx.inlineEditing} />;
+    }
+    if (col.identifier === "amount") {
+      return <ReadOnlyCell value={fmtNum(row.amount) || "0"} inlineEditing={ctx.inlineEditing} />;
+    }
+    if (col.identifier === "lineNumber") {
+      const idx = ctx.rows.indexOf(row);
+      return <ReadOnlyCell value={String(idx >= 0 ? idx + 1 : (row.lineNumber ?? ""))} inlineEditing={ctx.inlineEditing} />;
     }
     return undefined;
   }, []);
@@ -332,7 +447,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
       columnsJson={columnsJson}
       parentKey="saleUuid"
       parentUuid={saleUuid}
-      defaultSort={{ lineNumber: "asc" }}
+      defaultSort={{ id: "asc" }}
       disabled={disabled}
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
@@ -343,6 +458,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
       onItemsChange={handleItemsChange}
       customInlineChange={customInlineChange}
       validationRules={validationRules}
+      requiredFields={["product.shortName", "quantity"]}
     />
   );
 };

@@ -103,8 +103,6 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} value={String(form.fields.uuid ?? "-")} disabled />
               </GroupRow>
               <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, maxWidth: 640 }}>
@@ -125,10 +123,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
                 )}
               </div>
             </div>
-            <GroupRow style={{ justifyContent: "left" }}>
-              <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-              <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-            </GroupRow>
+
           </div>
         )
       },

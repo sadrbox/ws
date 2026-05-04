@@ -148,10 +148,6 @@ const CashReceiptOrdersForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
             </div>
           </Group>
-          <GroupRow style={{ justifyContent: "left" }}>
-            <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-            <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-          </GroupRow>
         </div>
       ),
     },

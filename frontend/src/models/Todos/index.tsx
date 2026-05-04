@@ -112,10 +112,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                 <FieldTextarea label="Описание задачи" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="120px" rows={6} />
               </GroupCol>
             </div>
-            <GroupRow style={{ justifyContent: "left" }}>
-              <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-              <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-            </GroupRow>
+
           </div>
         )
       },

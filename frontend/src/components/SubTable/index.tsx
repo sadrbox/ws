@@ -10,7 +10,7 @@
 import {
   FC, useMemo, useCallback, useState, useEffect, useRef, ReactNode,
 } from "react";
-import { getModelColumns } from "src/components/Table/services";
+import { getModelColumns, getFormatColumnValue, sortTableRows } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
@@ -104,6 +104,12 @@ export interface SubTableProps {
    * Ошибки отображаются красной рамкой вокруг ячейки + tooltip.
    */
   validationRules?: Record<string, TCellValidator>;
+  /**
+   * Идентификаторы полей, которые обязательны для логики/расчётов.
+   * Ячейки с пустым/нулевым значением будут выделены оранжевой рамкой.
+   * Пример: ["product.shortName", "quantity"]
+   */
+  requiredFields?: string[];
   /**
    * Дефолтные значения полей для новой строки (используется для стандартного onInlineAdd).
    * Если задан — SubTable сам обрабатывает добавление строки через POST,
@@ -232,6 +238,7 @@ const SubTable: FC<SubTableProps> = ({
   validationRules,
   defaultNewRow,
   extraQueryParams,
+  requiredFields,
   renderExpandedRow: renderExpandedRowProp,
 }) => {
   const queryClient = useQueryClient();
@@ -294,10 +301,18 @@ const SubTable: FC<SubTableProps> = ({
   const updateAdaptiveLimit = useCallback((n: number) => setAdaptiveLimit(n), []);
 
   // SubTable — вложенная таблица: поиск ВСЕГДА на фронтенде, не отправляем search на сервер
+  // Фильтруем sort: не отправляем на сервер поля у которых sortable === false
+  const serverSort = useMemo(() => {
+    const unsortableCols = new Set(columns.filter(c => c.sortable === false).map(c => c.identifier));
+    if (unsortableCols.size === 0) return sort;
+    const filtered = Object.fromEntries(Object.entries(sort).filter(([k]) => !unsortableCols.has(k)));
+    return Object.keys(filtered).length > 0 ? filtered : undefined;
+  }, [sort, columns]);
+
   const params = useMemo(() => ({
-    sort, filter,
+    sort: serverSort, filter,
     extra: parentUuid ? { [parentKey]: parentUuid, ...(extraQueryParams ?? {}) } : undefined,
-  }), [sort, filter, parentUuid, parentKey, extraQueryParams]);
+  }), [serverSort, filter, parentUuid, parentKey, extraQueryParams]);
 
   const { allItems, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage, cancelAllRequests, dataUpdatedAt } =
     useInfiniteModelList<TDataItem>({ model, params, queryOptions: { enabled: !!parentUuid } });
@@ -509,6 +524,7 @@ const SubTable: FC<SubTableProps> = ({
 
   // ── Inline-редактирование ──────────────────────────────────────────────
   const handleInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
+    // console.log(" validateCell");
     // Запускаем валидацию
     const error = validateCell(row, field, value);
     const rowId = getRowId(row);
@@ -677,12 +693,19 @@ const SubTable: FC<SubTableProps> = ({
       });
     }
 
-    if (!search) return visible;
+    // 3. Применяем клиентскую сортировку: корректно обрабатывает ссылочные поля
+    //    (напр. "unitOfMeasure.shortName") и pending-строки, не отправленные на сервер.
+    //    sortTableRows использует getNestedValue → поддерживает dot-notation.
+    const sorted = sortTableRows(visible, sort);
+
+    if (!search) return sorted;
     // Если задан кастомный filterRows — используем его
-    if (filterRows) return filterRows(visible, search);
+    if (filterRows) return filterRows(sorted, search);
     // Иначе — дефолтный поиск по всем полям строки (включая вложенные объекты)
-    const words = search.toLowerCase().split(/\s+/).filter(Boolean);
-    return visible.filter((row: TDataItem) => {
+    // Нормализуем слова поиска: заменяем запятую на точку, чтобы "3,5" находило числа "3.5"
+    const words = search.toLowerCase().split(/\s+/).filter(Boolean)
+      .map(w => w.replace(',', '.'));
+    return sorted.filter((row: TDataItem) => {
       const parts: string[] = [];
       const collect = (obj: unknown) => {
         if (obj == null) return;
@@ -696,7 +719,7 @@ const SubTable: FC<SubTableProps> = ({
       const haystack = parts.join(" ");
       return words.every(w => haystack.includes(w));
     });
-  }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey]);
+  }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort]);
 
   // console.log(displayRows)
   // ── openModelForm ─────────────────────────────────────────────────────
@@ -720,46 +743,75 @@ const SubTable: FC<SubTableProps> = ({
     // Проверяем наличие ошибки для этой ячейки
     const rowId = getRowId(row);
     const errorMsg = cellErrors[rowId]?.[col.identifier];
-    // if (errorMsg) {
-    //   // Оборачиваем ячейку в div с красной рамкой и tooltip
-    //   return (
-    //     <div
-    //       style={{
-    //         border: "1px solid #e53935",
-    //         borderRadius: 3,
-    //         padding: "0 2px",
-    //         margin: "-1px -2px",
-    //         position: "relative",
-    //         background: "rgba(229, 57, 53, 0.04)",
-    //       }}
-    //       title={errorMsg}
-    //     >
-    //       {content}
-    //       <div style={{
-    //         position: "absolute",
-    //         bottom: "100%",
-    //         left: 0,
-    //         fontSize: 11,
-    //         lineHeight: "14px",
-    //         color: "#e53935",
-    //         whiteSpace: "nowrap",
-    //         pointerEvents: "none",
-    //         padding: "1px 4px",
-    //         background: "#fff3f3",
-    //         borderRadius: "3px 3px 0 0",
-    //         border: "1px solid #e53935",
-    //         borderBottom: "none",
-    //         zIndex: 10,
-    //         maxWidth: 250,
-    //         overflow: "hidden",
-    //         textOverflow: "ellipsis",
-    //       }}>{errorMsg}</div>
-    //     </div>
-    //   );
-    // }
 
-    return content;
-  }, [renderCellProp, ctx, deferRemoteChanges, cellErrors]);
+    // Проверяем обязательность поля (только в режиме редактирования)
+    const isRequired = requiredFields?.includes(col.identifier) ?? false;
+    const isCellEmpty = isRequired && (() => {
+      // Для вложенных идентификаторов ("product.shortName") смотрим по точке
+      const parts = col.identifier.split(".");
+      let val: unknown = row;
+      for (const p of parts) {
+        if (val == null || typeof val !== "object") return true;
+        val = (val as Record<string, unknown>)[p];
+      }
+      return val === null || val === undefined || val === "" || val === 0;
+    })();
+
+    // Нет кастомного контента и нет ошибки и не обязательное пустое → используем дефолтный рендер Table
+    if (content === undefined && !errorMsg && !isCellEmpty) return undefined;
+
+    // Если кастомного контента нет, но есть ошибка — показываем отформатированное значение
+    const displayContent = content !== undefined
+      ? content
+      : <span>{getFormatColumnValue(row, col)}</span>;
+
+    // ВСЕГДА оборачиваем в div когда есть кастомный контент или ошибка.
+    // Постоянная структура DOM предотвращает ремонт input-ов при изменении состояния ошибки:
+    // React видит одинаковый тип элемента (div) и только обновляет стили.
+    return (
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          // Используем inset box-shadow вместо border — не влияет на layout ячейки
+          ...(errorMsg ? {
+            boxShadow: "inset 0 0 0 1.5px #e53935",
+            background: "rgba(229, 57, 53, 0.04)",
+          } : isCellEmpty ? {
+            boxShadow: "inset 0 0 0 1.5px #ff9800",
+            background: "rgba(255, 152, 0, 0.04)",
+          } : {}),
+        }}
+        title={errorMsg || undefined}
+      >
+        {displayContent}
+        {errorMsg && (
+          <div style={{
+            position: "absolute",
+            bottom: "100%",
+            left: 0,
+            fontSize: 11,
+            lineHeight: "14px",
+            color: "#e53935",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            padding: "1px 4px",
+            background: "#fff3f3",
+            borderRadius: "3px 3px 0 0",
+            border: "1px solid #e53935",
+            borderBottom: "none",
+            zIndex: 10,
+            maxWidth: 250,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}>{errorMsg}</div>
+        )}
+      </div>
+    );
+  }, [renderCellProp, ctx, deferRemoteChanges, cellErrors, requiredFields]);
 
   // ── handleInlineAdd wrapper ────────────────────────────────────────────
   const handleInlineAdd = useCallback(async () => {

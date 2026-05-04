@@ -7,7 +7,7 @@ import { Group } from 'src/components/UI'
 import useUID from 'src/hooks/useUID'
 import { useDebounceValue } from 'src/hooks/useDebounceValue'
 
-import { getFormatNumerical } from 'src/components/Table/services.ts'
+import { getFormatNumerical, parseNumericInput } from 'src/components/Table/services.ts'
 // type TypeFieldStringProps = {
 //   label: string
 //   name: string
@@ -702,6 +702,7 @@ interface TypeFieldNumberProps {
   textAlign?: 'left' | 'right' | 'center';
   actions?: TypeFieldActions;
   variant?: FieldVariant;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
 export const FieldNumber: FC<TypeFieldNumberProps> = ({
@@ -721,6 +722,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   textAlign = 'right',
   actions,
   variant = 'default',
+  onKeyDown,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const isTable = variant === 'table';
@@ -728,14 +730,70 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     ? `${styles.FieldWrapper} ${styles.tableVariant}`
     : styles.FieldWrapper;
 
-  // Гарантируем, что value для input[type=number] является числовой строкой
-  const safeValue = (() => {
-    if (value === '' || value === undefined || value === null) return '';
-    if (!isNaN(Number(value))) return String(getFormatNumerical(Number(value)));
-    return ""; // Невалидное значение → пустая строка
-  })();
+  // ── Состояние фокуса: когда поле активно — показываем «сырое» число с точкой,
+  // при потере фокуса — форматируем с разделителями групп разрядов и запятой.
+  const [isFocused, setIsFocused] = useState(false);
+  // Буфер ввода — то что пользователь набирает сейчас (хранится отдельно чтобы не скакал курсор)
+  const [editText, setEditText] = useState('');
 
-  const handleClear = () => {
+  // «Сырое» значение снаружи (без пробелов, с точкой)
+  const rawValue = useMemo(() => {
+    if (value === '' || value === undefined || value === null) return '';
+    return String(value).replace(/[\s\u00A0\u202F]/g, '').replace(',', '.');
+  }, [value]);
+
+  // Синхронизируем editText когда внешнее значение меняется извне (не через ввод пользователя)
+  const prevRawRef = useRef(rawValue);
+  useEffect(() => {
+    if (!isFocused && prevRawRef.current !== rawValue) {
+      prevRawRef.current = rawValue;
+      setEditText(rawValue);
+    }
+  }, [isFocused, rawValue]);
+
+  // Отображаемый текст:
+  // - в фокусе: editText (то что набрал пользователь, с запятой)
+  // - без фокуса: форматированное с разделителями и запятой (ru-RU)
+  const displayText = useMemo(() => {
+    if (isFocused) return editText;
+    if (rawValue === '') return '';
+    const n = parseNumericInput(rawValue);
+    return n != null ? getFormatNumerical(n) : rawValue;
+  }, [isFocused, editText, rawValue]);
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+    // При входе в поле показываем значение с запятой (пользовательский формат)
+    setEditText(prevRawRef.current.replace('.', ','));
+  }, []);
+
+  const handleBlur = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+    setIsFocused(false);
+    if (!onChange) return;
+    // Нормализуем введённое: убираем пробелы, меняем запятую на точку
+    const n = parseNumericInput(e.target.value);
+    if (n === null) {
+      // Если пустое или некорректное — очищаем
+      if (e.target.value.trim() === '') return;
+      const fakeEvent = { target: { value: '', name }, currentTarget: e.currentTarget } as React.ChangeEvent<HTMLInputElement>;
+      onChange(fakeEvent);
+      return;
+    }
+    // Применяем зажим min/max
+    const mn = min !== undefined ? parseNumericInput(String(min)) : null;
+    const mx = max !== undefined ? parseNumericInput(String(max)) : null;
+    let clamped = n;
+    if (mn !== null && n < mn) clamped = mn;
+    if (mx !== null && n > mx) clamped = mx;
+    prevRawRef.current = String(clamped);
+    const fakeEvent = {
+      target: { value: String(clamped), name },
+      currentTarget: e.currentTarget,
+    } as React.ChangeEvent<HTMLInputElement>;
+    onChange(fakeEvent);
+  }, [onChange, min, max, name]);
+
+  const handleClear = useCallback(() => {
     if (inputRef.current) {
       inputRef.current.value = "";
       if (onChange) {
@@ -744,7 +802,50 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
         onChange(event as any);
       }
     }
-  };
+  }, [onChange]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    // Разрешаем только: цифры, точку, запятую (десятичный разделитель), минус в начале
+    const raw = e.target.value;
+    // Убираем все недопустимые символы: всё кроме 0-9, . , -
+    const filtered = raw.replace(/[^0-9.,\-]/g, '');
+    // Разрешаем минус только в начале и только один раз
+    const withMinus = filtered.replace(/(?!^)-/g, '');
+    // Нормализуем: и точку и запятую принимаем как десятичный разделитель,
+    // но в editText храним запятую (пользовательский формат)
+    const withComma = withMinus.replace('.', ',');
+    // Не допускаем две запятых
+    const commaParts = withComma.split(',');
+    const displayNorm = commaParts.length > 2
+      ? commaParts[0] + ',' + commaParts.slice(1).join('')
+      : withComma;
+    // Внутреннее значение (для onChange и prevRawRef) — с точкой
+    const dotNorm = displayNorm.replace(',', '.');
+    // Обновляем буфер редактирования (с запятой — для отображения)
+    setEditText(displayNorm);
+    prevRawRef.current = dotNorm;
+    // Пробрасываем дальше только если значение завершённое (не заканчивается запятой/точкой)
+    if (onChange && dotNorm !== '' && !dotNorm.endsWith('.')) {
+      const fakeEvent = { ...e, target: { ...e.target, value: dotNorm, name } } as React.ChangeEvent<HTMLInputElement>;
+      onChange(fakeEvent);
+    } else if (onChange && dotNorm === '') {
+      onChange({ ...e, target: { ...e.target, value: '', name } } as React.ChangeEvent<HTMLInputElement>);
+    }
+  }, [onChange, name]);
+
+  const handleNumberKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Блокируем ввод букв и спецсимволов (кроме навигационных и управляющих клавиш)
+    if (e.ctrlKey || e.metaKey) {
+      // разрешаем Ctrl+C/V/A/X и т.д.
+      onKeyDown?.(e);
+      return;
+    }
+    if (e.key.length === 1 && !/[0-9.,\-]/.test(e.key)) {
+      e.preventDefault();
+      return;
+    }
+    onKeyDown?.(e);
+  }, [onKeyDown]);
 
   const defaultActions: TypeFieldActions = actions || [
     { type: "clear", onClick: handleClear },
@@ -776,26 +877,20 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
       <div className={styles.FieldInputWrapper}>
         <input
           ref={inputRef}
-          type="tex"
-          // inputMode="numeric"
-          // inputMode="decimal"
+          type="text"
+          inputMode="decimal"
           id={name}
           name={name}
-          value={safeValue}
-          onChange={onChange}
+          value={displayText}
+          onChange={handleChange}
+          onKeyDown={handleNumberKeyDown}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
           autoComplete="off"
           disabled={disabled}
           placeholder={placeholder}
-          step={step}
-          min={min}
-          max={max}
-          style={{
-            textAlign,
-            ...(visibleActions.length > 0 && {
-              // paddingRight: `${visibleActions.length * 32 - 6}px`,
-            }),
-          }}
+          style={{ textAlign }}
         />
 
         {visibleActions.length > 0 && (

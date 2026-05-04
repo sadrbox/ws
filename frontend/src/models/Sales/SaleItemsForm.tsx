@@ -275,20 +275,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
                 disabled
                 width="80px"
               />
-              <Field
-                label="ID"
-                name={`${formUid}_id`}
-                value={String(fields.id ?? "-")}
-                disabled
-                width="100px"
-              />
-              <Field
-                label="UUID"
-                name={`${formUid}_uuid`}
-                value={String(fields.uuid ?? "-")}
-                disabled
-                width="300px"
-              />
+
             </div>
           </Group>
         </>

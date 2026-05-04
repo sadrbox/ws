@@ -8,28 +8,28 @@ datasource db {
 }
 
 model User {
-  id               Int                @id @default(autoincrement())
-  uuid             String             @unique @default(uuid())
+  id               Int              @id @default(autoincrement())
+  uuid             String           @unique @default(uuid())
   username         String?
   email            String?
   password         String?
   employeeUuid     String?
-  isSuperAdmin     Boolean            @default(false)
+  isSuperAdmin     Boolean          @default(false)
   avatarPath       String?
   /// UUID активной (текущей) организации пользователя.
   /// Должен совпадать с одной из записей в userPermissions.
   organizationUuid String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @default(now()) @updatedAt
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @default(now()) @updatedAt
   deletedAt        DateTime?
   accessRights     AccessRight[]
   notifications    Notification[]
-  curatorTodos     Todo[]             @relation("TodoCurator")
-  executorTodos    Todo[]             @relation("TodoExecutor")
-  employee         Employee?          @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
-  organization     Organization?      @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+  curatorTodos     Todo[]           @relation("TodoCurator")
+  executorTodos    Todo[]           @relation("TodoExecutor")
+  employee         Employee?        @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
+  organization     Organization?    @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   /// Список организаций, к которым у пользователя есть доступ
-  userPermissions    UserPermission[]
+  userPermissions  UserPermission[]
 
   @@index([employeeUuid])
   @@index([organizationUuid])
@@ -41,17 +41,17 @@ model User {
 /// role: "admin"  — может управлять правами доступа пользователей своей орг.
 /// role: "member" — обычный пользователь.
 model UserPermission {
-  id               Int          @id @default(autoincrement())
-  uuid             String       @unique @default(uuid())
+  id               Int      @id @default(autoincrement())
+  uuid             String   @unique @default(uuid())
   userUuid         String
   organizationUuid String
   /// "admin" | "member"
-  role             String       @default("member")
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @default(now()) @updatedAt
+  role             String   @default("member")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
 
-  user             User         @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
-  organization     Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  user         User         @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
 
   @@unique([userUuid, organizationUuid])
   @@index([userUuid])
@@ -61,58 +61,58 @@ model UserPermission {
 }
 
 model Organization {
-  id                 Int                    @id @default(autoincrement())
-  uuid               String                 @unique @default(uuid())
-  bin                String                 @unique @db.VarChar(12)
-  shortName          String?
-  displayName        String?
-  inviteCode         String?                @unique
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @default(now()) @updatedAt
-  deletedAt          DateTime?
-  activityHistories  ActivityHistory[]
-  cashExpenseOrders  CashExpenseOrder[]     @relation("OrgCashExpenses")
-  cashReceiptOrders  CashReceiptOrder[]     @relation("OrgCashReceipts")
-  contracts          Contract[]             @relation("OrgContracts")
-  employees          Employee[]             @relation("EmployeeOrganization")
-  incomingInvoices   IncomingInvoice[]      @relation("OrgIncomingInvoices")
-  inventoryTransfers InventoryTransfer[]
-  outgoingInvoices   OutgoingInvoice[]      @relation("OrgOutgoingInvoices")
-  paymentInvoices    PaymentInvoice[]
-  payrollCalculations PayrollCalculation[]  @relation("OrgPayrollCalc")
-  payrollPayments    PayrollPayment[]       @relation("OrgPayrollPay")
-  purchases          Purchase[]
-  sales              Sale[]
-  scheduledTasks     ScheduledTask[]
-  todos              Todo[]
-  users              User[]                 @relation("UserOrganization")
-  userPermissions    UserPermission[]
-  accessRights       AccessRight[]
-  warehouses         Warehouse[]
-  employeeHistories  EmployeeHistory[]
-  counterparties     Counterparty[]         @relation("OrgCounterparties")
-  products           Product[]              @relation("OrgProducts")
-  brands             Brand[]                @relation("OrgBrands")
-  positions          Position[]             @relation("OrgPositions")
-  contacts           Contact[]              @relation("OrgContacts")
-  contactPersons     ContactPerson[]        @relation("OrgContactPersons")
-  bankAccounts       BankAccount[]          @relation("OrgBankAccounts")
+  id                  Int                  @id @default(autoincrement())
+  uuid                String               @unique @default(uuid())
+  bin                 String               @unique @db.VarChar(12)
+  shortName           String?
+  displayName         String?
+  inviteCode          String?              @unique
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @default(now()) @updatedAt
+  deletedAt           DateTime?
+  activityHistories   ActivityHistory[]
+  cashExpenseOrders   CashExpenseOrder[]   @relation("OrgCashExpenses")
+  cashReceiptOrders   CashReceiptOrder[]   @relation("OrgCashReceipts")
+  contracts           Contract[]           @relation("OrgContracts")
+  employees           Employee[]           @relation("EmployeeOrganization")
+  incomingInvoices    IncomingInvoice[]    @relation("OrgIncomingInvoices")
+  inventoryTransfers  InventoryTransfer[]
+  outgoingInvoices    OutgoingInvoice[]    @relation("OrgOutgoingInvoices")
+  paymentInvoices     PaymentInvoice[]
+  payrollCalculations PayrollCalculation[] @relation("OrgPayrollCalc")
+  payrollPayments     PayrollPayment[]     @relation("OrgPayrollPay")
+  purchases           Purchase[]
+  sales               Sale[]
+  scheduledTasks      ScheduledTask[]
+  todos               Todo[]
+  users               User[]               @relation("UserOrganization")
+  userPermissions     UserPermission[]
+  accessRights        AccessRight[]
+  warehouses          Warehouse[]
+  employeeHistories   EmployeeHistory[]
+  counterparties      Counterparty[]       @relation("OrgCounterparties")
+  products            Product[]            @relation("OrgProducts")
+  brands              Brand[]              @relation("OrgBrands")
+  positions           Position[]           @relation("OrgPositions")
+  contacts            Contact[]            @relation("OrgContacts")
+  contactPersons      ContactPerson[]      @relation("OrgContactPersons")
+  bankAccounts        BankAccount[]        @relation("OrgBankAccounts")
 
   @@index([updatedAt])
   @@map("organizations")
 }
 
 model Counterparty {
-  id               Int                @id @default(autoincrement())
-  uuid             String             @unique @default(uuid())
-  bin              String             @unique @db.VarChar(12)
-  shortName        String?
-  displayName      String?
-  organizationUuid String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @default(now()) @updatedAt
-  deletedAt        DateTime?
-  organization     Organization?      @relation("OrgCounterparties", fields: [organizationUuid], references: [uuid])
+  id                Int                @id @default(autoincrement())
+  uuid              String             @unique @default(uuid())
+  bin               String             @unique @db.VarChar(12)
+  shortName         String?
+  displayName       String?
+  organizationUuid  String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @default(now()) @updatedAt
+  deletedAt         DateTime?
+  organization      Organization?      @relation("OrgCounterparties", fields: [organizationUuid], references: [uuid])
   cashExpenseOrders CashExpenseOrder[] @relation("CpCashExpenses")
   cashReceiptOrders CashReceiptOrder[] @relation("CpCashReceipts")
   contracts         Contract[]         @relation("CpContracts")
@@ -129,27 +129,27 @@ model Counterparty {
 }
 
 model Contract {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
-  shortName        String
-  contractNumber   String?
-  contractText     String?
-  startDate        DateTime?
-  endDate          DateTime?
-  organizationUuid String?
-  counterpartyUuid String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @default(now()) @updatedAt
-  deletedAt        DateTime?
-  organization     Organization? @relation("OrgContracts", fields: [organizationUuid], references: [uuid])
-  counterparty     Counterparty? @relation("CpContracts", fields: [counterpartyUuid], references: [uuid])
-  cashExpenseOrders  CashExpenseOrder[]
-  cashReceiptOrders  CashReceiptOrder[]
-  incomingInvoices   IncomingInvoice[]
-  outgoingInvoices   OutgoingInvoice[]
-  paymentInvoices    PaymentInvoice[]
-  purchases          Purchase[]
-  sales              Sale[]
+  id                Int                @id @default(autoincrement())
+  uuid              String             @unique @default(uuid())
+  shortName         String
+  contractNumber    String?
+  contractText      String?
+  startDate         DateTime?
+  endDate           DateTime?
+  organizationUuid  String?
+  counterpartyUuid  String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @default(now()) @updatedAt
+  deletedAt         DateTime?
+  organization      Organization?      @relation("OrgContracts", fields: [organizationUuid], references: [uuid])
+  counterparty      Counterparty?      @relation("CpContracts", fields: [counterpartyUuid], references: [uuid])
+  cashExpenseOrders CashExpenseOrder[]
+  cashReceiptOrders CashReceiptOrder[]
+  incomingInvoices  IncomingInvoice[]
+  outgoingInvoices  OutgoingInvoice[]
+  paymentInvoices   PaymentInvoice[]
+  purchases         Purchase[]
+  sales             Sale[]
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -189,17 +189,17 @@ model ContactType {
 }
 
 model Contact {
-  id              Int          @id @default(autoincrement())
-  uuid            String       @unique @default(uuid())
-  value           String       @default("")
-  contactTypeUuid String?
-  ownerType       String?
-  ownerUuid       String?
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  value            String        @default("")
+  contactTypeUuid  String?
+  ownerType        String?
+  ownerUuid        String?
   organizationUuid String?
-  updatedAt       DateTime     @default(now()) @updatedAt
-  deletedAt       DateTime?
-  contactType     ContactType? @relation(fields: [contactTypeUuid], references: [uuid])
-  organization    Organization? @relation("OrgContacts", fields: [organizationUuid], references: [uuid])
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
+  contactType      ContactType?  @relation(fields: [contactTypeUuid], references: [uuid])
+  organization     Organization? @relation("OrgContacts", fields: [organizationUuid], references: [uuid])
 
   @@index([contactTypeUuid])
   @@index([ownerType, ownerUuid])
@@ -209,18 +209,18 @@ model Contact {
 }
 
 model ContactPerson {
-  id               Int       @id @default(autoincrement())
-  uuid             String    @unique @default(uuid())
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
   firstName        String?
   lastName         String?
   middleName       String?
-  fullName         String?   @db.VarChar(255)
+  fullName         String?       @db.VarChar(255)
   ownerType        String?
   ownerUuid        String?
   organizationUuid String?
   comment          String?
   avatarPath       String?
-  updatedAt        DateTime  @default(now()) @updatedAt
+  updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   organization     Organization? @relation("OrgContactPersons", fields: [organizationUuid], references: [uuid])
 
@@ -231,8 +231,8 @@ model ContactPerson {
 }
 
 model BankAccount {
-  id               Int       @id @default(autoincrement())
-  uuid             String    @unique @default(uuid())
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
   ownerType        String?
   ownerUuid        String?
   iban             String
@@ -241,9 +241,9 @@ model BankAccount {
   shortName        String?
   currencyUuid     String?
   organizationUuid String?
-  updatedAt        DateTime  @default(now()) @updatedAt
+  updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
-  currency         Currency? @relation(fields: [currencyUuid], references: [uuid])
+  currency         Currency?     @relation(fields: [currencyUuid], references: [uuid])
   organization     Organization? @relation("OrgBankAccounts", fields: [organizationUuid], references: [uuid])
 
   @@index([ownerType, ownerUuid])
@@ -352,7 +352,7 @@ model Warehouse {
 model Sale {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  date     DateTime      @default(now())
+  date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   amountWithoutVat Decimal?      @db.Decimal(18, 2)
@@ -384,7 +384,7 @@ model Sale {
 model Purchase {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  date     DateTime      @default(now())
+  date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -408,7 +408,7 @@ model Purchase {
 model OutgoingInvoice {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  date     DateTime      @default(now())
+  date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -432,7 +432,7 @@ model OutgoingInvoice {
 model IncomingInvoice {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  date     DateTime      @default(now())
+  date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -456,7 +456,7 @@ model IncomingInvoice {
 model PaymentInvoice {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  date     DateTime      @default(now())
+  date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -500,7 +500,7 @@ model ScheduledTask {
 model InventoryTransfer {
   id                Int           @id @default(autoincrement())
   uuid              String        @unique @default(uuid())
-  date      DateTime      @default(now())
+  date              DateTime      @default(now())
   description       String?
   status            String        @default("draft")
   fromWarehouseUuid String?
@@ -523,7 +523,7 @@ model InventoryTransfer {
 model CashReceiptOrder {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  date     DateTime      @default(now())
+  date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -547,7 +547,7 @@ model CashReceiptOrder {
 model CashExpenseOrder {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  date     DateTime      @default(now())
+  date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
   status           String        @default("draft")
@@ -569,11 +569,11 @@ model CashExpenseOrder {
 }
 
 model Brand {
-  id               Int       @id @default(autoincrement())
-  uuid             String    @unique @default(uuid())
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
   shortName        String
   organizationUuid String?
-  updatedAt        DateTime  @default(now()) @updatedAt
+  updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   organization     Organization? @relation("OrgBrands", fields: [organizationUuid], references: [uuid])
   products         Product[]
@@ -584,19 +584,19 @@ model Brand {
 }
 
 model Product {
-  id                  Int            @id @default(autoincrement())
-  uuid                String         @unique @default(uuid())
-  shortName           String
-  sku                 String?
-  brandUuid           String?
-  unitOfMeasureUuid   String?
-  organizationUuid    String?
-  updatedAt           DateTime       @default(now()) @updatedAt
-  deletedAt           DateTime?
-  brand               Brand?         @relation(fields: [brandUuid], references: [uuid])
-  unitOfMeasure       UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
-  organization        Organization?  @relation("OrgProducts", fields: [organizationUuid], references: [uuid])
-  saleItems           SaleItem[]
+  id                Int            @id @default(autoincrement())
+  uuid              String         @unique @default(uuid())
+  shortName         String
+  sku               String?
+  brandUuid         String?
+  unitOfMeasureUuid String?
+  organizationUuid  String?
+  updatedAt         DateTime       @default(now()) @updatedAt
+  deletedAt         DateTime?
+  brand             Brand?         @relation(fields: [brandUuid], references: [uuid])
+  unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
+  organization      Organization?  @relation("OrgProducts", fields: [organizationUuid], references: [uuid])
+  saleItems         SaleItem[]
 
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
@@ -608,7 +608,6 @@ model Product {
 model SaleItem {
   id                Int            @id @default(autoincrement())
   uuid              String         @unique @default(uuid())
-  lineNumber        Int            @default(0)
   quantity          Decimal        @default(0) @db.Decimal(18, 4)
   price             Decimal        @default(0) @db.Decimal(18, 2)
   amount            Decimal        @default(0) @db.Decimal(18, 2)
@@ -636,22 +635,22 @@ model SaleItem {
 }
 
 model Employee {
-  id                   Int                    @id @default(autoincrement())
-  uuid                 String                 @unique @default(uuid())
-  firstName            String?
-  lastName             String?
-  middleName           String?
-  fullName             String?                @db.VarChar(255)
-  iin                  String?                @db.VarChar(12)
-  avatarPath           String?
-  organizationUuid     String?
-  updatedAt            DateTime               @default(now()) @updatedAt
-  deletedAt            DateTime?
-  employeeHistory      EmployeeHistory[]
-  payrollCalculations  PayrollCalculation[]   @relation("PayrollCalcEmployee")
-  payrollPayments      PayrollPayment[]       @relation("PayrollPayEmployee")
-  organization         Organization?          @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid])
-  users                User[]
+  id                  Int                  @id @default(autoincrement())
+  uuid                String               @unique @default(uuid())
+  firstName           String?
+  lastName            String?
+  middleName          String?
+  fullName            String?              @db.VarChar(255)
+  iin                 String?              @db.VarChar(12)
+  avatarPath          String?
+  organizationUuid    String?
+  updatedAt           DateTime             @default(now()) @updatedAt
+  deletedAt           DateTime?
+  employeeHistory     EmployeeHistory[]
+  payrollCalculations PayrollCalculation[] @relation("PayrollCalcEmployee")
+  payrollPayments     PayrollPayment[]     @relation("PayrollPayEmployee")
+  organization        Organization?        @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid])
+  users               User[]
 
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -659,16 +658,16 @@ model Employee {
 }
 
 model Position {
-  id                  Int                    @id @default(autoincrement())
-  uuid                String                 @unique @default(uuid())
+  id                  Int                  @id @default(autoincrement())
+  uuid                String               @unique @default(uuid())
   shortName           String
   description         String?
   organizationUuid    String?
-  updatedAt           DateTime               @default(now()) @updatedAt
+  updatedAt           DateTime             @default(now()) @updatedAt
   deletedAt           DateTime?
-  organization        Organization?          @relation("OrgPositions", fields: [organizationUuid], references: [uuid])
+  organization        Organization?        @relation("OrgPositions", fields: [organizationUuid], references: [uuid])
   employeeHistory     EmployeeHistory[]
-  payrollCalculations PayrollCalculation[]   @relation("PayrollCalcPosition")
+  payrollCalculations PayrollCalculation[] @relation("PayrollCalcPosition")
 
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -698,17 +697,17 @@ model EmployeeHistory {
 }
 
 model AccessRight {
-  id               Int          @id @default(autoincrement())
-  uuid             String       @unique @default(uuid())
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
   modelName        String
-  accessLevel      String       @default("none")
+  accessLevel      String        @default("none")
   userUuid         String
   /// Права привязаны к конкретной организации.
   /// NULL — права действуют глобально (для суперадминов, legacy-записи).
   organizationUuid String?
-  updatedAt        DateTime     @default(now()) @updatedAt
+  updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
-  user             User         @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+  user             User          @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
 
   @@unique([userUuid, organizationUuid, modelName])
@@ -735,7 +734,7 @@ model Currency {
 model PayrollCalculation {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  date     DateTime      @default(now())
+  date             DateTime      @default(now())
   description      String?
   period           String?       @db.VarChar(7)
   employeeUuid     String?
@@ -769,7 +768,7 @@ model PayrollCalculation {
 model PayrollPayment {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  date     DateTime      @default(now())
+  date             DateTime      @default(now())
   description      String?
   period           String?       @db.VarChar(7)
   employeeUuid     String?

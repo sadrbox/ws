@@ -4,7 +4,9 @@ import modalManager from 'src/components/Modal/modalManager';
 import { createPortal } from 'react-dom';
 import { ContractsList } from 'src/models/Contracts';
 // Divider is imported in components that use it; not used here
-// import { getTranslation } from 'src/i18';
+import { translate } from 'src/i18';
+import { getFormatNumerical } from 'src/components/Table/services';
+import { getFormatDate, getFormatDateOnly } from 'src/utils/main.module';
 // import { CounterpartiesList } from 'src/models/Organizations';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
@@ -17,7 +19,7 @@ import { usePaneToolbarSlot, useHasToolbar } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
-import { usePaneDirty, usePaneNotifications, dismissPaneNotification } from 'src/hooks/useFormStore';
+import { usePaneDirty, usePaneDirtyDiff, usePaneNotifications, dismissPaneNotification } from 'src/hooks/useFormStore';
 import { CounterpartiesList } from 'src/models/Counterparties';
 import { ContactTypesList } from 'src/models/ContactTypes';
 import { ContactsList } from 'src/models/Contacts';
@@ -125,16 +127,13 @@ const PaneTabItem: FC<{
     >
       {!isLocked && (
         isDirty
-          ? <button
+          ? <CloseButton
             className={styles.PaneTabItemClose}
             onClick={(e) => { e.stopPropagation(); onClose(); }}
-            title="Закрыть"
-            type="button"
-          ><span className={styles.PaneTabItemDirtyDot} /></button>
+          />
           : <CloseButton
             className={styles.PaneTabItemClose}
             onClick={(e) => { e.stopPropagation(); onClose(); }}
-            size={14}
           />
       )}
       <span className={styles.PaneTabItemLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
@@ -311,13 +310,28 @@ const PersistenceModeToggle: FC = () => {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // NavbarPaneBell — колокольчик уведомлений активной панели в Navbar
+// ─── Форматирование значений в блоке "Несохранённые изменения" ──────────────
+function formatDiffValue(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "boolean") return v ? "Да" : "Нет";
+  if (typeof v === "number") return getFormatNumerical(v);
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return getFormatDate(s);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return getFormatDateOnly(s);
+  const n = Number(s.replace(/[\s\u00A0\u202F]/g, "").replace(",", "."));
+  if (!isNaN(n) && s.trim() !== "" && /^[\d\s\u00A0\u202F.,+-]+$/.test(s.trim())) return getFormatNumerical(n);
+  return s.length > 30 ? s.slice(0, 30) + "…" : s;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 
 const NavbarPaneBell: FC = () => {
   const { windows: { activePane, addPane } } = useAppContext();
   const isDirty = usePaneDirty(activePane ?? "");
+  const dirtyDiff = usePaneDirtyDiff(activePane ?? "");
   const notifications = usePaneNotifications(activePane ?? "");
   const [showNotes, setShowNotes] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
   const bellRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(notifications.length);
@@ -325,7 +339,10 @@ const NavbarPaneBell: FC = () => {
   const hoverRef = useRef(false);
 
   // Закрыть попover при смене панели
-  useEffect(() => { setShowNotes(false); }, [activePane]);
+  useEffect(() => { setShowNotes(false); setShowDiff(false); }, [activePane]);
+
+  // Сбросить diff при закрытии попover
+  useEffect(() => { if (!showNotes) setShowDiff(false); }, [showNotes]);
 
   // Авто-открыть попover при появлении новых уведомлений
   useEffect(() => {
@@ -452,6 +469,45 @@ const NavbarPaneBell: FC = () => {
             <div className={[styles.PaneNoteItem, styles.PaneNoteInfo].join(" ")}>
               <span className={styles.PaneNoteIcon}>✅</span>
               <span className={styles.PaneNoteText}>Нет уведомлений.</span>
+            </div>
+          )}
+          {isDirty && (
+            <div className={styles.PaneNoteDirtySection}>
+              <button
+                type="button"
+                className={styles.PaneNoteDirtyToggle}
+                onClick={() => setShowDiff(v => !v)}
+              >
+                <span>✏️ Несохранённые изменения</span>
+                <span className={styles.PaneNoteDirtyToggleArrow}>{showDiff ? "▲" : "▼"}</span>
+              </button>
+              {showDiff && (
+                <div className={styles.PaneNoteDirtyDiff}>
+                  {dirtyDiff.fields.filter(({ field }) => field !== "id" && field !== "uuid" && field !== "updatedAt" && !field.endsWith("Uuid")).map(({ field, savedValue, currentValue }) => (
+                    <div key={field} className={styles.PaneNoteDirtyRow}>
+                      <span className={styles.PaneNoteDirtyField}>
+                        {translate(field)}
+                      </span>
+                      <span className={styles.PaneNoteDirtyValues}>
+                        <span className={styles.PaneNoteDirtyOld}>{formatDiffValue(savedValue)}</span>
+                        <span className={styles.PaneNoteDirtyArrow}>→</span>
+                        <span className={styles.PaneNoteDirtyNew}>{formatDiffValue(currentValue)}</span>
+                      </span>
+                    </div>
+                  ))}
+                  {dirtyDiff.tables.map(({ key, pendingCount }) => (
+                    <div key={key} className={styles.PaneNoteDirtyRow}>
+                      <span className={styles.PaneNoteDirtyField}>{translate(key)}</span>
+                      <span className={styles.PaneNoteDirtyValues}>
+                        <span className={styles.PaneNoteDirtyNew}>{pendingCount} строк изменено</span>
+                      </span>
+                    </div>
+                  ))}
+                  {dirtyDiff.fields.filter(({ field }) => field !== "id" && field !== "uuid" && field !== "updatedAt" && !field.endsWith("Uuid")).length === 0 && dirtyDiff.tables.length === 0 && (
+                    <div className={styles.PaneNoteDirtyRow} style={{ color: "#999" }}>нет видимых изменений</div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

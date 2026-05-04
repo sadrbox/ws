@@ -149,10 +149,6 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
               />
             </GroupCol>
           </div>
-          <GroupRow style={{ justifyContent: "left" }}>
-            <div>ID: <span>{`${form.fields.id ?? "-"}`}</span></div>
-            <div>UUID: <span>{`${form.fields.uuid ?? "-"}`}</span></div>
-          </GroupRow>
         </div>
       ),
     },
@@ -174,31 +170,6 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
 };
 AccessRightsForm.displayName = "AccessRightsForm";
 
-const RelatedLink: FC<{
-  label: string;
-  endpoint: "organizations" | "users";
-  uuid?: string | null;
-  addPane: (options: any) => void;
-}> = ({ label, endpoint, uuid, addPane }) => {
-  if (!label) return <span />;
-  if (!uuid) return <span>{label}</span>;
-  return (
-    <button
-      type="button"
-      className={styles.PaneNoteJournalLink}
-      onClick={(e) => {
-        e.stopPropagation();
-        import("src/registry/formRegistry").then(({ openFormByEndpoint }) => {
-          openFormByEndpoint(endpoint, uuid, addPane);
-        });
-      }}
-      title="Открыть форму"
-    >
-      {label}
-    </button>
-  );
-};
-
 // ═══════════════════════════════════════════════════════════════════════════
 // MODEL RIGHTS LIST — список записей access-rights
 // ═══════════════════════════════════════════════════════════════════════════
@@ -207,33 +178,6 @@ const AccessRightsList: FC<{
   variant?: TTableVariant;
   onSelectItem?: (item: TDataItem) => void;
 }> = ({ variant, onSelectItem }) => {
-  const { addPane } = useAppContext().windows;
-  const renderCell = useCallback((row: TDataItem, col: TColumn) => {
-    if (col.identifier === "organization.shortName") {
-      const org = row.organization as any;
-      return (
-        <RelatedLink
-          label={org?.shortName ?? ""}
-          endpoint="organizations"
-          uuid={org?.uuid ?? (row.organizationUuid as string | undefined)}
-          addPane={addPane}
-        />
-      );
-    }
-    if (col.identifier === "user.username") {
-      const user = row.user as any;
-      return (
-        <RelatedLink
-          label={user?.username ?? ""}
-          endpoint="users"
-          uuid={user?.uuid ?? (row.userUuid as string | undefined)}
-          addPane={addPane}
-        />
-      );
-    }
-    return undefined;
-  }, [addPane]);
-
   return (
     <ModelList
       endpoint={ENDPOINT}
@@ -248,7 +192,6 @@ const AccessRightsList: FC<{
       variant={variant}
       onSelectItem={onSelectItem}
       defaultSort={{ id: "desc" }}
-      renderCell={renderCell}
     />
   );
 };
@@ -303,28 +246,6 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
   }, [modelNameMap, accessLevelMap]);
 
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
-    if (col.identifier === "organization.shortName") {
-      const org = row.organization as any;
-      return (
-        <RelatedLink
-          label={org?.shortName ?? ""}
-          endpoint="organizations"
-          uuid={org?.uuid ?? (row.organizationUuid as string | undefined)}
-          addPane={addPane}
-        />
-      );
-    }
-    if (col.identifier === "user.username") {
-      const user = row.user as any;
-      return (
-        <RelatedLink
-          label={user?.username ?? ""}
-          endpoint="users"
-          uuid={user?.uuid ?? (row.userUuid as string | undefined)}
-          addPane={addPane}
-        />
-      );
-    }
     if (col.identifier === "modelName") {
       if (ctx.inlineEditing) {
         // Исключаем из опций модели, уже занятые другими строками таблицы

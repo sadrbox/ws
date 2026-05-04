@@ -56,6 +56,16 @@ export interface LookupFieldProps {
   /** Какие кнопки показывать. По умолчанию — все доступные.
    *  Пример: ["quickselect"] — только кнопка быстрого выбора. */
   visibleActions?: LookupActionType[];
+  /**
+   * Вызывается когда пользователь нажимает Enter в поле без активного пункта дропдауна
+   * (сигнал для перехода на следующее поле в строке).
+   */
+  onEnterKey?: () => void;
+  /**
+   * Вызывается после того, как пользователь выбрал элемент из модального окна (SelectPane).
+   * Используется для перехода фокуса на следующее поле.
+   */
+  onAfterSelect?: () => void;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -108,6 +118,8 @@ const LookupField: FC<LookupFieldProps> = ({
   secondaryFields,
   extraParams,
   visibleActions,
+  onEnterKey,
+  onAfterSelect,
 }) => {
   // Подавляем неиспользуемые переменные совместимости
   void _columns;
@@ -208,7 +220,7 @@ const LookupField: FC<LookupFieldProps> = ({
     if (disabled) return;
     addPane({
       component: SelectPaneWrapper,
-      label: `Выбор: ${typeof label === "string" ? label : getByEndpoint(endpoint)?.label ?? endpoint}`,
+      label: `Выбор: ${(typeof label === "string" && label.trim()) ? label : (getByEndpoint(endpoint)?.label ?? endpoint)}`,
       isSelector: true,
       data: { endpoint, listComponent, extraParams } as any,
       onSelectResult: (item: Record<string, any>) => {
@@ -217,9 +229,19 @@ const LookupField: FC<LookupFieldProps> = ({
         onSelect(uuid, display, item);
         setIsDropdownOpen(false);
         setInputText(display);
+        // Переводим фокус на следующее поле после закрытия модалки.
+        // Сначала фокусируем собственный input (document.activeElement = наш input),
+        // чтобы focusNextInRow() мог найти tr и следующее поле.
+        if (onAfterSelect) {
+          setTimeout(() => {
+            const ownInput = wrapperRef.current?.querySelector<HTMLInputElement>('input');
+            if (ownInput) ownInput.focus();
+            onAfterSelect();
+          }, 50);
+        }
       },
     });
-  }, [disabled, addPane, label, endpoint, listComponent, displayField, onSelect, extraParams]);
+  }, [disabled, addPane, label, endpoint, listComponent, displayField, onSelect, extraParams, onAfterSelect]);
 
   // ── Быстрый выбор — загружает все записи и открывает inline dropdown ──
   const handleQuickSelect = useCallback(() => {
@@ -241,6 +263,8 @@ const LookupField: FC<LookupFieldProps> = ({
     onSelect(uuid, display, item);
     setIsDropdownOpen(false);
     setInputText(display);
+    // Перевод фокуса при dropdown-выборе НЕ выполняется — только при выборе из формы (pane).
+    // см. handleOpenModal → onSelectResult
   }, [onSelect, displayField]);
 
   const handleClear = useCallback(() => {
@@ -293,11 +317,16 @@ const LookupField: FC<LookupFieldProps> = ({
   // Навигация клавишами в dropdown
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isDropdownOpen || suggestions.length === 0) {
-      if (e.key === "ArrowDown" || e.key === "Enter") {
-        // При нажатии стрелки вниз без текста — открыть модалку
-        if (!inputText && !disabled) {
-          handleOpenModal();
+      if (e.key === "ArrowDown") {
+        // Стрелка вниз — активировать «Быстрый выбор» (inline dropdown)
+        if (!disabled) {
+          e.preventDefault();
+          handleQuickSelect();
         }
+      } else if (e.key === "Enter") {
+        // Enter без дропдауна — перейти на следующее поле
+        e.preventDefault();
+        onEnterKey?.();
       }
       return;
     }
@@ -311,11 +340,15 @@ const LookupField: FC<LookupFieldProps> = ({
       e.preventDefault();
       if (activeIndex >= 0 && activeIndex < suggestions.length) {
         handleSuggestionClick(suggestions[activeIndex]);
+      } else {
+        setIsDropdownOpen(false);
       }
+      // Всегда переходим на следующее поле при Enter (выбор сделан или подтверждён)
+      onEnterKey?.();
     } else if (e.key === "Escape") {
       setIsDropdownOpen(false);
     }
-  }, [isDropdownOpen, suggestions, activeIndex, inputText, disabled, handleOpenModal, handleSuggestionClick]);
+  }, [isDropdownOpen, suggestions, activeIndex, inputText, disabled, handleOpenModal, handleSuggestionClick, onEnterKey]);
 
   // Скроллинг активного элемента в видимую область dropdown
   useEffect(() => {
@@ -418,7 +451,6 @@ const LookupField: FC<LookupFieldProps> = ({
             autoComplete="off"
             disabled={disabled}
             placeholder={placeholder ?? "Введите для поиска..."}
-            onDoubleClick={handleOpenModal}
             style={{
               cursor: disabled ? "default" : "text",
               // ...(fieldActions.length > 0 && {
