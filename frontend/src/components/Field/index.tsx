@@ -742,6 +742,9 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     return String(value).replace(/[\s\u00A0\u202F]/g, '').replace(',', '.');
   }, [value]);
 
+  // Значение поля в момент получения фокуса — для сравнения в handleBlur
+  const valueAtFocusRef = useRef('');
+
   // Синхронизируем editText когда внешнее значение меняется извне (не через ввод пользователя)
   const prevRawRef = useRef(rawValue);
   useEffect(() => {
@@ -763,6 +766,8 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
+    // Сохраняем исходное значение для сравнения в handleBlur (определение изменения)
+    valueAtFocusRef.current = prevRawRef.current;
     // При входе в поле показываем значение с запятой (пользовательский формат)
     setEditText(prevRawRef.current.replace('.', ','));
   }, []);
@@ -773,8 +778,10 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     // Нормализуем введённое: убираем пробелы, меняем запятую на точку
     const n = parseNumericInput(e.target.value);
     if (n === null) {
-      // Если пустое или некорректное — очищаем
+      // Если пустое — ничего не делаем
       if (e.target.value.trim() === '') return;
+      // Некорректный ввод — сбрасываем в пустое, но только если исходное не было пустым
+      if (valueAtFocusRef.current === '') return;
       const fakeEvent = { target: { value: '', name }, currentTarget: e.currentTarget } as React.ChangeEvent<HTMLInputElement>;
       onChange(fakeEvent);
       return;
@@ -786,6 +793,8 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     if (mn !== null && n < mn) clamped = mn;
     if (mx !== null && n > mx) clamped = mx;
     prevRawRef.current = String(clamped);
+    // Вызываем onChange только если значение реально изменилось
+    if (String(clamped) === valueAtFocusRef.current) return;
     const fakeEvent = {
       target: { value: String(clamped), name },
       currentTarget: e.currentTarget,

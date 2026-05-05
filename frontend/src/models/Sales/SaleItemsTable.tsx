@@ -48,7 +48,7 @@ const ReadOnlyCell: FC<{ value: string; inlineEditing: boolean }> = ({ value, in
     <span
       className={flashing ? fieldStyles.flashReadOnly : undefined}
       onClick={handleClick}
-      style={inlineEditing ? { cursor: "not-allowed", display: "inline-block", width: "100%", textAlign: "right" } : undefined}
+      style={inlineEditing ? { cursor: "not-allowed", display: "flex", alignItems: "center", flex: 1, width: "100%", height: "100%", justifyContent: "flex-end" } : undefined}
     >
       {value}
     </span>

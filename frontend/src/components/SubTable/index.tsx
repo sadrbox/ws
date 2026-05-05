@@ -608,6 +608,29 @@ const SubTable: FC<SubTableProps> = ({
     notifyParent(cachedRowsRef.current as TDataItem[]);
   }, [validateCell, setCellError]);
 
+  // ── Refs для фокуса после добавления строки ──────────────────────────────
+  const containerRef = useRef<HTMLDivElement>(null);
+  // 'first' — деферред-режим (новая строка с отриц. id идёт первой при сортировке ASC)
+  // 'last'  — немедленный режим (новая строка с макс. id идёт последней)
+  const newRowFocusRef = useRef<'first' | 'last' | null>(null);
+
+  useEffect(() => {
+    if (!newRowFocusRef.current || !containerRef.current) return;
+    const position = newRowFocusRef.current;
+    newRowFocusRef.current = null;
+    requestAnimationFrame(() => {
+      if (!containerRef.current) return;
+      const allTrs = containerRef.current.querySelectorAll<HTMLElement>('tbody tr');
+      if (allTrs.length === 0) return;
+      const tr = position === 'first' ? allTrs[0] : allTrs[allTrs.length - 1];
+      const input = tr.querySelector<HTMLInputElement>('input:not([disabled]):not([type="checkbox"])');
+      if (input) {
+        input.focus();
+        try { input.select(); } catch { /* ignore */ }
+      }
+    });
+  }, [cacheVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Контекст для кастомных колбэков ────────────────────────────────────
   // Используем ref для rows, чтобы ctx.rows всегда возвращал свежие данные
   // (избегаем stale closure после delete → refetch)
@@ -842,6 +865,7 @@ const SubTable: FC<SubTableProps> = ({
         newRow._untouched = true;
       }
       cachedRowsRef.current = [newRow as TDataItem, ...cachedRowsRef.current];
+      newRowFocusRef.current = 'first';
       setCacheVersion(v => v + 1);
       notifyParent(cachedRowsRef.current as TDataItem[]);
       return;
@@ -864,6 +888,7 @@ const SubTable: FC<SubTableProps> = ({
       try {
         const { default: apiClient } = await import("src/services/api/client");
         await apiClient.post(`/${model}`, { ...resolvedDefaultNewRow, [parentKey]: parentUuid, ...(extraQueryParams ?? {}) });
+        newRowFocusRef.current = 'last';
       } catch (err: any) {
         alert(err.response?.data?.message || "Ошибка создания записи");
       } finally {
@@ -947,7 +972,7 @@ const SubTable: FC<SubTableProps> = ({
     );
   }
 
-  return <Table {...tableProps} />;
+  return <div ref={containerRef} style={{ display: 'contents' }}><Table {...tableProps} /></div>;
 };
 
 SubTable.displayName = "SubTable";

@@ -242,6 +242,7 @@ tbody {
 	// contain: content;
 
 	tr {
+		// cursor: pointer;
 		// Оптимизация для каждой строки
 		will-change: auto;
 		transform: translate3d(0, 0, 0);
@@ -269,6 +270,23 @@ tbody {
 				overflow: hidden;
 				user-select: none;
 				border: 1px solid #fff;
+
+				// Поля ввода без фокуса наследуют pointer от tr;
+				// при получении фокуса — cursor меняется на text мгновенно через :focus
+				input:not([type="checkbox"]),
+				textarea,
+				select {
+					cursor: default !important;
+				}
+
+				input:not([type="checkbox"]):focus,
+				textarea:focus,
+				select:focus {
+					cursor: text;
+					user-select: text;
+				}
+
+
 
 
 

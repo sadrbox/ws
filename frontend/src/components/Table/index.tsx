@@ -1187,12 +1187,68 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     }
   }, [row.id, rows, isAllSelectedMode, setIsAllSelectedMode, setSelectedRows, setExcludedRows]);
 
+  // Флаг: mousedown произошёл на уже сфокусированном поле — клик должен быть стандартным
+  const clickedFocusedInputRef = useRef(false);
+
   const handleRowClick = useCallback(() => {
     setActiveRow?.(row.id as number);
+    if (clickedFocusedInputRef.current) {
+      // Клик по уже сфокусированному полю — не сбрасываем фокус, даём стандартное поведение
+      clickedFocusedInputRef.current = false;
+      return;
+    }
+    // Для всех остальных кликов — снимаем фокус с любого активного поля ввода
+    const active = document.activeElement as HTMLElement | null;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') && (active as HTMLInputElement).type !== 'checkbox') {
+      active.blur();
+    }
   }, [setActiveRow, row.id]);
 
-  const handleDoubleClick = useCallback(() => {
-    if (inlineEditingRef?.current) return; // В inline-режиме двойной клик не открывает форму
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!inlineEditingRef?.current) {
+      clickedFocusedInputRef.current = false;
+      return;
+    }
+    const target = e.target as HTMLElement;
+    const isEditableInput =
+      (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'checkbox') ||
+      target.tagName === 'TEXTAREA';
+    if (!isEditableInput) {
+      clickedFocusedInputRef.current = false;
+      return;
+    }
+    // Проверяем: есть ли уже сфокусированное поле в ЭТОЙ же строке (не только в кликнутом поле)
+    const tr = e.currentTarget as HTMLElement;
+    const active = document.activeElement as HTMLElement | null;
+    const rowHasFocusedInput =
+      active !== null &&
+      ((active.tagName === 'INPUT' && (active as HTMLInputElement).type !== 'checkbox') ||
+        active.tagName === 'TEXTAREA') &&
+      tr.contains(active);
+    if (rowHasFocusedInput) {
+      // В строке уже есть фокус → разрешаем переключение фокуса одиночным кликом
+      // (стандартное поведение браузера: перевести курсор, выделить текст и т.д.)
+      clickedFocusedInputRef.current = true;
+    } else {
+      // В строке нет фокуса → блокируем авто-фокус; фокус только по двойному клику
+      clickedFocusedInputRef.current = false;
+      e.preventDefault();
+    }
+  }, [inlineEditingRef]);
+
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    if (inlineEditingRef?.current) {
+      // В inline-режиме: двойной клик по полю ввода — фокусируем его
+      const target = e.target as HTMLElement;
+      const isEditableField =
+        (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'checkbox') ||
+        target.tagName === 'TEXTAREA';
+      if (isEditableField) {
+        (target as HTMLInputElement).focus();
+        try { (target as HTMLInputElement).select(); } catch { /* ignore */ }
+      }
+      return;
+    }
     if (onSelectItem) {
       onSelectItem(row);
     } else if (openModelForm) {
@@ -1208,6 +1264,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     <Fragment>
       <tr
         onClick={handleRowClick}
+        onMouseDown={handleMouseDown}
         onDoubleClick={handleDoubleClick}
         className={[isActive && styles.activeRow].filter(r => !!r).join(' ')}
         data-active={isActive || undefined}
