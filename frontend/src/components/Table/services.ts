@@ -1,6 +1,5 @@
 import { getFormatDateOnly } from "src/utils/main.module";
 import { TColumn, TDataItem, TypeTableTypes } from "./types";
-import { CSSProperties } from "react";
 
 const getNestedValue = <T>(obj: T, path: string): any => {
 	return path.split(".").reduce((acc: any, key) => acc?.[key], obj);
@@ -121,19 +120,6 @@ export function getModelColumns(
 	}
 
 	return columns;
-}
-
-export function getTextAlignByColumnType(column: TColumn): CSSProperties {
-	switch (column.type) {
-		case "number":
-			return { justifyContent: "right" }; // align-items - не подойдет!
-		case "string":
-			return { justifyContent: "left" };
-		case "switcher":
-			return { justifyContent: "center" };
-		default:
-			return { justifyContent: "left" };
-	}
 }
 
 export function getFormatColumnValue(

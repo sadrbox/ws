@@ -10,7 +10,7 @@ import {
 } from './types';
 
 import { getTranslateColumn } from 'src/i18';
-import { getFormatColumnValue, getTextAlignByColumnType } from './services';
+import { getFormatColumnValue } from './services';
 
 import Modal from '../Modal';
 import { Button } from '../Button';
@@ -551,7 +551,7 @@ const Table: FC<TableProps> = memo((props) => {
         )}
 
         <div className={styles.TableScrollContainer}>
-          <div ref={scrollRef} className={styles.TableScrollWrapper} style={{ overflowAnchor: 'none' }}>
+          <div ref={scrollRef} className={`${styles.TableScrollWrapper} ${styles.NoOverflowAnchor}`}>
             <TableArea />
           </div>
           {(isLoading || isFetchingNextPage) && (
@@ -580,7 +580,7 @@ const TableArea = memo(() => {
     <>
       <table>
         <colgroup>
-          {!isSelect && <col style={{ width: '30px', maxWidth: '30px', minWidth: '30px' }} />}
+          {!isSelect && <col className={styles.CheckboxCol} />}
           {visibleColumns.slice(0, -1).map(col => {
             // console.log(col.identifier);
             return (
@@ -791,8 +791,8 @@ const TableHeader = memo(() => {
     <thead>
       <tr>
         {!isSelect && (
-          <th style={{ width: '30px', textAlign: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+          <th className={styles.HeaderCheckboxCell}>
+            <div className={styles.CenterContent}>
               <input
                 ref={checkboxRef}
                 type="checkbox"
@@ -820,7 +820,7 @@ const TableHeader = memo(() => {
               <div className={styles.TableHeaderCell}>
                 <span>{getTranslateColumn(col)}</span>
                 {isSorting && (
-                  <svg style={{ transform: dir === 'desc' ? 'scaleY(-1)' : 'none' }}
+                  <svg className={`${styles.SortArrow} ${dir === 'desc' ? styles.desc : ''}`}
                     width="24px" height="24px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <g><path fill="none" d="M0 0h24v24H0z" /><path d="M12 14l-4-4h8z" /></g>
                   </svg>
@@ -1037,15 +1037,9 @@ const TableBody = memo(() => {
   }
 
   return (
-    <tbody
-      // className={isLoading ? styles.blur5 : ''}
-      style={{
-        willChange: 'transform',
-        transform: 'translate3d(0, 0, 0)',
-      }}
-    >
+    <tbody>
       {topPaddingAll > 0 && (
-        <tr style={{ height: `${topPaddingAll}px`, border: '0px' }}>
+        <tr className={styles.VirtualPaddingRow} style={{ height: `${topPaddingAll}px` }}>
           <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
         </tr>
       )}
@@ -1059,7 +1053,7 @@ const TableBody = memo(() => {
       ))}
 
       {bottomPaddingAll > 0 && (
-        <tr style={{ height: `${bottomPaddingAll}px`, border: '0px' }}>
+        <tr className={styles.VirtualPaddingRow} style={{ height: `${bottomPaddingAll}px` }}>
           <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} >
 
           </td>
@@ -1223,24 +1217,32 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   const isExpanded = expandedRowIds?.has(rowUuid) ?? false;
   const visibleColCount = columns.filter(c => c.visible).length + (variant !== 'select' ? 1 : 0);
 
+  // Класс выравнивания ячейки по типу колонки — вычисляется один раз на колонку
+  const cellAlignClass = (col: TColumn) => {
+    switch (col.type) {
+      case 'number': return styles.JustifyRight;
+      case 'switcher': return styles.JustifyCenter;
+      default: return styles.JustifyLeft;
+    }
+  };
+
+  const trClassName = [
+    isActive && styles.activeRow,
+    isLoading && styles.RowLoading,
+  ].filter(Boolean).join(' ');
+
   return (
     <Fragment>
       <tr
         onClick={handleRowClick}
         onMouseDown={handleMouseDown}
         onDoubleClick={handleDoubleClick}
-        className={[isActive && styles.activeRow].filter(r => !!r).join(' ')}
+        className={trClassName}
         data-active={isActive || undefined}
-        style={{
-          willChange: isActive ? 'background-color, box-shadow' : 'auto',
-          transform: 'translate3d(0, 0, 0)',
-          opacity: isLoading ? 0.3 : 1,
-          pointerEvents: isLoading ? 'none' : 'auto',
-        }}
       >
         {variant !== 'select' && (
-          <td style={{ textAlign: 'center' }}>
-            <div className={styles.TableBodyCell} style={{ justifyContent: 'center' }}>
+          <td className={styles.CellCenter}>
+            <div className={`${styles.TableBodyCell} ${styles.CellJustifyCenter}`}>
               <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading} />
             </div>
           </td>
@@ -1248,18 +1250,13 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         {columns.map(col => {
           // Кастомный рендер ячейки (переводы, спецзначения) — работает в любом режиме
           const currentRenderCell = renderCellRef?.current;
-          const align = getTextAlignByColumnType(col);
+          const cellClass = `${styles.TableBodyCell} ${cellAlignClass(col)}`;
           if (currentRenderCell) {
             const customCell = currentRenderCell(row, col);
             if (customCell !== undefined) {
               return (
                 <td key={col.identifier}>
-                  <div className={styles.TableBodyCell} style={{
-                    ...align,
-                    willChange: 'contents', transform: 'translate3d(0, 0, 0)'
-                  }}>
-                    {customCell}
-                  </div>
+                  <div className={cellClass}>{customCell}</div>
                 </td>
               );
             }
@@ -1267,14 +1264,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           const value = getFormatColumnValue(row, col);
           return (
             <td key={col.identifier}>
-              <div
-                style={{
-                  ...align,
-                  willChange: 'contents',
-                  transform: 'translate3d(0, 0, 0)',
-                }}
-                className={styles.TableBodyCell}
-              >
+              <div className={cellClass}>
                 <span>{value}</span>
               </div>
             </td>
@@ -1286,7 +1276,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           <tr>
             <td
               colSpan={visibleColCount}
-              style={{ padding: 0, background: 'var(--bg-secondary, #f8f9fa)', borderBottom: '2px solid var(--border-color, #e0e0e0)' }}
+              className={styles.ExpandedRowCell}
             >
               {renderExpandedRow(row)}
             </td>
@@ -1314,7 +1304,7 @@ const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
   useEffect(() => { setColumnsConfig(columns); }, [columns]);
 
   return (
-    <Modal title="Колонки таблицы" method={method} onApply={onApply} style={{ width: '400px' }}>
+    <Modal title="Колонки таблицы" method={method} onApply={onApply} className={styles.ColumnsModal}>
       <TableConfigColumns columns={columnsConfig} setColumns={setColumnsConfig} />
     </Modal>
   );
@@ -1516,9 +1506,9 @@ const FieldDateRangeModal = memo(({ method, startDate, endDate, onApply }: {
       method={method}
       onApply={handleApply}
       title="Период"
-      style={{ maxWidth: 400 }}
+      className={styles.DateRangeModal}
     >
-      <div className={styles.FilterGroup} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+      <div className={`${styles.FilterGroup} ${styles.DateRangeFilterGroup}`}>
         <div className={styles.SearchContainer}>
           <input
             type="datetime-local"

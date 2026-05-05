@@ -15,13 +15,14 @@
 		// "ignoreDeprecations": "6.0",
 
 		/* Bundler mode */
-		"moduleResolution": "bundler", // was bundler
+		"moduleResolution": "bundler",
 		"allowImportingTsExtensions": true,
 		"isolatedModules": false, // was true
 		"moduleDetection": "force",
 		"noEmit": true,
 		// "jsx": "react",
 		"jsx": "react-jsx",
+		"types": ["node"],
 
 		/* Linting */
 		"strict": true,

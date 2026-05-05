@@ -1,0 +1,62 @@
+/* SubTable — стили вложенной (tabular part) таблицы */
+
+/* Контейнер-обёртка над <Table>: используется как display:contents,
+   но имеет ref для фокуса первого/последнего input после добавления строки. */
+.SubTableHost {
+  display: contents;
+}
+
+/* Заглушка когда parentUuid ещё не задан */
+.EmptyParent {
+  padding: 24px;
+  color: $color5;
+  text-align: center;
+}
+
+/* Бейдж id/uuid для несохранённых (temp) строк */
+.TempIdBadge {
+  color: $color5;
+  font-style: italic;
+}
+
+/* Враппер ячейки с возможной ошибкой/обязательностью */
+.CellWrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+/* Ошибка валидации: красная inset-рамка */
+.CellWrap_error {
+  box-shadow: inset 0 0 0 1.5px #e53935;
+  background: rgba(229, 57, 53, 0.04);
+}
+
+/* Обязательное пустое поле: оранжевая inset-рамка */
+.CellWrap_required {
+  box-shadow: inset 0 0 0 1px #ff9800;
+  background: rgba(255, 152, 0, 0.1);
+}
+
+/* Тултип ошибки над ячейкой */
+.CellErrorTooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  font-size: 11px;
+  line-height: 14px;
+  color: #e53935;
+  white-space: nowrap;
+  pointer-events: none;
+  padding: 1px 4px;
+  background: #fff3f3;
+  border-radius: 3px 3px 0 0;
+  border: 1px solid #e53935;
+  border-bottom: none;
+  z-index: 10;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -37,7 +37,7 @@
 		"@testing-library/user-event": "^14.6.1",
 		"@types/feather-icons": "^4.29.4",
 		"@types/lodash": "^4.17.13",
-		"@types/node": "^22.10.2",
+		"@types/node": "^22.19.17",
 		"@types/react": "^19.1.2",
 		"@types/react-dom": "^19.0.2",
 		"@types/testing-library__react": "^10.0.1",

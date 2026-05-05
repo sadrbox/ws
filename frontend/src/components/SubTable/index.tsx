@@ -18,10 +18,24 @@ import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useIn
 import { useModelDelete } from "src/hooks/useModelDelete";
 import Toolbar from "src/components/Toolbar";
 import { useQueryClient } from "@tanstack/react-query";
+import styles from "./SubTable.module.scss";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Типы
 // ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Внутренний тип строки таблицы с pending-маркерами.
+ * Расширяет TDataItem полями, которые SubTable добавляет локально
+ * для отслеживания несохранённых изменений (`deferRemoteChanges`).
+ */
+type PendingRow = TDataItem & {
+  _pendingAction?: "create" | "update" | "delete";
+  _untouched?: boolean;
+};
+
+/** Хелпер: безопасный каст к PendingRow (TDataItem уже типизирован, но без приватных полей) */
+const asPending = (r: TDataItem): PendingRow => r as PendingRow;
 
 /**
  * Правило валидации ячейки SubTable.
@@ -41,6 +55,7 @@ export interface SubTableProps {
   /** Ключ для columns.json (например "SaleItemsList_part") */
   componentName: string;
   /** JSON-конфиг колонок (import columnsJson from "./saleItemsColumns.json") */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   columnsJson: any;
   /** Имя FK-параметра для фильтрации (например "saleUuid", "employeeUuid") */
   parentKey: string;
@@ -180,29 +195,43 @@ export interface SubTableContext {
 
 /** Получить rowId для идентификации строки в cellErrors */
 function getRowId(row: TDataItem): string {
-  return (row as any).uuid || String((row as any).id);
+  return row.uuid || String(row.id);
+}
+
+/** Сравнение по бизнес-id (uuid приоритетнее, fallback на числовой id) */
+function isSameRow(a: TDataItem, b: TDataItem): boolean {
+  return (!!a.uuid && a.uuid === b.uuid) || a.id === b.id;
+}
+
+/** Безопасное извлечение сообщения ошибки сервера из axios-подобного err */
+function extractServerError(err: unknown): string {
+  if (typeof err === "object" && err !== null) {
+    const e = err as { response?: { data?: { message?: string } }; message?: string };
+    return e.response?.data?.message || e.message || "Ошибка сохранения";
+  }
+  return "Ошибка сохранения";
 }
 
 /**
  * Мерж серверных строк с pending-строками (update/delete/create).
  * Возвращает объединённый массив.
  */
-function mergeServerWithPending(serverItems: TDataItem[], pendingRows: TDataItem[]): TDataItem[] {
-  const serverUuidSet = new Set(serverItems.map((r: any) => r.uuid).filter(Boolean));
-  const merged: TDataItem[] = [];
+function mergeServerWithPending(serverItems: TDataItem[], pendingRows: TDataItem[]): PendingRow[] {
+  const serverUuidSet = new Set(serverItems.map(r => r.uuid).filter(Boolean));
+  const merged: PendingRow[] = [];
 
   // 1. Обходим серверные строки: если есть pending update/delete — подставляем его
   for (const item of serverItems) {
-    const pendingRow = pendingRows.find((p: any) =>
+    const pendingRow = (pendingRows as PendingRow[]).find(p =>
       p._pendingAction && p._pendingAction !== "create" &&
-      ((p.uuid && p.uuid === (item as any).uuid) || p.id === (item as any).id)
+      ((p.uuid && p.uuid === item.uuid) || p.id === item.id)
     );
-    merged.push(pendingRow ?? item);
+    merged.push(pendingRow ?? asPending(item));
   }
 
   // 2. Добавляем temp-строки (create), которых нет на сервере
-  for (const p of pendingRows) {
-    if ((p as any)._pendingAction === "create" && !serverUuidSet.has((p as any).uuid)) {
+  for (const p of pendingRows as PendingRow[]) {
+    if (p._pendingAction === "create" && !serverUuidSet.has(p.uuid)) {
       merged.unshift(p);
     }
   }
@@ -324,7 +353,7 @@ const SubTable: FC<SubTableProps> = ({
   // ставим счётчик ниже минимума, чтобы новые строки не получали дублирующиеся ключи.
   const tempIdRef = useRef(
     deferRemoteChanges && initialPendingRows?.length
-      ? Math.min(-1, Math.min(...initialPendingRows.map((r: any) => (typeof r.id === "number" ? r.id : 0))) - 1)
+      ? Math.min(-1, Math.min(...initialPendingRows.map(r => (typeof r.id === "number" ? r.id : 0))) - 1)
       : -1,
   );
   // Флаг: были ли initialPendingRows уже применены (мерж выполняется один раз)
@@ -346,11 +375,11 @@ const SubTable: FC<SubTableProps> = ({
       // После коммита данные уже на сервере, а ветка B при следующем allItems
       // должна выполнить чистую замену кэша (без мержа старых dirty-строк).
       cachedRowsRef.current = cachedRowsRef.current
-        .filter((r: any) => !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")))
-        .map((r: any) => {
+        .filter(r => !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")))
+        .map(r => {
           if (r._pendingAction) {
-            const { _pendingAction, _untouched, ...rest } = r;
-            return rest;
+            const { _pendingAction: _a, _untouched: _u, ...rest } = r;
+            return rest as PendingRow;
           }
           return r;
         });
@@ -367,19 +396,19 @@ const SubTable: FC<SubTableProps> = ({
   const handleDelete = useCallback(async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
     if (deferRemoteChanges) {
       const toDelete = new Set<number>(selectedRowIds);
-      cachedRowsRef.current = cachedRowsRef.current.map((r: any) => {
+      cachedRowsRef.current = cachedRowsRef.current.map(r => {
         if (!r) return r;
         if (toDelete.has(r.id)) {
           if (r._pendingAction === "create") return null; // убрать созданную локально запись
-          return { ...r, _pendingAction: "delete" };
+          return { ...r, _pendingAction: "delete" as const };
         }
         return r;
-      }).filter(Boolean);
+      }).filter((r): r is PendingRow => r !== null);
       // Очищаем ошибки валидации для удалённых строк
       setCellErrors(prev => {
         const next = { ...prev };
         for (const id of toDelete) {
-          const row = tableRows.find((r: any) => r.id === id);
+          const row = tableRows.find(r => r.id === id);
           if (row) delete next[getRowId(row)];
         }
         return next;
@@ -407,14 +436,14 @@ const SubTable: FC<SubTableProps> = ({
    * новые пустые строки, которые пользователь ещё не редактировал,
    * не должны попадать в pending (sessionStorage) и не должны коммититься.
    */
-  const notifyParent = useCallback((items: TDataItem[]) => {
+  const notifyParent = useCallback((items: PendingRow[]) => {
     if (!onItemsChangeRef.current) return;
-    const filtered = items.filter((r: any) => !r._untouched);
+    const filtered = items.filter(r => !r._untouched);
     onItemsChangeRef.current(filtered);
   }, []);
 
   // ── Кэширование строк ─────────────────────────────────────────────────
-  const cachedRowsRef = useRef<TDataItem[]>([]);
+  const cachedRowsRef = useRef<PendingRow[]>([]);
   const [cacheVersion, setCacheVersion] = useState(0);
 
   useEffect(() => {
@@ -431,14 +460,14 @@ const SubTable: FC<SubTableProps> = ({
 
     // ── Ветка B: синхронизация кэша с серверными данными ──
     // Убираем любые остаточные temp-строки (отрицательный id или uuid "tmp-...")
-    const clean = allItems.filter((r: any) =>
+    const clean = allItems.filter(r =>
       !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-"))
-    );
+    ) as PendingRow[];
 
     const prev = cachedRowsRef.current;
     // Собираем dirty-строки, исключая «нетронутые» (новые пустые строки — не были отредактированы)
-    const dirtyRows = deferRemoteChanges
-      ? prev.filter((r: any) => r._pendingAction && !r._untouched)
+    const dirtyRows: PendingRow[] = deferRemoteChanges
+      ? prev.filter(r => r._pendingAction && !r._untouched)
       : [];
 
     // Если есть pending-строки при deferRemoteChanges — мержим с серверными данными,
@@ -457,12 +486,12 @@ const SubTable: FC<SubTableProps> = ({
     }
 
     // Нет pending-строк — чистая замена кэша
-    const hadDirtyRows = prev.some((r: any) => r._pendingAction);
+    const hadDirtyRows = prev.some(r => r._pendingAction);
     const countChanged = prev.length !== clean.length;
     // Сравниваем содержимое: проверяем id, uuid и все скалярные поля (deep compare).
     // Ранее сравнивались только id/uuid, что пропускало обновления содержимого строк.
-    const contentChanged = countChanged || prev.some((r: any, i: number) => {
-      const c = clean[i] as any;
+    const contentChanged = countChanged || prev.some((r, i) => {
+      const c = clean[i];
       if (!c || r.id !== c.id || r.uuid !== c.uuid) return true;
       // Быстрая deep-проверка через JSON
       return JSON.stringify(r) !== JSON.stringify(c);
@@ -511,7 +540,7 @@ const SubTable: FC<SubTableProps> = ({
     // чтобы после refetch остались ТОЛЬКО актуальные серверные данные.
     if (deferRemoteChanges) {
       cachedRowsRef.current = cachedRowsRef.current.filter(
-        (r: any) => !r._pendingAction,
+        r => !r._pendingAction,
       );
       setCacheVersion(v => v + 1);
       notifyParent(cachedRowsRef.current);
@@ -534,17 +563,13 @@ const SubTable: FC<SubTableProps> = ({
 
     // Если режим отложенных изменений — изменяем локальную копию и помечаем строку как обновлённую
     if (deferRemoteChanges) {
-      cachedRowsRef.current = cachedRowsRef.current.map((r: any) => {
-        if (!r) return r;
-        const idMatch = ((r.uuid && r.uuid === (row as any).uuid) || r.id === (row as any).id);
-        if (idMatch) {
-          const next = { ...r, [field]: value };
-          if (next._pendingAction !== "create") next._pendingAction = "update";
-          // Строка была отредактирована — снимаем маркер «нетронутая»
-          delete next._untouched;
-          return next;
-        }
-        return r;
+      cachedRowsRef.current = cachedRowsRef.current.map(r => {
+        if (!isSameRow(r, row)) return r;
+        const next: PendingRow = { ...r, [field]: value };
+        if (next._pendingAction !== "create") next._pendingAction = "update";
+        // Строка была отредактирована — снимаем маркер «нетронутая»
+        delete next._untouched;
+        return next;
       });
       setCacheVersion(v => v + 1);
       notifyParent(cachedRowsRef.current);
@@ -557,11 +582,9 @@ const SubTable: FC<SubTableProps> = ({
     if (!row.uuid) return;
 
     // Оптимистичный локальный апдейт — немедленный отклик UI без мигания
-    cachedRowsRef.current = cachedRowsRef.current.map((r: any) => {
-      if (!r) return r;
-      const idMatch = ((r.uuid && r.uuid === (row as any).uuid) || r.id === (row as any).id);
-      return idMatch ? { ...r, [field]: value } : r;
-    });
+    cachedRowsRef.current = cachedRowsRef.current.map(r =>
+      isSameRow(r, row) ? { ...r, [field]: value } : r
+    );
     setCacheVersion(v => v + 1);
 
     setOpCount(c => c + 1);
@@ -573,9 +596,9 @@ const SubTable: FC<SubTableProps> = ({
       const { default: apiClient } = await import("src/services/api/client");
       await apiClient.put(`/${model}/${row.uuid}`, { [field]: value });
       // refetch не нужен — оптимистичный кэш уже актуален
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Сервер вернул ошибку — откатываем через refetch и показываем ошибку в ячейке
-      const serverError = err.response?.data?.message || "Ошибка сохранения";
+      const serverError = extractServerError(err);
       setCellError(rowId, field, serverError);
       void refetch();
     } finally {
@@ -594,17 +617,13 @@ const SubTable: FC<SubTableProps> = ({
       setCellError(rowId, field, error);
     }
 
-    cachedRowsRef.current = cachedRowsRef.current.map((r: any) => {
-      if (!r) return r;
-      const idMatch = ((r.uuid && r.uuid === (row as any).uuid) || r.id === (row as any).id);
-      if (idMatch) {
-        const next = { ...r, ...patch };
-        if (next._pendingAction !== "create") next._pendingAction = "update";
-        // Строка была отредактирована — снимаем маркер «нетронутая»
-        delete next._untouched;
-        return next;
-      }
-      return r;
+    cachedRowsRef.current = cachedRowsRef.current.map(r => {
+      if (!isSameRow(r, row)) return r;
+      const next: PendingRow = { ...r, ...patch };
+      if (next._pendingAction !== "create") next._pendingAction = "update";
+      // Строка была отредактирована — снимаем маркер «нетронутая»
+      delete next._untouched;
+      return next;
     });
     setCacheVersion(v => v + 1);
     notifyParent(cachedRowsRef.current);
@@ -661,11 +680,9 @@ const SubTable: FC<SubTableProps> = ({
     // Немедленный режим — оптимистичный апдейт + PUT на сервер
     if (!row.uuid) return;
     // Оптимистичный локальный апдейт — включаем relation-объекты для правильного отображения
-    cachedRowsRef.current = cachedRowsRef.current.map((r: any) => {
-      if (!r) return r;
-      const idMatch = ((r.uuid && r.uuid === (row as any).uuid) || r.id === (row as any).id);
-      return idMatch ? { ...r, [fkField]: value, ...(extraPatch ?? {}) } : r;
-    });
+    cachedRowsRef.current = cachedRowsRef.current.map(r =>
+      isSameRow(r, row) ? { ...r, [fkField]: value, ...(extraPatch ?? {}) } : r
+    );
     setCacheVersion(v => v + 1);
     setOpCount(c => c + 1);
     try {
@@ -678,8 +695,8 @@ const SubTable: FC<SubTableProps> = ({
       }
       await apiClient.put(`/${model}/${row.uuid}`, { [fkField]: value, ...primitiveExtras });
       // refetch не нужен — оптимистичный кэш актуален
-    } catch (err: any) {
-      const serverError = err.response?.data?.message || "Ошибка сохранения";
+    } catch (err: unknown) {
+      const serverError = extractServerError(err);
       const rowId = getRowId(row);
       setCellError(rowId, fkField, serverError);
       void refetch(); // откатываем к серверному состоянию
@@ -702,19 +719,18 @@ const SubTable: FC<SubTableProps> = ({
   // ── Фронтенд-фильтрация (всегда на фронте) ─────────────────────────────
   const displayRows = useMemo(() => {
     // 1. Скрываем строки, помеченные на удаление
-    let visible = deferRemoteChanges
-      ? rows.filter((r: TDataItem) => (r as any)._pendingAction !== "delete")
+    let visible: PendingRow[] = deferRemoteChanges
+      ? rows.filter(r => r._pendingAction !== "delete")
       : rows;
 
 
     // 2. Фильтруем по владельцу (parentKey) — защитный слой на фронтенде,
     //    даже если сервер вернул лишние строки или данные из кеша
     if (parentUuid && parentKey) {
-      visible = visible.filter((r: TDataItem) => {
-        const val = (r as any)[parentKey];
+      visible = visible.filter(r => {
         // Пропускаем новые temp-строки (id < 0) — у них parentKey всегда правильный
-        if (typeof (r as any).id === "number" && (r as any).id < 0) return true;
-        return val === parentUuid;
+        if (typeof r.id === "number" && r.id < 0) return true;
+        return r[parentKey] === parentUuid;
       });
     }
 
@@ -758,8 +774,8 @@ const SubTable: FC<SubTableProps> = ({
   const renderCell = useCallback((row: TDataItem, col: TColumn): ReactNode | undefined => {
     // Для несохранённых (temp) строк скрываем служебные поля id / uuid
     if (deferRemoteChanges && typeof row.id === "number" && row.id < 0) {
-      if (col.identifier === "id") return <span style={{ color: "#999", fontStyle: "italic" }}>Новый</span>;
-      if (col.identifier === "uuid") return <span style={{ color: "#999", fontStyle: "italic" }}>—</span>;
+      if (col.identifier === "id") return <span className={styles.TempIdBadge}>Новый</span>;
+      if (col.identifier === "uuid") return <span className={styles.TempIdBadge}>—</span>;
     }
 
     // Получаем контент ячейки от кастомного renderCell или возвращаем undefined (дефолтный рендер)
@@ -793,47 +809,15 @@ const SubTable: FC<SubTableProps> = ({
     // ВСЕГДА оборачиваем в div когда есть кастомный контент или ошибка.
     // Постоянная структура DOM предотвращает ремонт input-ов при изменении состояния ошибки:
     // React видит одинаковый тип элемента (div) и только обновляет стили.
+    const wrapClass = errorMsg
+      ? `${styles.CellWrap} ${styles.CellWrap_error}`
+      : isCellEmpty
+        ? `${styles.CellWrap} ${styles.CellWrap_required}`
+        : styles.CellWrap;
     return (
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          // Используем inset box-shadow вместо border — не влияет на layout ячейки
-          ...(errorMsg ? {
-            boxShadow: "inset 0 0 0 1.5px #e53935",
-            background: "rgba(229, 57, 53, 0.04)",
-          } : isCellEmpty ? {
-            boxShadow: "inset 0 0 0 1.5px #ff9800",
-            background: "rgba(255, 152, 0, 0.04)",
-          } : {}),
-        }}
-        title={errorMsg || undefined}
-      >
+      <div className={wrapClass} title={errorMsg || undefined}>
         {displayContent}
-        {errorMsg && (
-          <div style={{
-            position: "absolute",
-            bottom: "100%",
-            left: 0,
-            fontSize: 11,
-            lineHeight: "14px",
-            color: "#e53935",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            padding: "1px 4px",
-            background: "#fff3f3",
-            borderRadius: "3px 3px 0 0",
-            border: "1px solid #e53935",
-            borderBottom: "none",
-            zIndex: 10,
-            maxWidth: 250,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}>{errorMsg}</div>
-        )}
+        {errorMsg && <div className={styles.CellErrorTooltip}>{errorMsg}</div>}
       </div>
     );
   }, [renderCellProp, ctx, deferRemoteChanges, cellErrors, requiredFields]);
@@ -849,7 +833,7 @@ const SubTable: FC<SubTableProps> = ({
       // создаём локальную временную строку и не отправляем на сервер
       const tmpId = tempIdRef.current--;
       const tmpUuid = `tmp-${Date.now()}-${Math.abs(tmpId)}`;
-      const newRow: any = { id: tmpId, uuid: tmpUuid, [parentKey]: parentUuid, ...(extraQueryParams ?? {}) };
+      const newRow: PendingRow = { id: tmpId, uuid: tmpUuid, [parentKey]: parentUuid, ...(extraQueryParams ?? {}) };
       // инициализация полей из columns
       columns.forEach((c) => {
         if (!(c.identifier in newRow)) newRow[c.identifier] = c.type === "number" ? null : "";
@@ -866,7 +850,7 @@ const SubTable: FC<SubTableProps> = ({
       if (!resolvedDefaultNewRow) {
         newRow._untouched = true;
       }
-      cachedRowsRef.current = [newRow as TDataItem, ...cachedRowsRef.current];
+      cachedRowsRef.current = [newRow, ...cachedRowsRef.current];
       newRowFocusRef.current = 'first';
       setCacheVersion(v => v + 1);
       notifyParent(cachedRowsRef.current);
@@ -891,8 +875,8 @@ const SubTable: FC<SubTableProps> = ({
         const { default: apiClient } = await import("src/services/api/client");
         await apiClient.post(`/${model}`, { ...resolvedDefaultNewRow, [parentKey]: parentUuid, ...(extraQueryParams ?? {}) });
         newRowFocusRef.current = 'last';
-      } catch (err: any) {
-        alert(err.response?.data?.message || "Ошибка создания записи");
+      } catch (err: unknown) {
+        alert(extractServerError(err) || "Ошибка создания записи");
       } finally {
         void refetch();
         setOpCount(c => c - 1);
@@ -957,11 +941,7 @@ const SubTable: FC<SubTableProps> = ({
 
   // ── Рендер ─────────────────────────────────────────────────────────────
   if (!parentUuid) {
-    return (
-      <div style={{ padding: "24px", color: "#999", textAlign: "center" }}>
-        {emptyMessage}
-      </div>
-    );
+    return <div className={styles.EmptyParent}>{emptyMessage}</div>;
   }
 
   if (error) {
@@ -974,7 +954,7 @@ const SubTable: FC<SubTableProps> = ({
     );
   }
 
-  return <div ref={containerRef} style={{ display: 'contents' }}><Table {...tableProps} /></div>;
+  return <div ref={containerRef} className={styles.SubTableHost}><Table {...tableProps} /></div>;
 };
 
 SubTable.displayName = "SubTable";

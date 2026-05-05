@@ -899,3 +899,117 @@ input[type="checkbox"] {
 // ────────────────────────────────────────────────
 // DateRange Modal — использует FilterGroup / SearchContainer / SearchInput
 // ────────────────────────────────────────────────
+// ────────────────────────────────────────────────
+// Утилитарные классы (вынесены из inline style индекса Table)
+// ────────────────────────────────────────────────
+
+/* Колонка-чекбокс (th и col) — фиксированная ширина 30px, центр */
+.CheckboxCol {
+	width: 30px;
+	min-width: 30px;
+	max-width: 30px;
+}
+
+.HeaderCheckboxCell {
+	width: 30px;
+	text-align: center;
+}
+
+.CenterContent {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+}
+
+/* Стрелка сортировки (по умолчанию — asc); .desc переворачивает */
+.SortArrow {
+	transform: none;
+
+	&.desc {
+		transform: scaleY(-1);
+	}
+}
+
+/* td с textAlign:center (для checkbox-ячейки в теле таблицы) */
+.CellCenter {
+	text-align: center;
+}
+
+.CellJustifyCenter {
+	justify-content: center;
+}
+
+/* Tbody c GPU-оптимизацией (will-change/transform уже в tbody-селекторе);
+   кладём ради явного className, чтобы избавиться от inline style. */
+.TbodyOptimized {
+	// no-op — стили заданы на селекторе tbody выше
+}
+
+/* Виртуализация: пустые spacer-tr; только высоту задаём inline */
+.VirtualPaddingRow {
+	border: 0;
+
+	td {
+		border: 0;
+	}
+}
+
+/* Контейнер скролла: запрет overflow-anchor (для виртуализации) */
+.NoOverflowAnchor {
+	overflow-anchor: none;
+}
+
+/* Ячейка раскрытой (expanded) строки */
+.ExpandedRowCell {
+	padding: 0;
+	background: var(--bg-secondary, #f8f9fa);
+	border-bottom: 2px solid var(--border-color, #e0e0e0);
+}
+
+/* Строка таблицы с GPU-оптимизацией + состояния */
+.TableRow {
+	transform: translate3d(0, 0, 0);
+	will-change: auto;
+
+	&.active {
+		will-change: background-color, box-shadow;
+	}
+
+	&.loading {
+		opacity: 0.3;
+		pointer-events: none;
+	}
+}
+
+/* TableBodyCell с will-change/transform — расширение основного класса */
+.TableBodyCellGpu {
+	will-change: contents;
+	transform: translate3d(0, 0, 0);
+}
+
+/* Модалка "Колонки таблицы" */
+.ColumnsModal {
+	width: 400px;
+}
+
+/* Модалка "Период" — DateRange */
+.DateRangeModal {
+	max-width: 400px;
+}
+
+.DateRangeFilterGroup {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+/* Выравнивание ячеек по типу колонки */
+.JustifyLeft   { justify-content: left; }
+.JustifyRight  { justify-content: right; }
+.JustifyCenter { justify-content: center; }
+
+/* Состояния строки */
+.RowLoading {
+	opacity: 0.3;
+	pointer-events: none;
+}

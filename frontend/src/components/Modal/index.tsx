@@ -22,6 +22,7 @@ type ModalProps = {
   onClose?: () => void;
   title: ReactNode;
   style?: CSSProperties;
+  className?: string;
   children: ReactNode;
   /**
    * Полностью заменяет стандартный набор кнопок (Сохранить и закрыть / Отмена).
@@ -34,7 +35,7 @@ import modalManager from './modalManager';
 
 const ModalContextInstance = createContext<{ values: Record<string, any>; setValues: (values: Record<string, any>) => void } | null>(null);
 
-const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, children, buttons }) => {
+const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, className, children, buttons }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const AppContext = useAppContext();
@@ -138,7 +139,7 @@ const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, childre
 
   return ReactDOM.createPortal(
     <div className={styles.ModalBackground} onClick={handleOutsideClick}>
-      <div className={styles.ModalWrapper} ref={modalRef} style={{ ...style }} tabIndex={-1} data-modal-root="true">
+      <div className={`${styles.ModalWrapper}${className ? ` ${className}` : ''}`} ref={modalRef} style={style} tabIndex={-1} data-modal-root="true">
         <div className={styles.ModalHeader}>
           <div className={styles.ModalTitle}>{title}</div>
           <div className={styles.ModalButtons}>

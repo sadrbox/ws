@@ -463,7 +463,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
       onItemsChange={handleItemsChange}
       customInlineChange={customInlineChange}
       validationRules={validationRules}
-      requiredFields={["product.shortName", "quantity"]}
+      requiredFields={["product.shortName", "quantity", "price", "unitOfMeasure.shortName", "vatRateRef.shortName"]}
     />
   );
 };
