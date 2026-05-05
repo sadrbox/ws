@@ -39,9 +39,9 @@ function allKeys(a: Record<string, unknown> | null | undefined, b: Record<string
 function formatValue(v: unknown): string {
   if (v == null) return "—";
   if (typeof v === "object") {
-    try { return JSON.stringify(v); } catch { return String(v); }
+    try { return JSON.stringify(v); } catch { return String(v as string | null | undefined); }
   }
-  return String(v);
+  return String(v as string | null | undefined);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

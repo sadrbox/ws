@@ -6,8 +6,8 @@ import type { TTableVariant } from "src/components/Table";
 import type { TPane } from "src/app/types";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
-import { Field, FieldSelect } from "src/components/Field";
-import { GroupCol, GroupRow } from "src/components/UI/Group";
+import { FieldSelect } from "src/components/Field";
+import { GroupCol } from "src/components/UI/Group";
 import styles from "src/styles/main.module.scss";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import ModelList from "src/components/ModelList";
@@ -293,7 +293,7 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
       ? { userUuid, ...(organizationUuid ? { organizationUuid } : {}) } as unknown as TDataItem
       : data;
     const refresh = () => {
-      queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+      void queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
       _ctx.refetch();
     };
     addPane({

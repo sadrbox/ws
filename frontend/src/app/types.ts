@@ -1,14 +1,4 @@
-import {
-	ReactNode,
-	SetStateAction,
-	Dispatch,
-	ReactElement,
-	ComponentType,
-	JSX,
-	ComponentClass,
-	FunctionComponent,
-	FC,
-} from "react";
+import { SetStateAction, Dispatch, FC } from "react";
 import { TDataItem } from "src/components/Table/types";
 import type { OrgEntry } from "src/services/auth";
 // import { OverlayProps } from ".";
@@ -22,13 +12,19 @@ export type TypeAppContextProps = {
 		/** Закрытие панели.
 		 *  По умолчанию (force=false) — проверяет beforeClose guards (используется из UI).
 		 *  force=true — принудительно, без guards (используется после сохранения). */
-		requestClose: (uniqId: string, options?: { force?: boolean }) => Promise<void>;
+		requestClose: (
+			uniqId: string,
+			options?: { force?: boolean },
+		) => Promise<void>;
 		reloadPane: (uniqId: string) => Promise<void>;
 		setActivePane: (uniqId: string) => void;
 		updatePaneLabel: (uniqId: string, label: string) => void;
 		/** Регистрирует guard-функцию, которая будет вызвана перед закрытием панели.
 		 *  Возвращает unregister-функцию. Guard возвращает true = можно закрыть, false = отмена. */
-		registerBeforeClose: (uniqId: string, guard: () => Promise<boolean> | boolean) => () => void;
+		registerBeforeClose: (
+			uniqId: string,
+			guard: () => Promise<boolean> | boolean,
+		) => () => void;
 	};
 	actions: {
 		confirm: (message: string) => Promise<boolean>;
@@ -76,8 +72,8 @@ export type TPane = {
 	uniqId: string;
 	label: string;
 	data?: TDataItem;
-	onSave?: () => void;
-	onClose?: () => void;
+	onSave?: () => void | Promise<void>;
+	onClose?: () => void | Promise<void>;
 	/** Панель является формой выбора (selector) — приоритетная, требует результат */
 	isSelector?: boolean;
 	/** Callback при выборе элемента в selector-панели */

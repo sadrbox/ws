@@ -92,7 +92,7 @@ function openDB(): Promise<IDBDatabase> {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => {
       dbPromise = null;
-      reject(req.error);
+      reject(req.error ?? new Error("IDB error"));
     };
   });
   return dbPromise;
@@ -106,8 +106,8 @@ function tx(
     const store = transaction.objectStore(STORE_NAME);
     const done = new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error);
+      transaction.onerror = () => reject(transaction.error ?? new Error("IDB error"));
+      transaction.onabort = () => reject(transaction.error ?? new Error("IDB error"));
     });
     return { store, done };
   });
@@ -117,7 +117,7 @@ function tx(
 function req<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onerror = () => reject(request.error ?? new Error("IDB error"));
   });
 }
 

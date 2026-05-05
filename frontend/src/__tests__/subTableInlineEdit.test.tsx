@@ -190,7 +190,7 @@ function filterRowsFn(
     const levelLabel = (accessLevelMap[row.accessLevel as string] ?? (row.accessLevel as string) ?? "").toLowerCase();
     const modelKey = ((row.modelName as string) ?? "").toLowerCase();
     const levelKey = ((row.accessLevel as string) ?? "").toLowerCase();
-    const idStr = String(row.id ?? "");
+    const idStr = String(row.id as number | null | undefined);
     return words.every((w) =>
       modelLabel.includes(w) ||
       modelKey.includes(w) ||

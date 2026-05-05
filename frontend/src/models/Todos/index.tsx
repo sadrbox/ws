@@ -8,7 +8,7 @@ import FilesPanel from "src/components/FilesPanel";
 import PrintPreview from "src/components/PrintPreview";
 import { Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -134,7 +134,7 @@ TodosForm.displayName = "TodosForm";
 
 const TodosList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName="TodosList" columnsJson={columnsJson} FormComponent={TodosForm}
-    getLabel={(d) => d?.description ? (String(d.description).slice(0, 50) + (String(d.description).length > 50 ? "..." : "")) : "?"}
+    getLabel={(d) => d?.description ? ((d.description as string).slice(0, 50) + ((d.description as string).length > 50 ? "..." : "")) : "?"}
     variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
 );
 TodosList.displayName = "TodosList";

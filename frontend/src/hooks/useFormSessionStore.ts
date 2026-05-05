@@ -17,72 +17,78 @@ type Listener = () => void;
 
 /** Создаёт external store для одного ключа. */
 function createFormStore<T>(storageKey: string, initialValue: T) {
-  let listeners: Set<Listener> = new Set();
-  let currentValue: T = initialValue;
+	const listeners: Set<Listener> = new Set();
+	let currentValue: T = initialValue;
 
-  // Пробуем восстановить из sessionStorage
-  try {
-    const raw = sessionStorage.getItem(storageKey);
-    if (raw !== null) {
-      currentValue = JSON.parse(raw) as T;
-    }
-  } catch {
-    // corrupted data — используем initialValue
-  }
+	// Пробуем восстановить из sessionStorage
+	try {
+		const raw = sessionStorage.getItem(storageKey);
+		if (raw !== null) {
+			currentValue = JSON.parse(raw) as T;
+		}
+	} catch {
+		// corrupted data — используем initialValue
+	}
 
-  function subscribe(listener: Listener): () => void {
-    listeners.add(listener);
-    return () => { listeners.delete(listener); };
-  }
+	function subscribe(listener: Listener): () => void {
+		listeners.add(listener);
+		return () => {
+			listeners.delete(listener);
+		};
+	}
 
-  function getSnapshot(): T {
-    return currentValue;
-  }
+	function getSnapshot(): T {
+		return currentValue;
+	}
 
-  function setState(updater: T | ((prev: T) => T)): void {
-    const next = typeof updater === "function"
-      ? (updater as (prev: T) => T)(currentValue)
-      : updater;
+	function setState(updater: T | ((prev: T) => T)): void {
+		const next =
+			typeof updater === "function"
+				? (updater as (prev: T) => T)(currentValue)
+				: updater;
 
-    // Пропускаем если значение не изменилось (поверхностное сравнение)
-    if (next === currentValue) return;
+		// Пропускаем если значение не изменилось (поверхностное сравнение)
+		if (next === currentValue) return;
 
-    currentValue = next;
+		currentValue = next;
 
-    // Сохраняем в sessionStorage
-    try {
-      sessionStorage.setItem(storageKey, JSON.stringify(next));
-    } catch {
-      // quota exceeded — игнорируем
-    }
+		// Сохраняем в sessionStorage
+		try {
+			sessionStorage.setItem(storageKey, JSON.stringify(next));
+		} catch {
+			// quota exceeded — игнорируем
+		}
 
-    // Уведомляем подписчиков
-    listeners.forEach((l) => l());
-  }
+		// Уведомляем подписчиков
+		listeners.forEach((l) => l());
+	}
 
-  function cleanup(): void {
-    try {
-      sessionStorage.removeItem(storageKey);
-    } catch { /* ignore */ }
-    listeners.clear();
-  }
+	function cleanup(): void {
+		try {
+			sessionStorage.removeItem(storageKey);
+		} catch {
+			/* ignore */
+		}
+		listeners.clear();
+	}
 
-  /** Были ли данные восстановлены из sessionStorage при создании store?
-   *  Ранее использовалось простое сравнение по ссылке (currentValue !== initialValue),
-   *  что давало true если значения равны по содержимому, но были разными объектами
-   *  (например после восстановления из sessionStorage). Это приводило к ложным
-   *  уведомлениям "несохранённых правок" при открытии формы, которая на самом деле
-   *  не была изменена. Теперь сравниваем через сериализацию JSON (по содержимому).
-   */
-  let hadStoredData = false;
-  try {
-    hadStoredData = JSON.stringify(currentValue) !== JSON.stringify(initialValue);
-  } catch {
-    // Если сериализация не удалась, fallback на ссылочное сравнение
-    hadStoredData = currentValue !== initialValue;
-  }
+	/** Были ли данные восстановлены из sessionStorage при создании store?
+	 *  Ранее использовалось простое сравнение по ссылке (currentValue !== initialValue),
+	 *  что давало true если значения равны по содержимому, но были разными объектами
+	 *  (например после восстановления из sessionStorage). Это приводило к ложным
+	 *  уведомлениям "несохранённых правок" при открытии формы, которая на самом деле
+	 *  не была изменена. Теперь сравниваем через сериализацию JSON (по содержимому).
+	 */
+	let hadStoredData = false;
+	try {
+		hadStoredData =
+			JSON.stringify(currentValue) !== JSON.stringify(initialValue);
+	} catch {
+		// Если сериализация не удалась, fallback на ссылочное сравнение
+		hadStoredData = currentValue !== initialValue;
+	}
 
-  return { subscribe, getSnapshot, setState, cleanup, hadStoredData };
+	return { subscribe, getSnapshot, setState, cleanup, hadStoredData };
 }
 
 // Кэш активных store по ключу — чтобы несколько хуков с одним ключом
@@ -91,10 +97,10 @@ function createFormStore<T>(storageKey: string, initialValue: T) {
 const storeCache = new Map<string, ReturnType<typeof createFormStore<any>>>();
 
 function getOrCreateStore<T>(storageKey: string, initialValue: T) {
-  if (!storeCache.has(storageKey)) {
-    storeCache.set(storageKey, createFormStore<T>(storageKey, initialValue));
-  }
-  return storeCache.get(storageKey)! as ReturnType<typeof createFormStore<T>>;
+	if (!storeCache.has(storageKey)) {
+		storeCache.set(storageKey, createFormStore<T>(storageKey, initialValue));
+	}
+	return storeCache.get(storageKey)! as ReturnType<typeof createFormStore<T>>;
 }
 
 /**
@@ -108,53 +114,59 @@ function getOrCreateStore<T>(storageKey: string, initialValue: T) {
  * @returns [data, setData, clearStorage, hadStoredData] — как useState + очистка + флаг восстановления
  */
 export function useFormSessionStore<T>(
-  formName: string,
-  entityId: string | undefined,
-  initialValue: T,
-  options?: { keepOnUnmount?: boolean },
+	formName: string,
+	entityId: string | undefined,
+	initialValue: T,
+	options?: { keepOnUnmount?: boolean },
 ): [T, (updater: T | ((prev: T) => T)) => void, () => void, boolean] {
-  const storageKey = `${STORAGE_PREFIX}${formName}:${entityId ?? "new"}`;
-  const keepOnUnmount = options?.keepOnUnmount ?? false;
+	const storageKey = `${STORAGE_PREFIX}${formName}:${entityId ?? "new"}`;
+	const keepOnUnmount = options?.keepOnUnmount ?? false;
 
-  // Получаем или создаём store для этого ключа
-  const storeRef = useRef(getOrCreateStore<T>(storageKey, initialValue));
+	// Получаем или создаём store для этого ключа
+	const storeRef = useRef(getOrCreateStore<T>(storageKey, initialValue));
 
-  // Если ключ изменился (другой entityId) — пересоздаём store
-  if (storeRef.current !== storeCache.get(storageKey)) {
-    storeRef.current = getOrCreateStore<T>(storageKey, initialValue);
-  }
+	// Если ключ изменился (другой entityId) — пересоздаём store
+	if (storeRef.current !== storeCache.get(storageKey)) {
+		storeRef.current = getOrCreateStore<T>(storageKey, initialValue);
+	}
 
-  const store = storeRef.current;
+	const store = storeRef.current;
 
-  const data = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+	const data = useSyncExternalStore(
+		store.subscribe,
+		store.getSnapshot,
+		store.getSnapshot,
+	);
 
-  const setData = useCallback((updater: T | ((prev: T) => T)) => {
-    store.setState(updater);
-  }, [store]);
+	const setData = useCallback(
+		(updater: T | ((prev: T) => T)) => {
+			store.setState(updater);
+		},
+		[store],
+	);
 
-  const clearStorage = useCallback(() => {
-    store.cleanup();
-    storeCache.delete(storageKey);
-  }, [store, storageKey]);
+	const clearStorage = useCallback(() => {
+		store.cleanup();
+		storeCache.delete(storageKey);
+	}, [store, storageKey]);
 
-  // Очистка при размонтировании (если не keepOnUnmount)
-  // Используем useRef + эффект, чтобы не зависеть от clearStorage в deps
-  const clearRef = useRef(clearStorage);
-  clearRef.current = clearStorage;
-  const keepRef = useRef(keepOnUnmount);
-  keepRef.current = keepOnUnmount;
+	// Очистка при размонтировании (если не keepOnUnmount)
+	// Используем useRef + эффект, чтобы не зависеть от clearStorage в deps
+	const clearRef = useRef(clearStorage);
+	clearRef.current = clearStorage;
+	const keepRef = useRef(keepOnUnmount);
+	keepRef.current = keepOnUnmount;
 
-  // Cleanup at unmount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // useEffect(() => {
-  //   return () => {
-  //     if (!keepRef.current) {
-  //       clearRef.current();
-  //     }
-  //   };
-  // }, [storageKey]);
+	// Cleanup at unmount
+	// useEffect(() => {
+	//   return () => {
+	//     if (!keepRef.current) {
+	//       clearRef.current();
+	//     }
+	//   };
+	// }, [storageKey]);
 
-  return [data, setData, clearStorage, store.hadStoredData];
+	return [data, setData, clearStorage, store.hadStoredData];
 }
 
 /**
@@ -162,29 +174,29 @@ export function useFormSessionStore<T>(
  * Полезно при logout.
  */
 export function clearAllFormStores(): void {
-  const keysToRemove: string[] = [];
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const key = sessionStorage.key(i);
-    if (key?.startsWith(STORAGE_PREFIX)) {
-      keysToRemove.push(key);
-    }
-  }
-  keysToRemove.forEach((k) => sessionStorage.removeItem(k));
-  storeCache.clear();
+	const keysToRemove: string[] = [];
+	for (let i = 0; i < sessionStorage.length; i++) {
+		const key = sessionStorage.key(i);
+		if (key?.startsWith(STORAGE_PREFIX)) {
+			keysToRemove.push(key);
+		}
+	}
+	keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+	storeCache.clear();
 }
 
 /**
  * Запись несохранённой формы из sessionStorage.
  */
 export interface FormStoreEntry {
-  /** Полный ключ sessionStorage */
-  storageKey: string;
-  /** Имя формы (например "users-form") */
-  formName: string;
-  /** ID сущности или "new" */
-  entityId: string;
-  /** Сырые данные формы */
-  data: Record<string, unknown>;
+	/** Полный ключ sessionStorage */
+	storageKey: string;
+	/** Имя формы (например "users-form") */
+	formName: string;
+	/** ID сущности или "new" */
+	entityId: string;
+	/** Сырые данные формы */
+	data: Record<string, unknown>;
 }
 
 /**
@@ -192,37 +204,39 @@ export interface FormStoreEntry {
  * Возвращает массив FormStoreEntry для каждого ключа `formStore:*`.
  */
 export function getAllFormStoreEntries(): FormStoreEntry[] {
-  const entries: FormStoreEntry[] = [];
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const key = sessionStorage.key(i);
-    if (!key?.startsWith(STORAGE_PREFIX)) continue;
+	const entries: FormStoreEntry[] = [];
+	for (let i = 0; i < sessionStorage.length; i++) {
+		const key = sessionStorage.key(i);
+		if (!key?.startsWith(STORAGE_PREFIX)) continue;
 
-    // Ключ: "formStore:<formName>:<entityId>"
-    const rest = key.slice(STORAGE_PREFIX.length); // "users-form:some-uuid"
-    const colonIdx = rest.indexOf(":");
-    if (colonIdx === -1) continue;
+		// Ключ: "formStore:<formName>:<entityId>"
+		const rest = key.slice(STORAGE_PREFIX.length); // "users-form:some-uuid"
+		const colonIdx = rest.indexOf(":");
+		if (colonIdx === -1) continue;
 
-    const formName = rest.slice(0, colonIdx);
-    const entityId = rest.slice(colonIdx + 1);
+		const formName = rest.slice(0, colonIdx);
+		const entityId = rest.slice(colonIdx + 1);
 
-    try {
-      const raw = sessionStorage.getItem(key);
-      if (raw === null) continue;
-      const data = JSON.parse(raw) as Record<string, unknown>;
-      entries.push({ storageKey: key, formName, entityId, data });
-    } catch {
-      // corrupted — skip
-    }
-  }
-  return entries;
+		try {
+			const raw = sessionStorage.getItem(key);
+			if (raw === null) continue;
+			const data = JSON.parse(raw) as Record<string, unknown>;
+			entries.push({ storageKey: key, formName, entityId, data });
+		} catch {
+			// corrupted — skip
+		}
+	}
+	return entries;
 }
 
 /**
  * Удалить одну запись из sessionStorage по storageKey.
  */
 export function removeFormStoreEntry(storageKey: string): void {
-  try {
-    sessionStorage.removeItem(storageKey);
-  } catch { /* ignore */ }
-  storeCache.delete(storageKey);
+	try {
+		sessionStorage.removeItem(storageKey);
+	} catch {
+		/* ignore */
+	}
+	storeCache.delete(storageKey);
 }

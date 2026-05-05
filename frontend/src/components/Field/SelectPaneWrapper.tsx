@@ -64,11 +64,11 @@ const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId })
 
   const handleSelectItem = useCallback((item: Record<string, any>) => {
     onSelectResult?.(item);
-    if (uniqId) requestClose(uniqId, { force: true });
+    if (uniqId) void requestClose(uniqId, { force: true });
   }, [onSelectResult, uniqId, requestClose]);
 
   const handleCancel = useCallback(() => {
-    if (uniqId) requestClose(uniqId, { force: true });
+    if (uniqId) void requestClose(uniqId, { force: true });
   }, [uniqId, requestClose]);
 
   if (loadError) {

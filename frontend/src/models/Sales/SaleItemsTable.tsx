@@ -35,9 +35,9 @@ const fmtNum = (value: unknown): string => {
 const ReadOnlyCell: FC<{ value: string; inlineEditing: boolean }> = ({ value, inlineEditing }) => {
   const [flashing, setFlashing] = useState(false);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
+  const handleClick = useCallback((_e: React.MouseEvent) => {
     if (!inlineEditing) return;
-    e.stopPropagation();
+    // e.stopPropagation();
     setFlashing(false);
     // Сбрасываем в следующем тике, чтобы повторный клик снова запускал анимацию
     requestAnimationFrame(() => setFlashing(true));
@@ -48,7 +48,7 @@ const ReadOnlyCell: FC<{ value: string; inlineEditing: boolean }> = ({ value, in
     <span
       className={flashing ? fieldStyles.flashReadOnly : undefined}
       onClick={handleClick}
-      style={inlineEditing ? { cursor: "not-allowed", display: "flex", alignItems: "center", flex: 1, width: "100%", height: "100%", justifyContent: "flex-end" } : undefined}
+      style={inlineEditing ? { display: "flex", alignItems: "center", flex: 1, width: "100%", height: "100%", justifyContent: "flex-end" } : undefined}
     >
       {value}
     </span>
@@ -117,30 +117,35 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
   }, [onTotalChange, onItemsChange]);
 
   // ── Правила валидации ячеек ────────────────────────────────────────────
-  const validationRules = useMemo<Record<string, TCellValidator>>(() => ({
-    quantity: (value) => {
-      if (value === "" || value == null) return undefined;
-      const n = parseNumericInput(String(value));
-      if (n === null) return "Должно быть числом";
-      if (n < 0) return "Не может быть отрицательным";
-      return undefined;
-    },
-    price: (value) => {
-      if (value === "" || value == null) return undefined;
-      const n = parseNumericInput(String(value));
-      if (n === null) return "Должно быть числом";
-      if (n < 0) return "Не может быть отрицательным";
-      return undefined;
-    },
-    vatRate: (_value) => undefined,
-    discountPercent: (value) => {
-      if (value === "" || value == null) return undefined;
-      const n = parseNumericInput(String(value));
-      if (n === null) return "Должно быть числом";
-      // Зажим 0–100 обрабатывается в FieldNumber (min/max props), ошибка здесь не нужна
-      return undefined;
-    },
-  }), []);
+  const validationRules = useMemo<Record<string, TCellValidator>>(() => {
+    // Сужаем value: unknown → string безопасной строковой формой (без [object Object])
+    const toStr = (v: unknown): string =>
+      typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : "";
+    return {
+      quantity: (value) => {
+        if (value === "" || value == null) return undefined;
+        const n = parseNumericInput(toStr(value));
+        if (n === null) return "Должно быть числом";
+        if (n < 0) return "Не может быть отрицательным";
+        return undefined;
+      },
+      price: (value) => {
+        if (value === "" || value == null) return undefined;
+        const n = parseNumericInput(toStr(value));
+        if (n === null) return "Должно быть числом";
+        if (n < 0) return "Не может быть отрицательным";
+        return undefined;
+      },
+      vatRate: () => undefined,
+      discountPercent: (value) => {
+        if (value === "" || value == null) return undefined;
+        const n = parseNumericInput(toStr(value));
+        if (n === null) return "Должно быть числом";
+        // Зажим 0–100 обрабатывается в FieldNumber (min/max props), ошибка здесь не нужна
+        return undefined;
+      },
+    };
+  }, []);
 
   const customInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
     if (!row.uuid) return;
@@ -154,242 +159,242 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, disabled = false, o
   }, [queryClient]);
 
   // ── renderCell ─────────────────────────────────────────────────────────
+  // Стратегия: возвращаем undefined для чистого "только чтение" → Table сам
+  // вызовет дефолтный getFormatColumnValue. Кастомный JSX отдаём только там,
+  // где нужно: inline-редактирование, ReadOnlyCell-обёртка (мигание при клике),
+  // вычисляемый lineNumber.
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
-    if (col.identifier === "product.shortName") {
-      if (ctx.inlineEditing) {
-        return (
-          <LookupField
-            label=""
-            name={`saleitem_product_${row.id}`}
-            value={(row.productUuid as string) ?? ""}
-            displayValue={(row.product as any)?.shortName ?? ""}
-            endpoint="products"
-            displayField="shortName"
-            columns={[
-              { key: "shortName", label: "Наименование" },
-              { key: "sku", label: "Артикул" },
-              { key: "brand.shortName", label: "Бренд" },
-            ]}
-            onSelect={(uuid, _displayValue, item) => {
-              ctx.handleLookupChange(row, "productUuid", uuid, {
-                product: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
-              });
-            }}
-            onClear={() => {
-              ctx.handleLookupChange(row, "productUuid", null, { product: null });
-            }}
-            onEnterKey={() => focusNextInRow(document.activeElement)}
-            onAfterSelect={() => focusNextInRow(document.activeElement)}
-            disabled={ctx.disabled}
-            width="100%"
-            variant="table"
-          />
-        );
-      }
-      return <span>{(row.product as any)?.shortName ?? ""}</span>;
+    const id = col.identifier;
+
+    // ── lineNumber: всегда позиция строки в таблице ──────────────────────
+    if (id === "lineNumber") {
+      const idx = ctx.rows.indexOf(row);
+      const value = String(idx >= 0 ? idx + 1 : (row.lineNumber as string | number | null | undefined) ?? "");
+      return <ReadOnlyCell value={value} inlineEditing={ctx.inlineEditing} />;
     }
-    if (col.identifier === "quantity") {
-      if (ctx.inlineEditing) {
-        return (
-          <FieldNumber
-            name={`saleitem_qty_${row.id}`}
-            value={row.quantity != null ? String(row.quantity) : "0"}
-            onChange={e => {
-              if (ctx.deferRemoteChanges) {
-                ctx.updateLocalRow(row, withSaleItemRecalc(row as any, { quantity: e.target.value }));
-                return;
-              }
-              ctx.handleInlineChange(row, "quantity", e.target.value);
-            }}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
-            disabled={ctx.disabled}
-            // step="0.1"
-            textAlign="right"
-            width="100%"
-            actions={[]}
-            variant="table"
-          />
-        );
+
+    // ── Read-only вычисляемые суммы (мигание при клике в inline-режиме) ──
+    if (id === "vatAmount") return <ReadOnlyCell value={fmtNum(row.vatAmount) || "0"} inlineEditing={ctx.inlineEditing} />;
+    if (id === "amount") return <ReadOnlyCell value={fmtNum(row.amount) || "0"} inlineEditing={ctx.inlineEditing} />;
+
+    // ── discountAmount: read-only вне inline / FieldNumber внутри ────────
+    if (id === "discountAmount") {
+      if (!ctx.inlineEditing) {
+        return <ReadOnlyCell value={fmtNum(row.discountAmount) || "0"} inlineEditing={false} />;
       }
-      return <span>{fmtNum(row.quantity)}</span>;
+      return (
+        <FieldNumber
+          name={`saleitem_discamt_${row.id}`}
+          value={row.discountAmount != null ? String(row.discountAmount as number | string) : "0"}
+          onChange={e => {
+            if (ctx.deferRemoteChanges) {
+              ctx.updateLocalRow(row, withSaleItemRecalcFromDiscountAmount(row as any, e.target.value));
+              return;
+            }
+            const recalc = withSaleItemRecalcFromDiscountAmount(row as any, e.target.value);
+            ctx.handleInlineChange(row, "discountPercent", String(recalc.discountPercent));
+          }}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
+          disabled={ctx.disabled}
+          step="0.01"
+          min="0"
+          textAlign="right"
+          width="100%"
+          actions={[]}
+          variant="table"
+        />
+      );
     }
-    if (col.identifier === "price") {
-      if (ctx.inlineEditing) {
-        return (
-          <FieldNumber
-            name={`saleitem_price_${row.id}`}
-            value={row.price != null ? String(row.price) : "0"}
-            onChange={e => {
-              if (ctx.deferRemoteChanges) {
-                ctx.updateLocalRow(row, withSaleItemRecalc(row as any, { price: e.target.value }));
-                return;
-              }
-              ctx.handleInlineChange(row, "price", e.target.value);
-            }}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
-            disabled={ctx.disabled}
-            step="0.1"
-            textAlign="right"
-            width="100%"
-            actions={[]}
-            variant="table"
-          />
-        );
-      }
-      return <span>{fmtNum(row.price)}</span>;
+
+    // ── Вне inline-режима для обычных колонок — дефолтный рендер Table ───
+    if (!ctx.inlineEditing) return undefined;
+
+    // ── Inline-режим: контролы редактирования ────────────────────────────
+    if (id === "product.shortName") {
+      return (
+        <LookupField
+          label=""
+          name={`saleitem_product_${row.id}`}
+          value={(row.productUuid as string) ?? ""}
+          displayValue={(row.product as any)?.shortName ?? ""}
+          endpoint="products"
+          displayField="shortName"
+          columns={[
+            { key: "shortName", label: "Наименование" },
+            { key: "sku", label: "Артикул" },
+            { key: "brand.shortName", label: "Бренд" },
+          ]}
+          onSelect={(uuid, _displayValue, item) => {
+            ctx.handleLookupChange(row, "productUuid", uuid, {
+              product: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
+            });
+          }}
+          onClear={() => {
+            ctx.handleLookupChange(row, "productUuid", null, { product: null });
+          }}
+          onEnterKey={() => focusNextInRow(document.activeElement)}
+          onAfterSelect={() => focusNextInRow(document.activeElement)}
+          disabled={ctx.disabled}
+          width="100%"
+          variant="table"
+        />
+      );
     }
-    if (col.identifier === "unitOfMeasure.shortName") {
-      if (ctx.inlineEditing) {
-        return (
-          <LookupField
-            label=""
-            name={`saleitem_uom_${row.id}`}
-            value={(row.unitOfMeasureUuid as string) ?? ""}
-            displayValue={(row.unitOfMeasure as any)?.shortName ?? ""}
-            endpoint="unit-of-measures"
-            displayField="shortName"
-            columns={[
-              { key: "shortName", label: "Наименование" },
-              { key: "code", label: "Код" },
-            ]}
-            onSelect={(uuid, _displayValue, item) => {
-              ctx.handleLookupChange(row, "unitOfMeasureUuid", uuid, {
-                unitOfMeasure: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
-              });
-            }}
-            onClear={() => {
-              ctx.handleLookupChange(row, "unitOfMeasureUuid", null, { unitOfMeasure: null });
-            }}
-            onEnterKey={() => focusNextInRow(document.activeElement)}
-            onAfterSelect={() => focusNextInRow(document.activeElement)}
-            disabled={ctx.disabled}
-            width="100%"
-            variant="table"
-            visibleActions={["quickselect"]}
-          />
-        );
-      }
-      return <span>{(row.unitOfMeasure as any)?.shortName ?? ""}</span>;
+
+    if (id === "quantity") {
+      return (
+        <FieldNumber
+          name={`saleitem_qty_${row.id}`}
+          value={row.quantity != null ? String(row.quantity as number | string) : "0"}
+          onChange={e => {
+            if (ctx.deferRemoteChanges) {
+              ctx.updateLocalRow(row, withSaleItemRecalc(row as any, { quantity: e.target.value }));
+              return;
+            }
+            ctx.handleInlineChange(row, "quantity", e.target.value);
+          }}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
+          disabled={ctx.disabled}
+          textAlign="right"
+          width="100%"
+          actions={[]}
+          variant="table"
+        />
+      );
     }
-    if (col.identifier === "vatRateRef.shortName") {
-      if (ctx.inlineEditing) {
-        return (
-          <LookupField
-            label=""
-            name={`saleitem_vatRate_${row.id}`}
-            value={(row.vatRateUuid as string) ?? ""}
-            displayValue={(row.vatRateRef as any)?.shortName ?? ""}
-            endpoint="vat-rates"
-            displayField="shortName"
-            columns={[
-              { key: "shortName", label: "Наименование" },
-              { key: "rate", label: "%" },
-            ]}
-            onSelect={(uuid, _displayValue, item) => {
-              if (ctx.deferRemoteChanges) {
-                ctx.updateLocalRow(row, withSaleItemRecalc(row as any, {
-                  vatRateUuid: uuid,
-                  vatRateRef: item && uuid ? { uuid, shortName: item.shortName ?? "", rate: item.rate } : null,
-                  vatRate: item?.rate ?? 0,
-                }));
-                return;
-              }
-              ctx.handleLookupChange(row, "vatRateUuid", uuid, {
+
+    if (id === "price") {
+      return (
+        <FieldNumber
+          name={`saleitem_price_${row.id}`}
+          value={row.price != null ? String(row.price as number | string) : "0"}
+          onChange={e => {
+            if (ctx.deferRemoteChanges) {
+              ctx.updateLocalRow(row, withSaleItemRecalc(row as any, { price: e.target.value }));
+              return;
+            }
+            ctx.handleInlineChange(row, "price", e.target.value);
+          }}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
+          disabled={ctx.disabled}
+          step="0.1"
+          textAlign="right"
+          width="100%"
+          actions={[]}
+          variant="table"
+        />
+      );
+    }
+
+    if (id === "unitOfMeasure.shortName") {
+      return (
+        <LookupField
+          label=""
+          name={`saleitem_uom_${row.id}`}
+          value={(row.unitOfMeasureUuid as string) ?? ""}
+          displayValue={(row.unitOfMeasure as any)?.shortName ?? ""}
+          endpoint="unit-of-measures"
+          displayField="shortName"
+          columns={[
+            { key: "shortName", label: "Наименование" },
+            { key: "code", label: "Код" },
+          ]}
+          onSelect={(uuid, _displayValue, item) => {
+            ctx.handleLookupChange(row, "unitOfMeasureUuid", uuid, {
+              unitOfMeasure: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
+            });
+          }}
+          onClear={() => {
+            ctx.handleLookupChange(row, "unitOfMeasureUuid", null, { unitOfMeasure: null });
+          }}
+          onEnterKey={() => focusNextInRow(document.activeElement)}
+          onAfterSelect={() => focusNextInRow(document.activeElement)}
+          disabled={ctx.disabled}
+          width="100%"
+          variant="table"
+          visibleActions={["quickselect"]}
+        />
+      );
+    }
+
+    if (id === "vatRateRef.shortName") {
+      return (
+        <LookupField
+          label=""
+          name={`saleitem_vatRate_${row.id}`}
+          value={(row.vatRateUuid as string) ?? ""}
+          displayValue={(row.vatRateRef as any)?.shortName ?? ""}
+          endpoint="vat-rates"
+          displayField="shortName"
+          columns={[
+            { key: "shortName", label: "Наименование" },
+            { key: "rate", label: "%" },
+          ]}
+          onSelect={(uuid, _displayValue, item) => {
+            if (ctx.deferRemoteChanges) {
+              ctx.updateLocalRow(row, withSaleItemRecalc(row as any, {
+                vatRateUuid: uuid,
                 vatRateRef: item && uuid ? { uuid, shortName: item.shortName ?? "", rate: item.rate } : null,
                 vatRate: item?.rate ?? 0,
-                ...withSaleItemRecalc(row as any, { vatRate: item?.rate ?? 0 }),
-              });
-            }}
-            onClear={() => {
-              if (ctx.deferRemoteChanges) {
-                ctx.updateLocalRow(row, withSaleItemRecalc(row as any, {
-                  vatRateUuid: null,
-                  vatRateRef: null,
-                  vatRate: 0,
-                }));
-                return;
-              }
-              ctx.handleLookupChange(row, "vatRateUuid", null, {
+              }));
+              return;
+            }
+            ctx.handleLookupChange(row, "vatRateUuid", uuid, {
+              vatRateRef: item && uuid ? { uuid, shortName: item.shortName ?? "", rate: item.rate } : null,
+              vatRate: item?.rate ?? 0,
+              ...withSaleItemRecalc(row as any, { vatRate: item?.rate ?? 0 }),
+            });
+          }}
+          onClear={() => {
+            if (ctx.deferRemoteChanges) {
+              ctx.updateLocalRow(row, withSaleItemRecalc(row as any, {
+                vatRateUuid: null,
                 vatRateRef: null,
                 vatRate: 0,
-                ...withSaleItemRecalc(row as any, { vatRate: 0 }),
-              });
-            }}
-            onEnterKey={() => focusNextInRow(document.activeElement)}
-            onAfterSelect={() => focusNextInRow(document.activeElement)}
-            disabled={ctx.disabled}
-            width="100%"
-            variant="table"
-            visibleActions={["quickselect"]}
-          />
-        );
-      }
-      return <span>{(row.vatRateRef as any)?.shortName ?? ""}</span>;
+              }));
+              return;
+            }
+            ctx.handleLookupChange(row, "vatRateUuid", null, {
+              vatRateRef: null,
+              vatRate: 0,
+              ...withSaleItemRecalc(row as any, { vatRate: 0 }),
+            });
+          }}
+          onEnterKey={() => focusNextInRow(document.activeElement)}
+          onAfterSelect={() => focusNextInRow(document.activeElement)}
+          disabled={ctx.disabled}
+          width="100%"
+          variant="table"
+          visibleActions={["quickselect"]}
+        />
+      );
     }
-    if (col.identifier === "discountPercent") {
-      if (ctx.inlineEditing) {
-        return (
-          <FieldNumber
-            name={`saleitem_discount_${row.id}`}
-            value={row.discountPercent != null ? String(row.discountPercent) : "0"}
-            onChange={e => {
-              if (ctx.deferRemoteChanges) {
-                ctx.updateLocalRow(row, withSaleItemRecalc(row as any, { discountPercent: e.target.value }));
-                return;
-              }
-              ctx.handleInlineChange(row, "discountPercent", e.target.value);
-            }}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
-            disabled={ctx.disabled}
-            step="0.1"
-            min="0"
-            max="100"
-            textAlign="right"
-            width="100%"
-            actions={[]}
-            variant="table"
-          />
-        );
-      }
-      return <span>{fmtNum(row.discountPercent) || "0"}</span>;
+
+    if (id === "discountPercent") {
+      return (
+        <FieldNumber
+          name={`saleitem_discount_${row.id}`}
+          value={row.discountPercent != null ? String(row.discountPercent as number | string) : "0"}
+          onChange={e => {
+            if (ctx.deferRemoteChanges) {
+              ctx.updateLocalRow(row, withSaleItemRecalc(row as any, { discountPercent: e.target.value }));
+              return;
+            }
+            ctx.handleInlineChange(row, "discountPercent", e.target.value);
+          }}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
+          disabled={ctx.disabled}
+          step="0.1"
+          min="0"
+          max="100"
+          textAlign="right"
+          width="100%"
+          actions={[]}
+          variant="table"
+        />
+      );
     }
-    if (col.identifier === "vatAmount") {
-      return <ReadOnlyCell value={fmtNum(row.vatAmount) || "0"} inlineEditing={ctx.inlineEditing} />;
-    }
-    if (col.identifier === "discountAmount") {
-      if (ctx.inlineEditing) {
-        return (
-          <FieldNumber
-            name={`saleitem_discamt_${row.id}`}
-            value={row.discountAmount != null ? String(row.discountAmount) : "0"}
-            onChange={e => {
-              if (ctx.deferRemoteChanges) {
-                ctx.updateLocalRow(row, withSaleItemRecalcFromDiscountAmount(row as any, e.target.value));
-                return;
-              }
-              const recalc = withSaleItemRecalcFromDiscountAmount(row as any, e.target.value);
-              ctx.handleInlineChange(row, "discountPercent", String(recalc.discountPercent));
-            }}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
-            disabled={ctx.disabled}
-            step="0.01"
-            min="0"
-            textAlign="right"
-            width="100%"
-            actions={[]}
-            variant="table"
-          />
-        );
-      }
-      return <ReadOnlyCell value={fmtNum(row.discountAmount) || "0"} inlineEditing={ctx.inlineEditing} />;
-    }
-    if (col.identifier === "amount") {
-      return <ReadOnlyCell value={fmtNum(row.amount) || "0"} inlineEditing={ctx.inlineEditing} />;
-    }
-    if (col.identifier === "lineNumber") {
-      const idx = ctx.rows.indexOf(row);
-      return <ReadOnlyCell value={String(idx >= 0 ? idx + 1 : (row.lineNumber ?? ""))} inlineEditing={ctx.inlineEditing} />;
-    }
+
     return undefined;
   }, []);
 

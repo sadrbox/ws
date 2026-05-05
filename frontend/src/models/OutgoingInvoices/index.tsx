@@ -76,11 +76,11 @@ const OutgoingInvoicesForm: FC<Partial<TPane>> = (paneProps) => {
       amount: d.amount != null ? String(d.amount) : "",
       status: d.status ?? "draft",
       organizationUuid: d.organizationUuid ?? "",
-      organizationName: (d.organization as any)?.shortName ?? "",
+      organizationName: d.organization?.shortName ?? "",
       counterpartyUuid: d.counterpartyUuid ?? "",
-      counterpartyName: (d.counterparty as any)?.shortName ?? "",
+      counterpartyName: d.counterparty?.shortName ?? "",
       contractUuid: d.contractUuid ?? "",
-      contractName: (d.contract as any)?.shortName ?? "",
+      contractName: d.contract?.shortName ?? "",
     }),
     buildPayload: (fd) => ({
       date: fd.date || null,
@@ -186,7 +186,7 @@ const OutgoingInvoicesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: 
     listName={LIST_NAME}
     columnsJson={columnsJson}
     FormComponent={OutgoingInvoicesForm}
-    getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""}
+    getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
     variant={variant}
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}

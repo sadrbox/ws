@@ -1,12 +1,32 @@
-import { FC, useMemo, useCallback } from "react";
+// 1. React
+import { FC, ComponentType, useMemo, useCallback } from "react";
 import type { ReactNode } from "react";
+
+// 2. Контекст приложения
 import { useAppContext } from "src/app";
-import { translate } from "src/i18";
-import type { TColumn, TDataItem } from "src/components/Table/types";
-import type { TTableVariant } from "src/components/Table";
-import Table, { TOpenModelFormProps } from "src/components/Table";
+
+// 3. Хуки
 import { useModelListState } from "src/hooks/useModelListState";
+
+// 4. Компоненты
+import Table from "src/components/Table";
+import type { TOpenModelFormProps, TTableVariant } from "src/components/Table";
+
+// 5. Типы
+import type { TColumn, TDataItem } from "src/components/Table/types";
+
+// 6. Utils / i18n
+import { translate } from "src/i18";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
+
+// 7. Стили
+import styles from "./ModelList.module.scss";
+
+// ─── Стабильный хелпер перевода ───────────────────────────────────────────────
+// Определён вне компонента, чтобы не пересоздаваться при каждом рендере
+const t = (key: string): string => translate(key) || key;
+
+// ─── Типы ─────────────────────────────────────────────────────────────────────
 
 /**
  * Универсальный компонент списка модели.
@@ -25,17 +45,16 @@ import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
  * />
  * ```
  */
-
 interface ModelListProps {
   /** API-эндпоинт (например `"organizations"`) */
   endpoint: string;
   /** Имя компонента для translate и componentName (например `"OrganizationsList"`) */
   listName: string;
   /** Описание колонок из columns.json */
-  columnsJson: any;
+  columnsJson: unknown;
   /** Компонент формы */
-  FormComponent: FC<any>;
-  /** Извлечение метки для панели из данных строки (необязательно — по умолчанию `() => ""`) */
+  FormComponent: ComponentType<Record<string, unknown>>;
+  /** Извлечение метки для панели из данных строки (по умолчанию `() => ""`) */
   getLabel?: (data: TDataItem | undefined) => string;
   /** Сортировка по умолчанию */
   defaultSort?: Record<string, "asc" | "desc">;
@@ -59,6 +78,37 @@ interface ModelListProps {
   renderCell?: (row: TDataItem, col: TColumn) => ReactNode | undefined;
 }
 
+// ─── Вспомогательный компонент состояния ошибки ───────────────────────────────
+
+interface ErrorStateProps {
+  message: string;
+  onRetry: () => void;
+}
+
+const ErrorState: FC<ErrorStateProps> = ({ message, onRetry }) => (
+  <section
+    className={styles.errorContainer}
+    role="alert"
+    aria-live="assertive"
+    data-testid="model-list-error"
+  >
+    <h3 className={styles.errorTitle}>{t("errorTitle") || "Ошибка загрузки"}</h3>
+    <p className={styles.errorDescription}>{message}</p>
+    <button
+      type="button"
+      className={styles.retryButton}
+      onClick={onRetry}
+      data-testid="model-list-retry"
+    >
+      {t("retry") || "Повторить"}
+    </button>
+  </section>
+);
+
+ErrorState.displayName = "ErrorState";
+
+// ─── Основной компонент ───────────────────────────────────────────────────────
+
 const ModelList: FC<ModelListProps> = ({
   endpoint,
   listName,
@@ -76,17 +126,22 @@ const ModelList: FC<ModelListProps> = ({
 }) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? `${listName}_part` : listName;
+
   const { addPane } = useAppContext().windows;
-  const t = (key: string) => translate(key) || key;
 
   const ownerFilter = useMemo(() => {
     const f: Record<string, { value: unknown; operator: string }> = {};
-    if (ownerUuid && ownerField) f[ownerField] = { value: ownerUuid, operator: "equals" };
+
+    if (ownerUuid && ownerField) {
+      f[ownerField] = { value: ownerUuid, operator: "equals" };
+    }
+
     if (extraFilter) {
       for (const [key, val] of Object.entries(extraFilter)) {
         if (val) f[key] = { value: val, operator: "equals" };
       }
     }
+
     return Object.keys(f).length > 0 ? f : undefined;
   }, [ownerUuid, ownerField, extraFilter]);
 
@@ -99,40 +154,47 @@ const ModelList: FC<ModelListProps> = ({
     ownerFilter,
   });
 
-  const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
-    const d = formProps.data;
-    const isEdit = !!d?.uuid;
-    const newData = !isEdit && ownerUuid && ownerField
-      ? { [ownerField]: ownerUuid } as unknown as TDataItem
-      : d;
-    const listTitle = t(componentName) || componentName;
-    const label = isEdit
-      ? makePaneLabelFromData(componentName, listTitle, d, getLabel(d))
-      : makePaneLabelFromData(componentName, listTitle);
-    addPane({
-      label,
-      component: FormComponent,
-      data: newData,
-      onSave: () => refetch(),
-      onClose: () => refetch(),
-    });
-  }, [addPane, t, refetch, componentName, ownerUuid, ownerField, FormComponent, getLabel]);
+  const openModelForm = useCallback(
+    (formProps: TOpenModelFormProps) => {
+      const d = formProps.data;
+      const isEdit = !!d?.uuid;
+
+      // При создании новой записи в контексте владельца — проставляем FK автоматически
+      const newData =
+        !isEdit && ownerUuid && ownerField
+          ? ({ [ownerField]: ownerUuid } as unknown as TDataItem)
+          : d;
+
+      const listTitle = t(componentName) || componentName;
+      const label = isEdit
+        ? makePaneLabelFromData(componentName, listTitle, d, getLabel(d))
+        : makePaneLabelFromData(componentName, listTitle);
+
+      addPane({
+        label,
+        component: FormComponent,
+        data: newData,
+        onSave: () => refetch(),
+        onClose: () => refetch(),
+      });
+    },
+    [addPane, refetch, componentName, ownerUuid, ownerField, FormComponent, getLabel],
+  );
 
   if (error) {
     return (
-      <div className="error-container">
-        <div className="error-message">
-          <h3>{t("errorTitle") || "Ошибка загрузки"}</h3>
-          <p>{(error as Error)?.message || "Неизвестная ошибка"}</p>
-          <button onClick={() => refetch()} className="retry-button">
-            {t("retry") || "Повторить"}
-          </button>
-        </div>
-      </div>
+      <ErrorState
+        message={error?.message ?? "Неизвестная ошибка"}
+        onRetry={refetch}
+      />
     );
   }
 
-  return <Table {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange, renderCell })} />;
+  return (
+    <Table
+      {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange, renderCell })}
+    />
+  );
 };
 
 ModelList.displayName = "ModelList";

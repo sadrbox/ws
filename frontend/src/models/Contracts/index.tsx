@@ -8,7 +8,7 @@ import FilesPanel from "src/components/FilesPanel";
 import PrintPreview from "src/components/PrintPreview";
 import { Field, FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app";
@@ -170,7 +170,7 @@ const ContractsList: FC<ContractsListProps> = ({ variant, onSelectItem, ownerUui
     listName="ContractsList"
     columnsJson={columnsJson}
     FormComponent={ContractsForm}
-    getLabel={(d) => String(d?.shortName || d?.contractNumber || "")}
+    getLabel={(d) => (d?.shortName as string | undefined) || (d?.contractNumber as string | undefined) || ""}
     variant={variant}
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}
@@ -251,7 +251,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     const refresh = () => {
-      queryClient.invalidateQueries({ queryKey: [CR_TABLE_ENDPOINT] });
+      void queryClient.invalidateQueries({ queryKey: [CR_TABLE_ENDPOINT] });
       _ctx.refetch();
     };
     const nameKey = parentKey.replace(/Uuid$/, "Name");

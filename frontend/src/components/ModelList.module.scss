@@ -1,0 +1,57 @@
+@import "src/styles/variables.scss";
+
+// ─── Layout ───────────────────────────────────────────────────────────────────
+
+.errorContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding-block: 3rem;
+  padding-inline: 1.5rem;
+  text-align: center;
+}
+
+// ─── Typography ───────────────────────────────────────────────────────────────
+
+.errorTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #dc2626;
+}
+
+.errorDescription {
+  margin: 0;
+  font-size: 0.875rem;
+  color: $color51;
+}
+
+// ─── Controls ─────────────────────────────────────────────────────────────────
+
+.retryButton {
+  display: inline-flex;
+  align-items: center;
+  padding-block: 0.375rem;
+  padding-inline: 1rem;
+  border: 1px solid $colorTheme;
+  border-radius: $radius3;
+  background: transparent;
+  color: $colorTheme;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    background-color: $colorTheme;
+    color: #fff;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $colorTheme;
+    outline-offset: 2px;
+    background-color: $colorTheme;
+    color: #fff;
+  }
+}

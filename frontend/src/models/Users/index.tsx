@@ -122,7 +122,7 @@ UsersForm.displayName = "UsersForm";
 
 const UsersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName="UsersList" columnsJson={columnsJson} FormComponent={UsersForm}
-    getLabel={(d) => d?.username ? String(d.username) : (d?.employee as any)?.fullName || "?"} variant={variant} onSelectItem={onSelectItem} />
+    getLabel={(d) => d?.username ? (d.username as string) : (d?.employee as any)?.fullName || "?"} variant={variant} onSelectItem={onSelectItem} />
 );
 UsersList.displayName = "UsersList";
 

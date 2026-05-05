@@ -359,14 +359,14 @@ const SubTable: FC<SubTableProps> = ({
       // Принудительно запрашиваем свежие данные с сервера.
       // Не полагаемся на setTimeout(invalidateQueries) в родителе — SubTable
       // сам гарантирует обновление кэша после коммита.
-      queryClient.invalidateQueries({ queryKey: [model] });
+      void queryClient.invalidateQueries({ queryKey: [model] });
     }
   }, [deferRemoteChanges, initialPendingRows, queryClient, model]);
 
   // Обёртка для delete — показывает спиннер во время удаления
   const handleDelete = useCallback(async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
     if (deferRemoteChanges) {
-      const toDelete = new Set<number>(selectedRowIds as Set<number>);
+      const toDelete = new Set<number>(selectedRowIds);
       cachedRowsRef.current = cachedRowsRef.current.map((r: any) => {
         if (!r) return r;
         if (toDelete.has(r.id)) {
@@ -385,7 +385,7 @@ const SubTable: FC<SubTableProps> = ({
         return next;
       });
       setCacheVersion(v => v + 1);
-      notifyParent(cachedRowsRef.current as TDataItem[]);
+      notifyParent(cachedRowsRef.current);
       return;
     }
     setOpCount(c => c + 1);
@@ -444,7 +444,9 @@ const SubTable: FC<SubTableProps> = ({
     // Если есть pending-строки при deferRemoteChanges — мержим с серверными данными,
     // чтобы не потерять локальные изменения при invalidateQueries (например после
     // сохранения формы открытой из SubTable в режиме "Редактирование в форме").
-    if (dirtyRows.length > 0) {
+    // НЕ мержим если родитель уже очистил pending (initialPendingRows === []) —
+    // это значит коммит прошёл успешно, серверные данные теперь авторитетны.
+    if (dirtyRows.length > 0 && (initialPendingRows?.length ?? 0) > 0) {
       const merged = mergeServerWithPending(clean, dirtyRows);
 
       cachedRowsRef.current = merged;
@@ -512,14 +514,14 @@ const SubTable: FC<SubTableProps> = ({
         (r: any) => !r._pendingAction,
       );
       setCacheVersion(v => v + 1);
-      notifyParent(cachedRowsRef.current as TDataItem[]);
+      notifyParent(cachedRowsRef.current);
     }
 
     // invalidateQueries помечает кэш как stale и автоматически вызывает refetch
     // для активного (mounted) query — ручной refetch() НЕ нужен, иначе будет два запроса.
     // Кэш cachedRowsRef НЕ сбрасываем — useEffect на [allItems] обновит его когда придут новые данные,
     // а пока пользователь видит предыдущие строки вместо пустой таблицы.
-    queryClient.invalidateQueries({ queryKey: [model] });
+    void queryClient.invalidateQueries({ queryKey: [model] });
   }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model, deferRemoteChanges, notifyParent]);
 
   // ── Inline-редактирование ──────────────────────────────────────────────
@@ -545,7 +547,7 @@ const SubTable: FC<SubTableProps> = ({
         return r;
       });
       setCacheVersion(v => v + 1);
-      notifyParent(cachedRowsRef.current as TDataItem[]);
+      notifyParent(cachedRowsRef.current);
       return;
     }
 
@@ -575,7 +577,7 @@ const SubTable: FC<SubTableProps> = ({
       // Сервер вернул ошибку — откатываем через refetch и показываем ошибку в ячейке
       const serverError = err.response?.data?.message || "Ошибка сохранения";
       setCellError(rowId, field, serverError);
-      refetch();
+      void refetch();
     } finally {
       setOpCount(c => c - 1);
     }
@@ -605,7 +607,7 @@ const SubTable: FC<SubTableProps> = ({
       return r;
     });
     setCacheVersion(v => v + 1);
-    notifyParent(cachedRowsRef.current as TDataItem[]);
+    notifyParent(cachedRowsRef.current);
   }, [validateCell, setCellError]);
 
   // ── Refs для фокуса после добавления строки ──────────────────────────────
@@ -629,7 +631,7 @@ const SubTable: FC<SubTableProps> = ({
         try { input.select(); } catch { /* ignore */ }
       }
     });
-  }, [cacheVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cacheVersion]);
 
   // ── Контекст для кастомных колбэков ────────────────────────────────────
   // Используем ref для rows, чтобы ctx.rows всегда возвращал свежие данные
@@ -680,7 +682,7 @@ const SubTable: FC<SubTableProps> = ({
       const serverError = err.response?.data?.message || "Ошибка сохранения";
       const rowId = getRowId(row);
       setCellError(rowId, fkField, serverError);
-      refetch(); // откатываем к серверному состоянию
+      void refetch(); // откатываем к серверному состоянию
     } finally {
       setOpCount(c => c - 1);
     }
@@ -735,7 +737,7 @@ const SubTable: FC<SubTableProps> = ({
         if (typeof obj === "object") {
           for (const v of Object.values(obj as Record<string, unknown>)) collect(v);
         } else {
-          parts.push(String(obj).toLowerCase());
+          parts.push(String(obj as string | number | boolean).toLowerCase());
         }
       };
       collect(row);
@@ -840,7 +842,7 @@ const SubTable: FC<SubTableProps> = ({
   const handleInlineAdd = useCallback(async () => {
     // Резолвим defaultNewRow: поддерживаем как объект, так и функцию (rows) => {...}
     const resolvedDefaultNewRow = typeof defaultNewRow === "function"
-      ? defaultNewRow(cachedRowsRef.current as TDataItem[])
+      ? defaultNewRow(cachedRowsRef.current)
       : defaultNewRow;
 
     if (deferRemoteChanges) {
@@ -867,7 +869,7 @@ const SubTable: FC<SubTableProps> = ({
       cachedRowsRef.current = [newRow as TDataItem, ...cachedRowsRef.current];
       newRowFocusRef.current = 'first';
       setCacheVersion(v => v + 1);
-      notifyParent(cachedRowsRef.current as TDataItem[]);
+      notifyParent(cachedRowsRef.current);
       return;
     }
 
@@ -879,7 +881,7 @@ const SubTable: FC<SubTableProps> = ({
         // Ошибку обрабатывает сам onInlineAdd (alert и т.д.)
       } finally {
         // Всегда обновляем данные после попытки добавления строки
-        refetch();
+        void refetch();
         setOpCount(c => c - 1);
       }
     } else if (resolvedDefaultNewRow) {
@@ -892,7 +894,7 @@ const SubTable: FC<SubTableProps> = ({
       } catch (err: any) {
         alert(err.response?.data?.message || "Ошибка создания записи");
       } finally {
-        refetch();
+        void refetch();
         setOpCount(c => c - 1);
       }
     }
@@ -966,7 +968,7 @@ const SubTable: FC<SubTableProps> = ({
     return (
       <div className="error-container"><div className="error-message">
         <h3>Ошибка загрузки</h3>
-        <p>{(error as Error)?.message || "Неизвестная ошибка"}</p>
+        <p>{error?.message || "Неизвестная ошибка"}</p>
         <button onClick={() => refetch()} className="retry-button">Повторить</button>
       </div></div>
     );

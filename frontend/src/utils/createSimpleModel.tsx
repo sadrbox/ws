@@ -18,14 +18,14 @@ import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
-import { Divider, Field } from "src/components/Field";
+import { Field } from "src/components/Field";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { Group, GroupRow } from "src/components/UI";
+import { Group } from "src/components/UI";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Типы конфига
@@ -103,7 +103,9 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
   // ─── FORM ───────────────────────────────────────────────────────────
 
   const SimpleForm: FC<Partial<TPane>> = (paneProps) => {
-    const access = accessRight ? useAccessRight(accessRight) : { canWrite: true };
+    // Хук всегда вызывается безусловно; если accessRight не задан — перекрываем результат
+    const _accessRaw = useAccessRight(accessRight ?? "");
+    const access = accessRight ? _accessRaw : { canWrite: true };
 
     const form = useFormStore<TFields>({
       endpoint,

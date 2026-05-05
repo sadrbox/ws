@@ -54,7 +54,7 @@ img{width:100%;height:100%;object-fit:contain;display:block}
 
 function ext(name: string) { return (name.match(/\.(\w+)$/) ?? [])[1]?.toLowerCase() ?? ""; }
 
-function esc(s: string) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function esc(s: string) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
 function htmlBlob(html: string) { return URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" })); }
 
@@ -75,9 +75,9 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const srcRef = useRef(src);       srcRef.current = src;
-  const filesRef = useRef(files);   filesRef.current = files;
-  const selRef = useRef(selected);  selRef.current = selected;
+  const srcRef = useRef(src); srcRef.current = src;
+  const filesRef = useRef(files); filesRef.current = files;
+  const selRef = useRef(selected); selRef.current = selected;
   const genRef = useRef(0);
 
   // Очистка blob при unmount
@@ -102,7 +102,7 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
     finally { setLoading(false); }
   }, [ownerUuid, ownerType]);
 
-  useEffect(() => { if (ownerUuid) loadFiles(); }, [ownerUuid, filesRevision]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (ownerUuid) void loadFiles(); }, [ownerUuid, filesRevision]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Конвертация файла → blob URL ───────────────────────────────────────
   const convert = useCallback(async (uuid: string) => {
@@ -160,7 +160,7 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
     }
   }, [revoke]);
 
-  useEffect(() => { if (selected) convert(selected); else revoke(); }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (selected) void convert(selected); else revoke(); }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Печать ─────────────────────────────────────────────────────────────
   const iframeRef = useRef<HTMLIFrameElement | null>(null);

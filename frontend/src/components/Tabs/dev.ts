@@ -1,4 +1,3 @@
-import { isArray } from "lodash";
 import { TTabs } from "./types";
 
 export type Root = Root2[];
@@ -10,7 +9,7 @@ export interface Root2 {
 	body: string;
 }
 
-async function getMockTabs(): Promise<TTabs[]> {
+function getMockTabs(): Promise<TTabs[]> {
 	// console.log("first");
 	// const response = await fetch("https://jsonplaceholder.typicode.com/posts");
 	// if (!response.ok) {

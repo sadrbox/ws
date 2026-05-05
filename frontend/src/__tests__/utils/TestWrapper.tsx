@@ -11,23 +11,23 @@ export const TestWrapper: React.FC<PropsWithChildren> = ({ children }) => {
     windows: {
       panes: [],
       activePane: null,
-      addPane: () => {},
-      requestClose: async () => {},
-      reloadPane: async () => {},
-      setActivePane: () => {},
-      updatePaneLabel: () => {},
-      registerBeforeClose: () => () => {},
+      addPane: () => { },
+      requestClose: async () => { },
+      reloadPane: async () => { },
+      setActivePane: () => { },
+      updatePaneLabel: () => { },
+      registerBeforeClose: () => () => { },
     },
     actions: {
-      confirm: async () => true,
+      confirm: () => true,
     },
     navbar: {
       props: [],
-      setProps: () => {},
+      setProps: () => { },
     },
     auth: {
       user: null,
-      logout: () => {},
+      logout: () => { },
     },
   };
 

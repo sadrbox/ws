@@ -389,7 +389,7 @@ const StorageTab: FC<{
   const [clearing, setClearing] = useState<string | null>(null);
 
   useEffect(() => {
-    navigator.storage?.estimate?.().then(e => setDbSize(e.usage ?? null)).catch(() => {});
+    navigator.storage?.estimate?.().then(e => setDbSize(e.usage ?? null)).catch(() => { });
   }, [offlineStats]);
 
   const handleClearAll = useCallback(async () => {
@@ -405,7 +405,7 @@ const StorageTab: FC<{
   const withData = useMemo(() => allTables.filter(t => t.count > 0), [allTables]);
 
   const toggle = useCallback((t: string) => {
-    setSelected(p => { const n = new Set(p); n.has(t) ? n.delete(t) : n.add(t); return n; });
+    setSelected(p => { const n = new Set(p); if (n.has(t)) { n.delete(t); } else { n.add(t); } return n; });
   }, []);
 
   const handleDlSelected = useCallback(async () => {
@@ -502,7 +502,7 @@ const StorageTab: FC<{
                     className={styles.SyncInlineBtn}
                     title="Очистить"
                     disabled={clearing === table}
-                    onClick={e => { e.stopPropagation(); handleClearTable(table); }}
+                    onClick={e => { e.stopPropagation(); void handleClearTable(table); }}
                   >🗑</button>
                 )}
               </span>

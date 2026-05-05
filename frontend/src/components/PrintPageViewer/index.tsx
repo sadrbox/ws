@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useRef, useState } from "react";
+import React, { ReactNode } from "react";
 import styles from './styles.module.scss';
 import Toolbar from "src/components/Toolbar";
 import imgDownloadPdf from 'src/assets/download-pdf.png'

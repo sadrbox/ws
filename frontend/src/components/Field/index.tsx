@@ -1,11 +1,7 @@
-import React, { CSSProperties, FC, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import React, { CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import styles from "./Field.module.scss"
-import { useTableContext } from '../Table'
 // import { TypeDateRange } from '../Table/types'
-import { Group } from 'src/components/UI'
-import useUID from 'src/hooks/useUID'
-import { useDebounceValue } from 'src/hooks/useDebounceValue'
 
 import { getFormatNumerical, parseNumericInput } from 'src/components/Table/services.ts'
 // type TypeFieldStringProps = {
@@ -23,13 +19,6 @@ import { getFormatNumerical, parseNumericInput } from 'src/components/Table/serv
 //   onClick: () => void;
 // }[];
 
-
-type TypeFieldFilterProps = {
-  actions: TypeFieldActions;
-  name: string;
-  label: string;
-  inputRef?: React.RefObject<HTMLInputElement | null>;
-}
 
 // type TypeFieldGroupProps = {
 //   name: string;
@@ -393,46 +382,6 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
   );
 };
 
-export const FieldFilter: FC<TypeFieldFilterProps> = ({ label, name, actions }) => {
-  const inputRef = useRef<HTMLInputElement | null>(null)
-
-  return (
-    <FieldGroup
-      name={name}
-      label={label}
-      inputRef={inputRef}
-      actions={actions}
-    />
-  );
-};
-
-export const FieldString: FC<TypeFieldStringProps> = ({ label, name }) => {
-  const inputRef = useRef<HTMLInputElement | null>(null)
-
-  const handleClear = () => {
-    if (inputRef.current) inputRef.current.value = "";
-  };
-
-  const handleList = () => {
-    // TODO: implement list action
-  };
-
-
-  const actions: TypeFieldActions = [
-    { type: "clear", onClick: handleClear },
-    { type: "list", onClick: handleList },
-    { type: "open", onClick: () => { } },
-  ];
-  return (
-    <FieldGroup
-      name={name}
-      label={label}
-      inputRef={inputRef}
-      actions={actions}
-    />
-  );
-};
-
 type TypeFieldSelectProps = {
   label?: string;
   name: string;
@@ -460,223 +409,6 @@ export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, va
           ))}
         </select>
       </div>
-    </div>
-  );
-};
-
-type TypeFieldAutocompleteProps = {
-  label: string;
-  name: string;
-  style?: CSSProperties;
-  // attributes?: HTMLAttributes<HTMLInputElement>;
-}
-
-export const FieldAutocomplete: FC<TypeFieldAutocompleteProps> = ({ label, name, style }) => {
-  return (
-    <Group align="row" className={styles.FieldWrapper} style={style}>
-      <label htmlFor={name} className={styles.FieldLabel}>{label}</label>
-      <Group align="col" className={styles.FieldInputWrapper}>
-        <input
-          type="text"
-          id={name}
-          name={name}
-          autoComplete='off'
-          placeholder=""
-          className={styles.FieldString}
-        />
-      </Group>
-    </Group>
-  );
-};
-
-// вероятно не используется, в Table есть свой компонент FieldFastSearch, который работает с глобальным поиском таблицы. Но если нужно универсальное поле для быстрого поиска — можно юзать и это.
-export const FieldFastSearch: FC = () => {
-  const { search, filtering, columns } = useTableContext();
-
-  // Глобальное значение поиска из контекста
-  const { value: globalSearchValue, onChange: setGlobalSearch } = search;
-
-  // Локальное значение инпута (управляемое состояние)
-  const [localValue, setLocalValue] = useState<string>(globalSearchValue);
-
-  // Дебаунс — отправляем в глобальный фильтр не чаще чем раз в 400 мс
-  const debouncedValue = useDebounceValue(localValue, 400);
-
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Видимые колонки для поиска (только те, где visible === true)
-  const visibleColumns = useMemo(
-    () =>
-      columns
-        .filter(col => col.visible === true)
-        .map(col => ({ identifier: col.identifier, type: col.type })),
-    [columns]
-  );
-
-  // Синхронизация локального значения с глобальным (если изменилось извне)
-  useEffect(() => {
-    setLocalValue(globalSearchValue);
-  }, [globalSearchValue]);
-
-  // Отправка debounced значения в глобальный фильтр
-  useEffect(() => {
-    const trimmed: string = typeof debouncedValue === 'string' ? debouncedValue.trim() : '';
-
-    if (!trimmed) {
-      // Если пусто — убираем searchBy полностью
-      filtering.onFilterChange('searchBy', undefined);
-      return;
-    }
-
-    // Формируем объект searchBy
-    const searchByValue = {
-      value: trimmed,
-      columns: visibleColumns,
-    };
-
-    filtering.onFilterChange('searchBy', searchByValue);
-  }, [debouncedValue, visibleColumns, filtering.onFilterChange]);
-
-  // Очистка поля и фильтра
-  const handleClear = useCallback(() => {
-    setLocalValue('');
-    if (inputRef.current) {
-      inputRef.current.value = '';
-      inputRef.current.focus?.();
-    }
-    // Немедленно очищаем searchBy
-    filtering.onFilterChange('searchBy', undefined);
-  }, [filtering.onFilterChange]);
-
-  // Обработчик ввода
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalValue(e.target.value);
-  }, []);
-
-  return (
-    <div className={styles.FieldInputWrapper}>
-      <input
-        ref={inputRef}
-        type="text"
-        placeholder="Поиск..."
-        className={styles.FieldString}
-        autoComplete="off"
-        // style={{ paddingRight: '26px' }}
-        value={localValue}
-        onChange={handleChange}
-      />
-
-      {localValue && (
-        <div className={styles.FieldActions}>
-          <button
-            type="button"
-            onClick={handleClear}
-            title="Очистить поиск"
-            aria-label="Очистить поиск"
-          >
-            {/* Замените на вашу иконку (например, SVG или Heroicons) */}
-            {/* <span style={{ fontSize: '20px', lineHeight: 1 }}>×</span> */}
-            {/* или: <XMarkIcon width={18} height={18} /> */}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// type TypeFieldPeriodProps = {setSearchPeriod: ({startDate, endDate}: TypeDateRange) => void };
-// type TypeFieldDateRangeProps = { props: { dateRange: TypeDateRange, setDateRange: Dispatch<SetStateAction<TypeDateRange>> }; style?: CSSProperties };
-
-export interface TypeDateRange {
-  startDate: string | null; // ISO-строка или пустая строка / null
-  endDate: string | null;
-}
-
-export const FieldDateRange: FC = () => {
-  const { filtering } = useTableContext();
-  const { filters, onFilterChange } = filtering;
-
-  // Текущее значение диапазона дат из глобальных фильтров
-  const currentDateRange = filters?.dateRange as TypeDateRange | undefined;
-
-  // Локальное состояние для управления вводом
-  const [localRange, setLocalRange] = useState<TypeDateRange>(
-    currentDateRange ?? { startDate: null, endDate: null }
-  );
-
-  // Синхронизация: если глобальный фильтр изменился извне — обновляем локальное состояние
-  useEffect(() => {
-    if (currentDateRange) {
-      setLocalRange(currentDateRange);
-    } else {
-      setLocalRange({ startDate: null, endDate: null });
-    }
-  }, [currentDateRange]);
-
-  // Отправка изменений в глобальные фильтры
-  // Можно добавить debounce, если сервер не любит частые запросы
-  const updateGlobalFilter = useCallback(() => {
-    // Если оба поля пустые → очищаем фильтр
-    if (!localRange.startDate && !localRange.endDate) {
-      onFilterChange('dateRange', undefined);
-      return;
-    }
-
-    // Иначе передаём объект
-    onFilterChange('dateRange', localRange);
-  }, [localRange, onFilterChange]);
-
-  // Обновляем глобальный фильтр при изменении локального состояния
-  useEffect(() => {
-    updateGlobalFilter();
-  }, [localRange, updateGlobalFilter]);
-
-  // Обработчики для инпутов
-  const handleStartChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value || null;
-    setLocalRange(prev => ({ ...prev, startDate: value }));
-  }, []);
-
-  const handleEndChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value || null;
-    setLocalRange(prev => ({ ...prev, endDate: value }));
-  }, []);
-
-  // Очистка диапазона
-  const handleClear = useCallback(() => {
-    setLocalRange({ startDate: null, endDate: null });
-    onFilterChange('dateRange', undefined);
-  }, [onFilterChange]);
-
-  return (
-    <div className={styles.FieldDateWrapper}>
-      <input
-        type="datetime-local"
-        className={styles.FieldDate}
-        value={localRange.startDate ?? ''}
-        onChange={handleStartChange}
-        placeholder="Начало"
-      />
-      <span className={styles.DateSeparator}>—</span>
-      <input
-        type="datetime-local"
-        className={styles.FieldDate}
-        value={localRange.endDate ?? ''}
-        onChange={handleEndChange}
-        placeholder="Конец"
-      />
-
-      {(localRange.startDate || localRange.endDate) && (
-        <button
-          type="button"
-          className={styles.ClearButton}
-          onClick={handleClear}
-          title="Сбросить диапазон"
-          aria-label="Сбросить диапазон дат"
-        >
-          ✕
-        </button>
-      )}
     </div>
   );
 };
@@ -716,7 +448,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   disabled = false,
   placeholder,
   required = false,
-  step,
+  step: _step,
   min,
   max,
   textAlign = 'right',
@@ -817,7 +549,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     // Разрешаем только: цифры, точку, запятую (десятичный разделитель), минус в начале
     const raw = e.target.value;
     // Убираем все недопустимые символы: всё кроме 0-9, . , -
-    const filtered = raw.replace(/[^0-9.,\-]/g, '');
+    const filtered = raw.replace(/[^0-9.,-]/g, '');
     // Разрешаем минус только в начале и только один раз
     const withMinus = filtered.replace(/(?!^)-/g, '');
     // Нормализуем: и точку и запятую принимаем как десятичный разделитель,
@@ -849,7 +581,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
       onKeyDown?.(e);
       return;
     }
-    if (e.key.length === 1 && !/[0-9.,\-]/.test(e.key)) {
+    if (e.key.length === 1 && !/[0-9.,-]/.test(e.key)) {
       e.preventDefault();
       return;
     }
@@ -991,6 +723,3 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
   );
 };
 
-function useDebounce(localValue: string, arg1: number) {
-  throw new Error('Function not implemented.')
-}

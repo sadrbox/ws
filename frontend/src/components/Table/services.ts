@@ -1,12 +1,10 @@
 import { getFormatDateOnly } from "src/utils/main.module";
-import { TColumn, TDataItem, TOrder, TypeTableTypes } from "./types";
+import { TColumn, TDataItem, TypeTableTypes } from "./types";
 import { CSSProperties } from "react";
 
 const getNestedValue = <T>(obj: T, path: string): any => {
 	return path.split(".").reduce((acc: any, key) => acc?.[key], obj);
 };
-const isCompositeKey = (key: string): boolean => key.includes(".");
-
 /**
  * Сортирует массив строк таблицы по указанной конфигурации сортировки
  * @param arr - массив элементов для сортировки
@@ -78,21 +76,6 @@ export function sortTableRows<T>(
 	});
 }
 
-// Вспомогательная функция для получения вложенного значения
-// function getNestedValue(obj: any, path: string): unknown {
-// 	if (obj == null || !path) return undefined;
-
-// 	let current: any = obj;
-// 	const parts = path.split(".");
-
-// 	for (const part of parts) {
-// 		if (current == null) return undefined;
-// 		current = current[part];
-// 	}
-
-// 	return current;
-// }
-
 export function getModelColumns(
 	initColumns: TColumn[],
 	modelName: string,
@@ -140,47 +123,6 @@ export function getModelColumns(
 	return columns;
 }
 
-// Функция для поиска ширины колонки по id
-export function getColumnWidthById(
-	columns: TColumn[],
-	columnId: string,
-): string {
-	// console.log(tableParams);
-	const column = columns.find((col) => col.identifier === columnId);
-	return column?.width ? column.width : "auto"; // Возвращает ширину или undefined, если не найдено
-}
-
-// Функция для поиска ширины колонки по id модификация
-export function getColumnWidthSetting(
-	columns: TColumn[],
-	columnID: string,
-): string | undefined {
-	const column = columns.find((col) => col.identifier === columnID);
-	return column ? column.width : "auto"; // Возвращает ширину или undefined, если не найдено
-}
-
-export function getColumnSettings<T extends TColumn>(
-	columns: T[],
-	columnID: string,
-): T | undefined {
-	return columns.find((column) => {
-		if (column.identifier === columnID) {
-			return column;
-		}
-	});
-}
-
-export function getColumnWidth<T extends TColumn>(
-	columns: T[],
-	columnID: keyof T | string,
-): T | undefined {
-	return columns.find((column) => {
-		if (column.identifier === columnID) {
-			return column;
-		}
-	});
-}
-
 export function getTextAlignByColumnType(column: TColumn): CSSProperties {
 	switch (column.type) {
 		case "number":
@@ -192,17 +134,6 @@ export function getTextAlignByColumnType(column: TColumn): CSSProperties {
 		default:
 			return { justifyContent: "left" };
 	}
-}
-export function getColumnSettingValue(
-	rowSettingColumn: TColumn,
-	column: TColumn,
-): string {
-	if (column.type === "string") {
-		return rowSettingColumn[column.identifier as keyof TColumn] + "";
-	} else if (column.type === "number") {
-		return rowSettingColumn[column.identifier as keyof TColumn] + "";
-	}
-	return rowSettingColumn[column.identifier as keyof TColumn] + "";
 }
 
 export function getFormatColumnValue(
@@ -240,7 +171,7 @@ export function getFormatColumnValue(
 }
 
 // Формат числовой идентификатор /////////////////////////////////////////////////////////////////////////
-export function getFormatNumericalID(n: number): string {
+function getFormatNumericalID(n: number): string {
 	// return n.toString().padStart(5, "0");
 	return n.toString();
 }
@@ -271,16 +202,3 @@ export function parseNumericInput(value: string): number | null {
 	const n = Number(normalized);
 	return isNaN(n) ? null : n;
 }
-
-// // Формат даты /////////////////////////////////////////////////////////////////////////
-// export function getFormatDate(d: string): string {
-// 	const date = new Date(d);
-
-// 	// Проверка на валидность даты и на эпоху Unix (01.01.1970)
-// 	if (isNaN(date.getTime()) || date.getTime() === 0) {
-// 		return ""; // Возвращаем пустую строку или другое значение по умолчанию
-// 	}
-
-// 	const localDateString = date.toLocaleString();
-// 	return localDateString;
-// }

@@ -33,6 +33,23 @@ export default tseslint.config(
 				"warn",
 				{ allowConstantExport: true },
 			],
+			"@typescript-eslint/no-unused-vars": [
+				"error",
+				{
+					argsIgnorePattern: "^_",
+					varsIgnorePattern: "^_",
+					caughtErrorsIgnorePattern: "^_",
+					ignoreRestSiblings: true,
+				},
+			],
+			"@typescript-eslint/no-misused-promises": [
+				"error",
+				{
+					checksVoidReturn: {
+						attributes: false,
+					},
+				},
+			],
 		},
 		settings: {
 			"import/resolver": {
@@ -42,5 +59,5 @@ export default tseslint.config(
 				},
 			},
 		},
-	}
+	},
 );

@@ -5,7 +5,6 @@ import Table from "src/components/Table";
 import columnsJson from "./columns.json";
 import apiClient from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
-import styles from "src/styles/main.module.scss";
 
 const MODEL_ENDPOINT = "files";
 const COMPONENT_NAME = "FilesList_part";
@@ -49,7 +48,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
         `/${MODEL_ENDPOINT}?ownerType=${encodeURIComponent(ownerType)}&ownerUuid=${encodeURIComponent(ownerUuid)}`,
       );
       setRows(res.data?.items ?? []);
-    } catch (e) {
+    } catch (_e) {
       showToast("Ошибка загрузки списка файлов", "error");
     } finally {
       setIsLoading(false);
@@ -57,7 +56,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
   }, [ownerType, ownerUuid]);
 
   useEffect(() => {
-    if (ownerType && ownerUuid) loadFiles();
+    if (ownerType && ownerUuid) void loadFiles();
   }, [loadFiles, ownerType, ownerUuid]);
 
   // ── Конвертация fileSize + клиентская фильтрация по поиску ────────────
@@ -75,7 +74,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
       const words = searchValue.toLowerCase().split(/\s+/).filter(Boolean);
       filtered = mapped.filter(row =>
         words.every(w =>
-          String(row.fileName ?? "").toLowerCase().includes(w),
+          ((row.fileName as string | undefined) ?? "").toLowerCase().includes(w),
         ),
       );
     }
@@ -87,7 +86,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
       filtered = [...filtered].sort((a, b) => {
         const va = a[field] ?? "";
         const vb = b[field] ?? "";
-        const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
+        const cmp = String(va as string | number | null | undefined).localeCompare(String(vb as string | number | null | undefined), undefined, { numeric: true });
         return dir === "desc" ? -cmp : cmp;
       });
     }
@@ -109,7 +108,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
         await apiClient.post(`/${MODEL_ENDPOINT}`, fd);
         await loadFiles();
         onFilesChange?.();
-      } catch (err) {
+      } catch (_err) {
         showToast("Ошибка загрузки файла", "error");
       } finally {
         setIsUploading(false);
@@ -131,7 +130,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
       a.download = fileName;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch (err) {
+    } catch (_err) {
       showToast("Ошибка скачивания файла", "error");
     }
   }, []);
@@ -141,7 +140,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
     async (fileUuid: string) => {
       try {
         await apiClient.delete(`/${MODEL_ENDPOINT}/${fileUuid}`);
-      } catch (err) {
+      } catch (_err) {
         showToast("Ошибка удаления файла", "error");
       }
     },
@@ -185,7 +184,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, onFilesChange }
     ({ data }: { data?: TDataItem }) => {
       if (data?.uuid && data?.fileName) {
         // Клик по строке — скачивание
-        handleDownload(String(data.uuid), String(data.fileName));
+        void handleDownload(data.uuid, data.fileName as string);
       } else {
         // "Добавить" — открыть диалог выбора файла
         fileInputRef.current?.click();

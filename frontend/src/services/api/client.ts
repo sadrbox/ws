@@ -85,7 +85,7 @@ apiClient.interceptors.response.use(
 			showToast(message, "error", 6000);
 		}
 
-		return Promise.reject(error);
+		return Promise.reject(error instanceof Error ? error : new Error(String(error)));
 	},
 );
 

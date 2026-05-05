@@ -5,7 +5,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import LookupField from "src/components/Field/LookupField";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
@@ -217,7 +217,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     const refresh = () => {
-      queryClient.invalidateQueries({ queryKey: [CT_TABLE_ENDPOINT] });
+      void queryClient.invalidateQueries({ queryKey: [CT_TABLE_ENDPOINT] });
       _ctx.refetch();
     };
     addPane({

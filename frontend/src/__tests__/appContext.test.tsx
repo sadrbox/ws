@@ -14,7 +14,7 @@ import { useAppContext, AppContextProvider } from 'src/app/context';
 import type { TypeAppContextProps } from 'src/app/types';
 
 // Мокируем тяжёлые сервисы, которые транзитивно подтягиваются через app/index
-vi.mock('src/services/queryPersist', () => ({ restoreQueryCache: vi.fn(), persistQueryCache: vi.fn(() => () => {}), clearPersistedCache: vi.fn() }));
+vi.mock('src/services/queryPersist', () => ({ restoreQueryCache: vi.fn(), persistQueryCache: vi.fn(() => () => { }), clearPersistedCache: vi.fn() }));
 vi.mock('src/services/syncManager', () => ({ initialSync: vi.fn(), startPeriodicSync: vi.fn(), stopPeriodicSync: vi.fn() }));
 vi.mock('src/services/offlineDb', () => ({ clearOfflineDb: vi.fn() }));
 vi.mock('src/services/registerSW', () => ({ registerServiceWorker: vi.fn() }));
@@ -22,7 +22,7 @@ vi.mock('src/services/networkStatus', () => ({ startHealthCheck: vi.fn(), stopHe
 vi.mock('src/services/offlineQueue', () => ({ clearAllEntries: vi.fn() }));
 vi.mock('src/services/auth', () => ({
   isAuthenticated: vi.fn(() => false),
-  verifyToken: vi.fn(async () => null),
+  verifyToken: vi.fn(() => null),
   logout: vi.fn(),
   getCurrentUser: vi.fn(() => null),
 }));
@@ -35,16 +35,16 @@ function makeMockValue(overrides?: Partial<TypeAppContextProps>): TypeAppContext
     windows: {
       panes: [],
       activePane: null,
-      addPane: () => {},
-      requestClose: async () => {},
-      reloadPane: async () => {},
-      setActivePane: () => {},
-      updatePaneLabel: () => {},
-      registerBeforeClose: () => () => {},
+      addPane: () => { },
+      requestClose: async () => { },
+      reloadPane: async () => { },
+      setActivePane: () => { },
+      updatePaneLabel: () => { },
+      registerBeforeClose: () => () => { },
     },
-    actions: { confirm: async () => true },
-    navbar: { props: [], setProps: () => {} },
-    auth: { user: null, logout: () => {} },
+    actions: { confirm: () => true },
+    navbar: { props: [], setProps: () => { } },
+    auth: { user: null, logout: () => { } },
     ...overrides,
   };
 }
@@ -71,7 +71,7 @@ describe('AppContextProvider / useAppContext (context.tsx)', () => {
     const value = makeMockValue({
       auth: {
         user: { uuid: 'u1', username: 'admin' },
-        logout: () => {},
+        logout: () => { },
       },
     });
     render(
@@ -84,7 +84,7 @@ describe('AppContextProvider / useAppContext (context.tsx)', () => {
 
   it('бросает ошибку при вызове useAppContext вне провайдера', () => {
     const orig = console.error;
-    console.error = () => {};
+    console.error = () => { };
     expect(() => render(<ContextConsumer />)).toThrow(
       'useAppContext must be used within AppContextProvider'
     );

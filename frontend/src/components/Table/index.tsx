@@ -327,15 +327,15 @@ const Table: FC<TableProps> = memo((props) => {
     if (!onSelectItem || rows.length === 0) return;
     setActiveRow(prev => {
       // Остаёмся на текущей строке если она ещё видна; иначе переходим на первую
-      const stillVisible = prev !== null && rows.some(r => (r.id as number) === prev);
-      return stillVisible ? prev : (rows[0].id as number);
+      const stillVisible = prev !== null && rows.some(r => r.id === prev);
+      return stillVisible ? prev : rows[0].id;
     });
   }, [onSelectItem, rows]);
 
   // Прокрутка к активной строке при изменении activeRow
   useEffect(() => {
     if (activeRow === null || !scrollRef.current) return;
-    const el = scrollRef.current.querySelector('[data-active="true"]') as HTMLElement | null;
+    const el = scrollRef.current.querySelector<HTMLElement>('[data-active="true"]');
     if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [activeRow]);
 
@@ -349,7 +349,7 @@ const Table: FC<TableProps> = memo((props) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         const currentActive = activeRowRef.current;
-        const row = currentRows.find(r => (r.id as number) === currentActive);
+        const row = currentRows.find(r => r.id === currentActive);
         if (row) onSelectItemRef.current?.(row);
         return;
       }
@@ -357,11 +357,11 @@ const Table: FC<TableProps> = memo((props) => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         setActiveRow(prev => {
-          const idx = prev !== null ? currentRows.findIndex(r => (r.id as number) === prev) : -1;
+          const idx = prev !== null ? currentRows.findIndex(r => r.id === prev) : -1;
           if (e.key === 'ArrowDown') {
-            return currentRows[Math.min(Math.max(idx + 1, 0), currentRows.length - 1)].id as number;
+            return currentRows[Math.min(Math.max(idx + 1, 0), currentRows.length - 1)].id;
           } else {
-            return currentRows[Math.max(idx <= 0 ? 0 : idx - 1, 0)].id as number;
+            return currentRows[Math.max(idx <= 0 ? 0 : idx - 1, 0)].id;
           }
         });
       }
@@ -433,13 +433,13 @@ const Table: FC<TableProps> = memo((props) => {
     refetch();
   }, [refetch]);
 
-  const handleDeleteClick = useCallback(async () => {
+  const handleDeleteClick = useCallback(() => {
     // Собираем реальный набор id выбранных строк
     let effectiveIds: Set<number>;
     if (isAllSelectedMode) {
       // Все строки выбраны, кроме excludedRows
       effectiveIds = new Set(
-        rows.map(r => r.id as number).filter(id => !excludedRows.has(id)),
+        rows.map(r => r.id).filter(id => !excludedRows.has(id)),
       );
     } else if (selectedRows.size > 0) {
       effectiveIds = selectedRows;
@@ -453,7 +453,7 @@ const Table: FC<TableProps> = memo((props) => {
     if (effectiveIds.size === 0) return;
 
     if (onDelete) {
-      await onDelete(effectiveIds, rows);
+      onDelete(effectiveIds, rows);
       // Сбрасываем выделение после удаления
       setSelectedRows(new Set());
       setIsAllSelectedMode(false);
@@ -558,7 +558,6 @@ const Table: FC<TableProps> = memo((props) => {
             <LoadingSpinner variant="overlay" />
           )}
         </div>
-        {/* <TableStatusBar /> */}
       </div>
     </TableContextProvider>
   );
@@ -661,40 +660,6 @@ function computeFooterValue(col: TColumn, rows: TDataItem[]): string | null {
 }
 
 // ────────────────────────────────────────────────
-// TableStatusBar — строка состояния (снаружи скролла, всегда внизу)
-// ────────────────────────────────────────────────
-
-const TableStatusBar = memo(() => {
-  const {
-    total,
-    states: { selectedRows, isAllSelectedMode, excludedRows },
-  } = useTableContext();
-
-  const selectedCount = isAllSelectedMode
-    ? total - excludedRows.size
-    : selectedRows.size;
-
-  if (selectedCount === 0) return null;
-
-  return (
-    <div className={styles.TableStatusBar}>
-      <div className={styles.TableStatusCell}>
-        <span>
-          Выбрано:{' '}
-          <span className={styles.TableStatusSelected}>
-            {selectedCount.toLocaleString('ru-RU')}
-          </span>
-          {' из '}
-          {total.toLocaleString('ru-RU')}
-        </span>
-      </div>
-    </div>
-  );
-});
-
-TableStatusBar.displayName = 'TableStatusBar';
-
-// ────────────────────────────────────────────────
 // TableHeader
 // ────────────────────────────────────────────────
 
@@ -718,7 +683,7 @@ const TableHeader = memo(() => {
   // isAllSelected = true если режим "все" без исключений
   const isAllSelected = useMemo(() => {
     if (isAllSelectedMode) return excludedRows.size === 0;
-    return rows.length > 0 && rows.every(r => selectedRows.has(r.id as number));
+    return rows.length > 0 && rows.every(r => selectedRows.has(r.id));
   }, [isAllSelectedMode, excludedRows, rows, selectedRows]);
 
   // indeterminate = частичный выбор
@@ -1085,12 +1050,11 @@ const TableBody = memo(() => {
         </tr>
       )}
 
-      {visibleRows.map((row, visibleIndex) => (
+      {visibleRows.map((row) => (
         <TableBodyRow
-          key={row.id ?? `row-${row.id}`}
+          key={row.id}
           row={row}
           columns={visibleColumns}
-          rowIndex={startIndexVirtual + visibleIndex}
         />
       ))}
 
@@ -1112,7 +1076,6 @@ const TableBody = memo(() => {
 interface TableBodyRowProps {
   row: TDataItem;
   columns: TColumn[];
-  rowIndex: number;
 }
 
 
@@ -1135,18 +1098,18 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     isLoading,
   } = useTableContext();
 
-  const isActive = activeRow === (row.id as number);
+  const isActive = activeRow === row.id;
 
   // Строка выбрана если:
   // 1. Режим "все" И строка НЕ в исключениях
   // 2. Или обычный режим И строка в selectedRows
   const isSelected = isAllSelectedMode
-    ? !excludedRows.has(row.id as number)
-    : selectedRows.has(row.id as number);
+    ? !excludedRows.has(row.id)
+    : selectedRows.has(row.id);
 
   const toggleSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
-    const id = row.id as number;
+    const id = row.id;
     if (isAllSelectedMode) {
       // В режиме "все" управляем исключениями
       setExcludedRows(prev => {
@@ -1175,7 +1138,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           next.delete(id);
         }
         // Если выбраны ВСЕ загруженные строки — переключаемся в режим "все"
-        const allLoadedIds = rows.map(r => r.id as number);
+        const allLoadedIds = rows.map(r => r.id);
         if (allLoadedIds.every(rid => next.has(rid))) {
           setIsAllSelectedMode(true);
           setExcludedRows(new Set());
@@ -1191,7 +1154,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   const clickedFocusedInputRef = useRef(false);
 
   const handleRowClick = useCallback(() => {
-    setActiveRow?.(row.id as number);
+    setActiveRow?.(row.id);
     if (clickedFocusedInputRef.current) {
       // Клик по уже сфокусированному полю — не сбрасываем фокус, даём стандартное поведение
       clickedFocusedInputRef.current = false;

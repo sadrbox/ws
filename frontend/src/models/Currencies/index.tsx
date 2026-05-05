@@ -16,7 +16,7 @@ const { Form: CurrenciesForm, List: CurrenciesList } = createSimpleModel({
   ],
   buildPaneLabel: (saved) =>
     makePaneLabel("CurrenciesList", "Валюты", saved, [saved.code, saved.shortName].filter(Boolean).join(" ") || undefined),
-  getLabel: (d) => `${d?.code || "?"} — ${d?.shortName || "?"}`,
+  getLabel: (d) => `${(d?.code as string | undefined) || "?"} — ${(d?.shortName as string | undefined) || "?"}`,
 });
 
 export { CurrenciesList, CurrenciesForm };

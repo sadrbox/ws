@@ -6,12 +6,26 @@ import { ensureOfflineDb } from './services/offlineDb'
 
 const root = createRoot(document.getElementById('root')!);
 
+// ── Глобальный обработчик Escape: убирает фокус с поля ввода ─────────────
+// При нажатии Escape, если активный элемент — input/textarea/contenteditable,
+// снимаем с него фокус (blur). Capture-фаза используется, чтобы сработать
+// раньше локальных обработчиков, которые могут вызвать stopPropagation.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const el = document.activeElement;
+  if (!(el instanceof HTMLElement)) return;
+  const tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable) {
+    el.blur();
+  }
+}, true);
+
 // ── Инициализация offline-first инфраструктуры ───────────────────────────
 // 1. Открываем IndexedDB (Dexie) — миграции схемы выполняются автоматически
 ensureOfflineDb().catch(err => console.error('[OfflineDB] Ошибка инициализации:', err));
 
 // 2. Регистрируем Service Worker — кэширование статики
-registerServiceWorker().catch(() => {});
+registerServiceWorker().catch(() => { });
 
 // 3. Запускаем health-check сервера каждые 30 сек
 //    При переходе online → автоматический запуск fullSync()
@@ -31,7 +45,7 @@ waitForFonts().then(() => {
 
   root.render(
     // <StrictMode>
-      <App />
+    <App />
     // </StrictMode>,
   );
 
@@ -41,4 +55,4 @@ waitForFonts().then(() => {
       rootEl.style.opacity = '1';
     });
   });
-});
+}).catch(console.error);

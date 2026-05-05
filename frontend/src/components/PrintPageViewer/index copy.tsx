@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useRef, useState } from "react";
+import React, { ReactNode } from "react";
 
 // Компонент для страницы A4
 const A4Page: React.FC<{ children: ReactNode }> = ({ children }) => {

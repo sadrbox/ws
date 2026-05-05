@@ -1,7 +1,7 @@
 import { FC, useMemo } from "react";
 import apiClient from "src/services/api/client";
 import type { TPane } from "src/app/types";
-import { Field, FieldDate, FieldNumber, FieldSelect } from "src/components/Field";
+import { FieldDate, FieldNumber, FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import styles from "src/styles/main.module.scss";
 import { translate } from "src/i18";
@@ -11,7 +11,6 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
-import { getFormatNumerical } from "src/components/Table/services";
 
 const MODEL_ENDPOINT = "employee-histories";
 
@@ -61,7 +60,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
     defaultFields: DEFAULT_FIELDS,
     initialFields,
     paneProps,
-    mapServerToForm: async (d, prev) => ({
+    mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       id: d.id,
       uuid: d.uuid,
@@ -107,7 +106,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
               endpoint="organizations" displayField="shortName"
               columns={[{ key: "shortName", label: "Наименование" }, { key: "bin", label: "БИН" }]}
               onSelect={(uuid) => {
-                apiClient.get(`/organizations/${uuid}`).then(r => {
+                void apiClient.get(`/organizations/${uuid}`).then(r => {
                   const o = r.data?.item ?? r.data;
                   form.setFields({ organizationUuid: o.uuid, organizationName: o.shortName ?? "" } as any);
                 });
@@ -119,7 +118,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
               endpoint="positions" displayField="shortName"
               columns={[{ key: "shortName", label: "Наименование" }]}
               onSelect={(uuid) => {
-                apiClient.get(`/positions/${uuid}`).then(r => {
+                void apiClient.get(`/positions/${uuid}`).then(r => {
                   const o = r.data?.item ?? r.data;
                   form.setFields({ positionUuid: o.uuid, positionName: o.shortName ?? "" } as any);
                 });

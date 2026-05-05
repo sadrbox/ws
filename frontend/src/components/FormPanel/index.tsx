@@ -1,9 +1,5 @@
 import { FC } from "react";
 import { Button } from "src/components/Button";
-import { ReloadButton } from "src/components/Toolbar";
-import saveCloseIcon from "src/assets/save-close_16.svg";
-import saveIcon from "src/assets/save_16.svg";
-import reloadIcon from "src/assets/reload_16.png";
 
 export interface FormPanelProps {
   onSaveAndClose?: () => void;
@@ -45,20 +41,20 @@ const FormPanel: FC<FormPanelProps> = ({
     <>
       {effectiveSaveAndClose && (
         <Button variant="primary" onClick={effectiveSaveAndClose} disabled={isLoading}>
-            {/* <img src={saveCloseIcon} width={16} height={16} alt="" /> */}
-            <span>Сохранить и закрыть</span>
+          {/* <img src={saveCloseIcon} width={16} height={16} alt="" /> */}
+          <span>Сохранить и закрыть</span>
         </Button>
       )}
       {effectiveSave && (
         <Button onClick={effectiveSave} disabled={isLoading}>
-            {/* <img src={saveIcon} width={16} height={16} alt="" /> */}
-            <span>Сохранить</span>
+          {/* <img src={saveIcon} width={16} height={16} alt="" /> */}
+          <span>Сохранить</span>
         </Button>
       )}
       {onClose && (
         <Button onClick={onClose} disabled={isLoading}>
-            {/* <img src={reloadIcon} width={16} height={16} alt="" /> */}
-            <span>Закрыть</span>
+          {/* <img src={reloadIcon} width={16} height={16} alt="" /> */}
+          <span>Закрыть</span>
         </Button>
       )}
     </>

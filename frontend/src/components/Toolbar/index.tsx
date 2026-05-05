@@ -30,7 +30,6 @@ import settingsForm_16 from "src/assets/form-setting_16.png";
 import calendar_16 from "src/assets/calendar_16.png";
 import searchField_16 from "src/assets/search-field_16.png";
 import editInlineIcon from "src/assets/edit-inline_16.svg";
-import closeIcon16 from "src/assets/close_16.png";
 import styles from "./Toolbar.module.scss";
 
 // ─── Toolbar (контейнер) ────────────────────────────────────────────────
@@ -128,11 +127,9 @@ InlineEditButton.displayName = "Toolbar.InlineEditButton";
 
 // ─── Toolbar.CloseButton — кнопка закрытия с hover-эффектом (синий → красный) ───
 
-interface CloseButtonProps extends Omit<IconButtonProps, "children"> {
-  size?: number;
-}
+type CloseButtonProps = Omit<IconButtonProps, "children">;
 
-const CloseButton: FC<CloseButtonProps> = ({ size = 16, className, ...props }) => (
+const CloseButton: FC<CloseButtonProps> = ({ className, ...props }) => (
   <IconButton
     className={[styles.CloseButton, className].filter(Boolean).join(" ")}
     title="Закрыть"

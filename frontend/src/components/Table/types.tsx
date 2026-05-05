@@ -1,24 +1,12 @@
 import { Dispatch, SetStateAction } from "react";
 // import { TypeOpenForm } from 'src/components/Table/types';
-import { TOpenModelFormProps, TPane } from "src/app/types";
-
-export type TFieldType =
-  | "string"
-  | "number"
-  | "bigint"
-  | "boolean"
-  | "symbol"
-  | "undefined"
-  | "object"
-  | "function"
-  | unknown[];
+import { TOpenModelFormProps } from "src/app/types";
 
 export type TOrder = {
   columnID: string;
   direction: "asc" | "desc";
 };
 
-export type TDataRow = { [key: string | number]: string | number | boolean };
 export type TDataItem = {
   id: number;
   uuid: string;
@@ -42,20 +30,6 @@ export type TColumn = {
   inlist: boolean;
   footer?: TColumnFooter; // итог колонки в tfoot
 };
-export type TColumnSetting = {
-  position: number;
-  identifier: string;
-  type: string;
-  name: string;
-  width?: string;
-  minWidth?: string;
-  hint?: string;
-  alignment?: string;
-  sortable?: boolean;
-  visible: boolean;
-  filter: boolean;
-  inlist: boolean;
-};
 export type TypeModelStates = {
   activeRow?: number | null;
   setActiveRow?: Dispatch<SetStateAction<number | null>>;
@@ -71,12 +45,6 @@ export type TypeTableTypes = "part" | "list" | undefined;
 
 export type TOpenModelForm = (form: TOpenModelFormProps) => void;
 
-
-export enum EActiveTable {
-  DATA,
-  CONFIG,
-  FILTER,
-}
 
 export type TypeDateRange = {
   startDate?: string | null;

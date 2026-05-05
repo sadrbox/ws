@@ -69,7 +69,7 @@ const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
 
   // Открыть панель уведомлений
   const openNotificationsList = useCallback(() => {
-    import("src/models/Notifications").then(({ NotificationsList }) => {
+    void import("src/models/Notifications").then(({ NotificationsList }) => {
       addPane({
         component: NotificationsList,
         label: t("NotificationsList"),
@@ -81,7 +81,7 @@ const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
   // Открыть задачу из уведомления
   const openTodo = useCallback((n: TNotification) => {
     if (!n.todo?.uuid) return;
-    import("src/models/Todos").then(({ TodosForm }) => {
+    void import("src/models/Todos").then(({ TodosForm }) => {
       addPane({
         label: `${t("TodosList")} №${n.todo!.id}`,
         component: TodosForm,
@@ -93,14 +93,14 @@ const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
 
   // Polling
   useEffect(() => {
-    fetchUnreadCount();
-    timerRef.current = setInterval(fetchUnreadCount, POLL_INTERVAL);
+    void fetchUnreadCount();
+    timerRef.current = setInterval(() => void fetchUnreadCount(), POLL_INTERVAL);
     return () => clearInterval(timerRef.current);
   }, [fetchUnreadCount]);
 
   // Загрузить уведомления при открытии
   useEffect(() => {
-    if (isOpen) fetchNotifications();
+    if (isOpen) void fetchNotifications();
   }, [isOpen, fetchNotifications]);
 
   if (!userUuid) return null;
@@ -149,7 +149,7 @@ const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
                   </div>
                   <button
                     className={styles.MarkReadBtn}
-                    onClick={(e) => { e.stopPropagation(); markRead(n.uuid); }}
+                    onClick={(e) => { e.stopPropagation(); void markRead(n.uuid); }}
                     title={t("markRead")}
                   >✓</button>
                 </div>

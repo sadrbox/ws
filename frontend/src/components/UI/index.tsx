@@ -11,9 +11,7 @@ import { getFormatDate, getFormatDateOnly } from 'src/utils/main.module';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app/context';
-import Toolbar, { ReloadButton, CloseButton } from 'src/components/Toolbar';
-import { Button } from 'src/components/Button';
-import closeIcon from 'src/assets/close_16.png';
+import { ReloadButton, CloseButton } from 'src/components/Toolbar';
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
@@ -145,7 +143,7 @@ export const PanesTabs: FC = () => {
 
   const context = useAppContext();
   const panes = context?.windows.panes;
-  const { activePane, setActivePane, requestClose } = context?.windows;
+  const { activePane, setActivePane, requestClose } = context.windows;
 
   // Определяем, есть ли активная selector-панель → блокировка остальных вкладок
   const selectorPane = panes.find((p) => p.isSelector);
@@ -171,7 +169,7 @@ export const PanesTabs: FC = () => {
 
 export const Panes: FC = () => {
   const context = useAppContext();
-  const { panes, activePane, requestClose } = context?.windows;
+  const { panes, activePane, requestClose } = context.windows;
 
   return (
     <div className={styles.Panes}>
@@ -213,7 +211,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
   );
 }
 
-type TypeOverFormProps = PropsWithChildren<{}>;
+type TypeOverFormProps = PropsWithChildren;
 export const OverForm: FC<TypeOverFormProps> = ({ children }) => {
   return (
     <div className={styles.OverFormNest}>
@@ -315,7 +313,7 @@ function formatDiffValue(v: unknown): string {
   if (v === null || v === undefined || v === "") return "—";
   if (typeof v === "boolean") return v ? "Да" : "Нет";
   if (typeof v === "number") return getFormatNumerical(v);
-  const s = String(v);
+  const s = String(v as string | number | boolean);
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return getFormatDate(s);
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return getFormatDateOnly(s);
   const n = Number(s.replace(/[\s\u00A0\u202F]/g, "").replace(",", "."));
@@ -449,7 +447,7 @@ const NavbarPaneBell: FC = () => {
                         className={styles.PaneNoteActionBtn}
                         type="button"
                         onClick={() => {
-                          a.onClick();
+                          void a.onClick();
                           dismissPaneNotification(activePane, n.id);
                         }}
                       >{a.label}</button>
@@ -521,7 +519,7 @@ export const Navbar: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
 
-  const { props, setProps } = context?.navbar;
+  const { props, setProps } = context.navbar;
   const activeNav = props.find(nav => nav.isActive);
 
   // Измеряем высоту навбара → CSS custom property для overlay

@@ -69,7 +69,7 @@ WarehousesForm.displayName = "WarehousesForm";
 
 const WarehousesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={WarehousesForm}
-    getLabel={(d) => d?.shortName ? String(d.shortName).slice(0, 50) : "?"} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => d?.shortName ? (d.shortName as string).slice(0, 50) : "?"} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
 );
 WarehousesList.displayName = "WarehousesList";

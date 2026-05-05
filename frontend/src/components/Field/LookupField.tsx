@@ -7,8 +7,6 @@ import { useAppContext } from "src/app";
 import SelectPaneWrapper from "./SelectPaneWrapper";
 import { translate } from "src/i18";
 import type { FieldVariant } from "./index";
-
-import { imgActions } from "./index"
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════

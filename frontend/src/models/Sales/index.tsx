@@ -17,7 +17,6 @@ import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { getFormatNumerical } from "src/components/Table/services";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
@@ -62,7 +61,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   })();
 
   const invalidateSubTables = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["saleitems"] });
+    void queryClient.invalidateQueries({ queryKey: ["saleitems"] });
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
@@ -124,7 +123,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     }),
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
     afterLoad: invalidateSubTables,
-    afterSave: async () => { setTimeout(invalidateSubTables, 0); },
+    afterSave: () => { setTimeout(invalidateSubTables, 0); },
   });
 
   const saleItems = form.useTable("saleItems");
@@ -273,7 +272,7 @@ SalesForm.displayName = "SalesForm";
 const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={SalesForm}
     getLabel={(d) => {
-      return d?.date ? getFormatDateOnly(String(d.date)) : "";
+      return d?.date ? getFormatDateOnly(d.date as string) : "";
     }} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
 );

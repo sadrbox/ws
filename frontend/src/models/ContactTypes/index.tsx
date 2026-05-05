@@ -91,7 +91,7 @@ const ContactTypesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
     listName="ContactTypesList"
     columnsJson={columnsJson}
     FormComponent={ContactTypesForm}
-    getLabel={(d) => String(d?.shortName || "")}
+    getLabel={(d) => (d?.shortName as string | undefined) || ""}
     variant={variant}
     onSelectItem={onSelectItem}
   />

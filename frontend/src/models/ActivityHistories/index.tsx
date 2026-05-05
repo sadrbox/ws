@@ -150,7 +150,7 @@ const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant, onSele
     listName="ActivityHistoriesList"
     columnsJson={columnsJson}
     FormComponent={ActivityHistoriesForm}
-    getLabel={(d) => String(d?.actionType || "")}
+    getLabel={(d) => (d?.actionType as string | undefined) || ""}
     variant={variant}
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}

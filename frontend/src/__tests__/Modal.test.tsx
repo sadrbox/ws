@@ -16,14 +16,14 @@ describe('Modal focus-trap and restore', () => {
 
   afterEach(() => {
     modalManager.clearAll();
-    try { if (host.parentNode) host.parentNode.removeChild(host); } catch {}
+    try { if (host.parentNode) host.parentNode.removeChild(host); } catch { /* intentional */ }
     document.body.style.overflow = '';
   });
 
   it('focuses first focusable element and traps tab', async () => {
     render(
       <TestWrapper>
-        <Modal title={<span>Test</span>} onClose={() => {}}>
+        <Modal title={<span>Test</span>} onClose={() => { }}>
           <div>
             <button>First</button>
             <button>Second</button>
@@ -33,8 +33,8 @@ describe('Modal focus-trap and restore', () => {
       { container: host }
     );
 
-    const first = screen.getByText('First') as HTMLElement;
-    const second = screen.getByText('Second') as HTMLElement;
+    const first = screen.getByText('First');
+    const second = screen.getByText('Second');
 
     // focus should be on first
     expect(document.activeElement === first || document.activeElement === host).toBe(true);

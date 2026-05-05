@@ -30,9 +30,9 @@ const NotificationsList: FC<NotificationsListProps> = () => {
     (entry: NotificationJournalEntry) => {
       if (!entry.ref) return;
       const { endpoint, uuid } = entry.ref;
-      import("../../registry/formRegistry").then(({ openFormByEndpoint }) => {
-        openFormByEndpoint(endpoint, uuid, addPane);
-      }).catch(() => {});
+      void import("../../registry/formRegistry").then(({ openFormByEndpoint }) => {
+        void openFormByEndpoint(endpoint, uuid, addPane);
+      }).catch(() => { /* intentional */ });
     },
     [addPane],
   );

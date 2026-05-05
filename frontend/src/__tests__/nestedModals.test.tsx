@@ -17,7 +17,7 @@ describe('nested modals behavior', () => {
 
   afterEach(() => {
     modalManager.clearAll();
-    try { if (host.parentNode) host.parentNode.removeChild(host); } catch {}
+    try { if (host.parentNode) host.parentNode.removeChild(host); } catch { /* intentional */ }
     document.body.style.overflow = '';
   });
 

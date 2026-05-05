@@ -45,7 +45,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
   })();
 
   const invalidateSubTables = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    void queryClient.invalidateQueries({ queryKey: ["contacts"] });
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
@@ -71,9 +71,9 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
     }),
     buildPaneLabel: (saved) => makePaneLabel("ContactPersonsList", "Контактные лица", saved),
     afterLoad: invalidateSubTables,
-    afterSave: async () => {
+    afterSave: () => {
       setTimeout(invalidateSubTables, 0);
-      queryClient.invalidateQueries({ queryKey: ["contactpersons"] });
+      void queryClient.invalidateQueries({ queryKey: ["contactpersons"] });
     },
   });
 
@@ -81,33 +81,37 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
-      { id: "general", label: translate("general"), component: (
-        <div className={styles.Form}>
-          {form.isEditMode && (
-            <GroupRow>
-            </GroupRow>
-          )}
-          <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-              <Field label="ФИО" name={`${form.formUid}_fullName`} value={form.fields.fullName} onChange={e => form.setField("fullName", e.target.value)} disabled={form.isLoading} />
-              <OwnerLookupField name={`${form.formUid}_owner`} ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
-                onOwnerChange={({ ownerType, ownerUuid, ownerName }) => form.setFields({ ownerType, ownerUuid, ownerName } as Partial<TFields>)}
-                disabled={form.isLoading} typeLocked={!form.uuid && !!paneProps.data?.ownerType} allowedTypes={["organization", "counterparty"]} />
-              <Field label="Комментарий" name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-            </div>
-            {form.isEditMode && form.fields.uuid && (
-              <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
+      {
+        id: "general", label: translate("general"), component: (
+          <div className={styles.Form}>
+            {form.isEditMode && (
+              <GroupRow>
+              </GroupRow>
             )}
+            <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                <Field label="ФИО" name={`${form.formUid}_fullName`} value={form.fields.fullName} onChange={e => form.setField("fullName", e.target.value)} disabled={form.isLoading} />
+                <OwnerLookupField name={`${form.formUid}_owner`} ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
+                  onOwnerChange={({ ownerType, ownerUuid, ownerName }) => form.setFields({ ownerType, ownerUuid, ownerName } as Partial<TFields>)}
+                  disabled={form.isLoading} typeLocked={!form.uuid && !!paneProps.data?.ownerType} allowedTypes={["organization", "counterparty"]} />
+                <Field label="Комментарий" name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+              </div>
+              {form.isEditMode && form.fields.uuid && (
+                <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
+              )}
+            </div>
           </div>
-        </div>
-      )},
+        )
+      },
     ];
     if (form.isEditMode && form.fields.uuid) {
-      t.push({ id: "contacts", label: translate("ContactsList"), component: (
-        <ContactsTable deferRemoteChanges ownerType="contactperson" parentUuid={form.fields.uuid}
-          parentName={form.fields.fullName} initialPendingRows={contacts.pending}
-          onItemsChange={contacts.onItemsChange} />
-      )});
+      t.push({
+        id: "contacts", label: translate("ContactsList"), component: (
+          <ContactsTable deferRemoteChanges ownerType="contactperson" parentUuid={form.fields.uuid}
+            parentName={form.fields.fullName} initialPendingRows={contacts.pending}
+            onItemsChange={contacts.onItemsChange} />
+        )
+      });
     }
     return t;
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.uuid, paneProps.data, contacts]);
@@ -122,7 +126,7 @@ ContactPersonsForm.displayName = "ContactPersonsForm";
 
 const ContactPersonsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName="ContactPersonsList" columnsJson={columnsJson} FormComponent={ContactPersonsForm}
-    getLabel={(d) => d?.fullName ? String(d.fullName) : "?"} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => d?.fullName ? (d.fullName as string) : "?"} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} />
 );
 ContactPersonsList.displayName = "ContactPersonsList";

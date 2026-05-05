@@ -37,7 +37,7 @@ function openDB(): Promise<IDBDatabase> {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => {
       dbPromise = null;
-      reject(req.error);
+      reject(req.error ?? new Error("IDB error"));
     };
   });
   return dbPromise;
@@ -49,7 +49,7 @@ async function idbGet<T>(key: string): Promise<T | undefined> {
     const tx = db.transaction(STORE_NAME, "readonly");
     const req = tx.objectStore(STORE_NAME).get(key);
     req.onsuccess = () => resolve(req.result as T | undefined);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => reject(req.error ?? new Error("IDB error"));
   });
 }
 
@@ -59,7 +59,7 @@ async function idbSet(key: string, value: unknown): Promise<void> {
     const tx = db.transaction(STORE_NAME, "readwrite");
     tx.objectStore(STORE_NAME).put(value, key);
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = () => reject(tx.error ?? new Error("IDB error"));
   });
 }
 
@@ -69,7 +69,7 @@ async function idbDelete(key: string): Promise<void> {
     const tx = db.transaction(STORE_NAME, "readwrite");
     tx.objectStore(STORE_NAME).delete(key);
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = () => reject(tx.error ?? new Error("IDB error"));
   });
 }
 

@@ -348,9 +348,9 @@ function createFormStore<F extends object>(
 		} catch {
 			/* ignore */
 		}
-		const savedFields = (parsed?.fields ?? {}) as Record<string, unknown>;
+		const savedFields = parsed?.fields ?? {};
 		const savedTables = parsed?.tables ?? {};
-		const currentFields = state.fields as Record<string, unknown>;
+		const currentFields = state.fields;
 
 		const changedFields: DirtyFieldEntry[] = [];
 		const allKeys = new Set([
@@ -553,18 +553,11 @@ function createFormStore<F extends object>(
 			let wasOffline = false;
 
 			if (isEdit && entityUuid) {
-				const result = await pipeUpdate(
-					endpoint,
-					entityUuid,
-					payloadOrError as Record<string, unknown>,
-				);
+				const result = await pipeUpdate(endpoint, entityUuid, payloadOrError);
 				saved = result.item;
 				wasOffline = result.offline;
 			} else {
-				const result = await pipeCreate(
-					endpoint,
-					payloadOrError as Record<string, unknown>,
-				);
+				const result = await pipeCreate(endpoint, payloadOrError);
 				saved = result.item;
 				wasOffline = result.offline;
 			}
@@ -760,7 +753,7 @@ const storeCache = new Map<string, FormStore<any>>();
  * Позволяет вызывать reload/save извне, зная только ID панели.
  */
 export const formStoreAPI = (() => {
-	const apiMap = new Map<string, { reload?: () => void }>();
+	const apiMap = new Map<string, { reload?: () => void | Promise<void> }>();
 	const listeners = new Map<string, Set<() => void>>();
 
 	function subscribe(paneId: string, cb: () => void) {
@@ -778,7 +771,10 @@ export const formStoreAPI = (() => {
 	}
 
 	return {
-		register: (paneId: string, api: { reload?: () => void }) => {
+		register: (
+			paneId: string,
+			api: { reload?: () => void | Promise<void> },
+		) => {
 			apiMap.set(paneId, api);
 			notify(paneId);
 		},
@@ -903,7 +899,7 @@ export function usePaneDirtyDiff(uniqId: string): DirtyFieldDiff {
 
 export interface PaneNotificationAction {
 	label: string;
-	onClick: () => void;
+	onClick: () => void | Promise<void>;
 }
 
 export interface PaneNotification {
@@ -1206,7 +1202,7 @@ export function useFormStore<F extends object>(
 	} = options;
 
 	const { onSave, onClose, data, uniqId } = paneProps;
-	const uuid = data?.uuid as string | undefined;
+	const uuid = data?.uuid;
 	const {
 		windows: { updatePaneLabel, requestClose, registerBeforeClose },
 		actions: { confirm },
@@ -1274,14 +1270,13 @@ export function useFormStore<F extends object>(
 			// Если данные восстановлены из sessionStorage — загружаем серверные данные
 			// только для snapshot (isDirty будет сравнивать с реальным серверным состоянием).
 			// Если sessionStorage пуст — полная загрузка (заменяет fields).
-			store.load(
+			void store.load(
 				uuid,
 				mapRef.current,
 				afterLoadRef.current,
 				store.hadStoredData,
 			);
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uuid, store]);
 
 	// ── Регистрация beforeClose guard ──
@@ -1293,7 +1288,7 @@ export function useFormStore<F extends object>(
 				// Чистая форма — разрешаем закрытие, но чистим ресурсы
 				store.clearStorage();
 				storeCache.delete(store.getStorageKey());
-				onCloseRef.current?.();
+				void onCloseRef.current?.();
 				return true;
 			}
 			const answer = await confirm(
@@ -1303,7 +1298,7 @@ export function useFormStore<F extends object>(
 			// Очистка при подтверждённом закрытии
 			store.clearStorage();
 			storeCache.delete(store.getStorageKey());
-			onCloseRef.current?.();
+			void onCloseRef.current?.();
 			return true;
 		});
 
@@ -1325,7 +1320,6 @@ export function useFormStore<F extends object>(
 			setPaneDirty(uniqId, false);
 			clearPaneNotifications(uniqId);
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uniqId, store]);
 
 	// ── Уведомление при восстановлении dirty-формы из ПРОШЛОЙ сессии ──
@@ -1345,12 +1339,12 @@ export function useFormStore<F extends object>(
 		const noteActions: PaneNotificationAction[] = [
 			{
 				label: "Сохранить несохранённые правки",
-				onClick: () => submitRef.current(),
+				onClick: () => void submitRef.current(),
 			},
 			{
 				label: "Обновить (несохранённые правки будут потеряны)",
 				onClick: () => {
-					if (uuid) loadFromServerRef.current(uuid);
+					if (uuid) void loadFromServerRef.current(uuid);
 				},
 			},
 		];
@@ -1406,7 +1400,6 @@ export function useFormStore<F extends object>(
 			// eslint-disable-next-line react-hooks/rules-of-hooks
 			const setValue = useCallback(
 				(v: F[K]) => store.setField(field, v),
-				// eslint-disable-next-line react-hooks/exhaustive-deps
 				[field],
 			);
 			return [value, setValue];
@@ -1427,7 +1420,6 @@ export function useFormStore<F extends object>(
 			// eslint-disable-next-line react-hooks/rules-of-hooks
 			const setPending = useCallback(
 				(rows: TDataItem[]) => store.setTablePending(tableKey, rows),
-				// eslint-disable-next-line react-hooks/exhaustive-deps
 				[tableKey],
 			);
 
@@ -1440,7 +1432,6 @@ export function useFormStore<F extends object>(
 					const pending = all.filter((r: any) => r._pendingAction);
 					store.setTablePending(tableKey, pending);
 				},
-				// eslint-disable-next-line react-hooks/exhaustive-deps
 				[tableKey],
 			);
 
@@ -1493,7 +1484,7 @@ export function useFormStore<F extends object>(
 			}
 		}
 
-		onSaveRef.current?.();
+		void onSaveRef.current?.();
 		store.markClean();
 
 		// Миграция storageKey после первого POST (new → uuid).
@@ -1515,7 +1506,7 @@ export function useFormStore<F extends object>(
 	loadFromServerRef.current = loadFromServer;
 
 	const handleSave = useCallback(() => {
-		submit();
+		void submit();
 	}, [submit]);
 
 	const handleSaveAndClose = useCallback(async () => {
@@ -1523,8 +1514,8 @@ export function useFormStore<F extends object>(
 			const currentKey = store.getStorageKey();
 			store.clearStorage();
 			storeCache.delete(currentKey);
-			onCloseRef.current?.();
-			if (uniqId) requestClose(uniqId, { force: true });
+			void onCloseRef.current?.();
+			if (uniqId) void requestClose(uniqId, { force: true });
 		}
 	}, [submit, store, uniqId, requestClose]);
 
@@ -1543,7 +1534,7 @@ export function useFormStore<F extends object>(
 			}
 			store.clearStorage();
 			storeCache.delete(store.getStorageKey());
-			onCloseRef.current?.();
+			void onCloseRef.current?.();
 		}
 	}, [store, uniqId, requestClose, confirm]);
 

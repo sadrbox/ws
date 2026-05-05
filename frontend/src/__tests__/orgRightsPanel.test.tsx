@@ -22,7 +22,7 @@ vi.mock('src/services/networkStatus', () => ({ startHealthCheck: vi.fn(), stopHe
 vi.mock('src/services/offlineQueue', () => ({ clearAllEntries: vi.fn() }));
 vi.mock('src/services/auth', () => ({
   isAuthenticated: vi.fn(() => false),
-  verifyToken: vi.fn(async () => null),
+  verifyToken: vi.fn(() => null),
   logout: vi.fn(),
   getCurrentUser: vi.fn(() => null),
 }));
@@ -35,7 +35,7 @@ const mockAppContext = {
     registerBeforeClose: vi.fn(() => () => { }),
     addPane: vi.fn(),
   },
-  actions: { confirm: vi.fn(async () => true) },
+  actions: { confirm: vi.fn(() => true) },
 };
 vi.mock('src/app/AppContext', () => ({
   useAppContext: () => mockAppContext,

@@ -21,7 +21,6 @@ import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
-import { getFormatNumerical } from "src/components/Table/services";
 
 const MODEL_ENDPOINT = "employees";
 const LIST_NAME = "EmployeesList";
@@ -43,8 +42,8 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   const queryClient = useQueryClient();
 
   const invalidateSubTables = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["contacts"] });
-    queryClient.invalidateQueries({ queryKey: ["employee-histories"] });
+    void queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    void queryClient.invalidateQueries({ queryKey: ["employee-histories"] });
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
@@ -80,7 +79,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Сотрудники", saved),
     afterLoad: invalidateSubTables,
-    afterSave: async () => { setTimeout(invalidateSubTables, 0); },
+    afterSave: () => { setTimeout(invalidateSubTables, 0); },
   });
 
   // При изменении фамилии/имени/отчества — автоматически пересчитывает fullName
@@ -248,7 +247,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     const refresh = () => {
-      queryClient.invalidateQueries({ queryKey: [EH_MODEL] });
+      void queryClient.invalidateQueries({ queryKey: [EH_MODEL] });
       _ctx.refetch();
     };
     addPane({

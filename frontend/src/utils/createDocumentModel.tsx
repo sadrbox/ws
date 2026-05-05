@@ -60,7 +60,10 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
 
   const DocForm: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
-    const access = opts.accessRight ? useAccessRight(opts.accessRight) : { canWrite: true };
+    // Хук всегда вызывается безусловно; если accessRight не задан — передаём пустую строку
+    // и перекрываем результат дефолтным значением (canWrite: true)
+    const _accessRaw = useAccessRight(opts.accessRight ?? "");
+    const access = opts.accessRight ? _accessRaw : { canWrite: true };
 
     const initialFields: TDocFields = (() => {
       const data = paneProps.data;
@@ -125,45 +128,47 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
     };
 
     const tabs = useMemo(() => [
-      { id: "general", label: translate("general"), component: (
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-            <FieldDate label="Дата" name={`${form.formUid}_docDate`} minWidth="200px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TDocFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TDocFields>)} disabled={form.isLoading} width="300px" />
-              <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TDocFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TDocFields>)} disabled={form.isLoading} width="300px" />
-            </div>
-            <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TDocFields>)} disabled={form.isLoading} width="300px"
-              extraParams={{
-                ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
-                ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
-              }}
-            />
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <Field label="Сумма" name={`${form.formUid}_amount`} minWidth="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
-              <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
-            </div>
-            <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
-          </div></Group>
-          {form.isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
-            <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-            <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-          </div></Group></>}
-        </div>
-      )},
+      {
+        id: "general", label: translate("general"), component: (
+          <div className={styles.FormBodyParts}>
+            <Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+              <FieldDate label="Дата" name={`${form.formUid}_docDate`} minWidth="200px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
+              <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TDocFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TDocFields>)} disabled={form.isLoading} width="300px" />
+                <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TDocFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TDocFields>)} disabled={form.isLoading} width="300px" />
+              </div>
+              <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TDocFields>)} disabled={form.isLoading} width="300px"
+                extraParams={{
+                  ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
+                  ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
+                }}
+              />
+              <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                <Field label="Сумма" name={`${form.formUid}_amount`} minWidth="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
+                <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+              </div>
+              <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
+            </div></Group>
+            {form.isEditMode && <><Divider /><Group align="row" gap="12px" className={styles.Form}><div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "12px" }}>
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+            </div></Group></>}
+          </div>
+        )
+      },
     ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, form.uuid, handleContractSelect]);
 
     return (
       <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading}
-      readonly={!access.canWrite} isDirty={form.isDirty} />
+        onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading}
+        readonly={!access.canWrite} isDirty={form.isDirty} />
     );
   };
   DocForm.displayName = `${listName.replace("List", "")}Form`;
 
   const DocList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
     <ModelList endpoint={endpoint} listName={listName} columnsJson={columnsJson} FormComponent={DocForm}
-      getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
+      getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""} variant={variant} onSelectItem={onSelectItem}
       ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
   );
   DocList.displayName = `${listName}`;

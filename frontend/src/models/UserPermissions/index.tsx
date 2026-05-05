@@ -16,7 +16,7 @@ import type { TTableVariant } from "src/components/Table";
 import type { TPane } from "src/app/types";
 import listColumnsJson from "./listColumns.json";
 import subColumnsJson from "./subColumns.json";
-import { Field, FieldSelect } from "src/components/Field";
+import { FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI/Group";
 import styles from "src/styles/main.module.scss";
@@ -106,7 +106,7 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
       userUuid: d.userUuid ?? "",
       userDisplayName: d.user?.username ?? prev?.userDisplayName ?? "",
       organizationUuid: d.organizationUuid ?? "",
-      orgShortName: (d.organization as any)?.shortName ?? prev?.orgShortName ?? "",
+      orgShortName: d.organization?.shortName ?? prev?.orgShortName ?? "",
       role: d.role ?? "member",
     }),
     buildPayload: (fd) => {
@@ -274,14 +274,14 @@ const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
             endpoint="organizations"
             displayField="shortName"
             onSelect={(uuid, _dv, item) => {
-              ctx.handleLookupChange(row, "organizationUuid", uuid, {
+              void ctx.handleLookupChange(row, "organizationUuid", uuid, {
                 organization: item && uuid
                   ? { uuid, shortName: item.shortName ?? "", bin: item.bin ?? null }
                   : null,
               });
             }}
             onClear={() => {
-              ctx.handleLookupChange(row, "organizationUuid", null, { organization: null });
+              void ctx.handleLookupChange(row, "organizationUuid", null, { organization: null });
             }}
             disabled={ctx.disabled}
             width="100%"
@@ -322,7 +322,7 @@ const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
       : data;
 
     const refresh = () => {
-      queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+      void queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
       ctx.refetch();
     };
 

@@ -1,4 +1,4 @@
-import React, { FC, useRef, useEffect, useLayoutEffect, createContext, useContext, useState, ReactNode, CSSProperties, useCallback } from 'react';
+import React, { FC, useRef, useEffect, useLayoutEffect, createContext, useState, ReactNode, CSSProperties, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './Modal.module.scss';
 // import Button from '../Button';
@@ -34,12 +34,6 @@ import modalManager from './modalManager';
 
 const ModalContextInstance = createContext<{ values: Record<string, any>; setValues: (values: Record<string, any>) => void } | null>(null);
 
-export const useModalContextProps = () => {
-  const context = useContext(ModalContextInstance);
-  if (!context) throw new Error('useModalContext должен использоваться внутри DataGridFilter');
-  return { ...context };
-};
-
 const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, children, buttons }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -66,7 +60,7 @@ const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, childre
     if (!modalEl) return;
 
     // save previously focused element
-    try { previouslyFocused.current = document.activeElement as HTMLElement | null; } catch { }
+    try { previouslyFocused.current = document.activeElement as HTMLElement | null; } catch { /* intentional */ }
 
     const focusableSelector = 'a[href], area[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, [tabindex]:not([tabindex="-1"]), [contenteditable]';
     const modalBody = modalEl.querySelector<HTMLElement>('[data-modal-body="true"]');
@@ -80,7 +74,7 @@ const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, childre
     try {
       if (first) first.focus();
       else modalEl.focus();
-    } catch { }
+    } catch { /* intentional */ }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
@@ -119,9 +113,9 @@ const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, childre
             (remainingNodes[0] ?? topModal).focus();
             return;
           }
-        } catch { }
+        } catch { /* intentional */ }
 
-        try { previouslyFocused.current?.focus(); } catch { }
+        try { previouslyFocused.current?.focus(); } catch { /* intentional */ }
       });
     };
   }, []);

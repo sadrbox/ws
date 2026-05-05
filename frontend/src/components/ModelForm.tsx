@@ -1,7 +1,6 @@
 import { FC, ReactNode } from "react";
 import FormPanel from "src/components/FormPanel";
 import Tabs from "src/components/Tabs";
-import styles from "src/styles/main.module.scss";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
 
 /**
@@ -41,12 +40,12 @@ const ModelForm: FC<ModelFormProps> = ({
   tabs,
   onSave,
   onSaveAndClose,
-  onClose , // закрытие теперь через ✕ в PaneHeaderControls
+  onClose, // закрытие теперь через ✕ в PaneHeaderControls
   onReload,
   isLoading,
   // showReload,
   readonly,
-  isDirty: _isDirty, // индикатор теперь через usePaneDirty в PaneItem
+  // isDirty — не используется, индикатор через usePaneDirty в PaneItem
   paneId,
 }) => {
   // Рендерим кнопки формы в заголовок панели через портал
@@ -59,7 +58,7 @@ const ModelForm: FC<ModelFormProps> = ({
       onClose={onClose}
       readonly={readonly}
       isLoading={isLoading}
-      // showReload={showReload}
+    // showReload={showReload}
     />,
   );
 

@@ -52,7 +52,7 @@ const AvatarUpload: FC<AvatarUploadProps> = ({
   }, [endpoint, entityUuid]);
 
   useEffect(() => {
-    if (hasAvatar && entityUuid) loadAvatar();
+    if (hasAvatar && entityUuid) void loadAvatar();
     else setAvatarUrl(null);
   }, [hasAvatar, entityUuid, loadAvatar]);
 
@@ -69,7 +69,7 @@ const AvatarUpload: FC<AvatarUploadProps> = ({
           headers: { "Content-Type": "multipart/form-data" },
         });
         await loadAvatar();
-      } catch (err) {
+      } catch (_err) {
         showToast("Ошибка загрузки аватара", "error");
       } finally {
         setIsUploading(false);
@@ -87,7 +87,7 @@ const AvatarUpload: FC<AvatarUploadProps> = ({
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
       setAvatarUrl(null);
-    } catch (err) {
+    } catch (_err) {
       showToast("Ошибка удаления аватара", "error");
     }
   }, [endpoint, entityUuid, disabled]);

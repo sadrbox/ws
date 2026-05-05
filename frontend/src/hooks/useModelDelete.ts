@@ -9,8 +9,13 @@ import { useAppContext } from "src/app";
  * @param model — endpoint модели (например "organizations")
  * @param refetch — функция обновления списка после удаления
  */
-export function useModelDelete(model: string, refetch: () => void) {
-	const { actions: { confirm } } = useAppContext();
+export function useModelDelete(
+	model: string,
+	refetch: () => void | Promise<unknown>,
+) {
+	const {
+		actions: { confirm },
+	} = useAppContext();
 
 	const handleDelete = useCallback(
 		async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
@@ -40,7 +45,7 @@ export function useModelDelete(model: string, refetch: () => void) {
 				alert(`Ошибки при удалении:\n${errors.join("\n")}`);
 			}
 
-			refetch();
+			void refetch();
 		},
 		[model, refetch, confirm],
 	);

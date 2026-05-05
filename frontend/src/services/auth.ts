@@ -3,7 +3,7 @@ import { isNetworkError } from "./networkUtils";
 
 export interface OrgEntry {
 	organizationUuid: string;
-	role: "admin" | "member" | string;
+	role: string;
 	organization?: {
 		uuid: string;
 		shortName: string | null;

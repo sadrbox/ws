@@ -185,7 +185,7 @@ const BankAccountsList: FC<BankAccountsListProps> = ({ variant, onSelectItem, ow
     listName="BankAccountsList"
     columnsJson={columnsJson}
     FormComponent={BankAccountsForm}
-    getLabel={(d) => String(d?.shortName || d?.iban || "")}
+    getLabel={(d) => (d?.shortName as string | undefined) || (d?.iban as string | undefined) || ""}
     variant={variant}
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}
@@ -248,7 +248,7 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     const refresh = () => {
-      queryClient.invalidateQueries({ queryKey: [BA_TABLE_ENDPOINT] });
+      void queryClient.invalidateQueries({ queryKey: [BA_TABLE_ENDPOINT] });
       _ctx.refetch();
     };
     addPane({

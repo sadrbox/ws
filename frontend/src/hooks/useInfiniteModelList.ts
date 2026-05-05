@@ -94,7 +94,12 @@ export function useInfiniteModelList<TData = unknown>({
 			filter: params.filter,
 			extra: params.extra,
 		}),
-		[JSON.stringify(params.sort), params.search, JSON.stringify(params.filter), JSON.stringify(params.extra)],
+		[
+			JSON.stringify(params.sort),
+			params.search,
+			JSON.stringify(params.filter),
+			JSON.stringify(params.extra),
+		],
 	);
 
 	const queryKey: InfiniteQueryKey = [model, "infinite", memoizedQueryParams];
@@ -169,7 +174,7 @@ export function useInfiniteModelList<TData = unknown>({
 								reject(new Error("Request was cancelled"));
 							}
 							onError?.(err as Error);
-							reject(err);
+							reject(err instanceof Error ? err : new Error(String(err)));
 						}
 						return;
 					}
@@ -181,12 +186,16 @@ export function useInfiniteModelList<TData = unknown>({
 					// При offline и syncable → читаем из Dexie напрямую
 					if (!getIsOnline() && isSyncableEndpoint(model)) {
 						try {
-							const result = await fetchList<TData>(model, {
-								limit: query.limit,
-								cursor: pageParam,
-								sort: currentParams.sort,
-								search: currentParams.search,
-							}, query);
+							const result = await fetchList<TData>(
+								model,
+								{
+									limit: query.limit,
+									cursor: pageParam,
+									sort: currentParams.sort,
+									search: currentParams.search,
+								},
+								query,
+							);
 							resolve({
 								items: result.items,
 								nextCursor: result.nextCursor,
@@ -195,7 +204,10 @@ export function useInfiniteModelList<TData = unknown>({
 							});
 							return;
 						} catch (offlineErr) {
-							console.warn(`[InfiniteList] Offline fallback failed for ${model}:`, offlineErr);
+							console.warn(
+								`[InfiniteList] Offline fallback failed for ${model}:`,
+								offlineErr,
+							);
 						}
 					}
 
@@ -207,8 +219,10 @@ export function useInfiniteModelList<TData = unknown>({
 
 						// Кэшируем данные в Dexie для будущего offline-доступа
 						if (isSyncableEndpoint(model) && response.data?.items?.length > 0) {
-							import("src/services/offlineDb").then(({ upsertRecords }) =>
-								upsertRecords(model, response.data.items as any[]).catch(() => {}),
+							void import("src/services/offlineDb").then(({ upsertRecords }) =>
+								upsertRecords(model, response.data.items as any[]).catch(
+									() => {},
+								),
 							);
 						}
 
@@ -217,13 +231,15 @@ export function useInfiniteModelList<TData = unknown>({
 						// Если сеть упала во время запроса → fallback на Dexie (без повторного сетевого запроса)
 						if (isSyncableEndpoint(model) && isNetworkLikeError(err)) {
 							try {
-								const { getActiveRecords, countActiveRecords, searchRecords } = await import("src/services/offlineDb");
+								const { getActiveRecords, countActiveRecords, searchRecords } =
+									await import("src/services/offlineDb");
 
 								let sortField = "id";
 								let sortDir: "asc" | "desc" = "desc";
 								if (currentParams.sort) {
 									const entries = Object.entries(currentParams.sort);
-									if (entries.length > 0) [sortField, sortDir] = entries[0] as [string, "asc" | "desc"];
+									if (entries.length > 0)
+										[sortField, sortDir] = entries[0];
 								}
 
 								let items: any[];
@@ -235,16 +251,28 @@ export function useInfiniteModelList<TData = unknown>({
 									items = await searchRecords(model, currentParams.search);
 									total = items.length;
 									items.sort((a: any, b: any) => {
-										const va = a[sortField], vb = b[sortField];
+										const va = a[sortField],
+											vb = b[sortField];
 										if (va == null && vb == null) return 0;
 										if (va == null) return 1;
 										if (vb == null) return -1;
-										return sortDir === "desc" ? (vb > va ? 1 : -1) : (va > vb ? 1 : -1);
+										return sortDir === "desc"
+											? vb > va
+												? 1
+												: -1
+											: va > vb
+												? 1
+												: -1;
 									});
 									items = items.slice(offset, offset + limit);
 								} else {
 									total = await countActiveRecords(model);
-									items = await getActiveRecords(model, { limit, offset, sortField, sortDir });
+									items = await getActiveRecords(model, {
+										limit,
+										offset,
+										sortField,
+										sortDir,
+									});
 								}
 
 								const hasMore = offset + items.length < total;
@@ -264,7 +292,7 @@ export function useInfiniteModelList<TData = unknown>({
 							reject(new Error("Request was cancelled"));
 						}
 						onError?.(err as Error);
-						reject(err);
+						reject(err instanceof Error ? err : new Error(String(err)));
 					}
 				});
 			});
@@ -296,7 +324,8 @@ export function useInfiniteModelList<TData = unknown>({
 		gcTime: 30 * 60 * 1000,
 		retry: (failureCount, error: any) => {
 			// Не ретраить при сетевых ошибках
-			if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") return false;
+			if (error?.code === "ERR_NETWORK" || error?.message === "Network Error")
+				return false;
 			return failureCount < 1;
 		},
 		refetchOnWindowFocus: false,
@@ -330,5 +359,12 @@ export function useInfiniteModelList<TData = unknown>({
 		return () => cancelAll();
 	}, [cancelAll]);
 
-	return { ...result, allItems, total, isAnythingLoading, cancelAllRequests: cancelAll, dataUpdatedAt };
+	return {
+		...result,
+		allItems,
+		total,
+		isAnythingLoading,
+		cancelAllRequests: cancelAll,
+		dataUpdatedAt,
+	};
 }

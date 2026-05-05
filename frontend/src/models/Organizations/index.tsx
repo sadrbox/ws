@@ -6,7 +6,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
 import { Field } from "src/components/Field";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import BankAccountsTable from "../BankAccounts/BankAccountsTable";
 import ContractsTable from "../Contracts/ContractsTable";
@@ -42,9 +42,9 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const queryClient = useQueryClient();
 
   const invalidateSubTables = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["contacts"] });
-    queryClient.invalidateQueries({ queryKey: ["bankaccounts"] });
-    queryClient.invalidateQueries({ queryKey: ["contracts"] });
+    void queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    void queryClient.invalidateQueries({ queryKey: ["bankaccounts"] });
+    void queryClient.invalidateQueries({ queryKey: ["contracts"] });
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
@@ -86,7 +86,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) =>
       makePaneLabel(LIST_NAME, "Организации", saved, saved.shortName || saved.bin),
     afterLoad: invalidateSubTables,
-    afterSave: async () => {
+    afterSave: () => {
       // commitAllTables уже вызван автоматически внутри useFormStore.submit()
       setTimeout(invalidateSubTables, 0);
     },

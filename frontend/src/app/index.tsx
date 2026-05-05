@@ -14,7 +14,7 @@ import { clearOfflineDb } from "src/services/offlineDb";
 import { registerServiceWorker } from "src/services/registerSW";
 
 import { getTranslation } from "src/i18";
-import {  Navbar, NavList, ErrorBoundary,  Screen, LoadingSpinner,  Container } from "../components/UI";
+import { Navbar, NavList, ErrorBoundary, Screen, LoadingSpinner, Container } from "../components/UI";
 import { TComponentNode, TPane, TypeAppContextProps, TypeNavbarProps } from "./types";
 import useUID from "src/hooks/useUID";
 import { TDataItem } from "src/components/Table/types";
@@ -103,7 +103,7 @@ const App: React.FC = () => {
   // ── Query Persist: восстановить кэш из IndexedDB + подписка на сохранение ──
   useEffect(() => {
     // Восстанавливаем кэш (данные появляются мгновенно при offline)
-    restoreQueryCache(queryClient).catch(() => {});
+    restoreQueryCache(queryClient).catch(() => { });
     // Подписываемся на сохранение изменений кэша в IndexedDB
     const unsubscribe = persistQueryCache(queryClient);
     return unsubscribe;
@@ -121,7 +121,7 @@ const App: React.FC = () => {
           setCurrentUser(null);
         }
         setAuthChecked(true);
-      });
+      }).catch(console.error);
     } else {
       setAuthChecked(true);
     }
@@ -171,7 +171,7 @@ const App: React.FC = () => {
 
   // ── Регистрация Service Worker (один раз при монтировании) ──
   useEffect(() => {
-    registerServiceWorker().catch(() => {});
+    registerServiceWorker().catch(() => { });
   }, []);
 
   const handleLoginSuccess = useCallback(() => {
@@ -183,9 +183,9 @@ const App: React.FC = () => {
     logout();
     // Очистка данных сессии при выходе
     clearAllFormStores();
-    clearPersistedCache().catch(() => {});
-    clearOfflineQueue().catch(() => {});
-    clearOfflineDb().catch(() => {});
+    clearPersistedCache().catch(() => { });
+    clearOfflineQueue().catch(() => { });
+    clearOfflineDb().catch(() => { });
     stopPeriodicSync();
     queryClient.clear();
     setIsLoggedIn(false);
@@ -380,10 +380,10 @@ const App: React.FC = () => {
   // ────────────────────────────────────────────────
   const { confirm, confirmState } = useConfirm();
 
-  const reloadPane = useCallback(async (uniqId: string) => {
+  const reloadPane = useCallback((uniqId: string) => {
     const api = formStoreAPI.get(uniqId);
     if (api?.reload) {
-      await api.reload();
+      void api.reload();
     }
   }, []);
 

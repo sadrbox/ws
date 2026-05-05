@@ -4,9 +4,9 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Divider, Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
+import { Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { Group, GroupRow } from "src/components/UI";
+import { Group } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -76,11 +76,11 @@ const CashReceiptOrdersForm: FC<Partial<TPane>> = (paneProps) => {
       amount: d.amount != null ? String(d.amount) : "",
       status: d.status ?? "draft",
       organizationUuid: d.organizationUuid ?? "",
-      organizationName: (d.organization as any)?.shortName ?? "",
+      organizationName: d.organization?.shortName ?? "",
       counterpartyUuid: d.counterpartyUuid ?? "",
-      counterpartyName: (d.counterparty as any)?.shortName ?? "",
+      counterpartyName: d.counterparty?.shortName ?? "",
       contractUuid: d.contractUuid ?? "",
-      contractName: (d.contract as any)?.shortName ?? "",
+      contractName: d.contract?.shortName ?? "",
     }),
     buildPayload: (fd) => ({
       date: fd.date || null,
@@ -177,7 +177,7 @@ const CashReceiptOrdersList: FC<{ variant?: TTableVariant; onSelectItem?: (item:
     listName={LIST_NAME}
     columnsJson={columnsJson}
     FormComponent={CashReceiptOrdersForm}
-    getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""}
+    getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
     variant={variant}
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}

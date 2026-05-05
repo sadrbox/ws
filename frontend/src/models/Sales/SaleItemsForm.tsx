@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-misused-promises */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TPane } from "src/app/types";
 import { Divider, Field, FieldNumber } from "src/components/Field";
@@ -12,7 +12,6 @@ import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { useAppContext } from "src/app";
 import useUID from "src/hooks/useUID";
 import { recalcSaleItemAmounts, withSaleItemRecalc } from "./saleItemDraft";
-import { getFormatNumerical } from "src/components/Table/services";
 
 const MODEL_ENDPOINT = "saleitems";
 
@@ -391,8 +390,8 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
   }, [uniqId]);
 
   const handleClose = useCallback(() => {
-    if (paneProps.onClose) paneProps.onClose();
-    if (uniqId) requestClose(uniqId, { force: true });
+    if (paneProps.onClose) void paneProps.onClose();
+    if (uniqId) void requestClose(uniqId, { force: true });
   }, [paneProps, uniqId, requestClose]);
 
   const tabs = useMemo(() => [
