@@ -16,11 +16,12 @@
 	// padding: 6px;
 	border-radius: $radius2;
 	box-shadow: 0 32px 32px rgba($color6, 0.5);
-	width: 100%;
+	// width: 100%;
 	// max-width: 500px;
 	animation: fadeIn 0.3s ease;
 	overflow: auto;
 }
+
 .ModalHeader {
 	display: flex;
 	justify-content: space-between;
@@ -30,9 +31,10 @@
 	border-bottom: 1px solid $color10;
 	border-radius: 3px 3px 0 0;
 }
+
 .ModalBody {
 	overflow: auto; // margin: 12px;
-	padding:  12px;
+	padding: 12px;
 	// border: 1px solid $color5;
 	border-bottom: 0px;
 	background-color: $color30;
@@ -72,6 +74,7 @@
 		opacity: 0;
 		transform: scale(0.1);
 	}
+
 	to {
 		opacity: 1;
 		transform: scale(1);

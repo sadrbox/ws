@@ -61,42 +61,43 @@ model UserPermission {
 }
 
 model Organization {
-  id                  Int                  @id @default(autoincrement())
-  uuid                String               @unique @default(uuid())
-  bin                 String               @unique @db.VarChar(12)
+  id                  Int                             @id @default(autoincrement())
+  uuid                String                          @unique @default(uuid())
+  bin                 String                          @unique @db.VarChar(12)
   shortName           String?
   displayName         String?
-  inviteCode          String?              @unique
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @default(now()) @updatedAt
+  inviteCode          String?                         @unique
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @default(now()) @updatedAt
   deletedAt           DateTime?
   activityHistories   ActivityHistory[]
-  cashExpenseOrders   CashExpenseOrder[]   @relation("OrgCashExpenses")
-  cashReceiptOrders   CashReceiptOrder[]   @relation("OrgCashReceipts")
-  contracts           Contract[]           @relation("OrgContracts")
-  employees           Employee[]           @relation("EmployeeOrganization")
-  incomingInvoices    IncomingInvoice[]    @relation("OrgIncomingInvoices")
+  cashExpenseOrders   CashExpenseOrder[]              @relation("OrgCashExpenses")
+  cashReceiptOrders   CashReceiptOrder[]              @relation("OrgCashReceipts")
+  contracts           Contract[]                      @relation("OrgContracts")
+  employees           Employee[]                      @relation("EmployeeOrganization")
+  incomingInvoices    IncomingInvoice[]               @relation("OrgIncomingInvoices")
   inventoryTransfers  InventoryTransfer[]
-  outgoingInvoices    OutgoingInvoice[]    @relation("OrgOutgoingInvoices")
+  outgoingInvoices    OutgoingInvoice[]               @relation("OrgOutgoingInvoices")
   paymentInvoices     PaymentInvoice[]
-  payrollCalculations PayrollCalculation[] @relation("OrgPayrollCalc")
-  payrollPayments     PayrollPayment[]     @relation("OrgPayrollPay")
+  payrollCalculations PayrollCalculation[]            @relation("OrgPayrollCalc")
+  payrollPayments     PayrollPayment[]                @relation("OrgPayrollPay")
   purchases           Purchase[]
   sales               Sale[]
   scheduledTasks      ScheduledTask[]
   todos               Todo[]
-  users               User[]               @relation("UserOrganization")
+  users               User[]                          @relation("UserOrganization")
   userPermissions     UserPermission[]
   accessRights        AccessRight[]
   warehouses          Warehouse[]
   employeeHistories   EmployeeHistory[]
-  counterparties      Counterparty[]       @relation("OrgCounterparties")
-  products            Product[]            @relation("OrgProducts")
-  brands              Brand[]              @relation("OrgBrands")
-  positions           Position[]           @relation("OrgPositions")
-  contacts            Contact[]            @relation("OrgContacts")
-  contactPersons      ContactPerson[]      @relation("OrgContactPersons")
-  bankAccounts        BankAccount[]        @relation("OrgBankAccounts")
+  counterparties      Counterparty[]                  @relation("OrgCounterparties")
+  products            Product[]                       @relation("OrgProducts")
+  brands              Brand[]                         @relation("OrgBrands")
+  positions           Position[]                      @relation("OrgPositions")
+  contacts            Contact[]                       @relation("OrgContacts")
+  contactPersons      ContactPerson[]                 @relation("OrgContactPersons")
+  bankAccounts        BankAccount[]                   @relation("OrgBankAccounts")
+  accountingSettings  OrganizationAccountingSetting[] @relation("OrgAccountingSettings")
 
   @@index([updatedAt])
   @@map("organizations")
@@ -619,6 +620,7 @@ model SaleItem {
   discountAmount    Decimal        @default(0) @db.Decimal(18, 2)
   productUuid       String?
   saleUuid          String
+  taxes             Json?
   updatedAt         DateTime       @default(now()) @updatedAt
   deletedAt         DateTime?
   product           Product?       @relation(fields: [productUuid], references: [uuid])
@@ -804,14 +806,63 @@ model UnitOfMeasure {
 }
 
 model VatRate {
-  id        Int        @id @default(autoincrement())
-  uuid      String     @unique @default(uuid())
-  shortName String
-  rate      Decimal    @db.Decimal(5, 2)
-  updatedAt DateTime   @default(now()) @updatedAt
-  deletedAt DateTime?
-  saleItems SaleItem[]
+  id                 Int                             @id @default(autoincrement())
+  uuid               String                          @unique @default(uuid())
+  shortName          String
+  rate               Decimal                         @db.Decimal(5, 2)
+  /// Способ расчёта НДС:
+  ///   "INCLUDED" — НДС включён в цену (в сумме);
+  ///   "ADDED"    — НДС начисляется сверху к стоимости.
+  calculationMethod  String                          @default("INCLUDED")
+  updatedAt          DateTime                        @default(now()) @updatedAt
+  deletedAt          DateTime?
+  saleItems          SaleItem[]
+  accountingSettings OrganizationAccountingSetting[] @relation("OrgAccountingVatRate")
 
   @@index([updatedAt])
   @@map("vat_rates")
+}
+
+model Tax {
+  id                Int       @id @default(autoincrement())
+  uuid              String    @unique @default(uuid())
+  shortName         String
+  code              String?   @unique
+  rate              Decimal?  @db.Decimal(5, 2)
+  /// Способ расчёта налога:
+  ///   "INCLUDED" — налог включён в цену (НДС в Стоимость);
+  ///   "ADDED"    — налог начисляется сверху (Стоимость + Налог).
+  calculationMethod String    @default("INCLUDED")
+  updatedAt         DateTime  @default(now()) @updatedAt
+  deletedAt         DateTime?
+
+  @@index([updatedAt])
+  @@map("taxes")
+}
+
+/// Журнал настроек учёта организации.
+/// Активная запись на организацию — последняя с deletedAt IS NULL.
+/// При обновлении старая помечается deletedAt, создаётся новая.
+model OrganizationAccountingSetting {
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  organizationUuid String?
+  /// Дата начала действия настроек (для исторических запросов).
+  startDate        DateTime      @default(now())
+  /// Использовать НДС (включает колонки НДС в строках документов).
+  useVat           Boolean       @default(false)
+  /// Ссылка на справочник VatRate (выбранная ставка НДС).
+  vatRateUuid      String?
+  /// Использовать скидки в строках документов продажи.
+  useDiscount      Boolean       @default(false)
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
+  organization     Organization? @relation("OrgAccountingSettings", fields: [organizationUuid], references: [uuid])
+  vatRateRef       VatRate?      @relation("OrgAccountingVatRate", fields: [vatRateUuid], references: [uuid])
+
+  @@index([organizationUuid])
+  @@index([vatRateUuid])
+  @@index([startDate])
+  @@index([updatedAt])
+  @@map("organization_accounting_settings")
 }

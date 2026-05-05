@@ -40,7 +40,10 @@ const errorTranslations: [RegExp, string][] = [
 	[/(\w+)\s+required/i, "Поле «$1» обязательно для заполнения"],
 	// ── Prisma / DB ──
 	[/unique constraint/i, "Нарушение уникальности: такая запись уже существует"],
-	[/foreign key constraint/i, "Невозможно удалить: запись используется в других данных"],
+	[
+		/foreign key constraint/i,
+		"Невозможно удалить: запись используется в других данных",
+	],
 ];
 
 export function translateError(message: string): string {
@@ -55,7 +58,13 @@ export function translateError(message: string): string {
 
 export function getTranslateColumn(column: TColumn): string | undefined {
 	if (column.identifier) {
-		return getTranslation(column.identifier.toString());
+		const id = column.identifier.toString();
+		const translated = getTranslation(id);
+		// Если для identifier нет перевода — getTranslation возвращает сам id.
+		// В этом случае предпочитаем явное column.name (например, для
+		// динамически генерируемых колонок типа `tax_<uuid>`).
+		if (translated && translated !== id) return translated;
+		return column.name || id;
 	}
 	return column.name || column.identifier;
 }

@@ -41,6 +41,8 @@ import { BrandsList } from 'src/models/Brands';
 import { ProductsList } from 'src/models/Products';
 import { UnitOfMeasuresList } from 'src/models/UnitOfMeasures';
 import { VatRatesList } from 'src/models/VatRates';
+import { TaxesList } from 'src/models/Taxes';
+import { OrganizationAccountingSettingsList } from 'src/models/OrganizationAccountingSettings';
 import { CurrenciesList } from 'src/models/Currencies';
 import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
@@ -687,6 +689,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>}
               {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList })}>Единицы измерения</li>}
               {can("VatRate") && <li onClick={() => addPane({ component: VatRatesList })}>Ставки НДС</li>}
+              {can("Tax") && <li onClick={() => addPane({ component: TaxesList })}>Налоги</li>}
+              {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>Настройки учёта организации</li>}
               {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>}
             </ul>
           </div>

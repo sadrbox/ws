@@ -4,7 +4,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field } from "src/components/Field";
+import { Field, FieldSelect } from "src/components/Field";
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -21,8 +21,9 @@ interface TFields {
   uuid?: string;
   shortName: string;
   rate: string;
+  calculationMethod: "INCLUDED" | "ADDED";
 }
-const DEFAULT_FIELDS: TFields = { shortName: "", rate: "" };
+const DEFAULT_FIELDS: TFields = { shortName: "", rate: "", calculationMethod: "INCLUDED" };
 
 const VatRatesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("VatRate");
@@ -36,6 +37,7 @@ const VatRatesForm: FC<Partial<TPane>> = (paneProps) => {
       ...d,
       shortName: d.shortName ?? "",
       rate: d.rate !== undefined && d.rate !== null ? String(d.rate) : "",
+      calculationMethod: d.calculationMethod === "ADDED" ? "ADDED" : "INCLUDED",
     }),
     buildPayload: (fd) => {
       if (!fd.shortName?.trim()) return "Наименование обязательно";
@@ -44,6 +46,7 @@ const VatRatesForm: FC<Partial<TPane>> = (paneProps) => {
       return {
         shortName: fd.shortName.trim(),
         rate: rateNum,
+        calculationMethod: fd.calculationMethod === "ADDED" ? "ADDED" : "INCLUDED",
       };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Ставки НДС", saved),
@@ -72,6 +75,23 @@ const VatRatesForm: FC<Partial<TPane>> = (paneProps) => {
                 value={form.fields.rate}
                 onChange={(e) => form.setField("rate", e.target.value)}
                 disabled={form.isLoading}
+              />
+              <FieldSelect
+                label="Способ расчёта"
+                name={`${form.formUid}_calcMethod`}
+                value={form.fields.calculationMethod}
+                options={[
+                  { value: "INCLUDED", label: "В сумме (в т.ч.)" },
+                  { value: "ADDED", label: "Сверху (начисляется к стоимости)" },
+                ]}
+                onChange={(e) =>
+                  form.setField(
+                    "calculationMethod",
+                    e.target.value === "ADDED" ? "ADDED" : "INCLUDED",
+                  )
+                }
+                disabled={form.isLoading}
+                style={{ minWidth: 280 }}
               />
             </GroupRow>
           </div>
@@ -109,6 +129,13 @@ const VatRatesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataIte
     getLabel={(d) => (d?.shortName as string) || "?"}
     variant={variant}
     onSelectItem={onSelectItem}
+    renderCell={(row, col) => {
+      if (col.identifier === "calculationMethod") {
+        const v = String(row.calculationMethod ?? "INCLUDED").toUpperCase();
+        return (<span>{v === "ADDED" ? "Сверху" : "В сумме"}</span>);
+      }
+      return undefined;
+    }}
   />
 );
 VatRatesList.displayName = "VatRatesList";

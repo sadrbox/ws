@@ -6,6 +6,48 @@ const router = express.Router();
 const MODEL = "saleItem";
 const ROUTE = "saleitems";
 
+/**
+ * Пересчёт массива налогов с учётом calculationMethod каждого:
+ *   INCLUDED ("в т.ч."):  taxAmount = base * rate / (100 + rate)
+ *   ADDED   ("сверху"):   taxAmount = base * rate / 100
+ * Возвращает массив записей `{ taxUuid, code, shortName, rate, method, amount }`.
+ * Базовая стоимость строки (amountAfterDiscount) при INCLUDED не меняется,
+ * при ADDED итоговый `amount` строки = afterDiscount + Σ ADDED-сумм.
+ */
+function recalcTaxes(amountAfterDiscount, taxes) {
+	if (!Array.isArray(taxes)) return null;
+	return taxes.map((t) => {
+		const rate = Number(t?.rate ?? 0) || 0;
+		const taxUuid = String(t?.taxUuid ?? "");
+		const code = t?.code ?? null;
+		const shortName = t?.shortName ?? null;
+		const rawMethod = String(
+			t?.calculationMethod ?? t?.method ?? "INCLUDED",
+		).toUpperCase();
+		const method = rawMethod === "ADDED" ? "ADDED" : "INCLUDED";
+		let amount = 0;
+		if (rate > 0) {
+			amount =
+				method === "INCLUDED"
+					? Math.round(((amountAfterDiscount * rate) / (100 + rate)) * 100) /
+						100
+					: Math.round(((amountAfterDiscount * rate) / 100) * 100) / 100;
+		}
+		return { taxUuid, code, shortName, rate, method, amount };
+	});
+}
+
+/** Сумма ADDED-налогов (надбавка к базовой стоимости). */
+function sumAddedTaxes(entries) {
+	if (!Array.isArray(entries)) return 0;
+	let s = 0;
+	for (const t of entries) {
+		if (String(t?.method ?? "").toUpperCase() === "ADDED")
+			s += Number(t?.amount) || 0;
+	}
+	return Math.round(s * 100) / 100;
+}
+
 // ── GET list by saleUuid ────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -105,6 +147,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			vatRateUuid,
 			vatRate,
 			discountPercent,
+			taxes,
 		} = req.body;
 		if (!saleUuid)
 			return res
@@ -124,7 +167,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				? Math.round(((amountAfterDiscount * vRate) / (100 + vRate)) * 100) /
 					100
 				: 0;
-		const amt = amountAfterDiscount;
+		const recomputedTaxes = recalcTaxes(amountAfterDiscount, taxes);
+		const amt =
+			Math.round((amountAfterDiscount + sumAddedTaxes(recomputedTaxes)) * 100) /
+			100;
 
 		const item = await prisma[MODEL].create({
 			data: {
@@ -139,6 +185,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				vatAmount: vat,
 				discountPercent: discPct,
 				discountAmount: discAmt,
+				taxes: recomputedTaxes ?? undefined,
 			},
 			include: {
 				product: { include: { brand: true } },
@@ -221,9 +268,47 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 						) / 100
 					: 0;
 
-			data.amount = amountAfterDiscount;
 			data.discountAmount = discAmt;
 			data.vatAmount = vatAmt;
+
+			// Пересчёт массива taxes (если задан в payload или существует в записи)
+			const incomingTaxes = req.body.taxes;
+			const existingTaxes = Array.isArray(existing.taxes)
+				? existing.taxes
+				: null;
+			const sourceTaxes = Array.isArray(incomingTaxes)
+				? incomingTaxes
+				: existingTaxes;
+			let recomputed = null;
+			if (sourceTaxes) {
+				recomputed = recalcTaxes(amountAfterDiscount, sourceTaxes);
+				data.taxes = recomputed;
+			} else if (incomingTaxes === null) {
+				data.taxes = null;
+			}
+			// amount = afterDiscount + Σ ADDED-налогов
+			data.amount =
+				Math.round((amountAfterDiscount + sumAddedTaxes(recomputed)) * 100) /
+				100;
+		} else if (req.body.taxes !== undefined) {
+			// Изменился только массив taxes — пересчитать на основе базовой стоимости
+			// (afterDiscount = quantity*price - discountAmount).
+			const existing = await prisma[MODEL].findUnique({ where: w });
+			if (!existing)
+				return res.status(404).json({ success: false, message: "Не найдено" });
+			const eQty = Number(existing.quantity) || 0;
+			const ePrc = Number(existing.price) || 0;
+			const eDisc = Number(existing.discountAmount) || 0;
+			const eAfter = Math.round((eQty * ePrc - eDisc) * 100) / 100;
+			if (req.body.taxes) {
+				const recomputed = recalcTaxes(eAfter, req.body.taxes);
+				data.taxes = recomputed;
+				data.amount =
+					Math.round((eAfter + sumAddedTaxes(recomputed)) * 100) / 100;
+			} else {
+				data.taxes = null;
+				data.amount = eAfter;
+			}
 		}
 
 		const item = await prisma[MODEL].update({

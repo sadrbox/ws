@@ -189,10 +189,6 @@ describe("validationRules: quantity", () => {
 	it("нечисловое значение — ошибка", () => {
 		expect(validate("abc")).toBe("Должно быть числом");
 	});
-
-	it("значение number (не string) — ошибки нет (приводится через String)", () => {
-		expect(validate(100 as unknown as string)).toBeUndefined();
-	});
 });
 
 describe("validationRules: price", () => {

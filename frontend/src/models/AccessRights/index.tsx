@@ -55,6 +55,8 @@ export const MODEL_NAME_OPTIONS = [
     { value: "InventoryTransfer", i18: "InventoryTransfersList" },
     { value: "UnitOfMeasure", i18: "UnitOfMeasuresList" },
     { value: "VatRate", i18: "VatRatesList" },
+    { value: "Tax", i18: "TaxesList" },
+    { value: "OrganizationAccountingSetting", i18: "OrganizationAccountingSettingsList" },
     { value: "ScheduledTask", i18: "ScheduledTasksList" },
     { value: "PayrollCalculation", i18: "PayrollCalculationsList" },
     { value: "PayrollPayment", i18: "PayrollPaymentsList" },

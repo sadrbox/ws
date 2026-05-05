@@ -19,7 +19,8 @@
 	// border: 1px solid $color10;
 	// background: linear-gradient(180deg, $color30, $color33, $color34);
 
-	border-radius: $radius3; /* Увеличен радиус скругления */
+	border-radius: $radius3;
+	/* Увеличен радиус скругления */
 	// box-shadow: 0px 1px 0px 0px rgba($color6, 0.7);
 	// box-shadow: inset 0px 0px 1px $color30, inset 0px 0px 1px $color1;
 	height: $heightFieldInput + 2px;
@@ -30,6 +31,7 @@
 	color: $color6;
 	// background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
 	background: linear-gradient(180deg, #fff, #aaa);
+
 	// transition: all 900ms ease;
 	// box-shadow: 1px 1px 1px 0px rgba(#eeeeee, 1);
 	// box-shadow: 0px 2px px 1px rgba(0, 0, 0, 0.2) !important;
@@ -37,6 +39,7 @@
 		// outline: 2px solid #fff;
 		box-shadow: 0px 0px 5px 1px rgba(0, 0, 0, 0.2) !important;
 	}
+
 	&:active {
 		// background: linear-gradient(180deg, $color34, $color33, $color30);
 		// outline: 1px solid $color6 // border: 1px solid $color6;
@@ -45,6 +48,7 @@
 		// border: 1px solid $color10;
 		border: 1px solid #3d3400;
 	}
+
 	&:not(:last-child) {
 		// margin-right: 6px;
 	}
@@ -53,14 +57,13 @@
 	span {
 		padding: 0 3px;
 		font-weight: normal;
-		line-height: 18px;
+		// line-height: 18px;
 		white-space: nowrap;
 		display: flex;
 		align-items: center;
 	}
 
-	&:enabled {
-	}
+	&:enabled {}
 
 	&:disabled {
 		opacity: 0.5;

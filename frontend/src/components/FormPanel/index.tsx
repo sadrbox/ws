@@ -24,36 +24,33 @@ export interface FormPanelProps {
 const FormPanel: FC<FormPanelProps> = ({
   onSaveAndClose,
   onSave,
-  // onReload,
+  onReload,
   onClose,
   isLoading,
-  // showReload = true,
   readonly: isReadonly = false,
 }) => {
   const effectiveSaveAndClose = isReadonly ? undefined : onSaveAndClose;
   const effectiveSave = isReadonly ? undefined : onSave;
 
-  // Если нечего показывать (readonly без reload) — не рендерим ничего
-  // const hasActions = effectiveSaveAndClose || effectiveSave || (showReload && onReload);
-  // if (!hasActions) return null;
-
   return (
     <>
       {effectiveSaveAndClose && (
         <Button variant="primary" onClick={effectiveSaveAndClose} disabled={isLoading}>
-          {/* <img src={saveCloseIcon} width={16} height={16} alt="" /> */}
           <span>Сохранить и закрыть</span>
         </Button>
       )}
       {effectiveSave && (
         <Button onClick={effectiveSave} disabled={isLoading}>
-          {/* <img src={saveIcon} width={16} height={16} alt="" /> */}
           <span>Сохранить</span>
+        </Button>
+      )}
+      {onReload && (
+        <Button onClick={onReload} disabled={isLoading}>
+          <span>Обновить</span>
         </Button>
       )}
       {onClose && (
         <Button onClick={onClose} disabled={isLoading}>
-          {/* <img src={reloadIcon} width={16} height={16} alt="" /> */}
           <span>Закрыть</span>
         </Button>
       )}

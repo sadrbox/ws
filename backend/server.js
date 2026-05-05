@@ -15,7 +15,11 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { getLocalIP } from "./utils/module.js";
-import { authMiddleware, tenantMiddleware, accessRightMiddleware } from "./utils/auth.js";
+import {
+	authMiddleware,
+	tenantMiddleware,
+	accessRightMiddleware,
+} from "./utils/auth.js";
 
 // ── Роутеры ─────────────────────────────────────────────────────────────
 import authRouter from "./api/router/auth.js";
@@ -55,6 +59,8 @@ import payrollCalculationsRouter from "./api/router/payrollcalculations.js";
 import payrollPaymentsRouter from "./api/router/payrollpayments.js";
 import unitOfMeasuresRouter from "./api/router/unitofmeasures.js";
 import vatRatesRouter from "./api/router/vatrates.js";
+import taxesRouter from "./api/router/taxes.js";
+import organizationAccountingSettingsRouter from "./api/router/organizationaccountingsettings.js";
 import syncRouter from "./api/router/sync.js";
 
 const app = express();
@@ -85,21 +91,36 @@ app.use(
 		},
 		credentials: true,
 		methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-		allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Force-Overwrite", "X-Organization-ID"],
+		allowedHeaders: [
+			"Content-Type",
+			"Authorization",
+			"Accept",
+			"X-Force-Overwrite",
+			"X-Organization-ID",
+		],
 	}),
 );
 
 // Явный обработчик preflight для всех маршрутов
-app.options("*", cors({
-	origin: (origin, callback) => {
-		if (!origin) return callback(null, true);
-		if (allowedOrigins.includes(origin)) return callback(null, true);
-		return callback(new Error("Запрещено CORS-политикой"));
-	},
-	credentials: true,
-	methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-	allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Force-Overwrite", "X-Organization-ID"],
-}));
+app.options(
+	"*",
+	cors({
+		origin: (origin, callback) => {
+			if (!origin) return callback(null, true);
+			if (allowedOrigins.includes(origin)) return callback(null, true);
+			return callback(new Error("Запрещено CORS-политикой"));
+		},
+		credentials: true,
+		methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+		allowedHeaders: [
+			"Content-Type",
+			"Authorization",
+			"Accept",
+			"X-Force-Overwrite",
+			"X-Organization-ID",
+		],
+	}),
+);
 
 // Rate limiting — защита от brute-force и DDoS
 const apiLimiter = rateLimit({
@@ -234,6 +255,8 @@ app.use("/api/v1", payrollCalculationsRouter);
 app.use("/api/v1", payrollPaymentsRouter);
 app.use("/api/v1", unitOfMeasuresRouter);
 app.use("/api/v1", vatRatesRouter);
+app.use("/api/v1", taxesRouter);
+app.use("/api/v1", organizationAccountingSettingsRouter);
 app.use("/api/v1", syncRouter);
 
 // ═══════════════════════════════════════════════════════════════════════════

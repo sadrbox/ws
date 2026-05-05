@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TPane } from "src/app/types";
-import { Divider, Field, FieldNumber } from "src/components/Field";
+import { FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { Group } from "src/components/UI";
+import { Group, GroupRow, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore, setPaneDirty } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import ModelForm from "src/components/ModelForm";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { useAppContext } from "src/app";
@@ -107,7 +108,6 @@ interface SaleItemsFieldsFormProps {
   fields: TFields;
   setFields: (patch: Partial<TFields>) => void;
   isLoading: boolean;
-  isEditMode: boolean;
   formUid: string;
 }
 
@@ -115,170 +115,164 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
   fields,
   setFields,
   isLoading,
-  isEditMode,
   formUid,
 }) => {
+  const { isVatEnabled } = useOrgAccountingSettings();
+
   const handleNumericChange = useCallback((field: keyof TFields, value: string) => {
     setFields(withSaleItemRecalc(fields, { [field]: value }) as Partial<TFields>);
   }, [fields, setFields]);
 
   return (
-    <div className={styles.FormBodyParts}>
-      <Group align="row" gap="12px" className={styles.Form}>
-        <LookupField
-          label="Номенклатура"
-          name={`${formUid}_product`}
-          value={fields.productUuid}
-          displayValue={fields.productName}
-          endpoint="products"
-          displayField="shortName"
-          columns={[
-            { key: "shortName", label: "Наименование" },
-            { key: "sku", label: "Артикул" },
-            { key: "brand.shortName", label: "Бренд" },
-          ]}
-          onSelect={(uuid, display) =>
-            setFields({ productUuid: uuid, productName: display })
-          }
-          onClear={() =>
-            setFields({ productUuid: "", productName: "" })
-          }
-          disabled={isLoading}
-          width="400px"
-        />
-      </Group>
-
-      <Group align="row" gap="12px" className={styles.Form}>
-        <FieldNumber
-          label="Количество"
-          name={`${formUid}_qty`}
-          value={fields.quantity}
-          onChange={e => handleNumericChange("quantity", e.target.value)}
-          disabled={isLoading}
-          step="0.1"
-          textAlign="right"
-          width="160px"
-        />
-        <FieldNumber
-          label="Цена"
-          name={`${formUid}_price`}
-          value={fields.price}
-          onChange={e => handleNumericChange("price", e.target.value)}
-          disabled={isLoading}
-          step="0.1"
-          textAlign="right"
-          width="160px"
-        />
-        <LookupField
-          label="Ед. изм."
-          name={`${formUid}_uom`}
-          value={fields.unitOfMeasureUuid}
-          displayValue={fields.unitOfMeasureName}
-          endpoint="unit-of-measures"
-          displayField="shortName"
-          columns={[
-            { key: "shortName", label: "Наименование" },
-            { key: "code", label: "Код" },
-          ]}
-          onSelect={(uuid, display) =>
-            setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display })
-          }
-          onClear={() =>
-            setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" })
-          }
-          disabled={isLoading}
-          width="160px"
-        />
-      </Group>
-
-      <Group align="row" gap="12px" className={styles.Form}>
-        <LookupField
-          label="Ставка НДС"
-          name={`${formUid}_vatRate`}
-          value={fields.vatRateUuid}
-          displayValue={fields.vatRateName}
-          endpoint="vat-rates"
-          displayField="shortName"
-          columns={[
-            { key: "shortName", label: "Наименование" },
-            { key: "rate", label: "%" },
-          ]}
-          onSelect={(uuid, display, item) => {
-            const rate = item?.rate != null ? Number(item.rate) : Number(fields.vatRate);
-            setFields({
-              vatRateUuid: uuid,
-              vatRateName: display,
-              vatRate: rate,
-              ...recalcSaleItemAmounts(fields.quantity, fields.price, rate, fields.discountPercent),
-            });
-          }}
-          onClear={() => {
-            setFields({
-              vatRateUuid: "",
-              vatRateName: "",
-              vatRate: 0,
-              ...recalcSaleItemAmounts(fields.quantity, fields.price, "0", fields.discountPercent),
-            });
-          }}
-          disabled={isLoading}
-          width="200px"
-        />
-        <FieldNumber
-          label="Скидка %"
-          name={`${formUid}_discPct`}
-          value={fields.discountPercent}
-          onChange={e => handleNumericChange("discountPercent", e.target.value)}
-          disabled={isLoading}
-          step="0.1"
-          textAlign="right"
-          width="120px"
-        />
-      </Group>
-
-      <Group align="row" gap="12px" className={styles.Form}>
-        <FieldNumber
-          label="Сумма скидки"
-          name={`${formUid}_discAmt`}
-          value={fields.discountAmount}
-          disabled
-          textAlign="right"
-          width="150px"
-        />
-        <FieldNumber
-          label="НДС (в т.ч.)"
-          name={`${formUid}_vatAmt`}
-          value={fields.vatAmount}
-          disabled
-          textAlign="right"
-          width="150px"
-        />
-        <FieldNumber
-          label="Итого"
-          name={`${formUid}_amount`}
-          value={fields.amount}
-          disabled
-          textAlign="right"
-          width="180px"
-        />
-      </Group>
-
-      {isEditMode && (
-        <>
-          <Divider />
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px", flexWrap: "wrap" }}>
-              <Field
-                label="N строки"
-                name={`${formUid}_lineNum`}
-                value={String(fields.lineNumber ?? "-")}
-                disabled
-                width="80px"
-              />
-
-            </div>
+    <div className={styles.FormWrapper}>
+      <div className={styles.Form}>
+        <GroupCol>
+          {/* Строка 1: Номенклатура (во всю ширину) */}
+          <Group>
+            <LookupField
+              label="Номенклатура"
+              name={`${formUid}_product`}
+              value={fields.productUuid}
+              displayValue={fields.productName}
+              endpoint="products"
+              displayField="shortName"
+              columns={[
+                { key: "shortName", label: "Наименование" },
+                { key: "sku", label: "Артикул" },
+                { key: "brand.shortName", label: "Бренд" },
+              ]}
+              onSelect={(uuid, display) =>
+                setFields({ productUuid: uuid, productName: display })
+              }
+              onClear={() =>
+                setFields({ productUuid: "", productName: "" })
+              }
+              disabled={isLoading}
+            />
           </Group>
-        </>
-      )}
+
+          {/* Строка 2: Количество · Цена · Ед. изм. */}
+          <GroupRow>
+            <FieldNumber
+              label="Количество"
+              name={`${formUid}_qty`}
+              value={fields.quantity}
+              onChange={e => handleNumericChange("quantity", e.target.value)}
+              disabled={isLoading}
+              step="0.1"
+              textAlign="right"
+              width="160px"
+            />
+            <FieldNumber
+              label="Цена"
+              name={`${formUid}_price`}
+              value={fields.price}
+              onChange={e => handleNumericChange("price", e.target.value)}
+              disabled={isLoading}
+              step="0.1"
+              textAlign="right"
+              width="160px"
+            />
+            <LookupField
+              label="Ед. изм."
+              name={`${formUid}_uom`}
+              value={fields.unitOfMeasureUuid}
+              displayValue={fields.unitOfMeasureName}
+              endpoint="unit-of-measures"
+              displayField="shortName"
+              columns={[
+                { key: "shortName", label: "Наименование" },
+                { key: "code", label: "Код" },
+              ]}
+              onSelect={(uuid, display) =>
+                setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display })
+              }
+              onClear={() =>
+                setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" })
+              }
+              disabled={isLoading}
+              width="160px"
+            />
+          </GroupRow>
+
+          {/* Строка 3: Ставка НДС · Скидка % */}
+          <GroupRow>
+            {isVatEnabled && (
+              <LookupField
+                label="Ставка НДС"
+                name={`${formUid}_vatRate`}
+                value={fields.vatRateUuid}
+                displayValue={fields.vatRateName}
+                endpoint="vat-rates"
+                displayField="shortName"
+                columns={[
+                  { key: "shortName", label: "Наименование" },
+                  { key: "rate", label: "%" },
+                ]}
+                onSelect={(uuid, display, item) => {
+                  const rate = item?.rate != null ? Number(item.rate) : Number(fields.vatRate);
+                  setFields({
+                    vatRateUuid: uuid,
+                    vatRateName: display,
+                    vatRate: rate,
+                    ...recalcSaleItemAmounts(fields.quantity, fields.price, rate, fields.discountPercent),
+                  });
+                }}
+                onClear={() => {
+                  setFields({
+                    vatRateUuid: "",
+                    vatRateName: "",
+                    vatRate: 0,
+                    ...recalcSaleItemAmounts(fields.quantity, fields.price, "0", fields.discountPercent),
+                  });
+                }}
+                disabled={isLoading}
+                width="200px"
+              />
+            )}
+            <FieldNumber
+              label="Скидка %"
+              name={`${formUid}_discPct`}
+              value={fields.discountPercent}
+              onChange={e => handleNumericChange("discountPercent", e.target.value)}
+              disabled={isLoading}
+              step="0.1"
+              textAlign="right"
+              width="120px"
+            />
+          </GroupRow>
+
+          {/* Строка 4: Сумма скидки · НДС · Итого */}
+          <GroupRow>
+            <FieldNumber
+              label="Сумма скидки"
+              name={`${formUid}_discAmt`}
+              value={fields.discountAmount}
+              disabled
+              textAlign="right"
+              width="150px"
+            />
+            {isVatEnabled && (
+              <FieldNumber
+                label="НДС (в т.ч.)"
+                name={`${formUid}_vatAmt`}
+                value={fields.vatAmount}
+                disabled
+                textAlign="right"
+                width="150px"
+              />
+            )}
+            <FieldNumber
+              label="Итого"
+              name={`${formUid}_amount`}
+              value={fields.amount}
+              disabled
+              textAlign="right"
+              width="180px"
+            />
+          </GroupRow>
+        </GroupCol>
+      </div>
     </div>
   );
 };
@@ -317,13 +311,17 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
       };
     },
 
-    buildPaneLabel: (saved) =>
-      makePaneLabel(
-        "SaleItemsList",
-        "Товар",
-        saved,
-        saved.product?.shortName || String(saved.id ?? "?"),
-      ),
+    buildPaneLabel: (saved) => {
+      const product = saved.product?.shortName?.trim();
+      const qty = saved.quantity != null ? Number(saved.quantity) : null;
+      const amount = saved.amount != null ? Number(saved.amount) : null;
+      const parts: string[] = [];
+      if (product) parts.push(product);
+      if (qty != null && amount != null) parts.push(`${qty} × ${amount}`);
+      else if (qty != null) parts.push(String(qty));
+      const detail = parts.length > 0 ? parts.join(" · ") : String(saved.id ?? "?");
+      return makePaneLabel("SaleItemsList", "Строка продажи", saved, detail);
+    },
   });
 
   const tabs = useMemo(() => [
@@ -335,7 +333,6 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
           fields={form.fields}
           setFields={form.setFields}
           isLoading={form.isLoading}
-          isEditMode={form.isEditMode}
           formUid={form.formUid}
         />
       ),
@@ -377,6 +374,12 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
     });
   }, [embedded]);
 
+  // «Обновить» — откатить локальные изменения к исходному состоянию строки.
+  const handleReload = useCallback(() => {
+    setFieldsState(initialFields);
+    embedded?.applyDraft(fieldsToDraftRow(initialFields));
+  }, [initialFields, embedded]);
+
   useEffect(() => {
     if (!uniqId) return;
     setPaneDirty(uniqId, isDirty);
@@ -403,7 +406,6 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
           fields={fields}
           setFields={setFields}
           isLoading={false}
-          isEditMode={!!(fields.uuid || fields.id)}
           formUid={formUid}
         />
       ),
@@ -417,6 +419,7 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
       onSave={handleClose}
       onSaveAndClose={handleClose}
       onClose={handleClose}
+      onReload={isDirty ? handleReload : undefined}
       isLoading={false}
       readonly={!canWrite}
       isDirty={isDirty}

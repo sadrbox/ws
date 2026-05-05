@@ -13,6 +13,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
@@ -47,6 +48,7 @@ const DEFAULT_FIELDS: TFields = {
 
 const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
+  const { isVatEnabled } = useOrgAccountingSettings();
   const queryClient = useQueryClient();
   const { canWrite } = useAccessRight("Sale");
 
@@ -223,10 +225,14 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             <Group>
               <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
                 {([
-                  { label: "Без НДС", value: form.fields.amountWithoutVat },
-                  { label: "НДС", value: form.fields.vatAmount },
+                  ...(isVatEnabled
+                    ? ([
+                      { label: "Без НДС", value: form.fields.amountWithoutVat },
+                      { label: "НДС", value: form.fields.vatAmount },
+                    ] as const)
+                    : ([] as const)),
                   { label: "Скидка", value: form.fields.discountAmount },
-                ] as const).map(({ label, value }) => (
+                ] as ReadonlyArray<{ label: string; value: number | string }>).map(({ label, value }) => (
                   <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
                     <span>{label}</span>
                     <span style={{ fontVariantNumeric: "tabular-nums" }}>{value || "0"}</span>
@@ -245,7 +251,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     },
     {
       id: "tab-items", label: translate("SaleItemsList"), component: form.isEditMode && form.fields.uuid ? (
-        <SaleItemsTable saleUuid={form.fields.uuid} disabled={form.isLoading} deferRemoteChanges
+        <SaleItemsTable saleUuid={form.fields.uuid} organizationUuid={form.fields.organizationUuid} disabled={form.isLoading} deferRemoteChanges
+          parentLabel={`${translate("SalesList") || "Реализация"}: №${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           initialPendingRows={saleItems.pending} onTotalChange={handleTotalChange}
           onItemsChange={saleItems.onItemsChange} />
       ) : (

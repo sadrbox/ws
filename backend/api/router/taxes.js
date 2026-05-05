@@ -3,9 +3,9 @@ import { prisma } from "../../prisma/prisma-client.js";
 
 const router = express.Router();
 
-const MODEL = "vatRate";
-const ROUTE = "vat-rates";
-const TEXT_FIELDS = ["shortName"];
+const MODEL = "tax";
+const ROUTE = "taxes";
+const TEXT_FIELDS = ["shortName", "code"];
 
 // ── GET list ────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -45,11 +45,12 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		let searchWhere = {};
 		if (searchWords.length > 0)
 			searchWhere = {
-				AND: searchWords.map((w) => ({
-					OR: TEXT_FIELDS.map((f) => ({
+				AND: searchWords.map((w) => {
+					const orConditions = TEXT_FIELDS.map((f) => ({
 						[f]: { contains: w, mode: "insensitive" },
-					})),
-				})),
+					}));
+					return { OR: orConditions };
+				}),
 			};
 
 		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
@@ -119,30 +120,34 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { shortName, rate, calculationMethod } = req.body;
+		const { shortName, code, rate, calculationMethod } = req.body;
 		if (!shortName?.trim())
 			return res
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
-		if (rate === undefined || rate === null || rate === "")
+		const data = {
+			shortName: shortName.trim(),
+			code: code?.trim() || null,
+			rate:
+				rate === undefined || rate === null || rate === ""
+					? null
+					: Number(rate),
+			calculationMethod:
+				String(calculationMethod ?? "INCLUDED").toUpperCase() === "ADDED"
+					? "ADDED"
+					: "INCLUDED",
+		};
+		if (data.rate !== null && isNaN(data.rate))
 			return res
 				.status(400)
-				.json({ success: false, message: "Ставка обязательна" });
-		const rateNum = Number(rate);
-		if (isNaN(rateNum) || rateNum < 0)
-			return res
-				.status(400)
-				.json({ success: false, message: "Ставка должна быть числом ≥ 0" });
-		const calcMethod = calculationMethod === "ADDED" ? "ADDED" : "INCLUDED";
-		const item = await prisma[MODEL].create({
-			data: {
-				shortName: shortName.trim(),
-				rate: rateNum,
-				calculationMethod: calcMethod,
-			},
-		});
+				.json({ success: false, message: "Ставка должна быть числом" });
+		const item = await prisma[MODEL].create({ data });
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (error.code === "P2002")
+			return res
+				.status(409)
+				.json({ success: false, message: "Код налога должен быть уникальным" });
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -158,27 +163,27 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const data = {};
 		if (req.body.shortName !== undefined)
 			data.shortName = req.body.shortName?.trim() ?? null;
+		if (req.body.code !== undefined) data.code = req.body.code?.trim() || null;
 		if (req.body.rate !== undefined) {
-			if (req.body.rate === null || req.body.rate === "")
-				return res
-					.status(400)
-					.json({ success: false, message: "Ставка обязательна" });
-			const rateNum = Number(req.body.rate);
-			if (isNaN(rateNum) || rateNum < 0)
-				return res
-					.status(400)
-					.json({ success: false, message: "Ставка должна быть числом ≥ 0" });
-			data.rate = rateNum;
+			if (req.body.rate === null || req.body.rate === "") data.rate = null;
+			else if (!isNaN(Number(req.body.rate))) data.rate = Number(req.body.rate);
 		}
 		if (req.body.calculationMethod !== undefined) {
 			data.calculationMethod =
-				req.body.calculationMethod === "ADDED" ? "ADDED" : "INCLUDED";
+				String(req.body.calculationMethod ?? "INCLUDED").toUpperCase() ===
+				"ADDED"
+					? "ADDED"
+					: "INCLUDED";
 		}
 		const item = await prisma[MODEL].update({ where: w, data });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		if (error.code === "P2002")
+			return res
+				.status(409)
+				.json({ success: false, message: "Код налога должен быть уникальным" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
