@@ -6,7 +6,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Divider, Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { Group, GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -21,8 +21,8 @@ const LIST_NAME = "OutgoingInvoicesList";
 const FORM_LABEL = "СФ исходящая";
 
 const STATUS_OPTIONS = [
-  { value: "draft",     label: translate("statusDraft")     || "Черновик" },
-  { value: "approved",  label: translate("statusApproved")  || "Утверждён" },
+  { value: "draft", label: translate("statusDraft") || "Черновик" },
+  { value: "approved", label: translate("statusApproved") || "Утверждён" },
   { value: "cancelled", label: translate("statusCancelled") || "Отменён" },
 ];
 
@@ -106,57 +106,50 @@ const OutgoingInvoicesForm: FC<Partial<TPane>> = (paneProps) => {
       id: "general",
       label: translate("general") || "Основное",
       component: (
-        <div className={styles.FormBodyParts}>
-          <Group align="row" gap="12px" className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-              <FieldDate label={translate("date") || "Дата"} name={`${form.formUid}_date`} minWidth="200px"
-                value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
-              <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-                <LookupField label={translate("OrganizationsList") || "Организация"} name={`${form.formUid}_org`}
-                  endpoint="organizations" displayField="shortName"
+        <div className={styles.FormWrapper}>
+          <div className={styles.Form}>
+            <GroupCol>
+              <GroupRow>
+                <FieldDate label={translate("date") || "Дата"} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="120px" />
+                <FieldSelect label={translate("status") || "Статус"} name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+              </GroupRow>
+
+              <Group>
+                <LookupField label={translate("OrganizationsList") || "Организация"} name={`${form.formUid}_org`} endpoint="organizations" displayField="shortName"
                   value={form.fields.organizationUuid} displayValue={form.fields.organizationName}
                   onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d })}
                   onClear={() => form.setFields({ organizationUuid: "", organizationName: "" })}
-                  disabled={form.isLoading} width="300px" />
-                <LookupField label={translate("CounterpartiesList") || "Контрагент"} name={`${form.formUid}_cpty`}
-                  endpoint="counterparties" displayField="shortName"
+                  disabled={form.isLoading} />
+              </Group>
+
+              <Group>
+                <LookupField label={translate("CounterpartiesList") || "Контрагент"} name={`${form.formUid}_cpty`} endpoint="counterparties" displayField="shortName"
                   value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName}
                   onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d })}
                   onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" })}
-                  disabled={form.isLoading} width="300px" />
-              </div>
-              <LookupField label={translate("ContractsList") || "Договор"} name={`${form.formUid}_contract`}
-                endpoint="contracts" displayField="shortName"
-                value={form.fields.contractUuid} displayValue={form.fields.contractName}
-                onSelect={handleContractSelect}
-                onClear={() => form.setFields({ contractUuid: "", contractName: "" })}
-                disabled={form.isLoading} width="300px"
-                extraParams={{
-                  ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
-                  ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
-                }}
-              />
-              <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-                <Field label={translate("amount") || "Сумма"} name={`${form.formUid}_amount`} minWidth="200px"
-                  value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
-                <FieldSelect label={translate("status") || "Статус"} name={`${form.formUid}_status`}
-                  options={STATUS_OPTIONS} value={form.fields.status}
-                  onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
-              </div>
-              <FieldTextarea label={translate("description") || "Описание"} name={`${form.formUid}_description`}
-                value={form.fields.description} onChange={e => form.setField("description", e.target.value)}
-                disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
-            </div>
-          </Group>
-          {form.isEditMode && (
-            <>
-              <Divider />
-              <Group align="row" gap="12px" className={styles.Form}>
-                <GroupRow>
-                </GroupRow>
+                  disabled={form.isLoading} />
+                <LookupField label={translate("ContractsList") || "Договор"} name={`${form.formUid}_contract`} endpoint="contracts" displayField="shortName"
+                  value={form.fields.contractUuid} displayValue={form.fields.contractName}
+                  onSelect={handleContractSelect}
+                  onClear={() => form.setFields({ contractUuid: "", contractName: "" })}
+                  disabled={form.isLoading}
+                  extraParams={{
+                    ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
+                    ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
+                  }}
+                />
               </Group>
-            </>
-          )}
+
+              <GroupRow>
+                <Field label={translate("amount") || "Сумма"} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
+              </GroupRow>
+
+              <Group>
+                <FieldTextarea label={translate("description") || "Описание"} name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minHeight="80px" rows={4} />
+              </Group>
+            </GroupCol>
+            {form.isEditMode && (<Divider />)}
+          </div>
         </div>
       ),
     },

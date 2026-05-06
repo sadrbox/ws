@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-floating-promises */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-floating-promises */
 import { FC, useCallback, useMemo, useState } from "react";
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
@@ -8,12 +8,14 @@ import LookupField from "src/components/Field/LookupField";
 import apiClient from "src/services/api/client";
 import SaleItemsForm from "./SaleItemsForm";
 import columnsJson from "./saleItemsColumns.json";
-import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
+import SubTable, { type SubTableContext, type TCellValidator, useSubTableContext } from "src/components/SubTable";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { withSaleItemRecalc, withSaleItemRecalcFromDiscountAmount } from "./saleItemDraft";
 import { getFormatNumerical, parseNumericInput } from "src/components/Table/services";
 import fieldStyles from "src/components/Field/Field.module.scss";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
+import { Toolbar } from "src/components/Toolbar";
+import { useTableContext } from "src/components/Table";
 
 const MODEL_ENDPOINT = "saleitems";
 const COMPONENT_NAME = "SaleItemsList_part";
@@ -340,9 +342,18 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
             { key: "brand.shortName", label: "Бренд" },
           ]}
           onSelect={(uuid, _displayValue, item) => {
-            ctx.handleLookupChange(row, "productUuid", uuid, {
+            const extra: Record<string, unknown> = {
               product: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
-            });
+            };
+            const umUuid = item?.unitOfMeasureUuid as string | undefined;
+            const um = item?.unitOfMeasure as { uuid?: string; shortName?: string; name?: string } | undefined;
+            if (umUuid) {
+              extra.unitOfMeasureUuid = umUuid;
+              extra.unitOfMeasure = um
+                ? { uuid: um.uuid ?? umUuid, shortName: um.shortName ?? um.name ?? "" }
+                : { uuid: umUuid, shortName: "" };
+            }
+            ctx.handleLookupChange(row, "productUuid", uuid, extra);
           }}
           onClear={() => {
             ctx.handleLookupChange(row, "productUuid", null, { product: null });
@@ -511,7 +522,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
     }
 
     return undefined;
-  }, []);
+  }, [withTaxes, recalcWithFlags]);
 
   // ── openFormFor ────────────────────────────────────────────────────────
   const buildItemLabel = (data: TDataItem | undefined, isEdit: boolean) => {
@@ -589,6 +600,26 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
       customInlineChange={customInlineChange}
       validationRules={validationRules}
       requiredFields={requiredFields}
+      extraButtons={
+        <RecalcAllButton
+          disabled={disabled}
+          recalcRow={(row) => {
+            // Заполнение ссылочных значений для незаполненных полей:
+            //   - vatRate из настроек учёта организации (если НДС включён)
+            //   - unitOfMeasure из номенклатуры (product.unitOfMeasureUuid)
+            const refDefaults: Record<string, unknown> = {};
+            if (isVatEnabled && !row.vatRateUuid && orgVatRateUuid && orgVatRate) {
+              refDefaults.vatRateUuid = orgVatRateUuid;
+              refDefaults.vatRate = Number(orgVatRate.rate) || 0;
+            }
+            const product = row.product as { unitOfMeasureUuid?: string | null } | null | undefined;
+            if (!row.unitOfMeasureUuid && product?.unitOfMeasureUuid) {
+              refDefaults.unitOfMeasureUuid = product.unitOfMeasureUuid;
+            }
+            return withTaxes(row, recalcWithFlags(row as any, refDefaults));
+          }}
+        />
+      }
     />
   );
 };
@@ -596,3 +627,67 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
 SaleItemsTable.displayName = "SaleItemsTable";
 export { SaleItemsTable };
 export default SaleItemsTable;
+
+// ─────────────────────────────────────────────────────────────────────────
+// RecalcAllButton — кнопка тулбара "Пересчитать": перевычисляет суммы
+// (количество × цена, скидка, НДС) для всех СТРОК В ТАБЛИЦЕ.
+//
+// Работает чисто на фронтенде через SubTableContext.updateLocalRow:
+//   - не выполняет refetch (документ может быть не сохранён);
+//   - в режиме deferRemoteChanges изменения остаются локальными до save;
+//   - в обычном режиме PUT отправляется параллельно для уже сохранённых
+//     строк (row.uuid), но загрузка таблицы не перезапускается —
+//     UI обновляется сразу через локальный кэш SubTable.
+// ─────────────────────────────────────────────────────────────────────────
+interface RecalcAllButtonProps {
+  disabled?: boolean;
+  recalcRow: (row: TDataItem) => Record<string, unknown>;
+}
+
+const RecalcAllButton: FC<RecalcAllButtonProps> = ({ disabled = false, recalcRow }) => {
+  const subCtx = useSubTableContext();
+  const tableCtx = useTableContext();
+  const [busy, setBusy] = useState(false);
+
+  const handleClick = useCallback(async () => {
+    const rows = subCtx?.rows ?? tableCtx.rows;
+    if (!rows || rows.length === 0) return;
+    setBusy(true);
+    try {
+      // 1) Локальный пересчёт всех строк (включая несохранённые).
+      //    SubTable обновляет кэш и нотифицирует родителя через onItemsChange.
+      const patches: Array<{ row: TDataItem; payload: Record<string, unknown> }> = [];
+      for (const row of rows) {
+        const payload = recalcRow(row);
+        patches.push({ row, payload });
+        subCtx?.updateLocalRow(row, payload);
+      }
+
+      // 2) В обычном (не отложенном) режиме — параллельно сохраняем
+      //    изменения для уже существующих строк. Без refetch.
+      if (!subCtx?.deferRemoteChanges) {
+        await Promise.all(
+          patches.map(({ row, payload }) =>
+            row.uuid
+              ? apiClient.put(`/${MODEL_ENDPOINT}/${row.uuid}`, payload).catch(() => undefined)
+              : Promise.resolve(),
+          ),
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [subCtx, tableCtx, recalcRow]);
+
+  const rowsForCheck = subCtx?.rows ?? tableCtx.rows;
+  const empty = !rowsForCheck || rowsForCheck.length === 0;
+
+  return (
+    <Toolbar.RecalcButton
+      onClick={handleClick}
+      disabled={disabled || busy || empty}
+      title={busy ? "Пересчёт…" : "Пересчитать суммы и итоги по всем строкам"}
+      className={busy ? "spinning" : undefined}
+    />
+  );
+};

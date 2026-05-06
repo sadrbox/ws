@@ -7,7 +7,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
-import { GroupRow } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import ContactsTable from "../Contacts/ContactsTable";
 import AvatarUpload from "src/components/AvatarUpload";
@@ -83,22 +83,20 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
       {
         id: "general", label: translate("general"), component: (
-          <div className={styles.Form}>
-            {form.isEditMode && (
-              <GroupRow>
-              </GroupRow>
-            )}
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-                <Field label="ФИО" name={`${form.formUid}_fullName`} value={form.fields.fullName} onChange={e => form.setField("fullName", e.target.value)} disabled={form.isLoading} />
+          <div className={styles.FormWrapper}>
+            <div className={styles.Form}>
+              <GroupCol>
+                <GroupRow>
+                  <Field label="ФИО" name={`${form.formUid}_fullName`} value={form.fields.fullName} onChange={e => form.setField("fullName", e.target.value)} disabled={form.isLoading} />
+                  {form.isEditMode && form.fields.uuid && (
+                    <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
+                  )}
+                </GroupRow>
                 <OwnerLookupField name={`${form.formUid}_owner`} ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
                   onOwnerChange={({ ownerType, ownerUuid, ownerName }) => form.setFields({ ownerType, ownerUuid, ownerName } as Partial<TFields>)}
                   disabled={form.isLoading} typeLocked={!form.uuid && !!paneProps.data?.ownerType} allowedTypes={["organization", "counterparty"]} />
                 <Field label="Комментарий" name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-              </div>
-              {form.isEditMode && form.fields.uuid && (
-                <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
-              )}
+              </GroupCol>
             </div>
           </div>
         )

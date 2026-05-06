@@ -1032,6 +1032,9 @@ const TableBody = memo(() => {
         <tr>
           <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
         </tr>
+        <tr className={styles.TableFillerRow} aria-hidden="true">
+          <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
+        </tr>
       </tbody>
     );
   }
@@ -1059,6 +1062,13 @@ const TableBody = memo(() => {
           </td>
         </tr>
       )}
+
+      {/* Filler row: поглощает остаток высоты, чтобы tfoot прижимался
+          к низу TableScrollWrapper, при этом обычные строки tbody
+          сохраняют свою фиксированную высоту. */}
+      <tr className={styles.TableFillerRow} aria-hidden="true">
+        <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
+      </tr>
     </tbody>
   );
 });
@@ -1239,6 +1249,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         onDoubleClick={handleDoubleClick}
         className={trClassName}
         data-active={isActive || undefined}
+        data-primary={row.isPrimary ? "true" : undefined}
       >
         {variant !== 'select' && (
           <td className={styles.CellCenter}>

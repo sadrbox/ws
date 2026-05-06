@@ -1,4 +1,5 @@
 import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDate } from "src/utils/main.module";
 import { TColumn, TDataItem, TypeTableTypes } from "./types";
 
 const getNestedValue = <T>(obj: T, path: string): any => {
@@ -148,6 +149,8 @@ export function getFormatColumnValue(
 		return rawValue + "";
 	} else if (column.type === "date") {
 		return getFormatDateOnly(rawValue as string);
+	} else if (column.type === "datetime") {
+		return getFormatDate(rawValue as string);
 	} else if (column.type === "string") {
 		return rawValue != null ? rawValue + "" : "";
 	} else if (column.type === "boolean") {

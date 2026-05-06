@@ -55,7 +55,8 @@
 		"visible": true,
 		"width": "100px",
 		"minWidth": "80px",
-		"alignment": "right"
+		"alignment": "right",
+		"footer": "sum"
 	},
 	{
 		"identifier": "price",
@@ -99,7 +100,8 @@
 		"visible": true,
 		"width": "90px",
 		"minWidth": "70px",
-		"alignment": "right"
+		"alignment": "right",
+		"footer": "sum"
 	},
 	{
 		"identifier": "vatRateRef.shortName",
@@ -121,7 +123,8 @@
 		"visible": true,
 		"width": "100px",
 		"minWidth": "70px",
-		"alignment": "right"
+		"alignment": "right",
+		"footer": "sum"
 	},
 	{
 		"identifier": "amount",
@@ -132,6 +135,7 @@
 		"visible": true,
 		"width": "110px",
 		"minWidth": "80px",
-		"alignment": "right"
+		"alignment": "right",
+		"footer": "sum"
 	}
 ]

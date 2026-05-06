@@ -25,11 +25,15 @@
  */
 
 import { FC, forwardRef, type ButtonHTMLAttributes, type ImgHTMLAttributes, type ReactNode } from "react";
-import reload_16 from "src/assets/reload_16.png";
-import settingsForm_16 from "src/assets/form-setting_16.png";
+import reload_16 from "src/assets/reload_16.svg";
+import settingsForm_16 from "src/assets/form-setting_16.svg";
 import calendar_16 from "src/assets/calendar_16.png";
-import searchField_16 from "src/assets/search-field_16.png";
+import searchField_16 from "src/assets/search-field_16.svg";
 import editInlineIcon from "src/assets/edit-inline_16.svg";
+import makePrimaryIcon from "src/assets/make-primary_16.svg";
+import recalcIcon from "src/assets/recalc_16.svg";
+import closeIcon from "src/assets/close-x_16.svg";
+import closeIconHover from "src/assets/close-x-hover_16.svg";
 import styles from "./Toolbar.module.scss";
 
 // ─── Toolbar (контейнер) ────────────────────────────────────────────────
@@ -125,6 +129,16 @@ const InlineEditButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (prop
 );
 InlineEditButton.displayName = "Toolbar.InlineEditButton";
 
+const MakePrimaryButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (props) => (
+  <ImageButton src={makePrimaryIcon} alt="Сделать основным" title="Сделать основным" {...props} />
+);
+MakePrimaryButton.displayName = "Toolbar.MakePrimaryButton";
+
+const RecalcButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (props) => (
+  <ImageButton src={recalcIcon} alt="Пересчитать" title="Пересчитать" {...props} />
+);
+RecalcButton.displayName = "Toolbar.RecalcButton";
+
 // ─── Toolbar.CloseButton — кнопка закрытия с hover-эффектом (синий → красный) ───
 
 type CloseButtonProps = Omit<IconButtonProps, "children">;
@@ -135,8 +149,8 @@ const CloseButton: FC<CloseButtonProps> = ({ className, ...props }) => (
     title="Закрыть"
     {...props}
   >
-    <div className={styles.CloseIcon}>✕</div>
-    <div className={styles.CloseIconHover} style={{ filter: "invert(19%) sepia(95%) saturate(7477%) hue-rotate(359deg) brightness(98%) contrast(113%)" }}>✕</div>
+    <ToolbarImage src={closeIcon} alt="Закрыть" className={styles.CloseIcon} />
+    <ToolbarImage src={closeIconHover} alt="Закрыть" className={styles.CloseIconHover} />
   </IconButton>
 );
 CloseButton.displayName = "Toolbar.CloseButton";
@@ -154,6 +168,8 @@ type ToolbarComponent = typeof ToolbarRoot & {
   PeriodButton: typeof PeriodButton;
   SearchButton: typeof SearchButton;
   InlineEditButton: typeof InlineEditButton;
+  MakePrimaryButton: typeof MakePrimaryButton;
+  RecalcButton: typeof RecalcButton;
   CloseButton: typeof CloseButton;
 };
 
@@ -168,6 +184,8 @@ Toolbar.SettingsButton = SettingsButton;
 Toolbar.PeriodButton = PeriodButton;
 Toolbar.SearchButton = SearchButton;
 Toolbar.InlineEditButton = InlineEditButton;
+Toolbar.MakePrimaryButton = MakePrimaryButton;
+Toolbar.RecalcButton = RecalcButton;
 Toolbar.CloseButton = CloseButton;
 
 export {
@@ -182,6 +200,8 @@ export {
   PeriodButton,
   SearchButton,
   InlineEditButton,
+  MakePrimaryButton,
+  RecalcButton,
   CloseButton,
 };
 export default Toolbar;

@@ -308,7 +308,7 @@
 	"discountPercent": "Скидка %",
 	"discountAmount": "Скидка",
 	"vatRate": "НДС %",
-	"vatAmount": "НДС",
+	"vatAmount": "Сумма НДС",
 	"warehouse.shortName": "Склад",
 
 	"PayrollCalculationsList": "Начисление ЗП",

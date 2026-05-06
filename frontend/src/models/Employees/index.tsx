@@ -6,7 +6,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import historyColumnsJson from "./historyColumns.json";
 import { useQueryClient } from "@tanstack/react-query";
-import { Field, FieldNumber, FieldSelect } from "src/components/Field";
+import { Field, FieldNumber, FieldSelect, FieldDate } from "src/components/Field";
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useAppContext } from "src/app";
@@ -201,7 +201,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     if (col.identifier === "eventDate") {
       const val = typeof row.eventDate === "string" ? row.eventDate.slice(0, 10) : "";
-      if (ctx.inlineEditing) return <input type="date" value={val} onChange={e => ctx.handleInlineChange(row, "eventDate", e.target.value)} disabled={ctx.disabled} style={{ border: "none", background: "transparent", padding: "2px 4px", width: "100%", fontSize: 13 }} />;
+      if (ctx.inlineEditing) return <FieldDate label="" name={`hist_eventDate_${row.id}`} value={val} onChange={e => ctx.handleInlineChange(row, "eventDate", e.target.value)} disabled={ctx.disabled} variant="table" />;
       return <span>{val ? getFormatDateOnly(val) : ""}</span>;
     }
     if (col.identifier === "eventType") {

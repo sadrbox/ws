@@ -13,6 +13,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
@@ -216,11 +217,14 @@ export interface BankAccountsTableProps {
   onItemsChange?: (items: TDataItem[]) => void;
   /** Начальные pending-строки */
   initialPendingRows?: TDataItem[];
+  /** Показать кнопку "Сделать основным" в тулбаре */
+  showPrimaryButton?: boolean;
 }
 
 const BankAccountsTable: FC<BankAccountsTableProps> = ({
   ownerType, parentUuid, parentName = "", disabled = false,
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
+  showPrimaryButton = false,
 }) => {
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
@@ -289,6 +293,7 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
+      extraButtons={showPrimaryButton ? <PrimaryToolbarButton endpoint={BA_TABLE_ENDPOINT} disabled={disabled} /> : undefined}
     />
   );
 };

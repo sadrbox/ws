@@ -89,8 +89,8 @@
 		"hint": "Дата последнего изменения",
 		"type": "datetime",
 		"position": 8,
-		"visible": true,
-		"inlist": true,
+		"visible": false,
+		"inlist": false,
 		"width": "160px",
 		"minWidth": "120px",
 		"alignment": "left"

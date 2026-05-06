@@ -134,17 +134,18 @@ table {
 	border-collapse: separate;
 	border-spacing: 0;
 	width: 100%;
-	// height: 100%;
+	height: 100%;
 	table-layout: fixed;
 }
 
 thead {
-	background: $color30;
+	background: $color31;
 	position: sticky;
 	top: 0;
 	z-index: 2;
 
-	// box-shadow: 0 0px 6px 2px rgba($color6, 0.3);
+	box-shadow: 0 0px 6px 2px rgba($color6, 0.3);
+
 	tr {
 		th {
 			padding: 0;
@@ -179,7 +180,7 @@ thead {
 		.TableHeaderCell {
 			display: flex;
 			align-items: center;
-			height: $heightFieldInput - 1px;
+			height: $heightFieldInput - 3px;
 			padding: 1px;
 			// margin: 1px;
 			overflow: hidden;
@@ -213,21 +214,51 @@ thead {
 	}
 
 	&::after {
-		content: "";
-		position: absolute;
-		top: $heightFieldInput + 2px;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		height: 0px;
-		background: $color10;
-		box-shadow: 0 0px 6px 2px rgba($color6, 0.3);
+		// z-index: 9;
+		// content: "";
+		// position: absolute;
+		// // top: $heightFieldInput + 2px;
+		// left: 0;
+		// right: 0;
+		// bottom: 0;
+		// height: 1px;
+		// background: $color5;
+		// box-shadow: 0 2px 3px 1px rgba($color5, 0.8);
 	}
 }
 
 tr:has(+ tr.activeRow) {
 	td {
 		border-bottom: 1px solid $color1 !important;
+	}
+}
+
+tr[data-primary="true"] {
+	td .TableBodyCell {
+		font-weight: 700 !important;
+
+		// Применяем bold ко всем потомкам, включая span/input/select
+		// и кастомные рендеры ячеек (LookupField и т.п.)
+		* {
+			font-weight: 700 !important;
+		}
+	}
+}
+
+/* Filler row — занимает остаток высоты, чтобы tfoot прижимался
+   к низу TableScrollWrapper. Реальные строки tbody при этом
+   сохраняют свою фиксированную высоту. */
+.TableFillerRow {
+	height: 100%;
+
+	td {
+		padding: 0 !important;
+		border: 0 !important;
+		background: transparent !important;
+
+		&::after {
+			display: none !important;
+		}
 	}
 }
 
@@ -240,6 +271,7 @@ tbody {
 	contain: layout style paint;
 	// will-change: contents;
 	// contain: content;
+	position: relative;
 
 	tr {
 		// cursor: pointer;
@@ -350,14 +382,16 @@ tbody {
 			border: 0 solid transparent;
 		}
 	}
+
 }
 
 /* tfoot — итоги колонок, sticky bottom внутри скролла, в стиле thead */
 tfoot {
-	background: $color30;
+	background: $color31;
 	position: sticky;
 	bottom: 0;
-	z-index: 2;
+	// z-index: 9992;
+	box-shadow: 0 0px 6px 0px rgba($color6, 0.3);
 
 	tr {
 		td {
@@ -365,19 +399,20 @@ tfoot {
 			padding: 0;
 			font-weight: 500;
 			user-select: none;
-			border-top: 0;
+			border-top: 1px solid $color34;
 			border-bottom: 0;
-			border-right: 1px solid transparent !important;
+			border-right: 1px solid $color34;
+			// border-right: 1px solid transparent !important;
 
 			&::after {
-				content: "";
-				position: absolute;
-				top: 0;
-				right: -1px;
-				bottom: 0;
-				height: 100%;
-				width: 1px;
-				border-right: 1px solid $color34;
+				// content: "";
+				// position: absolute;
+				// top: 0;
+				// right: -1px;
+				// bottom: 0;
+				// height: 100%;
+				// width: 1px;
+				// border-right: 1px solid $color34;
 			}
 
 			&:first-child {
@@ -391,7 +426,7 @@ tfoot {
 			.TableFooterCell {
 				display: flex;
 				align-items: center;
-				height: $heightFieldInput - 4px;
+				height: $heightFieldInput - 3px;
 				padding: 1px;
 				margin: 1px;
 				overflow: hidden;
@@ -412,16 +447,18 @@ tfoot {
 	}
 
 	// Линия-тень сверху — не участвует в border-collapse, всегда видна
-	&::before {
-		content: "";
-		position: absolute;
-		left: 0;
-		right: 0;
-		top: 0;
-		height: 1px;
-		background: $color34;
-		// box-shadow: 0 -1px 3px 1px rgba($color6, 0.3);
-	}
+	// &::before {
+	// 	z-index: 9;
+	// 	content: "";
+	// 	position: absolute;
+	// 	top: 0;
+	// 	left: 0;
+	// 	right: 0;
+	// 	// height: 1px;
+	// 	// bottom: $heightFieldInput + 2px;
+	// 	background: $color5;
+	// 	box-shadow: 0 -2px 3px 1px rgba($color5, 0.6);
+	// }
 }
 
 /* TableStatusBar — строка состояния, снаружи скролла, всегда внизу TableWrapper */
@@ -1004,9 +1041,17 @@ input[type="checkbox"] {
 }
 
 /* Выравнивание ячеек по типу колонки */
-.JustifyLeft   { justify-content: left; }
-.JustifyRight  { justify-content: right; }
-.JustifyCenter { justify-content: center; }
+.JustifyLeft {
+	justify-content: left;
+}
+
+.JustifyRight {
+	justify-content: right;
+}
+
+.JustifyCenter {
+	justify-content: center;
+}
 
 /* Состояния строки */
 .RowLoading {

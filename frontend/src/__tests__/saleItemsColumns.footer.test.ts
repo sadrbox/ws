@@ -1,0 +1,25 @@
+import { describe, it, expect } from "vitest";
+import columns from "src/models/Sales/saleItemsColumns.json";
+
+interface Col {
+	identifier: string;
+	footer?: string;
+}
+
+describe("saleItemsColumns: footer aggregates", () => {
+	const byId = (id: string) =>
+		(columns as Col[]).find((c) => c.identifier === id);
+
+	it.each(["quantity", "discountAmount", "vatAmount", "amount"])(
+		"колонка %s имеет footer='sum'",
+		(id) => {
+			expect(byId(id)?.footer).toBe("sum");
+		},
+	);
+
+	it("колонки product/price/discountPercent не имеют footer", () => {
+		expect(byId("product.shortName")?.footer).toBeUndefined();
+		expect(byId("price")?.footer).toBeUndefined();
+		expect(byId("discountPercent")?.footer).toBeUndefined();
+	});
+});

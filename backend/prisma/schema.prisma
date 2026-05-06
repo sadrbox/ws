@@ -139,6 +139,7 @@ model Contract {
   endDate           DateTime?
   organizationUuid  String?
   counterpartyUuid  String?
+  isPrimary         Boolean            @default(false)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @default(now()) @updatedAt
   deletedAt         DateTime?
@@ -242,6 +243,7 @@ model BankAccount {
   shortName        String?
   currencyUuid     String?
   organizationUuid String?
+  isPrimary        Boolean       @default(false)
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   currency         Currency?     @relation(fields: [currencyUuid], references: [uuid])

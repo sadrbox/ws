@@ -34,7 +34,17 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				const s = JSON.parse(sortParam);
 				if (s && typeof s === "object")
 					for (const [f, d] of Object.entries(s)) {
-						if (d === "asc" || d === "desc") orderBy.push({ [f]: d });
+						if (d !== "asc" && d !== "desc") continue;
+						if (f.includes(".")) {
+							const parts = f.split(".");
+							let nested = { [parts[parts.length - 1]]: d };
+							for (let i = parts.length - 2; i >= 0; i--) {
+								nested = { [parts[i]]: nested };
+							}
+							orderBy.push(nested);
+						} else {
+							orderBy.push({ [f]: d });
+						}
 					}
 			} catch {}
 		}
@@ -82,7 +92,12 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			orderBy,
-			include: { organization: true, counterparty: true, contract: true, warehouse: true },
+			include: {
+				organization: true,
+				counterparty: true,
+				contract: true,
+				warehouse: true,
+			},
 		};
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };
@@ -117,7 +132,12 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const item = await prisma[MODEL].findUnique({
 			where: w,
-			include: { organization: true, counterparty: true, contract: true, warehouse: true },
+			include: {
+				organization: true,
+				counterparty: true,
+				contract: true,
+				warehouse: true,
+			},
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
@@ -149,9 +169,11 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				date: date ? new Date(date) : new Date(),
 				description: description?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
-				amountWithoutVat: amountWithoutVat != null ? parseFloat(amountWithoutVat) : null,
+				amountWithoutVat:
+					amountWithoutVat != null ? parseFloat(amountWithoutVat) : null,
 				vatAmount: vatAmount != null ? parseFloat(vatAmount) : null,
-				discountAmount: discountAmount != null ? parseFloat(discountAmount) : null,
+				discountAmount:
+					discountAmount != null ? parseFloat(discountAmount) : null,
 				status: status || "draft",
 				posted: posted === true,
 				organizationUuid: organizationUuid || null,
@@ -159,7 +181,12 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				contractUuid: contractUuid || null,
 				warehouseUuid: warehouseUuid || null,
 			},
-			include: { organization: true, counterparty: true, contract: true, warehouse: true },
+			include: {
+				organization: true,
+				counterparty: true,
+				contract: true,
+				warehouse: true,
+			},
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -189,26 +216,33 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		}
 		if (req.body.posted !== undefined) data.posted = req.body.posted === true;
 		if (req.body.date !== undefined)
-			data.date = req.body.date
-				? new Date(req.body.date)
-				: null;
+			data.date = req.body.date ? new Date(req.body.date) : null;
 		if (req.body.amount !== undefined)
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
 		if (req.body.amountWithoutVat !== undefined)
 			data.amountWithoutVat =
-				req.body.amountWithoutVat != null ? parseFloat(req.body.amountWithoutVat) : null;
+				req.body.amountWithoutVat != null
+					? parseFloat(req.body.amountWithoutVat)
+					: null;
 		if (req.body.vatAmount !== undefined)
 			data.vatAmount =
 				req.body.vatAmount != null ? parseFloat(req.body.vatAmount) : null;
 		if (req.body.discountAmount !== undefined)
 			data.discountAmount =
-				req.body.discountAmount != null ? parseFloat(req.body.discountAmount) : null;
+				req.body.discountAmount != null
+					? parseFloat(req.body.discountAmount)
+					: null;
 
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
-			include: { organization: true, counterparty: true, contract: true, warehouse: true },
+			include: {
+				organization: true,
+				counterparty: true,
+				contract: true,
+				warehouse: true,
+			},
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

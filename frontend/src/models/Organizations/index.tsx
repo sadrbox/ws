@@ -97,6 +97,8 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const bankAccounts = form.useTable("bankAccounts");
   const contracts = form.useTable("contracts");
 
+  const ownerUuid = form.fields.uuid ?? "";
+
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
       {
@@ -122,6 +124,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           parentName={form.fields.shortName}
           initialPendingRows={bankAccounts.pending}
           onItemsChange={bankAccounts.onItemsChange}
+          showPrimaryButton={form.isEditMode && canWrite}
         />
       ),
     });
@@ -134,6 +137,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           parentName={form.fields.shortName}
           initialPendingRows={contracts.pending}
           onItemsChange={contracts.onItemsChange}
+          showPrimaryButton={form.isEditMode && canWrite}
         />
       ),
     });
@@ -150,7 +154,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       ),
     });
     return result;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts, canWrite, ownerUuid]);
 
   return (
     <ModelForm

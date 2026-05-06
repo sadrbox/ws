@@ -687,10 +687,6 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>Справочники</h3>
             <ul className={styles.NavList}>
               {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>}
-              {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList })}>Единицы измерения</li>}
-              {can("VatRate") && <li onClick={() => addPane({ component: VatRatesList })}>Ставки НДС</li>}
-              {can("Tax") && <li onClick={() => addPane({ component: TaxesList })}>Налоги</li>}
-              {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>Настройки учёта организации</li>}
               {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>}
             </ul>
           </div>
@@ -750,6 +746,15 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("Contact") && <li onClick={() => addPane({ component: ContactsList })}>Контакты</li>}
               {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>}
               {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList })}>Валюты</li>}
+            </ul>
+          </div>
+          <div className={styles.NavGroup}>
+            <h3>Учёт</h3>
+            <ul className={styles.NavList}>
+              {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>Настройки учёта организации</li>}
+              {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList })}>Единицы измерения</li>}
+              {can("VatRate") && <li onClick={() => addPane({ component: VatRatesList })}>Ставки НДС</li>}
+              {can("Tax") && <li onClick={() => addPane({ component: TaxesList })}>Налоги</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>

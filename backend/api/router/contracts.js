@@ -50,6 +50,10 @@ router.get("/contracts", async (req, res) => {
 			if (!orderBy.some((o) => "id" in o)) orderBy.push({ id: "asc" });
 		}
 
+		// «Основной» договор всегда первым в списке независимо от
+		// пользовательской сортировки колонок.
+		orderBy.unshift({ isPrimary: "desc" });
+
 		const TEXT_FIELDS = ["shortName", "contractNumber"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
@@ -111,11 +115,17 @@ router.get("/contracts", async (req, res) => {
 		// Значение uuid → фильтр по конкретной записи.
 		// Не передан параметр → нет фильтра.
 		const fkFilter = {};
-		if (typeof req.query.organizationUuid === "string" && req.query.organizationUuid.trim()) {
+		if (
+			typeof req.query.organizationUuid === "string" &&
+			req.query.organizationUuid.trim()
+		) {
 			const orgVal = req.query.organizationUuid.trim();
 			fkFilter.organizationUuid = orgVal === "null" ? null : orgVal;
 		}
-		if (typeof req.query.counterpartyUuid === "string" && req.query.counterpartyUuid.trim()) {
+		if (
+			typeof req.query.counterpartyUuid === "string" &&
+			req.query.counterpartyUuid.trim()
+		) {
 			const cptyVal = req.query.counterpartyUuid.trim();
 			if (cptyVal === "null") {
 				// только договора без контрагента
@@ -187,6 +197,21 @@ router.get("/contracts/:id", async (req, res) => {
 	}
 });
 
+// Build owner-scope WHERE for isPrimary uniqueness on Contract.
+// Контракт может принадлежать организации, контрагенту или обоим одновременно.
+// SubTable отображает контракты по organizationUuid (в OrganizationsForm)
+// либо по counterpartyUuid (в CounterpartiesForm). Чтобы в каждом таком
+// списке был ровно один primary, при установке isPrimary=true сбрасываем
+// флаг у ВСЕХ контрактов, разделяющих хотя бы одно общее значение owner-поля
+// (organizationUuid ИЛИ counterpartyUuid).
+function buildContractOwnerScope({ organizationUuid, counterpartyUuid }) {
+	const or = [];
+	if (organizationUuid) or.push({ organizationUuid });
+	if (counterpartyUuid) or.push({ counterpartyUuid });
+	if (or.length === 0) return null;
+	return or.length === 1 ? or[0] : { OR: or };
+}
+
 router.post("/contracts", async (req, res) => {
 	try {
 		const {
@@ -197,23 +222,39 @@ router.post("/contracts", async (req, res) => {
 			endDate,
 			organizationUuid,
 			counterpartyUuid,
+			isPrimary,
 		} = req.body;
 		if (!shortName || typeof shortName !== "string")
 			return res
 				.status(400)
 				.json({ success: false, message: "shortName required" });
 
-		const item = await prisma.contract.create({
-			data: {
-				shortName: shortName.trim(),
-				contractNumber: contractNumber?.trim() ?? null,
-				contractText: contractText ?? null,
-				startDate: startDate ? new Date(startDate) : null,
-				endDate: endDate ? new Date(endDate) : null,
-				organizationUuid: organizationUuid || null,
-				counterpartyUuid: counterpartyUuid || null,
-			},
-			include: { organization: true, counterparty: true },
+		const makePrimary = isPrimary === true;
+		const createData = {
+			shortName: shortName.trim(),
+			contractNumber: contractNumber?.trim() ?? null,
+			contractText: contractText ?? null,
+			startDate: startDate ? new Date(startDate) : null,
+			endDate: endDate ? new Date(endDate) : null,
+			organizationUuid: organizationUuid || null,
+			counterpartyUuid: counterpartyUuid || null,
+			isPrimary: makePrimary,
+		};
+
+		const item = await prisma.$transaction(async (tx) => {
+			if (makePrimary) {
+				const scope = buildContractOwnerScope(createData);
+				if (scope) {
+					await tx.contract.updateMany({
+						where: { ...scope, isPrimary: true },
+						data: { isPrimary: false },
+					});
+				}
+			}
+			return tx.contract.create({
+				data: createData,
+				include: { organization: true, counterparty: true },
+			});
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -236,6 +277,7 @@ router.put("/contracts/:id", async (req, res) => {
 			endDate,
 			organizationUuid,
 			counterpartyUuid,
+			isPrimary,
 		} = req.body;
 
 		const data = {};
@@ -251,11 +293,29 @@ router.put("/contracts/:id", async (req, res) => {
 			data.organizationUuid = organizationUuid || null;
 		if (counterpartyUuid !== undefined)
 			data.counterpartyUuid = counterpartyUuid || null;
+		if (isPrimary !== undefined) data.isPrimary = !!isPrimary;
 
-		const item = await prisma.contract.update({
-			where: whereClause,
-			data,
-			include: { organization: true, counterparty: true },
+		const item = await prisma.$transaction(async (tx) => {
+			if (data.isPrimary === true) {
+				const current = await tx.contract.findUnique({ where: whereClause });
+				if (current) {
+					const scope = buildContractOwnerScope({
+						organizationUuid: data.organizationUuid ?? current.organizationUuid,
+						counterpartyUuid: data.counterpartyUuid ?? current.counterpartyUuid,
+					});
+					if (scope) {
+						await tx.contract.updateMany({
+							where: { ...scope, isPrimary: true, NOT: { uuid: current.uuid } },
+							data: { isPrimary: false },
+						});
+					}
+				}
+			}
+			return tx.contract.update({
+				where: whereClause,
+				data,
+				include: { organization: true, counterparty: true },
+			});
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

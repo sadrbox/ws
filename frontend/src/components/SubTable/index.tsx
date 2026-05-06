@@ -9,6 +9,7 @@
  */
 import {
   FC, useMemo, useCallback, useState, useEffect, useRef, ReactNode,
+  createContext, useContext,
 } from "react";
 import { getModelColumns, getFormatColumnValue, sortTableRows } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -197,6 +198,21 @@ export interface SubTableContext {
 function getRowId(row: TDataItem): string {
   return row.uuid || String(row.id);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// React Context для доступа к SubTableContext из дочерних элементов
+// (например — из кнопок, переданных через extraButtons).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SubTableInternalContext = createContext<SubTableContext | null>(null);
+
+/**
+ * Хук для доступа к SubTableContext из любого компонента, отрендеренного
+ * внутри SubTable (включая extraButtons). Возвращает null, если вызван
+ * вне SubTable.
+ */
+export const useSubTableContext = (): SubTableContext | null =>
+  useContext(SubTableInternalContext);
 
 /** Сравнение по бизнес-id (uuid приоритетнее, fallback на числовой id) */
 function isSameRow(a: TDataItem, b: TDataItem): boolean {
@@ -954,7 +970,7 @@ const SubTable: FC<SubTableProps> = ({
     );
   }
 
-  return <div ref={containerRef} className={styles.SubTableHost}><Table {...tableProps} /></div>;
+  return <div ref={containerRef} className={styles.SubTableHost}><SubTableInternalContext.Provider value={ctx}><Table {...tableProps} /></SubTableInternalContext.Provider></div>;
 };
 
 SubTable.displayName = "SubTable";

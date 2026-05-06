@@ -14,6 +14,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { getFormatDateOnly } from "src/utils/main.module";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
@@ -199,11 +200,14 @@ export interface ContractsTableProps {
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
   initialPendingRows?: TDataItem[];
+  /** Показать кнопку "Сделать основным" в тулбаре */
+  showPrimaryButton?: boolean;
 }
 
 const ContractsTable: FC<ContractsTableProps> = ({
   parentKey, parentUuid, parentName = "", disabled = false,
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
+  showPrimaryButton = false,
 }) => {
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
@@ -219,12 +223,12 @@ const ContractsTable: FC<ContractsTableProps> = ({
     }
     if (col.identifier === "startDate") {
       const val = typeof row.startDate === "string" ? row.startDate.slice(0, 10) : "";
-      if (ctx.inlineEditing) return <input type="date" value={val} onChange={e => ctx.handleInlineChange(row, "startDate", e.target.value)} disabled={ctx.disabled} style={{ border: "none", background: "transparent", padding: "2px 4px", width: "100%", fontSize: 13 }} />;
+      if (ctx.inlineEditing) return <FieldDate label="" name={`ct_startDate_${row.id}`} value={val} onChange={e => ctx.handleInlineChange(row, "startDate", e.target.value)} disabled={ctx.disabled} variant="table" />;
       return <span>{val ? getFormatDateOnly(val) : ""}</span>;
     }
     if (col.identifier === "endDate") {
       const val = typeof row.endDate === "string" ? row.endDate.slice(0, 10) : "";
-      if (ctx.inlineEditing) return <input type="date" value={val} onChange={e => ctx.handleInlineChange(row, "endDate", e.target.value)} disabled={ctx.disabled} style={{ border: "none", background: "transparent", padding: "2px 4px", width: "100%", fontSize: 13 }} />;
+      if (ctx.inlineEditing) return <FieldDate label="" name={`ct_endDate_${row.id}`} value={val} onChange={e => ctx.handleInlineChange(row, "endDate", e.target.value)} disabled={ctx.disabled} variant="table" />;
       return <span>{val ? getFormatDateOnly(val) : ""}</span>;
     }
     if (col.identifier === "counterparty.shortName") {
@@ -295,6 +299,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
+      extraButtons={showPrimaryButton ? <PrimaryToolbarButton endpoint={CR_TABLE_ENDPOINT} disabled={disabled} /> : undefined}
     />
   );
 };

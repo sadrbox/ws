@@ -6,7 +6,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import LookupField from "src/components/Field/LookupField";
-import { Field } from "src/components/Field";
+import { FieldDate } from "src/components/Field";
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -55,6 +55,7 @@ const DEFAULT_FIELDS: TFields = {
 // ─────────────────────────────────────────────────────────────────────────
 const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("OrganizationAccountingSetting");
+  const queryClient = useQueryClient();
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT,
@@ -95,8 +96,16 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
         LIST_NAME,
         "Настройки учёта организации",
         saved,
-        orgName ?? (form.fields.organizationName || "Глобальные"),
+        orgName ?? "Глобальные",
       );
+    },
+    afterSave: () => {
+      // Сбрасываем кэш активных настроек, чтобы SaleItemsTable
+      // и др. подписчики useOrgAccountingSettings немедленно
+      // увидели новое состояние НДС/скидок.
+      void queryClient.invalidateQueries({
+        queryKey: ["organization-accounting-settings", "active"],
+      });
     },
   });
 
@@ -132,14 +141,14 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   disabled={form.isLoading || !canWrite}
                   width="320px"
                 />
-                <Field
+                <FieldDate
                   label="Дата начала *"
                   name={`${form.formUid}_startDate`}
-                  type="date"
                   value={form.fields.startDate}
                   onChange={(e) => form.setField("startDate", e.target.value)}
                   disabled={form.isLoading || !canWrite}
                   minWidth="180px"
+                  required
                 />
                 <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
                   Если организация не выбрана — настройки считаются глобальными.

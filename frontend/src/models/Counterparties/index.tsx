@@ -6,7 +6,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
 import { Field } from "src/components/Field";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import BankAccountsTable from "../BankAccounts/BankAccountsTable";
 import ContractsTable from "../Contracts/ContractsTable";
@@ -58,16 +58,14 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   const bankAccounts = form.useTable("bankAccounts");
   const contracts = form.useTable("contracts");
 
+  const ownerUuid = form.fields.uuid ?? "";
+
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
       {
         id: "tab0", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
-              {form.isEditMode && (
-                <GroupRow>
-                </GroupRow>
-              )}
               <GroupCol>
                 <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
                 <Field label="Полное наименование" name={`${form.formUid}_displayName`} minWidth="339px" value={form.fields.displayName} onChange={e => form.setField("displayName", e.target.value)} disabled={form.isLoading} />
@@ -80,12 +78,12 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
     ];
     if (canReadBankAccounts) result.push({
       id: "tab1", label: translate("BankAccountsList"), component: (
-        <BankAccountsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={bankAccounts.pending} onItemsChange={bankAccounts.onItemsChange} />
+        <BankAccountsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={bankAccounts.pending} onItemsChange={bankAccounts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
       )
     });
     if (canReadContracts) result.push({
       id: "tab2", label: translate("ContractsList"), component: (
-        <ContractsTable deferRemoteChanges parentKey="counterpartyUuid" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contracts.pending} onItemsChange={contracts.onItemsChange} />
+        <ContractsTable deferRemoteChanges parentKey="counterpartyUuid" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contracts.pending} onItemsChange={contracts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
       )
     });
     if (canReadContacts) result.push({
@@ -94,7 +92,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
       )
     });
     return result;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts, canWrite, ownerUuid]);
 
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}

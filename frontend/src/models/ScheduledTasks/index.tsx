@@ -6,7 +6,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDateTime, FieldSelect, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
@@ -58,23 +58,23 @@ const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const tabs = useMemo(() => [
-    { id: "general", label: translate("general"), component: (
-      <div className={styles.Form}>
-        {form.isEditMode && (
-          <GroupRow>
-          </GroupRow>
-        )}
-        <GroupCol>
-          <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
-          <Field label="Cron выражение" name={`${form.formUid}_cron`} minWidth="339px" value={form.fields.cronExpr} onChange={e => form.setField("cronExpr", e.target.value)} disabled={form.isLoading} />
-          <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
-          <FieldDateTime label="Последний запуск" name={`${form.formUid}_lastRun`} minWidth="200px" value={form.fields.lastRunAt} onChange={e => form.setField("lastRunAt", e.target.value)} disabled={form.isLoading} />
-          <FieldDateTime label="Следующий запуск" name={`${form.formUid}_nextRun`} minWidth="200px" value={form.fields.nextRunAt} onChange={e => form.setField("nextRunAt", e.target.value)} disabled={form.isLoading} />
-          <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-          <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
-        </GroupCol>
-      </div>
-    )},
+    {
+      id: "general", label: translate("general"), component: (
+        <div className={styles.FormWrapper}>
+          <div className={styles.Form}>
+            <GroupCol>
+              <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
+              <Field label="Cron выражение" name={`${form.formUid}_cron`} minWidth="339px" value={form.fields.cronExpr} onChange={e => form.setField("cronExpr", e.target.value)} disabled={form.isLoading} />
+              <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+              <FieldDateTime label="Последний запуск" name={`${form.formUid}_lastRun`} minWidth="200px" value={form.fields.lastRunAt} onChange={e => form.setField("lastRunAt", e.target.value)} disabled={form.isLoading} />
+              <FieldDateTime label="Следующий запуск" name={`${form.formUid}_nextRun`} minWidth="200px" value={form.fields.nextRunAt} onChange={e => form.setField("nextRunAt", e.target.value)} disabled={form.isLoading} />
+              <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+              <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
+            </GroupCol>
+          </div>
+        </div>
+      )
+    },
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);
 
   return (

@@ -141,9 +141,14 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
                 { key: "sku", label: "Артикул" },
                 { key: "brand.shortName", label: "Бренд" },
               ]}
-              onSelect={(uuid, display) =>
-                setFields({ productUuid: uuid, productName: display })
-              }
+              onSelect={(uuid, display, item) => {
+                const upd: Partial<TFields> = { productUuid: uuid, productName: display };
+                const umUuid = item?.unitOfMeasureUuid as string | undefined;
+                const umName = (item?.unitOfMeasure?.shortName ?? item?.unitOfMeasure?.name) as string | undefined;
+                if (umUuid) upd.unitOfMeasureUuid = umUuid;
+                if (umName) upd.unitOfMeasureName = umName;
+                setFields(upd);
+              }}
               onClear={() =>
                 setFields({ productUuid: "", productName: "" })
               }
