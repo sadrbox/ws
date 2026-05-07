@@ -161,7 +161,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
             <FieldNumber
               label="Количество"
               name={`${formUid}_qty`}
-              value={fields.quantity}
+              value={String(fields.quantity)}
               onChange={e => handleNumericChange("quantity", e.target.value)}
               disabled={isLoading}
               step="0.1"
@@ -171,7 +171,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
             <FieldNumber
               label="Цена"
               name={`${formUid}_price`}
-              value={fields.price}
+              value={String(fields.price)}
               onChange={e => handleNumericChange("price", e.target.value)}
               disabled={isLoading}
               step="0.1"
@@ -238,7 +238,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
             <FieldNumber
               label="Скидка %"
               name={`${formUid}_discPct`}
-              value={fields.discountPercent}
+              value={String(fields.discountPercent)}
               onChange={e => handleNumericChange("discountPercent", e.target.value)}
               disabled={isLoading}
               step="0.1"
@@ -252,7 +252,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
             <FieldNumber
               label="Сумма скидки"
               name={`${formUid}_discAmt`}
-              value={fields.discountAmount}
+              value={String(fields.discountAmount)}
               disabled
               textAlign="right"
               width="150px"
@@ -261,7 +261,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
               <FieldNumber
                 label="НДС (в т.ч.)"
                 name={`${formUid}_vatAmt`}
-                value={fields.vatAmount}
+                value={String(fields.vatAmount)}
                 disabled
                 textAlign="right"
                 width="150px"
@@ -270,7 +270,7 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
             <FieldNumber
               label="Итого"
               name={`${formUid}_amount`}
-              value={fields.amount}
+              value={String(fields.amount)}
               disabled
               textAlign="right"
               width="180px"

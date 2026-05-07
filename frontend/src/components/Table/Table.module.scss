@@ -191,7 +191,7 @@ thead {
 			border: 1px solid transparent;
 
 			span {
-				padding: 0 5px;
+				padding: 0px 3px;
 				overflow: hidden;
 				white-space: nowrap;
 				text-overflow: ellipsis;
@@ -328,8 +328,7 @@ tbody {
 				}
 
 				span {
-					padding: 0 6px;
-					// line-height: 17px;
+					padding: 0px 3px;
 					overflow: hidden;
 					white-space: nowrap;
 					text-overflow: ellipsis;
@@ -428,7 +427,7 @@ tfoot {
 				align-items: center;
 				height: $heightFieldInput - 3px;
 				padding: 1px;
-				margin: 1px;
+				// margin: 0px 3px;
 				overflow: hidden;
 				white-space: nowrap;
 				text-overflow: ellipsis;
@@ -437,7 +436,7 @@ tfoot {
 				border: 1px solid transparent;
 
 				span {
-					padding: 0 5px;
+					padding: 0px 3px;
 					overflow: hidden;
 					white-space: nowrap;
 					text-overflow: ellipsis;

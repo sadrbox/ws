@@ -1,3 +1,7 @@
+.FieldDisabled {
+	border: 0px solid $color31 !important;
+}
+
 // $heightFieldInput: 26px;
 .FieldDate,
 .FieldString,
@@ -9,8 +13,7 @@
 	border: none;
 	// border-radius: $radius2;
 	height: $heightFieldInput;
-	// padding: 0px 0px 0px 0px;
-	// margin:0 0 0 6px;
+	padding: 0px 3px !important;
 	box-sizing: content-box;
 
 	option {
@@ -31,7 +34,7 @@
 
 .FieldString {
 	padding: 0px;
-	margin-left: 3px;
+	// margin-left: 3px;
 	text-overflow: ellipsis;
 	// padding: px;
 	// padding-right: 52px; // Перенесено из инлайн-стиля
@@ -44,7 +47,7 @@
 .FieldSelect {
 	padding: 0px;
 	// margin:0px;
-	margin-left: 2px;
+	// margin-left: 2px;
 }
 
 .FieldDateWrapper {
@@ -125,7 +128,8 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 			overflow: hidden;
-			padding-right: 6px;
+			padding: 0px 3px;
+			margin: 0px;
 
 			&:focus {
 				border: none;
@@ -155,7 +159,7 @@
 	gap: 3px;
 	background-color: $color60;
 
-	padding: 0 0 0 3px;
+	// padding: 0 0 0 3px;
 	border-radius: $radius2;
 	border: 1px solid $color5;
 	outline: none;

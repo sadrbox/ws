@@ -430,7 +430,7 @@ const LookupField: FC<LookupFieldProps> = ({
           </label>
         )}
 
-        <div className={styles.FieldInputWrapper}>
+        <div className={`${styles.FieldInputWrapper} ${disabled ? styles.FieldDisabled : ""}`}>
           <input
             ref={inputRef}
             type="text"
@@ -445,7 +445,7 @@ const LookupField: FC<LookupFieldProps> = ({
                 setIsDropdownOpen(true);
               }
             }}
-            className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ""}`}
+            className={styles.FieldString}
             autoComplete="off"
             disabled={disabled}
             placeholder={placeholder ?? "Введите для поиска..."}

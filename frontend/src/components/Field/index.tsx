@@ -615,7 +615,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
         </label>
       )}
 
-      <div className={styles.FieldInputWrapper}>
+      <div className={`${styles.FieldInputWrapper} ${disabled ? styles.FieldDisabled : ''}`}>
         <input
           ref={inputRef}
           type="text"
@@ -627,7 +627,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
           onKeyDown={handleNumberKeyDown}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
+          className={styles.FieldString}
           autoComplete="off"
           disabled={disabled}
           placeholder={placeholder}
