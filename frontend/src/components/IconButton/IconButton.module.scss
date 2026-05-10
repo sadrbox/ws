@@ -1,0 +1,74 @@
+/**
+ * Универсальная иконочная кнопка — общая для Toolbar и FieldActions.
+ * Сохраняет визуальную плотность и поведение (hover/active/focus/disabled)
+ * единым во всей системе.
+ */
+.IconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+  color: #555;
+  flex-shrink: 0;
+  border-radius: $radius3;
+  transition: background-color 0.12s ease, color 0.12s ease;
+
+  &.md {
+    width: 24px;
+    height: 24px;
+  }
+
+  &.sm {
+    width: 22px;
+    height: 22px;
+  }
+
+  &:hover:not(:disabled) {
+    background: rgba(#555, 0.12);
+    color: #222;
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: $color3;
+    box-shadow: 0 0 0 2px rgba($color3, 0.25);
+  }
+
+  &:active:not(:disabled) {
+    background: rgba(#555, 0.2);
+  }
+
+  &.active {
+    background: hsla(210, 79%, 46%, 0.12);
+    color: $color3;
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  svg {
+    display: block;
+  }
+}
+
+@keyframes IconButtonSpin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.IconButton.loading svg,
+.IconButton.loading img {
+  animation: IconButtonSpin 0.8s linear infinite;
+}

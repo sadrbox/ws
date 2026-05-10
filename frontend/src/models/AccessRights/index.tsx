@@ -54,7 +54,6 @@ export const MODEL_NAME_OPTIONS = [
     { value: "CashExpenseOrder", i18: "CashExpenseOrdersList" },
     { value: "InventoryTransfer", i18: "InventoryTransfersList" },
     { value: "UnitOfMeasure", i18: "UnitOfMeasuresList" },
-    { value: "VatRate", i18: "VatRatesList" },
     { value: "Tax", i18: "TaxesList" },
     { value: "OrganizationAccountingSetting", i18: "OrganizationAccountingSettingsList" },
     { value: "ScheduledTask", i18: "ScheduledTasksList" },
@@ -163,8 +162,8 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
       onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
-      isLoading={form.isLoading}
+      onReload={form.isEditMode ? form.handleReload : undefined}
+      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
       readonly={!canWrite}
       isDirty={form.isDirty}
     />

@@ -5,6 +5,8 @@ import { fetchList } from "src/services/offlineDataService";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
 import { useAppContext } from "src/app";
 import SelectPaneWrapper from "./SelectPaneWrapper";
+import FieldActionButton from "./FieldActionButton";
+import type { IconName } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
 import type { FieldVariant } from "./index";
 // ═══════════════════════════════════════════════════════════════════════════
@@ -12,6 +14,17 @@ import type { FieldVariant } from "./index";
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type LookupActionType = "clear" | "open" | "quickselect" | "list";
+
+// Карта тип-действия → иконка из общего реестра + подпись.
+// fieldActions описывают только тип, обработчик, состояние и tooltip —
+// визуал (SVG, размеры, hover/focus) полностью инкапсулирован
+// в FieldActionButton/IconButton.
+const FIELD_ACTION_META: Record<LookupActionType, { icon: IconName; label: string }> = {
+  clear: { icon: "clear", label: "Очистить" },
+  quickselect: { icon: "quickselect", label: "Быстрый выбор" },
+  list: { icon: "list", label: "Выбрать из списка" },
+  open: { icon: "open", label: "Открыть" },
+};
 
 export interface LookupFieldProps {
   /** Заголовок поля */
@@ -363,7 +376,10 @@ const LookupField: FC<LookupFieldProps> = ({
     const allowed = visibleActions; // undefined = показывать все
     const show = (t: LookupActionType) => !allowed || allowed.includes(t);
 
-    if (show("clear") && (value || inputText)) {
+    // В table-варианте кнопка «Очистить» избыточна: ячейка таблицы и так
+    // редактируется поверх существующего значения, отдельная кнопка только
+    // загромождает узкую колонку. Открытие/Быстрый выбор/Список оставляем.
+    if (show("clear") && !isTable && (value || inputText)) {
       acts.push({ type: "clear", onClick: handleClear });
     }
     if (show("open") && value && getByEndpoint(endpoint)) {
@@ -376,7 +392,7 @@ const LookupField: FC<LookupFieldProps> = ({
       acts.push({ type: "list", onClick: handleOpenModal });
     }
     return acts;
-  }, [disabled, visibleActions, value, inputText, endpoint, handleClear, handleOpenItemForm, handleQuickSelect, handleOpenModal]);
+  }, [disabled, visibleActions, isTable, value, inputText, endpoint, handleClear, handleOpenItemForm, handleQuickSelect, handleOpenModal]);
 
   // Получить отображаемое поле элемента
   const getItemDisplay = useCallback((item: Record<string, any>) => {
@@ -459,59 +475,15 @@ const LookupField: FC<LookupFieldProps> = ({
 
           {fieldActions.length > 0 && (
             <div className={styles.FieldActions}>
-              {fieldActions.map((action, index) => {
-                const iconData = {
-                  clear: {
-                    img: (
-                      <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M3,3 L13,13 M13,3 L3,13" stroke="currentColor" strokeWidth="0.5" fill="none" strokeLinecap="round" />
-                      </svg>
-                    ),
-                    alt: "Очистить",
-                  },
-                  quickselect: {
-                    img: (
-                      <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M4,6 L8,10 L12,6" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    ),
-                    alt: "Быстрый выбор",
-                  },
-                  list: {
-                    img: (
-                      <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="1" y="3" width="14" height="1" fill="currentColor" rx="0.5" />
-                        <rect x="1" y="6" width="14" height="1" fill="currentColor" rx="0.5" />
-                        <rect x="1" y="9" width="14" height="1" fill="currentColor" rx="0.5" />
-                        <rect x="1" y="12" width="14" height="1" fill="currentColor" rx="0.5" />
-                      </svg>
-                    ),
-                    alt: "Выбрать из списка",
-                  },
-                  open: {
-                    img: (
-                      <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="1" y="1" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1" rx="0.5" />
-                        <rect x="3" y="3" width="10" height="1" fill="currentColor" rx="0.5" />
-                        <rect x="3" y="5" width="8" height="1" fill="currentColor" rx="0.5" />
-                        <rect x="3" y="7" width="6" height="1" fill="currentColor" rx="0.5" />
-                      </svg>
-                    ),
-                    alt: "Открыть",
-                  },
-                };
-                const icon = iconData[action.type];
+              {fieldActions.map((action) => {
+                const meta = FIELD_ACTION_META[action.type];
                 return (
-                  <button
-                    key={index}
+                  <FieldActionButton
+                    key={action.type}
+                    icon={meta.icon}
+                    label={meta.label}
                     onClick={action.onClick}
-                    type="button"
-                    className={styles.FieldActionButton}
-                    title={icon.alt}
-                    tabIndex={-1}
-                  >
-                    {icon.img}
-                  </button>
+                  />
                 );
               })}
             </div>

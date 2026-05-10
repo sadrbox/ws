@@ -1,39 +1,27 @@
 /**
  * Toolbar — единый переиспользуемый компонент панели управления.
  *
- * Заменяет разрозненные паттерны:
- *   FormPanel > TablePanelLeft > colGroup
- *   TablePanel > TablePanelLeft + TablePanelRight
- *   <div style={{display:"flex", gap:8, ...}}>
+ * Иконки берутся из единого реестра `src/components/icons` через общий
+ * `IconButton`. Старые PNG/SVG-ассеты больше не импортируются.
  *
  * @example
- * // Самостоятельная панель (Table, SalesBoardForm)
  * <Toolbar right={<SearchField />}>
  *   <Button>Добавить</Button>
  *   <Toolbar.Divider />
  *   <Toolbar.ReloadButton onClick={refresh} disabled={loading} />
  * </Toolbar>
- *
- * @example
- * // Через портал в заголовок панели
- * usePaneToolbar(paneId, (
- *   <>
- *     <Button variant="primary" onClick={save}>Сохранить</Button>
- *     <Toolbar.Divider />
- *   </>
- * ));
  */
 
-import { FC, forwardRef, type ButtonHTMLAttributes, type ImgHTMLAttributes, type ReactNode } from "react";
-import reload_16 from "src/assets/reload_16.svg";
-import settingsForm_16 from "src/assets/form-setting_16.svg";
-import calendar_16 from "src/assets/calendar_16.png";
-import searchField_16 from "src/assets/search-field_16.svg";
-import editInlineIcon from "src/assets/edit-inline_16.svg";
-import makePrimaryIcon from "src/assets/make-primary_16.svg";
-import recalcIcon from "src/assets/recalc_16.svg";
-import closeIcon from "src/assets/close-x_16.svg";
-import closeIconHover from "src/assets/close-x-hover_16.svg";
+import {
+  FC,
+  forwardRef,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from "react";
+import IconButton, {
+  type IconButtonProps,
+} from "src/components/IconButton/IconButton";
+import { Icon, type IconName, CloseIcon } from "src/components/IconButton/icons";
 import styles from "./Toolbar.module.scss";
 
 // ─── Toolbar (контейнер) ────────────────────────────────────────────────
@@ -66,102 +54,81 @@ ToolbarSlot.displayName = "Toolbar.Slot";
 const ToolbarDivider: FC = () => <div className={styles.ToolbarDivider} />;
 ToolbarDivider.displayName = "Toolbar.Divider";
 
-// ─── Toolbar.IconButton — произвольная иконочная кнопка ─────────────────
+// ─── Toolbar.IconButton — переиспользуемая иконочная кнопка ─────────────
 
-interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  active?: boolean;
+type ToolbarIconButtonProps = IconButtonProps;
+
+const ToolbarIconButton: FC<ToolbarIconButtonProps> = (props) => (
+  <IconButton size="md" {...props} />
+);
+ToolbarIconButton.displayName = "Toolbar.IconButton";
+
+// ─── Хелпер для типовых именованных кнопок ──────────────────────────────
+
+type NamedButtonProps = Omit<ToolbarIconButtonProps, "icon">;
+
+function makeButton(name: IconName, label: string) {
+  const Cmp: FC<NamedButtonProps> = ({ title, ...rest }) => (
+    <ToolbarIconButton
+      icon={name}
+      title={title ?? label}
+      aria-label={label}
+      {...rest}
+    />
+  );
+  Cmp.displayName = `Toolbar.${label}`;
+  return Cmp;
 }
 
-const IconButton: FC<IconButtonProps> = ({ className, active, style, ...props }) => (
-  <button
-    type="button"
-    className={[styles.IconButton, className].filter(Boolean).join(" ")}
-    style={{ ...style, ...(active ? { background: "hsla(210, 79%, 46%, 0.12)", color: "#1976d2" } : undefined) }}
-    {...props}
-  />
-);
-IconButton.displayName = "Toolbar.IconButton";
+const ReloadButton = makeButton("reload", "Обновить");
+const SettingsButton = makeButton("settings", "Настройки колонок");
+const PeriodButton = makeButton("calendar", "Период");
+const SearchButton = makeButton("search", "Поиск");
+const InlineEditButton = makeButton("editInline", "Редактирование в таблице");
+const MakePrimaryButton = makeButton("makePrimary", "Сделать основным");
+const RecalcButton = makeButton("recalc", "Пересчитать");
+const PrintButton = makeButton("print", "Печать");
 
-interface ToolbarImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> {
-  src: string;
-}
+// ─── Toolbar.CloseButton ────────────────────────────────────────────────
 
-const ToolbarImage: FC<ToolbarImageProps> = ({ alt, width = 16, height = 16, ...props }) => (
-  <img alt={alt} width={width} height={height} {...props} />
-);
-ToolbarImage.displayName = "Toolbar.Image";
-
-interface ToolbarImageButtonProps extends IconButtonProps {
-  src: string;
-  alt: string;
-  imageProps?: Omit<ToolbarImageProps, "src" | "alt">;
-}
-
-const ImageButton: FC<ToolbarImageButtonProps> = ({ src, alt, imageProps, ...props }) => (
-  <IconButton {...props}>
-    <ToolbarImage src={src} alt={alt} {...imageProps} />
-  </IconButton>
-);
-ImageButton.displayName = "Toolbar.ImageButton";
-
-const ReloadButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (props) => (
-  <ImageButton src={reload_16} alt="Обновить" title="Обновить" {...props} />
-);
-ReloadButton.displayName = "Toolbar.ReloadButton";
-
-const SettingsButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (props) => (
-  <ImageButton src={settingsForm_16} alt="Настройки колонок" title="Настройки колонок" {...props} />
-);
-SettingsButton.displayName = "Toolbar.SettingsButton";
-
-const PeriodButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (props) => (
-  <ImageButton src={calendar_16} alt="Период" title="Период" {...props} />
-);
-PeriodButton.displayName = "Toolbar.PeriodButton";
-
-const SearchButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (props) => (
-  <ImageButton src={searchField_16} alt="Поиск" title="Поиск" {...props} />
-);
-SearchButton.displayName = "Toolbar.SearchButton";
-
-const InlineEditButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (props) => (
-  <ImageButton src={editInlineIcon} alt="Редактирование в таблице" title="Редактирование в таблице" {...props} />
-);
-InlineEditButton.displayName = "Toolbar.InlineEditButton";
-
-const MakePrimaryButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (props) => (
-  <ImageButton src={makePrimaryIcon} alt="Сделать основным" title="Сделать основным" {...props} />
-);
-MakePrimaryButton.displayName = "Toolbar.MakePrimaryButton";
-
-const RecalcButton: FC<Omit<ToolbarImageButtonProps, "src" | "alt">> = (props) => (
-  <ImageButton src={recalcIcon} alt="Пересчитать" title="Пересчитать" {...props} />
-);
-RecalcButton.displayName = "Toolbar.RecalcButton";
-
-// ─── Toolbar.CloseButton — кнопка закрытия с hover-эффектом (синий → красный) ───
-
-type CloseButtonProps = Omit<IconButtonProps, "children">;
-
-const CloseButton: FC<CloseButtonProps> = ({ className, ...props }) => (
-  <IconButton
+const CloseButton: FC<Omit<ToolbarIconButtonProps, "icon" | "children">> = ({
+  className,
+  title,
+  ...props
+}) => (
+  <ToolbarIconButton
     className={[styles.CloseButton, className].filter(Boolean).join(" ")}
-    title="Закрыть"
+    title={title ?? "Закрыть"}
+    aria-label="Закрыть"
     {...props}
   >
-    <ToolbarImage src={closeIcon} alt="Закрыть" className={styles.CloseIcon} />
-    <ToolbarImage src={closeIconHover} alt="Закрыть" className={styles.CloseIconHover} />
-  </IconButton>
+    <CloseIcon />
+  </ToolbarIconButton>
 );
 CloseButton.displayName = "Toolbar.CloseButton";
+
+// ─── Backwards-compat: ImageButton (для редких внешних потребителей) ────
+
+interface LegacyImageButtonProps
+  extends ButtonHTMLAttributes<HTMLButtonElement> {
+  src: string;
+  alt: string;
+}
+
+const ImageButton: FC<LegacyImageButtonProps> = ({ src, alt, ...rest }) => (
+  <ToolbarIconButton {...rest}>
+    <img src={src} alt={alt} width={16} height={16} />
+  </ToolbarIconButton>
+);
+ImageButton.displayName = "Toolbar.ImageButton";
 
 // ─── Compound export ────────────────────────────────────────────────────
 
 type ToolbarComponent = typeof ToolbarRoot & {
   Slot: typeof ToolbarSlot;
   Divider: typeof ToolbarDivider;
-  IconButton: typeof IconButton;
-  Image: typeof ToolbarImage;
+  IconButton: typeof ToolbarIconButton;
+  Icon: typeof Icon;
   ImageButton: typeof ImageButton;
   ReloadButton: typeof ReloadButton;
   SettingsButton: typeof SettingsButton;
@@ -170,14 +137,15 @@ type ToolbarComponent = typeof ToolbarRoot & {
   InlineEditButton: typeof InlineEditButton;
   MakePrimaryButton: typeof MakePrimaryButton;
   RecalcButton: typeof RecalcButton;
+  PrintButton: typeof PrintButton;
   CloseButton: typeof CloseButton;
 };
 
 const Toolbar = ToolbarRoot as ToolbarComponent;
 Toolbar.Slot = ToolbarSlot;
 Toolbar.Divider = ToolbarDivider;
-Toolbar.IconButton = IconButton;
-Toolbar.Image = ToolbarImage;
+Toolbar.IconButton = ToolbarIconButton;
+Toolbar.Icon = Icon;
 Toolbar.ImageButton = ImageButton;
 Toolbar.ReloadButton = ReloadButton;
 Toolbar.SettingsButton = SettingsButton;
@@ -186,14 +154,14 @@ Toolbar.SearchButton = SearchButton;
 Toolbar.InlineEditButton = InlineEditButton;
 Toolbar.MakePrimaryButton = MakePrimaryButton;
 Toolbar.RecalcButton = RecalcButton;
+Toolbar.PrintButton = PrintButton;
 Toolbar.CloseButton = CloseButton;
 
 export {
   Toolbar,
   ToolbarSlot,
   ToolbarDivider,
-  IconButton,
-  ToolbarImage,
+  ToolbarIconButton as IconButton,
   ImageButton,
   ReloadButton,
   SettingsButton,
@@ -202,6 +170,7 @@ export {
   InlineEditButton,
   MakePrimaryButton,
   RecalcButton,
+  PrintButton,
   CloseButton,
 };
 export default Toolbar;

@@ -7,10 +7,12 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import LookupField from "src/components/Field/LookupField";
 import { FieldDate } from "src/components/Field";
+import { FieldNumber } from "src/components/Field";
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import useOrgAccountingUsageStats from "src/hooks/useOrgAccountingUsageStats";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -27,11 +29,16 @@ interface TFields {
   startDate: string;
   /** Учитывать ли НДС в строках документов продажи. */
   useVat: boolean;
-  /** UUID выбранной ставки НДС (VatRate). null — НДС не используется. */
-  vatRateUuid: string | null;
-  vatRateName: string;
+  /** Ставка НДС, % (ввод как строка). */
+  vatRate: string;
+  /** Способ расчёта НДС: INCLUDED — в сумме; ADDED — сверху. */
+  vatCalculationMethod: "INCLUDED" | "ADDED";
   /** Включить колонки скидок в SaleItemsTable. */
   useDiscount: boolean;
+  /** Включить колонки акциза в SaleItemsTable (НК РК ст. 463). */
+  useExcise: boolean;
+  /** Ставка акциза по умолчанию, % (ввод в форме как строка). */
+  exciseRate: string;
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -41,15 +48,19 @@ const DEFAULT_FIELDS: TFields = {
   organizationName: "",
   startDate: todayIso(),
   useVat: false,
-  vatRateUuid: null,
-  vatRateName: "",
+  vatRate: "12",
+  vatCalculationMethod: "INCLUDED",
   useDiscount: false,
+  useExcise: false,
+  exciseRate: "0",
 };
 
 // ─────────────────────────────────────────────────────────────────────────
 // Форма «Настройки учёта организации»: организация (LookupField), дата
 // начала действия, переключатели «Использовать НДС» и «Использовать скидки»,
-// ставка НДС (LookupField → VatRates) — активна только при useVat.
+// числовая ставка НДС и способ расчёта (сверху / в сумме) — активны только при useVat.
+// Справочник «Ставки НДС» удалён — согласно НК РК ставка НДС одна на организацию
+// на дату.
 // При сохранении создаётся новая запись журнала; старая для этой организации
 // помечается deletedAt.
 // ─────────────────────────────────────────────────────────────────────────
@@ -73,20 +84,42 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
           ? String(d.startDate).slice(0, 10)
           : todayIso(),
       useVat: Boolean(d.useVat),
-      vatRateUuid: (d.vatRateUuid as string | null) ?? null,
-      vatRateName:
-        (d.vatRateRef as { shortName?: string } | null)?.shortName ?? "",
+      vatRate:
+        d.vatRate != null && d.vatRate !== "" ? String(d.vatRate) : "12",
+      vatCalculationMethod:
+        String(d.vatCalculationMethod ?? "INCLUDED").toUpperCase() === "ADDED"
+          ? "ADDED"
+          : "INCLUDED",
       useDiscount: Boolean(d.useDiscount),
+      useExcise: Boolean(d.useExcise),
+      exciseRate:
+        d.exciseRate != null && d.exciseRate !== ""
+          ? String(d.exciseRate)
+          : "0",
     }),
     buildPayload: (fd) => {
-      if (fd.useVat && !fd.vatRateUuid)
-        return "Выберите ставку НДС или отключите учёт НДС";
+      const vatRateNum =
+        fd.vatRate === "" || fd.vatRate == null ? 12 : Number(fd.vatRate);
+      if (
+        fd.useVat &&
+        (!Number.isFinite(vatRateNum) || vatRateNum < 0 || vatRateNum > 100)
+      )
+        return "Ставка НДС должна быть от 0 до 100% (НК РК ст. 422; стандарт 12%)";
+      const exciseRateNum =
+        fd.exciseRate === "" || fd.exciseRate == null
+          ? 0
+          : Number(fd.exciseRate);
+      if (fd.useExcise && (!Number.isFinite(exciseRateNum) || exciseRateNum < 0))
+        return "Некорректная ставка акциза";
       return {
         organizationUuid: fd.organizationUuid || null,
         startDate: fd.startDate || todayIso(),
         useVat: Boolean(fd.useVat),
-        vatRateUuid: fd.useVat ? fd.vatRateUuid || null : null,
+        vatRate: fd.useVat ? vatRateNum : 0,
+        vatCalculationMethod: fd.vatCalculationMethod ?? "INCLUDED",
         useDiscount: Boolean(fd.useDiscount),
+        useExcise: Boolean(fd.useExcise),
+        exciseRate: fd.useExcise ? exciseRateNum : 0,
       };
     },
     buildPaneLabel: (saved) => {
@@ -108,6 +141,20 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
       });
     },
   });
+
+  // Статистика использования НДС/скидок/акциза в проведённых документах.
+  // Если хотя бы один проведённый sale_item фактически использует НДС
+  // (vatRate>0), скидку (сумма/%>0) или акциз (сумма/%>0) — соответствующий
+  // переключатель в форме блокируется ПОЛНОСТЬЮ (в обе стороны: и
+  // включить, и отключить нельзя), чтобы изменение настроек не повлияло
+  // на уже проведённые документы и расчёты ЭСФ РК остались корректными.
+  // Бэкенд дополнительно выполняет ту же проверку на POST/PUT (HTTP 409).
+  const { stats: usageStats } = useOrgAccountingUsageStats(
+    form.fields.organizationUuid,
+  );
+  const lockVat = usageStats.hasPostedVat;
+  const lockDiscount = usageStats.hasPostedDiscount;
+  const lockExcise = usageStats.hasPostedExcise;
 
   const tabs = useMemo(
     () => [
@@ -175,40 +222,58 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     checked={Boolean(form.fields.useVat)}
                     onChange={(e) => {
                       const useVat = e.target.checked;
-                      form.setFields(
-                        useVat
-                          ? { useVat: true }
-                          : { useVat: false, vatRateUuid: null, vatRateName: "" },
-                      );
+                      form.setFields({ useVat });
                     }}
-                    disabled={form.isLoading || !canWrite}
+                    disabled={form.isLoading || !canWrite || lockVat}
+                    title={
+                      lockVat
+                        ? "Нельзя изменить флаг НДС: есть проведённые документы со ставкой НДС"
+                        : undefined
+                    }
                   />
                   <span style={{ fontWeight: 500 }}>Использовать НДС</span>
                 </label>
-                <LookupField
-                  label="Ставка НДС"
+                <FieldNumber
+                  label="Ставка НДС, %"
                   name={`${form.formUid}_vatRate`}
-                  value={form.fields.vatRateUuid ?? ""}
-                  displayValue={form.fields.vatRateName}
-                  endpoint="vat-rates"
-                  displayField="shortName"
-                  columns={[
-                    { key: "shortName", label: "Наименование" },
-                    { key: "rate", label: "Ставка, %" },
-                    { key: "calculationMethod", label: "Способ расчёта" },
-                  ]}
-                  onSelect={(uuid, display) =>
-                    form.setFields({ vatRateUuid: uuid, vatRateName: display })
-                  }
-                  onClear={() =>
-                    form.setFields({ vatRateUuid: null, vatRateName: "" })
-                  }
-                  disabled={form.isLoading || !canWrite || !form.fields.useVat}
-                  width="280px"
+                  value={form.fields.vatRate ?? "12"}
+                  onChange={(e) => form.setField("vatRate", e.target.value)}
+                  disabled={form.isLoading || !canWrite || !form.fields.useVat || lockVat}
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  width="140px"
                 />
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 10px",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 6,
+                    background: "#fff",
+                    cursor: canWrite && form.fields.useVat ? "pointer" : "default",
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: "#374151" }}>Способ расчёта:</span>
+                  <select
+                    value={form.fields.vatCalculationMethod}
+                    onChange={(e) =>
+                      form.setField(
+                        "vatCalculationMethod",
+                        e.target.value === "ADDED" ? "ADDED" : "INCLUDED",
+                      )
+                    }
+                    disabled={form.isLoading || !canWrite || !form.fields.useVat || lockVat}
+                  >
+                    <option value="INCLUDED">В сумме (в т.ч.)</option>
+                    <option value="ADDED">Сверху</option>
+                  </select>
+                </label>
                 <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
-                  Способ расчёта (в сумме / сверху) определяется выбранной ставкой
-                  в справочнике «Ставки НДС».
+                  НК РК: стандартная ставка НДС — 12%, расчёт «в сумме»
+                  или «сверху» определяется учётной политикой организации.
                 </span>
               </GroupRow>
 
@@ -230,13 +295,68 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     type="checkbox"
                     checked={Boolean(form.fields.useDiscount)}
                     onChange={(e) => form.setField("useDiscount", e.target.checked)}
-                    disabled={form.isLoading || !canWrite}
+                    disabled={form.isLoading || !canWrite || lockDiscount}
+                    title={
+                      lockDiscount
+                        ? "Нельзя изменить флаг скидок: есть проведённые документы со скидками"
+                        : undefined
+                    }
                   />
                   <span style={{ fontWeight: 500 }}>Использовать скидки</span>
                 </label>
                 <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
                   При включении в строках документов продажи отображаются колонки
                   «Процент скидки» и «Скидка».
+                </span>
+              </GroupRow>
+
+              <GroupRow style={{ marginTop: 12 }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 10px",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 6,
+                    background: form.fields.useExcise ? "#eff6ff" : "#fff",
+                    cursor: canWrite ? "pointer" : "default",
+                    userSelect: "none",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.fields.useExcise)}
+                    onChange={(e) => form.setField("useExcise", e.target.checked)}
+                    disabled={form.isLoading || !canWrite || lockExcise}
+                    title={
+                      lockExcise
+                        ? "Нельзя изменить флаг акциза: есть проведённые документы с акцизом"
+                        : undefined
+                    }
+                  />
+                  <span style={{ fontWeight: 500 }}>Использовать акциз</span>
+                </label>
+                <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
+                  При включении в строках документов продажи отображаются колонки
+                  «Ставка акциза» и «Сумма акциза» (НК РК ст. 463).
+                </span>
+              </GroupRow>
+
+              <GroupRow style={{ marginTop: 12 }}>
+                <FieldNumber
+                  label="Ставка акциза, %"
+                  name="exciseRate"
+                  value={form.fields.exciseRate ?? "0"}
+                  onChange={(e) => form.setField("exciseRate", e.target.value)}
+                  disabled={form.isLoading || !canWrite || !form.fields.useExcise || lockExcise}
+                  step="0.01"
+                  min="0"
+                  width="200px"
+                />
+                <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
+                  Подставляется в новые строки документов продажи как значение
+                  по умолчанию (можно скорректировать в каждой строке).
                 </span>
               </GroupRow>
             </div>
@@ -251,6 +371,9 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
       form.setField,
       form.setFields,
       canWrite,
+      lockVat,
+      lockDiscount,
+      lockExcise,
     ],
   );
 
@@ -261,8 +384,8 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
       onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
-      isLoading={form.isLoading}
+      onReload={form.isEditMode ? form.handleReload : undefined}
+      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
       readonly={!canWrite}
       isDirty={form.isDirty}
     />
@@ -282,26 +405,26 @@ const renderListCell = (row: TDataItem, col: TColumn) => {
       );
     return <span>{org.shortName}</span>;
   }
-  if (col.identifier === "vatRateRef.shortName") {
+  if (col.identifier === "vatRate") {
     const useVat = Boolean(row.useVat);
-    const vat = row.vatRateRef as
-      | { shortName?: string; rate?: number | string }
-      | null
-      | undefined;
     if (!useVat) return <span style={{ color: "#9ca3af" }}>—</span>;
-    if (!vat?.shortName) return <span style={{ color: "#9ca3af" }}>—</span>;
-    return (
-      <span>
-        {vat.shortName}
-        {vat.rate != null ? ` (${vat.rate}%)` : ""}
-      </span>
-    );
+    const r = row.vatRate;
+    return <span>{r != null ? `${r}%` : "—"}</span>;
+  }
+  if (col.identifier === "vatCalculationMethod") {
+    const useVat = Boolean(row.useVat);
+    if (!useVat) return <span style={{ color: "#9ca3af" }}>—</span>;
+    const m = String(row.vatCalculationMethod ?? "INCLUDED").toUpperCase();
+    return <span>{m === "ADDED" ? "Сверху" : "В сумме"}</span>;
   }
   if (col.identifier === "useVat") {
     return <span>{row.useVat ? "Да" : "Нет"}</span>;
   }
   if (col.identifier === "useDiscount") {
     return <span>{row.useDiscount ? "Да" : "Нет"}</span>;
+  }
+  if (col.identifier === "useExcise") {
+    return <span>{row.useExcise ? "Да" : "Нет"}</span>;
   }
   if (col.identifier === "startDate") {
     const v = row.startDate as string | null | undefined;

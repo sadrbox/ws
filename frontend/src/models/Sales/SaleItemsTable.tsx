@@ -8,60 +8,26 @@ import LookupField from "src/components/Field/LookupField";
 import apiClient from "src/services/api/client";
 import SaleItemsForm from "./SaleItemsForm";
 import columnsJson from "./saleItemsColumns.json";
-import SubTable, { type SubTableContext, type TCellValidator, useSubTableContext } from "src/components/SubTable";
+import SubTable, { ReadOnlyCell, type SubTableContext, type TCellValidator, useSubTableContext } from "src/components/SubTable";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { withSaleItemRecalc, withSaleItemRecalcFromDiscountAmount } from "./saleItemDraft";
-import { getFormatNumerical, parseNumericInput } from "src/components/Table/services";
-import fieldStyles from "src/components/Field/Field.module.scss";
+import { parseNumericInput } from "src/components/Table/services";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { Toolbar } from "src/components/Toolbar";
 import { useTableContext } from "src/components/Table";
+import { isEquivalent } from "src/utils/normalize";
 
 const MODEL_ENDPOINT = "saleitems";
 const COMPONENT_NAME = "SaleItemsList_part";
 
-/** Идентификаторы колонок, относящихся к НДС. Скрываются, если налог "VAT" не включён в TaxSettings. */
-const VAT_COLUMN_IDS = new Set(["vatRateRef.shortName", "vatAmount"]);
+/** Идентификаторы колонок, относящихся к НДС. Скрываются, если useVat=false в НУО. */
+const VAT_COLUMN_IDS = new Set(["vatRate", "vatAmount"]);
 /** Колонки скидок — скрываются, если useDiscount=false в настройках учёта. */
 const DISCOUNT_COLUMN_IDS = new Set(["discountPercent", "discountAmount"]);
-
-/**
- * Безопасно форматирует числовое значение любого типа (number | string | null | undefined)
- * в строку с разделителями групп цифр (формат "999 999 999,99").
- * Возвращает пустую строку если значение не приводимо к числу.
- */
-const fmtNum = (value: unknown): string => {
-  if (value == null || value === "") return "";
-  const n = Number(value);
-  return isNaN(n) ? "" : getFormatNumerical(n);
-};
-
-/**
- * Ячейка только для чтения: при клике в режиме inline-editing мигает красным,
- * сигнализируя пользователю что поле нередактируемо.
- */
-const ReadOnlyCell: FC<{ value: string; inlineEditing: boolean }> = ({ value, inlineEditing }) => {
-  const [flashing, setFlashing] = useState(false);
-
-  const handleClick = useCallback((_e: React.MouseEvent) => {
-    if (!inlineEditing) return;
-    // e.stopPropagation();
-    setFlashing(false);
-    // Сбрасываем в следующем тике, чтобы повторный клик снова запускал анимацию
-    requestAnimationFrame(() => setFlashing(true));
-    setTimeout(() => setFlashing(false), 600);
-  }, [inlineEditing]);
-
-  return (
-    <span
-      className={flashing ? fieldStyles.flashReadOnly : undefined}
-      onClick={handleClick}
-      style={inlineEditing ? { display: "flex", alignItems: "center", flex: 1, width: "100%", height: "100%", justifyContent: "flex-end" } : undefined}
-    >
-      {value}
-    </span>
-  );
-};
+/** Колонки акциза — скрываются, если useExcise=false (НК РК ст. 463). */
+const EXCISE_COLUMN_IDS = new Set(["exciseRate", "exciseAmount"]);
+/** «Стоимость без НДС» — скрывается, если НДС отключён (без НДС равно amount). */
+const AMOUNT_WITHOUT_VAT_IDS = new Set(["amountWithoutVat"]);
 
 /**
  * Переводит фокус на следующий незаблокированный input в той же строке таблицы (<tr>).
@@ -102,6 +68,11 @@ interface SaleItemsTableProps {
   saleUuid: string;
   /** UUID организации документа — для подбора активных TaxSettings и динамических колонок налогов. */
   organizationUuid?: string | null;
+  /** Дата документа (ISO YYYY-MM-DD). Используется для исторического подбора
+   *  настроек учёта организации (НДС/скидки отображаются согласно тому, что
+   *  действовало на эту дату). При изменении даты колонки автоматически
+   *  пересчитываются. */
+  documentDate?: string | null;
   /** Описание родительского документа (напр. "Реализация №123 · 21.04.2026") — попадает в заголовок вкладки строки. */
   parentLabel?: string;
   disabled?: boolean;
@@ -114,16 +85,17 @@ interface SaleItemsTableProps {
   initialPendingRows?: TDataItem[];
 }
 
-const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, parentLabel, disabled = false, onTotalChange, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
+const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, documentDate, parentLabel, disabled = false, onTotalChange, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
   const {
     isVatEnabled,
     useDiscount,
+    useExcise,
+    exciseRate: orgExciseRate,
     vatRate: orgVatRate,
-    vatRateUuid: orgVatRateUuid,
     vatCalculationMethod,
-  } = useOrgAccountingSettings(organizationUuid ?? null);
+  } = useOrgAccountingSettings(organizationUuid ?? null, documentDate ?? null);
 
   const dynamicColumns = useMemo(() => {
     let base = (columnsJson as Array<Record<string, unknown>>).filter((c) => {
@@ -132,28 +104,22 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
       if (!isVatEnabled && VAT_COLUMN_IDS.has(id)) return false;
       // Скрываем колонки скидок, если useDiscount=false
       if (!useDiscount && DISCOUNT_COLUMN_IDS.has(id)) return false;
+      // Скрываем колонки акциза, если useExcise=false
+      if (!useExcise && EXCISE_COLUMN_IDS.has(id)) return false;
+      // «Стоимость без НДС» имеет смысл только при включённом НДС
+      if (!isVatEnabled && AMOUNT_WITHOUT_VAT_IDS.has(id)) return false;
       return true;
     });
 
-    // Динамические имена для НДС-колонок:
-    //   «vatRateRef.shortName» → имя выбранной ставки НДС из настроек
-    //   «vatAmount» → «Сумма НДС (12%) в т.ч.» или «Сумма НДС (12%) сверху»
-    if (isVatEnabled && orgVatRate) {
-      const vatLabel = orgVatRate.shortName ?? "НДС";
-      const vatRateNum = orgVatRate.rate ?? "";
+    // Динамическое имя для НДС-колонки «vatAmount»: включаем в подпись
+    // числовую ставку НДС из настроек НУО и метод расчёта (в т.ч. / сверху).
+    if (isVatEnabled && Number(orgVatRate) > 0) {
       const methodLabel = vatCalculationMethod === "ADDED" ? "сверху" : "в сумме";
       base = base.map((c) => {
-        if (c.identifier === "vatRateRef.shortName") {
-          return {
-            ...c,
-            name: `Ставка ${vatLabel}`,
-            hint: `Ставка ${vatLabel}${vatRateNum !== "" ? `, ${vatRateNum}%` : ""}`,
-          };
-        }
         if (c.identifier === "vatAmount") {
           return {
             ...c,
-            name: `Сумма ${vatLabel}${vatRateNum !== "" ? ` (${vatRateNum}%)` : ""} ${methodLabel}`,
+            name: `Сумма НДС (${orgVatRate}%) ${methodLabel}`,
             hint:
               vatCalculationMethod === "ADDED"
                 ? `НДС начисляется сверху к стоимости`
@@ -165,7 +131,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
     }
 
     return base;
-  }, [isVatEnabled, useDiscount, orgVatRate, vatCalculationMethod]);
+  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod]);
 
   // Сигнатура для key — пересоздаёт SubTable при изменении набора колонок
   const taxSig = useMemo(
@@ -174,53 +140,47 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
       (isVatEnabled ? "1" : "0") +
       "|disc:" +
       (useDiscount ? "1" : "0") +
+      "|exc:" +
+      (useExcise ? "1" : "0") +
       "|m:" +
       vatCalculationMethod +
       "|r:" +
-      String(orgVatRate?.rate ?? ""),
-    [isVatEnabled, useDiscount, vatCalculationMethod, orgVatRate],
+      String(orgVatRate ?? ""),
+    [isVatEnabled, useDiscount, useExcise, vatCalculationMethod, orgVatRate],
   );
 
   /**
-   * При редактировании quantity/price/discount/vatRate
+   * При редактировании quantity/price/discount/vatRate/exciseRate
    * используем withSaleItemRecalc, который рассчитывает НДС внутри
    * строки (vatAmount, amount). Метод расчёта (INCLUDED/ADDED) берётся
-   * из выбранной ставки НДС организации.
-   */
-  // withTaxes — совместимость API: возвращает patch без изменений
-  // (расчёт НДс выполняется внутри withSaleItemRecalc).
-  const withTaxes = useCallback(
-    (_row: TDataItem, patch: Record<string, unknown>): Record<string, unknown> => patch,
-    [],
-  );
-
-  /**
-   * Обёртка над withSaleItemRecalc, которая принудительно обнуляет
-   * НДС-поля если isVatEnabled=false и поля скидки если useDiscount=false.
-   * Гарантирует, что отключённые опции не дают значимых расчётов, даже
-   * если в исходных данных строки оказались ненулевые НДС/скидка.
+   * из настроек учёта организации (vatCalculationMethod).
+   *
+   * Принудительно обнуляет НДС-поля если isVatEnabled=false, поля скидки
+   * если useDiscount=false, и поля акциза если useExcise=false — гарантируя,
+   * что отключённые опции не дают значимых расчётов.
    */
   const recalcWithFlags = useCallback(
     (row: any, patch: Record<string, unknown>): Record<string, unknown> => {
       const enforced: Record<string, unknown> = { ...patch };
       if (!isVatEnabled) {
         enforced.vatRate = 0;
-        enforced.vatRateUuid = null;
-        enforced.vatRateRef = null;
       }
       if (!useDiscount) {
         enforced.discountPercent = 0;
         enforced.discountAmount = 0;
       }
-      return withSaleItemRecalc({ ...row, ...enforced }, enforced);
+      if (!useExcise) {
+        enforced.exciseRate = 0;
+        enforced.exciseAmount = 0;
+      }
+      return withSaleItemRecalc({ ...row, ...enforced, vatCalculationMethod }, enforced);
     },
-    [isVatEnabled, useDiscount],
+    [isVatEnabled, useDiscount, useExcise, vatCalculationMethod],
   );
 
   const requiredFields = useMemo(() => {
-    const base = ["product.shortName", "quantity", "price", "unitOfMeasure.shortName"];
-    return isVatEnabled ? [...base, "vatRateRef.shortName"] : base;
-  }, [isVatEnabled]);
+    return ["product.shortName", "quantity", "price", "unitOfMeasure.shortName"];
+  }, []);
 
 
   // ── Пересчёт общей суммы при изменении строк ──────────────────────────
@@ -252,12 +212,25 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
         if (n < 0) return "Не может быть отрицательным";
         return undefined;
       },
-      vatRate: () => undefined,
+      vatRate: (value) => {
+        if (value === "" || value == null) return undefined;
+        const n = parseNumericInput(toStr(value));
+        if (n === null) return "Должно быть числом";
+        if (n < 0 || n > 100) return "0…100% (НК РК ст. 422)";
+        return undefined;
+      },
       discountPercent: (value) => {
         if (value === "" || value == null) return undefined;
         const n = parseNumericInput(toStr(value));
         if (n === null) return "Должно быть числом";
         // Зажим 0–100 обрабатывается в FieldNumber (min/max props), ошибка здесь не нужна
+        return undefined;
+      },
+      exciseRate: (value) => {
+        if (value === "" || value == null) return undefined;
+        const n = parseNumericInput(toStr(value));
+        if (n === null) return "Должно быть числом";
+        if (n < 0) return "Не может быть отрицательным";
         return undefined;
       },
     };
@@ -266,14 +239,13 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
   const customInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
     if (!row.uuid) return;
 
-    const recalc = ["quantity", "price", "discountPercent", "vatRate"].includes(field)
+    const payload = ["quantity", "price", "discountPercent", "vatRate", "exciseRate"].includes(field)
       ? recalcWithFlags(row as any, { [field]: value })
       : { [field]: value };
-    const payload = withTaxes(row, recalc);
 
     await apiClient.put(`/${MODEL_ENDPOINT}/${row.uuid}`, payload);
     await queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
-  }, [queryClient, withTaxes, recalcWithFlags]);
+  }, [queryClient, recalcWithFlags]);
 
   // ── renderCell ─────────────────────────────────────────────────────────
   // Стратегия: возвращаем undefined для чистого "только чтение" → Table сам
@@ -286,18 +258,22 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
     // ── lineNumber: всегда позиция строки в таблице ──────────────────────
     if (id === "lineNumber") {
       const idx = ctx.rows.indexOf(row);
-      const value = String(idx >= 0 ? idx + 1 : (row.lineNumber as string | number | null | undefined) ?? "");
-      return <ReadOnlyCell value={value} inlineEditing={ctx.inlineEditing} />;
+      const value = idx >= 0 ? idx + 1 : (row.lineNumber as string | number | null | undefined) ?? "";
+      return <ReadOnlyCell value={String(value)} inlineEditing={ctx.inlineEditing} />;
     }
 
     // ── Read-only вычисляемые суммы (мигание при клике в inline-режиме) ──
-    if (id === "vatAmount") return <ReadOnlyCell value={fmtNum(row.vatAmount) || "0"} inlineEditing={ctx.inlineEditing} />;
-    if (id === "amount") return <ReadOnlyCell value={fmtNum(row.amount) || "0"} inlineEditing={ctx.inlineEditing} />;
+    // Форматирование (ru-RU, разделители групп) делегируется ReadOnlyCell
+    // через column (column.type="number" → getFormatColumnValue).
+    if (id === "vatAmount") return <ReadOnlyCell value={row.vatAmount ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
+    if (id === "amount") return <ReadOnlyCell value={row.amount ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
+    if (id === "amountWithoutVat") return <ReadOnlyCell value={row.amountWithoutVat ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
+    if (id === "exciseAmount") return <ReadOnlyCell value={row.exciseAmount ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
 
     // ── discountAmount: read-only вне inline / FieldNumber внутри ────────
     if (id === "discountAmount") {
       if (!ctx.inlineEditing) {
-        return <ReadOnlyCell value={fmtNum(row.discountAmount) || "0"} inlineEditing={false} />;
+        return <ReadOnlyCell value={row.discountAmount ?? 0} column={col} inlineEditing={false} />;
       }
       return (
         <FieldNumber
@@ -305,10 +281,10 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
           value={row.discountAmount != null ? String(row.discountAmount as number | string) : "0"}
           onChange={e => {
             if (ctx.deferRemoteChanges) {
-              ctx.updateLocalRow(row, withTaxes(row, withSaleItemRecalcFromDiscountAmount(row as any, e.target.value)));
+              ctx.updateLocalRow(row, withSaleItemRecalcFromDiscountAmount({ ...(row as any), vatCalculationMethod }, e.target.value));
               return;
             }
-            const recalc = withSaleItemRecalcFromDiscountAmount(row as any, e.target.value);
+            const recalc = withSaleItemRecalcFromDiscountAmount({ ...(row as any), vatCalculationMethod }, e.target.value);
             ctx.handleInlineChange(row, "discountPercent", String(recalc.discountPercent));
           }}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
@@ -374,7 +350,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
           value={row.quantity != null ? String(row.quantity as number | string) : "0"}
           onChange={e => {
             if (ctx.deferRemoteChanges) {
-              ctx.updateLocalRow(row, withTaxes(row, recalcWithFlags(row as any, { quantity: e.target.value })));
+              ctx.updateLocalRow(row, recalcWithFlags(row as any, { quantity: e.target.value }));
               return;
             }
             ctx.handleInlineChange(row, "quantity", e.target.value);
@@ -396,7 +372,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
           value={row.price != null ? String(row.price as number | string) : "0"}
           onChange={e => {
             if (ctx.deferRemoteChanges) {
-              ctx.updateLocalRow(row, withTaxes(row, recalcWithFlags(row as any, { price: e.target.value })));
+              ctx.updateLocalRow(row, recalcWithFlags(row as any, { price: e.target.value }));
               return;
             }
             ctx.handleInlineChange(row, "price", e.target.value);
@@ -443,59 +419,6 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
       );
     }
 
-    if (id === "vatRateRef.shortName") {
-      return (
-        <LookupField
-          label=""
-          name={`saleitem_vatRate_${row.id}`}
-          value={(row.vatRateUuid as string) ?? ""}
-          displayValue={(row.vatRateRef as any)?.shortName ?? ""}
-          endpoint="vat-rates"
-          displayField="shortName"
-          columns={[
-            { key: "shortName", label: "Наименование" },
-            { key: "rate", label: "%" },
-          ]}
-          onSelect={(uuid, _displayValue, item) => {
-            if (ctx.deferRemoteChanges) {
-              ctx.updateLocalRow(row, withTaxes(row, withSaleItemRecalc(row as any, {
-                vatRateUuid: uuid,
-                vatRateRef: item && uuid ? { uuid, shortName: item.shortName ?? "", rate: item.rate } : null,
-                vatRate: item?.rate ?? 0,
-              })));
-              return;
-            }
-            ctx.handleLookupChange(row, "vatRateUuid", uuid, {
-              vatRateRef: item && uuid ? { uuid, shortName: item.shortName ?? "", rate: item.rate } : null,
-              vatRate: item?.rate ?? 0,
-              ...withSaleItemRecalc(row as any, { vatRate: item?.rate ?? 0 }),
-            });
-          }}
-          onClear={() => {
-            if (ctx.deferRemoteChanges) {
-              ctx.updateLocalRow(row, withTaxes(row, withSaleItemRecalc(row as any, {
-                vatRateUuid: null,
-                vatRateRef: null,
-                vatRate: 0,
-              })));
-              return;
-            }
-            ctx.handleLookupChange(row, "vatRateUuid", null, {
-              vatRateRef: null,
-              vatRate: 0,
-              ...withSaleItemRecalc(row as any, { vatRate: 0 }),
-            });
-          }}
-          onEnterKey={() => focusNextInRow(document.activeElement)}
-          onAfterSelect={() => focusNextInRow(document.activeElement)}
-          disabled={ctx.disabled}
-          width="100%"
-          variant="table"
-          visibleActions={["quickselect"]}
-        />
-      );
-    }
-
     if (id === "discountPercent") {
       return (
         <FieldNumber
@@ -503,7 +426,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
           value={row.discountPercent != null ? String(row.discountPercent as number | string) : "0"}
           onChange={e => {
             if (ctx.deferRemoteChanges) {
-              ctx.updateLocalRow(row, withTaxes(row, recalcWithFlags(row as any, { discountPercent: e.target.value })));
+              ctx.updateLocalRow(row, recalcWithFlags(row as any, { discountPercent: e.target.value }));
               return;
             }
             ctx.handleInlineChange(row, "discountPercent", e.target.value);
@@ -521,8 +444,61 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
       );
     }
 
+    if (id === "exciseRate") {
+      return (
+        <FieldNumber
+          name={`saleitem_exciserate_${row.id}`}
+          value={row.exciseRate != null ? String(row.exciseRate as number | string) : "0"}
+          onChange={e => {
+            if (ctx.deferRemoteChanges) {
+              ctx.updateLocalRow(row, recalcWithFlags(row as any, { exciseRate: e.target.value }));
+              return;
+            }
+            ctx.handleInlineChange(row, "exciseRate", e.target.value);
+          }}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
+          disabled={ctx.disabled}
+          step="0.01"
+          min="0"
+          textAlign="right"
+          width="100%"
+          actions={[]}
+          variant="table"
+        />
+      );
+    }
+
+    // Ручное редактирование ставки НДС в строке (НК РК ст. 422: 0..100%).
+    // Значение по умолчанию подставляется из настроек учёта организации,
+    // но пользователь может скорректировать его для конкретной строки
+    // (например, экспорт со ставкой 0% или льготная категория).
+    if (id === "vatRate") {
+      return (
+        <FieldNumber
+          name={`saleitem_vatrate_${row.id}`}
+          value={row.vatRate != null ? String(row.vatRate as number | string) : "0"}
+          onChange={e => {
+            if (ctx.deferRemoteChanges) {
+              ctx.updateLocalRow(row, recalcWithFlags(row as any, { vatRate: e.target.value }));
+              return;
+            }
+            ctx.handleInlineChange(row, "vatRate", e.target.value);
+          }}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
+          disabled={ctx.disabled}
+          step="0.01"
+          min="0"
+          max="100"
+          textAlign="right"
+          width="100%"
+          actions={[]}
+          variant="table"
+        />
+      );
+    }
+
     return undefined;
-  }, [withTaxes, recalcWithFlags]);
+  }, [recalcWithFlags]);
 
   // ── openFormFor ────────────────────────────────────────────────────────
   const buildItemLabel = (data: TDataItem | undefined, isEdit: boolean) => {
@@ -539,10 +515,14 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
         data: {
           ...(data ?? {}),
           saleUuid,
+          organizationUuid: organizationUuid ?? null,
+          saleDate: documentDate ?? null,
           _embeddedSaleItem: {
             applyDraft: (nextRow: Record<string, unknown>) => {
               _ctx.updateLocalRow(data, nextRow);
             },
+            organizationUuid: organizationUuid ?? null,
+            saleDate: documentDate ?? null,
           },
         } as any,
       });
@@ -555,11 +535,16 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
     addPane({
       label: buildItemLabel(data, isEdit),
       component: SaleItemsForm,
-      data: { ...(data ?? {}), saleUuid } as any,
+      data: {
+        ...(data ?? {}),
+        saleUuid,
+        organizationUuid: organizationUuid ?? null,
+        saleDate: documentDate ?? null,
+      } as any,
       onSave: refresh,
       onClose: refresh,
     });
-  }, [addPane, saleUuid, queryClient, deferRemoteChanges]);
+  }, [addPane, saleUuid, queryClient, deferRemoteChanges, organizationUuid, documentDate]);
 
   // ── defaultNewRow ───────────────────────────────────────────────────────
   // При добавлении новой строки подставляем ставку НДС из настроек учёта.
@@ -568,16 +553,15 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
     quantity: 0,
     price: 0,
     unitOfMeasureUuid: null,
-    vatRateUuid: isVatEnabled ? orgVatRateUuid ?? null : null,
-    vatRateRef: isVatEnabled && orgVatRate && orgVatRateUuid
-      ? { uuid: orgVatRateUuid, shortName: orgVatRate.shortName, rate: orgVatRate.rate }
-      : null,
-    vatRate: isVatEnabled && orgVatRate ? Number(orgVatRate.rate) || 0 : 0,
+    vatRate: isVatEnabled ? Number(orgVatRate) || 0 : 0,
     discountPercent: 0,
     discountAmount: 0,
+    exciseRate: useExcise ? Number(orgExciseRate) || 0 : 0,
+    exciseAmount: 0,
     vatAmount: 0,
+    amountWithoutVat: 0,
     amount: 0,
-  }), [isVatEnabled, orgVatRateUuid, orgVatRate]);
+  }), [isVatEnabled, orgVatRate, useExcise, orgExciseRate]);
 
 
   return (
@@ -604,19 +588,31 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, p
         <RecalcAllButton
           disabled={disabled}
           recalcRow={(row) => {
-            // Заполнение ссылочных значений для незаполненных полей:
-            //   - vatRate из настроек учёта организации (если НДС включён)
-            //   - unitOfMeasure из номенклатуры (product.unitOfMeasureUuid)
+            // Дозаполняем только то, что в строке отсутствует:
+            //   - unitOfMeasure из номенклатуры (product.unitOfMeasureUuid),
+            //     если строка ещё не имеет своей единицы измерения;
+            //   - discountPercent/exciseRate → 0, если значения null/undefined
+            //     (нормализация для стабильного пересчёта).
+            //
+            // ВАЖНО: vatRate и exciseRate, явно установленные пользователем
+            // (включая значение 0 — допустимо по НК РК для экспорта/льгот),
+            // НЕ перезаписываются настройками НУО. Кнопка «Пересчитать»
+            // уважает выбор пользователя в каждой строке.
             const refDefaults: Record<string, unknown> = {};
-            if (isVatEnabled && !row.vatRateUuid && orgVatRateUuid && orgVatRate) {
-              refDefaults.vatRateUuid = orgVatRateUuid;
-              refDefaults.vatRate = Number(orgVatRate.rate) || 0;
-            }
-            const product = row.product as { unitOfMeasureUuid?: string | null } | null | undefined;
+            const product = row.product as { unitOfMeasureUuid?: string | null; unitOfMeasure?: { uuid?: string; shortName?: string } | null } | null | undefined;
             if (!row.unitOfMeasureUuid && product?.unitOfMeasureUuid) {
               refDefaults.unitOfMeasureUuid = product.unitOfMeasureUuid;
+              if (product.unitOfMeasure) {
+                refDefaults.unitOfMeasure = product.unitOfMeasure;
+              }
             }
-            return withTaxes(row, recalcWithFlags(row as any, refDefaults));
+            // Нормализуем числовые поля (если null/undefined → 0), чтобы
+            // пересчёт всегда давал стабильный результат. Значение 0,
+            // явно установленное пользователем — НЕ перезаписываем.
+            if (row.discountPercent == null) refDefaults.discountPercent = 0;
+            if (row.exciseRate == null) refDefaults.exciseRate = 0;
+            if (row.vatRate == null) refDefaults.vatRate = 0;
+            return recalcWithFlags(row as any, refDefaults);
           }}
         />
       }
@@ -655,12 +651,21 @@ const RecalcAllButton: FC<RecalcAllButtonProps> = ({ disabled = false, recalcRow
     setBusy(true);
     try {
       // 1) Локальный пересчёт всех строк (включая несохранённые).
-      //    SubTable обновляет кэш и нотифицирует родителя через onItemsChange.
+      //    Применяем patch только если значения реально изменились —
+      //    иначе пустой no-op patch без причины поднимает dirty-флаг.
       const patches: Array<{ row: TDataItem; payload: Record<string, unknown> }> = [];
       for (const row of rows) {
         const payload = recalcRow(row);
-        patches.push({ row, payload });
-        subCtx?.updateLocalRow(row, payload);
+        const realPatch: Record<string, unknown> = {};
+        for (const [key, nextVal] of Object.entries(payload)) {
+          const prev = (row as Record<string, unknown>)[key];
+          if (!isEquivalent(prev, nextVal)) {
+            realPatch[key] = nextVal;
+          }
+        }
+        if (Object.keys(realPatch).length === 0) continue;
+        patches.push({ row, payload: realPatch });
+        subCtx?.updateLocalRow(row, realPatch);
       }
 
       // 2) В обычном (не отложенном) режиме — параллельно сохраняем
@@ -686,8 +691,8 @@ const RecalcAllButton: FC<RecalcAllButtonProps> = ({ disabled = false, recalcRow
     <Toolbar.RecalcButton
       onClick={handleClick}
       disabled={disabled || busy || empty}
+      loading={busy}
       title={busy ? "Пересчёт…" : "Пересчитать суммы и итоги по всем строкам"}
-      className={busy ? "spinning" : undefined}
     />
   );
 };

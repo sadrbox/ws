@@ -12,7 +12,7 @@ import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
-import { Divider, Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
+import { Divider, Field, FieldDateTime, FieldTextarea } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -20,26 +20,21 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 
-const STATUS_OPTIONS = [
-  { value: "draft", label: "Черновик" },
-  { value: "approved", label: "Утверждён" },
-  { value: "cancelled", label: "Отменён" },
-];
 
 interface TDocFields {
   id?: number; uuid?: string;
-  date: string; description: string; amount: string; status: string;
+  date: string; description: string; amount: string;
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
 }
 
 const DEFAULT_FIELDS: TDocFields = {
-  date: "", description: "", amount: "", status: "draft",
+  date: "", description: "", amount: "",
   organizationUuid: "", organizationName: "",
   counterpartyUuid: "", counterpartyName: "",
   contractUuid: "", contractName: "",
@@ -87,9 +82,9 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
       endpoint, storageKey, defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
       mapServerToForm: (d, prev) => ({
         ...(prev ?? DEFAULT_FIELDS), ...d,
-        date: d.date?.slice(0, 10) ?? "",
+        date: isoToLocalInput(d.date),
         description: d.description ?? "", amount: d.amount != null ? String(d.amount) : "",
-        status: d.status ?? "draft",
+
         organizationUuid: d.organizationUuid ?? "",
         organizationName: d.organization?.shortName ?? "",
         counterpartyUuid: d.counterpartyUuid ?? "",
@@ -98,9 +93,9 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
         contractName: d.contract?.shortName ?? "",
       }),
       buildPayload: (fd) => ({
-        date: fd.date || null,
+        date: localInputToIso(fd.date),
         description: fd.description?.trim() || null, amount: fd.amount ? parseFloat(fd.amount) : null,
-        status: fd.status || "draft",
+
         organizationUuid: fd.organizationUuid || null,
         counterpartyUuid: fd.counterpartyUuid || null,
         contractUuid: fd.contractUuid || null,
@@ -134,8 +129,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
             <div className={styles.Form}>
               <GroupCol>
                 <GroupRow>
-                  <FieldDate label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="120px" />
-                  <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+                  <FieldDateTime label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
                 </GroupRow>
 
                 <Group>
@@ -172,7 +166,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
 
     return (
       <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-        onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined} isLoading={form.isLoading}
+        onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading}
         readonly={!access.canWrite} isDirty={form.isDirty} />
     );
   };

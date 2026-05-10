@@ -21,6 +21,7 @@ import { Button } from "src/components/Button";
 import { Divider } from "src/components/Field";
 import { Group } from "src/components/UI";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
+import { formStoreAPI } from "src/hooks/useFormStore";
 import Tabs from "src/components/Tabs";
 import styles from "src/styles/main.module.scss";
 import type { TPane } from "src/app/types";
@@ -547,6 +548,20 @@ const SyncDashboard: FC<Partial<TPane>> = (paneProps) => {
         : <Button variant="primary" onClick={syncNow} disabled={!isOnline}><span>🔄 Синхронизировать</span></Button>}
     </>,
   );
+
+  // Регистрация reload-обработчика для кнопки ⟳ в PaneItemHeaderToolbar
+  // (заголовок панели). Без этого кнопка показывается, но клик
+  // не находит обработчика в formStoreAPI и тихо ничего не делает.
+  useEffect(() => {
+    const uniqId = paneProps.uniqId;
+    if (!uniqId) return;
+    const reload = () => {
+      refreshStats();
+      if (isOnline && !isSyncing) syncNow();
+    };
+    formStoreAPI.register(uniqId, { reload });
+    return () => formStoreAPI.unregister(uniqId);
+  }, [paneProps.uniqId, refreshStats, syncNow, isOnline, isSyncing]);
 
   const tabs = useMemo(() => [
     {

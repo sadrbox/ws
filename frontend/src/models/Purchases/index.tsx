@@ -11,6 +11,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
@@ -101,6 +102,25 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     form.setFields(updates);
   }, [form.setFields]);
 
+  // ── Авто-подстановка ОСНОВНОГО ДОГОВОРА для пары организация/контрагент ─
+  const contractScope = useMemo<Record<string, string> | null>(() => {
+    const hasOrg = !!form.fields.organizationUuid;
+    const hasCpty = !!form.fields.counterpartyUuid;
+    if (!hasOrg && !hasCpty) return null;
+    const s: Record<string, string> = {};
+    if (hasOrg) s.organizationUuid = form.fields.organizationUuid;
+    if (hasCpty) s.counterpartyUuid = form.fields.counterpartyUuid;
+    return s;
+  }, [form.fields.organizationUuid, form.fields.counterpartyUuid]);
+  useAutoFillPrimary({
+    endpoint: "contracts",
+    scope: contractScope,
+    currentUuid: form.fields.contractUuid,
+    isEditMode: form.isEditMode,
+    isLoading: form.isLoading,
+    apply: (uuid, name) => form.setFields({ contractUuid: uuid, contractName: name } as Partial<TFields>),
+  });
+
   const tabs = useMemo(() => [
     {
       id: "general",
@@ -163,7 +183,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
       onSaveAndClose={form.handleSaveAndClose}
       onClose={form.handleClose}
       onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
-      isLoading={form.isLoading}
+      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
       readonly={!canWrite}
       isDirty={form.isDirty}
     />

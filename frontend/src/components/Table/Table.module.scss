@@ -191,7 +191,7 @@ thead {
 			border: 1px solid transparent;
 
 			span {
-				padding: 0px 3px;
+				padding: 0px 6px;
 				overflow: hidden;
 				white-space: nowrap;
 				text-overflow: ellipsis;
@@ -328,7 +328,7 @@ tbody {
 				}
 
 				span {
-					padding: 0px 3px;
+					padding: 0px 6px;
 					overflow: hidden;
 					white-space: nowrap;
 					text-overflow: ellipsis;
@@ -436,7 +436,7 @@ tfoot {
 				border: 1px solid transparent;
 
 				span {
-					padding: 0px 3px;
+					padding: 0px 6px;
 					overflow: hidden;
 					white-space: nowrap;
 					text-overflow: ellipsis;
@@ -648,6 +648,23 @@ input[type="checkbox"] {
 .CheckboxWrapper {
 	display: flex;
 	align-items: center;
+	flex: 1;
+}
+
+.PrintableWrapper {
+	display: flex;
+	align-items: center;
+	margin-left: auto;
+	margin-right: 8px;
+	padding-left: 8px;
+	border-left: 1px dashed $color34;
+	font-size: 12px;
+	color: $color5;
+
+	label {
+		margin-left: 4px;
+		white-space: nowrap;
+	}
 }
 
 .CheckboxList {
@@ -872,30 +889,6 @@ input[type="checkbox"] {
 	&::placeholder {
 		color: #aaa;
 		font-size: $fontsize;
-	}
-}
-
-.ClearButton {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border: none;
-	// border-left: 1px solid #e0e0e0;
-	background: transparent;
-	cursor: pointer;
-	// margin: 2px;
-	// padding: 1px 4px;
-	color: $color51;
-	font-size: $fontsize + 1px;
-	// line-height: 1;
-	width: $heightFieldInput - 4px;
-	height: $heightFieldInput - 4px;
-	flex-shrink: 0;
-	border-radius: $radius2;
-
-	&:hover {
-		background: rgba($color3, 0.1);
-		color: #333;
 	}
 }
 

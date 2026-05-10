@@ -69,8 +69,8 @@ const ContactTypesForm: FC<Partial<TPane>> = (paneProps) => {
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
       onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
-      isLoading={form.isLoading}
+      onReload={form.isEditMode ? form.handleReload : undefined}
+      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
 
       readonly={!canWrite}
       isDirty={form.isDirty}

@@ -213,6 +213,8 @@ interface TableControlPanelProps {
   onRefresh: () => void;
   onAddClick: () => void;
   onDeleteClick: () => void;
+  /** Есть ли выбранные/выделенные строки — от этого зависит доступность кнопки «Удалить». */
+  hasSelection: boolean;
   search: { value: string; onChange: (value: string) => void };
   extraButtons?: React.ReactNode;
   /** Если true — скрыть кнопки «Добавить»/«Удалить» (режим только чтение) */
@@ -231,6 +233,7 @@ const TableControlPanel = memo(({
   onRefresh,
   onAddClick,
   onDeleteClick,
+  hasSelection,
   search,
   extraButtons,
   readonly: isReadonly = false,
@@ -242,7 +245,7 @@ const TableControlPanel = memo(({
       right={visibleFastSearch ? <FieldFastSearchInternal value={search.value} onChange={search.onChange} /> : undefined}
     >
       {!hideWrite && <Button onClick={onAddClick} disabled={isLoading}><span>Добавить</span></Button>}
-      {!hideWrite && <Button onClick={onDeleteClick} disabled={isLoading}><span>Удалить</span></Button>}
+      {!hideWrite && <Button onClick={onDeleteClick} disabled={isLoading || !hasSelection} title={!hasSelection ? "Выделите одну или несколько строк" : undefined}><span>Удалить</span></Button>}
       {!isSelect && extraButtons}
       {!isSelect && <Toolbar.Divider />}
       <Toolbar.ReloadButton onClick={onRefresh} disabled={isLoading} />
@@ -266,6 +269,7 @@ const TableControlPanel = memo(({
     prevProps.extraButtons === nextProps.extraButtons &&
     prevProps.onDeleteClick === nextProps.onDeleteClick &&
     prevProps.onAddClick === nextProps.onAddClick &&
+    prevProps.hasSelection === nextProps.hasSelection &&
     prevProps.readonly === nextProps.readonly
   );
 });
@@ -536,6 +540,7 @@ const Table: FC<TableProps> = memo((props) => {
           onRefresh={handleRefresh}
           onAddClick={handleCreate}
           onDeleteClick={handleDeleteClick}
+          hasSelection={isAllSelectedMode || selectedRows.size > 0 || activeRow !== null}
           search={search}
           extraButtons={extraButtons}
           readonly={isReadonly}
@@ -1249,7 +1254,11 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         onDoubleClick={handleDoubleClick}
         className={trClassName}
         data-active={isActive || undefined}
-        data-primary={row.isPrimary ? "true" : undefined}
+        // Жирное выделение основной записи (см. tr[data-primary="true"] в Table.module.scss)
+        // применяется ТОЛЬКО во вложенных таблицах (SubTable, variant="embedded"),
+        // которые используются внутри форм организации/контрагента и форм основных записей.
+        // В общих списках (variant="default") и в селекторах (variant="select") выделять не нужно.
+        data-primary={row.isPrimary && variant === 'embedded' ? "true" : undefined}
       >
         {variant !== 'select' && (
           <td className={styles.CellCenter}>
@@ -1339,6 +1348,12 @@ const TableConfigColumns: FC<TypeTableConfigColumnsProps> = ({ columns, setColum
     ));
   }, [setColumns]);
 
+  const updateColumnPrintable = useCallback((identifier: string, printable: boolean) => {
+    setColumns(prev => prev.map(col =>
+      col.identifier === identifier ? { ...col, printable } : col
+    ));
+  }, [setColumns]);
+
   const onDragStart = useCallback((event: any) => setDraggingId(String(event.active.id)), []);
 
   const onDragEnd = useCallback((event: any) => {
@@ -1369,6 +1384,7 @@ const TableConfigColumns: FC<TypeTableConfigColumnsProps> = ({ columns, setColum
                 column={column}
                 isDragging={column.identifier === draggingId}
                 toggleVisibility={updateColumnVisibility}
+                togglePrintable={updateColumnPrintable}
               />
             ))}
           </ul>
@@ -1386,14 +1402,21 @@ type TypeTableConfigColumnsItemProps = {
   column: TColumn;
   isDragging: boolean;
   toggleVisibility: (identifier: string, visible: boolean) => void;
+  togglePrintable: (identifier: string, printable: boolean) => void;
 };
 
-const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ column, isDragging, toggleVisibility }) => {
+const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ column, isDragging, toggleVisibility, togglePrintable }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: column.identifier });
 
   const handleVisibilityChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     toggleVisibility(column.identifier, e.target.checked);
   }, [column.identifier, toggleVisibility]);
+
+  const handlePrintableChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    togglePrintable(column.identifier, e.target.checked);
+  }, [column.identifier, togglePrintable]);
+
+  const printableChecked = column.printable !== false; // default true
 
   return (
     <li
@@ -1413,6 +1436,17 @@ const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ colu
         />
         <label htmlFor={`column-visibility-${column.identifier}`}>{getTranslateColumn(column)}</label>
       </div>
+      {column.togglePrintable && (
+        <div className={styles.PrintableWrapper} title="Показывать в печатной форме">
+          <input
+            type="checkbox"
+            id={`column-printable-${column.identifier}`}
+            checked={printableChecked}
+            onChange={handlePrintableChange}
+          />
+          <label htmlFor={`column-printable-${column.identifier}`}>В печать</label>
+        </div>
+      )}
     </li>
   );
 });
@@ -1450,7 +1484,7 @@ const DateRangeBar = memo(({ startDate, endDate, onClick, onClear }: {
     <div className={styles.DateRangeBar}>
       <span className={styles.DateRangeBarLabel}>Период:</span>
       <a className={styles.DateRangeLink} onClick={onClick} title="Изменить период">{label}</a>
-      <button className={styles.ClearButton} onClick={onClear} title="Сбросить период">✕</button>
+      <Toolbar.CloseButton onClick={onClear} title="Сбросить период" />
     </div>
   );
 });
@@ -1593,20 +1627,19 @@ const FieldFastSearchInternal = memo(({ value, onChange }: {
       <div className={styles.SearchContainer}>
         <input
           type="text"
+          name="fastSearch"
           value={inputValue}
           onChange={(e) => handleChange(e.target.value)}
           placeholder="Быстрый поиск"
           className={styles.SearchInput}
+          autoComplete="off"
           autoFocus
         // title="Быстрый поиск по всем полям"
         />
-        <button
+        <Toolbar.CloseButton
           onClick={handleClear}
-          className={styles.ClearButton}
           title="Очистить"
-        >
-          ✕
-        </button>
+        />
       </div>
     </div>
   );

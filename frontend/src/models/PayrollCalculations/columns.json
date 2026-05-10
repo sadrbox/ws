@@ -27,7 +27,7 @@
 		"identifier": "date",
 		"name": "Дата",
 		"hint": "Дата документа",
-		"type": "date",
+		"type": "datetime",
 		"position": 3,
 		"visible": true,
 		"inlist": true,
@@ -94,18 +94,6 @@
 		"width": "120px",
 		"minWidth": "80px",
 		"alignment": "right"
-	},
-	{
-		"identifier": "status",
-		"name": "Статус",
-		"hint": "Статус документа",
-		"type": "string",
-		"position": 9,
-		"visible": true,
-		"inlist": true,
-		"width": "110px",
-		"minWidth": "80px",
-		"alignment": "left"
 	},
 	{
 		"identifier": "organization.shortName",

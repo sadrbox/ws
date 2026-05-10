@@ -131,7 +131,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
     ];
     if (form.isEditMode && form.fields.uuid) {
       t.push({ id: "files", label: translate("files"), component: <FilesPanel ownerType="contract" ownerUuid={form.fields.uuid} onFilesChange={handleFilesChange} /> });
-      t.push({ id: "print", label: "Печать", component: <PrintPreview ownerUuid={form.fields.uuid} filesRevision={filesRevision} /> });
+      t.push({ id: "print", label: "Просмотр файла", component: <PrintPreview ownerUuid={form.fields.uuid} filesRevision={filesRevision} /> });
     }
     return t;
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, filesRevision, handleFilesChange]);
@@ -143,8 +143,8 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
       onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
-      isLoading={form.isLoading}
+      onReload={form.isEditMode ? form.handleReload : undefined}
+      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
       readonly={!canWrite}
       isDirty={form.isDirty}
     />

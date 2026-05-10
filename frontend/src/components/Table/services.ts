@@ -106,10 +106,18 @@ export function getModelColumns(
 				.sort()
 				.join(",");
 			if (initSig === cachedSig) {
-				// Берём кэш (ширины, видимость), но sortable всегда из JSON-определения
+				// Берём кэш (ширины, видимость, printable), но sortable и
+				// togglePrintable всегда из JSON-определения, чтобы изменения
+				// в исходных схемах колонок применялись без сброса кэша.
 				columns = cached.map((c) => {
 					const def = defaults.find((d) => d.identifier === c.identifier);
-					return def ? { ...c, sortable: def.sortable } : c;
+					return def
+						? {
+								...c,
+								sortable: def.sortable,
+								togglePrintable: def.togglePrintable,
+							}
+						: c;
 				});
 			} else {
 				// Столбцы изменились — сбрасываем устаревший кэш
@@ -157,6 +165,28 @@ export function getFormatColumnValue(
 		return rawValue ? "✔" : "";
 	}
 	return "";
+}
+
+// ── Горизонтальное выравнивание содержимого ячейки ──────────────────────
+// Числа выравниваются по правому краю (так удобно сравнивать разряды),
+// булевы — по центру (галочка/пусто), остальные типы — по левому краю.
+// Если в описании колонки явно задан `alignment`, он имеет приоритет.
+export type THorizontalAlign = "left" | "right" | "center";
+
+export function getColumnAlignment(column: TColumn): THorizontalAlign {
+	const explicit = column.alignment;
+	if (explicit === "left" || explicit === "right" || explicit === "center") {
+		return explicit;
+	}
+	switch (column.type) {
+		case "number":
+		case "position":
+			return "right";
+		case "boolean":
+			return "center";
+		default:
+			return "left";
+	}
 }
 
 // Формат числовой идентификатор /////////////////////////////////////////////////////////////////////////

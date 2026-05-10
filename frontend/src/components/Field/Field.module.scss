@@ -1,19 +1,24 @@
 .FieldDisabled {
-	border: 0px solid $color31 !important;
+	// border: 0px solid $color31 !important;
+	background-color: $color31;
 }
+
+
 
 // $heightFieldInput: 26px;
 .FieldDate,
 .FieldString,
 .FieldSelect {
+	// letter-spacing: -1px; // Убираем крошечные зазоры между буквами в некоторых шрифтах (например, в Chrome с font-size ≤ 13px)
 	// flex: 1 1 auto;
 	// display: flex;
 	font-size: $fontsize;
 	width: 100%;
 	border: none;
 	// border-radius: $radius2;
-	height: $heightFieldInput;
-	padding: 0px 3px !important;
+	height: $heightFieldInput + 2px;
+
+	padding: 0px 6px !important;
 	box-sizing: content-box;
 
 	option {
@@ -71,6 +76,7 @@
 
 .FieldLabel {
 	// height: 28px;
+	user-select: none;
 	width: min-content;
 	// padding: 0 6px 0 0;
 	// flex: 0 0 1;
@@ -92,11 +98,13 @@
 	flex-direction: column;
 	position: relative;
 	// align-items: center;
+	// flex: 1;
 
 	// ── Table variant: no label, no border, stretch to fill td ──
 	&.tableVariant {
 		width: 100%;
 		height: 100%;
+		flex: 1;
 
 		.FieldLabel {
 			display: none;
@@ -116,6 +124,10 @@
 			}
 		}
 
+		.FieldDate {
+			flex: 1;
+		}
+
 		.FieldString,
 		.FieldSelect,
 		.FieldDate {
@@ -128,7 +140,7 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 			overflow: hidden;
-			padding: 0px 3px;
+			padding: 0px 6px;
 			margin: 0px;
 
 			&:focus {
@@ -199,57 +211,16 @@
 
 .FieldActions {
 	box-sizing: content-box;
-	height: ($heightFieldInput - 7px); // height: 28px;
-	// width: ($heightFieldInput - 6px);
-	// 	padding: 0px 3px;
-	// padding: 8px;
-	// padding-right: 52px; // Перенесено из инлайн-стиля
-	// border: 1px solid $color10;
-	// background-color: $color2;
-	// border-radius: $radius2;
-	// font-family: "PT Sans", sans-serif;
-	// font-size: 13px;
-	padding: 3px 3px 3px 0px;
-	// position: absolute;
-	margin-right: 1px;
-	// display: flex;
-	// border: 1px solid blue;
+	// height: ($heightFieldInput - 7px); // ≈21px
+	// padding: 3px 3px 3px 0px;
+	margin-right: 4px;
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	flex: 1;
 	gap: 3px;
-
-	// width: ($heightFieldInput - 6px); // height: 28px;
-	// gap: 4px;
-	// margin-left: -48px; // Смещение для наложения кнопок на input
-	// align-items: center;
-	button {
-		border-radius: $radius2;
-		display: flex;
-		// align-items: center;
-		// justify-content: center;
-		background: rgba($color81, 0.2);
-		height: ($heightFieldInput - 6px); // height: 28px;
-		width: ($heightFieldInput - 6px);
-		// height: 100%;
-		// flex: 1 1 0;
-
-		place-items: center;
-		// flex-direction: column;
-		// height: 100%;
-		border: 0px solid transparent;
-		// background: none;
-		// border: none;
-		cursor: pointer;
-		padding: 3px;
-		color: #000000;
-
-		img {
-			width: max-content;
-			height: max-content;
-		}
-	}
+	// кнопки внутри — общий компонент IconButton (size="sm");
+	// все стили (hover/focus/active/disabled) определены в
+	// src/components/icons/IconButton.module.scss
 }
 
 // ── Flash-анимация для read-only ячеек в таблице ─────────────────────────
@@ -277,7 +248,7 @@
 
 .flashReadOnly {
 	animation: flashReadOnly 0.55s ease-in-out;
-	outline: 1px solid transparent;
+	// outline: 1px solid transparent;
 	// border-radius: 2px;
 }
 

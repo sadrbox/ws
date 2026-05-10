@@ -11,7 +11,7 @@ import {
   FC, useMemo, useCallback, useState, useEffect, useRef, ReactNode,
   createContext, useContext,
 } from "react";
-import { getModelColumns, getFormatColumnValue, sortTableRows } from "src/components/Table/services";
+import { getModelColumns, getFormatColumnValue, getColumnAlignment, sortTableRows } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import Table, { TOpenModelFormProps } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
@@ -213,6 +213,111 @@ const SubTableInternalContext = createContext<SubTableContext | null>(null);
  */
 export const useSubTableContext = (): SubTableContext | null =>
   useContext(SubTableInternalContext);
+
+// ─── ReadOnlyCell ───────────────────────────────────────────────────────
+// Универсальная ячейка «только чтение» для табличных частей. Используется:
+//   - дефолтным рендером SubTable (см. ниже);
+//   - кастомными *Table-компонентами (saleItems, purchaseItems и т.п.)
+//     для вычисляемых/read-only колонок (lineNumber, vatAmount, amount, …).
+//
+// Поведение:
+//   - форматирует значение с учётом column.type и локали ru-RU
+//     (через `getFormatColumnValue` из Table/services);
+//   - в режиме inline-editing при клике мигает красным, сигнализируя
+//     пользователю, что поле не редактируется (анимация .flashReadOnly).
+//
+// API:
+//   <ReadOnlyCell row column inlineEditing />              // значение из row[column.identifier]
+//   <ReadOnlyCell value={x} column inlineEditing />        // override значения
+//   <ReadOnlyCell value={x} inlineEditing />               // без column: number → ru-RU, иначе String
+export interface ReadOnlyCellProps {
+  /** Строка таблицы. Если задан column и не задан value — значение берётся отсюда. */
+  row?: TDataItem;
+  /** Колонка — для форматирования по типу (number/date/datetime/string/boolean). */
+  column?: TColumn;
+  /** Override значения (используется для вычисляемых полей, напр. lineNumber). */
+  value?: unknown;
+  /** Если true — клик запускает flash-анимацию (read-only клик в inline-режиме). */
+  inlineEditing?: boolean;
+}
+
+function formatReadOnlyValue(
+  value: unknown,
+  row?: TDataItem,
+  column?: TColumn,
+): string {
+  if (value === undefined && row && column) {
+    return String(getFormatColumnValue(row, column));
+  }
+  if (value == null || value === "") return "";
+  if (column) {
+    // Имитируем getFormatColumnValue с подставленным значением, сохраняя
+    // тип колонки (number/date/datetime/string/boolean) и локаль.
+    const lastKey = column.identifier.includes(".")
+      ? column.identifier.split(".").pop() ?? column.identifier
+      : column.identifier;
+    const synthetic = { [lastKey]: value } as unknown as TDataItem;
+    return String(
+      getFormatColumnValue(synthetic, { ...column, identifier: lastKey }),
+    );
+  }
+  // Без column: единая логика для number/string.
+  if (typeof value === "number") {
+    return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 9 }).format(
+      value,
+    );
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    // Числовая строка → форматируем по ru-RU.
+    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+      return new Intl.NumberFormat("ru-RU", {
+        maximumFractionDigits: 9,
+      }).format(Number(trimmed));
+    }
+    return value;
+  }
+  return String(value);
+}
+
+export const ReadOnlyCell: FC<ReadOnlyCellProps> = ({
+  row,
+  column,
+  value,
+  inlineEditing = false,
+}) => {
+  const [flashing, setFlashing] = useState(false);
+  const display = formatReadOnlyValue(value, row, column);
+
+  const handleClick = useCallback(() => {
+    if (!inlineEditing) return;
+    setFlashing(false);
+    requestAnimationFrame(() => setFlashing(true));
+    setTimeout(() => setFlashing(false), 600);
+  }, [inlineEditing]);
+
+  const cls = [
+    styles.ReadOnlyCell,
+    flashing && styles.flashReadOnly,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  // Горизонтальное выравнивание: number/position → справа,
+  // boolean → по центру, остальные → слева. Реализуется через
+  // justify-content, т.к. .ReadOnlyCell — flex-контейнер.
+  const align = column ? getColumnAlignment(column) : "left";
+  const justify = align === "right" ? "flex-end"
+    : align === "center" ? "center"
+      : "flex-start";
+
+  return (
+    <span className={cls} onClick={handleClick} style={{ justifyContent: justify, textAlign: align }}>
+      {display}
+    </span>
+  );
+};
+ReadOnlyCell.displayName = "ReadOnlyCell";
 
 /** Сравнение по бизнес-id (uuid приоритетнее, fallback на числовой id) */
 function isSameRow(a: TDataItem, b: TDataItem): boolean {
@@ -820,7 +925,7 @@ const SubTable: FC<SubTableProps> = ({
     // Если кастомного контента нет, но есть ошибка — показываем отформатированное значение
     const displayContent = content !== undefined
       ? content
-      : <span>{getFormatColumnValue(row, col)}</span>;
+      : <ReadOnlyCell row={row} column={col} inlineEditing={inlineEditing} />;
 
     // ВСЕГДА оборачиваем в div когда есть кастомный контент или ошибка.
     // Постоянная структура DOM предотвращает ремонт input-ов при изменении состояния ошибки:

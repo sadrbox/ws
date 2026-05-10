@@ -1,6 +1,8 @@
 import React, { CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import styles from "./Field.module.scss"
+import FieldActionButton from "./FieldActionButton"
+import type { IconName } from "src/components/IconButton/icons"
 // import { TypeDateRange } from '../Table/types'
 
 import { getFormatNumerical, parseNumericInput } from 'src/components/Table/services.ts'
@@ -30,34 +32,14 @@ import { getFormatNumerical, parseNumericInput } from 'src/components/Table/serv
 //   style?: CSSProperties;
 // }
 
-export const imgActions = {
-  clear: {
-    img: (<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-      <path d="M3,3 L13,13 M13,3 L3,13" stroke="currentColor" strokeWidth="0.5" fill="none" strokeLinecap="round" />
-    </svg>),
-    alt: "clear-sign--v1",
-  },
-  list: {
-    img: (<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1" y="3" width="14" height="1" fill="currentColor" rx="0.5" />
-      <rect x="1" y="6" width="14" height="1" fill="currentColor" rx="0.5" />
-      <rect x="1" y="9" width="14" height="1" fill="currentColor" rx="0.5" />
-      <rect x="1" y="12" width="14" height="1" fill="currentColor" rx="0.5" />
-    </svg>),
-    alt: "list-sign--v1",
-  },
-  open: {
-    img: (<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1" y="1" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1" rx="0.5" />
-      <rect x="3" y="3" width="10" height="1" fill="currentColor" rx="0.5" />
-      <rect x="3" y="5" width="8" height="1" fill="currentColor" rx="0.5" />
-      <rect x="3" y="7" width="6" height="1" fill="currentColor" rx="0.5" />
-      <rect x="3" y="9" width="4" height="1" fill="currentColor" rx="0.5" />
-      <rect x="3" y="11" width="6" height="1" fill="currentColor" rx="0.5" />
-    </svg>),
-    alt: "open-sign--v1",
-  }
-}
+// Карта тип-действия → иконка из общего реестра + подпись.
+// fieldActions описывают только тип, обработчик и (опц.) состояние —
+// визуал инкапсулирован в FieldActionButton/IconButton.
+const FIELD_ACTION_META: Record<'clear' | 'list' | 'open', { icon: IconName; label: string }> = {
+  clear: { icon: "clear", label: "Очистить" },
+  list: { icon: "list", label: "Выбрать из списка" },
+  open: { icon: "open", label: "Открыть" },
+};
 
 // Типы для действий
 type FieldActionType = 'clear' | 'list' | 'open';
@@ -240,18 +222,17 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
 
         {actions && actions.length > 0 && (
           <div className={styles.FieldActions}>
-            {actions.map((action, index) => (
-              <button
-                key={index}
-                onClick={action.onClick}
-                type='button'
-                className={styles.FieldActionButton}
-                title={imgActions[action.type].alt}
-                tabIndex={-1}
-              >
-                {imgActions[action.type].img}
-              </button>
-            ))}
+            {actions.map((action, index) => {
+              const meta = FIELD_ACTION_META[action.type];
+              return (
+                <FieldActionButton
+                  key={index}
+                  icon={meta.icon}
+                  label={meta.label}
+                  onClick={action.onClick}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -374,7 +355,7 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
           name={name}
           value={safeValue}
           onChange={onChange}
-          className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
+          className={`${styles.FieldDate} ${disabled ? styles.FieldDisabled : ''}`}
           disabled={disabled}
         />
       </div>
@@ -636,18 +617,17 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
 
         {visibleActions.length > 0 && (
           <div className={styles.FieldActions}>
-            {visibleActions.map((action, index) => (
-              <button
-                key={index}
-                onClick={action.onClick}
-                type="button"
-                className={styles.FieldActionButton}
-                title={imgActions[action.type].alt}
-                tabIndex={-1}
-              >
-                {imgActions[action.type].img}
-              </button>
-            ))}
+            {visibleActions.map((action, index) => {
+              const meta = FIELD_ACTION_META[action.type];
+              return (
+                <FieldActionButton
+                  key={index}
+                  icon={meta.icon}
+                  label={meta.label}
+                  onClick={action.onClick}
+                />
+              );
+            })}
           </div>
         )}
       </div>

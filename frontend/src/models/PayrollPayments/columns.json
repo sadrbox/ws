@@ -27,7 +27,7 @@
 		"identifier": "date",
 		"name": "Дата",
 		"hint": "Дата документа",
-		"type": "date",
+		"type": "datetime",
 		"position": 3,
 		"visible": true,
 		"inlist": true,
@@ -80,18 +80,6 @@
 		"visible": true,
 		"inlist": true,
 		"width": "140px",
-		"minWidth": "80px",
-		"alignment": "left"
-	},
-	{
-		"identifier": "status",
-		"name": "Статус",
-		"hint": "Статус документа",
-		"type": "string",
-		"position": 8,
-		"visible": true,
-		"inlist": true,
-		"width": "110px",
 		"minWidth": "80px",
 		"alignment": "left"
 	},

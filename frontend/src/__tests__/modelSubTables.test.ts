@@ -19,7 +19,6 @@ import payrollCalculationsCols from "../models/PayrollCalculations/columns.json"
 import payrollPaymentsCols from "../models/PayrollPayments/columns.json";
 import productsCols from "../models/Products/columns.json";
 import unitOfMeasuresCols from "../models/UnitOfMeasures/columns.json";
-import vatRatesCols from "../models/VatRates/columns.json";
 import bankAccountsCols from "../models/BankAccounts/columns.json";
 import contactsCols from "../models/Contacts/columns.json";
 import contractsCols from "../models/Contracts/columns.json";
@@ -285,7 +284,6 @@ describe("columns.json — поле inlist присутствует во все�
 	it("Products", () => checkAllHaveInlist(productsCols as any, "Products"));
 	it("UnitOfMeasures", () =>
 		checkAllHaveInlist(unitOfMeasuresCols as any, "UnitOfMeasures"));
-	it("VatRates", () => checkAllHaveInlist(vatRatesCols as any, "VatRates"));
 	it("BankAccounts", () =>
 		checkAllHaveInlist(bankAccountsCols as any, "BankAccounts"));
 	it("Contacts", () => checkAllHaveInlist(contactsCols as any, "Contacts"));

@@ -12,6 +12,7 @@ import { translateError } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import useUID from "./useUID";
+import { stableStringify } from "src/utils/normalize";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ТИПЫ
@@ -205,6 +206,22 @@ function createFormStore<F extends object>(
 	// Блокирует isDirty() чтобы не мерцал индикатор «Не сохранено».
 	let snapshotReady = !hadStoredData;
 
+	// Флаг: первая загрузка с сервера завершена (успех ИЛИ ошибка).
+	// Используется для отображения скелетона в ModelForm вместо мигания
+	// disabled-полей. Для новых записей (без uuid) — сразу true, фетч не нужен.
+	// Если данные восстановлены из sessionStorage (hadStoredData) — тоже true,
+	// поскольку у нас уже есть что показать (фоновый фетч обновит savedSnapshot).
+	let initialFetchDone = !uuid || hadStoredData;
+	function isInitialFetchDone(): boolean {
+		return initialFetchDone;
+	}
+	function markInitialFetchDone(): void {
+		if (!initialFetchDone) {
+			initialFetchDone = true;
+			notify();
+		}
+	}
+
 	// Флаг: уведомление о несохранённых данных прошлой сессии уже показывалось.
 	// Хранится в store (а не в React-состоянии), поэтому не сбрасывается при
 	// перемонтировании компонента (закрыл/открыл панель без перезагрузки страницы).
@@ -281,14 +298,17 @@ function createFormStore<F extends object>(
 	// isDirty() сравнивает текущее состояние с последним сохранённым.
 	// ⚠️ Инициализация = начальные defaults + пустые таблицы (ДО восстановления из sessionStorage).
 	// Если данные были восстановлены из session — isDirty() вернёт true, что корректно.
-	let savedSnapshot: string = JSON.stringify({
+	// Снимок формируется stableStringify — нормализация значений (null/undefined/"",
+	// число-строка, трим, сортировка ключей, Decimal/Date) исключает
+	// ложный dirty от повторной записи тех же значений / технических ре-render'ов.
+	let savedSnapshot: string = stableStringify({
 		fields: defaultFields,
 		tables: emptyTables,
 	});
 
 	/** Сбросить dirty-флаг (вызывать после load / save) */
 	function markClean(): void {
-		savedSnapshot = JSON.stringify({
+		savedSnapshot = stableStringify({
 			fields: state.fields,
 			tables: state.tables,
 		});
@@ -301,7 +321,7 @@ function createFormStore<F extends object>(
 	function isDirty(): boolean {
 		// Пока серверный snapshot не загружен — не показывать dirty
 		if (!snapshotReady) return false;
-		const current = JSON.stringify({
+		const current = stableStringify({
 			fields: state.fields,
 			tables: state.tables,
 		});
@@ -324,11 +344,11 @@ function createFormStore<F extends object>(
 		const savedFields = parsed?.fields;
 		const savedTables = parsed?.tables ?? {};
 		const fieldsDirty =
-			JSON.stringify(state.fields) !== JSON.stringify(savedFields);
+			stableStringify(state.fields) !== stableStringify(savedFields);
 		const tablesDirty = Object.keys(state.tables).some(
 			(key) =>
-				JSON.stringify(state.tables[key]) !==
-				JSON.stringify(savedTables[key] ?? { pending: [] }),
+				stableStringify(state.tables[key]) !==
+				stableStringify(savedTables[key] ?? { pending: [] }),
 		);
 		return { fields: fieldsDirty, tables: tablesDirty };
 	}
@@ -490,7 +510,7 @@ function createFormStore<F extends object>(
 			const mapped = await Promise.resolve(mapServerToForm(d, state.fields));
 
 			if (snapshotOnly) {
-				savedSnapshot = JSON.stringify({
+				savedSnapshot = stableStringify({
 					fields: mapped,
 					tables: emptyTables,
 				});
@@ -510,6 +530,7 @@ function createFormStore<F extends object>(
 			}
 
 			afterLoad?.();
+			markInitialFetchDone();
 		} catch (err: any) {
 			if (isNetworkError(err)) {
 				const offMsg =
@@ -522,16 +543,26 @@ function createFormStore<F extends object>(
 				);
 			}
 			setMeta({ isLoading: false });
+			// Даже при ошибке — снимаем скелетон, чтобы пользователь увидел
+			// сообщение об ошибке вместо бесконечной анимации загрузки.
+			markInitialFetchDone();
 		}
 	}
 
-	/** Сохранить поля формы на сервере (POST или PUT) */
+	/** Сохранить поля формы на сервере (POST или PUT).
+	 *
+	 * @param keepLoadingOnSuccess Если true — после успешного сохранения
+	 *   оставляет isLoading=true (поля формы остаются disabled). Используется
+	 *   handleSaveAndClose, чтобы избежать визуального «прыжка» disabled→enabled
+	 *   между окончанием PUT/POST и анмаунтом панели формы.
+	 */
 	async function submitFields(
 		buildPayload: (fields: F) => Record<string, unknown> | string,
 		mapServerToForm: (data: any, prev?: F) => F | Promise<F>,
 		buildPaneLabel: (saved: any) => string,
 		updatePaneLabel: (uniqId: string, label: string) => void,
 		uniqId?: string,
+		keepLoadingOnSuccess: boolean = false,
 	): Promise<{ success: boolean; savedData?: any }> {
 		setMeta({ isLoading: true });
 		setError(null);
@@ -567,7 +598,7 @@ function createFormStore<F extends object>(
 			);
 			replaceFields(mapped);
 			setMeta({
-				isLoading: false,
+				isLoading: keepLoadingOnSuccess ? true : false,
 				isEditMode: true,
 				uuid: saved.uuid ?? entityUuid,
 			});
@@ -685,6 +716,7 @@ function createFormStore<F extends object>(
 		markPrevSessionNotifShown,
 		isPrevSessionNotifShown,
 		isSnapshotReady,
+		isInitialFetchDone,
 
 		// Мутации fields
 		setField,
@@ -1169,6 +1201,9 @@ export interface UseFormStoreReturn<F extends object> {
 	/** formData — совместимость с существующим JSX */
 	formData: F;
 	isLoading: boolean;
+	/** true пока ПЕРВАЯ загрузка серверных данных не завершена для существующей записи.
+	 *  Используется для отображения скелетона вместо мигания пустых disabled-полей. */
+	isInitialLoading: boolean;
 	isEditMode: boolean;
 	error: string | null;
 	errorRevision: number;
@@ -1248,9 +1283,9 @@ export function useFormStore<F extends object>(
 	onCloseRef.current = onClose;
 
 	// Refs для deferred-доступа из эффектов, создаваемых раньше определения функций
-	const submitRef = useRef<() => Promise<boolean>>(() =>
-		Promise.resolve(false),
-	);
+	const submitRef = useRef<
+		(options?: { keepLoadingOnSuccess?: boolean }) => Promise<boolean>
+	>(() => Promise.resolve(false));
 	const loadFromServerRef = useRef<(entityUuid: string) => Promise<void>>(
 		async () => {},
 	);
@@ -1453,53 +1488,58 @@ export function useFormStore<F extends object>(
 	);
 
 	// ── Submit (fields + tables) ──
-	const submit = useCallback(async (): Promise<boolean> => {
-		const { success, savedData } = await store.submitFields(
-			buildPayloadRef.current,
-			mapRef.current,
-			buildLabelRef.current,
-			updatePaneLabel,
-			uniqId,
-		);
-		if (!success) return false;
+	const submit = useCallback(
+		async (options?: { keepLoadingOnSuccess?: boolean }): Promise<boolean> => {
+			const keepLoading = Boolean(options?.keepLoadingOnSuccess);
+			const { success, savedData } = await store.submitFields(
+				buildPayloadRef.current,
+				mapRef.current,
+				buildLabelRef.current,
+				updatePaneLabel,
+				uniqId,
+				keepLoading,
+			);
+			if (!success) return false;
 
-		// Коммит всех pending-таблиц
-		const parentUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid ?? "";
-		if (Object.keys(tableDefs).length > 0 && parentUuid) {
-			try {
-				await store.commitAllTables(parentUuid);
-			} catch (e: any) {
-				store.setError(e?.message || "Не удалось сохранить вложенные данные");
-				return false;
+			// Коммит всех pending-таблиц
+			const parentUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid ?? "";
+			if (Object.keys(tableDefs).length > 0 && parentUuid) {
+				try {
+					await store.commitAllTables(parentUuid);
+				} catch (e: any) {
+					store.setError(e?.message || "Не удалось сохранить вложенные данные");
+					return false;
+				}
 			}
-		}
 
-		// afterSave — дополнительная логика (invalidate и т.д.)
-		if (afterSaveRef.current) {
-			try {
-				await afterSaveRef.current(savedData);
-			} catch (e: any) {
-				store.setError(e?.message || "Ошибка после сохранения");
-				return false;
+			// afterSave — дополнительная логика (invalidate и т.д.)
+			if (afterSaveRef.current) {
+				try {
+					await afterSaveRef.current(savedData);
+				} catch (e: any) {
+					store.setError(e?.message || "Ошибка после сохранения");
+					return false;
+				}
 			}
-		}
 
-		void onSaveRef.current?.();
-		store.markClean();
+			void onSaveRef.current?.();
+			store.markClean();
 
-		// Миграция storageKey после первого POST (new → uuid).
-		// Если запись была создана (есть savedData.uuid) и текущий ключ НЕ содержит uuid —
-		// мигрируем ключ, чтобы при F5 данные были привязаны к uuid записи.
-		const newUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid;
-		if (newUuid) {
-			const uuidKey = `${STORAGE_PREFIX}${storageKey}:${newUuid}`;
-			if (store.getStorageKey() !== uuidKey) {
-				store.migrateStorageKey(uuidKey);
+			// Миграция storageKey после первого POST (new → uuid).
+			// Если запись была создана (есть savedData.uuid) и текущий ключ НЕ содержит uuid —
+			// мигрируем ключ, чтобы при F5 данные были привязаны к uuid записи.
+			const newUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid;
+			if (newUuid) {
+				const uuidKey = `${STORAGE_PREFIX}${storageKey}:${newUuid}`;
+				if (store.getStorageKey() !== uuidKey) {
+					store.migrateStorageKey(uuidKey);
+				}
 			}
-		}
 
-		return true;
-	}, [store, tableDefs, updatePaneLabel, uniqId, storageKey]);
+			return true;
+		},
+		[store, tableDefs, updatePaneLabel, uniqId, storageKey],
+	);
 
 	// ── Actions ──
 	submitRef.current = submit;
@@ -1510,7 +1550,10 @@ export function useFormStore<F extends object>(
 	}, [submit]);
 
 	const handleSaveAndClose = useCallback(async () => {
-		if (await submit()) {
+		// keepLoadingOnSuccess: оставляем isLoading=true на время закрытия,
+		// чтобы поля формы не «прыгали» из disabled в enabled между окончанием
+		// сохранения и анмаунтом панели.
+		if (await submit({ keepLoadingOnSuccess: true })) {
 			const currentKey = store.getStorageKey();
 			store.clearStorage();
 			storeCache.delete(currentKey);
@@ -1617,6 +1660,10 @@ export function useFormStore<F extends object>(
 		setFormData,
 		formData: snapshot.fields,
 		isLoading: snapshot.meta.isLoading,
+		// Скелетон формы: отображается пока серверный фетч не завершился
+		// (для уже существующей записи без данных в sessionStorage).
+		// Цель — убрать визуальный эффект "мигания" пустых/disabled полей.
+		isInitialLoading: !store.isInitialFetchDone(),
 		isEditMode: snapshot.meta.isEditMode,
 		error: snapshot.meta.error,
 		errorRevision: snapshot.meta.errorRevision,

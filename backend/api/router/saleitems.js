@@ -48,6 +48,125 @@ function sumAddedTaxes(entries) {
 	return Math.round(s * 100) / 100;
 }
 
+/**
+ * Расчёт vatAmount для строки SaleItem согласно методу из справочника VatRate.
+ *   INCLUDED — НДС включён в цену:    vat = base * rate / (100 + rate)
+ *   ADDED    — НДС начисляется сверху: vat = base * rate / 100
+ * Возвращает 0 если ставка ≤ 0.
+ */
+function calcVatAmount(amountAfterDiscount, rate, method) {
+	const r = Number(rate) || 0;
+	if (r <= 0) return 0;
+	const m =
+		String(method ?? "INCLUDED").toUpperCase() === "ADDED"
+			? "ADDED"
+			: "INCLUDED";
+	const v =
+		m === "ADDED"
+			? (amountAfterDiscount * r) / 100
+			: (amountAfterDiscount * r) / (100 + r);
+	return Math.round(v * 100) / 100;
+}
+
+/**
+ * Загрузка способа расчёта НДС из настроек учёта организации,
+ * к которой относится продажа. Возвращает "INCLUDED" по умолчанию.
+ * Справочник VatRate удалён — метод теперь хранится напрямую в
+ * OrganizationAccountingSetting.vatCalculationMethod.
+ */
+async function loadVatMethodForSale(saleUuid) {
+	if (!saleUuid) return "INCLUDED";
+	try {
+		const sale = await prisma.sale.findUnique({
+			where: { uuid: saleUuid },
+			select: { organizationUuid: true, date: true },
+		});
+		if (!sale?.organizationUuid) return "INCLUDED";
+		// Историческая выборка: настройки, действовавшие на дату документа
+		// (startDate <= sale.date). Фолбэк — последняя активная запись.
+		const where = { organizationUuid: sale.organizationUuid };
+		if (sale.date) where.startDate = { lte: sale.date };
+		let settings = await prisma.organizationAccountingSetting.findFirst({
+			where,
+			orderBy: { id: "desc" },
+			select: { vatCalculationMethod: true },
+		});
+		if (!settings) {
+			settings = await prisma.organizationAccountingSetting.findFirst({
+				where: { organizationUuid: sale.organizationUuid, deletedAt: null },
+				orderBy: { id: "desc" },
+				select: { vatCalculationMethod: true },
+			});
+		}
+		return String(
+			settings?.vatCalculationMethod ?? "INCLUDED",
+		).toUpperCase() === "ADDED"
+			? "ADDED"
+			: "INCLUDED";
+	} catch {
+		return "INCLUDED";
+	}
+}
+
+/**
+ * Полный пересчёт сумм строки SaleItem с учётом акциза (НК РК ст. 463).
+ *
+ *   base            = quantity × price
+ *   discountAmount  = base × discountPercent / 100
+ *   afterDiscount   = base − discountAmount
+ *   exciseAmount    = afterDiscount × exciseRate / 100   (акциз ADDED)
+ *   vatBase         = afterDiscount + exciseAmount        (база для НДС)
+ *
+ * Метод НДС определяется записью справочника VatRate:
+ *   INCLUDED:  vatAmount = vatBase × rate / (100 + rate)
+ *              amount    = vatBase
+ *   ADDED:     vatAmount = vatBase × rate / 100
+ *              amount    = vatBase + vatAmount
+ *
+ *   amountWithoutVat = amount − vatAmount   (графа 13 ЭСФ РК)
+ *
+ * @param {object} input { quantity, price, discountPercent, vatRate, exciseRate, vatMethod, taxes }
+ * @returns {{ discountAmount, exciseAmount, vatAmount, amount, amountWithoutVat, taxes }}
+ */
+function recalcLineAmounts(input) {
+	const qty = Number(input.quantity) || 0;
+	const prc = Number(input.price) || 0;
+	const discPct = Number(input.discountPercent) || 0;
+	const vRate = Number(input.vatRate) || 0;
+	const exciseRate = Number(input.exciseRate) || 0;
+	const vatMethod =
+		String(input.vatMethod ?? "INCLUDED").toUpperCase() === "ADDED"
+			? "ADDED"
+			: "INCLUDED";
+
+	const base = Math.round(qty * prc * 100) / 100;
+	const discountAmount = Math.round(((base * discPct) / 100) * 100) / 100;
+	const afterDiscount = Math.round((base - discountAmount) * 100) / 100;
+	const exciseAmount =
+		exciseRate > 0
+			? Math.round(((afterDiscount * exciseRate) / 100) * 100) / 100
+			: 0;
+	const vatBase = Math.round((afterDiscount + exciseAmount) * 100) / 100;
+
+	const vatAmount = calcVatAmount(vatBase, vRate, vatMethod);
+	const recomputedTaxes = recalcTaxes(vatBase, input.taxes);
+	const vatAddedDelta = vatMethod === "ADDED" ? vatAmount : 0;
+	const amount =
+		Math.round(
+			(vatBase + sumAddedTaxes(recomputedTaxes) + vatAddedDelta) * 100,
+		) / 100;
+	const amountWithoutVat = Math.round((amount - vatAmount) * 100) / 100;
+
+	return {
+		discountAmount,
+		exciseAmount,
+		vatAmount,
+		amount,
+		amountWithoutVat,
+		taxes: recomputedTaxes,
+	};
+}
+
 // ── GET list by saleUuid ────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -62,7 +181,6 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const NESTED_SORT_FIELDS = {
 			"product.shortName": { product: { shortName: "asc" } },
 			"unitOfMeasure.shortName": { unitOfMeasure: { shortName: "asc" } },
-			"vatRateRef.shortName": { vatRateRef: { shortName: "asc" } },
 		};
 
 		const orderBy = [];
@@ -101,7 +219,6 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			include: {
 				product: { include: { brand: true } },
 				unitOfMeasure: true,
-				vatRateRef: true,
 			},
 		});
 		return res.status(200).json({ success: true, items, total: items.length });
@@ -123,7 +240,6 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			include: {
 				product: { include: { brand: true } },
 				unitOfMeasure: true,
-				vatRateRef: true,
 			},
 		});
 		if (!item)
@@ -144,8 +260,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			quantity,
 			price,
 			unitOfMeasureUuid,
-			vatRateUuid,
 			vatRate,
+			exciseRate,
 			discountPercent,
 			taxes,
 		} = req.body;
@@ -158,19 +274,17 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		const prc = price != null ? parseFloat(price) : 0;
 		const discPct = discountPercent != null ? parseFloat(discountPercent) : 0;
 		const vRate = vatRate != null ? parseFloat(vatRate) : 12;
-
-		const baseAmount = Math.round(qty * prc * 100) / 100;
-		const discAmt = Math.round(((baseAmount * discPct) / 100) * 100) / 100;
-		const amountAfterDiscount = baseAmount - discAmt;
-		const vat =
-			vRate > 0
-				? Math.round(((amountAfterDiscount * vRate) / (100 + vRate)) * 100) /
-					100
-				: 0;
-		const recomputedTaxes = recalcTaxes(amountAfterDiscount, taxes);
-		const amt =
-			Math.round((amountAfterDiscount + sumAddedTaxes(recomputedTaxes)) * 100) /
-			100;
+		const exRate = exciseRate != null ? parseFloat(exciseRate) : 0;
+		const vatMethod = await loadVatMethodForSale(saleUuid);
+		const calc = recalcLineAmounts({
+			quantity: qty,
+			price: prc,
+			discountPercent: discPct,
+			vatRate: vRate,
+			exciseRate: exRate,
+			vatMethod,
+			taxes,
+		});
 
 		const item = await prisma[MODEL].create({
 			data: {
@@ -178,19 +292,20 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				productUuid: productUuid || null,
 				quantity: qty,
 				price: prc,
-				amount: amt,
+				amount: calc.amount,
+				amountWithoutVat: calc.amountWithoutVat,
 				unitOfMeasureUuid: unitOfMeasureUuid || null,
-				vatRateUuid: vatRateUuid || null,
 				vatRate: vRate,
-				vatAmount: vat,
+				vatAmount: calc.vatAmount,
+				exciseRate: exRate,
+				exciseAmount: calc.exciseAmount,
 				discountPercent: discPct,
-				discountAmount: discAmt,
-				taxes: recomputedTaxes ?? undefined,
+				discountAmount: calc.discountAmount,
+				taxes: calc.taxes ?? undefined,
 			},
 			include: {
 				product: { include: { brand: true } },
 				unitOfMeasure: true,
-				vatRateRef: true,
 			},
 		});
 
@@ -213,39 +328,51 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 
 		const data = {};
-		if (req.body.productUuid !== undefined)
-			data.productUuid = req.body.productUuid || null;
+		// Prisma 7+ запрещает прямую запись скалярных FK (productUuid,
+		// unitOfMeasureUuid) в update — нужно использовать вложенные
+		// connect/disconnect через relation-поля.
+		if (req.body.productUuid !== undefined) {
+			data.product = req.body.productUuid
+				? { connect: { uuid: req.body.productUuid } }
+				: { disconnect: true };
+		}
 		// lineNumber управляется сервером автоматически — ручное обновление игнорируется
-		if (req.body.unitOfMeasureUuid !== undefined)
-			data.unitOfMeasureUuid = req.body.unitOfMeasureUuid || null;
-		if (req.body.vatRateUuid !== undefined)
-			data.vatRateUuid = req.body.vatRateUuid || null;
+		if (req.body.unitOfMeasureUuid !== undefined) {
+			data.unitOfMeasure = req.body.unitOfMeasureUuid
+				? { connect: { uuid: req.body.unitOfMeasureUuid } }
+				: { disconnect: true };
+		}
 
-		const qty =
-			req.body.quantity !== undefined
-				? parseFloat(req.body.quantity)
-				: undefined;
-		const prc =
-			req.body.price !== undefined ? parseFloat(req.body.price) : undefined;
-		const discPct =
-			req.body.discountPercent !== undefined
-				? parseFloat(req.body.discountPercent)
-				: undefined;
-		const vRate =
-			req.body.vatRate !== undefined ? parseFloat(req.body.vatRate) : undefined;
+		// parseFloat("") и parseFloat(null) → NaN. Превращаем NaN в undefined,
+		// чтобы не записывать недопустимое значение в БД (Prisma пропустит).
+		const parseNum = (v) => {
+			if (v === undefined || v === null || v === "") return undefined;
+			const n = parseFloat(v);
+			return Number.isFinite(n) ? n : undefined;
+		};
+
+		const qty = parseNum(req.body.quantity);
+		const prc = parseNum(req.body.price);
+		const discPct = parseNum(req.body.discountPercent);
+		const vRate = parseNum(req.body.vatRate);
+		const exRate = parseNum(req.body.exciseRate);
 
 		if (qty !== undefined) data.quantity = qty;
 		if (prc !== undefined) data.price = prc;
 		if (discPct !== undefined) data.discountPercent = discPct;
 		if (vRate !== undefined) data.vatRate = vRate;
+		if (exRate !== undefined) data.exciseRate = exRate;
 
-		// Если обновились кол-во, цена, скидка или НДС — пересчитать суммы
-		if (
+		// Если обновились кол-во, цена, скидка, НДС, акциз или taxes — пересчитать суммы
+		const recalcNeeded =
 			qty !== undefined ||
 			prc !== undefined ||
 			discPct !== undefined ||
-			vRate !== undefined
-		) {
+			vRate !== undefined ||
+			exRate !== undefined ||
+			req.body.taxes !== undefined;
+
+		if (recalcNeeded) {
 			const existing = await prisma[MODEL].findUnique({ where: w });
 			if (!existing)
 				return res.status(404).json({ success: false, message: "Не найдено" });
@@ -255,59 +382,41 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				discPct !== undefined ? discPct : Number(existing.discountPercent);
 			const finalVatRate =
 				vRate !== undefined ? vRate : Number(existing.vatRate);
+			const finalExRate =
+				exRate !== undefined ? exRate : Number(existing.exciseRate);
+			const vatMethod = await loadVatMethodForSale(existing.saleUuid);
 
-			const baseAmount = Math.round(finalQty * finalPrc * 100) / 100;
-			const discAmt =
-				Math.round(((baseAmount * finalDiscPct) / 100) * 100) / 100;
-			const amountAfterDiscount = baseAmount - discAmt;
-			const vatAmt =
-				finalVatRate > 0
-					? Math.round(
-							((amountAfterDiscount * finalVatRate) / (100 + finalVatRate)) *
-								100,
-						) / 100
-					: 0;
-
-			data.discountAmount = discAmt;
-			data.vatAmount = vatAmt;
-
-			// Пересчёт массива taxes (если задан в payload или существует в записи)
+			// Источник массива taxes: payload (если задан), иначе существующий.
 			const incomingTaxes = req.body.taxes;
 			const existingTaxes = Array.isArray(existing.taxes)
 				? existing.taxes
 				: null;
-			const sourceTaxes = Array.isArray(incomingTaxes)
-				? incomingTaxes
-				: existingTaxes;
-			let recomputed = null;
-			if (sourceTaxes) {
-				recomputed = recalcTaxes(amountAfterDiscount, sourceTaxes);
-				data.taxes = recomputed;
-			} else if (incomingTaxes === null) {
+			const sourceTaxes =
+				incomingTaxes === undefined
+					? existingTaxes
+					: Array.isArray(incomingTaxes)
+						? incomingTaxes
+						: null;
+
+			const calc = recalcLineAmounts({
+				quantity: finalQty,
+				price: finalPrc,
+				discountPercent: finalDiscPct,
+				vatRate: finalVatRate,
+				exciseRate: finalExRate,
+				vatMethod,
+				taxes: sourceTaxes,
+			});
+
+			data.discountAmount = calc.discountAmount;
+			data.exciseAmount = calc.exciseAmount;
+			data.vatAmount = calc.vatAmount;
+			data.amount = calc.amount;
+			data.amountWithoutVat = calc.amountWithoutVat;
+			if (incomingTaxes === null) {
 				data.taxes = null;
-			}
-			// amount = afterDiscount + Σ ADDED-налогов
-			data.amount =
-				Math.round((amountAfterDiscount + sumAddedTaxes(recomputed)) * 100) /
-				100;
-		} else if (req.body.taxes !== undefined) {
-			// Изменился только массив taxes — пересчитать на основе базовой стоимости
-			// (afterDiscount = quantity*price - discountAmount).
-			const existing = await prisma[MODEL].findUnique({ where: w });
-			if (!existing)
-				return res.status(404).json({ success: false, message: "Не найдено" });
-			const eQty = Number(existing.quantity) || 0;
-			const ePrc = Number(existing.price) || 0;
-			const eDisc = Number(existing.discountAmount) || 0;
-			const eAfter = Math.round((eQty * ePrc - eDisc) * 100) / 100;
-			if (req.body.taxes) {
-				const recomputed = recalcTaxes(eAfter, req.body.taxes);
-				data.taxes = recomputed;
-				data.amount =
-					Math.round((eAfter + sumAddedTaxes(recomputed)) * 100) / 100;
-			} else {
-				data.taxes = null;
-				data.amount = eAfter;
+			} else if (calc.taxes != null) {
+				data.taxes = calc.taxes;
 			}
 		}
 
@@ -317,7 +426,6 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			include: {
 				product: { include: { brand: true } },
 				unitOfMeasure: true,
-				vatRateRef: true,
 			},
 		});
 

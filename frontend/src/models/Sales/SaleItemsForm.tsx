@@ -5,14 +5,14 @@ import { FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupRow, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
-import { useFormStore, setPaneDirty } from "src/hooks/useFormStore";
+import { useFormStore, setPaneDirty, formStoreAPI } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import ModelForm from "src/components/ModelForm";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { useAppContext } from "src/app";
 import useUID from "src/hooks/useUID";
-import { recalcSaleItemAmounts, withSaleItemRecalc } from "./saleItemDraft";
+import { withSaleItemRecalc } from "./saleItemDraft";
 
 const MODEL_ENDPOINT = "saleitems";
 
@@ -25,19 +25,26 @@ interface TFields {
   quantity: number;
   price: number;
   amount: number;
+  amountWithoutVat: number;
   unitOfMeasureUuid: string;
   unitOfMeasureName: string;
-  vatRateUuid: string;
-  vatRateName: string;
   vatRate: number;
   vatAmount: number;
+  /** Метод расчёта НДС из настроек НУО (только для пересчёта; на сервер не отправляется). */
+  vatCalculationMethod: "INCLUDED" | "ADDED";
   discountPercent: number;
   discountAmount: number;
+  exciseRate: number;
+  exciseAmount: number;
   saleUuid: string;
 }
 
 interface EmbeddedSaleItemConfig {
   applyDraft: (nextRow: Record<string, unknown>) => void;
+  /** Передаются из SaleItemsTable: организация и дата документа для подбора
+   *  актуальных настроек учёта (флаги НДС/Скидка/Акциз, метод расчёта). */
+  organizationUuid?: string | null;
+  saleDate?: string | null;
 }
 
 const DEFAULT_FIELDS: TFields = {
@@ -47,14 +54,16 @@ const DEFAULT_FIELDS: TFields = {
   quantity: 0,
   price: 0,
   amount: 0,
+  amountWithoutVat: 0,
   unitOfMeasureUuid: "",
   unitOfMeasureName: "",
-  vatRateUuid: "",
-  vatRateName: "",
   vatRate: 0,
   vatAmount: 0,
+  vatCalculationMethod: "INCLUDED",
   discountPercent: 0,
   discountAmount: 0,
+  exciseRate: 0,
+  exciseAmount: 0,
   saleUuid: "",
 };
 
@@ -70,14 +79,17 @@ function mapDataToFields(data: Record<string, any> | undefined, saleUuid?: strin
     quantity: data.quantity != null ? Number(data.quantity) : 0,
     price: data.price != null ? Number(data.price) : 0,
     amount: data.amount != null ? Number(data.amount) : 0,
+    amountWithoutVat: data.amountWithoutVat != null ? Number(data.amountWithoutVat) : 0,
     unitOfMeasureUuid: data.unitOfMeasureUuid ?? "",
     unitOfMeasureName: data.unitOfMeasure?.shortName ?? data.unitOfMeasureName ?? "",
-    vatRateUuid: data.vatRateUuid ?? "",
-    vatRateName: data.vatRateRef?.shortName ?? data.vatRateName ?? "",
     vatRate: data.vatRate != null ? Number(data.vatRate) : 0,
     vatAmount: data.vatAmount != null ? Number(data.vatAmount) : 0,
+    vatCalculationMethod:
+      String(data.vatCalculationMethod ?? "INCLUDED").toUpperCase() === "ADDED" ? "ADDED" : "INCLUDED",
     discountPercent: data.discountPercent != null ? Number(data.discountPercent) : 0,
     discountAmount: data.discountAmount != null ? Number(data.discountAmount) : 0,
+    exciseRate: data.exciseRate != null ? Number(data.exciseRate) : 0,
+    exciseAmount: data.exciseAmount != null ? Number(data.exciseAmount) : 0,
     saleUuid: data.saleUuid ?? saleUuid ?? "",
   };
 }
@@ -90,16 +102,15 @@ function fieldsToDraftRow(fields: TFields): Record<string, unknown> {
     quantity: fields.quantity,
     price: fields.price,
     amount: fields.amount,
+    amountWithoutVat: fields.amountWithoutVat,
     unitOfMeasureUuid: fields.unitOfMeasureUuid || null,
     unitOfMeasure: fields.unitOfMeasureUuid ? { uuid: fields.unitOfMeasureUuid, shortName: fields.unitOfMeasureName } : null,
-    vatRateUuid: fields.vatRateUuid || null,
-    vatRateRef: fields.vatRateUuid
-      ? { uuid: fields.vatRateUuid, shortName: fields.vatRateName, rate: fields.vatRate || 0 }
-      : null,
     vatRate: fields.vatRate,
     vatAmount: fields.vatAmount,
     discountPercent: fields.discountPercent,
     discountAmount: fields.discountAmount,
+    exciseRate: fields.exciseRate,
+    exciseAmount: fields.exciseAmount,
     saleUuid: fields.saleUuid,
   };
 }
@@ -109,6 +120,10 @@ interface SaleItemsFieldsFormProps {
   setFields: (patch: Partial<TFields>) => void;
   isLoading: boolean;
   formUid: string;
+  /** Контекст документа: организация и дата → определяют активные настройки
+   *  учёта (флаги НДС/Скидка/Акциз и метод расчёта НДС). */
+  organizationUuid?: string | null;
+  saleDate?: string | null;
 }
 
 const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
@@ -116,12 +131,18 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
   setFields,
   isLoading,
   formUid,
+  organizationUuid,
+  saleDate,
 }) => {
-  const { isVatEnabled } = useOrgAccountingSettings();
+  const { isVatEnabled, useDiscount, useExcise, vatCalculationMethod } =
+    useOrgAccountingSettings(organizationUuid ?? null, saleDate ?? null);
 
+  // Пересчёт всегда использует фактический метод НДС организации (INCLUDED/ADDED)
+  // и текущую ставку акциза в строке (если useExcise=true).
   const handleNumericChange = useCallback((field: keyof TFields, value: string) => {
-    setFields(withSaleItemRecalc(fields, { [field]: value }) as Partial<TFields>);
-  }, [fields, setFields]);
+    const current = { ...fields, vatCalculationMethod };
+    setFields(withSaleItemRecalc(current, { [field]: value }) as Partial<TFields>);
+  }, [fields, setFields, vatCalculationMethod]);
 
   return (
     <div className={styles.FormWrapper}>
@@ -200,66 +221,74 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
             />
           </GroupRow>
 
-          {/* Строка 3: Ставка НДС · Скидка % */}
+          {/* Строка 3: Ставка НДС · Скидка % · Ставка акциза */}
           <GroupRow>
-            {isVatEnabled && (
-              <LookupField
-                label="Ставка НДС"
-                name={`${formUid}_vatRate`}
-                value={fields.vatRateUuid}
-                displayValue={fields.vatRateName}
-                endpoint="vat-rates"
-                displayField="shortName"
-                columns={[
-                  { key: "shortName", label: "Наименование" },
-                  { key: "rate", label: "%" },
-                ]}
-                onSelect={(uuid, display, item) => {
-                  const rate = item?.rate != null ? Number(item.rate) : Number(fields.vatRate);
-                  setFields({
-                    vatRateUuid: uuid,
-                    vatRateName: display,
-                    vatRate: rate,
-                    ...recalcSaleItemAmounts(fields.quantity, fields.price, rate, fields.discountPercent),
-                  });
-                }}
-                onClear={() => {
-                  setFields({
-                    vatRateUuid: "",
-                    vatRateName: "",
-                    vatRate: 0,
-                    ...recalcSaleItemAmounts(fields.quantity, fields.price, "0", fields.discountPercent),
-                  });
-                }}
-                disabled={isLoading}
-                width="200px"
-              />
-            )}
-            <FieldNumber
-              label="Скидка %"
-              name={`${formUid}_discPct`}
-              value={String(fields.discountPercent)}
-              onChange={e => handleNumericChange("discountPercent", e.target.value)}
-              disabled={isLoading}
-              step="0.1"
-              textAlign="right"
-              width="120px"
-            />
-          </GroupRow>
-
-          {/* Строка 4: Сумма скидки · НДС · Итого */}
-          <GroupRow>
-            <FieldNumber
-              label="Сумма скидки"
-              name={`${formUid}_discAmt`}
-              value={String(fields.discountAmount)}
-              disabled
-              textAlign="right"
-              width="150px"
-            />
             {isVatEnabled && (
               <FieldNumber
-                label="НДС (в т.ч.)"
+                label="Ставка НДС, %"
+                name={`${formUid}_vatRate`}
+                value={String(fields.vatRate)}
+                onChange={e => handleNumericChange("vatRate", e.target.value)}
+                disabled={isLoading}
+                step="0.01"
+                min="0"
+                max="100"
+                textAlign="right"
+                width="120px"
+              />
+            )}
+            {useDiscount && (
+              <FieldNumber
+                label="Скидка %"
+                name={`${formUid}_discPct`}
+                value={String(fields.discountPercent)}
+                onChange={e => handleNumericChange("discountPercent", e.target.value)}
+                disabled={isLoading}
+                step="0.1"
+                textAlign="right"
+                width="120px"
+              />
+            )}
+            {useExcise && (
+              <FieldNumber
+                label="Ставка акциза, %"
+                name={`${formUid}_exciseRate`}
+                value={String(fields.exciseRate)}
+                onChange={e => handleNumericChange("exciseRate", e.target.value)}
+                disabled={isLoading}
+                step="0.01"
+                min="0"
+                textAlign="right"
+                width="140px"
+              />
+            )}
+          </GroupRow>
+
+          {/* Строка 4: Сумма скидки · Сумма акциза · НДС (сверху/в т.ч.) · Итого */}
+          <GroupRow>
+            {useDiscount && (
+              <FieldNumber
+                label="Сумма скидки"
+                name={`${formUid}_discAmt`}
+                value={String(fields.discountAmount)}
+                disabled
+                textAlign="right"
+                width="150px"
+              />
+            )}
+            {useExcise && (
+              <FieldNumber
+                label="Сумма акциза"
+                name={`${formUid}_exciseAmt`}
+                value={String(fields.exciseAmount)}
+                disabled
+                textAlign="right"
+                width="150px"
+              />
+            )}
+            {isVatEnabled && (
+              <FieldNumber
+                label={vatCalculationMethod === "ADDED" ? "НДС (сверху)" : "НДС (в т.ч.)"}
                 name={`${formUid}_vatAmt`}
                 value={String(fields.vatAmount)}
                 disabled
@@ -284,8 +313,16 @@ const SaleItemsFieldsForm: FC<SaleItemsFieldsFormProps> = ({
 
 const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Sale");
-  const data = paneProps.data;
-  const saleUuid = (data as any)?.saleUuid as string | undefined;
+  const data = paneProps.data as Record<string, any> | undefined;
+  const saleUuid = data?.saleUuid as string | undefined;
+  // Организация и дата документа прокидываются SaleItemsTable’ом в data.sale
+  // (либо в корне data для самостоятельного открытия).
+  const orgUuid = (data?.organizationUuid as string | null | undefined)
+    ?? (data?.sale as { organizationUuid?: string | null } | undefined)?.organizationUuid
+    ?? null;
+  const saleDate = (data?.saleDate as string | null | undefined)
+    ?? (data?.sale as { date?: string | null } | undefined)?.date
+    ?? null;
 
   const initialFields: TFields | undefined = (() => {
     if (!data || data.uuid) return undefined;
@@ -310,9 +347,9 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
         price: fd.price ? fd.price : 0,
         lineNumber: fd.lineNumber ? fd.lineNumber : undefined,
         unitOfMeasureUuid: fd.unitOfMeasureUuid || null,
-        vatRateUuid: fd.vatRateUuid || null,
         vatRate: fd.vatRate ? fd.vatRate : 0,
         discountPercent: fd.discountPercent ? fd.discountPercent : 0,
+        exciseRate: fd.exciseRate ? fd.exciseRate : 0,
       };
     },
 
@@ -339,10 +376,12 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
           setFields={form.setFields}
           isLoading={form.isLoading}
           formUid={form.formUid}
+          organizationUuid={orgUuid}
+          saleDate={saleDate}
         />
       ),
     },
-  ], [form.fields, form.setFields, form.isLoading, form.isEditMode, form.formUid]);
+  ], [form.fields, form.setFields, form.isLoading, form.isEditMode, form.formUid, orgUuid, saleDate]);
 
   return (
     <ModelForm
@@ -351,8 +390,8 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
       onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
-      isLoading={form.isLoading}
+      onReload={form.isEditMode ? form.handleReload : undefined}
+      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
       readonly={!canWrite}
       isDirty={form.isDirty}
     />
@@ -366,6 +405,8 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
   const uniqId = paneProps.uniqId;
   const data = paneProps.data as Record<string, any> | undefined;
   const embedded = data?._embeddedSaleItem as EmbeddedSaleItemConfig | undefined;
+  const orgUuid = embedded?.organizationUuid ?? null;
+  const saleDate = embedded?.saleDate ?? null;
   const initialFields = useMemo(() => mapDataToFields(data, data?.saleUuid as string | undefined), [data]);
   const [fields, setFieldsState] = useState<TFields>(initialFields);
   const initialSnapshotRef = useRef(JSON.stringify(initialFields));
@@ -384,6 +425,15 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
     setFieldsState(initialFields);
     embedded?.applyDraft(fieldsToDraftRow(initialFields));
   }, [initialFields, embedded]);
+
+  // Регистрация reload-обработчика в глобальном formStoreAPI: иначе кнопка
+  // ⟳ в PaneItemHeaderToolbar (заголовок панели) не находит обработчик
+  // и тихо ничего не делает (эта форма не использует useFormStore).
+  useEffect(() => {
+    if (!uniqId) return;
+    formStoreAPI.register(uniqId, { reload: handleReload });
+    return () => formStoreAPI.unregister(uniqId);
+  }, [uniqId, handleReload]);
 
   useEffect(() => {
     if (!uniqId) return;
@@ -412,10 +462,12 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
           setFields={setFields}
           isLoading={false}
           formUid={formUid}
+          organizationUuid={orgUuid}
+          saleDate={saleDate}
         />
       ),
     },
-  ], [fields, setFields, formUid]);
+  ], [fields, setFields, formUid, orgUuid, saleDate]);
 
   return (
     <ModelForm

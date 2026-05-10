@@ -39,7 +39,6 @@ describe("NavList structure", () => {
 
 		expect(slice).toContain("Настройки учёта организации");
 		expect(slice).toContain("Единицы измерения");
-		expect(slice).toContain("Ставки НДС");
 		expect(slice).toContain("Налоги");
 	});
 });

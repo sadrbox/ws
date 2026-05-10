@@ -361,7 +361,6 @@ model Sale {
   amountWithoutVat Decimal?      @db.Decimal(18, 2)
   vatAmount        Decimal?      @db.Decimal(18, 2)
   discountAmount   Decimal?      @db.Decimal(18, 2)
-  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
@@ -390,7 +389,6 @@ model Purchase {
   date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
-  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
@@ -414,7 +412,6 @@ model OutgoingInvoice {
   date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
-  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
@@ -438,7 +435,6 @@ model IncomingInvoice {
   date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
-  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
@@ -462,7 +458,6 @@ model PaymentInvoice {
   date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
-  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
@@ -505,7 +500,6 @@ model InventoryTransfer {
   uuid              String        @unique @default(uuid())
   date              DateTime      @default(now())
   description       String?
-  status            String        @default("draft")
   fromWarehouseUuid String?
   toWarehouseUuid   String?
   organizationUuid  String?
@@ -529,7 +523,6 @@ model CashReceiptOrder {
   date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
-  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
@@ -553,7 +546,6 @@ model CashExpenseOrder {
   date             DateTime      @default(now())
   description      String?
   amount           Decimal?      @db.Decimal(18, 2)
-  status           String        @default("draft")
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
@@ -614,10 +606,18 @@ model SaleItem {
   quantity          Decimal        @default(0) @db.Decimal(18, 4)
   price             Decimal        @default(0) @db.Decimal(18, 2)
   amount            Decimal        @default(0) @db.Decimal(18, 2)
+  /// Стоимость без НДС (графа 13 ЭСФ РК): amount − vatAmount.
+  amountWithoutVat  Decimal        @default(0) @db.Decimal(18, 2)
   unitOfMeasureUuid String?
-  vatRateUuid       String?
+  /// Ставка НДС, % — фиксируется по каждой строке для исторической
+  /// точности. Справочник «Ставки НДС» удалён — значение берётся
+  /// из Настроек учёта организации (OrganizationAccountingSetting.vatRate).
   vatRate           Decimal        @default(12) @db.Decimal(5, 2)
   vatAmount         Decimal        @default(0) @db.Decimal(18, 2)
+  /// Ставка акциза в процентах (НК РК ст. 463). 0 — акциз не применяется.
+  exciseRate        Decimal        @default(0) @db.Decimal(8, 4)
+  /// Сумма акциза по строке (afterDiscount × exciseRate / 100).
+  exciseAmount      Decimal        @default(0) @db.Decimal(18, 2)
   discountPercent   Decimal        @default(0) @db.Decimal(5, 2)
   discountAmount    Decimal        @default(0) @db.Decimal(18, 2)
   productUuid       String?
@@ -628,12 +628,10 @@ model SaleItem {
   product           Product?       @relation(fields: [productUuid], references: [uuid])
   sale              Sale           @relation(fields: [saleUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
-  vatRateRef        VatRate?       @relation(fields: [vatRateUuid], references: [uuid])
 
   @@index([saleUuid])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
-  @@index([vatRateUuid])
   @@index([updatedAt])
   @@map("sale_items")
 }
@@ -753,7 +751,6 @@ model PayrollCalculation {
   oosms            Decimal       @default(0) @db.Decimal(18, 2)
   netSalary        Decimal       @default(0) @db.Decimal(18, 2)
   totalExpense     Decimal       @default(0) @db.Decimal(18, 2)
-  status           String        @default("draft")
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   employee         Employee?     @relation("PayrollCalcEmployee", fields: [employeeUuid], references: [uuid])
@@ -779,7 +776,6 @@ model PayrollPayment {
   organizationUuid String?
   paymentMethod    String?       @default("bank_transfer")
   amount           Decimal       @default(0) @db.Decimal(18, 2)
-  status           String        @default("draft")
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   employee         Employee?     @relation("PayrollPayEmployee", fields: [employeeUuid], references: [uuid])
@@ -807,24 +803,6 @@ model UnitOfMeasure {
   @@map("units_of_measure")
 }
 
-model VatRate {
-  id                 Int                             @id @default(autoincrement())
-  uuid               String                          @unique @default(uuid())
-  shortName          String
-  rate               Decimal                         @db.Decimal(5, 2)
-  /// Способ расчёта НДС:
-  ///   "INCLUDED" — НДС включён в цену (в сумме);
-  ///   "ADDED"    — НДС начисляется сверху к стоимости.
-  calculationMethod  String                          @default("INCLUDED")
-  updatedAt          DateTime                        @default(now()) @updatedAt
-  deletedAt          DateTime?
-  saleItems          SaleItem[]
-  accountingSettings OrganizationAccountingSetting[] @relation("OrgAccountingVatRate")
-
-  @@index([updatedAt])
-  @@map("vat_rates")
-}
-
 model Tax {
   id                Int       @id @default(autoincrement())
   uuid              String    @unique @default(uuid())
@@ -846,24 +824,33 @@ model Tax {
 /// Активная запись на организацию — последняя с deletedAt IS NULL.
 /// При обновлении старая помечается deletedAt, создаётся новая.
 model OrganizationAccountingSetting {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
-  organizationUuid String?
+  id                   Int           @id @default(autoincrement())
+  uuid                 String        @unique @default(uuid())
+  organizationUuid     String?
   /// Дата начала действия настроек (для исторических запросов).
-  startDate        DateTime      @default(now())
+  startDate            DateTime      @default(now())
   /// Использовать НДС (включает колонки НДС в строках документов).
-  useVat           Boolean       @default(false)
-  /// Ссылка на справочник VatRate (выбранная ставка НДС).
-  vatRateUuid      String?
+  useVat               Boolean       @default(false)
+  /// Ставка НДС, % — используется для всех строк документов
+  /// этой организации. Ранее бралась из справочника VatRate (удалён).
+  vatRate              Decimal       @default(12) @db.Decimal(5, 2)
+  /// Способ расчёта НДС:
+  ///   "INCLUDED" — НДС включён в цену («в сумме»);
+  ///   "ADDED"    — НДС начисляется сверху к стоимости («сверху»).
+  vatCalculationMethod String        @default("INCLUDED")
   /// Использовать скидки в строках документов продажи.
-  useDiscount      Boolean       @default(false)
-  updatedAt        DateTime      @default(now()) @updatedAt
-  deletedAt        DateTime?
-  organization     Organization? @relation("OrgAccountingSettings", fields: [organizationUuid], references: [uuid])
-  vatRateRef       VatRate?      @relation("OrgAccountingVatRate", fields: [vatRateUuid], references: [uuid])
+  useDiscount          Boolean       @default(false)
+  /// Использовать акциз (НК РК ст. 463). При true в SaleItemsTable
+  /// отображается колонка «Ставка акциза» и «Сумма акциза».
+  useExcise            Boolean       @default(false)
+  /// Ставка акциза по умолчанию, % (используется как значение по умолчанию
+  /// для новых строк документов продажи при useExcise=true).
+  exciseRate           Decimal       @default(0) @db.Decimal(8, 4)
+  updatedAt            DateTime      @default(now()) @updatedAt
+  deletedAt            DateTime?
+  organization         Organization? @relation("OrgAccountingSettings", fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
-  @@index([vatRateUuid])
   @@index([startDate])
   @@index([updatedAt])
   @@map("organization_accounting_settings")

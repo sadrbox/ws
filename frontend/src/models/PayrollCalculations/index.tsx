@@ -152,6 +152,8 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.Form}>
           {form.isEditMode && (
             <GroupRow>
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
             </GroupRow>
           )}
         <Group align="row" gap="12px">
@@ -203,7 +205,7 @@ PayrollCalculationsForm.displayName = "PayrollCalculationsForm";
 
 const PayrollCalculationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={PayrollCalculationsForm}
-    getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
 );
 PayrollCalculationsList.displayName = "PayrollCalculationsList";

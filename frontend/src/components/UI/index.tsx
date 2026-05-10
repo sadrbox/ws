@@ -13,7 +13,7 @@ import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 import { useAppContext } from 'src/app/context';
 import { ReloadButton, CloseButton } from 'src/components/Toolbar';
 import type { TPane } from 'src/app/types';
-import { usePaneToolbarSlot, useHasToolbar } from 'src/hooks/usePaneToolbar';
+import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
@@ -40,7 +40,6 @@ import { CashExpenseOrdersList } from 'src/models/CashExpenseOrders';
 import { BrandsList } from 'src/models/Brands';
 import { ProductsList } from 'src/models/Products';
 import { UnitOfMeasuresList } from 'src/models/UnitOfMeasures';
-import { VatRatesList } from 'src/models/VatRates';
 import { TaxesList } from 'src/models/Taxes';
 import { OrganizationAccountingSettingsList } from 'src/models/OrganizationAccountingSettings';
 import { CurrenciesList } from 'src/models/Currencies';
@@ -184,6 +183,7 @@ export const Panes: FC = () => {
 /** Отдельный компонент панели — позволяет вызывать хуки */
 const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({ pane: p, isActive, onClose }) => {
   const { refCallback: slot } = usePaneToolbarSlot(p.uniqId);
+  const { refCallback: headerSlot } = usePaneHeaderActionsSlot(p.uniqId);
   const isDirty = usePaneDirty(p.uniqId);
   const hasToolbar = useHasToolbar(p.uniqId);
   const onReload = usePaneReload(p.uniqId);
@@ -201,6 +201,9 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
           {isDirty && <span className={styles.PaneItemHeaderDirtyDot} />}
         </h2>
         <div className={styles.PaneItemHeaderToolbar}>
+          {/* Слот для дополнительных кнопок от конкретной формы (напр. «Печать»).
+              Регистрируются через usePaneHeaderActions(paneId, <…/>). */}
+          <div ref={headerSlot} className={styles.PaneItemHeaderActionsSlot} />
           {hasToolbar && <ReloadButton onClick={onReload} />}
           <CloseButton onClick={onClose} />
         </div>
@@ -753,7 +756,6 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>Настройки учёта организации</li>}
               {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList })}>Единицы измерения</li>}
-              {can("VatRate") && <li onClick={() => addPane({ component: VatRatesList })}>Ставки НДС</li>}
               {can("Tax") && <li onClick={() => addPane({ component: TaxesList })}>Налоги</li>}
             </ul>
           </div>

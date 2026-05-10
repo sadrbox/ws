@@ -307,7 +307,7 @@
 	"unitOfMeasure": "Ед. изм.",
 	"discountPercent": "Скидка %",
 	"discountAmount": "Скидка",
-	"vatRate": "НДС %",
+	"vatRate": "Ставка НДС %",
 	"vatAmount": "Сумма НДС",
 	"warehouse.shortName": "Склад",
 
@@ -319,9 +319,6 @@
 	"UnitOfMeasuresList": "Единицы измерения",
 	"UnitOfMeasuresList_part": "Единицы измерения",
 	"UnitOfMeasureList": "Единицы измерения",
-	"VatRatesList": "Ставки НДС",
-	"VatRatesList_part": "Ставки НДС",
-	"VatRateList": "Ставки НДС",
 	"TaxesList": "Налоги",
 	"TaxesList_part": "Налоги",
 	"TaxList": "Налоги",
@@ -333,7 +330,6 @@
 	"OrganizationAccountingSettingList": "Настройки учёта организации",
 
 	"unitOfMeasure.shortName": "Ед. изм.",
-	"vatRateRef.shortName": "Ставка НДС",
 	"rate": "Ставка %",
 
 	"period": "Период",

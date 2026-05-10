@@ -1,27 +1,19 @@
 /**
  * Toolbar — единый компонент панели управления.
- *
- * Используется для:
- *  - Заголовков панелей (через портал usePaneToolbar)
- *  - Панели таблиц (Table)
- *  - Панелей произвольных форм (SalesBoardForm, UnsavedForms и т.д.)
+ * Иконочные кнопки используют общий компонент `IconButton`
+ * (см. src/components/icons/IconButton.module.scss).
  */
 
 @container (max-width: 500px) {
 	.Toolbar {
 		flex-direction: column;
-		// align-items: stretch;
-		// gap: 4px;
 	}
 }
 
 .Toolbar {
 	display: flex;
 	gap: 6px;
-	// align-items: center;
 	justify-content: space-between;
-	// min-height: 0;
-	// flex-shrink: 0;
 }
 
 /* Левая группа — основные действия */
@@ -49,72 +41,15 @@
 	min-height: 16px;
 }
 
-/* Портальный слот — невидимый контейнер (children участвуют в flex родителя) */
+/* Портальный слот — невидимый контейнер */
 .ToolbarSlot {
 	display: contents;
 }
 
-/* Иконочная кнопка внутри тулбара */
-.IconButton {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border: none;
-	background: transparent;
-	cursor: pointer;
-	margin: 0;
-	padding: 0;
-	color: #555;
-	width: 24px;
-	height: 24px;
-	flex-shrink: 0;
-	border-radius: $radius3;
-	font-size: $fontsize + 1px;
-
-	&:hover {
-		background: rgba(#555, 0.12);
-		color: #222;
-	}
-
-	&:disabled {
-		opacity: 0.35;
-		cursor: default;
-		pointer-events: none;
-	}
-}
-
-/* Анимация вращения для reload */
-@keyframes toolbarSpin {
-	from {
-		transform: rotate(0deg);
-	}
-
-	to {
-		transform: rotate(360deg);
-	}
-}
-
-.IconButtonLoading img {
-	animation: toolbarSpin 0.8s linear infinite;
-}
-
-/* CloseButton — hover переключает синий крестик на красный */
+/* CloseButton — hover подсвечивает крестик красным */
 .CloseButton {
-
-	// font-size: $fontsize + 1px;
-	.CloseIconHover {
-		display: none;
-	}
-
-	&:hover {
-		background: rgba(#c00, 0.1);
-
-		.CloseIcon {
-			display: none;
-		}
-
-		.CloseIconHover {
-			display: block;
-		}
+	&:hover:not(:disabled) {
+		background: rgba(#c00, 0.1) !important;
+		color: #c00 !important;
 	}
 }

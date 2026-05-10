@@ -60,16 +60,28 @@
 		"alignment": "center"
 	},
 	{
-		"identifier": "vatRateRef.shortName",
-		"name": "Ставка НДС",
-		"hint": "Выбранная ставка НДС из справочника «Ставки НДС»",
-		"type": "string",
+		"identifier": "vatRate",
+		"name": "Ставка НДС, %",
+		"hint": "Числовая ставка НДС, %",
+		"type": "number",
 		"position": 6,
 		"visible": true,
 		"inlist": true,
-		"width": "160px",
-		"minWidth": "100px",
-		"alignment": "left"
+		"width": "120px",
+		"minWidth": "80px",
+		"alignment": "right"
+	},
+	{
+		"identifier": "vatCalculationMethod",
+		"name": "Метод расчёта",
+		"hint": "INCLUDED — в сумме; ADDED — сверху",
+		"type": "string",
+		"position": 7,
+		"visible": true,
+		"inlist": true,
+		"width": "120px",
+		"minWidth": "80px",
+		"alignment": "center"
 	},
 	{
 		"identifier": "useDiscount",
@@ -84,11 +96,35 @@
 		"alignment": "center"
 	},
 	{
+		"identifier": "useExcise",
+		"name": "Акциз",
+		"hint": "Использовать колонки акциза в строках документов продажи (НК РК ст. 463)",
+		"type": "boolean",
+		"position": 8,
+		"visible": true,
+		"inlist": true,
+		"width": "100px",
+		"minWidth": "80px",
+		"alignment": "center"
+	},
+	{
+		"identifier": "exciseRate",
+		"name": "Ставка акциза, %",
+		"hint": "Ставка акциза по умолчанию для новых строк документов продажи",
+		"type": "number",
+		"position": 9,
+		"visible": true,
+		"inlist": true,
+		"width": "120px",
+		"minWidth": "90px",
+		"alignment": "right"
+	},
+	{
 		"identifier": "updatedAt",
 		"name": "Обновлено",
 		"hint": "Дата последнего изменения",
 		"type": "datetime",
-		"position": 8,
+		"position": 10,
 		"visible": false,
 		"inlist": false,
 		"width": "160px",

@@ -7,10 +7,15 @@ type Listener = () => void;
 class PaneToolbarStore {
   private slots = new Map<string, HTMLDivElement>();
   private toolbars = new Set<string>();
+  /** Header-action slots: paneId → DOM-элемент в шапке панели рядом с Reload/Close. */
+  private headerSlots = new Map<string, HTMLDivElement>();
+  private headerActions = new Set<string>();
   private listeners = new Set<Listener>();
 
   getSlot = (paneId: string): HTMLDivElement | undefined => this.slots.get(paneId);
   hasToolbar = (paneId: string): boolean => this.toolbars.has(paneId);
+  getHeaderSlot = (paneId: string): HTMLDivElement | undefined => this.headerSlots.get(paneId);
+  hasHeaderActions = (paneId: string): boolean => this.headerActions.has(paneId);
 
   registerSlot = (paneId: string, el: HTMLDivElement) => {
     this.slots.set(paneId, el);
@@ -28,6 +33,24 @@ class PaneToolbarStore {
 
   unregisterToolbar = (paneId: string) => {
     if (this.toolbars.delete(paneId)) this.emit();
+  };
+
+  registerHeaderSlot = (paneId: string, el: HTMLDivElement) => {
+    this.headerSlots.set(paneId, el);
+    this.emit();
+  };
+
+  unregisterHeaderSlot = (paneId: string) => {
+    if (this.headerSlots.delete(paneId)) this.emit();
+  };
+
+  registerHeaderActions = (paneId: string) => {
+    this.headerActions.add(paneId);
+    this.emit();
+  };
+
+  unregisterHeaderActions = (paneId: string) => {
+    if (this.headerActions.delete(paneId)) this.emit();
   };
 
   subscribe = (cb: Listener) => {
@@ -100,6 +123,54 @@ export function useHasToolbar(paneId: string): boolean {
     return store.subscribe(() => setHas(store.hasToolbar(paneId)));
   }, [paneId]);
   return has;
+}
+
+// ─── Header actions slot (рядом с ReloadButton/CloseButton в шапке) ─────
+/**
+ * Возвращает ref-callback для slot-контейнера дополнительных кнопок в шапке
+ * панели (рядом с Reload/Close). Используется PaneItem.
+ */
+export function usePaneHeaderActionsSlot(paneId: string) {
+  const elRef = useRef<HTMLDivElement | null>(null);
+  const refCallback = useCallback((el: HTMLDivElement | null) => {
+    elRef.current = el;
+    if (el) {
+      store.registerHeaderSlot(paneId, el);
+    } else {
+      store.unregisterHeaderSlot(paneId);
+    }
+  }, [paneId]);
+  return { elRef, refCallback };
+}
+
+/**
+ * Регистрирует дополнительные кнопки в шапке панели (например «Печать»).
+ * Использование внутри формы:
+ * ```tsx
+ * usePaneHeaderActions(paneId, <Button onClick={handlePrint}>Печать</Button>);
+ * ```
+ */
+export function usePaneHeaderActions(
+  paneId: string | undefined,
+  actions: ReactNode,
+): ReactNode {
+  const [slot, setSlot] = useState<HTMLDivElement | undefined>(undefined);
+
+  useEffect(() => {
+    if (!paneId) return;
+    const update = () => setSlot(store.getHeaderSlot(paneId));
+    update();
+    return store.subscribe(update);
+  }, [paneId]);
+
+  useEffect(() => {
+    if (!paneId) return;
+    store.registerHeaderActions(paneId);
+    return () => { store.unregisterHeaderActions(paneId); };
+  }, [paneId]);
+
+  if (!slot) return null;
+  return createPortal(actions, slot);
 }
 
 export { store as paneToolbarStore };

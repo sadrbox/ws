@@ -29,6 +29,16 @@ export type TColumn = {
   filter: boolean;
   inlist: boolean;
   footer?: TColumnFooter; // итог колонки в tfoot
+  /**
+   * Если true — в модалке «Колонки таблицы» рядом с чекбоксом видимости
+   * отображается дополнительный чекбокс «В печать». Используется для
+   * динамических полей (НДС, скидки, акциз и т. п.), которые могут
+   * включаться/исключаться из печатной формы независимо от видимости в UI.
+   */
+  togglePrintable?: boolean;
+  /** Текущее состояние «показывать в печатной форме». Игнорируется,
+   *  если `togglePrintable !== true`. По умолчанию считается true. */
+  printable?: boolean;
 };
 export type TypeModelStates = {
   activeRow?: number | null;

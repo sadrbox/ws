@@ -168,7 +168,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
         onSave={form.handleSave}
         onSaveAndClose={form.handleSaveAndClose}
         onClose={form.handleClose}
-        onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
+        onReload={form.isEditMode ? form.handleReload : undefined}
         isLoading={form.isLoading}
 
         readonly={!access.canWrite}

@@ -31,11 +31,13 @@ const buildItem = (
   organizationUuid: null,
   startDate: "2026-01-01",
   useVat: false,
-  vatRateUuid: null,
+  vatRate: 0,
+  vatCalculationMethod: "INCLUDED",
   useDiscount: false,
+  useExcise: false,
+  exciseRate: 0,
   updatedAt: "2026-05-05T00:00:00Z",
   deletedAt: null,
-  vatRateRef: null,
   ...overrides,
 });
 
@@ -55,19 +57,18 @@ describe("useOrgAccountingSettings", () => {
     expect(result.current.item).toBeNull();
     expect(result.current.useVat).toBe(false);
     expect(result.current.isVatEnabled).toBe(false);
-    expect(result.current.vatRate).toBeNull();
-    expect(result.current.vatRateUuid).toBeNull();
+    expect(result.current.vatRate).toBe(0);
     expect(result.current.useDiscount).toBe(false);
     expect(result.current.vatCalculationMethod).toBe("INCLUDED");
   });
 
-  it("isVatEnabled=true когда useVat=true и задан vatRateUuid", async () => {
+  it("isVatEnabled=true когда useVat=true и выбрана ставка > 0", async () => {
     mockGet.mockResolvedValue({
       success: true,
       item: buildItem({
         useVat: true,
-        vatRateUuid: "vat-12",
-        vatRateRef: { uuid: "vat-12", shortName: "НДС 12%", rate: 12, calculationMethod: "INCLUDED" },
+        vatRate: 12,
+        vatCalculationMethod: "INCLUDED",
       }),
     });
     const { result } = renderHook(() => useOrgAccountingSettings(), {
@@ -77,18 +78,16 @@ describe("useOrgAccountingSettings", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.useVat).toBe(true);
     expect(result.current.isVatEnabled).toBe(true);
-    expect(result.current.vatRateUuid).toBe("vat-12");
-    expect(result.current.vatRate?.shortName).toBe("НДС 12%");
+    expect(result.current.vatRate).toBe(12);
     expect(result.current.vatCalculationMethod).toBe("INCLUDED");
   });
 
-  it("isVatEnabled=false когда useVat=false (даже если vatRateUuid задан)", async () => {
+  it("isVatEnabled=false когда useVat=false (даже если ставка задана)", async () => {
     mockGet.mockResolvedValue({
       success: true,
       item: buildItem({
         useVat: false,
-        vatRateUuid: "vat-12",
-        vatRateRef: { uuid: "vat-12", shortName: "НДС 12%", rate: 12, calculationMethod: "INCLUDED" },
+        vatRate: 12,
       }),
     });
     const { result } = renderHook(() => useOrgAccountingSettings(), {
@@ -98,14 +97,13 @@ describe("useOrgAccountingSettings", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.useVat).toBe(false);
     expect(result.current.isVatEnabled).toBe(false);
-    expect(result.current.vatRate).toBeNull();
-    expect(result.current.vatRateUuid).toBeNull();
+    expect(result.current.vatRate).toBe(0);
   });
 
-  it("isVatEnabled=false когда useVat=true но vatRateUuid отсутствует", async () => {
+  it("isVatEnabled=true и vatRate=0 когда useVat=true но ставка=0 (НК РК — нулевая ставка)", async () => {
     mockGet.mockResolvedValue({
       success: true,
-      item: buildItem({ useVat: true, vatRateUuid: null }),
+      item: buildItem({ useVat: true, vatRate: 0 }),
     });
     const { result } = renderHook(() => useOrgAccountingSettings(), {
       wrapper: makeWrapper(),
@@ -113,16 +111,17 @@ describe("useOrgAccountingSettings", () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.useVat).toBe(true);
-    expect(result.current.isVatEnabled).toBe(false);
+    expect(result.current.isVatEnabled).toBe(true);
+    expect(result.current.vatRate).toBe(0);
   });
 
-  it("vatCalculationMethod корректно читается из vatRateRef.calculationMethod", async () => {
+  it("vatCalculationMethod ADDED корректно читается", async () => {
     mockGet.mockResolvedValue({
       success: true,
       item: buildItem({
         useVat: true,
-        vatRateUuid: "vat-12",
-        vatRateRef: { uuid: "vat-12", shortName: "НДС 12%", rate: 12, calculationMethod: "ADDED" },
+        vatRate: 12,
+        vatCalculationMethod: "ADDED",
       }),
     });
     const { result } = renderHook(() => useOrgAccountingSettings(), {

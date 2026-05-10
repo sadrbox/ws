@@ -1,0 +1,46 @@
+/* ModelForm Skeleton — отображается во время первой загрузки данных формы,
+   чтобы пользователь не видел мигание пустых/disabled полей. */
+
+.SkeletonRoot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+  min-height: 200px;
+}
+
+.SkeletonRow {
+  display: flex;
+  gap: 12px;
+}
+
+.SkeletonField {
+  height: 36px;
+  border-radius: 4px;
+  background: linear-gradient(90deg,
+      rgba(0, 0, 0, 0.05) 0%,
+      rgba(0, 0, 0, 0.10) 50%,
+      rgba(0, 0, 0, 0.05) 100%);
+  background-size: 200% 100%;
+  animation: SkeletonShimmer 1.4s ease-in-out infinite;
+  flex: 1;
+}
+
+.SkeletonFieldWide {
+  flex: 2;
+}
+
+.SkeletonFieldNarrow {
+  flex: 0 0 120px;
+}
+
+@keyframes SkeletonShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}

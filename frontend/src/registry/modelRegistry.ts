@@ -284,14 +284,6 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Единицы измерения",
 	},
 	{
-		endpoint: "vat-rates",
-		module: () => import("src/models/VatRates"),
-		formName: "VatRatesForm",
-		listName: "VatRatesList",
-		storageKey: "vat-rates-form",
-		label: "Ставки НДС",
-	},
-	{
 		endpoint: "taxes",
 		module: () => import("src/models/Taxes"),
 		formName: "TaxesForm",

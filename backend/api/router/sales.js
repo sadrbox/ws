@@ -70,12 +70,15 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
 		const filterWhere = {};
 		for (const [field, conds] of Object.entries(filter)) {
-			if (
-				["searchBy", "dateRange"].includes(field) ||
-				!conds ||
-				typeof conds !== "object"
-			)
+			if (field === "searchBy" || !conds || typeof conds !== "object")
 				continue;
+			if (field === "dateRange") {
+				const dr = {};
+				if (conds.startDate) dr.gte = new Date(conds.startDate);
+				if (conds.endDate) dr.lte = new Date(conds.endDate);
+				if (Object.keys(dr).length > 0) filterWhere.date = dr;
+				continue;
+			}
 			for (const [op, val] of Object.entries(conds)) {
 				if (!ALLOWED.includes(op)) continue;
 				if (op === "contains")
@@ -157,7 +160,6 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			amountWithoutVat,
 			vatAmount,
 			discountAmount,
-			status,
 			posted,
 			organizationUuid,
 			counterpartyUuid,
@@ -174,7 +176,6 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				vatAmount: vatAmount != null ? parseFloat(vatAmount) : null,
 				discountAmount:
 					discountAmount != null ? parseFloat(discountAmount) : null,
-				status: status || "draft",
 				posted: posted === true,
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
@@ -204,7 +205,6 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const data = {};
 		const strFields = [
 			"description",
-			"status",
 			"organizationUuid",
 			"counterpartyUuid",
 			"contractUuid",

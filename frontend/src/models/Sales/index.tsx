@@ -5,7 +5,8 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDate, FieldSelect } from "src/components/Field";
+import { Field, FieldDateTime } from "src/components/Field";
+import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { SaleItemsTable } from "./SaleItemsTable";
 import { Group, GroupRow, GroupCol } from "src/components/UI";
@@ -14,24 +15,29 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
+import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import { Toolbar } from "src/components/Toolbar";
+import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
+import { usePrintDocument } from "src/components/PrintLayout/usePrintDocument";
+import SaleInvoicePrint, { type SaleInvoicePrintData, type SaleInvoicePrintColumns, type SaleItemPrintRow } from "./SaleInvoicePrint";
+import { buildSaleInvoiceWorkbook } from "./saleInvoiceWorkbook";
+import GeneratedXlsxPreviewPane from "src/components/PrintPreview/GeneratedXlsxPreviewPane";
+import { useAppContext } from "src/app";
+import { Icon } from "src/components/IconButton/icons";
+import { api } from "src/services/api/client";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
 const FORM_LABEL = "Реализация";
 
-const STATUS_OPTIONS = [
-  { value: "draft", label: "Черновик" },
-  { value: "approved", label: "Утверждён" },
-  { value: "cancelled", label: "Отменён" },
-];
 
 interface TFields {
   id?: number; uuid?: string;
-  date: string; description: string; amount: number; status: string; posted: boolean;
+  date: string; description: string; amount: number; posted: boolean;
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
@@ -40,7 +46,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  date: "", description: "", amount: 0, status: "draft", posted: false,
+  date: "", description: "", amount: 0, posted: false,
   organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "", contractUuid: "", contractName: "",
   warehouseUuid: "", warehouseName: "",
   vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
@@ -48,7 +54,6 @@ const DEFAULT_FIELDS: TFields = {
 
 const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
-  const { isVatEnabled } = useOrgAccountingSettings();
   const queryClient = useQueryClient();
   const { canWrite } = useAccessRight("Sale");
 
@@ -77,8 +82,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
-          vatRateUuid: r.vatRateUuid ?? null,
           vatRate: r.vatRate ?? 0,
+          exciseRate: r.exciseRate ?? 0,
           discountPercent: r.discountPercent ?? 0,
         }),
         updatePayload: (r: any) => ({
@@ -86,8 +91,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
-          vatRateUuid: r.vatRateUuid ?? null,
           vatRate: r.vatRate ?? 0,
+          exciseRate: r.exciseRate ?? 0,
           discountPercent: r.discountPercent ?? 0,
         }),
         extraSkipFields: ["saleUuid"],
@@ -95,9 +100,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      date: d.date?.slice(0, 10) ?? "",
+      date: isoToLocalInput(d.date),
       description: d.description ?? "", amount: d.amount != null ? Number(d.amount) : 0,
-      status: d.status ?? "draft", posted: d.posted === true,
+      posted: d.posted === true,
       organizationUuid: d.organizationUuid ?? "",
       organizationName: d.organization?.shortName ?? "",
       counterpartyUuid: d.counterpartyUuid ?? "",
@@ -111,10 +116,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       amountWithoutVat: d.amountWithoutVat != null ? Number(d.amountWithoutVat) : 0,
     }),
     buildPayload: (fd) => ({
-      date: fd.date || null,
+      date: localInputToIso(fd.date),
       description: fd.description?.trim() || null,
       amount: fd.amount ? fd.amount : null,
-      status: fd.status || "draft", posted: fd.posted === true,
+      posted: fd.posted === true,
       organizationUuid: fd.organizationUuid || null,
       counterpartyUuid: fd.counterpartyUuid || null,
       contractUuid: fd.contractUuid || null,
@@ -129,6 +134,41 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const saleItems = form.useTable("saleItems");
+
+  // ── Историчные настройки учёта организации ─────────────────────────────
+  // Передаём дату документа в хук — так колонки/блоки НДС/скидок отображаются
+  // согласно настройкам, действовавшим на дату документа (для нового и
+  // существующего документа). При смене даты — настройки автоматически
+  // пересчитываются (React Query с queryKey по дате).
+  const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
+    form.fields.organizationUuid || null,
+    form.fields.date || null,
+  );
+
+  // ── Авто-подстановка ОСНОВНОГО ДОГОВОРА ───────────────────────────────
+  // При выборе организации/контрагента в новой форме автоматически подставляем
+  // договор, отмеченный как "основной" (isPrimary=true) для этой пары.
+  // Если пользователь вручную выбрал другой договор — не перезаписываем.
+  const contractScope = useMemo<Record<string, string> | null>(() => {
+    const hasOrg = !!form.fields.organizationUuid;
+    const hasCpty = !!form.fields.counterpartyUuid;
+    // Авто-подбор договора имеет смысл только когда есть хотя бы один из владельцев.
+    if (!hasOrg && !hasCpty) return null;
+    const s: Record<string, string> = {};
+    if (hasOrg) s.organizationUuid = form.fields.organizationUuid;
+    if (hasCpty) s.counterpartyUuid = form.fields.counterpartyUuid;
+    return s;
+  }, [form.fields.organizationUuid, form.fields.counterpartyUuid]);
+
+  useAutoFillPrimary({
+    endpoint: "contracts",
+    scope: contractScope,
+    currentUuid: form.fields.contractUuid,
+    isEditMode: form.isEditMode,
+    isLoading: form.isLoading,
+    apply: (uuid, name) =>
+      form.setFields({ contractUuid: uuid, contractName: name } as Partial<TFields>),
+  });
 
   const handleTotalChange = useCallback((total: number, items?: any[]) => {
     // console.log(Number(total), total);
@@ -186,6 +226,136 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     form.setFields(updates);
   }, [form.setFields]);
 
+  // ── Печать накладной (форма З-2 РК) ────────────────────────────────
+  // Печать осуществляется в формате xlsx (табличный документ): строится
+  // рабочая книга через buildSaleInvoiceWorkbook и открывается в отдельной
+  // вкладке-панели GeneratedXlsxPreviewPane, где пользователь может:
+  //   • сохранить как .xlsx;
+  //   • открыть нативный диалог печати → «Сохранить как PDF» / «Печать».
+  // Старый html-рендер SaleInvoicePrint оставлен для совместимости (могут
+  // использовать другие места) и доступен через usePrintDocument.print().
+  const { print: printHtml } = usePrintDocument();
+  void printHtml; // используется для альтернативного html-вывода
+  void SaleInvoicePrint; // компонент остался как референс структуры формы
+  const { windows: { addPane } } = useAppContext();
+  const handlePrint = useCallback(async () => {
+    if (!form.fields.uuid) return;
+    try {
+      // Получаем актуальные данные документа + позиции с сервера
+      const [saleResp, itemsResp] = await Promise.all([
+        api.get<{ success?: boolean; item?: any } | any>(`sales/${form.fields.uuid}`),
+        api.get<{ success?: boolean; items?: any[] } | any>(`saleitems`, { params: { saleUuid: form.fields.uuid } }),
+      ]);
+      const sale = (saleResp as any)?.item ?? saleResp;
+      const items: any[] = (itemsResp as any)?.items ?? (Array.isArray(itemsResp) ? itemsResp : []);
+
+      const rows: SaleItemPrintRow[] = items.map((it, idx) => ({
+        number: idx + 1,
+        name: it.product?.shortName ?? it.productName ?? it.name ?? "",
+        unit: it.unitOfMeasure?.shortName ?? it.unitOfMeasureName ?? "",
+        quantity: Number(it.quantity ?? 0),
+        price: Number(it.price ?? 0),
+        discountPercent: it.discountPercent != null ? Number(it.discountPercent) : undefined,
+        discountAmount: it.discountAmount != null ? Number(it.discountAmount) : undefined,
+        exciseRate: it.exciseRate != null ? Number(it.exciseRate) : undefined,
+        exciseAmount: it.exciseAmount != null ? Number(it.exciseAmount) : undefined,
+        amountWithoutVat: it.amountWithoutVat != null ? Number(it.amountWithoutVat) : undefined,
+        vatRate: it.vatRate != null ? Number(it.vatRate) : undefined,
+        vatAmount: it.vatAmount != null ? Number(it.vatAmount) : undefined,
+        amount: Number(it.amount ?? 0),
+      }));
+
+      // Сумма акциза по документу = сумма по строкам (на уровне Sale поля нет).
+      const totalExciseAmount = rows.reduce((s, r) => s + Number(r.exciseAmount ?? 0), 0);
+
+      // Читаем выбор пользователя «В печать» из настроек таблицы строк.
+      // Ключ совпадает с componentName SubTable (см. SaleItemsTable).
+      const PRINT_KEYS = [
+        "discountPercent",
+        "discountAmount",
+        "amountWithoutVat",
+        "exciseRate",
+        "exciseAmount",
+        "vatRate",
+        "vatAmount",
+      ] as const;
+      const printColumns: SaleInvoicePrintColumns = {};
+      try {
+        const raw = localStorage.getItem("table_columns_SaleItemsList_part");
+        if (raw) {
+          const parsed: Array<{ identifier: string; printable?: boolean; togglePrintable?: boolean }> = JSON.parse(raw);
+          for (const c of parsed) {
+            if (c?.togglePrintable && (PRINT_KEYS as readonly string[]).includes(c.identifier)) {
+              (printColumns as Record<string, boolean>)[c.identifier] = c.printable !== false;
+            }
+          }
+        }
+      } catch {
+        // если кэш повреждён — используем поведение по умолчанию (auto-detect)
+      }
+
+      const data: SaleInvoicePrintData = {
+        documentId: sale?.id ?? form.fields.id,
+        documentDate: sale?.date ?? form.fields.date,
+        organizationName: sale?.organization?.shortName ?? form.fields.organizationName,
+        organizationBin: sale?.organization?.bin ?? sale?.organization?.iin ?? undefined,
+        organizationAddress: sale?.organization?.address ?? undefined,
+        counterpartyName: sale?.counterparty?.shortName ?? form.fields.counterpartyName,
+        counterpartyBin: sale?.counterparty?.bin ?? sale?.counterparty?.iin ?? undefined,
+        counterpartyAddress: sale?.counterparty?.address ?? undefined,
+        contractName: sale?.contract?.shortName ?? form.fields.contractName,
+        warehouseName: sale?.warehouse?.shortName ?? form.fields.warehouseName,
+        items: rows,
+        totalAmount: Number(sale?.amount ?? form.fields.amount ?? 0),
+        totalAmountWithoutVat: Number(sale?.amountWithoutVat ?? form.fields.amountWithoutVat ?? 0),
+        totalVatAmount: Number(sale?.vatAmount ?? form.fields.vatAmount ?? 0),
+        totalDiscountAmount: Number(sale?.discountAmount ?? form.fields.discountAmount ?? 0),
+        totalExciseAmount: Math.round(totalExciseAmount * 100) / 100,
+        columns: printColumns,
+      };
+
+      // Строим Excel-документ и открываем в отдельной вкладке-панели.
+      // Внутри пользователь может сохранить как .xlsx или вызвать печать
+      // (через нативный диалог браузера → можно выбрать «Сохранить как PDF»).
+      const workbook = buildSaleInvoiceWorkbook(data);
+      const titleStr = `Накладная № ${data.documentId ?? ""}`;
+      const fileBase = `Накладная_${data.documentId ?? "draft"}`.replace(/\s+/g, "_");
+      addPane({
+        component: GeneratedXlsxPreviewPane,
+        isSelector: true, // уникальный uniqId на каждый клик
+        label: titleStr,
+        data: { workbook, fileBaseName: fileBase, title: titleStr },
+      });
+    } catch (e) {
+      console.error("[print] sale invoice failed", e);
+      alert("Не удалось подготовить документ к печати");
+    }
+  }, [
+    form.fields.uuid,
+    form.fields.id,
+    form.fields.date,
+    form.fields.amount,
+    form.fields.amountWithoutVat,
+    form.fields.vatAmount,
+    form.fields.discountAmount,
+    form.fields.organizationName,
+    form.fields.counterpartyName,
+    form.fields.contractName,
+    form.fields.warehouseName,
+    addPane,
+  ]);
+
+  // Регистрируем кнопку «Печать» в шапке панели (рядом с Reload/Close).
+  // Доступна только для сохранённого документа.
+  // ВАЖНО: возвращаемый ReactNode (портал) надо отрендерить в JSX,
+  // иначе React не выполнит createPortal и кнопка не появится.
+  const headerActionsPortal = usePaneHeaderActions(
+    form.paneId,
+    form.isEditMode && form.fields.uuid ? (
+      <Toolbar.PrintButton onClick={handlePrint} disabled={form.isLoading} />
+    ) : null,
+  );
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -196,9 +366,17 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               {/* ── Левая колонка: поля ── */}
               {/* Строка 1: Дата · Проведён · Статус */}
               <GroupRow>
-                <FieldDate label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="120px" />
+                <FieldDateTime label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
 
-                <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+
+                <FieldToggle
+                  name={`${form.formUid}_posted`}
+                  label="Проведён"
+                  value={form.fields.posted === true}
+                  onChange={(v) => form.setField("posted", v)}
+                  disabled={form.isLoading || !canWrite}
+                  variant="success"
+                />
               </GroupRow>
 
               <Group>
@@ -231,7 +409,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                       { label: "НДС", value: form.fields.vatAmount },
                     ] as const)
                     : ([] as const)),
-                  { label: "Скидка", value: form.fields.discountAmount },
+                  ...(useDiscount
+                    ? ([{ label: "Скидка", value: form.fields.discountAmount }] as const)
+                    : ([] as const)),
                 ] as ReadonlyArray<{ label: string; value: number | string }>).map(({ label, value }) => (
                   <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
                     <span>{label}</span>
@@ -251,7 +431,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     },
     {
       id: "tab-items", label: translate("SaleItemsList"), component: form.isEditMode && form.fields.uuid ? (
-        <SaleItemsTable saleUuid={form.fields.uuid} organizationUuid={form.fields.organizationUuid} disabled={form.isLoading} deferRemoteChanges
+        <SaleItemsTable saleUuid={form.fields.uuid} organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null} disabled={form.isLoading} deferRemoteChanges
           parentLabel={`${translate("SalesList") || "Реализация"}: №${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           initialPendingRows={saleItems.pending} onTotalChange={handleTotalChange}
           onItemsChange={saleItems.onItemsChange} />
@@ -261,17 +441,20 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         </div>
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount]);
 
   return (
-    <ModelForm paneId={form.paneId} tabs={tabs}
-      onSave={form.handleSave}
-      onSaveAndClose={form.handleSaveAndClose}
-      onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
-      isLoading={form.isLoading}
-      //
-      readonly={!canWrite} isDirty={form.isDirty} />
+    <>
+      <ModelForm paneId={form.paneId} tabs={tabs}
+        onSave={form.handleSave}
+        onSaveAndClose={form.handleSaveAndClose}
+        onClose={form.handleClose}
+        onReload={form.isEditMode ? form.handleReload : undefined}
+        isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+        //
+        readonly={!canWrite} isDirty={form.isDirty} />
+      {headerActionsPortal}
+    </>
   );
 };
 SalesForm.displayName = "SalesForm";
@@ -281,7 +464,42 @@ const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
     getLabel={(d) => {
       return d?.date ? getFormatDateOnly(d.date as string) : "";
     }} variant={variant} onSelectItem={onSelectItem}
-    ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
+    ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
+    renderCell={(row, col) => {
+      if (col.identifier === "posted") {
+        const isPosted = row.posted === true;
+        return (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "2px 8px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 600,
+              lineHeight: 1.4,
+              letterSpacing: 0.2,
+              background: isPosted ? "#d1fae5" : "#f3f4f6",
+              color: isPosted ? "#047857" : "#6b7280",
+              border: `1px solid ${isPosted ? "#a7f3d0" : "#e5e7eb"}`,
+              whiteSpace: "nowrap",
+            }}
+            title={isPosted ? "Документ проведён" : "Не проведён"}
+          >
+            <Icon
+              name={isPosted ? "posted" : "notPosted"}
+              width={12}
+              height={12}
+              style={{ color: isPosted ? "#10b981" : "#9ca3af", flexShrink: 0 }}
+            />
+            {isPosted ? "Проведён" : "Черновик"}
+          </span>
+        );
+      }
+      return undefined;
+    }}
+  />
 );
 SalesList.displayName = "SalesList";
 

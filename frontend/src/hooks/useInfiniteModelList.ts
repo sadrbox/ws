@@ -143,6 +143,15 @@ export function useInfiniteModelList<TData = unknown>({
 				for (const [field, cond] of Object.entries(currentParams.filter)) {
 					if (cond !== null && typeof cond === "object" && "value" in cond) {
 						query[`filter[${field}][${cond.operator}]`] = cond.value;
+					} else if (cond !== null && typeof cond === "object") {
+						// Объекты без { value, operator } (например dateRange:
+						// { startDate, endDate }) разворачиваем в подключи —
+						// бэкенд читает filter[dateRange][startDate].
+						for (const [subKey, subVal] of Object.entries(cond)) {
+							if (subVal !== undefined && subVal !== null && subVal !== "") {
+								query[`filter[${field}][${subKey}]`] = subVal;
+							}
+						}
 					} else {
 						query[`filter[${field}]`] = cond;
 					}
@@ -238,8 +247,7 @@ export function useInfiniteModelList<TData = unknown>({
 								let sortDir: "asc" | "desc" = "desc";
 								if (currentParams.sort) {
 									const entries = Object.entries(currentParams.sort);
-									if (entries.length > 0)
-										[sortField, sortDir] = entries[0];
+									if (entries.length > 0) [sortField, sortDir] = entries[0];
 								}
 
 								let items: any[];

@@ -153,7 +153,12 @@ export function useModelListState(opts: UseModelListStateOptions) {
 			setFilter((prev: typeof filter) => {
 				const next = { ...(prev ?? {}) };
 				if (value == null || value === "") delete next[field];
-				else next[field] = { value, operator };
+				// Спец-случай: dateRange — это объект { startDate, endDate },
+				// который не нужно оборачивать в { value, operator }, т.к.
+				// бэкенд ожидает filter[dateRange][startDate]=… / [endDate]=…
+				else if (field === "dateRange" && typeof value === "object") {
+					next[field] = value as { value: unknown; operator: string };
+				} else next[field] = { value, operator };
 				return Object.keys(next).length > 0 ? next : undefined;
 			});
 		},

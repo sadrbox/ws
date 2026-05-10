@@ -531,6 +531,12 @@ body {
 	display: contents; // дочерние элементы портала участвуют в flex-раскладке родителя
 }
 
+// Слот для дополнительных кнопок формы в шапке (например «Печать»).
+// Если кнопок нет — div пустой и не занимает места (display: contents).
+.PaneItemHeaderActionsSlot {
+	display: contents;
+}
+
 .PaneItemHeaderDirtyDot {
 	display: flex;
 	width: 12px;

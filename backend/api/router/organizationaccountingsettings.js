@@ -5,16 +5,17 @@ const router = express.Router();
 
 const MODEL = "organizationAccountingSetting";
 const ROUTE = "organization-accounting-settings";
-const INCLUDE = { organization: true, vatRateRef: true };
+const INCLUDE = { organization: true };
 
 /**
  * Журнальная модель OrganizationAccountingSetting:
  *   - 1 активная запись на организацию (deletedAt IS NULL).
  *     organizationUuid = NULL → глобальные настройки (fallback).
- *   - useVat:       включает учёт НДС в строках документов продажи;
- *   - vatRateUuid:  ссылка на справочник VatRate (выбранная ставка НДС);
- *   - useDiscount:  включает колонки скидок в SaleItemsTable;
- *   - startDate:    дата начала действия настроек (для исторических запросов).
+ *   - useVat:                включает учёт НДС в строках документов;
+ *   - vatRate:               ставка НДС, % (справочник VatRate удалён);
+ *   - vatCalculationMethod:  "INCLUDED" (в сумме) | "ADDED" (сверху);
+ *   - useDiscount:           включает колонки скидок в SaleItemsTable;
+ *   - startDate:             дата начала действия настроек (историчность).
  *   - При обновлении старая запись soft-deleted, создаётся новая.
  */
 
@@ -110,8 +111,70 @@ router.get(`/${ROUTE}`, async (req, res) => {
 	}
 });
 
+// ── GET usage-stats ─────────────────────────────────────────────────────
+// Возвращает информацию о том, использует ли организация (или глобально,
+// если organizationUuid не передан) проведённые документы с НДС, скидкой
+// или акцизом. Используется на фронтенде для блокировки соответствующих
+// переключателей в форме НУО — если есть проведённые (posted=true) документы
+// с фактически применёнными значениями, нельзя отключать соответствующую
+// настройку (это нарушит исторические расчёты ЭСФ РК).
+//
+// Ответ: { success, hasPostedVat, hasPostedDiscount, hasPostedExcise }
+router.get(`/${ROUTE}/usage-stats`, async (req, res) => {
+	try {
+		const orgQ = req.query.organizationUuid;
+		const orgUuid =
+			typeof orgQ === "string" && orgQ && orgQ !== "null" && orgQ !== "NULL"
+				? orgQ
+				: null;
+
+		// Условие на родительскую продажу: posted=true. Если organizationUuid
+		// задан — фильтр по организации; иначе глобально (без фильтра).
+		const saleWhere = { posted: true };
+		if (orgUuid) saleWhere.organizationUuid = orgUuid;
+
+		const [vatItem, discountItem, exciseItem] = await Promise.all([
+			prisma.saleItem.findFirst({
+				where: { sale: saleWhere, vatRate: { gt: 0 } },
+				select: { uuid: true },
+			}),
+			prisma.saleItem.findFirst({
+				where: {
+					sale: saleWhere,
+					OR: [{ discountPercent: { gt: 0 } }, { discountAmount: { gt: 0 } }],
+				},
+				select: { uuid: true },
+			}),
+			prisma.saleItem.findFirst({
+				where: {
+					sale: saleWhere,
+					OR: [{ exciseRate: { gt: 0 } }, { exciseAmount: { gt: 0 } }],
+				},
+				select: { uuid: true },
+			}),
+		]);
+
+		return res.status(200).json({
+			success: true,
+			hasPostedVat: Boolean(vatItem),
+			hasPostedDiscount: Boolean(discountItem),
+			hasPostedExcise: Boolean(exciseItem),
+		});
+	} catch (error) {
+		console.error(`GET /${ROUTE}/usage-stats error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 // ── GET active ──────────────────────────────────────────────────────────
 // Активная запись для организации. Если для конкретной нет — fallback на глобальную.
+//
+// Параметр `date` (необязательный, ISO-строка): возвращает настройки, которые
+// действовали на указанную дату (историчность). При обновлении настроек старая
+// запись soft-deleted (deletedAt != null), но в БД сохраняется — поэтому при
+// запросе с прошлой датой выбирается запись с максимальным startDate <= date,
+// независимо от deletedAt. Без параметра date — поведение прежнее: текущая
+// активная (deletedAt IS NULL).
 router.get(`/${ROUTE}/active`, async (req, res) => {
 	try {
 		const orgQ = req.query.organizationUuid;
@@ -120,21 +183,37 @@ router.get(`/${ROUTE}/active`, async (req, res) => {
 				? orgQ
 				: null;
 
+		// Историческая дата (опциональна).
+		const dateParam = req.query.date;
+		const historicalDate = parseDateOrNull(dateParam);
+		// historicalDate === undefined → невалидная дата → игнорируем (берём текущие)
+		const useHistorical = historicalDate instanceof Date;
+
+		async function findFor(uuid) {
+			if (useHistorical) {
+				// Историческая выборка: среди всех записей со startDate <= date берём
+				// САМУЮ НОВУЮ по id (id монотонно растёт с временем создания).
+				// Сортировка по startDate desc НЕ работает корректно при смешанных
+				// временах startDate (полночь встроках vs бывшие timestamp) — приоритет id.
+				return prisma[MODEL].findFirst({
+					where: {
+						organizationUuid: uuid,
+						startDate: { lte: historicalDate },
+					},
+					orderBy: { id: "desc" },
+					include: INCLUDE,
+				});
+			}
+			return prisma[MODEL].findFirst({
+				where: { organizationUuid: uuid, deletedAt: null },
+				orderBy: { id: "desc" },
+				include: INCLUDE,
+			});
+		}
+
 		let item = null;
-		if (orgUuid) {
-			item = await prisma[MODEL].findFirst({
-				where: { organizationUuid: orgUuid, deletedAt: null },
-				orderBy: { id: "desc" },
-				include: INCLUDE,
-			});
-		}
-		if (!item) {
-			item = await prisma[MODEL].findFirst({
-				where: { organizationUuid: null, deletedAt: null },
-				orderBy: { id: "desc" },
-				include: INCLUDE,
-			});
-		}
+		if (orgUuid) item = await findFor(orgUuid);
+		if (!item) item = await findFor(null);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		console.error(`GET /${ROUTE}/active error:`, error);
@@ -183,8 +262,7 @@ async function buildBodyData(body, existing = null) {
 			where: { uuid: orgUuid },
 			select: { uuid: true, deletedAt: true },
 		});
-		if (!org || org.deletedAt)
-			return { error: "Организация не найдена" };
+		if (!org || org.deletedAt) return { error: "Организация не найдена" };
 	}
 
 	// useVat
@@ -192,29 +270,57 @@ async function buildBodyData(body, existing = null) {
 		? Boolean(body.useVat)
 		: Boolean(existing?.useVat);
 
-	// vatRateUuid
-	let vatRateUuid;
-	if (Object.prototype.hasOwnProperty.call(body, "vatRateUuid")) {
-		const vatRaw = body.vatRateUuid;
-		vatRateUuid =
-			typeof vatRaw === "string" && vatRaw && vatRaw !== "null" ? vatRaw : null;
+	// vatRate — числовая ставка НДС, %. Раньше была ссылкой на справочник
+	// VatRate (vatRateUuid) — справочник удалён, значение хранится напрямую.
+	let vatRate;
+	if (Object.prototype.hasOwnProperty.call(body, "vatRate")) {
+		const raw = body.vatRate;
+		const num = raw === "" || raw == null ? 12 : Number(raw);
+		if (!Number.isFinite(num) || num < 0 || num > 100)
+			return { error: "Некорректное значение vatRate (0…100)" };
+		vatRate = num;
 	} else {
-		vatRateUuid = existing?.vatRateUuid ?? null;
+		vatRate = Number(existing?.vatRate ?? 12) || 12;
 	}
-	if (vatRateUuid) {
-		const vat = await prisma.vatRate.findUnique({
-			where: { uuid: vatRateUuid },
-			select: { uuid: true, deletedAt: true },
-		});
-		if (!vat || vat.deletedAt) return { error: "Ставка НДС не найдена" };
+
+	// vatCalculationMethod — "INCLUDED" | "ADDED".
+	let vatCalculationMethod;
+	if (Object.prototype.hasOwnProperty.call(body, "vatCalculationMethod")) {
+		const m = String(body.vatCalculationMethod ?? "INCLUDED").toUpperCase();
+		vatCalculationMethod = m === "ADDED" ? "ADDED" : "INCLUDED";
+	} else {
+		vatCalculationMethod =
+			String(existing?.vatCalculationMethod ?? "INCLUDED").toUpperCase() ===
+			"ADDED"
+				? "ADDED"
+				: "INCLUDED";
 	}
-	// Если useVat=false, обнуляем ставку
-	if (!useVat) vatRateUuid = null;
 
 	// useDiscount
 	const useDiscount = Object.prototype.hasOwnProperty.call(body, "useDiscount")
 		? Boolean(body.useDiscount)
 		: Boolean(existing?.useDiscount);
+
+	// useExcise — флаг использования акциза (НК РК ст. 463). Включает колонки
+	// «Ставка акциза» и «Сумма акциза» в строках документов продажи.
+	const useExcise = Object.prototype.hasOwnProperty.call(body, "useExcise")
+		? Boolean(body.useExcise)
+		: Boolean(existing?.useExcise);
+
+	// exciseRate — ставка акциза по умолчанию (% от стоимости после скидки).
+	// Используется как значение по умолчанию при добавлении новых строк
+	// документов продажи. Если useExcise=false — обнуляется.
+	let exciseRate;
+	if (Object.prototype.hasOwnProperty.call(body, "exciseRate")) {
+		const raw = body.exciseRate;
+		const num = raw === "" || raw == null ? 0 : Number(raw);
+		if (!Number.isFinite(num) || num < 0)
+			return { error: "Некорректное значение exciseRate" };
+		exciseRate = num;
+	} else {
+		exciseRate = Number(existing?.exciseRate ?? 0) || 0;
+	}
+	if (!useExcise) exciseRate = 0;
 
 	// startDate
 	let startDate;
@@ -228,8 +334,97 @@ async function buildBodyData(body, existing = null) {
 	}
 
 	return {
-		data: { organizationUuid: orgUuid, useVat, vatRateUuid, useDiscount, startDate },
+		data: {
+			organizationUuid: orgUuid,
+			useVat,
+			vatRate,
+			vatCalculationMethod,
+			useDiscount,
+			useExcise,
+			exciseRate,
+			startDate,
+		},
 	};
+}
+
+/**
+ * Проверяет, что изменения useVat/useDiscount/useExcise согласованы с
+ * историей проведённых документов. Если организация уже имеет хотя бы один
+ * проведённый sale_item с фактическим использованием соответствующего
+ * флага, отключать его нельзя (нарушит исторические расчёты).
+ *
+ * @param newData результат buildBodyData (новые желаемые значения)
+ * @param existing предыдущая активная запись (или null при создании)
+ * @returns строка с сообщением об ошибке либо null если изменения допустимы
+ */
+async function validateAgainstPostedDocs(newData, existing) {
+	const orgUuid = newData.organizationUuid;
+	const prevUseVat = Boolean(existing?.useVat);
+	const prevUseDiscount = Boolean(existing?.useDiscount);
+	const prevUseExcise = Boolean(existing?.useExcise);
+	const prevVatRate = Number(existing?.vatRate ?? 0) || 0;
+	const prevVatMethod = String(
+		existing?.vatCalculationMethod ?? "INCLUDED",
+	).toUpperCase();
+	const prevExciseRate = Number(existing?.exciseRate ?? 0) || 0;
+
+	// Любое изменение значений (флаг ВКЛ/ВЫКЛ, ставка, метод расчёта НДС,
+	// ставка акциза) при наличии проведённых документов с фактически
+	// применённой соответствующей настройкой — запрещено: уже проведённые
+	// документы изменять нельзя.
+	const newUseVat = Boolean(newData.useVat);
+	const newUseDiscount = Boolean(newData.useDiscount);
+	const newUseExcise = Boolean(newData.useExcise);
+	const newVatRate = Number(newData.vatRate ?? 0) || 0;
+	const newVatMethod = String(
+		newData.vatCalculationMethod ?? "INCLUDED",
+	).toUpperCase();
+	const newExciseRate = Number(newData.exciseRate ?? 0) || 0;
+
+	const changingVat =
+		prevUseVat !== newUseVat ||
+		prevVatRate !== newVatRate ||
+		prevVatMethod !== newVatMethod;
+	const changingDiscount = prevUseDiscount !== newUseDiscount;
+	const changingExcise =
+		prevUseExcise !== newUseExcise || prevExciseRate !== newExciseRate;
+
+	if (!changingVat && !changingDiscount && !changingExcise) return null;
+
+	const saleWhere = { posted: true };
+	if (orgUuid) saleWhere.organizationUuid = orgUuid;
+
+	if (changingVat) {
+		const found = await prisma.saleItem.findFirst({
+			where: { sale: saleWhere, vatRate: { gt: 0 } },
+			select: { uuid: true },
+		});
+		if (found)
+			return "Нельзя изменить настройки НДС: существуют проведённые документы со ставкой НДС > 0";
+	}
+	if (changingDiscount) {
+		const found = await prisma.saleItem.findFirst({
+			where: {
+				sale: saleWhere,
+				OR: [{ discountPercent: { gt: 0 } }, { discountAmount: { gt: 0 } }],
+			},
+			select: { uuid: true },
+		});
+		if (found)
+			return "Нельзя изменить настройки скидок: существуют проведённые документы со скидками";
+	}
+	if (changingExcise) {
+		const found = await prisma.saleItem.findFirst({
+			where: {
+				sale: saleWhere,
+				OR: [{ exciseRate: { gt: 0 } }, { exciseAmount: { gt: 0 } }],
+			},
+			select: { uuid: true },
+		});
+		if (found)
+			return "Нельзя изменить настройки акциза: существуют проведённые документы с акцизом";
+	}
+	return null;
 }
 
 // ── POST: создать активную запись (журнал) ─────────────────────────────
@@ -238,6 +433,18 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		const built = await buildBodyData(req.body || {});
 		if (built.error)
 			return res.status(400).json({ success: false, message: built.error });
+
+		// При создании «предыдущая» активная запись для той же организации —
+		// источник флагов для валидации (оппозиция «был включён → выключается»).
+		const prev = await prisma[MODEL].findFirst({
+			where: {
+				organizationUuid: built.data.organizationUuid,
+				deletedAt: null,
+			},
+		});
+		const validationError = await validateAgainstPostedDocs(built.data, prev);
+		if (validationError)
+			return res.status(409).json({ success: false, message: validationError });
 
 		const item = await prisma.$transaction(async (tx) => {
 			await tx[MODEL].updateMany({
@@ -272,6 +479,13 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const built = await buildBodyData(req.body || {}, existing);
 		if (built.error)
 			return res.status(400).json({ success: false, message: built.error });
+
+		const validationError = await validateAgainstPostedDocs(
+			built.data,
+			existing,
+		);
+		if (validationError)
+			return res.status(409).json({ success: false, message: validationError });
 
 		const item = await prisma.$transaction(async (tx) => {
 			// Soft-delete текущей активной записи для СТАРОЙ организации

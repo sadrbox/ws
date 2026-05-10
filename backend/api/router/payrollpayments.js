@@ -5,7 +5,7 @@ import { tenantFilter } from "../../utils/auth.js";
 const router = express.Router();
 const MODEL = "payrollPayment";
 const ROUTE = "payroll-payments";
-const TEXT_FIELDS = ["documentNumber", "description", "period"];
+const TEXT_FIELDS = ["description", "period"];
 const INCLUDE = { employee: true, organization: true };
 
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -57,12 +57,15 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
 		const filterWhere = {};
 		for (const [field, conds] of Object.entries(filter)) {
-			if (
-				["searchBy", "dateRange"].includes(field) ||
-				!conds ||
-				typeof conds !== "object"
-			)
+			if (field === "searchBy" || !conds || typeof conds !== "object")
 				continue;
+			if (field === "dateRange") {
+				const dr = {};
+				if (conds.startDate) dr.gte = new Date(conds.startDate);
+				if (conds.endDate) dr.lte = new Date(conds.endDate);
+				if (Object.keys(dr).length > 0) filterWhere.date = dr;
+				continue;
+			}
 			for (const [op, val] of Object.entries(conds)) {
 				if (!ALLOWED.includes(op)) continue;
 				if (op === "contains")
@@ -125,7 +128,6 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
 		const {
-			documentNumber,
 			date,
 			description,
 			period,
@@ -133,11 +135,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			organizationUuid,
 			paymentMethod,
 			amount,
-			status,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
-				documentNumber: documentNumber?.trim() ?? null,
 				date: date ? new Date(date) : new Date(),
 				description: description?.trim() ?? null,
 				period: period?.trim() ?? null,
@@ -145,7 +145,6 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				organizationUuid: organizationUuid || null,
 				paymentMethod: paymentMethod?.trim() ?? "bank_transfer",
 				amount: amount != null ? parseFloat(amount) : 0,
-				status: status || "draft",
 			},
 			include: INCLUDE,
 		});
@@ -164,10 +163,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
 		const strFields = [
-			"documentNumber",
 			"description",
 			"period",
-			"status",
 			"employeeUuid",
 			"organizationUuid",
 			"paymentMethod",

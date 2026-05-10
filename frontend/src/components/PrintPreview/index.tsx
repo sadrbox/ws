@@ -1,14 +1,16 @@
 import { FC, useCallback, useEffect, useState, useRef } from "react";
 import mammoth from "mammoth";
+import * as XLSX from "xlsx";
 import apiClient from "src/services/api/client";
 import { Button } from "src/components/Button";
 import styles from "src/styles/main.module.scss";
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PrintPreview — вкладка «Печать»
-// Все форматы → единый iframe на тёмном фоне.
+// PrintPreview — вкладка «Просмотр файла»
+// Единый механизм отображения Excel/Word/PDF/img/txt/html.
 // PDF — blob (нативный viewer браузера).
-// DOCX — mammoth → HTML. TXT/HTML — as-is. IMG — HTML-обёртка.
+// DOCX — mammoth → HTML. XLSX — SheetJS → HTML-таблица.
+// TXT/HTML — as-is. IMG — HTML-обёртка.
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface FileItem { uuid: string; fileName: string }
@@ -19,9 +21,10 @@ interface PrintPreviewProps {
   filesRevision?: number;
 }
 
-const PRINTABLE_EXT = /\.(docx|doc|txt|html|htm|pdf|png|jpg|jpeg|gif|bmp|webp|svg)$/i;
+const PRINTABLE_EXT = /\.(docx|doc|txt|html|htm|pdf|png|jpg|jpeg|gif|bmp|webp|svg|xlsx|xls)$/i;
 const IMAGE_EXT = /\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i;
 const PDF_EXT = /\.pdf$/i;
+const XLSX_EXT = /\.(xlsx|xls)$/i;
 
 const DOC_CSS = `
 *{box-sizing:border-box;margin:0;padding:0}
@@ -145,6 +148,22 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
         if (stale()) return;
         if (m.messages.length) console.warn("mammoth:", m.messages);
         setSrc(htmlBlob(wrap(m.value)));
+
+      } else if (XLSX_EXT.test(file.fileName)) {
+        const r = await dl("arraybuffer"); if (stale()) return;
+        const wb = XLSX.read(r.data as ArrayBuffer, { type: "array" });
+        const parts: string[] = [];
+        for (const sheetName of wb.SheetNames) {
+          const sheet = wb.Sheets[sheetName];
+          if (!sheet) continue;
+          const html = XLSX.utils.sheet_to_html(sheet, { id: "sheet" });
+          // sheet_to_html возвращает полный HTML — вырежем только <table>…</table>
+          const tableMatch = html.match(/<table[\s\S]*?<\/table>/);
+          const tableHtml = tableMatch ? tableMatch[0] : html;
+          parts.push(`<h2>${esc(sheetName)}</h2>${tableHtml}`);
+        }
+        if (stale()) return;
+        setSrc(htmlBlob(wrap(parts.join("\n"))));
 
       } else if (e === "doc") {
         setError("Формат .doc не поддерживается — сохраните как .docx");

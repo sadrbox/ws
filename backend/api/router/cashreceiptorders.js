@@ -4,7 +4,7 @@ import { tenantFilter } from "../../utils/auth.js";
 const router = express.Router();
 const MODEL = "cashReceiptOrder";
 const ROUTE = "cash-receipt-orders";
-const TEXT_FIELDS = ["documentNumber", "description"];
+const TEXT_FIELDS = ["description"];
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -55,12 +55,15 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
 		const filterWhere = {};
 		for (const [field, conds] of Object.entries(filter)) {
-			if (
-				["searchBy", "dateRange"].includes(field) ||
-				!conds ||
-				typeof conds !== "object"
-			)
+			if (field === "searchBy" || !conds || typeof conds !== "object")
 				continue;
+			if (field === "dateRange") {
+				const dr = {};
+				if (conds.startDate) dr.gte = new Date(conds.startDate);
+				if (conds.endDate) dr.lte = new Date(conds.endDate);
+				if (Object.keys(dr).length > 0) filterWhere.date = dr;
+				continue;
+			}
 			for (const [op, val] of Object.entries(conds)) {
 				if (!ALLOWED.includes(op)) continue;
 				if (op === "contains")
@@ -121,22 +124,18 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
 		const {
-			documentNumber,
 			date,
 			description,
 			amount,
-			status,
 			organizationUuid,
 			counterpartyUuid,
 			contractUuid,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
-				documentNumber: documentNumber?.trim() ?? null,
 				date: date ? new Date(date) : new Date(),
 				description: description?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
-				status: status || "draft",
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
@@ -157,9 +156,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
 		for (const f of [
-			"documentNumber",
 			"description",
-			"status",
 			"organizationUuid",
 			"counterpartyUuid",
 			"contractUuid",

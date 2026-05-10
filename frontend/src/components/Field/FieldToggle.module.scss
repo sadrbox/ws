@@ -1,0 +1,128 @@
+@import "src/styles/variables.scss";
+
+.FieldToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: $fontsize;
+  color: $color6;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1;
+
+  .label {
+    color: $color51;
+  }
+
+  .caption {
+    color: $color6;
+  }
+
+  // Скрываем нативный input, оставляем доступным.
+  .input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+  }
+
+  // Дорожка тумблера.
+  .track {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 20px;
+    background: $color33;
+    border-radius: 999px;
+    transition: background-color 0.18s ease, box-shadow 0.18s ease;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+  }
+
+  // Кнопка-«пилюля».
+  .thumb {
+    position: absolute;
+    top: 50%;
+    left: 2px;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04);
+    transition: left 0.18s ease, transform 0.18s ease, background-color 0.18s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .checkIcon {
+    opacity: 0;
+    color: #fff;
+    transition: opacity 0.18s ease;
+  }
+
+  // Hover/Focus.
+  &:hover:not(.disabled) .track {
+    box-shadow: 0 0 0 4px rgba($color1, 0.12);
+  }
+
+  .input:focus-visible+.track {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba($color3, 0.25);
+  }
+
+  // Состояние «включено».
+  &.checked {
+    .thumb {
+      left: calc(100% - 18px);
+    }
+
+    .checkIcon {
+      opacity: 1;
+      color: currentColor;
+    }
+  }
+
+  // Цветовая схема — успех (по умолчанию для «Проведено»).
+  &.variant_success.checked .track {
+    background: #1f9d55; // зелёный — «проведён»
+  }
+
+  &.variant_success.checked .thumb {
+    color: #1f9d55;
+  }
+
+  // Цветовая схема — primary.
+  &.variant_primary.checked .track {
+    background: $color3;
+  }
+
+  &.variant_primary.checked .thumb {
+    color: $color3;
+  }
+
+  // Размер sm.
+  &.size_sm .track {
+    width: 30px;
+    height: 17px;
+  }
+
+  &.size_sm .thumb {
+    width: 13px;
+    height: 13px;
+  }
+
+  &.size_sm.checked .thumb {
+    left: calc(100% - 15px);
+  }
+
+  // Заблокирован.
+  &.disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+}

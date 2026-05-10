@@ -25,7 +25,7 @@
 	},
 	{
 		"identifier": "date",
-		"type": "date",
+		"type": "datetime",
 		"name": "Дата",
 		"width": "150px",
 		"minWidth": "80px",
@@ -58,18 +58,6 @@
 		"visible": true,
 		"inlist": true,
 		"position": 5
-	},
-	{
-		"identifier": "status",
-		"type": "string",
-		"name": "Статус",
-		"width": "120px",
-		"minWidth": "80px",
-		"alignment": "left",
-		"hint": "Статус документа",
-		"visible": true,
-		"inlist": true,
-		"position": 6
 	},
 	{
 		"identifier": "posted",

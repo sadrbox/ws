@@ -2,7 +2,9 @@ type SaleItemCalcInput = {
 	quantity?: unknown;
 	price?: unknown;
 	vatRate?: unknown;
+	exciseRate?: unknown;
 	discountPercent?: unknown;
+	vatCalculationMethod?: unknown;
 };
 
 function toNumber(value: unknown): number {
@@ -11,27 +13,80 @@ function toNumber(value: unknown): number {
 	return 0;
 }
 
+/** Нормализует значение метода расчёта НДС к "INCLUDED" | "ADDED". */
+function normalizeMethod(v: unknown): "INCLUDED" | "ADDED" {
+	const s = String(v ?? "").toUpperCase();
+	return s === "ADDED" ? "ADDED" : "INCLUDED";
+}
+
+/**
+ * Пересчёт сумм строки SaleItem.
+ *
+ *   base          = quantity × price
+ *   discountAmount = base × discountPercent / 100
+ *   afterDiscount = base − discountAmount
+ *   exciseAmount  = afterDiscount × exciseRate / 100   (НК РК ст. 463; акциз ADDED)
+ *   vatBase       = afterDiscount + exciseAmount       (база для НДС)
+ *
+ * Способ расчёта НДС берётся из элемента справочника VatRate
+ * (поле `calculationMethod` записи `vatRateRef`):
+ *   "INCLUDED" — НДС уже включён в цену:
+ *       vatAmount = vatBase × rate / (100 + rate)
+ *       amount    = vatBase
+ *   "ADDED"    — НДС начисляется сверху:
+ *       vatAmount = vatBase × rate / 100
+ *       amount    = vatBase + vatAmount
+ *
+ *   amountWithoutVat = amount − vatAmount   (графа 13 ЭСФ РК)
+ *
+ * Параметр `method` опционален (по умолчанию INCLUDED).
+ * Параметр `exciseRate` опционален (по умолчанию 0 — акциз не применяется).
+ */
 export function recalcSaleItemAmounts(
 	quantity: unknown,
 	price: unknown,
 	vatRate: unknown,
 	discountPercent: unknown,
-): { discountAmount: number; vatAmount: number; amount: number } {
+	method?: unknown,
+	exciseRate?: unknown,
+): {
+	discountAmount: number;
+	exciseAmount: number;
+	vatAmount: number;
+	amount: number;
+	amountWithoutVat: number;
+} {
 	const q = toNumber(quantity);
 	const p = toNumber(price);
 	const vr = toNumber(vatRate);
 	const dp = toNumber(discountPercent);
+	const er = toNumber(exciseRate);
+	const m = normalizeMethod(method);
 
 	const base = Math.round(q * p * 100) / 100;
 	const discAmt = Math.round(((base * dp) / 100) * 100) / 100;
-	const afterDiscount = base - discAmt;
-	const vatAmt =
-		vr > 0 ? Math.round(((afterDiscount * vr) / (100 + vr)) * 100) / 100 : 0;
+	const afterDiscount = Math.round((base - discAmt) * 100) / 100;
+	const exciseAmt =
+		er > 0 ? Math.round(((afterDiscount * er) / 100) * 100) / 100 : 0;
+	const vatBase = Math.round((afterDiscount + exciseAmt) * 100) / 100;
+
+	let vatAmt = 0;
+	if (vr > 0) {
+		vatAmt =
+			m === "ADDED"
+				? Math.round(((vatBase * vr) / 100) * 100) / 100
+				: Math.round(((vatBase * vr) / (100 + vr)) * 100) / 100;
+	}
+	const amount =
+		m === "ADDED" ? Math.round((vatBase + vatAmt) * 100) / 100 : vatBase;
+	const amountWithoutVat = Math.round((amount - vatAmt) * 100) / 100;
 
 	return {
 		discountAmount: discAmt,
+		exciseAmount: exciseAmt,
 		vatAmount: vatAmt,
-		amount: afterDiscount,
+		amount,
+		amountWithoutVat,
 	};
 }
 
@@ -116,6 +171,9 @@ export function withSaleItemRecalc<T extends SaleItemCalcInput>(
 	patch: Record<string, unknown>,
 ): Record<string, unknown> {
 	const next = { ...current, ...patch };
+	// Метод расчёта НДС передаётся вызывающей стороной
+	// (vatCalculationMethod из настроек НУО организации), иначе — INCLUDED.
+	const method = (next as any).vatCalculationMethod ?? "INCLUDED";
 	return {
 		...patch,
 		...recalcSaleItemAmounts(
@@ -123,6 +181,8 @@ export function withSaleItemRecalc<T extends SaleItemCalcInput>(
 			next.price,
 			next.vatRate,
 			next.discountPercent,
+			method,
+			next.exciseRate,
 		),
 	};
 }
@@ -130,27 +190,32 @@ export function withSaleItemRecalc<T extends SaleItemCalcInput>(
 /**
  * Пересчёт строки при прямом вводе суммы скидки.
  * Обратная формула: discountPercent = (discountAmount / base) * 100
+ *
+ * Учитывает акциз (exciseRate) и НДС (vatRate с методом из vatRateRef).
  */
 export function withSaleItemRecalcFromDiscountAmount<
 	T extends SaleItemCalcInput,
 >(current: T, discountAmount: unknown): Record<string, unknown> {
 	const q = toNumber(current.quantity);
 	const p = toNumber(current.price);
-	const vr = toNumber(current.vatRate);
-
 	const base = Math.round(q * p * 100) / 100;
 	const discAmt = Math.min(Math.max(toNumber(discountAmount), 0), base);
 	const discPct =
 		base > 0 ? Math.round((discAmt / base) * 100 * 10000) / 10000 : 0;
 
-	const afterDiscount = base - discAmt;
-	const vatAmt =
-		vr > 0 ? Math.round(((afterDiscount * vr) / (100 + vr)) * 100) / 100 : 0;
+	const method = (current as any).vatCalculationMethod;
+	const recalc = recalcSaleItemAmounts(
+		q,
+		p,
+		current.vatRate,
+		discPct,
+		method,
+		current.exciseRate,
+	);
 
 	return {
 		discountAmount: discAmt,
 		discountPercent: discPct,
-		vatAmount: vatAmt,
-		amount: afterDiscount,
+		...recalc,
 	};
 }
