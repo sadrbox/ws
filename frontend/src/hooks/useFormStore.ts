@@ -1,6 +1,7 @@
 import { useCallback, useRef, useSyncExternalStore, useEffect } from "react";
 import { useAppContext } from "src/app";
 import { isNetworkError } from "src/services/networkUtils";
+import { getIsOnline } from "src/services/networkStatus";
 import { commitPendingRows } from "src/services/commitPendingRows";
 import {
 	pipeFetchOne,
@@ -9,6 +10,7 @@ import {
 	isOfflineFirst,
 } from "src/services/persistencePipe";
 import { translateError } from "src/i18";
+import { getCurrentUser } from "src/services/auth";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import useUID from "./useUID";
@@ -82,16 +84,26 @@ export interface FormStoreState<F extends object> {
 type Listener = () => void;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PERSIST (sessionStorage)
+// PERSIST (localStorage, по userId)
+// Черновики несохранённых форм хранятся в localStorage по ключу
+//   formStore:<userId>:<storageKey>:<entityId|new|uniqId>
+// Это позволяет переживать перезагрузку страницы (F5) и закрытие вкладки,
+// при этом не смешивая данные разных пользователей одного браузера.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const STORAGE_PREFIX = "formStore:";
+
+/** Текущий userId или "anon" — для разделения черновиков между пользователями. */
+export function getFormStoreUserId(): string {
+	return getCurrentUser()?.uuid || "anon";
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SESSION TOKEN
 // Уникальный токен, создаётся один раз при загрузке страницы (в памяти JS).
 // Сбрасывается при перезагрузке / закрытии вкладки.
-// Позволяет отличить данные sessionStorage текущей сессии от данных прошлой.
+// Позволяет отличить данные localStorage текущей сессии от данных прошлой —
+// для индикации «есть несохранённые данные из прошлой сессии» (DirtyButton).
 // ═══════════════════════════════════════════════════════════════════════════
 const CURRENT_SESSION_TOKEN =
 	Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -108,7 +120,7 @@ function persistToSession<F extends object>(
 			tables: state.tables,
 			[SESSION_TOKEN_KEY]: CURRENT_SESSION_TOKEN,
 		};
-		sessionStorage.setItem(storageKey, JSON.stringify(payload));
+		localStorage.setItem(storageKey, JSON.stringify(payload));
 	} catch {
 		/* quota exceeded */
 	}
@@ -122,7 +134,7 @@ function restoreFromSession<F extends object>(
 	fromCurrentSession: boolean;
 } | null {
 	try {
-		const raw = sessionStorage.getItem(storageKey);
+		const raw = localStorage.getItem(storageKey);
 		if (!raw) return null;
 		const parsed = JSON.parse(raw) as {
 			fields: F;
@@ -139,7 +151,7 @@ function restoreFromSession<F extends object>(
 
 function clearSession(storageKey: string): void {
 	try {
-		sessionStorage.removeItem(storageKey);
+		localStorage.removeItem(storageKey);
 	} catch {
 		/* ignore */
 	}
@@ -182,24 +194,26 @@ function createFormStore<F extends object>(
 
 	// Пробуем восстановить из sessionStorage
 	let hadStoredData = false;
-	// true — данные из ПРОШЛОЙ загрузки страницы (токен не совпадает).
-	// Только в этом случае показываем уведомление «несохранённые данные».
-	let hadPreviousSessionData = false;
+	// pendingStash — несохранённые данные ПРЕДЫДУЩЕГО открытия формы (любая
+	// сессия, в т.ч. текущая). Поведение: при открытии/повторном открытии
+	// формы НИКОГДА не подменяем поля автоматически — форма всегда стартует
+	// с серверного снапшота (или defaults). Пользователь явно восстанавливает
+	// несохранённые правки кликом по кнопке «Восстановить» (DirtyButton) в
+	// PaneItemHeaderToolbar — только тогда форма становится Dirty.
+	let pendingStash: { fields: F; tables: Record<string, TableState> } | null =
+		null;
 	const restored = restoreFromSession<F>(currentStorageKey);
 	if (restored) {
-		state.fields = { ...defaultFields, ...restored.fields };
-		// Восстанавливаем таблицы из sessionStorage независимо от наличия uuid.
-		// При uuid !== "" SubTable сам слияет pending-строки с серверными данными
-		// через mergeServerWithPending (ветка A в SubTable), поэтому ограничение
-		// "только при создании" было излишним и приводило к потере pending-строк.
-		for (const key of Object.keys(tableDefs)) {
-			if (restored.tables?.[key]) {
-				state.tables[key] = restored.tables[key];
-			}
-		}
-		hadStoredData = true;
-		// Данные из прошлой сессии (страница была перезагружена)
-		hadPreviousSessionData = !restored.fromCurrentSession;
+		pendingStash = {
+			fields: { ...defaultFields, ...restored.fields } as F,
+			tables: (() => {
+				const t: Record<string, TableState> = {};
+				for (const key of Object.keys(tableDefs)) {
+					t[key] = restored.tables?.[key] ?? { pending: [] };
+				}
+				return t;
+			})(),
+		};
 	}
 
 	// snapshotReady = false пока серверный snapshot не загружен (при hadStoredData).
@@ -222,16 +236,6 @@ function createFormStore<F extends object>(
 		}
 	}
 
-	// Флаг: уведомление о несохранённых данных прошлой сессии уже показывалось.
-	// Хранится в store (а не в React-состоянии), поэтому не сбрасывается при
-	// перемонтировании компонента (закрыл/открыл панель без перезагрузки страницы).
-	let prevSessionNotifShown = false;
-	function markPrevSessionNotifShown(): void {
-		prevSessionNotifShown = true;
-	}
-	function isPrevSessionNotifShown(): boolean {
-		return prevSessionNotifShown;
-	}
 	function isSnapshotReady(): boolean {
 		return snapshotReady;
 	}
@@ -446,9 +450,17 @@ function createFormStore<F extends object>(
 	/** ID панели — устанавливается из хука, используется для push-уведомлений */
 	let _paneUniqId: string | undefined;
 	function setPaneUniqId(id: string | undefined): void {
-		if (_paneUniqId) unregisterPaneDiff(_paneUniqId);
+		if (_paneUniqId) {
+			unregisterPaneDiff(_paneUniqId);
+			unregisterPaneStashActions(_paneUniqId);
+			setPaneHasStash(_paneUniqId, false);
+		}
 		_paneUniqId = id;
-		if (id) registerPaneDiff(id, getDirtyFieldDiff, subscribe);
+		if (id) {
+			registerPaneDiff(id, getDirtyFieldDiff, subscribe);
+			registerPaneStashActions(id, applyPendingStash, clearPendingStash);
+			setPaneHasStash(id, hasPendingStash());
+		}
 	}
 
 	/** Установить ошибку: пушит уведомление в колокольчик панели */
@@ -474,12 +486,14 @@ function createFormStore<F extends object>(
 	 * @param snapshotOnly — если true, НЕ заменять текущие fields/tables,
 	 *   а только обновить savedSnapshot серверными данными (для корректного isDirty).
 	 *   Используется когда fields восстановлены из sessionStorage.
+	 * @param noCache — обходить HTTP-кэш браузера (используется при reload).
 	 */
 	async function load(
 		entityUuid: string,
 		mapServerToForm: (data: any, prev?: F) => F | Promise<F>,
 		afterLoad?: () => void,
 		snapshotOnly = false,
+		noCache = false,
 	): Promise<void> {
 		setMeta({ isLoading: true });
 		setError(null);
@@ -489,7 +503,7 @@ function createFormStore<F extends object>(
 
 			if (isOfflineFirst()) {
 				// ── Offline-first pipe: server → Dexie fallback ──
-				const result = await pipeFetchOne(endpoint, entityUuid);
+				const result = await pipeFetchOne(endpoint, entityUuid, { noCache });
 				if (result) {
 					d = result.item;
 					fromCache = result.fromCache;
@@ -498,7 +512,7 @@ function createFormStore<F extends object>(
 				}
 			} else {
 				// ── Transactional pipe: только сервер ──
-				const result = await pipeFetchOne(endpoint, entityUuid);
+				const result = await pipeFetchOne(endpoint, entityUuid, { noCache });
 				if (result) {
 					d = result.item;
 					fromCache = false;
@@ -527,14 +541,21 @@ function createFormStore<F extends object>(
 			if (fromCache) {
 				const cacheMsg = "Данные загружены из локального кэша (offline-режим).";
 				setError(cacheMsg, "info");
+			} else if (_paneUniqId) {
+				// Свежие данные с сервера — убираем стальные «сетевые» уведомления.
+				dismissNetworkNotifications(_paneUniqId);
 			}
 
 			afterLoad?.();
 			markInitialFetchDone();
 		} catch (err: any) {
 			if (isNetworkError(err)) {
-				const offMsg =
-					"Нет связи с сервером. Работа в режиме offline — данные будут загружены при восстановлении соединения.";
+				// Различаем «по-настоящему» offline и разовый сбой сервера: если
+				// индикатор сети = Online (`getIsOnline()`), было бы ложью говорить
+				// «режим offline» — в этом случае показываем транзиентную ошибку.
+				const offMsg = getIsOnline()
+					? "Сервер временно недоступен. Повторите попытку."
+					: "Нет связи с сервером. Работа в режиме offline — данные будут загружены при восстановлении соединения.";
 				setError(offMsg, "warning");
 			} else {
 				setError(
@@ -607,6 +628,10 @@ function createFormStore<F extends object>(
 				const saveMsg =
 					"Сохранено локально. Синхронизация произойдёт при восстановлении связи.";
 				setError(saveMsg, "info");
+			} else if (_paneUniqId) {
+				// Успешное online-сохранение — убираем стальные «сетевые»
+				// уведомления, оставшиеся от прежних неудачных load/save.
+				dismissNetworkNotifications(_paneUniqId);
 			}
 
 			if (uniqId) updatePaneLabel(uniqId, buildPaneLabel(saved));
@@ -615,8 +640,9 @@ function createFormStore<F extends object>(
 			let msg = "Не удалось сохранить";
 			let noteType: PaneNotification["type"] = "error";
 			if (isNetworkError(err)) {
-				msg =
-					"Нет связи с сервером. Повторите попытку при восстановлении соединения.";
+				msg = getIsOnline()
+					? "Сервер временно недоступен. Повторите попытку сохранения."
+					: "Нет связи с сервером. Повторите попытку при восстановлении соединения.";
 				noteType = "warning";
 			} else if (err.response?.status === 409)
 				msg =
@@ -686,7 +712,11 @@ function createFormStore<F extends object>(
 		for (const k of previousStorageKeys) storeCache.delete(k);
 		previousStorageKeys.length = 0;
 		listeners.clear();
-		if (_paneUniqId) unregisterPaneDiff(_paneUniqId);
+		if (_paneUniqId) {
+			unregisterPaneDiff(_paneUniqId);
+			unregisterPaneStashActions(_paneUniqId);
+			setPaneHasStash(_paneUniqId, false);
+		}
 	}
 
 	/**
@@ -707,14 +737,36 @@ function createFormStore<F extends object>(
 		return currentStorageKey;
 	}
 
+	// ── Pending stash (несохранённые данные из прошлой сессии) ─────────────
+	function hasPendingStash(): boolean {
+		return pendingStash !== null;
+	}
+	/** Применить stash к state (восстановить последнее dirty-состояние). */
+	function applyPendingStash(): void {
+		if (!pendingStash) return;
+		state = {
+			...state,
+			fields: { ...state.fields, ...pendingStash.fields },
+			tables: { ...state.tables, ...pendingStash.tables },
+		};
+		pendingStash = null;
+		notify();
+		schedulePersist();
+		if (_paneUniqId) setPaneHasStash(_paneUniqId, false);
+	}
+	/** Сбросить stash (пользователь отказался восстанавливать). */
+	function clearPendingStash(): void {
+		if (!pendingStash) return;
+		pendingStash = null;
+		notify();
+		if (_paneUniqId) setPaneHasStash(_paneUniqId, false);
+	}
+
 	const storeResult = {
 		// Подписка
 		subscribe,
 		getSnapshot,
 		hadStoredData,
-		hadPreviousSessionData,
-		markPrevSessionNotifShown,
-		isPrevSessionNotifShown,
 		isSnapshotReady,
 		isInitialFetchDone,
 
@@ -748,6 +800,11 @@ function createFormStore<F extends object>(
 		// Storage key migration
 		migrateStorageKey,
 		getStorageKey,
+
+		// Pending stash (несохранённые данные прошлой сессии)
+		hasPendingStash,
+		applyPendingStash,
+		clearPendingStash,
 
 		// Cleanup
 		destroy,
@@ -858,6 +915,76 @@ export function usePaneDirty(uniqId: string): boolean {
 		() => dirtySet.has(uniqId),
 		() => false,
 	);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PENDING STASH STORE — реактивный Set<uniqId> для индикации, что в форме
+// есть несохранённые данные из прошлой сессии (доступные к восстановлению
+// через DirtyButton в PaneItemHeaderToolbar).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const stashSet = new Set<string>();
+const stashListeners = new Set<() => void>();
+
+function notifyStashListeners(): void {
+	for (const l of stashListeners) l();
+}
+
+export function setPaneHasStash(uniqId: string, has: boolean): void {
+	const had = stashSet.has(uniqId);
+	if (has && !had) {
+		stashSet.add(uniqId);
+		notifyStashListeners();
+	} else if (!has && had) {
+		stashSet.delete(uniqId);
+		notifyStashListeners();
+	}
+}
+
+function subscribeStash(listener: () => void): () => void {
+	stashListeners.add(listener);
+	return () => {
+		stashListeners.delete(listener);
+	};
+}
+
+/** Хук: есть ли в форме несохранённые данные из прошлой сессии. */
+export function usePaneHasPendingStash(uniqId: string): boolean {
+	return useSyncExternalStore(
+		subscribeStash,
+		() => stashSet.has(uniqId),
+		() => false,
+	);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// APPLY STASH REGISTRY — даёт кнопке возможность вызвать applyPendingStash
+// конкретной панели без прямого доступа к её store.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const paneApplyStashMap = new Map<string, () => void>();
+const paneClearStashMap = new Map<string, () => void>();
+
+export function registerPaneStashActions(
+	uniqId: string,
+	apply: () => void,
+	clear: () => void,
+): void {
+	paneApplyStashMap.set(uniqId, apply);
+	paneClearStashMap.set(uniqId, clear);
+}
+
+export function unregisterPaneStashActions(uniqId: string): void {
+	paneApplyStashMap.delete(uniqId);
+	paneClearStashMap.delete(uniqId);
+}
+
+export function applyPaneStash(uniqId: string): void {
+	paneApplyStashMap.get(uniqId)?.();
+}
+
+export function clearPaneStash(uniqId: string): void {
+	paneClearStashMap.get(uniqId)?.();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1055,6 +1182,21 @@ export function dismissPaneNotification(uniqId: string, noteId: number): void {
 	notifyNoteListeners();
 }
 
+/** Удалить из панели «сетевые» уведомления (offline/нет связи/локальный кэш).
+ *  Вызывается после успешного online-обращения к серверу, чтобы стальные
+ *  предупреждения не вводили пользователя в заблуждение. */
+export function dismissNetworkNotifications(uniqId: string): void {
+	const list = paneNotesMap.get(uniqId);
+	if (!list || list.length === 0) return;
+	const NETWORK_RE =
+		/Нет связи с сервером|режиме offline|локального кэша|Сохранено локально/i;
+	const filtered = list.filter((n) => !NETWORK_RE.test(n.text));
+	if (filtered.length === list.length) return;
+	if (filtered.length === 0) paneNotesMap.delete(uniqId);
+	else paneNotesMap.set(uniqId, filtered);
+	notifyNoteListeners();
+}
+
 /** Очистить все уведомления панели */
 export function clearPaneNotifications(uniqId: string): void {
 	if (paneNotesMap.has(uniqId)) {
@@ -1178,8 +1320,12 @@ export interface UseFormStoreReturn<F extends object> {
 	/** Обновить несколько полей */
 	setFields: (patch: Partial<F>) => void;
 
-	/** Загрузить с сервера (GET) */
-	loadFromServer: (entityUuid: string) => Promise<void>;
+	/** Загрузить с сервера (GET).
+	 * @param opts.noCache — обойти HTTP-кэш браузера (для кнопки «Обновить»). */
+	loadFromServer: (
+		entityUuid: string,
+		opts?: { noCache?: boolean },
+	) => Promise<void>;
 	/** Сохранить + закрыть (или только сохранить) */
 	handleSave: () => void;
 	handleSaveAndClose: () => Promise<void>;
@@ -1245,13 +1391,17 @@ export function useFormStore<F extends object>(
 	const formUid = useUID();
 
 	// ── Создание / получение store из кэша ──
-	// Для существующих записей (uuid) ключ стабилен: "formStore:<storageKey>:<uuid>"
-	// Для НОВЫХ форм ключ привязан к uniqId панели: "formStore:<storageKey>:<uniqId>"
-	// Это гарантирует что каждая новая форма имеет свой собственный store.
+	// Ключ формы привязан к пользователю, имени формы и идентификатору сущности:
+	//   "formStore:<userId>:<storageKey>:<uuid|uniqId|new>"
+	// Привязка к userId гарантирует, что черновики одного пользователя не
+	// видны другому при работе в одном браузере (см. также logout — данные не
+	// удаляются, чтобы при повторном входе пользователь увидел свои черновики).
+	// Для НОВЫХ форм ключ привязан к uniqId панели — у каждой новой формы свой store.
 	// При восстановлении из UnsavedForms — data._formStorageKey содержит оригинальный ключ.
+	const userId = getFormStoreUserId();
 	const fullStorageKey =
 		((data as any)?._formStorageKey as string) ||
-		`${STORAGE_PREFIX}${storageKey}:${uuid ?? uniqId ?? "new"}`;
+		`${STORAGE_PREFIX}${userId}:${storageKey}:${uuid ?? uniqId ?? "new"}`;
 	const effectiveDefaults = initialFields ?? defaultFields;
 
 	// Создаём/получаем store из кэша
@@ -1263,8 +1413,19 @@ export function useFormStore<F extends object>(
 		fullStorageKey,
 	);
 
-	// Привязываем uniqId панели к store — для push-уведомлений через setError
-	store.setPaneUniqId(uniqId);
+	// Привязываем uniqId панели к store — для push-уведомлений через setError.
+	// Вызов в useEffect (а не в теле render) обязателен: setPaneUniqId под
+	// капотом дёргает notifyStashListeners(), что приводит к setState в
+	// PaneTabItem и порождает React-warning «Cannot update a component while
+	// rendering a different component».
+	useEffect(() => {
+		store.setPaneUniqId(uniqId);
+		return () => {
+			// При размонтировании панели — отвязать обработчики, чтобы
+			// не висели подписки на закрытую вкладку.
+			store.setPaneUniqId(undefined);
+		};
+	}, [store, uniqId]);
 
 	// ── Стабильные ref-ы для колбэков (не пересоздаются) ──
 	const mapRef = useRef(mapServerToForm);
@@ -1286,9 +1447,9 @@ export function useFormStore<F extends object>(
 	const submitRef = useRef<
 		(options?: { keepLoadingOnSuccess?: boolean }) => Promise<boolean>
 	>(() => Promise.resolve(false));
-	const loadFromServerRef = useRef<(entityUuid: string) => Promise<void>>(
-		async () => {},
-	);
+	const loadFromServerRef = useRef<
+		(entityUuid: string, opts?: { noCache?: boolean }) => Promise<void>
+	>(async () => {});
 
 	// ── Полная подписка (для meta / error / loading) ──
 	const snapshot = useSyncExternalStore(
@@ -1357,71 +1518,9 @@ export function useFormStore<F extends object>(
 		};
 	}, [uniqId, store]);
 
-	// ── Уведомление при восстановлении dirty-формы из ПРОШЛОЙ сессии ──
-	// Показываем ТОЛЬКО когда данные в sessionStorage были записаны при предыдущей
-	// загрузке страницы (hadPreviousSessionData = true) — т.е. пользователь закрыл
-	// вкладку/перезагрузил страницу не сохранив данные.
-	// При работе в текущей сессии (открыл, редактировал, закрыл, открыл снова)
-	// sessionStorage содержит токен текущей сессии → hadPreviousSessionData = false → не показываем.
-	useEffect(() => {
-		if (!uniqId || !store.hadPreviousSessionData) return;
-		// Если уже показывали (например при перемонтировании панели) — не дублируем
-		if (store.isPrevSessionNotifShown()) return;
-		const noteCtx = {
-			paneLabel: paneProps.label,
-			ref: uuid ? { endpoint, uuid } : undefined,
-		};
-		const noteActions: PaneNotificationAction[] = [
-			{
-				label: "Сохранить несохранённые правки",
-				onClick: () => void submitRef.current(),
-			},
-			{
-				label: "Обновить (несохранённые правки будут потеряны)",
-				onClick: () => {
-					if (uuid) void loadFromServerRef.current(uuid);
-				},
-			},
-		];
-		// Флаг живёт внутри эффекта — не сбрасывается между re-renders (closure)
-		let fired = false;
-		const fire = (unsubscribe: () => void) => {
-			if (fired) return;
-			// Ждём, пока серверный снапшот не загружится (snapshotReady = true).
-			// Уведомление проверяется ровно ОДИН РАЗ после загрузки — до этого момента
-			// пользователь ещё не редактировал, поэтому не будет ложных срабатываний.
-			if (!store.isSnapshotReady()) return;
-			fired = true;
-			unsubscribe(); // сразу отписываемся: дальнейшее редактирование не триггерит уведомление
-			// Если данные сессии совпадают с серверными — уведомление не нужно
-			if (!store.isDirty()) return;
-			// Формируем текст с указанием что именно несохранено
-			const { fields: fieldsDirty, tables: tablesDirty } =
-				store.getDirtyDetails();
-			let what: string;
-			if (fieldsDirty && tablesDirty) {
-				what =
-					"поля формы и строки вложенных таблиц содержат несохранённые правки.";
-			} else if (tablesDirty) {
-				what = "строки вложенных таблиц содержат несохранённые правки.";
-			} else {
-				what = "поля формы содержат несохранённые правки.";
-			}
-			const noteText =
-				"В прошлый раз вы изменили данные в этой форме, но не сохранили их. " +
-				what;
-			store.markPrevSessionNotifShown(); // запомним в store — не показывать повторно
-			addPaneNotification(uniqId, "warning", noteText, noteCtx, noteActions);
-		};
-		// Ждём загрузки серверных данных (snapshotReady=true → markClean → notify).
-		// isDirty() возвращает false пока snapshotReady=false, поэтому
-		// преждевременного срабатывания во время заполнения формы не будет.
-		const unsub = store.subscribe(() => fire(unsub));
-		// Проверим сразу (если snapshot уже ready к моменту монтирования)
-		fire(() => unsub());
-		return unsub;
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [uniqId, store]);
+	// ── Несохранённые данные из прошлой сессии больше не вызывают уведомление.
+	// Они хранятся в store.pendingStash и доступны к восстановлению через
+	// DirtyButton в PaneItemHeaderToolbar (см. UI/index.tsx → applyPaneStash).
 
 	// ── Гранулярный useField ──
 	const useField = useCallback(
@@ -1481,8 +1580,14 @@ export function useFormStore<F extends object>(
 
 	// ── loadFromServer ──
 	const loadFromServer = useCallback(
-		async (entityUuid: string) => {
-			await store.load(entityUuid, mapRef.current, afterLoadRef.current, false);
+		async (entityUuid: string, opts?: { noCache?: boolean }) => {
+			await store.load(
+				entityUuid,
+				mapRef.current,
+				afterLoadRef.current,
+				false,
+				Boolean(opts?.noCache),
+			);
 		},
 		[store],
 	);
@@ -1588,10 +1693,23 @@ export function useFormStore<F extends object>(
 			);
 			if (!answer) return;
 		}
-		// Перезагрузка данных с сервера по uuid записи (если она не новая)
+		// При reload отбрасываем pending-stash (несохранённые правки из прошлого
+		// открытия формы) — пользователь явно запросил свежие данные с сервера.
+		store.clearPendingStash();
+		// Перезагрузка данных с сервера по uuid записи (если она не новая).
+		// noCache: true — принудительно обходим HTTP-кэш браузера, чтобы пользователь
+		// всегда получал актуальные данные с сервера.
 		const currentUuid = store.getSnapshot().meta.uuid;
-		if (currentUuid) await loadFromServer(currentUuid);
-	}, [store, confirm, loadFromServer]);
+		if (currentUuid) {
+			await loadFromServer(currentUuid, { noCache: true });
+		} else {
+			// Новая запись (uuid ещё нет): «Обновить» = сброс полей и таблиц к
+			// исходным defaults, чтобы Dirty гарантированно очищался.
+			store.replaceFields({ ...effectiveDefaults });
+			store.clearAllTablesPending();
+			store.markClean();
+		}
+	}, [store, confirm, loadFromServer, effectiveDefaults]);
 
 	// ── Регистрация в глобальном API ──
 	useEffect(() => {

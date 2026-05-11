@@ -11,6 +11,12 @@ import {
 
 import { getTranslateColumn } from 'src/i18';
 import { getFormatColumnValue } from './services';
+import {
+  computeNextActiveColId,
+  computeNextActiveRowId,
+  getCellNavDirection,
+  getTableNavDirection,
+} from './tableKeyboardNav';
 
 import Modal from '../Modal';
 import { Button } from '../Button';
@@ -45,12 +51,15 @@ import {
   Dispatch,
   FC,
   Fragment,
+  KeyboardEvent as ReactKeyboardEvent,
   memo,
   PropsWithChildren,
+  Ref,
   SetStateAction,
   useCallback,
   useContext,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -141,6 +150,9 @@ export interface TableContextProps {
     setExcludedRows: Dispatch<SetStateAction<Set<number>>>;
     activeRow: number | null;
     setActiveRow: Dispatch<SetStateAction<number | null>>;
+    /** Идентификатор активной (выделенной) колонки в строке activeRow. */
+    activeCell: string | null;
+    setActiveCell: Dispatch<SetStateAction<string | null>>;
   };
 
   scrollRef: React.RefObject<HTMLDivElement | null>;
@@ -192,6 +204,24 @@ export interface TableProps {
   expandedRowIds?: Set<string>;
   /** Рендер содержимого раскрытой строки */
   renderExpandedRow?: (row: TDataItem) => React.ReactNode;
+  /** Императивный ref для внешнего управления таблицей (activeRow, focus). */
+  apiRef?: Ref<TableApi>;
+}
+
+/**
+ * Императивный API таблицы — позволяет внешним обёрткам (напр. SubTable)
+ * управлять activeRow без перевода фокуса на ячейки/поля.
+ */
+export interface TableApi {
+  getActiveRow: () => number | null;
+  setActiveRow: (id: number | null) => void;
+  /** Идентификатор активной колонки (cell-level выделение) или null. */
+  getActiveCell: () => string | null;
+  setActiveCell: (identifier: string | null) => void;
+  /** Передать фокус на скролл-контейнер таблицы (чтобы клавиатура работала без выбора ячейки). */
+  focusContainer: () => void;
+  /** Получить скролл-контейнер (для поиска DOM-элементов строк). */
+  getScrollContainer: () => HTMLDivElement | null;
 }
 
 const ROW_HEIGHT = 30;  // ← ИСПРАВИЛ: было 28, должно быть 30
@@ -297,6 +327,7 @@ const Table: FC<TableProps> = memo((props) => {
     readonly: isReadonly = false,
     expandedRowIds,
     renderExpandedRow,
+    apiRef,
   } = props;
 
 
@@ -310,6 +341,7 @@ const Table: FC<TableProps> = memo((props) => {
   inlineEditingRef.current = inlineEditing;
 
   const [activeRow, setActiveRow] = useState<number | null>(null);
+  const [activeCell, setActiveCell] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [isAllSelectedMode, setIsAllSelectedMode] = useState<boolean>(false);
   const [excludedRows, setExcludedRows] = useState<Set<number>>(new Set());
@@ -321,6 +353,8 @@ const Table: FC<TableProps> = memo((props) => {
   // Stable refs для использования в эффектах без лишних пересозданий
   const activeRowRef = useRef(activeRow);
   activeRowRef.current = activeRow;
+  const activeCellRef = useRef(activeCell);
+  activeCellRef.current = activeCell;
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
   const onSelectItemRef = useRef(onSelectItem);
@@ -342,6 +376,26 @@ const Table: FC<TableProps> = memo((props) => {
     const el = scrollRef.current.querySelector<HTMLElement>('[data-active="true"]');
     if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [activeRow]);
+
+  // Сбрасываем activeCell, когда снимается activeRow (нет смысла подсвечивать
+  // ячейку без активной строки).
+  useEffect(() => {
+    if (activeRow === null && activeCell !== null) setActiveCell(null);
+  }, [activeRow, activeCell]);
+
+  // Императивный API для внешних оберток (SubTable и т.п.)
+  useImperativeHandle(
+    apiRef,
+    () => ({
+      getActiveRow: () => activeRowRef.current,
+      setActiveRow: (id) => setActiveRow(id),
+      getActiveCell: () => activeCellRef.current,
+      setActiveCell: (identifier) => setActiveCell(identifier),
+      focusContainer: () => scrollRef.current?.focus(),
+      getScrollContainer: () => scrollRef.current,
+    }),
+    [],
+  );
 
   // Клавиатурная навигация: ↑ / ↓ / Enter — только когда открыт список для выбора
   useEffect(() => {
@@ -409,6 +463,7 @@ const Table: FC<TableProps> = memo((props) => {
         isAllSelectedMode, setIsAllSelectedMode,
         excludedRows, setExcludedRows,
         activeRow, setActiveRow,
+        activeCell, setActiveCell,
       },
     }),
     [
@@ -418,7 +473,7 @@ const Table: FC<TableProps> = memo((props) => {
       pagination, sorting, filtering, search, extendedActions,
       hasNextPage, isFetchingNextPage,
       onInlineAdd,
-      selectedRows, isAllSelectedMode, excludedRows, activeRow,
+      selectedRows, isAllSelectedMode, excludedRows, activeRow, activeCell,
     ]
   );
 
@@ -428,9 +483,7 @@ const Table: FC<TableProps> = memo((props) => {
     } else if (openModelForm) {
       openModelForm({ onSave: refetch, onClose: () => { } });
     }
-  }, [inlineEditing, onInlineAdd, openModelForm, refetch]);
-
-  // onRefresh — обновляет данные.
+  }, [inlineEditing, onInlineAdd, openModelForm, refetch]);  // onRefresh — обновляет данные.
   // isAllSelectedMode, selectedRows и excludedRows НЕ сбрасываем:
   // строки с теми же ID после перезагрузки сохранят своё состояние выделения.
   const handleRefresh = useCallback(() => {
@@ -467,6 +520,90 @@ const Table: FC<TableProps> = memo((props) => {
       alert('Удалить выбранные');
     }
   }, [onDelete, selectedRows, rows, isAllSelectedMode, excludedRows, activeRow, setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow]);
+
+  // ── Клавиатурная навигация по таблице (Insert / Delete / Home / End /
+  // PgUp / PgDn / ArrowUp / ArrowDown) ───────────────────────────────────
+  // Обрабатывает события на контейнере скролла (tabIndex={0}). Срабатывает
+  // только когда фокус на самом контейнере или на не-input элементе внутри
+  // (чтобы не мешать вводу). Для select-режима (onSelectItem) стрелки/Enter
+  // продолжают работать через отдельный window-listener выше.
+  const handleScrollKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    // Не вмешиваемся, если фокус внутри редактируемого поля
+    const isEditable = target instanceof HTMLInputElement
+      || target instanceof HTMLTextAreaElement
+      || target instanceof HTMLSelectElement
+      || (target?.isContentEditable === true);
+    // Insert: создание новой строки/записи. Работает даже из input,
+    // т.к. Insert обычно не используется внутри полей ввода.
+    if (e.key === 'Insert') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleCreate();
+      return;
+    }
+    if (isEditable) return;
+    // Delete: удалить выбранные/активную
+    if (e.key === 'Delete') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleDeleteClick();
+      return;
+    }
+    // ── Enter: открыть форму активной строки ─────────────────────────────
+    // Работает только в обычных списках (*List, variant === 'default').
+    //  - SubTable (variant === 'embedded') обрабатывает Enter сам в capture-фазе
+    //    (вход в редактирование ячейки/строки).
+    //  - select-режим (onSelectItem) обрабатывает Enter через свой window-listener.
+    if (
+      e.key === 'Enter' &&
+      variant === 'default' &&
+      !onSelectItem &&
+      openModelForm
+    ) {
+      if (activeRow === null) return;
+      const row = rows.find(r => r.id === activeRow);
+      if (!row) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openModelForm({ data: row, onSave: refetch, onClose: () => { } });
+      return;
+    }
+    // ── Колоночная (cell-level) навигация: ArrowLeft/ArrowRight/Home/End ──
+    // ВНИМАНИЕ: activeCell-навигация работает только во встроенных таблицах
+    // (variant === 'embedded', т.е. внутри SubTable). В обычных списках (*List)
+    // активная ячейка не используется — стрелки Left/Right/Home/End там
+    // игнорируются на уровне Table, а row-навигация работает через
+    // ArrowUp/ArrowDown/PgUp/PgDn ниже.
+    const cellDir = variant === 'embedded' ? getCellNavDirection(e.key) : null;
+    if (cellDir) {
+      // Если строк нет — просто блокируем (чтобы не ездила каретка в input,
+      // но мы уже отсекли isEditable выше).
+      if (rows.length === 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      // Если activeRow нет — берём первую видимую строку (как точку старта).
+      const startRowId = activeRow ?? rows[0].id;
+      const nextColId = computeNextActiveColId(columns, activeCell, cellDir);
+      if (nextColId === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (activeRow === null) setActiveRow(startRowId);
+      setActiveCell(nextColId);
+      return;
+    }
+    // ── Построчная навигация: ArrowUp/ArrowDown/PgUp/PgDn ──────────────
+    const direction = getTableNavDirection(e.key);
+    if (!direction) return;
+    if (rows.length === 0) return;
+    const nextId = computeNextActiveRowId(rows, activeRow, direction);
+    if (nextId === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveRow(nextId);
+  }, [handleCreate, handleDeleteClick, rows, activeRow, activeCell, columns, variant, onSelectItem, openModelForm, refetch]);
 
   const handleConfigOpen = useCallback(() => {
     setConfigModalAction('open');
@@ -556,7 +693,12 @@ const Table: FC<TableProps> = memo((props) => {
         )}
 
         <div className={styles.TableScrollContainer}>
-          <div ref={scrollRef} className={`${styles.TableScrollWrapper} ${styles.NoOverflowAnchor}`}>
+          <div
+            ref={scrollRef}
+            className={`${styles.TableScrollWrapper} ${styles.NoOverflowAnchor}`}
+            tabIndex={0}
+            onKeyDown={handleScrollKeyDown}
+          >
             <TableArea />
           </div>
           {(isLoading || isFetchingNextPage) && (
@@ -816,6 +958,7 @@ const TableHeader = memo(() => {
           return (
             <th
               key={col.identifier}
+              title={col.hint || undefined}
               style={{
                 cursor: `${(isLoading || !isSortable) ? 'default' : 'pointer'}`,
                 width: isLast ? 'auto' : (col.width && col.width !== 'auto' ? col.width : undefined),
@@ -1099,12 +1242,14 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     renderExpandedRow,
     states: {
       activeRow, setActiveRow,
+      activeCell, setActiveCell,
       selectedRows, setSelectedRows,
       isAllSelectedMode, setIsAllSelectedMode,
       excludedRows, setExcludedRows,
     },
     actions: { openModelForm, refetch },
     isLoading,
+    scrollRef,
   } = useTableContext();
 
   const isActive = activeRow === row.id;
@@ -1162,8 +1307,17 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   // Флаг: mousedown произошёл на уже сфокусированном поле — клик должен быть стандартным
   const clickedFocusedInputRef = useRef(false);
 
-  const handleRowClick = useCallback(() => {
+  const handleRowClick = useCallback((e: React.MouseEvent) => {
     setActiveRow?.(row.id);
+    // Если клик пришёлся на конкретную ячейку — синхронизируем activeCell
+    // с колонкой этой ячейки. Только во встроенных таблицах (SubTable):
+    // в обычных *List (variant === 'default') механика activeCell отключена.
+    if (variant === 'embedded') {
+      const targetEl = e.target as HTMLElement | null;
+      const td = targetEl?.closest('td[data-col-id]') as HTMLElement | null;
+      const colId = td?.getAttribute('data-col-id') ?? null;
+      if (colId) setActiveCell?.(colId);
+    }
     if (clickedFocusedInputRef.current) {
       // Клик по уже сфокусированному полю — не сбрасываем фокус, даём стандартное поведение
       clickedFocusedInputRef.current = false;
@@ -1174,7 +1328,18 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') && (active as HTMLInputElement).type !== 'checkbox') {
       active.blur();
     }
-  }, [setActiveRow, row.id]);
+    // Гарантируем, что фокус остаётся на scroll-контейнере таблицы, чтобы
+    // клавиатурная навигация (Up/Down/Left/Right/Home/End/PgUp/PgDn) работала
+    // независимо от того, что в строке могут быть редактируемые поля (input),
+    // у которых mousedown с preventDefault может «съесть» автофокус контейнера.
+    // Без этого в SubTable (inline-editing) после клика по строке стрелки не
+    // работают, потому что фокус остаётся на body.
+    const scroller = scrollRef.current;
+    if (scroller && !scroller.contains(document.activeElement)) {
+      // preventScroll — чтобы не дёргать видимую область при программном фокусе
+      try { scroller.focus({ preventScroll: true }); } catch { scroller.focus(); }
+    }
+  }, [setActiveRow, setActiveCell, row.id, scrollRef, variant]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!inlineEditingRef?.current) {
@@ -1254,6 +1419,11 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         onDoubleClick={handleDoubleClick}
         className={trClassName}
         data-active={isActive || undefined}
+        // data-row-id / data-selected — атрибуты для внешних обработчиков
+        // (напр. SubTable.handleContainerKeyDown), чтобы по клавишам можно
+        // было определить выбранные/активные строки без доступа к React-state.
+        data-row-id={row.id}
+        data-selected={isSelected || undefined}
         // Жирное выделение основной записи (см. tr[data-primary="true"] в Table.module.scss)
         // применяется ТОЛЬКО во вложенных таблицах (SubTable, variant="embedded"),
         // которые используются внутри форм организации/контрагента и форм основных записей.
@@ -1271,11 +1441,27 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           // Кастомный рендер ячейки (переводы, спецзначения) — работает в любом режиме
           const currentRenderCell = renderCellRef?.current;
           const cellClass = `${styles.TableBodyCell} ${cellAlignClass(col)}`;
+          // Активная ячейка подсвечивается только в активной строке.
+          // Механика activeCell используется только во встроенных таблицах
+          // (SubTable); в *List (variant !== 'embedded') ячеечного выделения нет.
+          const isCellActive = variant === 'embedded' && isActive && activeCell === col.identifier;
+          const tdProps = {
+            'data-col-id': col.identifier,
+            'data-active-cell': isCellActive || undefined,
+            className: isCellActive ? styles.activeCell : undefined,
+            // tabIndex обязателен для активной ячейки — благодаря этому td может
+            // получать фокус. Используется механикой клавиатуры (Enter → фокус
+            // на input «в/под activeCell»): SubTable.handleContainerKeyDown
+            // ловит Enter в capture-фазе и переводит фокус на input этой td.
+            // Без tabIndex td не является focusable-элементом, поэтому ставим
+            // -1 (программный фокус допустим, в Tab-порядок не попадает).
+            tabIndex: isCellActive ? -1 : undefined,
+          } as const;
           if (currentRenderCell) {
             const customCell = currentRenderCell(row, col);
             if (customCell !== undefined) {
               return (
-                <td key={col.identifier}>
+                <td key={col.identifier} {...tdProps}>
                   <div className={cellClass}>{customCell}</div>
                 </td>
               );
@@ -1283,7 +1469,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           }
           const value = getFormatColumnValue(row, col);
           return (
-            <td key={col.identifier}>
+            <td key={col.identifier} {...tdProps}>
               <div className={cellClass}>
                 <span>{value}</span>
               </div>

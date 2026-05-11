@@ -1,0 +1,164 @@
+/* Tooltip — современная подсказка (CSS-only, без портала).
+   Триггер — inline-flex с фокусируемым tabIndex. Popup появляется при
+   :hover / :focus-within с плавным fade-in + поднятием. */
+
+.Tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  outline: none;
+  line-height: 1;
+}
+
+.TooltipPopup {
+  position: absolute;
+  z-index: 1000;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(30, 32, 38, 0.96);
+  color: #f5f5f5;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: pre-line;
+  /* поддержка \n в content */
+  text-align: left;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22),
+    0 2px 6px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms;
+}
+
+.Tooltip:hover .TooltipPopup,
+.Tooltip:focus-within .TooltipPopup {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 200ms;
+  /* небольшая задержка чтобы не мерцал */
+}
+
+.TooltipArrow {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  transform: rotate(45deg);
+}
+
+/* ── Размещение ────────────────────────────────────────────────────────── */
+
+.top .TooltipPopup {
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translate(-50%, 4px);
+}
+
+.top:hover .TooltipPopup,
+.top:focus-within .TooltipPopup {
+  transform: translate(-50%, 0);
+}
+
+.top .TooltipArrow {
+  left: 50%;
+  bottom: -4px;
+  margin-left: -4px;
+}
+
+.bottom .TooltipPopup {
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translate(-50%, -4px);
+}
+
+.bottom:hover .TooltipPopup,
+.bottom:focus-within .TooltipPopup {
+  transform: translate(-50%, 0);
+}
+
+.bottom .TooltipArrow {
+  left: 50%;
+  top: -4px;
+  margin-left: -4px;
+}
+
+.left .TooltipPopup {
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translate(4px, -50%);
+}
+
+.left:hover .TooltipPopup,
+.left:focus-within .TooltipPopup {
+  transform: translate(0, -50%);
+}
+
+.left .TooltipArrow {
+  right: -4px;
+  top: 50%;
+  margin-top: -4px;
+}
+
+.right .TooltipPopup {
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translate(-4px, -50%);
+}
+
+.right:hover .TooltipPopup,
+.right:focus-within .TooltipPopup {
+  transform: translate(0, -50%);
+}
+
+.right .TooltipArrow {
+  left: -4px;
+  top: 50%;
+  margin-top: -4px;
+}
+
+/* ── Inline-style для контента ─────────────────────────────────────────── */
+
+.TooltipPopup code,
+.TooltipPopup b,
+.TooltipPopup strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.TooltipPopup code {
+  font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Иконка-триггер «ⓘ» — для использования рядом с заголовками колонок. */
+.InfoIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.08);
+  color: #4a4a4a;
+  font-size: 10px;
+  font-weight: 700;
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.Tooltip:hover .InfoIcon,
+.Tooltip:focus-within .InfoIcon {
+  background: #1976d2;
+  color: #fff;
+}

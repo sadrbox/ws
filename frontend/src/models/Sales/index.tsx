@@ -5,7 +5,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDateTime } from "src/components/Field";
+import { Field, FieldDateTime, Divider } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { SaleItemsTable } from "./SaleItemsTable";
@@ -25,7 +25,8 @@ import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import { usePrintDocument } from "src/components/PrintLayout/usePrintDocument";
 import SaleInvoicePrint, { type SaleInvoicePrintData, type SaleInvoicePrintColumns, type SaleItemPrintRow } from "./SaleInvoicePrint";
 import { buildSaleInvoiceWorkbook } from "./saleInvoiceWorkbook";
-import GeneratedXlsxPreviewPane from "src/components/PrintPreview/GeneratedXlsxPreviewPane";
+import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
+import { renderToStaticMarkup } from "react-dom/server";
 import { useAppContext } from "src/app";
 import { Icon } from "src/components/IconButton/icons";
 import { api } from "src/services/api/client";
@@ -43,6 +44,7 @@ interface TFields {
   contractUuid: string; contractName: string;
   warehouseUuid: string; warehouseName: string;
   vatAmount: number; discountAmount: number; amountWithoutVat: number;
+  authorUuid: string; authorName: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
@@ -50,6 +52,7 @@ const DEFAULT_FIELDS: TFields = {
   organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "", contractUuid: "", contractName: "",
   warehouseUuid: "", warehouseName: "",
   vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
+  authorUuid: "", authorName: "",
 };
 
 const SalesForm: FC<Partial<TPane>> = (paneProps) => {
@@ -61,6 +64,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     const data = paneProps.data;
     if (!data || data.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
+    // «Автор» для нового документа всегда пустой:
+    // заполняется сервером при первом сохранении (req.user.uuid).
     if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
     if (data.counterpartyUuid) { init.counterpartyUuid = data.counterpartyUuid as string; }
@@ -114,6 +119,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       vatAmount: d.vatAmount != null ? Number(d.vatAmount) : 0,
       discountAmount: d.discountAmount != null ? Number(d.discountAmount) : 0,
       amountWithoutVat: d.amountWithoutVat != null ? Number(d.amountWithoutVat) : 0,
+      authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
+      authorName: d.author?.username ?? d.author?.email ?? "",
     }),
     buildPayload: (fd) => ({
       date: localInputToIso(fd.date),
@@ -227,16 +234,15 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.setFields]);
 
   // ── Печать накладной (форма З-2 РК) ────────────────────────────────
-  // Печать осуществляется в формате xlsx (табличный документ): строится
-  // рабочая книга через buildSaleInvoiceWorkbook и открывается в отдельной
-  // вкладке-панели GeneratedXlsxPreviewPane, где пользователь может:
-  //   • сохранить как .xlsx;
-  //   • открыть нативный диалог печати → «Сохранить как PDF» / «Печать».
-  // Старый html-рендер SaleInvoicePrint оставлен для совместимости (могут
-  // использовать другие места) и доступен через usePrintDocument.print().
+  // Печать осуществляется в формате A4 HTML (регламентированная типовая
+  // форма З-2 РК, приказ Минфина РК № 562 от 20.12.2012). Реализация:
+  //   • SaleInvoicePrint рендерит документ в скрытом iframe;
+  //   • usePrintDocument.print() вызывает window.print() в этом iframe;
+  //   • пользователь в нативном диалоге может «Сохранить как PDF» или печатать.
+  // xlsx-предпросмотр (buildSaleInvoiceWorkbook + GeneratedXlsxPreviewPane)
+  // также используется как альтернативный путь — открывается во вкладке для
+  // экспорта в .xlsx (через ctrl+клик / shift+клик ниже).
   const { print: printHtml } = usePrintDocument();
-  void printHtml; // используется для альтернативного html-вывода
-  void SaleInvoicePrint; // компонент остался как референс структуры формы
   const { windows: { addPane } } = useAppContext();
   const handlePrint = useCallback(async () => {
     if (!form.fields.uuid) return;
@@ -314,17 +320,27 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         columns: printColumns,
       };
 
-      // Строим Excel-документ и открываем в отдельной вкладке-панели.
-      // Внутри пользователь может сохранить как .xlsx или вызвать печать
-      // (через нативный диалог браузера → можно выбрать «Сохранить как PDF»).
-      const workbook = buildSaleInvoiceWorkbook(data);
+      // Открываем макет в отдельной MDI-вкладке (PrintDocumentPane).
+      // Внутри pane — iframe с A4-HTML + тулбар сохранения в xlsx/xls/pdf/doc.
+      // Печать происходит из самой вкладки (Печать / .pdf), а не через
+      // нативный диалог из формы — пользователь видит макет, может править
+      // выбор колонок и сохранить в любом из 4 форматов.
       const titleStr = `Накладная № ${data.documentId ?? ""}`;
       const fileBase = `Накладная_${data.documentId ?? "draft"}`.replace(/\s+/g, "_");
+      const bodyHtml = renderToStaticMarkup(<SaleInvoicePrint data={data} />);
+      const workbook = buildSaleInvoiceWorkbook(data);
       addPane({
-        component: GeneratedXlsxPreviewPane,
-        isSelector: true, // уникальный uniqId на каждый клик
+        component: PrintDocumentPane,
+        isSelector: true,
         label: titleStr,
-        data: { workbook, fileBaseName: fileBase, title: titleStr },
+        data: {
+          id: Number(data.documentId ?? form.fields.id ?? 0),
+          uuid: String(form.fields.uuid ?? ""),
+          bodyHtml,
+          fileBaseName: fileBase,
+          title: titleStr,
+          workbook,
+        },
       });
     } catch (e) {
       console.error("[print] sale invoice failed", e);
@@ -343,6 +359,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     form.fields.contractName,
     form.fields.warehouseName,
     addPane,
+    printHtml,
   ]);
 
   // Регистрируем кнопку «Печать» в шапке панели (рядом с Reload/Close).
@@ -425,6 +442,13 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 </div>
               </div>
             </Group>
+
+            {/* ── Служебные поля внизу: видны только для сохранённых документов ── */}
+            {form.isEditMode && <><Divider /><Group align="row" gap="12px">
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+              <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || ""} disabled />
+            </Group></>}
           </div>
         </div>
       )
@@ -470,30 +494,15 @@ const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
         const isPosted = row.posted === true;
         return (
           <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              padding: "2px 8px",
-              borderRadius: 999,
-              fontSize: 11,
-              fontWeight: 600,
-              lineHeight: 1.4,
-              letterSpacing: 0.2,
-              background: isPosted ? "#d1fae5" : "#f3f4f6",
-              color: isPosted ? "#047857" : "#6b7280",
-              border: `1px solid ${isPosted ? "#a7f3d0" : "#e5e7eb"}`,
-              whiteSpace: "nowrap",
-            }}
             title={isPosted ? "Документ проведён" : "Не проведён"}
           >
             <Icon
               name={isPosted ? "posted" : "notPosted"}
-              width={12}
-              height={12}
-              style={{ color: isPosted ? "#10b981" : "#9ca3af", flexShrink: 0 }}
+              width={17}
+              height={17}
+              style={{ color: isPosted ? "#10b981" : "#9ca3af", flexShrink: 0, display: "flex" }}
             />
-            {isPosted ? "Проведён" : "Черновик"}
+            {/* {isPosted ? "Проведён" : "Черновик"} */}
           </span>
         );
       }

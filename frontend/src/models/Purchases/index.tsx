@@ -33,6 +33,7 @@ interface TFields {
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
+  authorUuid: string; authorName: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
@@ -40,6 +41,7 @@ const DEFAULT_FIELDS: TFields = {
   organizationUuid: "", organizationName: "",
   counterpartyUuid: "", counterpartyName: "",
   contractUuid: "", contractName: "",
+  authorUuid: "", authorName: "",
 };
 
 const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
@@ -50,6 +52,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     const data = paneProps.data;
     if (!data || data.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
+
     if (data.organizationUuid) {
       init.organizationUuid = data.organizationUuid as string;
       init.organizationName = (data.organizationName as string) || "";
@@ -82,6 +85,8 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
       counterpartyName: d.counterparty?.shortName ?? "",
       contractUuid: d.contractUuid ?? "",
       contractName: d.contract?.shortName ?? "",
+      authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
+      authorName: d.author?.username ?? d.author?.email ?? "",
     }),
     buildPayload: (fd) => ({
       date: fd.date || null,
@@ -131,6 +136,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
             <GroupCol>
               <GroupRow>
                 <FieldDate label={translate("date") || "Дата"} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="120px" />
+                <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || "-"} disabled />
                 <FieldSelect label={translate("status") || "Статус"} name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
               </GroupRow>
 
@@ -182,7 +188,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}
       onClose={form.handleClose}
-      onReload={form.uuid ? () => form.loadFromServer(form.uuid!) : undefined}
+      onReload={form.isEditMode ? form.handleReload : undefined}
       isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
       readonly={!canWrite}
       isDirty={form.isDirty}

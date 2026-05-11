@@ -31,6 +31,7 @@ interface TDocFields {
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
+  authorUuid: string; authorName: string;
 }
 
 const DEFAULT_FIELDS: TDocFields = {
@@ -38,6 +39,7 @@ const DEFAULT_FIELDS: TDocFields = {
   organizationUuid: "", organizationName: "",
   counterpartyUuid: "", counterpartyName: "",
   contractUuid: "", contractName: "",
+  authorUuid: "", authorName: "",
 };
 
 interface CreateDocModelOptions {
@@ -62,7 +64,12 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
 
     const initialFields: TDocFields = (() => {
       const data = paneProps.data;
-      if (!data || data.uuid) return { ...DEFAULT_FIELDS };
+      if (!data || data.uuid) {
+        // Для нового несохранённого документа поле «Автор» остаётся пустым:
+        // оно заполняется сервером (req.user) при первом сохранении и приходит
+        // обратно в ответе. Так пользователь видит, что документ ещё не записан.
+        return { ...DEFAULT_FIELDS };
+      }
       const init = { ...DEFAULT_FIELDS };
       if (data.organizationUuid) {
         init.organizationUuid = data.organizationUuid as string;
@@ -91,6 +98,8 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
         counterpartyName: d.counterparty?.shortName ?? "",
         contractUuid: d.contractUuid ?? "",
         contractName: d.contract?.shortName ?? "",
+        authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
+        authorName: d.author?.username ?? d.author?.email ?? "",
       }),
       buildPayload: (fd) => ({
         date: localInputToIso(fd.date),
@@ -157,6 +166,7 @@ export function createDocumentModel(opts: CreateDocModelOptions) {
               {form.isEditMode && <><Divider /><Group align="row" gap="12px">
                 <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
                 <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+                <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || "-"} disabled />
               </Group></>}
             </div>
           </div>

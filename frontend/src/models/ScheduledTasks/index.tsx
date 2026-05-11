@@ -29,11 +29,13 @@ interface TFields {
   shortName: string; description: string; cronExpr: string; status: string;
   lastRunAt: string; nextRunAt: string;
   organizationUuid: string; organizationName: string;
+  authorUuid: string; authorName: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
   shortName: "", description: "", cronExpr: "", status: "active",
   lastRunAt: "", nextRunAt: "", organizationUuid: "", organizationName: "",
+  authorUuid: "", authorName: "",
 };
 
 const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
@@ -47,6 +49,8 @@ const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
       lastRunAt: d.lastRunAt?.slice(0, 16) ?? "", nextRunAt: d.nextRunAt?.slice(0, 16) ?? "",
       organizationUuid: d.organizationUuid ?? "",
       organizationName: d.organization?.shortName ?? "",
+      authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
+      authorName: d.author?.username ?? d.author?.email ?? "",
     }),
     buildPayload: (fd) => ({
       shortName: fd.shortName?.trim() || null, description: fd.description?.trim() || null,
@@ -67,6 +71,7 @@ const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
               <Field label="Cron выражение" name={`${form.formUid}_cron`} minWidth="339px" value={form.fields.cronExpr} onChange={e => form.setField("cronExpr", e.target.value)} disabled={form.isLoading} />
               <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
               <FieldDateTime label="Последний запуск" name={`${form.formUid}_lastRun`} minWidth="200px" value={form.fields.lastRunAt} onChange={e => form.setField("lastRunAt", e.target.value)} disabled={form.isLoading} />
+              <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || "-"} disabled />
               <FieldDateTime label="Следующий запуск" name={`${form.formUid}_nextRun`} minWidth="200px" value={form.fields.nextRunAt} onChange={e => form.setField("nextRunAt", e.target.value)} disabled={form.isLoading} />
               <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
               <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />

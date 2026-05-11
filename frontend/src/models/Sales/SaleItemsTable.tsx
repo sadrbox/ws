@@ -26,8 +26,8 @@ const VAT_COLUMN_IDS = new Set(["vatRate", "vatAmount"]);
 const DISCOUNT_COLUMN_IDS = new Set(["discountPercent", "discountAmount"]);
 /** Колонки акциза — скрываются, если useExcise=false (НК РК ст. 463). */
 const EXCISE_COLUMN_IDS = new Set(["exciseRate", "exciseAmount"]);
-/** «Стоимость без НДС» — скрывается, если НДС отключён (без НДС равно amount). */
-const AMOUNT_WITHOUT_VAT_IDS = new Set(["amountWithoutVat"]);
+/** «Облагаемый оборот НДС» и «Стоимость без косв. налогов» — скрываются при выключённом НДС (без НДС равно amount). */
+const AMOUNT_WITHOUT_VAT_IDS = new Set(["amountWithoutVat", "amountNetOfIndirectTaxes"]);
 
 /**
  * Переводит фокус на следующий незаблокированный input в той же строке таблицы (<tr>).
@@ -109,6 +109,119 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
       // «Стоимость без НДС» имеет смысл только при включённом НДС
       if (!isVatEnabled && AMOUNT_WITHOUT_VAT_IDS.has(id)) return false;
       return true;
+    });
+
+    // ── Динамические подсказки (hint) и имена (name) ─────────────────────
+    // Подсказки в JSON содержат полные формулы со всеми терминами (скидка,
+    // акциз, НДС). Если организация не использует какие-то из этих опций
+    // (useDiscount=false / useExcise=false / isVatEnabled=false), термины
+    // отключённых опций исключаются из формул, чтобы соответствовать
+    // реальному учёту по НК РК.
+    const dynHints: Record<string, { name?: string; hint: string }> = {};
+
+    // price — «без косвенных налогов» имеет смысл только если есть НДС или акциз
+    if (!isVatEnabled && !useExcise) {
+      dynHints["price"] = { hint: "Цена (тариф) за единицу — графа 8 ЭСФ РК" };
+    }
+
+    // discountAmount — пояснение, из какой базы вычитается скидка
+    if (useDiscount) {
+      let baseNote: string;
+      if (isVatEnabled && useExcise) baseNote = "Итого скидка вычитается из базы для НДС и акциза";
+      else if (isVatEnabled) baseNote = "Итого скидка вычитается из базы для НДС";
+      else if (useExcise) baseNote = "Итого скидка вычитается из базы для акциза";
+      else baseNote = "Уменьшает итоговую стоимость строки";
+      dynHints["discountAmount"] = {
+        hint:
+          "Сумма скидки (надбавки).\n" +
+          "Сумма скидки = Количество × Цена × Скидка % ÷ 100\n" +
+          `(${baseNote})`,
+      };
+    }
+
+    // amountNetOfIndirectTaxes — графа 13 ЭСФ: «Стоимость без косв. налогов»
+    // Формула базы зависит от наличия скидки; пояснение «база до начисления»
+    // — от наличия НДС/акциза.
+    if (isVatEnabled) {
+      const formula = useDiscount
+        ? "Стоимость без косв. налогов = Количество × Цена − Сумма скидки"
+        : "Стоимость без косв. налогов = Количество × Цена";
+      let baseFor: string;
+      if (isVatEnabled && useExcise) baseFor = "= база до начисления акциза и НДС";
+      else if (isVatEnabled) baseFor = "= база до начисления НДС";
+      else if (useExcise) baseFor = "= база до начисления акциза";
+      else baseFor = "";
+      const afterDiscount = useDiscount ? ", после скидки" : "";
+      dynHints["amountNetOfIndirectTaxes"] = {
+        hint:
+          `Стоимость без НДС и без акциза — графа 13 ЭСФ РК (ст. 412 НК РК)${afterDiscount}.\n` +
+          formula +
+          (baseFor ? "\n" + baseFor : ""),
+      };
+    }
+
+    // amountWithoutVat — графа «Облагаемый оборот НДС».
+    // С акцизом: = Стоимость без косв. налогов + Сумма акциза.
+    // Без акциза: = Стоимость без косв. налогов (т.е. = Кол-во × Цена [− Скидка]).
+    if (isVatEnabled) {
+      const lines: string[] = [
+        "Облагаемый оборот по НДС (НК РК ст. 381 п. 1 пп. 4).",
+      ];
+      if (useExcise) {
+        lines.push("Облагаемый оборот НДС = Стоимость без косв. налогов + Сумма акциза");
+      } else if (useDiscount) {
+        lines.push("Облагаемый оборот НДС = Количество × Цена − Сумма скидки");
+      } else {
+        lines.push("Облагаемый оборот НДС = Количество × Цена");
+      }
+      lines.push("= база для расчёта НДС");
+      lines.push("НДС = Облагаемый оборот × Ставка НДС ÷ 100");
+      dynHints["amountWithoutVat"] = { hint: lines.join("\n") };
+    }
+
+    // exciseAmount — база зависит от наличия скидки и НДС.
+    if (useExcise) {
+      const baseLabel = isVatEnabled
+        ? "Стоимость без косв. налогов"
+        : (useDiscount ? "(Количество × Цена − Сумма скидки)" : "(Количество × Цена)");
+      dynHints["exciseAmount"] = {
+        hint:
+          "Сумма акциза — графа 14 ЭСФ РК.\n" +
+          `Сумма акциза = ${baseLabel} × Ставка акциза ÷ 100\n` +
+          "(НК РК ст. 463; начисляется сверху — ADDED)",
+      };
+    }
+
+    // amount — итоговая стоимость строки. Имя и формула зависят от того,
+    // включён ли НДС (без НДС колонка отображает просто «Стоимость»).
+    {
+      const lines: string[] = [];
+      let name: string | undefined;
+      if (isVatEnabled) {
+        lines.push("Стоимость товаров (работ, услуг) с косвенными налогами — графа 17 ЭСФ РК.");
+        lines.push("Стоимость с НДС = Облагаемый оборот + Сумма НДС");
+      } else {
+        // Без НДС — название без «с НДС»
+        name = "Стоимость";
+        if (useExcise) {
+          lines.push("Стоимость товаров (работ, услуг) с акцизом.");
+          if (useDiscount) lines.push("Стоимость = Количество × Цена − Сумма скидки + Сумма акциза");
+          else lines.push("Стоимость = Количество × Цена + Сумма акциза");
+        } else {
+          lines.push("Стоимость товаров (работ, услуг).");
+          if (useDiscount) lines.push("Стоимость = Количество × Цена − Сумма скидки");
+          else lines.push("Стоимость = Количество × Цена");
+        }
+      }
+      lines.push("= итоговая сумма к оплате по строке");
+      dynHints["amount"] = { hint: lines.join("\n"), ...(name ? { name } : {}) };
+    }
+
+    // Применяем динамические подсказки/имена
+    base = base.map((c) => {
+      const id = c.identifier as string;
+      const patch = dynHints[id];
+      return patch ? { ...c, ...patch } : c;
     });
 
     // Динамическое имя для НДС-колонки «vatAmount»: включаем в подпись
@@ -268,6 +381,11 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
     if (id === "vatAmount") return <ReadOnlyCell value={row.vatAmount ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
     if (id === "amount") return <ReadOnlyCell value={row.amount ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
     if (id === "amountWithoutVat") return <ReadOnlyCell value={row.amountWithoutVat ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
+    if (id === "amountNetOfIndirectTaxes") {
+      // Графа 13 ЭСФ РК: стоимость без НДС и без акциза = amountWithoutVat − exciseAmount.
+      const netVal = Number(row.amountWithoutVat ?? 0) - Number(row.exciseAmount ?? 0);
+      return <ReadOnlyCell value={netVal} column={col} inlineEditing={ctx.inlineEditing} />;
+    }
     if (id === "exciseAmount") return <ReadOnlyCell value={row.exciseAmount ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
 
     // ── discountAmount: read-only вне inline / FieldNumber внутри ────────
@@ -584,6 +702,13 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
       customInlineChange={customInlineChange}
       validationRules={validationRules}
       requiredFields={requiredFields}
+      computeRow={(row) => ({
+        // Графа 13 ЭСФ РК: стоимость без НДС и без акциза = amountWithoutVat − exciseAmount.
+        // Поле отсутствует в БД (dynamic: true в saleItemsColumns.json), вычисляется на клиенте,
+        // чтобы клиентская сортировка по этой колонке находила значение через getNestedValue.
+        amountNetOfIndirectTaxes:
+          Number(row.amountWithoutVat ?? 0) - Number(row.exciseAmount ?? 0),
+      })}
       extraButtons={
         <RecalcAllButton
           disabled={disabled}

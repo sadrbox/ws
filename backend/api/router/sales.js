@@ -70,8 +70,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
 		const filterWhere = {};
 		for (const [field, conds] of Object.entries(filter)) {
-			if (field === "searchBy" || !conds || typeof conds !== "object")
-				continue;
+			if (field === "searchBy" || !conds || typeof conds !== "object") continue;
 			if (field === "dateRange") {
 				const dr = {};
 				if (conds.startDate) dr.gte = new Date(conds.startDate);
@@ -100,6 +99,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				counterparty: true,
 				contract: true,
 				warehouse: true,
+				author: { select: { uuid: true, username: true, email: true } },
 			},
 		};
 		if (cursorNumber !== null) {
@@ -140,6 +140,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 				counterparty: true,
 				contract: true,
 				warehouse: true,
+				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
 		if (!item)
@@ -153,6 +154,12 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
+		if (!req.user?.uuid) {
+			return res.status(401).json({
+				success: false,
+				message: "Автор документа обязателен: требуется авторизация",
+			});
+		}
 		const {
 			date,
 			description,
@@ -181,12 +188,14 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
 				warehouseUuid: warehouseUuid || null,
+				authorUuid: req.user.uuid,
 			},
 			include: {
 				organization: true,
 				counterparty: true,
 				contract: true,
 				warehouse: true,
+				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
 		return res.status(201).json({ success: true, item });
@@ -242,6 +251,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				counterparty: true,
 				contract: true,
 				warehouse: true,
+				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
 		return res.status(200).json({ success: true, item });

@@ -87,6 +87,7 @@ export function buildSaleInvoiceWorkbook(
 
 	// ── Шапка ──
 	aoa.push(["Типовая форма З-2"]);
+	aoa.push(["Утверждена приказом Министра финансов РК от 20.12.2012 г. № 562"]);
 	aoa.push([]);
 	aoa.push([
 		`Накладная на отпуск запасов на сторону № ${data.documentId ?? "—"} от ${fmtDate(data.documentDate)}`,
@@ -166,6 +167,9 @@ export function buildSaleInvoiceWorkbook(
 		data.accountantName ?? "",
 	]);
 	aoa.push(["Отпустил:", "", "", "Получил:", data.receiverName ?? ""]);
+	aoa.push(["Груз получил по доверенности №:", "", "от:", "", ""]);
+	aoa.push([]);
+	aoa.push(["М.П."]);
 
 	const ws = XLSX.utils.aoa_to_sheet(aoa);
 

@@ -274,9 +274,16 @@ const LookupField: FC<LookupFieldProps> = ({
     onSelect(uuid, display, item);
     setIsDropdownOpen(false);
     setInputText(display);
-    // Перевод фокуса при dropdown-выборе НЕ выполняется — только при выборе из формы (pane).
-    // см. handleOpenModal → onSelectResult
-  }, [onSelect, displayField]);
+    // После выбора из inline-dropdown ("Быстрый выбор" / автокомплит) переводим
+    // фокус на следующее поле текущей строки, как и при выборе из модальной формы.
+    if (onAfterSelect) {
+      setTimeout(() => {
+        const ownInput = wrapperRef.current?.querySelector<HTMLInputElement>('input');
+        if (ownInput) ownInput.focus();
+        onAfterSelect();
+      }, 0);
+    }
+  }, [onSelect, displayField, onAfterSelect]);
 
   const handleClear = useCallback(() => {
     onSelect("", "", {});
@@ -350,12 +357,13 @@ const LookupField: FC<LookupFieldProps> = ({
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (activeIndex >= 0 && activeIndex < suggestions.length) {
+        // handleSelectItem уже инициирует onAfterSelect (фокус на следующее поле).
         handleSuggestionClick(suggestions[activeIndex]);
       } else {
         setIsDropdownOpen(false);
+        // Подтверждение без выбора — перейти на следующее поле.
+        onEnterKey?.();
       }
-      // Всегда переходим на следующее поле при Enter (выбор сделан или подтверждён)
-      onEnterKey?.();
     } else if (e.key === "Escape") {
       setIsDropdownOpen(false);
     }

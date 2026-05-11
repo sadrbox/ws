@@ -9,14 +9,21 @@
  */
 import {
   FC, useMemo, useCallback, useState, useEffect, useRef, ReactNode,
-  createContext, useContext,
+  createContext, useContext, type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { getModelColumns, getFormatColumnValue, getColumnAlignment, sortTableRows } from "src/components/Table/services";
+import {
+  computeNextActiveColId,
+  computeNextActiveRowId,
+  getCellNavDirection,
+  getTableNavDirection,
+} from "src/components/Table/tableKeyboardNav";
 import type { TColumn, TDataItem } from "src/components/Table/types";
-import Table, { TOpenModelFormProps } from "src/components/Table";
+import Table, { TOpenModelFormProps, type TableApi } from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import { useModelDelete } from "src/hooks/useModelDelete";
+import { useAppContext } from "src/app";
 import Toolbar from "src/components/Toolbar";
 import { useQueryClient } from "@tanstack/react-query";
 import styles from "./SubTable.module.scss";
@@ -148,6 +155,13 @@ export interface SubTableProps {
    * Используй ctx.toggleExpandRow и ctx.expandedRowIds в renderCell для кнопок.
    */
   renderExpandedRow?: (row: TDataItem, ctx: SubTableContext) => ReactNode;
+  /**
+   * Вычисляет дополнительные (динамические) поля строки, которые
+   * отсутствуют в БД, но нужны для клиентской сортировки/фильтрации.
+   * Результат мержится в строку (`{ ...row, ...computeRow(row) }`) перед
+   * сортировкой в displayRows. Используется вместе с `dynamic: true` на колонке.
+   */
+  computeRow?: (row: TDataItem) => Partial<TDataItem>;
 }
 
 /** Контекст, передаваемый в кастомные колбэки */
@@ -350,10 +364,11 @@ function mergeServerWithPending(serverItems: TDataItem[], pendingRows: TDataItem
     merged.push(pendingRow ?? asPending(item));
   }
 
-  // 2. Добавляем temp-строки (create), которых нет на сервере
+  // 2. Добавляем temp-строки (create), которых нет на сервере — В КОНЕЦ списка,
+  //    чтобы новые строки всегда появлялись после последней существующей.
   for (const p of pendingRows as PendingRow[]) {
     if (p._pendingAction === "create" && !serverUuidSet.has(p.uuid)) {
-      merged.unshift(p);
+      merged.push(p);
     }
   }
 
@@ -390,8 +405,12 @@ const SubTable: FC<SubTableProps> = ({
   extraQueryParams,
   requiredFields,
   renderExpandedRow: renderExpandedRowProp,
+  computeRow,
 }) => {
   const queryClient = useQueryClient();
+  // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
+  // удаления при нажатии клавиши Delete.
+  const { actions: { confirm } } = useAppContext();
 
   // ── Стабильный ref для onItemsChange (избегаем бесконечного цикла) ────
   const onItemsChangeRef = useRef(onItemsChange);
@@ -452,10 +471,13 @@ const SubTable: FC<SubTableProps> = ({
 
   // SubTable — вложенная таблица: поиск ВСЕГДА на фронтенде, не отправляем search на сервер
   // Фильтруем sort: не отправляем на сервер поля у которых sortable === false
+  // или dynamic === true (вычисляемые колонки, отсутствующие в БД — сортируются клиентски).
   const serverSort = useMemo(() => {
-    const unsortableCols = new Set(columns.filter(c => c.sortable === false).map(c => c.identifier));
-    if (unsortableCols.size === 0) return sort;
-    const filtered = Object.fromEntries(Object.entries(sort).filter(([k]) => !unsortableCols.has(k)));
+    const skip = new Set(
+      columns.filter(c => c.sortable === false || c.dynamic === true).map(c => c.identifier),
+    );
+    if (skip.size === 0) return sort;
+    const filtered = Object.fromEntries(Object.entries(sort).filter(([k]) => !skip.has(k)));
     return Object.keys(filtered).length > 0 ? filtered : undefined;
   }, [sort, columns]);
 
@@ -635,9 +657,25 @@ const SubTable: FC<SubTableProps> = ({
 
   // ── Обработчики ────────────────────────────────────────────────────────
   const handleSortChange = useCallback((s: typeof sort) => {
-    cachedRowsRef.current = []; setCacheVersion(0); updateAdaptiveLimit(500);
-    setSort(s ?? defaultSort);
-  }, [updateAdaptiveLimit, defaultSort]);
+    const next = s ?? defaultSort;
+    // Сбрасываем кэш и адаптивный лимит ТОЛЬКО если изменился
+    // serverSort (это приведёт к refetch). Для динамических (dynamic:true)
+    // колонок serverSort не меняется — сортируем текущие строки
+    // клиентски, и сброс кэша оставил бы таблицу пустой (refetch
+    // не будет тригериться, т. к. params не меняются).
+    const skipIds = new Set(
+      columns.filter(c => c.sortable === false || c.dynamic === true).map(c => c.identifier),
+    );
+    const nextServerSort = Object.fromEntries(
+      Object.entries(next).filter(([k]) => !skipIds.has(k)),
+    );
+    const prevServerSort = serverSort ?? {};
+    const serverChanged = JSON.stringify(nextServerSort) !== JSON.stringify(prevServerSort);
+    if (serverChanged) {
+      cachedRowsRef.current = []; setCacheVersion(0); updateAdaptiveLimit(500);
+    }
+    setSort(next);
+  }, [updateAdaptiveLimit, defaultSort, columns, serverSort]);
 
   const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => {
     setFilter(prev => {
@@ -752,8 +790,10 @@ const SubTable: FC<SubTableProps> = ({
 
   // ── Refs для фокуса после добавления строки ──────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null);
-  // 'first' — деферред-режим (новая строка с отриц. id идёт первой при сортировке ASC)
-  // 'last'  — немедленный режим (новая строка с макс. id идёт последней)
+  /** Императивный API нижележащей Table — позволяет двигать activeRow без фокуса. */
+  const tableApiRef = useRef<TableApi>(null);
+  // Новая строка ВСЕГДА добавляется в конец таблицы (как в деферред-режиме,
+  // так и в немедленном режиме), поэтому фокусируем последнюю строку.
   const newRowFocusRef = useRef<'first' | 'last' | null>(null);
 
   useEffect(() => {
@@ -786,6 +826,11 @@ const SubTable: FC<SubTableProps> = ({
   // Ref для cellErrors — чтобы ctx.cellErrors не вызывал пересоздание useMemo
   const cellErrorsRef = useRef(cellErrors);
   cellErrorsRef.current = cellErrors;
+
+  // Ref на видимые строки — присваивается ниже, после useMemo для displayRows.
+  // Используется в ctx.rows (нужен для renderCell вычисляемых колонок) и
+  // в обработчике клавиатуры (навигация Home/End/PgUp/PgDn).
+  const displayRowsRef = useRef<TDataItem[]>([]);
 
   // ── handleLookupChange — универсальный хелпер для lookup-полей ─────────
   const handleLookupChange = useCallback(async (
@@ -827,7 +872,11 @@ const SubTable: FC<SubTableProps> = ({
   }, [deferRemoteChanges, updateLocalRow, model, refetch, setCellError]);
 
   const ctx: SubTableContext = useMemo(() => ({
-    get rows() { return rowsRef.current; },
+    // Важно: возвращаем именно displayRows (отображаемые строки в их видимом
+    // порядке и с computeRow-обогащением) через ref. Это нужно чтобы
+    // renderCell (напр. lineNumber) мог найти row через indexOf:
+    // в сырых rows были бы другие объекты (без computeRow-полей).
+    get rows() { return displayRowsRef.current; },
     refetch, inlineEditing, disabled, handleInlineChange,
     updateLocalRow, deferRemoteChanges,
     get cellErrors() { return cellErrorsRef.current; },
@@ -858,7 +907,24 @@ const SubTable: FC<SubTableProps> = ({
     // 3. Применяем клиентскую сортировку: корректно обрабатывает ссылочные поля
     //    (напр. "unitOfMeasure.shortName") и pending-строки, не отправленные на сервер.
     //    sortTableRows использует getNestedValue → поддерживает dot-notation.
-    const sorted = sortTableRows(visible, sort);
+    //    Pending create строки выносим из сортировки и приклеиваем В КОНЕЦ —
+    //    новая добавленная строка всегда отображается после последней существующей,
+    //    независимо от направления сортировки и знака временного id.
+    // 3a. Если задан computeRow — обогащаем строки динамическими полями
+    //     (например "amountNetOfIndirectTaxes"), чтобы sortTableRows нашёл значение
+    //     через getNestedValue. Серверные поля при этом не перезаписываются —
+    //     computeRow возвращает только дополнительные ключи.
+    const enriched = computeRow
+      ? visible.map(r => ({ ...r, ...computeRow(r) }))
+      : visible;
+    const pendingCreates = enriched.filter(r => r._pendingAction === "create");
+    const others = pendingCreates.length
+      ? enriched.filter(r => r._pendingAction !== "create")
+      : enriched;
+    const sortedOthers = sortTableRows(others, sort);
+    const sorted = pendingCreates.length
+      ? [...sortedOthers, ...pendingCreates]
+      : sortedOthers;
 
     if (!search) return sorted;
     // Если задан кастомный filterRows — используем его
@@ -881,7 +947,11 @@ const SubTable: FC<SubTableProps> = ({
       const haystack = parts.join(" ");
       return words.every(w => haystack.includes(w));
     });
-  }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort]);
+  }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow]);
+
+  // Синхронизируем ref c актуальным displayRows (используется в ctx.rows
+  // и в клавиатурном обработчике для навигации).
+  displayRowsRef.current = displayRows;
 
   // console.log(displayRows)
   // ── openModelForm ─────────────────────────────────────────────────────
@@ -971,8 +1041,8 @@ const SubTable: FC<SubTableProps> = ({
       if (!resolvedDefaultNewRow) {
         newRow._untouched = true;
       }
-      cachedRowsRef.current = [newRow, ...cachedRowsRef.current];
-      newRowFocusRef.current = 'first';
+      cachedRowsRef.current = [...cachedRowsRef.current, newRow];
+      newRowFocusRef.current = 'last';
       setCacheVersion(v => v + 1);
       notifyParent(cachedRowsRef.current);
       return;
@@ -1004,6 +1074,248 @@ const SubTable: FC<SubTableProps> = ({
       }
     }
   }, [deferRemoteChanges, tempIdRef, columns, parentKey, parentUuid, extraQueryParams, onInlineAddProp, defaultNewRow, model, ctx, refetch]);
+
+  // ── Обработчик клавиатуры на контейнере таблицы ───────────────────────
+  // Поведение (только в inline-режиме редактирования; в readonly — не работает):
+  //
+  //  - Insert  → добавить новую строку и сфокусировать её первое поле.
+  //              Работает независимо от текущего фокуса (можно из input).
+  //  - Delete  → удалить ВЫБРАННЫЕ через чекбоксы строки (с подтверждением).
+  //              Внутри input не перехватываем — Delete стандартно удаляет символ.
+  //  - Enter   → если фокус НЕ в input → перевести фокус в первое редактируемое
+  //              поле текущей activeRow (вход в режим редактирования строки).
+  //              Если фокус на последнем редактируемом поле → blur (выход из
+  //              редактирования). Новых строк Enter НЕ создаёт.
+  //  - ArrowUp/Down/Left/Right, Home, End, PgUp, PgDn →
+  //              перемещение activeRow по строкам ТАБЛИЦЫ (без перевода фокуса
+  //              на конкретное поле). Если фокус был в input — input блюрится.
+  //              Left/Right работают как Up/Down (предыдущая/следующая строка) —
+  //              ячеечной навигации больше нет.
+  //
+  // Все клавиши работают единообразно: если в данный момент пользователь печатает
+  // в input, нажатие любой навигационной клавиши снимает фокус с input и двигает
+  // только activeRow. Это намеренно унифицирует поведение с *List и убирает
+  // прежнюю «cell-level» навигацию фокусом.
+  const handleContainerKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (readonly) return;
+    const target = e.target as HTMLElement | null;
+    const isInputTarget = target instanceof HTMLInputElement && !target.disabled && target.type !== "checkbox";
+    const isTextAreaTarget = target instanceof HTMLTextAreaElement;
+    const isLookupOpen = target?.getAttribute("aria-expanded") === "true";
+    const container = containerRef.current;
+    const tableApi = tableApiRef.current;
+    if (!container) return;
+
+    // ── Режим «Редактирование через форму» (inlineEditing === false) ────
+    // В этом режиме SubTable работает как обычный список: клавиатурное
+    // редактирование ячеек отключено, но Enter на активной строке должен
+    // открывать форму выбранной записи (аналог двойного клика). Остальные
+    // навигационные клавиши (стрелки/Home/End/PgUp/PgDn) обрабатывает Table
+    // через handleScrollKeyDown — здесь дублировать не нужно.
+    if (!inlineEditing) {
+      if (e.key !== "Enter") return;
+      if (isInputTarget || isTextAreaTarget || isLookupOpen) return;
+      const activeId = tableApi?.getActiveRow() ?? null;
+      if (activeId === null) return;
+      const row = displayRowsRef.current.find(r => r.id === activeId);
+      if (!row) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openModelForm({ data: row });
+      return;
+    }
+
+    // ── Insert: добавить строку ────────────────────────────────────────
+    // После добавления — гарантированно переводим фокус на первое
+    // редактируемое поле новой (последней) строки. Это работает в обоих
+    // режимах: deferRemoteChanges (синхронно — строка появляется в кэше
+    // на следующий рендер) и немедленном (await POST + refetch).
+    // Дублирует логику newRowFocusRef.useEffect (на случай, если по какой-то
+    // причине useEffect не отработает — напр. на не-defer пути из-за гонки
+    // с refetch). Делаем focus после rAF, чтобы DOM успел отрендерить tr.
+    if (e.key === "Insert") {
+      if (!onInlineAddProp && !defaultNewRow) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Снимаем фокус с текущего input, чтобы клавиши, нажатые сразу после
+      // Insert (до появления новой строки), не попали в старое поле.
+      if (isInputTarget || isTextAreaTarget) {
+        (target as HTMLElement).blur();
+      }
+      void (async () => {
+        await handleInlineAdd();
+        // Двойной rAF — чтобы дождаться React commit + браузерного layout.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const cont = containerRef.current;
+            if (!cont) return;
+            const trs = cont.querySelectorAll<HTMLTableRowElement>('tbody tr[data-row-id]');
+            const lastTr = trs[trs.length - 1];
+            if (!lastTr) return;
+            // Синхронизируем activeRow с новой строкой, чтобы клавиатурная
+            // навигация продолжила работать корректно после редактирования.
+            const ridStr = lastTr.getAttribute("data-row-id");
+            const rid = ridStr ? Number(ridStr) : NaN;
+            if (Number.isFinite(rid)) tableApi?.setActiveRow(rid);
+            const input = lastTr.querySelector<HTMLInputElement>(
+              'input:not([disabled]):not([type="checkbox"]), textarea:not([disabled])'
+            );
+            if (input) {
+              input.focus();
+              try { (input as HTMLInputElement).select?.(); } catch { /* ignore */ }
+            }
+          });
+        });
+      })();
+      return;
+    }
+
+    // ── Delete: удалить ВЫБРАННЫЕ чекбоксом строки (с подтверждением) ──
+    // Внутри input/textarea — пропускаем (стандартное удаление символа).
+    if (e.key === "Delete" && !isInputTarget && !isTextAreaTarget) {
+      const rows = displayRowsRef.current;
+      if (rows.length === 0) return;
+      const selectedIds = new Set<number>();
+      const selectedTrs = container.querySelectorAll<HTMLTableRowElement>(
+        'tbody tr[data-selected="true"][data-row-id]'
+      );
+      selectedTrs.forEach((tr) => {
+        const id = Number(tr.getAttribute("data-row-id"));
+        if (Number.isFinite(id)) selectedIds.add(id);
+      });
+      if (selectedIds.size === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void (async () => {
+        const message = selectedIds.size === 1
+          ? "Удалить выбранную строку?"
+          : `Удалить выбранные строки (${selectedIds.size} шт.)?`;
+        const ok = await confirm(message);
+        if (!ok) return;
+        await handleDelete(selectedIds, rows);
+      })();
+      return;
+    }
+
+    // ── Навигация по строкам/ячейкам (activeRow + activeCell) ──────────
+    // Up/Down/PgUp/PgDn — перемещение activeRow (та же колонка).
+    // Left/Right/Home/End — перемещение activeCell внутри текущей строки.
+    // Если фокус был в input — input блюрится, а стартовые координаты
+    // берутся из строки/колонки этого input'а (важно для случая, когда
+    // пользователь редактирует не ту строку, что activeRow).
+    if (!isLookupOpen) {
+      const rowDir = getTableNavDirection(e.key);
+      const cellDir = getCellNavDirection(e.key);
+      if (rowDir || cellDir) {
+        const rows = displayRowsRef.current;
+        e.preventDefault();
+        e.stopPropagation();
+        if (rows.length === 0) return;
+        // Определяем стартовую строку и колонку. Если в input — берём из
+        // <tr data-row-id> и <td data-col-id>; иначе — из tableApi.
+        let startRowId: number | null = tableApi?.getActiveRow() ?? null;
+        let startColId: string | null = tableApi?.getActiveCell() ?? null;
+        if (isInputTarget || isTextAreaTarget) {
+          const tr = (target as HTMLElement).closest("tr[data-row-id]") as HTMLTableRowElement | null;
+          const td = (target as HTMLElement).closest("td[data-col-id]") as HTMLTableCellElement | null;
+          const rid = tr ? Number(tr.getAttribute("data-row-id")) : NaN;
+          if (Number.isFinite(rid)) startRowId = rid;
+          const cid = td?.getAttribute("data-col-id");
+          if (cid) startColId = cid;
+          (target as HTMLElement).blur();
+        }
+        if (cellDir) {
+          // Колоночная навигация — строка остаётся, меняем activeCell.
+          const nextCol = computeNextActiveColId(columns, startColId, cellDir);
+          if (startRowId !== null) tableApi?.setActiveRow(startRowId);
+          if (nextCol !== null) tableApi?.setActiveCell(nextCol);
+          tableApi?.focusContainer();
+        } else if (rowDir) {
+          // Построчная навигация — колонка сохраняется.
+          const nextId = computeNextActiveRowId(rows, startRowId, rowDir);
+          if (nextId !== null) {
+            tableApi?.setActiveRow(nextId);
+            if (startColId !== null) tableApi?.setActiveCell(startColId);
+            tableApi?.focusContainer();
+          }
+        }
+        return;
+      }
+    }
+
+    // ── Enter: вход/выход из редактирования строки ─────────────────────
+    if (e.key !== "Enter") return;
+    if (isLookupOpen) return;
+
+    // Хелпер: все редактируемые input-ы внутри tbody / строки.
+    const collectInputs = (root: ParentNode): HTMLInputElement[] =>
+      Array.from(
+        root.querySelectorAll<HTMLInputElement>(
+          'input:not([disabled]):not([type="checkbox"])'
+        )
+      );
+
+    if (!isInputTarget) {
+      // Фокус НЕ в input → войти в редактирование.
+      // Логика:
+      //  - activeCell задан → ищем редактируемый input/textarea в этой td.
+      //    Если он есть — фокусируем его.
+      //    Если в td нет редактируемого поля (computed/readonly колонка) —
+      //    НИЧЕГО не открываем (поведение как у onClick на нередактируемую
+      //    ячейку), но запускаем короткую визуальную индикацию «пульс»
+      //    на td через атрибут data-pulse, чтобы пользователь понимал что
+      //    Enter был обработан, но ячейка не редактируется.
+      //  - activeCell НЕ задан → fallback: фокус на первое редактируемое
+      //    поле активной строки (старое поведение «войти в редактирование»).
+      const activeId = tableApi?.getActiveRow() ?? null;
+      if (activeId === null) return;
+      const tr = container.querySelector<HTMLTableRowElement>(
+        `tbody tr[data-row-id="${activeId}"]`
+      );
+      if (!tr) return;
+      const activeColId = tableApi?.getActiveCell() ?? null;
+      if (activeColId) {
+        const td = tr.querySelector<HTMLTableCellElement>(
+          `td[data-col-id="${activeColId}"]`
+        );
+        if (!td) return;
+        const cellInput = td.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+          'input:not([disabled]):not([type="checkbox"]), textarea:not([disabled])'
+        );
+        e.preventDefault();
+        e.stopPropagation();
+        if (cellInput) {
+          cellInput.focus();
+          try { (cellInput as HTMLInputElement).select?.(); } catch { /* ignore */ }
+        } else {
+          // Нередактируемая ячейка — индикация «пульс» (data-pulse="true"),
+          // снимаем атрибут после короткой задержки, чтобы CSS-анимация
+          // могла отыграть ещё раз при следующем нажатии Enter.
+          td.setAttribute("data-pulse", "true");
+          window.setTimeout(() => td.removeAttribute("data-pulse"), 300);
+        }
+        return;
+      }
+      // Нет activeCell — старое поведение: первое редактируемое поле строки.
+      const firstInput = collectInputs(tr)[0];
+      if (!firstInput) return;
+      e.preventDefault();
+      e.stopPropagation();
+      firstInput.focus();
+      try { firstInput.select(); } catch { /* ignore */ }
+      return;
+    }
+
+    // Фокус в input: если это последний редактируемый input в tbody → blur.
+    const allInputs = collectInputs(
+      container.querySelector("tbody") ?? container
+    );
+    if (allInputs.length === 0) return;
+    if (target !== allInputs[allInputs.length - 1]) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (target as HTMLInputElement).blur();
+  }, [readonly, inlineEditing, onInlineAddProp, defaultNewRow, handleInlineAdd, handleDelete, confirm, columns, openModelForm]);
 
   // ── Кнопки ─────────────────────────────────────────────────────────────
   const extraButtons = useMemo(() => (
@@ -1052,6 +1364,7 @@ const SubTable: FC<SubTableProps> = ({
     renderExpandedRow: renderExpandedRowProp
       ? (row: TDataItem) => renderExpandedRowProp(row, ctx)
       : undefined,
+    apiRef: tableApiRef,
   }), [
     componentName, displayRows, columns, adaptiveLimit, combinedLoading, error,
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
@@ -1075,7 +1388,7 @@ const SubTable: FC<SubTableProps> = ({
     );
   }
 
-  return <div ref={containerRef} className={styles.SubTableHost}><SubTableInternalContext.Provider value={ctx}><Table {...tableProps} /></SubTableInternalContext.Provider></div>;
+  return <div ref={containerRef} className={styles.SubTableHost} onKeyDownCapture={handleContainerKeyDown}><SubTableInternalContext.Provider value={ctx}><Table {...tableProps} /></SubTableInternalContext.Provider></div>;
 };
 
 SubTable.displayName = "SubTable";

@@ -8,28 +8,40 @@ datasource db {
 }
 
 model User {
-  id               Int              @id @default(autoincrement())
-  uuid             String           @unique @default(uuid())
-  username         String?
-  email            String?
-  password         String?
-  employeeUuid     String?
-  isSuperAdmin     Boolean          @default(false)
-  avatarPath       String?
+  id                          Int                  @id @default(autoincrement())
+  uuid                        String               @unique @default(uuid())
+  username                    String?
+  email                       String?
+  password                    String?
+  employeeUuid                String?
+  isSuperAdmin                Boolean              @default(false)
+  avatarPath                  String?
   /// UUID активной (текущей) организации пользователя.
   /// Должен совпадать с одной из записей в userPermissions.
-  organizationUuid String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @default(now()) @updatedAt
-  deletedAt        DateTime?
-  accessRights     AccessRight[]
-  notifications    Notification[]
-  curatorTodos     Todo[]           @relation("TodoCurator")
-  executorTodos    Todo[]           @relation("TodoExecutor")
-  employee         Employee?        @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
-  organization     Organization?    @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+  organizationUuid            String?
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @default(now()) @updatedAt
+  deletedAt                   DateTime?
+  accessRights                AccessRight[]
+  notifications               Notification[]
+  curatorTodos                Todo[]               @relation("TodoCurator")
+  executorTodos               Todo[]               @relation("TodoExecutor")
+  employee                    Employee?            @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
+  organization                Organization?        @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   /// Список организаций, к которым у пользователя есть доступ
-  userPermissions  UserPermission[]
+  userPermissions             UserPermission[]
+  // Авторство документов — заполняется при создании, не редактируется.
+  authoredSales               Sale[]               @relation("SaleAuthor")
+  authoredPurchases           Purchase[]           @relation("PurchaseAuthor")
+  authoredOutgoingInvoices    OutgoingInvoice[]    @relation("OutgoingInvoiceAuthor")
+  authoredIncomingInvoices    IncomingInvoice[]    @relation("IncomingInvoiceAuthor")
+  authoredPaymentInvoices     PaymentInvoice[]     @relation("PaymentInvoiceAuthor")
+  authoredInventoryTransfers  InventoryTransfer[]  @relation("InventoryTransferAuthor")
+  authoredCashReceiptOrders   CashReceiptOrder[]   @relation("CashReceiptOrderAuthor")
+  authoredCashExpenseOrders   CashExpenseOrder[]   @relation("CashExpenseOrderAuthor")
+  authoredPayrollCalculations PayrollCalculation[] @relation("PayrollCalculationAuthor")
+  authoredPayrollPayments     PayrollPayment[]     @relation("PayrollPaymentAuthor")
+  authoredScheduledTasks      ScheduledTask[]      @relation("ScheduledTaskAuthor")
 
   @@index([employeeUuid])
   @@index([organizationUuid])
@@ -365,6 +377,7 @@ model Sale {
   counterpartyUuid String?
   contractUuid     String?
   warehouseUuid    String?
+  authorUuid       String
   posted           Boolean       @default(false)
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
@@ -373,11 +386,13 @@ model Sale {
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
   warehouse        Warehouse?    @relation(fields: [warehouseUuid], references: [uuid])
+  author           User          @relation("SaleAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([warehouseUuid])
+  @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
   @@map("sales")
@@ -392,15 +407,18 @@ model Purchase {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
+  author           User          @relation("PurchaseAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
+  @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
   @@map("purchases")
@@ -415,15 +433,18 @@ model OutgoingInvoice {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpOutgoingInvoices", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgOutgoingInvoices", fields: [organizationUuid], references: [uuid])
+  author           User          @relation("OutgoingInvoiceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
+  @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
   @@map("outgoing_invoices")
@@ -438,15 +459,18 @@ model IncomingInvoice {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpIncomingInvoices", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgIncomingInvoices", fields: [organizationUuid], references: [uuid])
+  author           User          @relation("IncomingInvoiceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
+  @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
   @@map("incoming_invoices")
@@ -461,15 +485,18 @@ model PaymentInvoice {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
+  author           User          @relation("PaymentInvoiceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
+  @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
   @@map("payment_invoices")
@@ -485,11 +512,14 @@ model ScheduledTask {
   lastRunAt        DateTime?
   nextRunAt        DateTime?
   organizationUuid String?
+  authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
+  author           User          @relation("ScheduledTaskAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
+  @@index([authorUuid])
   @@index([status])
   @@index([updatedAt])
   @@map("scheduled_tasks")
@@ -503,15 +533,18 @@ model InventoryTransfer {
   fromWarehouseUuid String?
   toWarehouseUuid   String?
   organizationUuid  String?
+  authorUuid        String
   updatedAt         DateTime      @default(now()) @updatedAt
   deletedAt         DateTime?
   fromWarehouse     Warehouse?    @relation("TransferFrom", fields: [fromWarehouseUuid], references: [uuid])
   organization      Organization? @relation(fields: [organizationUuid], references: [uuid])
   toWarehouse       Warehouse?    @relation("TransferTo", fields: [toWarehouseUuid], references: [uuid])
+  author            User          @relation("InventoryTransferAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([fromWarehouseUuid])
   @@index([toWarehouseUuid])
   @@index([organizationUuid])
+  @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
   @@map("inventory_transfers")
@@ -526,15 +559,18 @@ model CashReceiptOrder {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpCashReceipts", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashReceipts", fields: [organizationUuid], references: [uuid])
+  author           User          @relation("CashReceiptOrderAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
+  @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
   @@map("cash_receipt_orders")
@@ -549,15 +585,18 @@ model CashExpenseOrder {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpCashExpenses", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashExpenses", fields: [organizationUuid], references: [uuid])
+  author           User          @relation("CashExpenseOrderAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
+  @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
   @@map("cash_expense_orders")
@@ -751,15 +790,18 @@ model PayrollCalculation {
   oosms            Decimal       @default(0) @db.Decimal(18, 2)
   netSalary        Decimal       @default(0) @db.Decimal(18, 2)
   totalExpense     Decimal       @default(0) @db.Decimal(18, 2)
+  authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   employee         Employee?     @relation("PayrollCalcEmployee", fields: [employeeUuid], references: [uuid])
   organization     Organization? @relation("OrgPayrollCalc", fields: [organizationUuid], references: [uuid])
   position         Position?     @relation("PayrollCalcPosition", fields: [positionUuid], references: [uuid])
+  author           User          @relation("PayrollCalculationAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([employeeUuid])
   @@index([organizationUuid])
   @@index([positionUuid])
+  @@index([authorUuid])
   @@index([date])
   @@index([period])
   @@index([updatedAt])
@@ -776,13 +818,16 @@ model PayrollPayment {
   organizationUuid String?
   paymentMethod    String?       @default("bank_transfer")
   amount           Decimal       @default(0) @db.Decimal(18, 2)
+  authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   employee         Employee?     @relation("PayrollPayEmployee", fields: [employeeUuid], references: [uuid])
   organization     Organization? @relation("OrgPayrollPay", fields: [organizationUuid], references: [uuid])
+  author           User          @relation("PayrollPaymentAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([employeeUuid])
   @@index([organizationUuid])
+  @@index([authorUuid])
   @@index([date])
   @@index([period])
   @@index([updatedAt])

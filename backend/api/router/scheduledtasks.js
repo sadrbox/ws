@@ -76,7 +76,10 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			orderBy,
-			include: { organization: true },
+			include: {
+				organization: true,
+				author: { select: { uuid: true, username: true, email: true } },
+			},
 		};
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };
@@ -108,7 +111,10 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const item = await prisma[MODEL].findUnique({
 			where: w,
-			include: { organization: true },
+			include: {
+				organization: true,
+				author: { select: { uuid: true, username: true, email: true } },
+			},
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
@@ -120,6 +126,12 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 });
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
+		if (!req.user?.uuid) {
+			return res.status(401).json({
+				success: false,
+				message: "Автор документа обязателен: требуется авторизация",
+			});
+		}
 		const { shortName, description, cronExpr, status, organizationUuid } =
 			req.body;
 		if (!shortName?.trim())
@@ -133,8 +145,12 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				cronExpr: cronExpr?.trim() ?? null,
 				status: status || "active",
 				organizationUuid: organizationUuid || null,
+				authorUuid: req.user.uuid,
 			},
-			include: { organization: true },
+			include: {
+				organization: true,
+				author: { select: { uuid: true, username: true, email: true } },
+			},
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -166,7 +182,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
-			include: { organization: true },
+			include: {
+				organization: true,
+				author: { select: { uuid: true, username: true, email: true } },
+			},
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

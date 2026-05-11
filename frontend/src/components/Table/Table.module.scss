@@ -30,6 +30,23 @@
 	}
 }
 
+/* Индикация «нельзя редактировать» для activeCell.
+ * Используется при нажатии Enter на ячейку без редактируемого поля
+ * (см. SubTable.handleContainerKeyDown + td[data-pulse="true"]). */
+@keyframes activeCellPulse {
+	0% {
+		background-color: rgba($color1, 0.15);
+	}
+
+	40% {
+		background-color: rgba($color1, 0.55);
+	}
+
+	100% {
+		background-color: rgba($color1, 0.15);
+	}
+}
+
 /* Table layout containers */
 .TableWrapper {
 	container-type: size;
@@ -48,6 +65,7 @@
 }
 
 .TableScrollWrapper {
+	outline: none;
 	flex: 1;
 	min-height: 0;
 	margin: 0;
@@ -263,6 +281,7 @@ tr[data-primary="true"] {
 }
 
 tbody {
+	// outline: none;
 	// margin-top: 10px;
 	// position: relative;
 	// Оптимизация для производительности при виртуализации
@@ -373,6 +392,54 @@ tbody {
 				// border-left: 0px solid $color1;
 				&:last-child {
 					border-right: 0px;
+				}
+
+				// ── activeCell: ячейка-«фокус» внутри активной строки ─────
+				// Индикационный стиль: двойная рамка ($color1) + лёгкая
+				// «подсветка» содержимого + outline. Цель — чтобы пользователь
+				// сразу видел текущую ячейку даже на пёстром фоне строки и
+				// независимо от того, есть ли фокус на input внутри.
+				// Применяется через атрибут data-active-cell="true" и класс
+				// .activeCell на <td>. Используется механикой клавиатурной
+				// навигации (ArrowLeft/Right/Home/End) — см. Table/index.tsx.
+				&.activeCell,
+				&[data-active-cell="true"] {
+					position: relative;
+					z-index: 6;
+					// Двойная рамка: внутренний box-shadow + outline снаружи.
+					// outline-offset: -2px — рамка прижата к границе ячейки.
+					outline: 2px solid $color1;
+					outline-offset: -2px;
+					box-shadow: inset 0 0 0 4px rgba($color1, 0.18);
+
+					// «Бегущий» индикационный маркер слева — узкая полоса 3px
+					// акцентного цвета, выходящая за пределы рамки и делающая
+					// активную ячейку визуально доминирующей в строке.
+					&::before {
+						content: "";
+						position: absolute;
+						top: 0;
+						bottom: 0;
+						left: 0;
+						width: 3px;
+						background: $color1;
+						pointer-events: none;
+					}
+
+					.TableBodyCell {
+						// Чуть более насыщенный фон у активной ячейки, чем у
+						// фона активной строки — без перекрытия input'ов.
+						background: rgba($color1, 0.15);
+						font-weight: 500;
+					}
+				}
+
+				// ── data-pulse: индикация «нельзя редактировать» ──────────
+				// Применяется кратковременно (~300ms) к activeCell, когда
+				// пользователь нажимает Enter, а в ячейке нет редактируемого
+				// поля (computed/readonly колонка). См. SubTable.handleContainerKeyDown.
+				&[data-pulse="true"] {
+					animation: activeCellPulse 280ms ease-out 1;
 				}
 			}
 		}

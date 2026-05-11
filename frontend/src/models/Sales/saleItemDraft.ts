@@ -37,7 +37,14 @@ function normalizeMethod(v: unknown): "INCLUDED" | "ADDED" {
  *       vatAmount = vatBase × rate / 100
  *       amount    = vatBase + vatAmount
  *
- *   amountWithoutVat = amount − vatAmount   (графа 13 ЭСФ РК)
+ *   amountWithoutVat = amount − vatAmount
+ *
+ * ВАЖНО: `amountWithoutVat` — это БАЗА НДС (afterDiscount + exciseAmount),
+ * т.е. «стоимость без НДС, но С АКЦИЗОМ». По НК РК ст.381 акциз входит в
+ * облагаемый оборот по НДС, поэтому такая база — корректна.
+ *
+ * Графа 13 ЭСФ РК (НК РК ст.412) — «Стоимость без КОСВЕННЫХ налогов»
+ * (без акциза и без НДС) = afterDiscount = amountWithoutVat − exciseAmount.
  *
  * Параметр `method` опционален (по умолчанию INCLUDED).
  * Параметр `exciseRate` опционален (по умолчанию 0 — акциз не применяется).

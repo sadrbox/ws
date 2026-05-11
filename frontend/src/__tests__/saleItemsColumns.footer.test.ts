@@ -10,16 +10,17 @@ describe("saleItemsColumns: footer aggregates", () => {
 	const byId = (id: string) =>
 		(columns as Col[]).find((c) => c.identifier === id);
 
-	it.each(["quantity", "discountAmount", "vatAmount", "amount"])(
+	it.each(["discountAmount", "vatAmount", "amount"])(
 		"колонка %s имеет footer='sum'",
 		(id) => {
 			expect(byId(id)?.footer).toBe("sum");
 		},
 	);
 
-	it("колонки product/price/discountPercent не имеют footer", () => {
+	it("колонки product/price/discountPercent/quantity не имеют footer", () => {
 		expect(byId("product.shortName")?.footer).toBeUndefined();
 		expect(byId("price")?.footer).toBeUndefined();
 		expect(byId("discountPercent")?.footer).toBeUndefined();
+		expect(byId("quantity")?.footer).toBeUndefined();
 	});
 });

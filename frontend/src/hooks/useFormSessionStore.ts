@@ -1,17 +1,27 @@
 import { useCallback, useRef, useSyncExternalStore } from "react";
+import { getCurrentUser } from "src/services/auth";
 
 // ═══════════════════════════════════════════════════════════════════════════
-// External Store для данных формы с сохранением в sessionStorage
+// External Store для данных формы с сохранением в localStorage (по userId)
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // Использование:
 //   const [formData, setFormData] = useFormSessionStore<TFormData>("users-form", uuid, EMPTY_FORM);
 //
-// При каждом setFormData данные автоматически пишутся в sessionStorage.
+// При каждом setFormData данные автоматически пишутся в localStorage.
 // При монтировании (или F5 / обновлении страницы) данные восстанавливаются.
-// При размонтировании формы (закрытие вкладки в приложении) данные удаляются.
+// Ключ: "formStore:<userId>:<formName>:<entityId>" — черновики различных пользователей
+// изолированы.
 
 const STORAGE_PREFIX = "formStore:";
+
+function getUserId(): string {
+	return getCurrentUser()?.uuid || "anon";
+}
+
+function userPrefix(): string {
+	return `${STORAGE_PREFIX}${getUserId()}:`;
+}
 
 type Listener = () => void;
 
@@ -20,9 +30,9 @@ function createFormStore<T>(storageKey: string, initialValue: T) {
 	const listeners: Set<Listener> = new Set();
 	let currentValue: T = initialValue;
 
-	// Пробуем восстановить из sessionStorage
+	// Пробуем восстановить из localStorage
 	try {
-		const raw = sessionStorage.getItem(storageKey);
+		const raw = localStorage.getItem(storageKey);
 		if (raw !== null) {
 			currentValue = JSON.parse(raw) as T;
 		}
@@ -52,9 +62,9 @@ function createFormStore<T>(storageKey: string, initialValue: T) {
 
 		currentValue = next;
 
-		// Сохраняем в sessionStorage
+		// Сохраняем в localStorage
 		try {
-			sessionStorage.setItem(storageKey, JSON.stringify(next));
+			localStorage.setItem(storageKey, JSON.stringify(next));
 		} catch {
 			// quota exceeded — игнорируем
 		}
@@ -65,14 +75,14 @@ function createFormStore<T>(storageKey: string, initialValue: T) {
 
 	function cleanup(): void {
 		try {
-			sessionStorage.removeItem(storageKey);
+			localStorage.removeItem(storageKey);
 		} catch {
 			/* ignore */
 		}
 		listeners.clear();
 	}
 
-	/** Были ли данные восстановлены из sessionStorage при создании store?
+	/** Были ли данные восстановлены из localStorage при создании store?
 	 *  Ранее использовалось простое сравнение по ссылке (currentValue !== initialValue),
 	 *  что давало true если значения равны по содержимому, но были разными объектами
 	 *  (например после восстановления из sessionStorage). Это приводило к ложным
@@ -104,7 +114,7 @@ function getOrCreateStore<T>(storageKey: string, initialValue: T) {
 }
 
 /**
- * Хук для данных формы с автосохранением в sessionStorage.
+ * Хук для данных формы с автосохранением в localStorage (по userId).
  *
  * @param formName  — имя модели/формы (например "users-form")
  * @param entityId  — uuid или "new" для новой записи
@@ -119,7 +129,7 @@ export function useFormSessionStore<T>(
 	initialValue: T,
 	options?: { keepOnUnmount?: boolean },
 ): [T, (updater: T | ((prev: T) => T)) => void, () => void, boolean] {
-	const storageKey = `${STORAGE_PREFIX}${formName}:${entityId ?? "new"}`;
+	const storageKey = `${userPrefix()}${formName}:${entityId ?? "new"}`;
 	const keepOnUnmount = options?.keepOnUnmount ?? false;
 
 	// Получаем или создаём store для этого ключа
@@ -170,26 +180,30 @@ export function useFormSessionStore<T>(
 }
 
 /**
- * Утилита для очистки всех данных форм из sessionStorage.
- * Полезно при logout.
+ * Утилита для очистки всех данных форм текущего пользователя из localStorage.
+ * Полезно при logout. Черновики других пользователей (если были) не трогаются.
  */
 export function clearAllFormStores(): void {
+	const prefix = userPrefix();
 	const keysToRemove: string[] = [];
-	for (let i = 0; i < sessionStorage.length; i++) {
-		const key = sessionStorage.key(i);
-		if (key?.startsWith(STORAGE_PREFIX)) {
+	for (let i = 0; i < localStorage.length; i++) {
+		const key = localStorage.key(i);
+		if (key?.startsWith(prefix)) {
 			keysToRemove.push(key);
 		}
 	}
-	keysToRemove.forEach((k) => sessionStorage.removeItem(k));
-	storeCache.clear();
+	keysToRemove.forEach((k) => localStorage.removeItem(k));
+	// Очистка in-memory кэша только для своих ключей
+	for (const key of Array.from(storeCache.keys())) {
+		if (key.startsWith(prefix)) storeCache.delete(key);
+	}
 }
 
 /**
- * Запись несохранённой формы из sessionStorage.
+ * Запись несохранённой формы из localStorage.
  */
 export interface FormStoreEntry {
-	/** Полный ключ sessionStorage */
+	/** Полный ключ localStorage */
 	storageKey: string;
 	/** Имя формы (например "users-form") */
 	formName: string;
@@ -200,17 +214,18 @@ export interface FormStoreEntry {
 }
 
 /**
- * Получить все несохранённые записи форм из sessionStorage.
- * Возвращает массив FormStoreEntry для каждого ключа `formStore:*`.
+ * Получить все несохранённые записи форм текущего пользователя из localStorage.
+ * Возвращает массив FormStoreEntry для каждого ключа `formStore:<userId>:*`.
  */
 export function getAllFormStoreEntries(): FormStoreEntry[] {
+	const prefix = userPrefix();
 	const entries: FormStoreEntry[] = [];
-	for (let i = 0; i < sessionStorage.length; i++) {
-		const key = sessionStorage.key(i);
-		if (!key?.startsWith(STORAGE_PREFIX)) continue;
+	for (let i = 0; i < localStorage.length; i++) {
+		const key = localStorage.key(i);
+		if (!key?.startsWith(prefix)) continue;
 
-		// Ключ: "formStore:<formName>:<entityId>"
-		const rest = key.slice(STORAGE_PREFIX.length); // "users-form:some-uuid"
+		// Ключ: "formStore:<userId>:<formName>:<entityId>"
+		const rest = key.slice(prefix.length); // "users-form:some-uuid"
 		const colonIdx = rest.indexOf(":");
 		if (colonIdx === -1) continue;
 
@@ -218,7 +233,7 @@ export function getAllFormStoreEntries(): FormStoreEntry[] {
 		const entityId = rest.slice(colonIdx + 1);
 
 		try {
-			const raw = sessionStorage.getItem(key);
+			const raw = localStorage.getItem(key);
 			if (raw === null) continue;
 			const data = JSON.parse(raw) as Record<string, unknown>;
 			entries.push({ storageKey: key, formName, entityId, data });
@@ -230,11 +245,11 @@ export function getAllFormStoreEntries(): FormStoreEntry[] {
 }
 
 /**
- * Удалить одну запись из sessionStorage по storageKey.
+ * Удалить одну запись из localStorage по storageKey.
  */
 export function removeFormStoreEntry(storageKey: string): void {
 	try {
-		sessionStorage.removeItem(storageKey);
+		localStorage.removeItem(storageKey);
 	} catch {
 		/* ignore */
 	}

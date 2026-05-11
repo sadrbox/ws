@@ -517,6 +517,7 @@ body {
 	text-overflow: ellipsis;
 	flex-shrink: 1;
 	min-width: 0;
+	gap: 6px;
 }
 
 .PaneItemHeaderToolbar {
@@ -538,22 +539,67 @@ body {
 }
 
 .PaneItemHeaderDirtyDot {
-	display: flex;
-	width: 12px;
-	height: 12px;
+	display: inline-block;
+	width: 10px;
+	height: 10px;
 	border-radius: 50%;
-	background: #d48806;
-	margin-left: 6px;
+	background: #e8a030;
+	// margin-right: 8px;
 	flex-shrink: 0;
-	// vertical-align: middle;
-	box-shadow: 0 0 4px 1px rgba(#d48806, 0.5);
-	animation: dirtyPulse 2s ease-in-out infinite;
+	box-shadow: 0 0 0 2px rgba(#e8a030, 0.25);
+}
+
+.PaneItemHeaderDirtyDotStash {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: #e8a030;
+	// margin-right: 8px;
+	flex-shrink: 0;
+	box-shadow: 0 0 0 2px rgba(#e8a030, 0.25);
+	animation: dirtyPulse 1.5s ease-in-out infinite;
 }
 
 .PaneItemHeaderLabelDirty {
 	color: #c27400;
 }
 
+// Кнопка-индикатор несохранённых изменений в PaneItemHeaderToolbar.
+// .PaneItemHeaderDirtyButton — текущая форма содержит правки.
+// .PaneItemHeaderDirtyButtonStash — есть stash из прошлой сессии (клик восстанавливает).
+// .PaneItemHeaderDirtyButtonClean — форма чистая (кнопка disabled, видна как индикатор).
+.PaneItemHeaderDirtyButton {
+	color: #d48806;
+	background: rgba(#d48806, 0.08);
+
+	&:hover {
+		color: #c27400;
+		background: rgba(#d48806, 0.18);
+	}
+}
+
+.PaneItemHeaderDirtyButtonStash {
+	color: #d48806;
+	background: rgba(#d48806, 0.08);
+	animation: dirtyPulse 1.5s ease-in-out infinite;
+
+	&:hover {
+		color: #c27400;
+		background: rgba(#d48806, 0.18);
+		animation: none;
+	}
+}
+
+.PaneItemHeaderDirtyButtonClean {
+	color: #c3c3c3;
+	cursor: default;
+	opacity: 0.55;
+}
+
+// Прежде здесь была подсветка inset box-shadow для шапки панели.
+// Удалено: dirty-состояние теперь обозначается оранжевой точкой внутри
+// .PaneItemHeaderLabel (одинаковый стиль с .PaneTabItemDirtyDot).
 .PaneItemBottomToolbar {
 	display: flex;
 	flex-direction: row;
@@ -936,9 +982,10 @@ body {
 		justify-content: left;
 		align-items: center;
 		/* Используем SVG для скошенного угла */
-		padding: 6px 12px 6px 3px;
+		padding: 6px 3px 6px 12px;
 		cursor: pointer;
 		margin-right: -1px;
+		gap: 3px;
 		/* Наложение краев с учетом границы */
 		// font-weight: bold;
 		z-index: 1;
@@ -1012,7 +1059,7 @@ body {
 		// border: 1px solid $color60;
 		// border-top: 1px solid $color3;
 		color: $color6;
-		// font-weight: bold;
+		font-weight: bold;
 		z-index: 9;
 
 		&:hover {
@@ -1037,7 +1084,7 @@ body {
 
 	.PaneTabItemDirty {
 		.PaneTabItemLabel {
-			font-style: italic;
+			font-weight: 600;
 			color: #c77600;
 		}
 	}
@@ -1054,17 +1101,32 @@ body {
 		background-color: transparent;
 		border: none;
 		color: $color6;
-		margin-right: 3px;
-		width: $heightFieldInput - 8px;
-		height: $heightFieldInput - 8px;
+		// margin-right: 0px;
+		// width: $heightFieldInput - 10px;
+		// height: $heightFieldInput - 10px;
 	}
 
 	.PaneTabItemDirtyDot {
-		display: block;
+		display: inline-block;
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
 		background-color: #e8a030;
+		margin-right: 4px;
+		flex: 0 0 auto;
+		box-shadow: 0 0 0 2px rgba(#e8a030, 0.25);
+	}
+
+	.PaneTabItemDirtyDotStash {
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background-color: #e8a030;
+		margin-right: 4px;
+		flex: 0 0 auto;
+		box-shadow: 0 0 0 2px rgba(#e8a030, 0.25);
+		animation: dirtyPulse 1.5s ease-in-out infinite;
 	}
 }
 
@@ -2480,12 +2542,13 @@ body {
 .PrintViewport {
 	flex: 1;
 	min-height: 0;
-	overflow: hidden;
+	overflow: auto; // разрешаем вертикальную прокрутку контейнера
 	background: #2b2b2b;
 	border-radius: $radius2;
 	display: flex;
-	align-items: stretch;
+	align-items: flex-start;
 	justify-content: center;
+	padding: 16px 0;
 }
 
 // PDF — нативный viewer: растягиваем на всю область
@@ -2497,16 +2560,41 @@ body {
 	background: #525659;
 }
 
-// Документы (HTML/DOCX/TXT/IMG) — белый «лист» с тенью по центру тёмного фона
+// Документы (HTML/DOCX/TXT/IMG) — белый «лист» с тенью по центру тёмного фона.
+// Ширина точно соответствует A4 (210mm = ~793px @96dpi), чтобы не было ни
+// горизонтальной прокрутки, ни обрезки содержимого по ширине.
 .PrintIframeDoc {
-	width: 100%;
-	max-width: 900px;
+	width: 210mm;
+	max-width: calc(100% - 32px);
 	height: 100%;
+	min-height: 297mm;
 	border: none;
-	margin: 16px auto;
+	margin: 0 auto;
 	background: #fff;
 	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
 	border-radius: 2px;
+	display: block;
+}
+
+// Переключатель ориентации листа в шапке PrintDocumentPane.
+.PrintOrientationSelect {
+	height: 24px;
+	padding: 0 6px;
+	border: 1px solid #c4c4c4;
+	border-radius: 3px;
+	background: #fff;
+	font-size: 12px;
+	cursor: pointer;
+	outline: none;
+
+	&:hover {
+		border-color: #888;
+	}
+
+	&:focus-visible {
+		border-color: #1976d2;
+		box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+	}
 }
 
 .PrintPlaceholder {

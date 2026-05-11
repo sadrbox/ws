@@ -76,18 +76,29 @@ export interface PipeFetchOneResult<T> {
 
 /**
  * Получить одну запись по uuid через текущий pipe.
+ * @param options.noCache — обходить HTTP-кэш браузера (используется при
+ *   нажатии «Обновить», чтобы гарантировать свежие данные с сервера).
  */
 export async function pipeFetchOne<T = SyncRecord>(
 	endpoint: string,
 	uuid: string,
+	options: { noCache?: boolean } = {},
 ): Promise<PipeFetchOneResult<T> | null> {
 	if (isOfflineFirst()) {
-		return offlineFetchOne<T>(endpoint, uuid);
+		return offlineFetchOne<T>(endpoint, uuid, options);
 	}
 
 	// ── Transactional ──
 	const ep = endpoint.replace(/^\/+/, "");
-	const response = await apiClient.get(`/${ep}/${uuid}`);
+	const response = await apiClient.get(`/${ep}/${uuid}`, {
+		headers: options.noCache
+			? {
+					"Cache-Control": "no-cache",
+					Pragma: "no-cache",
+				}
+			: undefined,
+		params: options.noCache ? { _t: Date.now() } : undefined,
+	});
 	const item = response.data?.item ?? response.data;
 	return { item: item as T, fromCache: false };
 }

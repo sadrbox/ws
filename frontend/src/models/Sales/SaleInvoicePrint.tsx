@@ -121,13 +121,39 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   const has = (rowGetter: (r: SaleItemPrintRow) => number | undefined | null): boolean =>
     data.items.some((r) => Number(rowGetter(r) ?? 0) > 0);
 
+  // ── Режим: есть ли в документе косвенные налоги (НДС/акциз) ───────────
+  // По НК РК «косвенные налоги» = НДС + акциз. Если в документе ни одной
+  // позиции нет НДС/акциза (неплательщик НДС, освобождённая операция,
+  // упрощёнка), терминология «без/с косвенных налогов» не имеет смысла и
+  // вводит в заблуждение — заголовки и колонки приводятся к простой форме
+  // накладной З-2: «Цена», «Сумма».
+  const hasVat =
+    has((r) => r.vatRate) ||
+    has((r) => r.vatAmount) ||
+    Number(data.totalVatAmount ?? 0) > 0;
+  const hasExcise =
+    has((r) => r.exciseRate) ||
+    has((r) => r.exciseAmount) ||
+    Number(data.totalExciseAmount ?? 0) > 0;
+  const hasIndirectTaxes = hasVat || hasExcise;
+
+  const priceHeader = hasIndirectTaxes
+    ? "Цена за ед. без косв. налогов"
+    : "Цена";
+  const totalHeader = hasIndirectTaxes ? "Стоимость с косв. налогами" : "Сумма";
+  const amountWithoutTaxesHeader = "Стоимость без косв. налогов";
+
   const showDiscPct = cols.discountPercent !== false && (cols.discountPercent === true || has((r) => r.discountPercent) || has((r) => r.discountAmount));
   const showDiscAmt = cols.discountAmount !== false && (cols.discountAmount === true || has((r) => r.discountAmount) || Number(data.totalDiscountAmount ?? 0) > 0);
-  const showAmtNoVat = cols.amountWithoutVat !== false; // по умолчанию всегда показываем
-  const showExciseRate = cols.exciseRate !== false && (cols.exciseRate === true || has((r) => r.exciseRate) || has((r) => r.exciseAmount));
-  const showExciseAmt = cols.exciseAmount !== false && (cols.exciseAmount === true || has((r) => r.exciseAmount) || Number(data.totalExciseAmount ?? 0) > 0);
-  const showVatRate = cols["vatRateRef.shortName"] !== false && (cols["vatRateRef.shortName"] === true || has((r) => r.vatRate) || has((r) => r.vatAmount));
-  const showVatAmt = cols.vatAmount !== false && (cols.vatAmount === true || has((r) => r.vatAmount) || Number(data.totalVatAmount ?? 0) > 0);
+  // Колонка «Стоимость без косв. налогов» имеет смысл только когда есть
+  // косвенные налоги — иначе она совпадает с итоговой суммой и дублирует её.
+  const showAmtNoVat = hasIndirectTaxes && cols.amountWithoutVat !== false;
+  // Колонки НДС/акциза показываем только если они реально присутствуют в
+  // документе (или явно включены пользователем через «В печать»).
+  const showExciseRate = hasExcise && cols.exciseRate !== false && (cols.exciseRate === true || has((r) => r.exciseRate) || has((r) => r.exciseAmount));
+  const showExciseAmt = hasExcise && cols.exciseAmount !== false && (cols.exciseAmount === true || has((r) => r.exciseAmount) || Number(data.totalExciseAmount ?? 0) > 0);
+  const showVatRate = hasVat && cols["vatRateRef.shortName"] !== false && (cols["vatRateRef.shortName"] === true || has((r) => r.vatRate) || has((r) => r.vatAmount));
+  const showVatAmt = hasVat && cols.vatAmount !== false && (cols.vatAmount === true || has((r) => r.vatAmount) || Number(data.totalVatAmount ?? 0) > 0);
 
   // Подсчёт ширины строки итогов: «Итого:» занимает все левые описательные
   // и количественные колонки до первой суммовой (Сумма скидки / Стоимость без НДС).
@@ -186,7 +212,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
             <th style={headCellStyle}>Наименование товаров (работ, услуг)</th>
             <th style={{ ...headCellStyle, width: "14mm" }}>Ед. изм.</th>
             <th style={{ ...headCellStyle, width: "16mm" }}>Кол-во</th>
-            <th style={{ ...headCellStyle, width: "20mm" }}>Цена за ед. без косв. налогов</th>
+            <th style={{ ...headCellStyle, width: "20mm" }}>{priceHeader}</th>
             {showDiscPct && (
               <th style={{ ...headCellStyle, width: "12mm" }}>Скидка, %</th>
             )}
@@ -194,7 +220,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
               <th style={{ ...headCellStyle, width: "20mm" }}>Сумма скидки</th>
             )}
             {showAmtNoVat && (
-              <th style={{ ...headCellStyle, width: "22mm" }}>Стоимость без косв. налогов</th>
+              <th style={{ ...headCellStyle, width: "22mm" }}>{amountWithoutTaxesHeader}</th>
             )}
             {showExciseRate && (
               <th style={{ ...headCellStyle, width: "14mm" }}>Ставка акциза, %</th>
@@ -208,7 +234,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
             {showVatAmt && (
               <th style={{ ...headCellStyle, width: "20mm" }}>Сумма НДС</th>
             )}
-            <th style={{ ...headCellStyle, width: "24mm" }}>Стоимость с косв. налогами</th>
+            <th style={{ ...headCellStyle, width: "24mm" }}>{totalHeader}</th>
           </tr>
         </thead>
         <tbody>

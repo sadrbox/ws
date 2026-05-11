@@ -57,8 +57,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
 		const filterWhere = {};
 		for (const [field, conds] of Object.entries(filter)) {
-			if (field === "searchBy" || !conds || typeof conds !== "object")
-				continue;
+			if (field === "searchBy" || !conds || typeof conds !== "object") continue;
 			if (field === "dateRange") {
 				const dr = {};
 				if (conds.startDate) dr.gte = new Date(conds.startDate);
@@ -81,7 +80,12 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			orderBy,
-			include: { organization: true, counterparty: true, contract: true },
+			include: {
+				organization: true,
+				counterparty: true,
+				contract: true,
+				author: { select: { uuid: true, username: true, email: true } },
+			},
 		};
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };
@@ -114,7 +118,12 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const item = await prisma[MODEL].findUnique({
 			where: w,
-			include: { organization: true, counterparty: true, contract: true },
+			include: {
+				organization: true,
+				counterparty: true,
+				contract: true,
+				author: { select: { uuid: true, username: true, email: true } },
+			},
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
@@ -127,6 +136,12 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
+		if (!req.user?.uuid) {
+			return res.status(401).json({
+				success: false,
+				message: "Автор документа обязателен: требуется авторизация",
+			});
+		}
 		const {
 			date,
 			description,
@@ -143,8 +158,14 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
+				authorUuid: req.user.uuid,
 			},
-			include: { organization: true, counterparty: true, contract: true },
+			include: {
+				organization: true,
+				counterparty: true,
+				contract: true,
+				author: { select: { uuid: true, username: true, email: true } },
+			},
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -170,16 +191,19 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
 		if (req.body.date !== undefined)
-			data.date = req.body.date
-				? new Date(req.body.date)
-				: null;
+			data.date = req.body.date ? new Date(req.body.date) : null;
 		if (req.body.amount !== undefined)
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
-			include: { organization: true, counterparty: true, contract: true },
+			include: {
+				organization: true,
+				counterparty: true,
+				contract: true,
+				author: { select: { uuid: true, username: true, email: true } },
+			},
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

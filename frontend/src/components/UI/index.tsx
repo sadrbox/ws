@@ -5,19 +5,17 @@ import { createPortal } from 'react-dom';
 import { ContractsList } from 'src/models/Contracts';
 // Divider is imported in components that use it; not used here
 import { translate } from 'src/i18';
-import { getFormatNumerical } from 'src/components/Table/services';
-import { getFormatDate, getFormatDateOnly } from 'src/utils/main.module';
 // import { CounterpartiesList } from 'src/models/Organizations';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app/context';
-import { ReloadButton, CloseButton } from 'src/components/Toolbar';
+import { ReloadButton, CloseButton, DirtyButton, IconButton } from 'src/components/Toolbar';
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
-import { usePaneDirty, usePaneDirtyDiff, usePaneNotifications, dismissPaneNotification } from 'src/hooks/useFormStore';
+import { usePaneDirty, usePaneNotifications, dismissPaneNotification, usePaneHasPendingStash, applyPaneStash } from 'src/hooks/useFormStore';
 import { CounterpartiesList } from 'src/models/Counterparties';
 import { ContactTypesList } from 'src/models/ContactTypes';
 import { ContactsList } from 'src/models/Contacts';
@@ -108,6 +106,8 @@ const PaneTabItem: FC<{
   onClose: () => void;
 }> = ({ pane, isActive, isLocked, onActivate, onClose }) => {
   const isDirty = usePaneDirty(pane.uniqId);
+  const hasStash = usePaneHasPendingStash(pane.uniqId);
+  const showDirtyDot = isDirty || hasStash;
 
   return (
     <div
@@ -116,26 +116,31 @@ const PaneTabItem: FC<{
         isActive && styles.PaneTabItemActive,
         pane.isSelector && styles.PaneTabItemSelector,
         isLocked && styles.PaneTabItemDisabled,
-        isDirty && styles.PaneTabItemDirty,
+        showDirtyDot && styles.PaneTabItemDirty,
       ].filter(Boolean).join(" ")}
       onClick={isLocked ? undefined : onActivate}
-      title={pane.label}
+      title={pane.label + (isDirty ? " · есть несохранённые изменения" : hasStash ? " · есть данные прошлой сессии" : "")}
       role="tab"
       tabIndex={isLocked ? -1 : 0}
       aria-disabled={isLocked}
     >
-      {!isLocked && (
-        isDirty
-          ? <CloseButton
-            className={styles.PaneTabItemClose}
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
-          />
-          : <CloseButton
-            className={styles.PaneTabItemClose}
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
-          />
+      {showDirtyDot && (
+        <span
+          className={hasStash ? styles.PaneTabItemDirtyDotStash : styles.PaneTabItemDirtyDot}
+          aria-label={isDirty ? "Несохранённые изменения" : "Данные прошлой сессии"}
+        />
       )}
       <span className={styles.PaneTabItemLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
+      {!isLocked && (
+        <IconButton
+          icon="close"
+          size="sm"
+          className={styles.PaneTabItemClose}
+          aria-label="Закрыть"
+          title="Закрыть"
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+        />
+      )}
     </div>
   );
 };
@@ -185,25 +190,56 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
   const { refCallback: slot } = usePaneToolbarSlot(p.uniqId);
   const { refCallback: headerSlot } = usePaneHeaderActionsSlot(p.uniqId);
   const isDirty = usePaneDirty(p.uniqId);
+  const hasStash = usePaneHasPendingStash(p.uniqId);
   const hasToolbar = useHasToolbar(p.uniqId);
   const onReload = usePaneReload(p.uniqId);
   const Component = p.component as FC<any>;
 
-  // console.log('data:', p.data);
+  // Кнопка Dirty: видна всегда на формах (где есть toolbar), disabled когда форма
+  // чистая. Это даёт визуальную обратную связь о работающем механизме
+  // отслеживания изменений. При наличии stash из прошлой сессии — пульсирует
+  // и по клику восстанавливает данные.
+  const showDirtyButton = hasToolbar;
+  const dirtyButtonClass = hasStash
+    ? styles.PaneItemHeaderDirtyButtonStash
+    : isDirty
+      ? styles.PaneItemHeaderDirtyButton
+      : styles.PaneItemHeaderDirtyButtonClean;
+  const handleDirtyClick = useCallback(() => {
+    if (hasStash) applyPaneStash(p.uniqId);
+  }, [hasStash, p.uniqId]);
+
   return (
     <div className={[styles.PaneItem, isActive && styles.PaneItemActive].filter(Boolean).join(" ")}>
       <div className={styles.PaneItemHeader}>
-        <h2
-          className={[styles.PaneItemHeaderLabel, isDirty && styles.PaneItemHeaderLabelDirty].filter(Boolean).join(" ")}
-          title={isDirty ? "Форма содержит несохранённые изменения" : undefined}
-        >
+        <h2 className={styles.PaneItemHeaderLabel}>
           {p.label}
-          {isDirty && <span className={styles.PaneItemHeaderDirtyDot} />}
+          {(isDirty || hasStash) && (
+            <span
+              className={hasStash ? styles.PaneItemHeaderDirtyDotStash : styles.PaneItemHeaderDirtyDot}
+              aria-label={isDirty ? "Несохранённые изменения" : "Данные прошлой сессии"}
+              title={hasStash
+                ? "Есть несохранённые данные из прошлой сессии"
+                : "Форма содержит несохранённые изменения"}
+            />
+          )}
         </h2>
         <div className={styles.PaneItemHeaderToolbar}>
           {/* Слот для дополнительных кнопок от конкретной формы (напр. «Печать»).
               Регистрируются через usePaneHeaderActions(paneId, <…/>). */}
           <div ref={headerSlot} className={styles.PaneItemHeaderActionsSlot} />
+          {showDirtyButton && (
+            <DirtyButton
+              onClick={handleDirtyClick}
+              disabled={!isDirty && !hasStash}
+              className={dirtyButtonClass}
+              title={hasStash
+                ? "Есть несохранённые данные из прошлой сессии. Нажмите, чтобы восстановить."
+                : isDirty
+                  ? "Форма содержит несохранённые изменения"
+                  : "Форма не содержит несохранённых изменений"}
+            />
+          )}
           {hasToolbar && <ReloadButton onClick={onReload} />}
           <CloseButton onClick={onClose} />
         </div>
@@ -313,28 +349,12 @@ const PersistenceModeToggle: FC = () => {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // NavbarPaneBell — колокольчик уведомлений активной панели в Navbar
-// ─── Форматирование значений в блоке "Несохранённые изменения" ──────────────
-function formatDiffValue(v: unknown): string {
-  if (v === null || v === undefined || v === "") return "—";
-  if (typeof v === "boolean") return v ? "Да" : "Нет";
-  if (typeof v === "number") return getFormatNumerical(v);
-  const s = String(v as string | number | boolean);
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return getFormatDate(s);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return getFormatDateOnly(s);
-  const n = Number(s.replace(/[\s\u00A0\u202F]/g, "").replace(",", "."));
-  if (!isNaN(n) && s.trim() !== "" && /^[\d\s\u00A0\u202F.,+-]+$/.test(s.trim())) return getFormatNumerical(n);
-  return s.length > 30 ? s.slice(0, 30) + "…" : s;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 
 const NavbarPaneBell: FC = () => {
   const { windows: { activePane, addPane } } = useAppContext();
-  const isDirty = usePaneDirty(activePane ?? "");
-  const dirtyDiff = usePaneDirtyDiff(activePane ?? "");
   const notifications = usePaneNotifications(activePane ?? "");
   const [showNotes, setShowNotes] = useState(false);
-  const [showDiff, setShowDiff] = useState(false);
   const bellRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(notifications.length);
@@ -342,10 +362,7 @@ const NavbarPaneBell: FC = () => {
   const hoverRef = useRef(false);
 
   // Закрыть попover при смене панели
-  useEffect(() => { setShowNotes(false); setShowDiff(false); }, [activePane]);
-
-  // Сбросить diff при закрытии попover
-  useEffect(() => { if (!showNotes) setShowDiff(false); }, [showNotes]);
+  useEffect(() => { setShowNotes(false); }, [activePane]);
 
   // Авто-открыть попover при появлении новых уведомлений
   useEffect(() => {
@@ -367,7 +384,6 @@ const NavbarPaneBell: FC = () => {
           setShowNotes(false);
           autoOpenRef.current = false;
         } else {
-          // Мышь на поповере — пробуем снова через 2 сек
           schedule();
         }
       }, 6000);
@@ -391,7 +407,9 @@ const NavbarPaneBell: FC = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, [showNotes]);
 
-  const showBell = isDirty || notifications.length > 0;
+  // Колокольчик теперь отвечает ТОЛЬКО за обычные уведомления; индикация
+  // несохранённых изменений вынесена в DirtyButton (PaneItemHeaderToolbar).
+  const showBell = notifications.length > 0;
 
   const openJournal = useCallback(() => {
     setShowNotes(false);
@@ -425,7 +443,7 @@ const NavbarPaneBell: FC = () => {
           onMouseLeave={() => { hoverRef.current = false; }}
         >
           <div className={styles.PaneNotePopoverHeader}>
-            <span>Состояние формы</span>
+            <span>Уведомления</span>
             <button className={styles.PaneNoteJournalLink} onClick={openJournal} type="button">
               Журнал ➜
             </button>
@@ -468,51 +486,6 @@ const NavbarPaneBell: FC = () => {
               >✕</button>
             </div>
           ))}
-          {!isDirty && notifications.length === 0 && (
-            <div className={[styles.PaneNoteItem, styles.PaneNoteInfo].join(" ")}>
-              <span className={styles.PaneNoteIcon}>✅</span>
-              <span className={styles.PaneNoteText}>Нет уведомлений.</span>
-            </div>
-          )}
-          {isDirty && (
-            <div className={styles.PaneNoteDirtySection}>
-              <button
-                type="button"
-                className={styles.PaneNoteDirtyToggle}
-                onClick={() => setShowDiff(v => !v)}
-              >
-                <span>✏️ Несохранённые изменения</span>
-                <span className={styles.PaneNoteDirtyToggleArrow}>{showDiff ? "▲" : "▼"}</span>
-              </button>
-              {showDiff && (
-                <div className={styles.PaneNoteDirtyDiff}>
-                  {dirtyDiff.fields.filter(({ field }) => field !== "id" && field !== "uuid" && field !== "updatedAt" && !field.endsWith("Uuid")).map(({ field, savedValue, currentValue }) => (
-                    <div key={field} className={styles.PaneNoteDirtyRow}>
-                      <span className={styles.PaneNoteDirtyField}>
-                        {translate(field)}
-                      </span>
-                      <span className={styles.PaneNoteDirtyValues}>
-                        <span className={styles.PaneNoteDirtyOld}>{formatDiffValue(savedValue)}</span>
-                        <span className={styles.PaneNoteDirtyArrow}>→</span>
-                        <span className={styles.PaneNoteDirtyNew}>{formatDiffValue(currentValue)}</span>
-                      </span>
-                    </div>
-                  ))}
-                  {dirtyDiff.tables.map(({ key, pendingCount }) => (
-                    <div key={key} className={styles.PaneNoteDirtyRow}>
-                      <span className={styles.PaneNoteDirtyField}>{translate(key)}</span>
-                      <span className={styles.PaneNoteDirtyValues}>
-                        <span className={styles.PaneNoteDirtyNew}>{pendingCount} строк изменено</span>
-                      </span>
-                    </div>
-                  ))}
-                  {dirtyDiff.fields.filter(({ field }) => field !== "id" && field !== "uuid" && field !== "updatedAt" && !field.endsWith("Uuid")).length === 0 && dirtyDiff.tables.length === 0 && (
-                    <div className={styles.PaneNoteDirtyRow} style={{ color: "#999" }}>нет видимых изменений</div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
     </div>

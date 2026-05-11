@@ -53,3 +53,101 @@
 		color: #c00 !important;
 	}
 }
+
+/* ── SaveDropdownButton ─────────────────────────────────────────────── */
+.DropdownWrap {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 0;
+}
+
+.DropdownCaret {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 24px;
+	margin-left: -2px;
+	padding: 0;
+	border: 1px solid transparent;
+	background: transparent;
+	border-radius: 4px;
+	cursor: pointer;
+	color: #555;
+	transition: background-color 0.12s ease, color 0.12s ease;
+
+	&:hover:not(:disabled) {
+		background: rgba(#555, 0.12);
+		color: #222;
+	}
+
+	&:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(0, 119, 204, 0.25);
+	}
+
+	&:disabled {
+		opacity: 0.35;
+		cursor: default;
+		pointer-events: none;
+	}
+
+	svg {
+		display: block;
+		width: 12px;
+		height: 12px;
+	}
+}
+
+.DropdownMenu {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 0;
+	min-width: 180px;
+	background: #fff;
+	border: 1px solid #ccc;
+	border-radius: 6px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	padding: 4px 0;
+	z-index: 1000;
+	display: flex;
+	flex-direction: column;
+}
+
+.DropdownItem {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	color: #222;
+	font-size: 13px;
+	text-align: left;
+	white-space: nowrap;
+
+	&:hover:not(:disabled) {
+		background: rgba(0, 119, 204, 0.08);
+	}
+
+	&:disabled {
+		opacity: 0.45;
+		cursor: default;
+		pointer-events: none;
+	}
+}
+
+.DropdownItemIcon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+}
+
+.DropdownItemLabel {
+	flex: 1 1 auto;
+}

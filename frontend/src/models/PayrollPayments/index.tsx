@@ -40,6 +40,7 @@ interface TFields {
   paymentMethod: string;
   amount: string;
   status: string;
+  authorUuid: string; authorName: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
@@ -50,6 +51,7 @@ const DEFAULT_FIELDS: TFields = {
   paymentMethod: "bank_transfer",
   amount: "",
   status: "draft",
+  authorUuid: "", authorName: "",
 };
 
 const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
@@ -60,6 +62,7 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
     const data = paneProps.data;
     if (!data || data.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
+
     if (defaultOrg.organizationUuid) {
       init.organizationUuid = defaultOrg.organizationUuid;
       init.organizationName = defaultOrg.organizationName;
@@ -80,6 +83,8 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
       paymentMethod: d.paymentMethod ?? "bank_transfer",
       amount: d.amount != null ? String(d.amount) : "",
       status: d.status ?? "draft",
+      authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
+      authorName: d.author?.username ?? d.author?.email ?? "",
     }),
     buildPayload: (fd) => ({
       documentNumber: fd.documentNumber?.trim() || null, date: fd.date || null,
@@ -93,36 +98,39 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const tabs = useMemo(() => [
-    { id: "tab-details", label: translate("general"), component: (
-      <div className={styles.FormWrapper}>
-        <div className={styles.Form}>
-          {form.isEditMode && (
-            <GroupRow>
-              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-            </GroupRow>
-          )}
-        <Group align="row" gap="12px">
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 700 }}>
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <FieldDate label="Дата документа" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
-              <Field label="Период (ГГГГ-ММ)" name={`${form.formUid}_period`} value={form.fields.period} onChange={e => form.setField("period", e.target.value)} disabled={form.isLoading} width="140px" />
-            </div>
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" />
-              <LookupField label="Сотрудник" name={`${form.formUid}_emp`} value={form.fields.employeeUuid} displayValue={form.fields.employeeName} endpoint="employees" displayField="fullName" onSelect={(u, d) => form.setFields({ employeeUuid: u, employeeName: d } as Partial<TFields>)} onClear={() => form.setFields({ employeeUuid: "", employeeName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" />
-            </div>
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <Field label="Сумма выплаты" name={`${form.formUid}_amount`} value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} width="180px" />
-              <FieldSelect label="Способ выплаты" name={`${form.formUid}_method`} value={form.fields.paymentMethod} options={PAYMENT_METHOD_OPTIONS} onChange={e => form.setField("paymentMethod", e.target.value)} disabled={form.isLoading} />
-              <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
-            </div>
-            <Field label="Комментарий" name={`${form.formUid}_desc`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
+    {
+      id: "tab-details", label: translate("general"), component: (
+        <div className={styles.FormWrapper}>
+          <div className={styles.Form}>
+            {form.isEditMode && (
+              <GroupRow>
+                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+                <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || "-"} disabled />
+              </GroupRow>
+            )}
+            <Group align="row" gap="12px">
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 700 }}>
+                <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                  <FieldDate label="Дата документа" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
+                  <Field label="Период (ГГГГ-ММ)" name={`${form.formUid}_period`} value={form.fields.period} onChange={e => form.setField("period", e.target.value)} disabled={form.isLoading} width="140px" />
+                </div>
+                <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                  <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" />
+                  <LookupField label="Сотрудник" name={`${form.formUid}_emp`} value={form.fields.employeeUuid} displayValue={form.fields.employeeName} endpoint="employees" displayField="fullName" onSelect={(u, d) => form.setFields({ employeeUuid: u, employeeName: d } as Partial<TFields>)} onClear={() => form.setFields({ employeeUuid: "", employeeName: "" } as Partial<TFields>)} disabled={form.isLoading} width="300px" />
+                </div>
+                <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
+                  <Field label="Сумма выплаты" name={`${form.formUid}_amount`} value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} width="180px" />
+                  <FieldSelect label="Способ выплаты" name={`${form.formUid}_method`} value={form.fields.paymentMethod} options={PAYMENT_METHOD_OPTIONS} onChange={e => form.setField("paymentMethod", e.target.value)} disabled={form.isLoading} />
+                  <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+                </div>
+                <Field label="Комментарий" name={`${form.formUid}_desc`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
+              </div>
+            </Group>
           </div>
-        </Group>
         </div>
-      </div>
-    )},
+      )
+    },
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields]);
 
   return (

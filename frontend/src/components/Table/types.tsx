@@ -39,6 +39,14 @@ export type TColumn = {
   /** Текущее состояние «показывать в печатной форме». Игнорируется,
    *  если `togglePrintable !== true`. По умолчанию считается true. */
   printable?: boolean;
+  /**
+   * Динамическая (вычисляемая) колонка — значение отсутствует в БД
+   * и вычисляется на клиенте (обычно в `renderCell` или через `computeRow`).
+   * При `dynamic: true` идентификатор колонки НЕ отправляется
+   * в серверный sort/filter (иначе Prisma вернёт ошибку Unknown argument),
+   * но сортировка по ней выполняется клиентски (`sortTableRows`).
+   */
+  dynamic?: boolean;
 };
 export type TypeModelStates = {
   activeRow?: number | null;

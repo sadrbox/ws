@@ -193,6 +193,45 @@ export const PrintIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+/** Индикатор несохранённых изменений — карандаш. */
+export const DirtyIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M3 13h2l7-7-2-2-7 7z" />
+    <path d="M10 4l2 2" />
+    <path d="M3 13.5h3" />
+  </svg>
+);
+
+/** Восстановить несохранённые изменения — закруглённая стрелка против часовой
+ *  со стрелкой-наконечником и точкой в центре. Используется в DirtyButton
+ *  (PaneItemHeaderToolbar) для семантики «вернуть несохранённые правки». */
+export const RestoreIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    {/* Дуга, открытая слева сверху */}
+    <path d="M3 8a5 5 0 1 0 1.5-3.5" />
+    {/* Стрелка наконечник */}
+    <path d="M3 3v3h3" />
+    {/* Точка в центре — индикатор изменений */}
+    <circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="currentColor" />
+  </svg>
+);
+
+/** Сохранение/скачивание — дискета с лёгкой стрелкой вниз. */
+export const SaveIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M3 2.5h7l3 3V13a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 2 13V3a.5.5 0 0 1 .5-.5z" />
+    <path d="M4.5 2.5v3.5h6V2.5" />
+    <rect x="5" y="9" width="5.5" height="4.5" />
+  </svg>
+);
+
+/** Каретка ▼ для dropdown-кнопок. */
+export const CaretDownIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M4 6l4 4 4-4" />
+  </svg>
+);
+
 // ── Реестр + универсальный <Icon name="…" /> ─────────────────────────────
 
 export const ICONS = {
@@ -211,6 +250,10 @@ export const ICONS = {
   print: PrintIcon,
   posted: PostedIcon,
   notPosted: NotPostedIcon,
+  dirty: DirtyIcon,
+  restore: RestoreIcon,
+  save: SaveIcon,
+  caretDown: CaretDownIcon,
 } as const;
 
 export type IconName = keyof typeof ICONS;

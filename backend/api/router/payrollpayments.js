@@ -6,7 +6,11 @@ const router = express.Router();
 const MODEL = "payrollPayment";
 const ROUTE = "payroll-payments";
 const TEXT_FIELDS = ["description", "period"];
-const INCLUDE = { employee: true, organization: true };
+const INCLUDE = {
+	employee: true,
+	organization: true,
+	author: { select: { uuid: true, username: true, email: true } },
+};
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -57,8 +61,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
 		const filterWhere = {};
 		for (const [field, conds] of Object.entries(filter)) {
-			if (field === "searchBy" || !conds || typeof conds !== "object")
-				continue;
+			if (field === "searchBy" || !conds || typeof conds !== "object") continue;
 			if (field === "dateRange") {
 				const dr = {};
 				if (conds.startDate) dr.gte = new Date(conds.startDate);
@@ -127,6 +130,12 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
+		if (!req.user?.uuid) {
+			return res.status(401).json({
+				success: false,
+				message: "Автор документа обязателен: требуется авторизация",
+			});
+		}
 		const {
 			date,
 			description,
@@ -145,6 +154,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				organizationUuid: organizationUuid || null,
 				paymentMethod: paymentMethod?.trim() ?? "bank_transfer",
 				amount: amount != null ? parseFloat(amount) : 0,
+				authorUuid: req.user.uuid,
 			},
 			include: INCLUDE,
 		});
@@ -174,9 +184,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
 		if (req.body.date !== undefined)
-			data.date = req.body.date
-				? new Date(req.body.date)
-				: null;
+			data.date = req.body.date ? new Date(req.body.date) : null;
 		if (req.body.amount !== undefined)
 			data.amount = req.body.amount != null ? parseFloat(req.body.amount) : 0;
 		const item = await prisma[MODEL].update({
