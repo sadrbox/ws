@@ -41,9 +41,14 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canRead: canReadEmployeeHistory } = useAccessRight("EmployeeHistory");
   const queryClient = useQueryClient();
 
-  const invalidateSubTables = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["contacts"] });
-    void queryClient.invalidateQueries({ queryKey: ["employee-histories"] });
+  // refetchType: "active" — ждём завершение refetch смонтированных
+  // SubTable, чтобы useFormStore.submit() очистил pending-строки
+  // только после появления свежих серверных данных.
+  const invalidateSubTables = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["contacts"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["employee-histories"], refetchType: "active" }),
+    ]);
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
@@ -79,7 +84,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Сотрудники", saved),
     afterLoad: invalidateSubTables,
-    afterSave: () => { setTimeout(invalidateSubTables, 0); },
+    afterSave: invalidateSubTables,
   });
 
   // При изменении фамилии/имени/отчества — автоматически пересчитывает fullName

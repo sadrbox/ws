@@ -61,4 +61,27 @@ describe("normalize / isEquivalent", () => {
 		expect(isEquivalent(decimalLike, "12.5")).toBe(true);
 		expect(isEquivalent(decimalLike, 12.5)).toBe(true);
 	});
+
+	it("ignores server-managed timestamps (createdAt/updatedAt/deletedAt)", () => {
+		// Разные значения этих ключей не должны давать различий
+		expect(
+			isEquivalent(
+				{ id: 1, name: "A", updatedAt: "2024-01-01T00:00:00Z" },
+				{ id: 1, name: "A", updatedAt: "2025-06-15T12:34:56Z" },
+			),
+		).toBe(true);
+		expect(
+			isEquivalent(
+				{ id: 1, deletedAt: null },
+				{ id: 1, deletedAt: "2025-01-01" },
+			),
+		).toBe(true);
+		// И на вложенном уровне (организация, контрагент и т.п.)
+		expect(
+			isEquivalent(
+				{ org: { uuid: "x", name: "A", createdAt: "2024-01-01" } },
+				{ org: { uuid: "x", name: "A", createdAt: "2025-09-09" } },
+			),
+		).toBe(true);
+	});
 });

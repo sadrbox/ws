@@ -57,7 +57,6 @@ export const SYNCABLE_TABLES = [
 	"bankaccounts",
 	"users",
 	"todos",
-	"notifications",
 	"warehouses",
 	"sales",
 	"purchases",

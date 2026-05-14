@@ -1,4 +1,4 @@
-import React, { CSSProperties, FC, PropsWithChildren, useEffect, useState, useCallback, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo } from 'react';
+import React, { CSSProperties, FC, PropsWithChildren, useEffect, useState, useCallback, useMemo, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo } from 'react';
 import styles from "../../styles/main.module.scss"
 import modalManager from 'src/components/Modal/modalManager';
 import { createPortal } from 'react-dom';
@@ -15,7 +15,8 @@ import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src
 import { ToolbarSlot } from 'src/components/Toolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
-import { usePaneDirty, usePaneNotifications, dismissPaneNotification, usePaneHasPendingStash, applyPaneStash } from 'src/hooks/useFormStore';
+import { usePaneDirty, usePaneDirtyDiff, usePaneNotifications, dismissPaneNotification, usePaneHasPendingStash, applyPaneStash, setPaneShowDiff, usePaneShowDiff } from 'src/hooks/useFormStore';
+import { PaneScopeProvider } from 'src/hooks/useDirtyHighlight';
 import { CounterpartiesList } from 'src/models/Counterparties';
 import { ContactTypesList } from 'src/models/ContactTypes';
 import { ContactsList } from 'src/models/Contacts';
@@ -190,27 +191,230 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
   const { refCallback: slot } = usePaneToolbarSlot(p.uniqId);
   const { refCallback: headerSlot } = usePaneHeaderActionsSlot(p.uniqId);
   const isDirty = usePaneDirty(p.uniqId);
+  const dirtyDiff = usePaneDirtyDiff(p.uniqId);
   const hasStash = usePaneHasPendingStash(p.uniqId);
   const hasToolbar = useHasToolbar(p.uniqId);
   const onReload = usePaneReload(p.uniqId);
   const Component = p.component as FC<any>;
 
-  // Кнопка Dirty: видна всегда на формах (где есть toolbar), disabled когда форма
-  // чистая. Это даёт визуальную обратную связь о работающем механизме
-  // отслеживания изменений. При наличии stash из прошлой сессии — пульсирует
-  // и по клику восстанавливает данные.
-  const showDirtyButton = hasToolbar;
+  // Ref на корневой DOM-узел Pane — нужен чтобы при открытии нового пейна
+  // или переключении на существующий автоматически передать фокус
+  // первому табличному scroll-контейнеру (TableScrollWrapper, tabIndex=0).
+  // Это даёт мгновенную клавиатурную навигацию (Up/Down/Left/Right/Insert/
+  // Delete/Home/End/PgUp/PgDn) по таблице внутри Pane без доп. клика мыши.
+  const paneRootRef = useRef<HTMLDivElement | null>(null);
+  // Отслеживаем смену isActive: при переходе false → true (или при первой
+  // активации) принудительно переводим фокус на таблицу, даже если форма
+  // уже автофокусила какой-то свой input. При обычном ре-рендере (isActive
+  // не менялся) — фокус НЕ перехватываем, чтобы не мешать пользователю.
+  const wasActiveRef = useRef(false);
+  useEffect(() => {
+    if (!isActive) {
+      wasActiveRef.current = false;
+      return;
+    }
+    const justActivated = !wasActiveRef.current;
+    wasActiveRef.current = true;
+    const root = paneRootRef.current;
+    if (!root) return;
+    // Если это просто ре-рендер активного пейна, и фокус уже внутри него
+    // (например, пользователь печатает в поле формы) — НЕ перехватываем.
+    if (!justActivated && root.contains(document.activeElement)) return;
+    // Двойной rAF: 1) React commit + ребёнок (форма/список) смонтирован,
+    // 2) браузер применил layout/CSS — теперь scroll-контейнер существует.
+    const raf1 = requestAnimationFrame(() => {
+      const raf2 = requestAnimationFrame(() => {
+        if (!paneRootRef.current) return;
+        // Ищем ПЕРВЫЙ ВИДИМЫЙ табличный scroll-контейнер. Внутри Pane может
+        // быть форма с Tabs (см. ModelForm) — неактивные вкладки скрыты через
+        // display:none (см. Tabs.module.scss .TabsBodyWrapper), их таблицы не
+        // фокусируемы. Фильтруем по offsetParent !== null (стандартный
+        // признак «не display:none и не вне layout-потока»).
+        const candidates = Array.from(
+          paneRootRef.current.querySelectorAll<HTMLElement>('[class*="TableScrollWrapper"][tabindex="0"]')
+        );
+        const visible = candidates.find(el => el.offsetParent !== null);
+        const target =
+          visible
+          ?? paneRootRef.current.querySelector<HTMLElement>('[tabindex="0"]');
+        // На активации перехватываем фокус принудительно (даже если форма
+        // успела автофокусить input — таблица приоритетнее для клавиатурной
+        // навигации). На последующих ре-рендерах сюда не попадаем (см. выше).
+        target?.focus({ preventScroll: true });
+      });
+      cleanup.raf2 = raf2;
+    });
+    const cleanup: { raf2: number | null } = { raf2: null };
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (cleanup.raf2 !== null) cancelAnimationFrame(cleanup.raf2);
+    };
+  }, [isActive, p.uniqId]);
+
+  // Кнопка Dirty: показывается ТОЛЬКО когда есть смысл — есть несохранённые
+  // изменения в текущей сессии (isDirty) или stash из прошлой сессии.
+  // В «чистом» состоянии кнопка не нужна: освежить данные с сервера можно
+  // через отдельную кнопку «Обновить», а тоггл подсветки расхождений
+  // подсвечивать тоже нечего.
+  // При наличии stash — пульсирует, по клику восстанавливает данные.
+  // При isDirty — работает как ТОГГЛ подсветки расхождений
+  // (аналогично кнопке «Редактирование в таблице»).
+  const showDirtyButton = hasToolbar && (isDirty || hasStash);
   const dirtyButtonClass = hasStash
     ? styles.PaneItemHeaderDirtyButtonStash
-    : isDirty
-      ? styles.PaneItemHeaderDirtyButton
-      : styles.PaneItemHeaderDirtyButtonClean;
+    : styles.PaneItemHeaderDirtyButton;
+
+  // Подсветка расхождений: реактивный флаг на панели. Управляется кликом
+  // по DirtyButton (тоггл). При наведении мышью на саму кнопку даём
+  // временный предпросмотр — но клик «защёлкивает» состояние.
+  const showDiff = usePaneShowDiff(p.uniqId);
   const handleDirtyClick = useCallback(() => {
-    if (hasStash) applyPaneStash(p.uniqId);
-  }, [hasStash, p.uniqId]);
+    if (hasStash) {
+      applyPaneStash(p.uniqId);
+      return;
+    }
+    setPaneShowDiff(p.uniqId, !showDiff);
+  }, [hasStash, p.uniqId, showDiff]);
+  // При размонтировании Pane сбрасываем флаг.
+  useEffect(() => () => setPaneShowDiff(p.uniqId, false), [p.uniqId]);
+  // Если форма стала чистой (после save / undo / ручного отката) — гасим
+  // подсветку: иначе на disabled-кнопке остаётся «active»-стиль, а на Pane
+  // — атрибут data-pane-show-diff="true", хотя подсвечивать уже нечего.
+  useEffect(() => {
+    if (!isDirty && !hasStash && showDiff) {
+      setPaneShowDiff(p.uniqId, false);
+    }
+  }, [isDirty, hasStash, showDiff, p.uniqId]);
+
+  // Детальный tooltip для кнопки Dirty: показывает список изменённых полей
+  // в формате "Поле: 'старое' → 'новое'". Для вложенных таблиц — количество правок.
+  // Нативный title поддерживает \n для переноса строк.
+  const dirtyButtonTitle = useMemo(() => {
+    if (hasStash) {
+      return "Есть несохранённые данные из прошлой сессии.\nНажмите, чтобы восстановить.";
+    }
+    if (!isDirty) {
+      return "Форма не содержит несохранённых изменений";
+    }
+    const lines: string[] = ["Несохранённые изменения:"];
+    // Склонение для «изменение / изменения / изменений»
+    const pluralChanges = (n: number): string => {
+      const abs = Math.abs(n) % 100;
+      const n1 = abs % 10;
+      if (abs > 10 && abs < 20) return "изменений";
+      if (n1 > 1 && n1 < 5) return "изменения";
+      if (n1 === 1) return "изменение";
+      return "изменений";
+    };
+    // Попытаться извлечь человеко-понятный ярлык для объекта-сущности
+    // (counterparty, organization, warehouse и т.п.), чтобы не вываливать JSON.
+    const ENTITY_LABEL_KEYS = [
+      "shortName",
+      "fullName",
+      "name",
+      "title",
+      "username",
+      "label",
+      "code",
+      "number",
+      "uuid",
+      "id",
+    ];
+    const entityLabel = (o: Record<string, unknown>): string | null => {
+      for (const k of ENTITY_LABEL_KEYS) {
+        const val = o[k];
+        if (val === null || val === undefined || val === "") continue;
+        if (typeof val === "string" || typeof val === "number") {
+          const s = String(val);
+          return s.length > 40 ? s.slice(0, 37) + "…" : s;
+        }
+      }
+      return null;
+    };
+    const fmt = (v: unknown): string => {
+      if (v === null || v === undefined || v === "") return "—";
+      if (typeof v === "boolean") return v ? "да" : "нет";
+      if (typeof v === "number" || typeof v === "string") {
+        const s = String(v);
+        return s.length > 60 ? s.slice(0, 57) + "…" : s;
+      }
+      if (Array.isArray(v)) return `[${v.length} эл.]`;
+      if (typeof v === "object") {
+        const label = entityLabel(v as Record<string, unknown>);
+        if (label !== null) return label;
+        try {
+          const s = JSON.stringify(v);
+          return s.length > 60 ? s.slice(0, 57) + "…" : s;
+        } catch {
+          return "{объект}";
+        }
+      }
+      return String(v);
+    };
+    // Переводит имя поля в человекочитаемый ярлык.
+    // 1) Пары "*Uuid" + "*Name" сворачиваются в одну запись с базовым именем
+    //    (counterpartyUuid + counterpartyName → counterparty).
+    // 2) Имя пропускается через getTranslation/translate (i18) — порядок попыток:
+    //    a) полный ключ как есть (shortName → "Наименование");
+    //    b) ключ с обрезанным суффиксом Uuid/Name/Id (counterpartyUuid → counterparty);
+    //    c) если перевода не нашли — возвращаем сырой ключ (англоязычный fallback
+    //       через camelCase запрещён: метки должны идти только из translations.json,
+    //       сырой ключ служит сигналом «добавьте перевод»).
+    const humanizeField = (key: string): string => {
+      const direct = translate(key);
+      if (direct && direct !== key) return direct;
+      let base = key;
+      if (key.endsWith("Uuid") || key.endsWith("Name")) {
+        base = key.slice(0, -4);
+      } else if (key.endsWith("Id")) {
+        base = key.slice(0, -2);
+      }
+      if (base !== key) {
+        const t = translate(base);
+        if (t && t !== base) return t;
+      }
+      // Перевода нет — возвращаем сырой ключ, чтобы было видно, что нужно
+      // добавить запись в translations.json. Раньше тут делался camelCase
+      // split с заглавной буквой ("Short"), но это противоречит требованию
+      // «имена значений только через перевод».
+      return key;
+    };
+    // Сворачиваем "*Uuid" → пропускаем, если в diff есть пара "*Name":
+    // показываем только Name-вариант (он несёт читаемое значение).
+    const fieldNames = new Set(dirtyDiff.fields.map((f) => f.field));
+    for (const f of dirtyDiff.fields) {
+      if (f.field.endsWith("Uuid")) {
+        const pair = f.field.slice(0, -4) + "Name";
+        if (fieldNames.has(pair)) continue; // покажем Name-вариант ниже
+      }
+      const before = fmt(f.savedValue);
+      const after = fmt(f.currentValue);
+      const label = humanizeField(f.field);
+      // Если визуально одинаковы (например, оба объекта свелись к одному uuid)
+      // — пометим, что изменилось внутреннее содержимое.
+      if (before === after) {
+        lines.push(`• ${label}: изменено внутреннее содержимое`);
+      } else {
+        lines.push(`• ${label}: '${before}' → '${after}'`);
+      }
+    }
+    for (const t of dirtyDiff.tables) {
+      const tLabel = translate(t.key) || t.key;
+      lines.push(`• таблица "${tLabel}": ${t.pendingCount} ${pluralChanges(t.pendingCount)}`);
+    }
+    if (lines.length === 1) {
+      // isDirty=true, но diff пуст (напр. снапшот ещё не готов)
+      lines.push("Форма содержит несохранённые изменения");
+    }
+    return lines.join("\n");
+  }, [hasStash, isDirty, dirtyDiff]);
 
   return (
-    <div className={[styles.PaneItem, isActive && styles.PaneItemActive].filter(Boolean).join(" ")}>
+    <div
+      ref={paneRootRef}
+      className={[styles.PaneItem, isActive && styles.PaneItemActive].filter(Boolean).join(" ")}
+      data-pane-show-diff={showDiff ? "true" : undefined}
+    >
       <div className={styles.PaneItemHeader}>
         <h2 className={styles.PaneItemHeaderLabel}>
           {p.label}
@@ -231,20 +435,18 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
           {showDirtyButton && (
             <DirtyButton
               onClick={handleDirtyClick}
-              disabled={!isDirty && !hasStash}
+              active={showDiff}
               className={dirtyButtonClass}
-              title={hasStash
-                ? "Есть несохранённые данные из прошлой сессии. Нажмите, чтобы восстановить."
-                : isDirty
-                  ? "Форма содержит несохранённые изменения"
-                  : "Форма не содержит несохранённых изменений"}
+              title={dirtyButtonTitle}
             />
           )}
           {hasToolbar && <ReloadButton onClick={onReload} />}
           <CloseButton onClick={onClose} />
         </div>
       </div>
-      <Component {...p} />
+      <PaneScopeProvider paneId={p.uniqId}>
+        <Component {...p} />
+      </PaneScopeProvider>
       {hasToolbar && <div className={styles.PaneItemBottomToolbar}>
         <ToolbarSlot ref={slot} />
       </div>}
@@ -413,7 +615,7 @@ const NavbarPaneBell: FC = () => {
 
   const openJournal = useCallback(() => {
     setShowNotes(false);
-    addPane({ component: NotificationsList, label: "Журнал уведомлений" });
+    addPane({ component: NotificationsList, label: "Центр уведомлений" });
   }, [addPane]);
 
   if (!activePane || !showBell) return null;
@@ -739,7 +941,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/UserPermissions"); addPane({ component: m.UserPermissionsModuleList, label: "Права пользователей" }); }}>Права пользователей</li>}
               {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/AccessRights"); addPane({ component: m.AccessRightsList, label: "Права доступа" }); }}>Права доступа</li>}
               {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>}
-              {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: "Журнал уведомлений" })}>Журнал уведомлений</li>}
+              {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: "Центр уведомлений" })}>Центр уведомлений</li>}
               <li onClick={() => addPane({ component: UnsavedFormsList })}>Несохранённые записи</li>
               <li onClick={() => addPane({ component: SyncDashboard, label: 'Синхронизация и оффлайн-данные' })}>Синхронизация и оффлайн-данные</li>
             </ul>

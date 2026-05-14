@@ -72,12 +72,24 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     return init;
   })();
 
-  const invalidateSubTables = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["saleitems"] });
+  const invalidateSubTables = useCallback(async () => {
+    // refetchType: "active" — invalidateQueries вернёт Promise, который
+    // резолвится только после того, как АКТИВНЫЕ (mounted) запросы
+    // саб-таблиц завершат refetch. Это критично для submit-flow:
+    // useFormStore очищает pending-строки SubTable ТОЛЬКО после того,
+    // как afterSave дождётся свежих данных с сервера.
+    await queryClient.invalidateQueries({
+      queryKey: ["saleitems"],
+      refetchType: "active",
+    });
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "sales-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
+    // Поля-итоги вычисляются автоматически из строк saleItems (handleTotalChange).
+    // Исключаем из dirty-tracking — иначе любая правка строки SubTable
+    // «протекает» в diff формы.
+    derivedFields: ["amount", "vatAmount", "amountWithoutVat", "discountAmount"],
     tables: {
       saleItems: {
         endpoint: "saleitems", parentField: "saleUuid",
@@ -137,7 +149,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     }),
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
     afterLoad: invalidateSubTables,
-    afterSave: () => { setTimeout(invalidateSubTables, 0); },
+    afterSave: invalidateSubTables,
   });
 
   const saleItems = form.useTable("saleItems");

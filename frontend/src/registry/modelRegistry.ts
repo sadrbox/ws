@@ -116,14 +116,6 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Задачи",
 	},
 	{
-		endpoint: "notifications",
-		module: () => import("src/models/Notifications"),
-		formName: "NotificationsForm",
-		listName: "NotificationsList",
-		storageKey: "notifications-form",
-		label: "Уведомления",
-	},
-	{
 		endpoint: "brands",
 		module: () => import("src/models/Brands"),
 		formName: "BrandsForm",

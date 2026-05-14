@@ -1,5 +1,6 @@
 import styles from './Table.module.scss';
 import { GLOBAL_ADAPTIVE_LIMIT_REF } from 'src/hooks/useInfiniteModelList';
+import { formatDiffValue as formatDirtyValue, CellDirtyScope, type DirtyDomProps } from 'src/hooks/useDirtyHighlight';
 
 import {
   TColumn,
@@ -131,6 +132,16 @@ export interface TableContextProps {
   // ── Refs для inline-editing (не триггерят ререндер contextValue) ───────
   renderCellRef?: React.RefObject<((row: TDataItem, col: TColumn) => React.ReactNode | undefined) | undefined>;
   inlineEditingRef?: React.RefObject<boolean | undefined>;
+  /** Метаданные ячейки (error/required-обёртка) — переносятся на TableBodyCell. */
+  getCellMetaRef?: React.RefObject<
+    | ((row: TDataItem, col: TColumn) => { className?: string; title?: string; errorTooltip?: React.ReactNode } | null)
+    | undefined
+  >;
+  /** Per-cell diff vs saved snapshot — ref-вариант, не пересоздаёт contextValue. */
+  getCellDirtyRef?: React.RefObject<
+    | ((row: TDataItem, col: TColumn) => { isDirty: boolean; savedValue: unknown; currentValue: unknown } | null)
+    | undefined
+  >;
 
   // ── Expandable rows ────────────────────────────────────────────────────
   /** UUID строк, которые сейчас раскрыты */
@@ -198,6 +209,17 @@ export interface TableProps {
   inlineEditing?: boolean;
   renderCell?: (row: TDataItem, col: TColumn) => React.ReactNode | undefined;
   onInlineAdd?: () => void;
+  /** Per-cell diff vs saved snapshot для подсветки (см. SubTable). */
+  getCellDirty?: (row: TDataItem, col: TColumn) => { isDirty: boolean; savedValue: unknown; currentValue: unknown } | null;
+  /**
+   * Метаданные ячейки (ошибка / обязательное пустое) — применяются
+   * прямо на `.TableBodyCell` без промежуточного `CellWrap`-обёртки.
+   * Возвращает дополнительный className (хешированный CellWrap_error /
+   * CellWrap_required из стилей вызывающего компонента), tooltip (errorMsg)
+   * и опциональный визуальный errorTooltip-узел, рендерящийся рядом
+   * с контентом ячейки.
+   */
+  getCellMeta?: (row: TDataItem, col: TColumn) => { className?: string; title?: string; errorTooltip?: React.ReactNode } | null;
   /** Если true — скрыть кнопки «Добавить»/«Удалить» (режим только чтение по правам доступа) */
   readonly?: boolean;
   /** Раскрытые строки (expand) */
@@ -324,6 +346,8 @@ const Table: FC<TableProps> = memo((props) => {
     inlineEditing,
     renderCell,
     onInlineAdd,
+    getCellDirty,
+    getCellMeta,
     readonly: isReadonly = false,
     expandedRowIds,
     renderExpandedRow,
@@ -339,6 +363,10 @@ const Table: FC<TableProps> = memo((props) => {
   renderCellRef.current = renderCell;
   const inlineEditingRef = useRef(inlineEditing);
   inlineEditingRef.current = inlineEditing;
+  const getCellDirtyRef = useRef(getCellDirty);
+  getCellDirtyRef.current = getCellDirty;
+  const getCellMetaRef = useRef(getCellMeta);
+  getCellMetaRef.current = getCellMeta;
 
   const [activeRow, setActiveRow] = useState<number | null>(null);
   const [activeCell, setActiveCell] = useState<string | null>(null);
@@ -454,7 +482,7 @@ const Table: FC<TableProps> = memo((props) => {
       actions: extendedActions,
       hasNextPage, isFetchingNextPage,
       inlineEditing, renderCell, onInlineAdd,
-      renderCellRef, inlineEditingRef,
+      renderCellRef, inlineEditingRef, getCellDirtyRef, getCellMetaRef,
       scrollRef,
       expandedRowIds,
       renderExpandedRow,
@@ -509,13 +537,34 @@ const Table: FC<TableProps> = memo((props) => {
 
     if (effectiveIds.size === 0) return;
 
+    // ── Вычисляем следующий activeRow ДО удаления ─────────────────────
+    // Поведение: если активная строка удаляется — переносим фокус
+    // на ближайшую строку НИЖЕ удаляемого блока (которая сама не удаляется);
+    // если её нет — на ближайшую строку ВЫШЕ. Если все строки удалены —
+    // сбрасываем activeRow в null.
+    let nextActiveRow: number | null = activeRow;
+    if (activeRow !== null && effectiveIds.has(activeRow)) {
+      nextActiveRow = null;
+      const idx = rows.findIndex(r => r.id === activeRow);
+      if (idx !== -1) {
+        for (let i = idx + 1; i < rows.length; i++) {
+          if (!effectiveIds.has(rows[i].id)) { nextActiveRow = rows[i].id; break; }
+        }
+        if (nextActiveRow === null) {
+          for (let i = idx - 1; i >= 0; i--) {
+            if (!effectiveIds.has(rows[i].id)) { nextActiveRow = rows[i].id; break; }
+          }
+        }
+      }
+    }
+
     if (onDelete) {
       onDelete(effectiveIds, rows);
       // Сбрасываем выделение после удаления
       setSelectedRows(new Set());
       setIsAllSelectedMode(false);
       setExcludedRows(new Set());
-      setActiveRow(null);
+      setActiveRow(nextActiveRow);
     } else {
       alert('Удалить выбранные');
     }
@@ -1238,6 +1287,8 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     rows,
     renderCellRef,
     inlineEditingRef,
+    getCellDirtyRef,
+    getCellMetaRef,
     expandedRowIds,
     renderExpandedRow,
     states: {
@@ -1440,29 +1491,72 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         {columns.map(col => {
           // Кастомный рендер ячейки (переводы, спецзначения) — работает в любом режиме
           const currentRenderCell = renderCellRef?.current;
-          const cellClass = `${styles.TableBodyCell} ${cellAlignClass(col)}`;
           // Активная ячейка подсвечивается только в активной строке.
           // Механика activeCell используется только во встроенных таблицах
           // (SubTable); в *List (variant !== 'embedded') ячеечного выделения нет.
           const isCellActive = variant === 'embedded' && isActive && activeCell === col.identifier;
+
+          // ── Per-cell diff vs saved snapshot (см. SubTable.getCellDirty) ──
+          // ── Per-cell meta (error / required) — от вызывающего ────────
+          // Все атрибуты подсветки (data-pane-dirty, data-active-cell)
+          // и классы-обёртки (CellWrap_required / CellWrap_error, activeCell)
+          // унифицированы НА ОДНОМ узле — `.TableBodyCell` (div ниже).
+          // Это устраняет промежуточный `<div .CellWrap>` из разметки и
+          // гарантирует, что соседние механики (focus-within, activeRow,
+          // dirty-highlight) не конфликтуют между разными уровнями DOM.
+          const cellDirty = getCellDirtyRef?.current?.(row, col) ?? null;
+          const cellDirtyProps: DirtyDomProps | null = cellDirty?.isDirty
+            ? {
+              "data-pane-dirty": "true",
+              title: `Было: ${formatDirtyValue(cellDirty.savedValue)}\nСтало: ${formatDirtyValue(cellDirty.currentValue)}`,
+            }
+            : null;
+          const cellMeta = getCellMetaRef?.current?.(row, col) ?? null;
+
+          // Композиция className для TableBodyCell. Хешированные имена
+          // CellWrap_required / CellWrap_error приходят через cellMeta.className
+          // (из SubTable.module.scss) — это позволяет применять стили из
+          // другого модуля, не импортируя его сюда.
+          const cellClassName = [
+            styles.TableBodyCell,
+            cellAlignClass(col),
+            cellMeta?.className,
+            isCellActive ? styles.activeCell : null,
+          ].filter(Boolean).join(' ');
+
+          // title: ошибка валидации важнее dirty-tooltip-а; если ничего — undefined.
+          const cellTitle = cellMeta?.title ?? cellDirtyProps?.title;
+
+          // <td> сохраняет за собой только то, что нужно ВНЕ DOM-зоны
+          // содержимого: data-col-id для клавиатурной навигации (SubTable
+          // ищет td по этому атрибуту), tabIndex для программного фокуса.
+          // Визуальная подсветка и data-* семантика перенесены на .TableBodyCell.
           const tdProps = {
             'data-col-id': col.identifier,
-            'data-active-cell': isCellActive || undefined,
-            className: isCellActive ? styles.activeCell : undefined,
-            // tabIndex обязателен для активной ячейки — благодаря этому td может
-            // получать фокус. Используется механикой клавиатуры (Enter → фокус
-            // на input «в/под activeCell»): SubTable.handleContainerKeyDown
-            // ловит Enter в capture-фазе и переводит фокус на input этой td.
-            // Без tabIndex td не является focusable-элементом, поэтому ставим
-            // -1 (программный фокус допустим, в Tab-порядок не попадает).
             tabIndex: isCellActive ? -1 : undefined,
           } as const;
+
+          // Атрибуты, переезжающие на TableBodyCell (вместо <td>).
+          const cellWrapperProps = {
+            className: cellClassName,
+            ...(cellTitle ? { title: cellTitle } : {}),
+            ...(cellDirtyProps ? { "data-pane-dirty": cellDirtyProps["data-pane-dirty"] } : {}),
+            ...(isCellActive ? { "data-active-cell": "true" as const } : {}),
+          };
+
           if (currentRenderCell) {
             const customCell = currentRenderCell(row, col);
             if (customCell !== undefined) {
               return (
                 <td key={col.identifier} {...tdProps}>
-                  <div className={cellClass}>{customCell}</div>
+                  <div {...cellWrapperProps}>
+                    {/* Внутри ячейки таблицы Field-компонент НЕ должен
+                        сам выставлять data-pane-dirty (он теперь на
+                        TableBodyCell). value={null} → useFieldDirty
+                        возвращает EMPTY_PROPS. */}
+                    <CellDirtyScope value={null}>{customCell}</CellDirtyScope>
+                    {cellMeta?.errorTooltip}
+                  </div>
                 </td>
               );
             }
@@ -1470,8 +1564,9 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           const value = getFormatColumnValue(row, col);
           return (
             <td key={col.identifier} {...tdProps}>
-              <div className={cellClass}>
+              <div {...cellWrapperProps}>
                 <span>{value}</span>
+                {cellMeta?.errorTooltip}
               </div>
             </td>
           );

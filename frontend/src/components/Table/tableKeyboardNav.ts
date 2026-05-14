@@ -71,7 +71,25 @@ export function computeNextActiveRowId<R extends TNavRow>(
 	if (rows.length === 0) return null;
 	const idx =
 		activeRowId !== null ? rows.findIndex((r) => r.id === activeRowId) : -1;
-	const safeIdx = idx < 0 ? 0 : idx;
+	// Если активной строки нет (idx < 0) — первое нажатие ЛЮБОЙ клавиши
+	// навигации должно установить активной первую строку, а не «вторую»
+	// (как было раньше: при idx = -1, safeIdx = 0, ArrowDown / PageDown
+	// возвращали rows[1], пропуская rows[0]). Это унифицирует поведение
+	// между *List и SubTable при открытии форм.
+	if (idx < 0) {
+		switch (direction) {
+			case "last":
+			case "up":
+			case "pageUp":
+				return rows[rows.length - 1].id;
+			case "first":
+			case "down":
+			case "pageDown":
+			default:
+				return rows[0].id;
+		}
+	}
+	const safeIdx = idx;
 	switch (direction) {
 		case "first":
 			return rows[0].id;

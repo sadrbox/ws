@@ -167,14 +167,14 @@ export const ListIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
-/** Открыть элемент в новом окне/панели (rect + arrow «open in new»). */
+/** Открыть элемент — лаконичная «external link»:
+ *  миниатюрный прямоугольник в левом-нижнем углу + диагональная стрелка
+ *  наружу в правый-верхний. Минимум линий, максимум смысла. */
 export const OpenIcon: FC<SvgProps> = (props) => (
   <svg {...baseProps} {...props}>
-    {/* Прямоугольник с отсутствующим правым-верхним углом */}
-    <path d="M8 2.5H3.5a1 1 0 0 0-1 1V12.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V8" />
-    {/* Стрелка наружу */}
-    <path d="M9.5 2.5h4v4" strokeWidth={1.6} />
-    <path d="M13.5 2.5l-6 6" strokeWidth={1.6} />
+    <rect x="2.5" y="6.5" width="7" height="7" rx="1" />
+    <path d="M9 3h4v4" />
+    <path d="M13 3l-5 5" />
   </svg>
 );
 

@@ -2,6 +2,7 @@
 import express from "express";
 // import { querySchema } from "../utils/module.js";
 import { prisma } from "../../prisma/prisma-client.js";
+import { handleDelete } from "../../utils/checkReferences.js";
 import { tenantFilter } from "../../utils/auth.js";
 const router = express.Router();
 
@@ -512,41 +513,19 @@ router.delete("/counterparties/:uuid", async (req, res) => {
 			});
 		}
 
-		if (isNaN(uuid)) {
-			return res.status(400).json({
-				message: "Некорректный ID контрагента",
-			});
-		}
-
-		// Проверка существования и связанных данных
-		const existingCounterparty = await prisma.counterparty.findUnique({
-			where: { uuid },
-		});
-
-		if (!existingCounterparty) {
-			return res.status(404).json({
-				message: "Контрагент не найден",
-			});
-		}
-
-		// Удаление контрагента
-		await prisma.counterparty.delete({
-			where: { uuid },
-		});
-
-		res.status(200).json({
-			message: "Контрагент успешно удален",
-			uuid: uuid,
+		// Перенаправляем в общий обработчик: он сам сделает findUnique →
+		// guardReferences → delete и вернёт корректные коды (404/409/200).
+		// Подменяем req.params.id для совместимости с handleDelete.
+		req.params.id = uuid;
+		return handleDelete({
+			req,
+			res,
+			prisma,
+			modelName: "counterparty",
+			notFoundMessage: "Контрагент не найден",
 		});
 	} catch (error) {
 		console.error("Error deleting counterparty:", error);
-
-		if (error.code === "P2003") {
-			return res.status(409).json({
-				message: "Невозможно удалить контрагента из-за связанных записей",
-			});
-		}
-
 		res.status(500).json({
 			message: "Не удалось удалить контрагента",
 			error: error.message,

@@ -30,10 +30,17 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canRead: canReadContacts } = useAccessRight("Contact");
   const queryClient = useQueryClient();
 
-  const invalidateSubTables = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["contacts"] });
-    void queryClient.invalidateQueries({ queryKey: ["bankaccounts"] });
-    void queryClient.invalidateQueries({ queryKey: ["contracts"] });
+  // refetchType: "active" — invalidateQueries вернёт Promise, который
+  // резолвится только после refetch всех АКТИВНЫХ запросов SubTable.
+  // Критично для submit-flow useFormStore: он очищает pending-строки
+  // ТОЛЬКО после завершения afterSave (иначе SubTable покажет
+  // устаревшие серверные строки из локального кэша react-query).
+  const invalidateSubTables = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["contacts"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["bankaccounts"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["contracts"], refetchType: "active" }),
+    ]);
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
@@ -51,7 +58,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Контрагенты", saved, saved.shortName || saved.bin),
     afterLoad: invalidateSubTables,
-    afterSave: () => { setTimeout(invalidateSubTables, 0); },
+    afterSave: invalidateSubTables,
   });
 
   const contacts = form.useTable("contacts");

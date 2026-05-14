@@ -1,6 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
+import { handleDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
 
@@ -89,7 +90,11 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 
-		const baseWhere = { ...searchWhereClause, ...filterWhereClause, ...tenantFilter(req) };
+		const baseWhere = {
+			...searchWhereClause,
+			...filterWhereClause,
+			...tenantFilter(req),
+		};
 		const queryOptions = {
 			take: limitNumber,
 			where: baseWhere,
@@ -205,20 +210,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 // ============================================
 // DELETE /:id
 // ============================================
-router.delete(`/${ROUTE}/:id`, async (req, res) => {
-	try {
-		const param = req.params.id;
-		const numId = Number(param);
-		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
-		const where = isNumeric ? { id: numId } : { uuid: param };
-		await prisma[MODEL].delete({ where });
-		return res.status(200).json({ success: true, message: "Удалено" });
-	} catch (error) {
-		if (error.code === "P2025")
-			return res.status(404).json({ success: false, message: "Не найдено" });
-		console.error(`DELETE /${ROUTE}/:id error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
-	}
-});
+router.delete(`/${ROUTE}/:id`, (req, res) =>
+	handleDelete({ req, res, prisma, modelName: MODEL }),
+);
 
 export default router;

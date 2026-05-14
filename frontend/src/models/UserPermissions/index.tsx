@@ -61,6 +61,16 @@ const DEFAULT_FORM_FIELDS: TFormFields = {
 
 const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("AccessRight");
+  const queryClient = useQueryClient();
+
+  // refetchType: "active" — ждём refetch SubTable, чтобы useFormStore.submit()
+  // очистил pending-строки только после прихода свежих серверных данных.
+  const invalidateSubTables = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ["access-rights"],
+      refetchType: "active",
+    });
+  }, [queryClient]);
 
   const initialFields: TFormFields | undefined = (() => {
     const d = paneProps.data;
@@ -116,6 +126,8 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
     },
     buildPaneLabel: (saved) =>
       makePaneLabel("UserPermissionsList", translate("userPermission"), saved),
+    afterLoad: invalidateSubTables,
+    afterSave: invalidateSubTables,
   });
 
   const accessRights = form.useTable("accessRights");

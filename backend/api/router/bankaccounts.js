@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { handleDelete } from "../../utils/checkReferences.js";
 import { enrichWithOwnerName } from "../../utils/resolveOwnerName.js";
 import { tenantFilter } from "../../utils/auth.js";
 
@@ -376,25 +377,14 @@ router.put("/bankaccounts/:id", async (req, res) => {
 // ============================================
 // DELETE /bankaccounts/:id
 // ============================================
-router.delete("/bankaccounts/:id", async (req, res) => {
-	try {
-		const param = req.params.id;
-		const numId = Number(param);
-		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
-		const whereClause = isNumeric ? { id: numId } : { uuid: param };
-
-		await prisma.bankAccount.delete({ where: whereClause });
-
-		return res.status(200).json({ success: true, message: "Удалено" });
-	} catch (error) {
-		if (error.code === "P2025") {
-			return res
-				.status(404)
-				.json({ success: false, message: "Банковский счёт не найден" });
-		}
-		console.error("DELETE /bankaccounts/:id error:", error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
-	}
-});
+router.delete("/bankaccounts/:id", (req, res) =>
+	handleDelete({
+		req,
+		res,
+		prisma,
+		modelName: "bankAccount",
+		notFoundMessage: "Банковский счёт не найден",
+	}),
+);
 
 export default router;

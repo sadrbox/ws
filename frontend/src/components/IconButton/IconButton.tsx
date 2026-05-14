@@ -9,6 +9,7 @@
  */
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import type React from "react";
 import { Icon, type IconName } from "./icons";
 import styles from "./IconButton.module.scss";
 
@@ -27,7 +28,7 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
 
 const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   (
-    { icon, active, size = "md", loading, className, children, type, ...rest },
+    { icon, active, size = "md", loading, className, children, type, onMouseDown, ...rest },
     ref,
   ) => {
     const cls = [
@@ -39,8 +40,21 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
     ]
       .filter(Boolean)
       .join(" ");
+    // Не перехватываем фокус с предыдущего элемента (например, со скролл-контейнера
+    // таблицы) при клике мышью. Благодаря этому, после нажатия кнопки в Toolbar
+    // (Обновить / Настройки / Период / Inline-редактирование и т.п.) фокус
+    // остаётся на TableScrollWrapper, и клавиатурная навигация
+    // (Up/Down/Left/Right/Insert/Delete/Home/End/PgUp/PgDn) продолжает работать.
+    //
+    // Это стандартный приём для toolbar-кнопок: preventDefault на mousedown
+    // отменяет ТОЛЬКО перенос фокуса, сам click при этом срабатывает. Клавиатурная
+    // активация (Tab → Enter/Space) не затрагивается, т. к. она не проходит через mousedown.
+    const handleMouseDown: React.MouseEventHandler<HTMLButtonElement> = (e) => {
+      onMouseDown?.(e);
+      if (!e.defaultPrevented) e.preventDefault();
+    };
     return (
-      <button ref={ref} type={type ?? "button"} className={cls} {...rest}>
+      <button ref={ref} type={type ?? "button"} className={cls} onMouseDown={handleMouseDown} {...rest}>
         {icon ? <Icon name={icon} /> : children}
       </button>
     );

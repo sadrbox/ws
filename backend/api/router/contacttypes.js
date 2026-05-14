@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { handleDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
 
@@ -238,26 +239,15 @@ router.put("/contacttypes/:id", async (req, res) => {
 // ============================================
 // DELETE /contacttypes/:id
 // ============================================
-router.delete("/contacttypes/:id", async (req, res) => {
-	try {
-		const param = req.params.id;
-		const numId = Number(param);
-		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
-
-		await prisma.contactType.delete({
-			where: isNumeric ? { id: numId } : { uuid: param },
-		});
-
-		return res.status(200).json({ success: true, message: "Удалено" });
-	} catch (error) {
-		if (error.code === "P2025") {
-			return res
-				.status(404)
-				.json({ success: false, message: "Тип контакта не найден" });
-		}
-		console.error("DELETE /contacttypes/:id error:", error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
-	}
-});
+router.delete("/contacttypes/:id", (req, res) =>
+	handleDelete({
+		req,
+		res,
+		prisma,
+		modelName: "contactType",
+		notFoundMessage: "Тип контакта не найден",
+		softDelete: true,
+	}),
+);
 
 export default router;

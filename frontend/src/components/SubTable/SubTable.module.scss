@@ -8,33 +8,11 @@
   height: 100%;
 }
 
-/* Flash-анимация: при клике по read-only ячейке в режиме inline-editing
-   мигаем красным, сигнализируя, что поле не редактируется. */
-@keyframes flashReadOnly {
-  0% {
-    background-color: transparent;
-    outline-color: transparent;
-  }
-
-  20% {
-    background-color: rgba(255, 60, 60, 0.18);
-    outline-color: rgba(220, 50, 50, 0.6);
-  }
-
-  60% {
-    background-color: rgba(255, 60, 60, 0.18);
-    outline-color: rgba(220, 50, 50, 0.6);
-  }
-
-  100% {
-    background-color: transparent;
-    outline-color: transparent;
-  }
-}
-
-.flashReadOnly {
-  animation: flashReadOnly 0.55s ease-in-out;
-}
+/* Индикация «нельзя редактировать» унифицирована: и клик по read-only
+   ячейке (ReadOnlyCell.onClick), и нажатие Enter на нередактируемую
+   колонку (SubTable.handleContainerKeyDown) выставляют data-pulse="true"
+   на ближайший <td>. CSS-правило и @keyframes — в Table.module.scss
+   (`td[data-pulse="true"]`). Локального .flashReadOnly больше нет. */
 
 /* Контейнер-обёртка над <Table>: используется как display:contents,
    но имеет ref для фокуса первого/последнего input после добавления строки. */
@@ -67,16 +45,20 @@
 
 }
 
-/* Ошибка валидации: красная inset-рамка */
+/* Ошибка валидации: визуал (red inset + bg) задаётся в main.module.scss
+   через @layer table-cell-error — высший приоритет в каскаде состояний
+   ячейки. Здесь класс остаётся как маркер для селектора, CSS-переменная —
+   no-op, чтобы линтер не ругался на «пустой ruleset» (класс остаётся
+   экспортированным в CSS-modules-карте). */
 .CellWrap_error {
-  box-shadow: inset 0 0 0 1.5px #e53935;
-  background: rgba(229, 57, 53, 0.04);
+  --cell-state: error;
 }
 
-/* Обязательное пустое поле: оранжевая inset-рамка */
+/* Обязательное пустое поле: визуал (amber inset + bg) задаётся в
+   main.module.scss через @layer table-cell-required — приоритет ниже
+   error, выше dirty/activeCell/activeRow. */
 .CellWrap_required {
-  box-shadow: inset 0 0 0 1px #ff9800;
-  background: rgba(255, 152, 0, 0.1);
+  --cell-state: required;
 }
 
 /* Тултип ошибки над ячейкой */

@@ -25,6 +25,7 @@ import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useIn
 import { useModelDelete } from "src/hooks/useModelDelete";
 import { useAppContext } from "src/app";
 import Toolbar from "src/components/Toolbar";
+import { isEquivalent, normalizeValue } from "src/utils/normalize";
 import { useQueryClient } from "@tanstack/react-query";
 import styles from "./SubTable.module.scss";
 
@@ -300,22 +301,27 @@ export const ReadOnlyCell: FC<ReadOnlyCellProps> = ({
   value,
   inlineEditing = false,
 }) => {
-  const [flashing, setFlashing] = useState(false);
   const display = formatReadOnlyValue(value, row, column);
 
-  const handleClick = useCallback(() => {
+  // Единый механизм индикации «нельзя редактировать»:
+  // выставляем data-pulse="true" на ближайший <td> — то же самое делает
+  // SubTable.handleContainerKeyDown при Enter на нередактируемой ячейке.
+  // CSS-правило (td[data-pulse="true"] → animation activeCellPulse) живёт
+  // в Table.module.scss и работает на любой строке таблицы.
+  const handleClick = useCallback((e: React.MouseEvent<HTMLSpanElement>) => {
     if (!inlineEditing) return;
-    setFlashing(false);
-    requestAnimationFrame(() => setFlashing(true));
-    setTimeout(() => setFlashing(false), 600);
+    const td = (e.currentTarget as HTMLElement).closest("td");
+    if (!td) return;
+    // Снимаем атрибут перед установкой, чтобы повторный клик заново
+    // запускал CSS-анимацию (иначе браузер не перезапускает её).
+    td.removeAttribute("data-pulse");
+    // void reflow → форсируем рестарт анимации.
+    void (td as HTMLElement).offsetWidth;
+    td.setAttribute("data-pulse", "true");
+    window.setTimeout(() => td.removeAttribute("data-pulse"), 300);
   }, [inlineEditing]);
 
-  const cls = [
-    styles.ReadOnlyCell,
-    flashing && styles.flashReadOnly,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const cls = styles.ReadOnlyCell;
 
   // Горизонтальное выравнивание: number/position → справа,
   // boolean → по центру, остальные → слева. Реализуется через
@@ -962,6 +968,11 @@ const SubTable: FC<SubTableProps> = ({
   }, [openFormFor, ctx]);
 
   // ── renderCell wrapper ─────────────────────────────────────────────────
+  // Возвращает ТОЛЬКО внутренний контент ячейки. Обёртку с CellWrap_error /
+  // CellWrap_required и сам error-tooltip собирает Table на уровне
+  // `.TableBodyCell` (см. getCellMeta ниже) — это убирает промежуточный
+  // `<div>` из разметки и приводит все механики (activeCell, dirty,
+  // required/error) к одному уровню DOM.
   const renderCell = useCallback((row: TDataItem, col: TColumn): ReactNode | undefined => {
     // Для несохранённых (temp) строк скрываем служебные поля id / uuid
     if (deferRemoteChanges && typeof row.id === "number" && row.id < 0) {
@@ -969,17 +980,18 @@ const SubTable: FC<SubTableProps> = ({
       if (col.identifier === "uuid") return <span className={styles.TempIdBadge}>—</span>;
     }
 
-    // Получаем контент ячейки от кастомного renderCell или возвращаем undefined (дефолтный рендер)
     const content = renderCellProp ? renderCellProp(row, col, ctx) : undefined;
+    if (content !== undefined) return content;
 
-    // Проверяем наличие ошибки для этой ячейки
+    // Кастомного контента нет. Если у ячейки есть ошибка или требование
+    // заполнения — нужно явно показать значение (ReadOnlyCell), чтобы
+    // визуально различать «строка отображения сформирована» и
+    // «пустая ячейка с подсветкой required». Иначе — отдаём дефолтный
+    // рендер Table (getFormatColumnValue) через возврат undefined.
     const rowId = getRowId(row);
-    const errorMsg = cellErrors[rowId]?.[col.identifier];
-
-    // Проверяем обязательность поля (только в режиме редактирования)
+    const hasError = !!cellErrors[rowId]?.[col.identifier];
     const isRequired = requiredFields?.includes(col.identifier) ?? false;
     const isCellEmpty = isRequired && (() => {
-      // Для вложенных идентификаторов ("product.shortName") смотрим по точке
       const parts = col.identifier.split(".");
       let val: unknown = row;
       for (const p of parts) {
@@ -988,30 +1000,38 @@ const SubTable: FC<SubTableProps> = ({
       }
       return val === null || val === undefined || val === "" || val === 0;
     })();
+    if (!hasError && !isCellEmpty) return undefined;
+    return <ReadOnlyCell row={row} column={col} inlineEditing={inlineEditing} />;
+  }, [renderCellProp, ctx, deferRemoteChanges, cellErrors, requiredFields, inlineEditing]);
 
-    // Нет кастомного контента и нет ошибки и не обязательное пустое → используем дефолтный рендер Table
-    if (content === undefined && !errorMsg && !isCellEmpty) return undefined;
-
-    // Если кастомного контента нет, но есть ошибка — показываем отформатированное значение
-    const displayContent = content !== undefined
-      ? content
-      : <ReadOnlyCell row={row} column={col} inlineEditing={inlineEditing} />;
-
-    // ВСЕГДА оборачиваем в div когда есть кастомный контент или ошибка.
-    // Постоянная структура DOM предотвращает ремонт input-ов при изменении состояния ошибки:
-    // React видит одинаковый тип элемента (div) и только обновляет стили.
-    const wrapClass = errorMsg
-      ? `${styles.CellWrap} ${styles.CellWrap_error}`
-      : isCellEmpty
-        ? `${styles.CellWrap} ${styles.CellWrap_required}`
-        : styles.CellWrap;
-    return (
-      <div className={wrapClass} title={errorMsg || undefined}>
-        {displayContent}
-        {errorMsg && <div className={styles.CellErrorTooltip}>{errorMsg}</div>}
-      </div>
-    );
-  }, [renderCellProp, ctx, deferRemoteChanges, cellErrors, requiredFields]);
+  // ── getCellMeta ────────────────────────────────────────────────────────
+  // Возвращает классы-варианты (CellWrap_required / CellWrap_error),
+  // title (errorMsg) и визуальный errorTooltip, которые Table накладывает
+  // ПРЯМО на `.TableBodyCell`. Без этого Table вынужден был бы оборачивать
+  // содержимое ячейки в дополнительный div — а это создавало лишний слой
+  // DOM и осложняло координацию с focus-within / activeCell / dirty.
+  const getCellMeta = useCallback((row: TDataItem, col: TColumn) => {
+    const rowId = getRowId(row);
+    const errorMsg = cellErrors[rowId]?.[col.identifier];
+    const isRequired = requiredFields?.includes(col.identifier) ?? false;
+    const isCellEmpty = isRequired && (() => {
+      const parts = col.identifier.split(".");
+      let val: unknown = row;
+      for (const p of parts) {
+        if (val == null || typeof val !== "object") return true;
+        val = (val as Record<string, unknown>)[p];
+      }
+      return val === null || val === undefined || val === "" || val === 0;
+    })();
+    if (!errorMsg && !isCellEmpty) return null;
+    return {
+      className: errorMsg ? styles.CellWrap_error : styles.CellWrap_required,
+      title: errorMsg || undefined,
+      errorTooltip: errorMsg
+        ? <div className={styles.CellErrorTooltip}>{errorMsg}</div>
+        : null,
+    };
+  }, [cellErrors, requiredFields]);
 
   // ── handleInlineAdd wrapper ────────────────────────────────────────────
   const handleInlineAdd = useCallback(async () => {
@@ -1106,6 +1126,25 @@ const SubTable: FC<SubTableProps> = ({
     const tableApi = tableApiRef.current;
     if (!container) return;
 
+    // ── Escape: выйти из редактирования input/textarea и вернуть фокус
+    // на контейнер таблицы, чтобы клавиатурная навигация (Up/Down/Left/Right
+    // /Insert/Delete/Home/End/PgUp/PgDn) продолжала работать. Без этого
+    // фокус остаётся «нигде», и события клавиатуры не достигают onKeyDown.
+    if (e.key === "Escape" && (isInputTarget || isTextAreaTarget)) {
+      e.preventDefault();
+      e.stopPropagation();
+      (target as HTMLElement).blur();
+      // Синхронизируем activeRow с строкой текущего input (если был).
+      const tr = (target as HTMLElement).closest("tr[data-row-id]") as HTMLTableRowElement | null;
+      const td = (target as HTMLElement).closest("td[data-col-id]") as HTMLTableCellElement | null;
+      const rid = tr ? Number(tr.getAttribute("data-row-id")) : NaN;
+      if (Number.isFinite(rid)) tableApi?.setActiveRow(rid);
+      const cid = td?.getAttribute("data-col-id");
+      if (cid) tableApi?.setActiveCell(cid);
+      tableApi?.focusContainer();
+      return;
+    }
+
     // ── Режим «Редактирование через форму» (inlineEditing === false) ────
     // В этом режиме SubTable работает как обычный список: клавиатурное
     // редактирование ячеек отключено, но Enter на активной строке должен
@@ -1126,22 +1165,13 @@ const SubTable: FC<SubTableProps> = ({
     }
 
     // ── Insert: добавить строку ────────────────────────────────────────
-    // После добавления — гарантированно переводим фокус на первое
-    // редактируемое поле новой (последней) строки. Это работает в обоих
-    // режимах: deferRemoteChanges (синхронно — строка появляется в кэше
-    // на следующий рендер) и немедленном (await POST + refetch).
-    // Дублирует логику newRowFocusRef.useEffect (на случай, если по какой-то
-    // причине useEffect не отработает — напр. на не-defer пути из-за гонки
-    // с refetch). Делаем focus после rAF, чтобы DOM успел отрендерить tr.
-    if (e.key === "Insert") {
+    // Если фокус в input/textarea — НЕ перехватываем (поле в фокусе должно
+    // работать штатно, управление таблицей отключено). Insert работает
+    // только когда фокус на контейнере таблицы.
+    if (e.key === "Insert" && !isInputTarget && !isTextAreaTarget) {
       if (!onInlineAddProp && !defaultNewRow) return;
       e.preventDefault();
       e.stopPropagation();
-      // Снимаем фокус с текущего input, чтобы клавиши, нажатые сразу после
-      // Insert (до появления новой строки), не попали в старое поле.
-      if (isInputTarget || isTextAreaTarget) {
-        (target as HTMLElement).blur();
-      }
       void (async () => {
         await handleInlineAdd();
         // Двойной rAF — чтобы дождаться React commit + браузерного layout.
@@ -1200,10 +1230,13 @@ const SubTable: FC<SubTableProps> = ({
     // ── Навигация по строкам/ячейкам (activeRow + activeCell) ──────────
     // Up/Down/PgUp/PgDn — перемещение activeRow (та же колонка).
     // Left/Right/Home/End — перемещение activeCell внутри текущей строки.
-    // Если фокус был в input — input блюрится, а стартовые координаты
-    // берутся из строки/колонки этого input'а (важно для случая, когда
-    // пользователь редактирует не ту строку, что activeRow).
-    if (!isLookupOpen) {
+    //
+    // ВАЖНО: если фокус в input/textarea — навигационные клавиши НЕ
+    // перехватываются. Поле в фокусе должно использовать клавиши штатно
+    // (каретка влево/вправо, выделение Home/End внутри текста, ввод символов).
+    // Управление таблицей работает ТОЛЬКО когда фокус на контейнере таблицы
+    // (после Escape или клика по строке). Это унифицирует поведение с Table.
+    if (!isLookupOpen && !isInputTarget && !isTextAreaTarget) {
       const rowDir = getTableNavDirection(e.key);
       const cellDir = getCellNavDirection(e.key);
       if (rowDir || cellDir) {
@@ -1211,19 +1244,8 @@ const SubTable: FC<SubTableProps> = ({
         e.preventDefault();
         e.stopPropagation();
         if (rows.length === 0) return;
-        // Определяем стартовую строку и колонку. Если в input — берём из
-        // <tr data-row-id> и <td data-col-id>; иначе — из tableApi.
-        let startRowId: number | null = tableApi?.getActiveRow() ?? null;
-        let startColId: string | null = tableApi?.getActiveCell() ?? null;
-        if (isInputTarget || isTextAreaTarget) {
-          const tr = (target as HTMLElement).closest("tr[data-row-id]") as HTMLTableRowElement | null;
-          const td = (target as HTMLElement).closest("td[data-col-id]") as HTMLTableCellElement | null;
-          const rid = tr ? Number(tr.getAttribute("data-row-id")) : NaN;
-          if (Number.isFinite(rid)) startRowId = rid;
-          const cid = td?.getAttribute("data-col-id");
-          if (cid) startColId = cid;
-          (target as HTMLElement).blur();
-        }
+        const startRowId: number | null = tableApi?.getActiveRow() ?? null;
+        const startColId: string | null = tableApi?.getActiveCell() ?? null;
         if (cellDir) {
           // Колоночная навигация — строка остаётся, меняем activeCell.
           const nextCol = computeNextActiveColId(columns, startColId, cellDir);
@@ -1306,12 +1328,63 @@ const SubTable: FC<SubTableProps> = ({
       return;
     }
 
-    // Фокус в input: если это последний редактируемый input в tbody → blur.
-    const allInputs = collectInputs(
-      container.querySelector("tbody") ?? container
-    );
-    if (allInputs.length === 0) return;
-    if (target !== allInputs[allInputs.length - 1]) return;
+    // Фокус В input: Enter → следующее редактируемое поле в той же строке.
+    // Если текущее поле последнее в строке → первое поле следующей строки
+    // (пропуская строки без редактируемых полей). Если редактируемых полей
+    // больше нет (последний input последней строки) → blur, чтобы вернуть
+    // управление клавиатурой контейнеру таблицы.
+    //
+    // Ранее эта логика дублировалась в каждой *Table (SaleItemsTable и т.п.)
+    // через `focusNextInRow` на каждом input'е. Теперь единое поведение
+    // обеспечивается на уровне SubTable — все SubTable получают его автоматически.
+    const currentTr = (target as HTMLElement).closest("tr") as HTMLTableRowElement | null;
+    if (!currentTr) {
+      // Фолбэк — старое поведение для нестандартных DOM (target не в tr).
+      const allInputs = collectInputs(
+        container.querySelector("tbody") ?? container
+      );
+      if (allInputs.length === 0) return;
+      if (target !== allInputs[allInputs.length - 1]) return;
+      e.preventDefault();
+      e.stopPropagation();
+      (target as HTMLInputElement).blur();
+      return;
+    }
+
+    const rowInputs = collectInputs(currentTr);
+    const idxInRow = rowInputs.indexOf(target as HTMLInputElement);
+    // Есть следующее поле в этой же строке — перейти на него.
+    if (idxInRow >= 0 && idxInRow < rowInputs.length - 1) {
+      e.preventDefault();
+      e.stopPropagation();
+      const next = rowInputs[idxInRow + 1];
+      next.focus();
+      try { next.select(); } catch { /* ignore */ }
+      return;
+    }
+
+    // Поле — последнее в строке. Ищем первое редактируемое поле следующей
+    // строки (с непустым списком input'ов). Если такой строки нет — blur.
+    let nextTr = currentTr.nextElementSibling as HTMLElement | null;
+    while (nextTr && nextTr.tagName === "TR") {
+      const nextInputs = collectInputs(nextTr);
+      if (nextInputs.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        const first = nextInputs[0];
+        // Синхронизируем activeRow с новой строкой, чтобы при последующем
+        // Esc/нав. клавишах работа продолжилась с правильной строки.
+        const ridStr = (nextTr as HTMLTableRowElement).getAttribute("data-row-id");
+        const rid = ridStr ? Number(ridStr) : NaN;
+        if (Number.isFinite(rid)) tableApi?.setActiveRow(rid);
+        first.focus();
+        try { first.select(); } catch { /* ignore */ }
+        return;
+      }
+      nextTr = nextTr.nextElementSibling as HTMLElement | null;
+    }
+
+    // Редактируемых полей дальше нет — выходим из режима редактирования.
     e.preventDefault();
     e.stopPropagation();
     (target as HTMLInputElement).blur();
@@ -1365,12 +1438,59 @@ const SubTable: FC<SubTableProps> = ({
       ? (row: TDataItem) => renderExpandedRowProp(row, ctx)
       : undefined,
     apiRef: tableApiRef,
+    // ── Per-cell meta (error / required) ─────────────────────────────────
+    // CellWrap_error / CellWrap_required теперь применяются прямо на
+    // `.TableBodyCell` (см. Table). Здесь только формируем мета-объект.
+    getCellMeta,
+    // ── Per-cell diff: сравнение текущего значения с серверным (saved) ──
+    // Используется Table для подсветки изменённых ячеек при hover на
+    // DirtyButton панели (см. UI/PaneItem + useDirtyHighlight + main.module.scss).
+    getCellDirty: (row: TDataItem, col: TColumn) => {
+      const p = row as PendingRow;
+      if (!p._pendingAction) return null;
+      const getNested = (obj: unknown, path: string): unknown => {
+        const parts = path.split(".");
+        let v: unknown = obj;
+        for (const k of parts) {
+          if (v == null || typeof v !== "object") return undefined;
+          v = (v as Record<string, unknown>)[k];
+        }
+        return v;
+      };
+      const currentValue = getNested(row, col.identifier);
+      if (p._pendingAction === "create") {
+        // Не помечаем как dirty поля, у которых пользователь не задал
+        // осмысленного значения (пусто / 0 / "" нормализуются в null).
+        // Иначе на новой строке светятся все колонки с tooltip «Было: — Стало: —».
+        if (normalizeValue(currentValue) === null) return null;
+        return { isDirty: true, savedValue: undefined, currentValue };
+      }
+      if (p._pendingAction === "delete") {
+        if (normalizeValue(currentValue) === null) return null;
+        return { isDirty: true, savedValue: currentValue, currentValue: undefined };
+      }
+      // update — ищем оригинал в серверных данных по uuid
+      const original = allItems.find(r => r.uuid && r.uuid === p.uuid);
+      if (!original) return null;
+      const savedValue = getNested(original, col.identifier);
+      // Если на серверном (saved) объекте этого ключа нет — значит колонка
+      // является ПРОИЗВОДНОЙ/ВЫЧИСЛЯЕМОЙ (например, totalAmount, vatIncluded,
+      // discountAmount пересчитываются локально при изменении quantity/price).
+      // Пользователь её напрямую не редактирует, и tooltip «Было: —» сбивает
+      // с толку. Не помечаем такие ячейки как dirty.
+      if (savedValue === undefined) return null;
+      // Используем семантическое сравнение: "30" и 30, "" и null, 0 и "0",
+      // Decimal-объект и число — всё это одно и то же значение и не должно
+      // давать ложный dirty (типичный случай: «Было: 0 / Стало: 0»).
+      if (isEquivalent(savedValue, currentValue)) return null;
+      return { isDirty: true, savedValue, currentValue };
+    },
   }), [
     componentName, displayRows, columns, adaptiveLimit, combinedLoading, error,
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
     openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
-    handleCleanRefresh, handleDelete, extraButtons, inlineEditing, renderCell, handleInlineAdd, onInlineAddProp, defaultNewRow,
-    renderExpandedRowProp, expandedRowIds, ctx,
+    handleCleanRefresh, handleDelete, extraButtons, inlineEditing, renderCell, getCellMeta, handleInlineAdd, onInlineAddProp, defaultNewRow,
+    renderExpandedRowProp, expandedRowIds, ctx, readonly, allItems,
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────

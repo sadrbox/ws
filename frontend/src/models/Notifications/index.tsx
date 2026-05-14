@@ -42,7 +42,7 @@ const NotificationsList: FC<NotificationsListProps> = () => {
   return (
     <div className={styles.JournalWrap}>
       <div className={styles.JournalHeader}>
-        <h3 className={styles.JournalTitle}>Журнал уведомлений</h3>
+        <h3 className={styles.JournalTitle}>Центр уведомлений</h3>
         {journal.length > 0 && (
           <button className={styles.JournalClear} onClick={clearNotificationJournal} type="button">
             Очистить журнал

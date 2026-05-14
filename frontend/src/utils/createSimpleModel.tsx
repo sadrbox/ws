@@ -170,7 +170,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
         onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined}
         isLoading={form.isLoading}
-
+        isInitialLoading={form.isInitialLoading}
         readonly={!access.canWrite}
         isDirty={form.isDirty}
       />

@@ -510,7 +510,7 @@ body {
 	margin: 0;
 	padding: 0;
 	font-weight: bold;
-	font-size: $fontsize + 3px;
+	font-size: $fontsize + 6;
 	color: $color6;
 	white-space: nowrap;
 	overflow: hidden;
@@ -566,9 +566,9 @@ body {
 }
 
 // Кнопка-индикатор несохранённых изменений в PaneItemHeaderToolbar.
-// .PaneItemHeaderDirtyButton — текущая форма содержит правки.
+// Показывается только когда есть что показать (isDirty || hasStash).
+// .PaneItemHeaderDirtyButton — текущая форма содержит правки (клик — тоггл подсветки).
 // .PaneItemHeaderDirtyButtonStash — есть stash из прошлой сессии (клик восстанавливает).
-// .PaneItemHeaderDirtyButtonClean — форма чистая (кнопка disabled, видна как индикатор).
 .PaneItemHeaderDirtyButton {
 	color: #d48806;
 	background: rgba(#d48806, 0.08);
@@ -589,12 +589,6 @@ body {
 		background: rgba(#d48806, 0.18);
 		animation: none;
 	}
-}
-
-.PaneItemHeaderDirtyButtonClean {
-	color: #c3c3c3;
-	cursor: default;
-	opacity: 0.55;
 }
 
 // Прежде здесь была подсветка inset box-shadow для шапки панели.
@@ -806,88 +800,121 @@ body {
 	}
 }
 
-.PaneNoteDirtySection {
-	border-top: 1px solid #ffe58f;
-	background: #fffbe6;
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLE CELL STATES — единый приоритетный каскад для `.TableBodyCell`.
+//
+// Атрибуты и классы, влияющие на оформление одной и той же ячейки таблицы:
+//   1) CellWrap_error          — ошибка валидации   (самый высокий)
+//   2) CellWrap_required       — обязательное пустое поле
+//   3) data-pane-dirty="true"  — значение отличается от saved (в show-diff)
+//   4) activeCell / data-active-cell="true" — выбранная ячейка
+//   5) activeRow               — выбранная строка   (самый низкий)
+//
+// Применяется через CSS `@layer`: порядок ОБЪЯВЛЕНИЯ слоёв определяет
+// приоритет. Объявленный ПОЗЖЕ слой ВСЕГДА перекрывает ранее объявленные,
+// независимо от специфичности и !important. Это нативная семантика
+// каскадных слоёв (CSS Cascade Layers, поддерживается всеми современными
+// браузерами с 2022 г.).
+//
+// Замечание: правила вне @layer имеют ВЫСШИЙ приоритет над любыми
+// слойными правилами. Поэтому background/box-shadow для states ячейки
+// ОБЯЗАНЫ жить ТОЛЬКО внутри этого @layer-блока — соответствующие
+// декларации в Table.module.scss (activeRow / activeCell / focus-within)
+// и SubTable.module.scss (CellWrap_error / CellWrap_required) убраны.
+//
+// Где живёт атрибут data-pane-dirty="true":
+//   • в обычной форме — на FieldInputWrapper / FieldSelectWrapper /
+//     FieldTextareaInputWrapper (через useFieldDirty внутри Field-компонента);
+//   • в табличной ячейке — на самой `.TableBodyCell` (см. Table/index.tsx
+//     → cellWrapperProps). Внутри Field-компонентов в табличных ячейках
+//     useFieldDirty подавляется через CellDirtyScope value={null}.
+// ═══════════════════════════════════════════════════════════════════════════
 
-.PaneNoteDirtyToggle {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	width: 100%;
-	padding: 8px 12px;
-	border: none;
-	background: transparent;
-	cursor: pointer;
-	font-size: $fontsize - 1px;
-	color: #ad6800;
-	font-weight: 500;
-	gap: 8px;
+// Объявление порядка слоёв. ПОЗДНЕЕ = ВЫШЕ.
+// Порядок приоритета (снизу вверх):
+//   activeRow → dirty → required → error → activeCell.
+// activeCell поднят НА САМЫЙ ВЕРХ: визуальное выделение текущей
+// (выбранной/фокусной) ячейки должно быть видно всегда, даже на ячейке
+// с ошибкой валидации или незаполненным обязательным полем — иначе
+// пользователь теряет позицию курсора при навигации по таблице.
+@layer table-cell-activeRow, table-cell-dirty, table-cell-required,
+table-cell-error, table-cell-activeCell;
 
-	&:hover {
-		background: rgba(#d48806, 0.08);
+// ── Layer 5 (lowest): activeRow ────────────────────────────────────────────
+// Подсветка строки целиком. Применяется ко всем .TableBodyCell внутри tr.
+@layer table-cell-activeRow {
+	tr[class*="activeRow"] [class*="TableBodyCell"] {
+		background: $color2;
 	}
 }
 
-.PaneNoteDirtyToggleArrow {
-	font-size: $fontsize - 2px;
-	color: #d48806;
-	flex-shrink: 0;
-}
+// ── Layer 4: activeCell / data-active-cell="true" ──────────────────────────
+// Активная (выделенная) ячейка — синий inset + слегка усиленный фон.
+// :focus-within остаётся отдельным визуальным состоянием поверх activeCell
+// (более насыщенный синий) — это разный UX-уровень (навигация vs ввод).
+@layer table-cell-activeCell {
 
-.PaneNoteDirtyDiff {
-	border-top: 1px solid #ffe58f;
-	padding: 4px 0;
-	max-height: 180px;
-	overflow-y: auto;
-}
+	[class*="TableBodyCell"].activeCell,
+	[class*="TableBodyCell"][data-active-cell="true"] {
+		background: rgba($color1, 0.2);
+		box-shadow: inset 0 0 0 1px rgba($color1, 0.5);
+	}
 
-.PaneNoteDirtyRow {
-	display: flex;
-	align-items: baseline;
-	gap: 6px;
-	padding: 3px 12px;
-	font-size: $fontsize - 2px;
-	flex-wrap: wrap;
-
-	&:hover {
-		background: rgba(#d48806, 0.05);
+	// focus-within = идёт ввод в input/textarea/select ячейки. Семантически
+	// относится к тому же уровню навигации/выделения, что и activeCell,
+	// поэтому живёт в этом же слое. Из-за источникового порядка после
+	// activeCell — перекрывает её визуал.
+	[class*="TableBodyCell"]:focus-within {
+		background: rgba($color60, 0.9);
+		box-shadow: inset 0 0 0 1px $colorPrimaryLight;
 	}
 }
 
-.PaneNoteDirtyField {
-	color: #595959;
-	font-weight: 500;
-	min-width: 80px;
-	flex-shrink: 0;
-	font-size: $fontsize - 2px;
+// ── Layer 3: data-pane-dirty="true" ────────────────────────────────────────
+// Подсветка изменённых полей/ячеек. Показывается:
+//   • в режиме show-diff (клик-тоггл DirtyButton выставляет
+//     data-pane-show-diff="true" на корне Pane);
+//   • НЕ показывается, пока пользователь активно вводит в это поле
+//     (:not(:focus-within)) — приоритет UX у активного ввода.
+@layer table-cell-dirty {
+
+	// Подсветка ячеек таблицы (атрибут на TableBodyCell).
+	[data-pane-show-diff="true"] [data-pane-dirty="true"][class*="TableBodyCell"]:not(:focus-within) {
+		background: rgba(245, 158, 11, 0.18);
+		box-shadow: inset 0 0 0 1px #f59e0b !important;
+	}
+
+	// Подсветка полей формы вне таблицы (атрибут на FieldInputWrapper и т.д.).
+	// Поля формы не участвуют в табличных слоях, но логически принадлежат
+	// тому же уровню «dirty» — поэтому держим здесь же для единообразия.
+	[data-pane-show-diff="true"] [data-pane-dirty="true"][class*="FieldInputWrapper"]:not(:focus-within),
+	[data-pane-show-diff="true"] [data-pane-dirty="true"][class*="FieldSelectWrapper"]:not(:focus-within),
+	[data-pane-show-diff="true"] [data-pane-dirty="true"][class*="FieldTextareaInputWrapper"]:not(:focus-within) {
+		background: rgba(245, 158, 11, 0.18);
+		box-shadow: inset 0 0 0 1px #f59e0b !important;
+		// border-radius: $radius2;
+	}
 }
 
-.PaneNoteDirtyValues {
-	display: flex;
-	align-items: baseline;
-	gap: 4px;
-	flex: 1;
-	min-width: 0;
-	flex-wrap: wrap;
+// ── Layer 2: CellWrap_required ─────────────────────────────────────────────
+// Обязательное пустое поле — амбер inset. Перекрывает dirty / activeCell:
+// семантика «введите значение» важнее, чем «значение изменено» и чем
+// текущее выделение строки/ячейки.
+@layer table-cell-required {
+	[class*="TableBodyCell"][class*="CellWrap_required"] {
+		background: rgba($attention, 0.07);
+		box-shadow: inset 0 0 0 1px $attentionBorder !important;
+	}
 }
 
-.PaneNoteDirtyOld {
-	color: #cf1322;
-	text-decoration: line-through;
-	word-break: break-all;
-}
-
-.PaneNoteDirtyArrow {
-	color: #8c8c8c;
-	flex-shrink: 0;
-}
-
-.PaneNoteDirtyNew {
-	color: #389e0d;
-	font-weight: 500;
-	word-break: break-all;
+// ── Layer 1 (highest): CellWrap_error ──────────────────────────────────────
+// Ошибка валидации — красный inset. Перекрывает всё: пользователь должен
+// видеть проблему даже на активной строке/ячейке/во время ввода.
+@layer table-cell-error {
+	[class*="TableBodyCell"][class*="CellWrap_error"] {
+		background: rgba($attention, 0.07);
+		box-shadow: inset 0 0 0 1px $attentionBorder !important;
+	}
 }
 
 .PaneHeaderClose {

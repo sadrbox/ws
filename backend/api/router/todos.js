@@ -224,17 +224,7 @@ router.post("/todos", async (req, res) => {
 			include: INCLUDE,
 		});
 
-		// Уведомление исполнителю
-		if (executorUuid) {
-			await prisma.notification.create({
-				data: {
-					userUuid: executorUuid,
-					todoUuid: item.uuid,
-					title: "Новая задача",
-					message: `Вам назначена задача: ${shortName || "Без названия"}`,
-				},
-			});
-		}
+		// Уведомления хранятся только на клиенте (localStorage), сервер их не пишет.
 
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -294,29 +284,7 @@ router.put("/todos/:id", async (req, res) => {
 			include: INCLUDE,
 		});
 
-		// Уведомление при смене исполнителя
-		if (executorUuid && executorUuid !== existing.executorUuid) {
-			await prisma.notification.create({
-				data: {
-					userUuid: executorUuid,
-					todoUuid: item.uuid,
-					title: "Назначена задача",
-					message: `Вам назначена задача: ${item.shortName || "Без названия"}`,
-				},
-			});
-		}
-
-		// Уведомление куратору при смене статуса
-		if (status && status !== existing.status && existing.curatorUuid) {
-			await prisma.notification.create({
-				data: {
-					userUuid: existing.curatorUuid,
-					todoUuid: item.uuid,
-					title: "Статус задачи изменён",
-					message: `Задача «${item.shortName || "Без названия"}» — ${status}`,
-				},
-			});
-		}
+		// Уведомления хранятся только на клиенте (localStorage), сервер их не пишет.
 
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

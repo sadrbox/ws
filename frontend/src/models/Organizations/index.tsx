@@ -41,10 +41,15 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canRead: canReadContacts } = useAccessRight("Contact");
   const queryClient = useQueryClient();
 
-  const invalidateSubTables = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["contacts"] });
-    void queryClient.invalidateQueries({ queryKey: ["bankaccounts"] });
-    void queryClient.invalidateQueries({ queryKey: ["contracts"] });
+  // refetchType: "active" — ждём завершение refetch смонтированных
+  // SubTable, чтобы useFormStore.submit() очистил pending-строки
+  // только после появления свежих серверных данных.
+  const invalidateSubTables = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["contacts"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["bankaccounts"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["contracts"], refetchType: "active" }),
+    ]);
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
@@ -86,10 +91,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) =>
       makePaneLabel(LIST_NAME, "Организации", saved, saved.shortName || saved.bin),
     afterLoad: invalidateSubTables,
-    afterSave: () => {
-      // commitAllTables уже вызван автоматически внутри useFormStore.submit()
-      setTimeout(invalidateSubTables, 0);
-    },
+    afterSave: invalidateSubTables,
   });
 
   // Гранулярные подписки на вложенные таблицы

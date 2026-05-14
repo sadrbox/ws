@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { handleDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
 
@@ -190,20 +191,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 });
 
 // ── DELETE ──────────────────────────────────────────────────────────────
-router.delete(`/${ROUTE}/:id`, async (req, res) => {
-	try {
-		const p = req.params.id;
-		const n = Number(p);
-		const w =
-			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
-		await prisma[MODEL].update({ where: w, data: { deletedAt: new Date() } });
-		return res.status(200).json({ success: true, message: "Удалено" });
-	} catch (error) {
-		if (error.code === "P2025")
-			return res.status(404).json({ success: false, message: "Не найдено" });
-		console.error(`DELETE /${ROUTE}/:id error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
-	}
-});
+router.delete(`/${ROUTE}/:id`, (req, res) =>
+	handleDelete({ req, res, prisma, modelName: MODEL, softDelete: true }),
+);
 
 export default router;

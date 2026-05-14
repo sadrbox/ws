@@ -25,6 +25,45 @@ $colorPrimaryDark: #1c5fcb;
 $color80: #f1f5f9;
 $color81: #9aa7b6;
 
+// ──────────────────────────────────────────────────────────────────────────
+// Семантическая палитра (фон + бордер для каждой роли).
+// Используется в: тостах, badge-ах, статусах, плашках уведомлений и т.п.
+// Соглашение: <name>      — основной (фон/заливка)
+//             <name>Bg    — мягкий фон для плашек (12% непрозрачности от основного)
+//             <name>Border— оттенок для бордера (затемнение основного ~12%)
+//             <name>Text  — контрастный текст поверх <name>Bg
+// ──────────────────────────────────────────────────────────────────────────
+
+// primary — действие, фокус, основной CTA (синий)
+$primary: #2c77ef;
+$primaryBg: #eaf2ff;
+$primaryBorder: #1c5fcb;
+$primaryText: #0b3a82;
+
+// info — нейтральная информация (бирюзовый)
+$info: #17a2b8;
+$infoBg: #e4f6f9;
+$infoBorder: #117a8b;
+$infoText: #0b525c;
+
+// warning — предупреждение (жёлто-оранжевый)
+$warning: #f0ad4e;
+$warningBg: #fdf3e1;
+$warningBorder: #c98a2e;
+$warningText: #7a4d12;
+
+// silver — нейтральный / выключенный
+$silverPrimary: $silver; // совместимость с уже существующим $silver
+$silverBg: $silverLightest;
+$silverBorder: $silverDark;
+$silverText: $color6;
+
+// attention — критическое предупреждение / ошибка (красный)
+$attention: #dc3545;
+$attentionBg: #fde2e4;
+$attentionBorder: #b02a37;
+$attentionText: #6b1119;
+
 $radius1: 1px;
 $radius2: 2px;
 $radius3: 3px;

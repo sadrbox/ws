@@ -1,4 +1,5 @@
-import { FC, useMemo } from "react";
+import { FC, useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -31,6 +32,17 @@ const DEFAULT_FIELDS: TFields = {
 
 const UsersForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("User");
+  const queryClient = useQueryClient();
+
+  // refetchType: "active" — ждём завершение refetch смонтированной SubTable,
+  // чтобы useFormStore.submit() очистил pending-строки только после
+  // появления свежих серверных данных (см. useFormStore.ts → submit).
+  const invalidateSubTables = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ["user-permissions"],
+      refetchType: "active",
+    });
+  }, [queryClient]);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "users-form", defaultFields: DEFAULT_FIELDS, paneProps,
@@ -59,6 +71,8 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
       return payload;
     },
     buildPaneLabel: (saved) => makePaneLabel("UsersList", "Пользователи", saved),
+    afterLoad: invalidateSubTables,
+    afterSave: invalidateSubTables,
   });
 
   const userPermissions = form.useTable("userPermissions");

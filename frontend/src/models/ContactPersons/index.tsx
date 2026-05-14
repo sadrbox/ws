@@ -44,8 +44,14 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
     return init;
   })();
 
-  const invalidateSubTables = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["contacts"] });
+  // refetchType: "active" — ждём завершение refetch смонтированных
+  // SubTable, чтобы useFormStore.submit() очистил pending-строки
+  // только после появления свежих серверных данных.
+  const invalidateSubTables = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ["contacts"],
+      refetchType: "active",
+    });
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
@@ -71,9 +77,11 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
     }),
     buildPaneLabel: (saved) => makePaneLabel("ContactPersonsList", "Контактные лица", saved),
     afterLoad: invalidateSubTables,
-    afterSave: () => {
-      setTimeout(invalidateSubTables, 0);
-      void queryClient.invalidateQueries({ queryKey: ["contactpersons"] });
+    afterSave: async () => {
+      await invalidateSubTables();
+      // Неявный invalidate родительского списка — не критичен для
+      // порядка очистки pending, но тоже ждём.
+      await queryClient.invalidateQueries({ queryKey: ["contactpersons"] });
     },
   });
 

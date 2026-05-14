@@ -23,7 +23,6 @@ model User {
   updatedAt                   DateTime             @default(now()) @updatedAt
   deletedAt                   DateTime?
   accessRights                AccessRight[]
-  notifications               Notification[]
   curatorTodos                Todo[]               @relation("TodoCurator")
   executorTodos               Todo[]               @relation("TodoExecutor")
   employee                    Employee?            @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
@@ -295,25 +294,24 @@ model ActivityHistory {
 }
 
 model Todo {
-  id               Int            @id @default(autoincrement())
-  uuid             String         @unique @default(uuid())
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
   shortName        String?
   description      String?
   organizationUuid String?
   counterpartyUuid String?
   curatorUuid      String?
   executorUuid     String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @default(now()) @updatedAt
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   deadline         DateTime?
   deadlineDays     Int?
-  status           String         @default("new")
-  notifications    Notification[]
-  counterparty     Counterparty?  @relation(fields: [counterpartyUuid], references: [uuid])
-  curator          User?          @relation("TodoCurator", fields: [curatorUuid], references: [uuid])
-  executor         User?          @relation("TodoExecutor", fields: [executorUuid], references: [uuid])
-  organization     Organization?  @relation(fields: [organizationUuid], references: [uuid])
+  status           String        @default("new")
+  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
+  curator          User?         @relation("TodoCurator", fields: [curatorUuid], references: [uuid])
+  executor         User?         @relation("TodoExecutor", fields: [executorUuid], references: [uuid])
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -322,27 +320,6 @@ model Todo {
   @@index([status])
   @@index([updatedAt])
   @@map("todos")
-}
-
-model Notification {
-  id        Int       @id @default(autoincrement())
-  uuid      String    @unique @default(uuid())
-  userUuid  String
-  todoUuid  String?
-  title     String
-  message   String?
-  isRead    Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now()) @updatedAt
-  deletedAt DateTime?
-  todo      Todo?     @relation(fields: [todoUuid], references: [uuid])
-  user      User      @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
-
-  @@index([userUuid])
-  @@index([todoUuid])
-  @@index([userUuid, isRead])
-  @@index([updatedAt])
-  @@map("notifications")
 }
 
 model Warehouse {

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import styles from "./Field.module.scss";
 import { fetchList } from "src/services/offlineDataService";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
+import { useFieldDirty } from "src/hooks/useDirtyHighlight";
 import { useAppContext } from "src/app";
 import SelectPaneWrapper from "./SelectPaneWrapper";
 import FieldActionButton from "./FieldActionButton";
@@ -161,19 +162,21 @@ const LookupField: FC<LookupFieldProps> = ({
       setDropdownPos(null);
       return;
     }
+    const el = wrapperRef.current;
     const updatePos = () => {
-      const rect = wrapperRef.current?.getBoundingClientRect();
-      if (rect) {
-        setDropdownPos({ top: rect.bottom, left: rect.left, width: rect.width });
-      }
+      const rect = el.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom, left: rect.left, width: rect.width });
     };
     updatePos();
-    // Обновляем при скролле / ресайзе
+    // Обновляем при скролле / ресайзе окна и при изменении ширины самого поля
     window.addEventListener("scroll", updatePos, true);
     window.addEventListener("resize", updatePos);
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updatePos) : null;
+    ro?.observe(el);
     return () => {
       window.removeEventListener("scroll", updatePos, true);
       window.removeEventListener("resize", updatePos);
+      ro?.disconnect();
     };
   }, [isTable, isDropdownOpen]);
 
@@ -195,9 +198,12 @@ const LookupField: FC<LookupFieldProps> = ({
     fetchList(endpoint, undefined, { search: debouncedText, limit: 10, ...extraParams })
       .then((result) => {
         if (cancelled) return;
-        setSuggestions(result.items as any[]);
+        const items = result.items as any[];
+        setSuggestions(items);
         setIsDropdownOpen(true);
-        setActiveIndex(-1);
+        // Сразу выделяем первый элемент, чтобы Up/Down/Enter работали
+        // без предварительного нажатия Down.
+        setActiveIndex(items.length > 0 ? 0 : -1);
       })
       .catch(() => {
         if (!cancelled) setSuggestions([]);
@@ -257,12 +263,20 @@ const LookupField: FC<LookupFieldProps> = ({
   // ── Быстрый выбор — загружает все записи и открывает inline dropdown ──
   const handleQuickSelect = useCallback(() => {
     if (disabled) return;
+    // Гарантируем, что фокус останется на input — иначе клавиши Up/Down
+    // после клика по кнопке уйдут в родительский контейнер (напр. SubTable
+    // → перемещение activeRow). preventDefault в onMouseDown FieldActionButton
+    // удерживает фокус, но если кнопка нажата с клавиатуры (Enter/Space) или
+    // input ещё не был сфокусирован — явно переводим фокус сюда.
+    inputRef.current?.focus();
     setIsLoading(true);
     fetchList(endpoint, undefined, { limit: 200, ...extraParams })
       .then((result) => {
-        setSuggestions(result.items as any[]);
+        const items = result.items as any[];
+        setSuggestions(items);
         setIsDropdownOpen(true);
-        setActiveIndex(-1);
+        // Первый элемент сразу выделен — Up/Down навигация + Enter работают.
+        setActiveIndex(items.length > 0 ? 0 : -1);
       })
       .catch(() => setSuggestions([]))
       .finally(() => setIsLoading(false));
@@ -303,7 +317,7 @@ const LookupField: FC<LookupFieldProps> = ({
       if (!FormComp) return;
       const t = translate;
       addPane({
-        label: `${t(entry.formName) || endpoint}`,
+        label: t(entry.formName) || entry.label || endpoint,
         component: FormComp,
         data: { uuid: value } as any,
       });
@@ -339,23 +353,28 @@ const LookupField: FC<LookupFieldProps> = ({
         // Стрелка вниз — активировать «Быстрый выбор» (inline dropdown)
         if (!disabled) {
           e.preventDefault();
+          e.stopPropagation();
           handleQuickSelect();
         }
       } else if (e.key === "Enter") {
         // Enter без дропдауна — перейти на следующее поле
         e.preventDefault();
+        e.stopPropagation();
         onEnterKey?.();
       }
       return;
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      e.stopPropagation();
       setActiveIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      e.stopPropagation();
       setActiveIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
+      e.stopPropagation();
       if (activeIndex >= 0 && activeIndex < suggestions.length) {
         // handleSelectItem уже инициирует onAfterSelect (фокус на следующее поле).
         handleSuggestionClick(suggestions[activeIndex]);
@@ -365,9 +384,11 @@ const LookupField: FC<LookupFieldProps> = ({
         onEnterKey?.();
       }
     } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
       setIsDropdownOpen(false);
     }
-  }, [isDropdownOpen, suggestions, activeIndex, inputText, disabled, handleOpenModal, handleSuggestionClick, onEnterKey]);
+  }, [isDropdownOpen, suggestions, activeIndex, inputText, disabled, handleOpenModal, handleSuggestionClick, handleQuickSelect, onEnterKey]);
 
   // Скроллинг активного элемента в видимую область dropdown
   useEffect(() => {
@@ -437,6 +458,8 @@ const LookupField: FC<LookupFieldProps> = ({
     return parts.join(" · ");
   }, [resolvedSecondaryFields, getNestedValue]);
 
+  const dirty = useFieldDirty(name);
+
   return (
     <>
       <div
@@ -454,7 +477,7 @@ const LookupField: FC<LookupFieldProps> = ({
           </label>
         )}
 
-        <div className={`${styles.FieldInputWrapper} ${disabled ? styles.FieldDisabled : ""}`}>
+        <div className={`${styles.FieldInputWrapper} ${disabled ? styles.FieldDisabled : ""}`} {...dirty}>
           <input
             ref={inputRef}
             type="text"
@@ -463,11 +486,26 @@ const LookupField: FC<LookupFieldProps> = ({
             value={inputText}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
+            // Combobox-паттерн: aria-expanded сигнализирует обёрткам (например,
+            // SubTable handleContainerKeyDown), что у поля открыт собственный
+            // dropdown и Up/Down/Enter нужно отдавать ему, а не использовать
+            // для навигации по строкам таблицы.
+            role="combobox"
+            aria-expanded={isDropdownOpen}
+            aria-autocomplete="list"
             onFocus={() => {
               // При фокусе — если есть текст и нет выбранного значения, открыть dropdown
               if (inputText && !value && suggestions.length > 0) {
                 setIsDropdownOpen(true);
               }
+            }}
+            onBlur={(e) => {
+              // Если фокус ушёл внутрь dropdown (например, на скроллбар) — не закрывать
+              const next = e.relatedTarget as Node | null;
+              if (next && dropdownRef.current && dropdownRef.current.contains(next)) {
+                return;
+              }
+              setIsDropdownOpen(false);
             }}
             className={styles.FieldString}
             autoComplete="off"

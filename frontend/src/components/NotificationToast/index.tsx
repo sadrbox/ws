@@ -1,166 +1,168 @@
-import { FC, useState, useEffect, useCallback, useRef } from "react";
-import { api } from "src/services/api/client";
+import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import { useAppContext } from "src/app";
 import { translate } from "src/i18";
+import {
+  useNotificationJournal,
+  clearNotificationJournal,
+  type NotificationJournalEntry,
+} from "src/hooks/useFormStore";
 import styles from "./NotificationToast.module.scss";
 
-interface TNotification {
-  uuid: string;
-  title: string;
-  message: string;
-  isRead: boolean;
-  createdAt: string;
-  todo?: { uuid: string; shortName: string; id: number };
-}
-
-const POLL_INTERVAL = 30_000; // 30 секунд
-
+/**
+ * Колокольчик уведомлений в шапке.
+ *
+ * Уведомления хранятся ИСКЛЮЧИТЕЛЬНО на клиенте (localStorage), сервер
+ * никаких уведомлений не пишет и не возвращает. «Непрочитанные» считаются
+ * как записи журнала с timestamp > lastSeenAt (ключ — на пользователя).
+ */
 const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
-  const [notifications, setNotifications] = useState<TNotification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const journal = useNotificationJournal();
   const [isOpen, setIsOpen] = useState(false);
-  const [removing, setRemoving] = useState<Set<string>>(new Set());
   const { addPane } = useAppContext().windows;
   const t = (key: string) => translate(key) || key;
-  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
-  // Получить количество непрочитанных
-  const fetchUnreadCount = useCallback(async () => {
-    if (!userUuid) return;
+  const seenKey = useMemo(
+    () => `notification-journal:lastSeen:${userUuid || "anonymous"}`,
+    [userUuid],
+  );
+
+  const [lastSeenAt, setLastSeenAt] = useState<number>(() => {
     try {
-      const res: any = await api.get(`/notifications/unread-count?userUuid=${userUuid}`);
-      setUnreadCount(res.count ?? 0);
-    } catch { /* ignore */ }
-  }, [userUuid]);
+      return Number(localStorage.getItem(seenKey)) || 0;
+    } catch {
+      return 0;
+    }
+  });
 
-  // Получить последние непрочитанные
-  const fetchNotifications = useCallback(async () => {
-    if (!userUuid) return;
+  useEffect(() => {
     try {
-      const res: any = await api.get(`/notifications?filter=${encodeURIComponent(JSON.stringify({ isRead: { value: false, operator: "equals" } }))}&sort=${encodeURIComponent(JSON.stringify({ createdAt: "desc" }))}&limit=10`);
-      setNotifications(res.data ?? []);
-      setUnreadCount(res.total ?? 0);
-    } catch { /* ignore */ }
-  }, [userUuid]);
+      setLastSeenAt(Number(localStorage.getItem(seenKey)) || 0);
+    } catch {
+      setLastSeenAt(0);
+    }
+  }, [seenKey]);
 
-  // Пометить одно как прочитанное
-  const markRead = useCallback(async (uuid: string) => {
-    setRemoving(prev => new Set(prev).add(uuid));
+  const unread = useMemo(
+    () => journal.filter((e) => e.timestamp > lastSeenAt),
+    [journal, lastSeenAt],
+  );
+
+  const recent = useMemo(
+    () => [...journal].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10),
+    [journal],
+  );
+
+  const markAllRead = useCallback(() => {
+    const now = Date.now();
     try {
-      await api.put(`/notifications/${uuid}/read`);
-    } catch { /* ignore */ }
-    // Убираем с анимацией
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.uuid !== uuid));
-      setUnreadCount(prev => Math.max(0, prev - 1));
-      setRemoving(prev => { const s = new Set(prev); s.delete(uuid); return s; });
-    }, 300);
-  }, []);
+      localStorage.setItem(seenKey, String(now));
+    } catch {
+      /* ignore */
+    }
+    setLastSeenAt(now);
+  }, [seenKey]);
 
-  // Пометить все как прочитанные
-  const markAllRead = useCallback(async () => {
-    if (!userUuid) return;
-    try {
-      await api.put("/notifications/read-all", { userUuid });
-    } catch { /* ignore */ }
-    setNotifications([]);
-    setUnreadCount(0);
-  }, [userUuid]);
-
-  // Открыть панель уведомлений
-  const openNotificationsList = useCallback(() => {
+  const openCenter = useCallback(() => {
     void import("src/models/Notifications").then(({ NotificationsList }) => {
       addPane({
         component: NotificationsList,
-        label: t("NotificationsList"),
+        label: "Центр уведомлений",
       });
     });
     setIsOpen(false);
-  }, [addPane, t]);
+    markAllRead();
+  }, [addPane, markAllRead]);
 
-  // Открыть задачу из уведомления
-  const openTodo = useCallback((n: TNotification) => {
-    if (!n.todo?.uuid) return;
-    void import("src/models/Todos").then(({ TodosForm }) => {
-      addPane({
-        label: `${t("TodosList")} №${n.todo!.id}`,
-        component: TodosForm,
-        data: { uuid: n.todo!.uuid } as any,
-      });
-    });
-    setIsOpen(false);
-  }, [addPane, t]);
-
-  // Polling
-  useEffect(() => {
-    void fetchUnreadCount();
-    timerRef.current = setInterval(() => void fetchUnreadCount(), POLL_INTERVAL);
-    return () => clearInterval(timerRef.current);
-  }, [fetchUnreadCount]);
-
-  // Загрузить уведомления при открытии
-  useEffect(() => {
-    if (isOpen) void fetchNotifications();
-  }, [isOpen, fetchNotifications]);
+  const openEntry = useCallback(
+    (_entry: NotificationJournalEntry) => {
+      // Универсального открытия по endpoint нет — направляем в центр уведомлений.
+      openCenter();
+    },
+    [openCenter],
+  );
 
   if (!userUuid) return null;
 
   return (
     <div className={styles.NotificationToast}>
-      {/* Колокольчик */}
       <button
         className={styles.BellButton}
-        onClick={() => setIsOpen(prev => !prev)}
-        title={t("notifications")}
+        onClick={() => setIsOpen((prev) => !prev)}
+        title={t("notifications") || "Уведомления"}
+        type="button"
       >
         🔔
-        {unreadCount > 0 && (
-          <span className={styles.Badge}>{unreadCount > 99 ? "99+" : unreadCount}</span>
+        {unread.length > 0 && (
+          <span className={styles.Badge}>
+            {unread.length > 99 ? "99+" : unread.length}
+          </span>
         )}
       </button>
 
-      {/* Выпадающая панель */}
       {isOpen && (
         <div className={styles.Panel}>
           <div className={styles.PanelHeader}>
-            <span>{t("notifications")}</span>
-            {notifications.length > 0 && (
-              <button className={styles.MarkAllBtn} onClick={markAllRead}>
-                {t("markAllRead")}
+            <span>{t("notifications") || "Уведомления"}</span>
+            {journal.length > 0 && (
+              <button
+                className={styles.MarkAllBtn}
+                onClick={markAllRead}
+                type="button"
+              >
+                {t("markAllRead") || "Прочитать всё"}
               </button>
             )}
           </div>
 
           <div className={styles.PanelBody}>
-            {notifications.length === 0 ? (
-              <div className={styles.Empty}>{t("noNotifications")}</div>
+            {recent.length === 0 ? (
+              <div className={styles.Empty}>
+                {t("noNotifications") || "Нет уведомлений"}
+              </div>
             ) : (
-              notifications.map(n => (
+              recent.map((n) => (
                 <div
-                  key={n.uuid}
-                  className={`${styles.Item} ${removing.has(n.uuid) ? styles.ItemSlideOut : styles.ItemSlideIn}`}
+                  key={n.id}
+                  className={`${styles.Item} ${n.timestamp > lastSeenAt ? styles.ItemSlideIn : ""
+                    }`}
                 >
-                  <div className={styles.ItemContent} onClick={() => openTodo(n)}>
-                    <div className={styles.ItemTitle}>{n.title}</div>
-                    <div className={styles.ItemMessage}>{n.message}</div>
+                  <div
+                    className={styles.ItemContent}
+                    onClick={() => openEntry(n)}
+                  >
+                    <div className={styles.ItemTitle}>
+                      {n.paneLabel || n.type}
+                    </div>
+                    <div className={styles.ItemMessage}>{n.text}</div>
                     <div className={styles.ItemTime}>
-                      {new Date(n.createdAt).toLocaleString("ru-RU")}
+                      {new Date(n.timestamp).toLocaleString("ru-RU")}
                     </div>
                   </div>
-                  <button
-                    className={styles.MarkReadBtn}
-                    onClick={(e) => { e.stopPropagation(); void markRead(n.uuid); }}
-                    title={t("markRead")}
-                  >✓</button>
                 </div>
               ))
             )}
           </div>
 
           <div className={styles.PanelFooter}>
-            <button className={styles.ShowAllBtn} onClick={openNotificationsList}>
-              {t("showAll")}
+            <button
+              className={styles.ShowAllBtn}
+              onClick={openCenter}
+              type="button"
+            >
+              {t("showAll") || "Открыть центр уведомлений"}
             </button>
+            {journal.length > 0 && (
+              <button
+                className={styles.ShowAllBtn}
+                onClick={() => {
+                  clearNotificationJournal();
+                  markAllRead();
+                }}
+                type="button"
+              >
+                Очистить
+              </button>
+            )}
           </div>
         </div>
       )}

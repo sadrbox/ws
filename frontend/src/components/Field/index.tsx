@@ -3,6 +3,7 @@ import React, { CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useS
 import styles from "./Field.module.scss"
 import FieldActionButton from "./FieldActionButton"
 import type { IconName } from "src/components/IconButton/icons"
+import { useFieldDirty } from "src/hooks/useDirtyHighlight"
 // import { TypeDateRange } from '../Table/types'
 
 import { getFormatNumerical, parseNumericInput } from 'src/components/Table/services.ts'
@@ -191,6 +192,7 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
   const wrapperClass = isTable
     ? `${styles.FieldWrapper} ${styles.tableVariant}`
     : styles.FieldWrapper;
+  const dirty = useFieldDirty(name);
 
   return (
     <div className={wrapperClass} style={style}>
@@ -201,7 +203,7 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
         </label>
       )}
 
-      <div className={styles.FieldInputWrapper}>
+      <div className={styles.FieldInputWrapper} {...dirty}>
         <input
           ref={inputRef}
           type="text"
@@ -281,6 +283,7 @@ export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
     // Любое другое значение — пустая строка
     return '';
   })();
+  const dirty = useFieldDirty(name);
 
   return (
     <div
@@ -293,7 +296,7 @@ export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
           {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
         </label>
       )}
-      <div className={styles.FieldInputWrapper}>
+      <div className={styles.FieldInputWrapper} {...dirty}>
         <input
           type="datetime-local"
           id={name}
@@ -336,6 +339,7 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
     // Любое другое значение (включая русский текст) — пустая строка
     return '';
   })();
+  const dirty = useFieldDirty(name);
 
   return (
     <div
@@ -348,7 +352,7 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
           {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
         </label>
       )}
-      <div className={styles.FieldInputWrapper}>
+      <div className={styles.FieldInputWrapper} {...dirty}>
         <input
           type="date"
           id={name}
@@ -379,11 +383,12 @@ export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, va
   const wrapperClass = isTable
     ? `${styles.FieldWrapper} ${styles.tableVariant}`
     : styles.FieldWrapper;
+  const dirty = useFieldDirty(name);
 
   return (
     <div className={wrapperClass} style={style}>
       {!isTable && label && <label htmlFor={name} className={styles.FieldLabel}>{label}</label>}
-      <div className={styles.FieldSelectWrapper}>
+      <div className={styles.FieldSelectWrapper} {...dirty}>
         <select name={name} id={name} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled}>
           {options.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
@@ -579,6 +584,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
       if (action.type === 'clear' && !value) return false;
       return true;
     });
+  const dirty = useFieldDirty(name);
 
   return (
     <div
@@ -596,7 +602,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
         </label>
       )}
 
-      <div className={`${styles.FieldInputWrapper} ${disabled ? styles.FieldDisabled : ''}`}>
+      <div className={`${styles.FieldInputWrapper} ${disabled ? styles.FieldDisabled : ''}`} {...dirty}>
         <input
           ref={inputRef}
           type="text"
@@ -674,6 +680,7 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
   placeholder,
   required = false,
 }) => {
+  const dirty = useFieldDirty(name);
   return (
     <div className={styles.FieldTextareaWrapper} style={{
       width: width ?? 'auto',
@@ -686,7 +693,7 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
           {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
         </label>
       )}
-      <div className={styles.FieldTextareaInputWrapper}>
+      <div className={styles.FieldTextareaInputWrapper} {...dirty}>
         <textarea
           id={name}
           name={name}

@@ -19,6 +19,21 @@
 
 const PRIMITIVE_NUMBER_RE = /^-?\d+(?:\.\d+)?$/;
 
+/**
+ * Серверные/служебные поля, которые НИКОГДА не должны участвовать в
+ * dirty-сравнении и не должны показываться пользователю в diff:
+ *   - createdAt / updatedAt — управляются сервером, меняются после любого
+ *     сохранения и поэтому всегда «дают» ложный dirty.
+ *   - deletedAt — soft-delete маркер, формой не редактируется.
+ * Удаление выполняется рекурсивно: и на верхнем уровне state.fields,
+ * и внутри вложенных объектов-сущностей (organization, counterparty, …).
+ */
+export const IGNORED_DIFF_KEYS: ReadonlySet<string> = new Set([
+	"createdAt",
+	"updatedAt",
+	"deletedAt",
+]);
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	if (v === null || typeof v !== "object") return false;
 	const proto = Object.getPrototypeOf(v);
@@ -71,6 +86,7 @@ export function normalizeValue(v: unknown): unknown {
 		const out: Record<string, unknown> = {};
 		const keys = Object.keys(obj).sort();
 		for (const k of keys) {
+			if (IGNORED_DIFF_KEYS.has(k)) continue; // служебные поля игнорируем
 			const nv = normalizeValue(obj[k]);
 			if (nv === null) continue; // отсутствующее значение не учитывается
 			out[k] = nv;

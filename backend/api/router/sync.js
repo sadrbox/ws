@@ -28,7 +28,6 @@ const MODEL_MAP = {
 	contactpersons: "contactPerson",
 	bankaccounts: "bankAccount",
 	todos: "todo",
-	notifications: "notification",
 	warehouses: "warehouse",
 	sales: "sale",
 	purchases: "purchase",
@@ -64,16 +63,41 @@ const INCLUDE_MAP = {
 	contactType: {},
 	contactPerson: {},
 	bankAccount: { currency: true },
-	todo: { organization: true, curator: { select: { uuid: true, username: true, employee: { select: { fullName: true } } } }, executor: { select: { uuid: true, username: true, employee: { select: { fullName: true } } } } },
-	notification: { todo: true },
+	todo: {
+		organization: true,
+		curator: {
+			select: {
+				uuid: true,
+				username: true,
+				employee: { select: { fullName: true } },
+			},
+		},
+		executor: {
+			select: {
+				uuid: true,
+				username: true,
+				employee: { select: { fullName: true } },
+			},
+		},
+	},
 	warehouse: { organization: true },
-	sale: { organization: true, counterparty: true, contract: true, warehouse: true, saleItems: { include: { product: true } } },
+	sale: {
+		organization: true,
+		counterparty: true,
+		contract: true,
+		warehouse: true,
+		saleItems: { include: { product: true } },
+	},
 	purchase: { organization: true, counterparty: true, contract: true },
 	outgoingInvoice: { organization: true, counterparty: true, contract: true },
 	incomingInvoice: { organization: true, counterparty: true, contract: true },
 	paymentInvoice: { organization: true, counterparty: true, contract: true },
 	scheduledTask: { organization: true },
-	inventoryTransfer: { organization: true, fromWarehouse: true, toWarehouse: true },
+	inventoryTransfer: {
+		organization: true,
+		fromWarehouse: true,
+		toWarehouse: true,
+	},
 	cashReceiptOrder: { organization: true, counterparty: true, contract: true },
 	cashExpenseOrder: { organization: true, counterparty: true, contract: true },
 	brand: {},
@@ -130,7 +154,10 @@ router.post("/sync/pull", async (req, res) => {
 					results[tableName] = items;
 				}
 			} catch (err) {
-				console.warn(`[Sync/pull] Ошибка для таблицы ${tableName}:`, err.message);
+				console.warn(
+					`[Sync/pull] Ошибка для таблицы ${tableName}:`,
+					err.message,
+				);
 			}
 		}
 
@@ -175,7 +202,9 @@ router.post("/sync/push", async (req, res) => {
 			try {
 				if (action === "create") {
 					// Проверяем нет ли уже записи с таким uuid
-					const existing = await prisma[modelKey].findUnique({ where: { uuid } });
+					const existing = await prisma[modelKey].findUnique({
+						where: { uuid },
+					});
 					if (existing) {
 						// Уже создана (другим клиентом или повторная отправка) — пропускаем
 						applied.push({ uuid, table, action: "skip" });
@@ -183,10 +212,11 @@ router.post("/sync/push", async (req, res) => {
 					}
 					await prisma[modelKey].create({ data: { uuid, ...data } });
 					applied.push({ uuid, table, action: "create" });
-
 				} else if (action === "update") {
 					// Проверяем на конфликт: если серверная версия новее клиентской
-					const serverRecord = await prisma[modelKey].findUnique({ where: { uuid } });
+					const serverRecord = await prisma[modelKey].findUnique({
+						where: { uuid },
+					});
 					if (!serverRecord) {
 						errors.push({ uuid, table, error: "Record not found on server" });
 						continue;
@@ -217,10 +247,11 @@ router.post("/sync/push", async (req, res) => {
 						data,
 					});
 					applied.push({ uuid, table, action: "update" });
-
 				} else if (action === "delete") {
 					// Soft delete
-					const existing = await prisma[modelKey].findUnique({ where: { uuid } });
+					const existing = await prisma[modelKey].findUnique({
+						where: { uuid },
+					});
 					if (!existing) {
 						applied.push({ uuid, table, action: "skip" });
 						continue;

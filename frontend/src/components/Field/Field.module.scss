@@ -16,9 +16,9 @@
 	width: 100%;
 	border: none;
 	// border-radius: $radius2;
-	height: $heightFieldInput + 2px;
+	height: $heightFieldInput + 1px;
 
-	padding: 0px 6px !important;
+	// padding: 0px 6px !important;
 	box-sizing: content-box;
 
 	option {
@@ -47,6 +47,7 @@
 	font-family: "PT Sans", sans-serif;
 	// font-size: 40px;
 	// height: $heightFieldInput;
+	padding: 0px 6px !important;
 }
 
 .FieldSelect {
@@ -115,12 +116,12 @@
 			border: none;
 			border-radius: 0;
 			height: 100%;
-			background-color: transparent;
+			background: transparent !important;
 
 			&:focus-within {
 				background-color: #fff9c5;
-				border: 0px;
-				box-shadow: none;
+				border: 0px solid $color2;
+				box-shadow: 0 0 0 1px $color2;
 			}
 		}
 
@@ -140,7 +141,8 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 			overflow: hidden;
-			padding: 0px 6px;
+			padding: 0px 0px 0px 2px;
+
 			margin: 0px;
 
 			&:focus {
@@ -286,9 +288,19 @@
 		border-bottom: none;
 	}
 
-	&:hover,
-	&Active {
+	&:hover {
 		background: rgba($color1, 0.12);
+	}
+}
+
+// Активный (keyboard-highlighted) элемент — более выразительный фон + левая
+// акцентная полоса, чтобы пользователь чётко видел текущий выбор при Up/Down.
+.LookupDropdownItemActive {
+	background: rgba($color1, 0.22);
+	box-shadow: inset 3px 0 0 0 $color1;
+
+	&:hover {
+		background: rgba($color1, 0.28);
 	}
 }
 

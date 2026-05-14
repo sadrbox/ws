@@ -147,7 +147,6 @@ const ROUTE_TO_MODEL = {
 	bankaccounts: "BankAccount",
 	activityhistories: "ActivityHistory",
 	todos: "Todo",
-	notifications: "Notification",
 	warehouses: "Warehouse",
 	sales: "Sale",
 	purchases: "Purchase",
@@ -222,13 +221,17 @@ export async function accessRightMiddleware(req, res, next) {
 		const [anyOrgRight, globalRight] = await Promise.all([
 			orgsToCheck.length > 0
 				? prisma.accessRight.findFirst({
-					where: { userUuid: req.user.uuid, modelName, organizationUuid: { in: orgsToCheck } },
-					// Приоритет: активная org выше, чем любая другая
-					orderBy: orgUuid
-						? [{ organizationUuid: "asc" }]  // активная будет найдена через in
-						: undefined,
-					select: { accessLevel: true, organizationUuid: true },
-				  })
+						where: {
+							userUuid: req.user.uuid,
+							modelName,
+							organizationUuid: { in: orgsToCheck },
+						},
+						// Приоритет: активная org выше, чем любая другая
+						orderBy: orgUuid
+							? [{ organizationUuid: "asc" }] // активная будет найдена через in
+							: undefined,
+						select: { accessLevel: true, organizationUuid: true },
+					})
 				: null,
 			prisma.accessRight.findFirst({
 				where: { userUuid: req.user.uuid, modelName, organizationUuid: null },
@@ -242,7 +245,11 @@ export async function accessRightMiddleware(req, res, next) {
 			// Есть право для другой орг, но не для активной — оставляем как fallback
 			// Дополнительно ищем именно для активной
 			const activeOrgRight = await prisma.accessRight.findFirst({
-				where: { userUuid: req.user.uuid, modelName, organizationUuid: orgUuid },
+				where: {
+					userUuid: req.user.uuid,
+					modelName,
+					organizationUuid: orgUuid,
+				},
 				select: { accessLevel: true },
 			});
 			orgRight = activeOrgRight ?? anyOrgRight;

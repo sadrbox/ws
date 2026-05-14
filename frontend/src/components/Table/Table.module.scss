@@ -32,18 +32,29 @@
 
 /* Индикация «нельзя редактировать» для activeCell.
  * Используется при нажатии Enter на ячейку без редактируемого поля
- * (см. SubTable.handleContainerKeyDown + td[data-pulse="true"]). */
+ * (см. SubTable.handleContainerKeyDown + td[data-pulse="true"]).
+ * Палитра соответствует .flashReadOnly из SubTable (красный мигающий
+ * фон) — единый визуальный язык для onClick по read-only ячейке
+ * и для Enter по нередактируемой колонке. */
 @keyframes activeCellPulse {
 	0% {
-		background-color: rgba($color1, 0.15);
+		background-color: transparent;
+		outline-color: transparent;
 	}
 
-	40% {
-		background-color: rgba($color1, 0.55);
+	20% {
+		background-color: rgba(229, 57, 53, 0.18);
+		outline-color: rgba(220, 50, 50, 0.6);
+	}
+
+	60% {
+		background-color: rgba(229, 57, 53, 0.18);
+		outline-color: rgba(220, 50, 50, 0.6);
 	}
 
 	100% {
-		background-color: rgba($color1, 0.15);
+		background-color: transparent;
+		outline-color: transparent;
 	}
 }
 
@@ -198,7 +209,7 @@ thead {
 		.TableHeaderCell {
 			display: flex;
 			align-items: center;
-			height: $heightFieldInput - 3px;
+			height: $heightFieldInput + 1px;
 			padding: 1px;
 			// margin: 1px;
 			overflow: hidden;
@@ -231,18 +242,7 @@ thead {
 		}
 	}
 
-	&::after {
-		// z-index: 9;
-		// content: "";
-		// position: absolute;
-		// // top: $heightFieldInput + 2px;
-		// left: 0;
-		// right: 0;
-		// bottom: 0;
-		// height: 1px;
-		// background: $color5;
-		// box-shadow: 0 2px 3px 1px rgba($color5, 0.8);
-	}
+
 }
 
 tr:has(+ tr.activeRow) {
@@ -314,13 +314,18 @@ tbody {
 			.TableBodyCell {
 				display: flex;
 				align-items: center;
-				height: $heightFieldInput - 1px;
+				height: $heightFieldInput + 1px;
 				padding: 0;
 				white-space: nowrap;
 				text-overflow: ellipsis;
 				overflow: hidden;
 				user-select: none;
 				border: 1px solid #fff;
+				// position: relative нужен для абсолютно-позиционированных
+				// потомков (CellErrorTooltip из SubTable, который теперь
+				// рендерится прямо внутри .TableBodyCell, без промежуточного
+				// `.CellWrap`-обёртки).
+				position: relative;
 
 				// Поля ввода без фокуса наследуют pointer от tr;
 				// при получении фокуса — cursor меняется на text мгновенно через :focus
@@ -377,11 +382,41 @@ tbody {
 
 			td {
 				.TableBodyCell {
-					background: $color2;
+					// Фоновая подсветка строки (`background: $color2`) теперь
+					// задаётся в main.module.scss через @layer table-cell-activeRow.
+					// Здесь оставлены только структурные/контентные правила.
 
 					&>input[type="text"] {
 						width: 100%;
 						border: 0px transparent;
+					}
+
+					// ── activeCell: ячейка-«фокус» внутри активной строки ─────
+					// Атрибут data-active-cell="true" и класс .activeCell теперь
+					// живут НЕПОСРЕДСТВЕННО на .TableBodyCell (а не на <td>).
+					// Так все механики оформления ячейки (focus-within, dirty,
+					// required/error через CellWrap_*) находятся на одном узле
+					// DOM и не конфликтуют между разными уровнями.
+					//
+					// Визуал (background + box-shadow) задаётся в main.module.scss
+					// через @layer table-cell-activeCell — там единый
+					// приоритетный каскад для всех состояний ячейки.
+					&.activeCell,
+					&[data-active-cell="true"] {
+						position: relative;
+						z-index: 6;
+						outline: none;
+						font-weight: 500;
+					}
+
+					// ── focus: поле в фокусе ──────────────────────────────────
+					// :focus-within срабатывает на TableBodyCell, когда любой
+					// input/textarea/select внутри получает фокус. Визуал
+					// (background + box-shadow) — в main.module.scss
+					// (@layer table-cell-activeCell, последнее правило в слое).
+					&:focus-within {
+						position: relative;
+						z-index: 7;
 					}
 				}
 
@@ -394,53 +429,6 @@ tbody {
 					border-right: 0px;
 				}
 
-				// ── activeCell: ячейка-«фокус» внутри активной строки ─────
-				// Индикационный стиль: двойная рамка ($color1) + лёгкая
-				// «подсветка» содержимого + outline. Цель — чтобы пользователь
-				// сразу видел текущую ячейку даже на пёстром фоне строки и
-				// независимо от того, есть ли фокус на input внутри.
-				// Применяется через атрибут data-active-cell="true" и класс
-				// .activeCell на <td>. Используется механикой клавиатурной
-				// навигации (ArrowLeft/Right/Home/End) — см. Table/index.tsx.
-				&.activeCell,
-				&[data-active-cell="true"] {
-					position: relative;
-					z-index: 6;
-					// Двойная рамка: внутренний box-shadow + outline снаружи.
-					// outline-offset: -2px — рамка прижата к границе ячейки.
-					outline: 2px solid $color1;
-					outline-offset: -2px;
-					box-shadow: inset 0 0 0 4px rgba($color1, 0.18);
-
-					// «Бегущий» индикационный маркер слева — узкая полоса 3px
-					// акцентного цвета, выходящая за пределы рамки и делающая
-					// активную ячейку визуально доминирующей в строке.
-					&::before {
-						content: "";
-						position: absolute;
-						top: 0;
-						bottom: 0;
-						left: 0;
-						width: 3px;
-						background: $color1;
-						pointer-events: none;
-					}
-
-					.TableBodyCell {
-						// Чуть более насыщенный фон у активной ячейки, чем у
-						// фона активной строки — без перекрытия input'ов.
-						background: rgba($color1, 0.15);
-						font-weight: 500;
-					}
-				}
-
-				// ── data-pulse: индикация «нельзя редактировать» ──────────
-				// Применяется кратковременно (~300ms) к activeCell, когда
-				// пользователь нажимает Enter, а в ячейке нет редактируемого
-				// поля (computed/readonly колонка). См. SubTable.handleContainerKeyDown.
-				&[data-pulse="true"] {
-					animation: activeCellPulse 280ms ease-out 1;
-				}
 			}
 		}
 
@@ -449,6 +437,18 @@ tbody {
 		}
 	}
 
+}
+
+/* ── data-pulse: единая индикация «нельзя редактировать» ──────────────
+ * Кратковременная (~300 ms) анимация на любой <td>, у которой стоит
+ * data-pulse="true". Атрибут выставляется в двух местах:
+ *   1) SubTable.handleContainerKeyDown — Enter на нередактируемую ячейку;
+ *   2) ReadOnlyCell.onClick — клик по read-only содержимому ячейки в
+ *      режиме inline-editing.
+ * Селектор — на любой td в любой строке (вне tr.activeRow), чтобы
+ * срабатывало и на неактивной строке. */
+td[data-pulse="true"] {
+	animation: activeCellPulse 280ms ease-out 1;
 }
 
 /* tfoot — итоги колонок, sticky bottom внутри скролла, в стиле thead */
@@ -492,7 +492,7 @@ tfoot {
 			.TableFooterCell {
 				display: flex;
 				align-items: center;
-				height: $heightFieldInput - 3px;
+				height: $heightFieldInput + 1px;
 				padding: 1px;
 				// margin: 0px 3px;
 				overflow: hidden;
@@ -512,19 +512,7 @@ tfoot {
 		}
 	}
 
-	// Линия-тень сверху — не участвует в border-collapse, всегда видна
-	// &::before {
-	// 	z-index: 9;
-	// 	content: "";
-	// 	position: absolute;
-	// 	top: 0;
-	// 	left: 0;
-	// 	right: 0;
-	// 	// height: 1px;
-	// 	// bottom: $heightFieldInput + 2px;
-	// 	background: $color5;
-	// 	box-shadow: 0 -2px 3px 1px rgba($color5, 0.6);
-	// }
+
 }
 
 /* TableStatusBar — строка состояния, снаружи скролла, всегда внизу TableWrapper */
@@ -548,7 +536,7 @@ tfoot {
 .TableStatusCell {
 	display: flex;
 	align-items: center;
-	height: $heightFieldInput - 4px;
+	height: $heightFieldInput - 3px;
 	padding: 1px 8px;
 	overflow: hidden;
 	white-space: nowrap;

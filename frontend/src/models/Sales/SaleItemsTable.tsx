@@ -26,7 +26,7 @@ const VAT_COLUMN_IDS = new Set(["vatRate", "vatAmount"]);
 const DISCOUNT_COLUMN_IDS = new Set(["discountPercent", "discountAmount"]);
 /** Колонки акциза — скрываются, если useExcise=false (НК РК ст. 463). */
 const EXCISE_COLUMN_IDS = new Set(["exciseRate", "exciseAmount"]);
-/** «Облагаемый оборот НДС» и «Стоимость без косв. налогов» — скрываются при выключённом НДС (без НДС равно amount). */
+/** «Облагаемый оборот НДС» и «Стоимость» — скрываются при выключённом НДС (без НДС равно amount). */
 const AMOUNT_WITHOUT_VAT_IDS = new Set(["amountWithoutVat", "amountNetOfIndirectTaxes"]);
 
 /**
@@ -139,13 +139,13 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
       };
     }
 
-    // amountNetOfIndirectTaxes — графа 13 ЭСФ: «Стоимость без косв. налогов»
+    // amountNetOfIndirectTaxes — графа 13 ЭСФ: «Стоимость»
     // Формула базы зависит от наличия скидки; пояснение «база до начисления»
     // — от наличия НДС/акциза.
     if (isVatEnabled) {
       const formula = useDiscount
-        ? "Стоимость без косв. налогов = Количество × Цена − Сумма скидки"
-        : "Стоимость без косв. налогов = Количество × Цена";
+        ? "Стоимость = Количество × Цена − Сумма скидки"
+        : "Стоимость = Количество × Цена";
       let baseFor: string;
       if (isVatEnabled && useExcise) baseFor = "= база до начисления акциза и НДС";
       else if (isVatEnabled) baseFor = "= база до начисления НДС";
@@ -161,14 +161,14 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
     }
 
     // amountWithoutVat — графа «Облагаемый оборот НДС».
-    // С акцизом: = Стоимость без косв. налогов + Сумма акциза.
-    // Без акциза: = Стоимость без косв. налогов (т.е. = Кол-во × Цена [− Скидка]).
+    // С акцизом: = Стоимость + Сумма акциза.
+    // Без акциза: = Стоимость (т.е. = Кол-во × Цена [− Скидка]).
     if (isVatEnabled) {
       const lines: string[] = [
         "Облагаемый оборот по НДС (НК РК ст. 381 п. 1 пп. 4).",
       ];
       if (useExcise) {
-        lines.push("Облагаемый оборот НДС = Стоимость без косв. налогов + Сумма акциза");
+        lines.push("Облагаемый оборот НДС = Стоимость + Сумма акциза");
       } else if (useDiscount) {
         lines.push("Облагаемый оборот НДС = Количество × Цена − Сумма скидки");
       } else {
@@ -182,7 +182,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
     // exciseAmount — база зависит от наличия скидки и НДС.
     if (useExcise) {
       const baseLabel = isVatEnabled
-        ? "Стоимость без косв. налогов"
+        ? "Стоимость"
         : (useDiscount ? "(Количество × Цена − Сумма скидки)" : "(Количество × Цена)");
       dynHints["exciseAmount"] = {
         hint:
@@ -286,9 +286,24 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
         enforced.exciseRate = 0;
         enforced.exciseAmount = 0;
       }
+      // ── Авто-подстановка ставок из настроек учёта ──────────────────────
+      // Если итоговая ставка НДС/акциза получается «пустой» (null/undefined/""),
+      // НО при этом не равна явному 0 — подставляем дефолт из настроек
+      // организации. Явный 0, введённый пользователем, не перетирается:
+      // он означает «без налога по этой строке» (необлагаемая позиция).
+      const merged = { ...row, ...enforced } as Record<string, unknown>;
+      const isBlank = (v: unknown) => v === null || v === undefined || v === "";
+      if (isVatEnabled && isBlank(merged.vatRate)) {
+        const d = Number(orgVatRate);
+        if (Number.isFinite(d) && d > 0) enforced.vatRate = d;
+      }
+      if (useExcise && isBlank(merged.exciseRate)) {
+        const d = Number(orgExciseRate);
+        if (Number.isFinite(d) && d > 0) enforced.exciseRate = d;
+      }
       return withSaleItemRecalc({ ...row, ...enforced, vatCalculationMethod }, enforced);
     },
-    [isVatEnabled, useDiscount, useExcise, vatCalculationMethod],
+    [isVatEnabled, useDiscount, useExcise, vatCalculationMethod, orgVatRate, orgExciseRate],
   );
 
   const requiredFields = useMemo(() => {

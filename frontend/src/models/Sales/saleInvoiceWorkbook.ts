@@ -44,7 +44,6 @@ export function buildSaleInvoiceWorkbook(
 		(cols.discountAmount === true ||
 			has((r) => r.discountAmount) ||
 			Number(data.totalDiscountAmount ?? 0) > 0);
-	const showAmtNoVat = cols.amountWithoutVat !== false;
 	const showExciseRate =
 		cols.exciseRate !== false &&
 		(cols.exciseRate === true ||
@@ -66,22 +65,37 @@ export function buildSaleInvoiceWorkbook(
 			has((r) => r.vatAmount) ||
 			Number(data.totalVatAmount ?? 0) > 0);
 
+	// ── Режим: есть ли НДС/акциз ───────────────────────────────────
+	const hasVat = showVatAmt || showVatRate;
+	const hasExcise = showExciseAmt || showExciseRate;
+	const hasIndirectTaxes = hasVat || hasExcise;
+	// «Стоимость без НДС» — база для НДС (вкл. акциз, если он есть).
+	// Показывается при наличии НДС/акциза — без них дублирует итог.
+	const showAmtNoVat = hasIndirectTaxes && cols.amountWithoutVat !== false;
+
+	const priceHeader = hasExcise
+		? "Цена без налогов"
+		: hasVat
+			? "Цена без НДС"
+			: "Цена";
+	const totalHeader = hasIndirectTaxes ? "Стоимость с НДС" : "Сумма";
+
 	// Заголовки таблицы
 	const headers: string[] = [
 		"№",
 		"Наименование",
 		"Ед. изм.",
 		"Кол-во",
-		"Цена без налогов",
+		priceHeader,
 	];
 	if (showDiscPct) headers.push("Скидка, %");
 	if (showDiscAmt) headers.push("Сумма скидки");
-	if (showAmtNoVat) headers.push("Стоимость без налогов");
+	if (showAmtNoVat) headers.push("Стоимость без НДС");
 	if (showExciseRate) headers.push("Ставка акциза, %");
 	if (showExciseAmt) headers.push("Сумма акциза");
 	if (showVatRate) headers.push("Ставка НДС, %");
 	if (showVatAmt) headers.push("Сумма НДС");
-	headers.push("Стоимость с налогами");
+	headers.push(totalHeader);
 
 	const aoa: (string | number)[][] = [];
 

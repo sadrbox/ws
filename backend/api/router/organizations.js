@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { handleDelete } from "../../utils/checkReferences.js";
 import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
@@ -271,25 +272,14 @@ router.put("/organizations/:id", async (req, res) => {
 // ============================================
 // DELETE /organizations/:id
 // ============================================
-router.delete("/organizations/:id", async (req, res) => {
-	try {
-		const param = req.params.id;
-		const numId = Number(param);
-		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
-		const whereClause = isNumeric ? { id: numId } : { uuid: param };
-
-		await prisma.organization.delete({ where: whereClause });
-
-		return res.status(200).json({ success: true, message: "Удалено" });
-	} catch (error) {
-		if (error.code === "P2025") {
-			return res
-				.status(404)
-				.json({ success: false, message: "Организация не найдена" });
-		}
-		console.error("DELETE /organizations/:id error:", error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
-	}
-});
+router.delete("/organizations/:id", (req, res) =>
+	handleDelete({
+		req,
+		res,
+		prisma,
+		modelName: "organization",
+		notFoundMessage: "Организация не найдена",
+	}),
+);
 
 export default router;

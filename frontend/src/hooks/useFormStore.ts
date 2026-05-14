@@ -14,7 +14,7 @@ import { getCurrentUser } from "src/services/auth";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import useUID from "./useUID";
-import { stableStringify } from "src/utils/normalize";
+import { stableStringify, IGNORED_DIFF_KEYS } from "src/utils/normalize";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ТИПЫ
@@ -99,15 +99,30 @@ export function getFormStoreUserId(): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SESSION TOKEN
-// Уникальный токен, создаётся один раз при загрузке страницы (в памяти JS).
-// Сбрасывается при перезагрузке / закрытии вкладки.
-// Позволяет отличить данные localStorage текущей сессии от данных прошлой —
-// для индикации «есть несохранённые данные из прошлой сессии» (DirtyButton).
+// TAB_ID — идентификатор вкладки браузера.
+// Хранится в sessionStorage, которое:
+//   • переживает F5 / навигацию внутри вкладки;
+//   • НЕ переживает закрытие вкладки / её процесса;
+//   • изолировано между вкладками.
+// Это позволяет различить «черновик моей вкладки после F5» (нужно
+// восстановить АВТОМАТИЧЕСКИ, чтобы пользователь не потерял правки при
+// случайном Ctrl+R / падении страницы) и «черновик другой вкладки / прошлой
+// сессии» (предложить восстановить через DirtyButton).
 // ═══════════════════════════════════════════════════════════════════════════
-const CURRENT_SESSION_TOKEN =
-	Math.random().toString(36).slice(2) + Date.now().toString(36);
 const SESSION_TOKEN_KEY = "_st";
+const TAB_ID_STORAGE_KEY = "formStore:tabId";
+const CURRENT_SESSION_TOKEN = (() => {
+	try {
+		const existing = sessionStorage.getItem(TAB_ID_STORAGE_KEY);
+		if (existing) return existing;
+		const fresh = Math.random().toString(36).slice(2) + Date.now().toString(36);
+		sessionStorage.setItem(TAB_ID_STORAGE_KEY, fresh);
+		return fresh;
+	} catch {
+		// sessionStorage недоступен (приватный режим и т.п.) — fallback: in-memory.
+		return Math.random().toString(36).slice(2) + Date.now().toString(36);
+	}
+})();
 
 function persistToSession<F extends object>(
 	storageKey: string,
@@ -167,6 +182,7 @@ function createFormStore<F extends object>(
 	endpoint: string,
 	uuid: string | undefined,
 	storageKey: string,
+	derivedFields: ReadonlySet<string> = new Set(),
 ) {
 	// Мутабельный ключ — может измениться после первого save (new → uuid)
 	let currentStorageKey = storageKey;
@@ -192,19 +208,19 @@ function createFormStore<F extends object>(
 		},
 	};
 
-	// Пробуем восстановить из sessionStorage
+	// Пробуем восстановить из localStorage.
+	// pendingStash — несохранённые данные ПРЕДЫДУЩЕЙ сессии (другой вкладки
+	// или прошлой работы пользователя). Не подменяем поля автоматически —
+	// пользователь явно восстанавливает их кликом DirtyButton.
+	// Если же черновик принадлежит ТЕКУЩЕЙ вкладке (был сохранён до F5 /
+	// случайного перезагрузки) — применяем его автоматически. Это и есть
+	// «бесшовное переживание перезагрузки» для пользователя.
 	let hadStoredData = false;
-	// pendingStash — несохранённые данные ПРЕДЫДУЩЕГО открытия формы (любая
-	// сессия, в т.ч. текущая). Поведение: при открытии/повторном открытии
-	// формы НИКОГДА не подменяем поля автоматически — форма всегда стартует
-	// с серверного снапшота (или defaults). Пользователь явно восстанавливает
-	// несохранённые правки кликом по кнопке «Восстановить» (DirtyButton) в
-	// PaneItemHeaderToolbar — только тогда форма становится Dirty.
 	let pendingStash: { fields: F; tables: Record<string, TableState> } | null =
 		null;
 	const restored = restoreFromSession<F>(currentStorageKey);
 	if (restored) {
-		pendingStash = {
+		const merged = {
 			fields: { ...defaultFields, ...restored.fields } as F,
 			tables: (() => {
 				const t: Record<string, TableState> = {};
@@ -214,6 +230,15 @@ function createFormStore<F extends object>(
 				return t;
 			})(),
 		};
+		if (restored.fromCurrentSession) {
+			// Та же вкладка после F5 — авто-применяем черновик в state.
+			state = { ...state, fields: merged.fields, tables: merged.tables };
+			hadStoredData = true;
+		} else {
+			// Другая вкладка / прошлая сессия — кладём в stash, ждём явного
+			// восстановления через DirtyButton.
+			pendingStash = merged;
+		}
 	}
 
 	// snapshotReady = false пока серверный snapshot не загружен (при hadStoredData).
@@ -269,6 +294,19 @@ function createFormStore<F extends object>(
 
 	// ── Мутации ──
 
+	// userChangeSeq — счётчик «значимых» пользовательских изменений полей
+	// формы (non-derived). Инкрементируется в setField/setFields только
+	// когда реально меняется состояние, отслеживаемое dirty-сравнением.
+	// Используется в submit() для безопасного отложенного markClean: если
+	// за время между save и следующим React-commit пользователь ничего
+	// не поменял — повторно фиксируем «чистый» снапшот, перекрывая ложный
+	// dirty от пост-render эффектов (merge SubTable после refetch,
+	// handleTotalChange и т.п.).
+	let userChangeSeq = 0;
+	function getUserChangeSeq(): number {
+		return userChangeSeq;
+	}
+
 	/** Обновить одно поле формы */
 	function setField<K extends keyof F>(field: K, value: F[K]): void {
 		if (state.fields[field] === value) return;
@@ -276,16 +314,25 @@ function createFormStore<F extends object>(
 			...state,
 			fields: { ...state.fields, [field]: value },
 		};
+		if (!derivedFields.has(field as string)) userChangeSeq++;
 		notify();
 		schedulePersist();
 	}
 
 	/** Обновить несколько полей формы за раз */
 	function setFields(patch: Partial<F>): void {
+		const prevFields = state.fields;
 		state = {
 			...state,
 			fields: { ...state.fields, ...patch },
 		};
+		for (const k of Object.keys(patch)) {
+			if (derivedFields.has(k)) continue;
+			if (prevFields[k as keyof F] !== (patch as any)[k]) {
+				userChangeSeq++;
+				break;
+			}
+		}
 		notify();
 		schedulePersist();
 	}
@@ -313,7 +360,7 @@ function createFormStore<F extends object>(
 	/** Сбросить dirty-флаг (вызывать после load / save) */
 	function markClean(): void {
 		savedSnapshot = stableStringify({
-			fields: state.fields,
+			fields: stripDerived(state.fields as Record<string, unknown>),
 			tables: state.tables,
 		});
 		snapshotReady = true;
@@ -321,12 +368,29 @@ function createFormStore<F extends object>(
 		notify(); // Уведомить подписчиков (dirty-индикатор на вкладке)
 	}
 
+	/**
+	 * Отфильтровать derived-поля из объекта (для dirty-сравнения).
+	 * Derived-поля — это поля, которые формируются автоматически из других
+	 * полей/таблиц (например amount = Σ saleItems.amount). Они НЕ участвуют
+	 * в dirty-tracking, так как «изменение» в них является следствием
+	 * изменения первичных данных, а не действием пользователя.
+	 */
+	function stripDerived<T extends Record<string, unknown>>(obj: T): T {
+		if (derivedFields.size === 0) return obj;
+		const out: Record<string, unknown> = {};
+		for (const k of Object.keys(obj)) {
+			if (derivedFields.has(k)) continue;
+			out[k] = obj[k];
+		}
+		return out as T;
+	}
+
 	/** Есть ли несохранённые изменения? */
 	function isDirty(): boolean {
 		// Пока серверный snapshot не загружен — не показывать dirty
 		if (!snapshotReady) return false;
 		const current = stableStringify({
-			fields: state.fields,
+			fields: stripDerived(state.fields as Record<string, unknown>),
 			tables: state.tables,
 		});
 		return current !== savedSnapshot;
@@ -348,7 +412,8 @@ function createFormStore<F extends object>(
 		const savedFields = parsed?.fields;
 		const savedTables = parsed?.tables ?? {};
 		const fieldsDirty =
-			stableStringify(state.fields) !== stableStringify(savedFields);
+			stableStringify(stripDerived(state.fields as Record<string, unknown>)) !==
+			stableStringify(savedFields);
 		const tablesDirty = Object.keys(state.tables).some(
 			(key) =>
 				stableStringify(state.tables[key]) !==
@@ -382,13 +447,22 @@ function createFormStore<F extends object>(
 			...Object.keys(savedFields),
 		]);
 		for (const key of allKeys) {
+			// Служебные поля (createdAt/updatedAt/deletedAt) не показываем
+			// пользователю и не учитываем как «изменение».
+			if (IGNORED_DIFF_KEYS.has(key)) continue;
+			// Derived-поля (вычисляются из других значений — суммы, итоги и т.п.)
+			// тоже не показываем: их «изменение» — следствие, а не действие.
+			if (derivedFields.has(key)) continue;
+			// Сравниваем нормализованные значения — иначе появляются
+			// «ложные» правки вида '—' → '—' (null vs "" vs undefined и т.п.).
 			if (
-				JSON.stringify(currentFields[key]) !== JSON.stringify(savedFields[key])
+				stableStringify(currentFields[key] as string) !==
+				stableStringify(savedFields[key])
 			) {
 				changedFields.push({
 					field: key,
 					savedValue: savedFields[key],
-					currentValue: currentFields[key],
+					currentValue: currentFields[key] as string,
 				});
 			}
 		}
@@ -396,7 +470,7 @@ function createFormStore<F extends object>(
 		const changedTables: DirtyTableEntry[] = [];
 		for (const key of Object.keys(state.tables)) {
 			const saved = savedTables[key] ?? { pending: [] };
-			if (JSON.stringify(state.tables[key]) !== JSON.stringify(saved)) {
+			if (stableStringify(state.tables[key]) !== stableStringify(saved)) {
 				changedTables.push({
 					key,
 					pendingCount: state.tables[key].pending.length,
@@ -491,7 +565,7 @@ function createFormStore<F extends object>(
 	async function load(
 		entityUuid: string,
 		mapServerToForm: (data: any, prev?: F) => F | Promise<F>,
-		afterLoad?: () => void,
+		afterLoad?: () => void | Promise<void>,
 		snapshotOnly = false,
 		noCache = false,
 	): Promise<void> {
@@ -525,16 +599,18 @@ function createFormStore<F extends object>(
 
 			if (snapshotOnly) {
 				savedSnapshot = stableStringify({
-					fields: mapped,
+					fields: stripDerived(mapped as unknown as Record<string, unknown>),
 					tables: emptyTables,
 				});
 				snapshotReady = true;
-				setMeta({ isLoading: false, isEditMode: true, uuid: entityUuid });
+				// isLoading остаётся true — снимем ПОСЛЕ afterLoad,
+				// чтобы поля формы были disabled до резолва invalidate/refetch SubTable.
+				setMeta({ isEditMode: true, uuid: entityUuid });
 				notify();
 			} else {
 				replaceFields(mapped);
 				clearAllTablesPending();
-				setMeta({ isLoading: false, isEditMode: true, uuid: entityUuid });
+				setMeta({ isEditMode: true, uuid: entityUuid });
 				markClean();
 			}
 
@@ -546,7 +622,14 @@ function createFormStore<F extends object>(
 				dismissNetworkNotifications(_paneUniqId);
 			}
 
-			afterLoad?.();
+			// Дожидаемся всех promise в afterLoad (invalidateQueries
+			// + refetch SubTable) — только после разрешаем ввод.
+			try {
+				await Promise.resolve(afterLoad?.());
+			} catch {
+				/* ошибки afterLoad не блокируют разблокировку формы */
+			}
+			setMeta({ isLoading: false });
 			markInitialFetchDone();
 		} catch (err: any) {
 			if (isNetworkError(err)) {
@@ -656,8 +739,22 @@ function createFormStore<F extends object>(
 		}
 	}
 
-	/** Коммит pending-строк всех вложенных таблиц на сервер */
-	async function commitAllTables(parentUuid: string): Promise<void> {
+	/**
+	 * Коммит pending-строк всех вложенных таблиц на сервер.
+	 *
+	 * @param parentUuid UUID родительской записи.
+	 * @param opts.clear если true (по умолчанию) — после успешной отправки
+	 *   очищает локальное pending-состояние таблиц. В flow `submit()` мы
+	 *   передаём `clear: false`, чтобы сначала дождаться `afterSave`
+	 *   (invalidate+refetch SubTable из react-query), и только потом
+	 *   обнулить pending. Иначе SubTable между шагами успевает отрисовать
+	 *   устаревшие серверные данные из локального кэша.
+	 */
+	async function commitAllTables(
+		parentUuid: string,
+		opts?: { clear?: boolean },
+	): Promise<void> {
+		const clear = opts?.clear ?? true;
 		for (const [key, tableDef] of Object.entries(tableDefs)) {
 			const { pending } = state.tables[key];
 			if (!pending.length) continue;
@@ -676,7 +773,7 @@ function createFormStore<F extends object>(
 				},
 			);
 		}
-		clearAllTablesPending();
+		if (clear) clearAllTablesPending();
 	}
 
 	/** Коммит pending-строк одной конкретной таблицы */
@@ -796,6 +893,7 @@ function createFormStore<F extends object>(
 		getDirtyDetails,
 		getDirtyFieldDiff,
 		markClean,
+		getUserChangeSeq,
 
 		// Storage key migration
 		migrateStorageKey,
@@ -953,6 +1051,48 @@ export function usePaneHasPendingStash(uniqId: string): boolean {
 	return useSyncExternalStore(
 		subscribeStash,
 		() => stashSet.has(uniqId),
+		() => false,
+	);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SHOW-DIFF HOVER STATE — реактивный флаг "показать подсветку расхождений
+// на полях/ячейках формы". Активируется при наведении на DirtyButton в
+// PaneItemHeaderToolbar. Используется компонентами Field*/SubTable
+// (через data-pane-show-diff на корне Pane + data-pane-dirty на узлах).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const showDiffSet = new Set<string>();
+const showDiffListeners = new Set<() => void>();
+
+function notifyShowDiffListeners(): void {
+	for (const l of showDiffListeners) l();
+}
+
+/** Установить флаг показа подсветки расхождений для панели. */
+export function setPaneShowDiff(uniqId: string, on: boolean): void {
+	const had = showDiffSet.has(uniqId);
+	if (on && !had) {
+		showDiffSet.add(uniqId);
+		notifyShowDiffListeners();
+	} else if (!on && had) {
+		showDiffSet.delete(uniqId);
+		notifyShowDiffListeners();
+	}
+}
+
+function subscribeShowDiff(listener: () => void): () => void {
+	showDiffListeners.add(listener);
+	return () => {
+		showDiffListeners.delete(listener);
+	};
+}
+
+/** Хук: показывать ли подсветку расхождений на полях/ячейках панели. */
+export function usePaneShowDiff(uniqId: string): boolean {
+	return useSyncExternalStore(
+		subscribeShowDiff,
+		() => showDiffSet.has(uniqId),
 		() => false,
 	);
 }
@@ -1244,11 +1384,19 @@ function getOrCreate<F extends object>(
 	endpoint: string,
 	uuid: string | undefined,
 	storageKey: string,
+	derivedFields?: ReadonlySet<string>,
 ): FormStore<F> {
 	if (!storeCache.has(storageKey)) {
 		storeCache.set(
 			storageKey,
-			createFormStore(defaultFields, tableDefs, endpoint, uuid, storageKey),
+			createFormStore(
+				defaultFields,
+				tableDefs,
+				endpoint,
+				uuid,
+				storageKey,
+				derivedFields,
+			),
 		);
 	}
 	return storeCache.get(storageKey)! as FormStore<F>;
@@ -1279,10 +1427,19 @@ export interface UseFormStoreOptions<F extends object> {
 	buildPayload: (fields: F) => Record<string, unknown> | string;
 	/** Метка панели после сохранения */
 	buildPaneLabel: (saved: any) => string;
-	/** Доп. логика после load */
-	afterLoad?: () => void;
+	/** Доп. логика после load. Может быть async — форма остаётся
+	 * disabled до резолва Promise. */
+	afterLoad?: () => void | Promise<void>;
 	/** Доп. логика после save (кроме commitTables — он вызывается автоматически) */
 	afterSave?: (savedData: any) => Promise<void> | void;
+	/**
+	 * Имена полей, которые вычисляются автоматически (производные/derived):
+	 * например, `amount`, `vatAmount`, `amountWithoutVat` — суммы по
+	 * строкам SubTable. Такие поля исключаются из dirty-tracking, иначе
+	 * любая правка строки SubTable «протекает» в diff формы и показывает
+	 * пользователю шумные/некорректные «было → стало» для итогов.
+	 */
+	derivedFields?: readonly string[];
 }
 
 /** Возвращаемый тип useFormStore */
@@ -1380,6 +1537,7 @@ export function useFormStore<F extends object>(
 		buildPaneLabel,
 		afterLoad,
 		afterSave,
+		derivedFields,
 	} = options;
 
 	const { onSave, onClose, data, uniqId } = paneProps;
@@ -1404,13 +1562,16 @@ export function useFormStore<F extends object>(
 		`${STORAGE_PREFIX}${userId}:${storageKey}:${uuid ?? uniqId ?? "new"}`;
 	const effectiveDefaults = initialFields ?? defaultFields;
 
-	// Создаём/получаем store из кэша
+	// Создаём/получаем store из кэша.
+	// Set из derivedFields передаётся в createFormStore при ПЕРВОМ создании
+	// (кэш по fullStorageKey). Повторные вызовы используют уже созданный store.
 	const store = getOrCreate<F>(
 		effectiveDefaults,
 		tableDefs,
 		endpoint,
 		uuid,
 		fullStorageKey,
+		derivedFields ? new Set(derivedFields) : undefined,
 	);
 
 	// Привязываем uniqId панели к store — для push-уведомлений через setError.
@@ -1596,39 +1757,89 @@ export function useFormStore<F extends object>(
 	const submit = useCallback(
 		async (options?: { keepLoadingOnSuccess?: boolean }): Promise<boolean> => {
 			const keepLoading = Boolean(options?.keepLoadingOnSuccess);
+			// keepLoadingOnSuccess: true вне зависимости от опции — нужно,
+			// чтобы поля формы оставались disabled на протяжении ВСЕЙ цепочки
+			// (submitFields → commitAllTables → afterSave + refetch → markClean).
+			// В конце явно сбрасываем isLoading, если caller не запросил
+			// сохранение isLoading=true (используется handleSaveAndClose, чтобы
+			// поля не «прыгали» enabled↔disabled во время анмаунта панели).
 			const { success, savedData } = await store.submitFields(
 				buildPayloadRef.current,
 				mapRef.current,
 				buildLabelRef.current,
 				updatePaneLabel,
 				uniqId,
-				keepLoading,
+				true,
 			);
-			if (!success) return false;
+			if (!success) {
+				if (!keepLoading) store.setMeta({ isLoading: false });
+				return false;
+			}
 
-			// Коммит всех pending-таблиц
+			// Коммит всех pending-таблиц.
+			// Важно: НЕ очищаем pending здесь — сначала дадим afterSave
+			// (invalidate + refetch SubTable) принести свежие данные, иначе
+			// SubTable между шагами успевает отрисовать устаревшие строки
+			// из локального кэша react-query.
 			const parentUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid ?? "";
 			if (Object.keys(tableDefs).length > 0 && parentUuid) {
 				try {
-					await store.commitAllTables(parentUuid);
+					await store.commitAllTables(parentUuid, { clear: false });
 				} catch (e: any) {
 					store.setError(e?.message || "Не удалось сохранить вложенные данные");
+					if (!keepLoading) store.setMeta({ isLoading: false });
 					return false;
 				}
 			}
 
-			// afterSave — дополнительная логика (invalidate и т.д.)
+			// afterSave — дополнительная логика (invalidate queries, refetch и т.д.).
+			// Должна возвращать Promise, чтобы мы дождались появления свежих
+			// данных ДО очистки pending. См. комментарий выше.
 			if (afterSaveRef.current) {
 				try {
 					await afterSaveRef.current(savedData);
 				} catch (e: any) {
 					store.setError(e?.message || "Ошибка после сохранения");
+					if (!keepLoading) store.setMeta({ isLoading: false });
 					return false;
 				}
 			}
 
+			// Теперь, когда серверные данные SubTable уже актуальны (afterSave
+			// дождался refetch), безопасно сбрасываем локальные pending-строки.
+			if (Object.keys(tableDefs).length > 0 && parentUuid) {
+				store.clearAllTablesPending();
+			}
+
 			void onSaveRef.current?.();
 			store.markClean();
+
+			// ── Settle: повторный markClean после React-commit ────────────
+			// Некоторые пост-render эффекты (SubTable merge после refetch,
+			// handleTotalChange с derived-полями, фоновые setFields из хуков
+			// автоподстановки и т.п.) могут мутировать state УЖЕ ПОСЛЕ
+			// синхронного markClean выше, оставляя ложный dirty-флаг.
+			// Перевыполняем markClean после полного цикла render/effects.
+			// Защита: пропускаем повторный markClean, если за это время
+			// пользователь внёс новые значимые (non-derived) изменения
+			// (userChangeSeq изменился) — это означает, что dirty настоящий.
+			const seqAfterSave = store.getUserChangeSeq();
+			const followUpMarkClean = () => {
+				if (store.getUserChangeSeq() !== seqAfterSave) return;
+				if (!store.isDirty()) return;
+				try {
+					store.markClean();
+				} catch {
+					/* noop */
+				}
+			};
+			if (typeof requestAnimationFrame !== "undefined") {
+				requestAnimationFrame(() => {
+					requestAnimationFrame(followUpMarkClean);
+				});
+			} else {
+				setTimeout(followUpMarkClean, 32);
+			}
 
 			// Миграция storageKey после первого POST (new → uuid).
 			// Если запись была создана (есть savedData.uuid) и текущий ключ НЕ содержит uuid —
@@ -1640,6 +1851,11 @@ export function useFormStore<F extends object>(
 					store.migrateStorageKey(uuidKey);
 				}
 			}
+
+			// Вся цепочка успешно завершена — разрешаем ввод в форму.
+			// Если caller запросил keepLoadingOnSuccess (handleSaveAndClose) —
+			// оставляем disabled до анмаунта панели.
+			if (!keepLoading) store.setMeta({ isLoading: false });
 
 			return true;
 		},
