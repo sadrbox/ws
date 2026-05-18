@@ -23,7 +23,11 @@ import { Group } from "src/components/UI";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import Tabs from "src/components/Tabs";
-import styles from "src/styles/main.module.scss";
+import styles from "./SyncDashboard.module.scss";
+// Общие form-классы (FormWrapper/FormBody/Form) живут в главном модуле стилей
+// и используются также другими формами. Импортируем отдельно — `composes:`
+// от SCSS-файла не работает (postcss-парсер не понимает SCSS-комментарии).
+import mainStyles from "src/styles/main.module.scss";
 import type { TPane } from "src/app/types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -145,7 +149,7 @@ const MainTab: FC<{
   syncNow: () => Promise<void>; abortSync: () => void;
   mode: PersistenceMode; setMode: (m: PersistenceMode) => void;
 }> = ({ isOnline, isSyncing, syncState, pendingCount, offlineStats, syncNow, abortSync, mode, setMode }) => (
-  <div className={styles.FormBodyParts}>
+  <div className={mainStyles.FormBodyParts}>
     <StatusBanner isOnline={isOnline} isSyncing={isSyncing} pendingCount={pendingCount} mode={mode} />
 
     {/* Прогресс */}
@@ -159,7 +163,7 @@ const MainTab: FC<{
     )}
 
     {/* Режим работы */}
-    <Group align="col" label="Режим работы с данными" className={styles.Form}>
+    <Group align="col" label="Режим работы с данными" className={mainStyles.Form}>
       <div className={styles.SyncModeRow}>
         <button
           type="button"
@@ -189,7 +193,7 @@ const MainTab: FC<{
     <Divider />
 
     {/* Метрики */}
-    <Group align="row" gap="12px" className={styles.Form}>
+    <Group align="row" gap="12px" className={mainStyles.Form}>
       <div className={styles.SyncMetricGrid}>
         <MetricCell value={isOnline ? "🟢" : "🔴"} label={isOnline ? "Подключён" : "Нет связи"} />
         <MetricCell value={String(pendingCount)} label="Не отправлено" />
@@ -201,7 +205,7 @@ const MainTab: FC<{
     <Divider />
 
     {/* Действия */}
-    <Group align="row" gap="8px" className={styles.Form}>
+    <Group align="row" gap="8px" className={mainStyles.Form}>
       {isSyncing ? (
         <Button onClick={abortSync}><span>⏹ Остановить</span></Button>
       ) : (
@@ -216,7 +220,7 @@ const MainTab: FC<{
     {syncState.lastResult && (
       <>
         <Divider />
-        <Group align="col" label="Результат последней синхронизации" className={styles.Form}>
+        <Group align="col" label="Результат последней синхронизации" className={mainStyles.Form}>
           <div className={styles.SyncResultGrid}>
             <span>Статус</span><span>{syncState.lastResult.success ? "✅ Успешно" : "❌ С ошибками"}</span>
             <span>Загружено</span><span>{syncState.lastResult.pulled} записей</span>
@@ -257,20 +261,20 @@ const QueueTab: FC<{
 
   if (pendingCount === 0) {
     return (
-      <div className={styles.FormBodyParts}>
+      <div className={mainStyles.FormBodyParts}>
         <EmptyState icon="✅" title="Все данные отправлены" desc="Нет неотправленных изменений. Всё синхронизировано." />
       </div>
     );
   }
 
   return (
-    <div className={styles.FormBodyParts}>
+    <div className={mainStyles.FormBodyParts}>
       <div className={styles.SyncInfoBox}>
         Изменения, сделанные вами, которые ещё не отправлены на сервер.
         {isOnline ? " Нажмите «Отправить все»." : " Будут отправлены при появлении связи."}
       </div>
 
-      <Group align="row" gap="8px" className={styles.Form}>
+      <Group align="row" gap="8px" className={mainStyles.Form}>
         <Button variant="primary" onClick={syncNow} disabled={isSyncing || !isOnline}>
           <span>{isSyncing ? "⏳ Отправка…" : `🔄 Отправить все (${pendingCount})`}</span>
         </Button>
@@ -331,14 +335,14 @@ const ConflictsTab: FC<{ conflicts: SyncConflict[] }> = ({ conflicts }) => {
 
   if (conflicts.length === 0) {
     return (
-      <div className={styles.FormBodyParts}>
+      <div className={mainStyles.FormBodyParts}>
         <EmptyState icon="✅" title="Конфликтов нет" desc="Все данные согласованы между устройством и сервером." />
       </div>
     );
   }
 
   return (
-    <div className={styles.FormBodyParts}>
+    <div className={mainStyles.FormBodyParts}>
       <div className={styles.SyncInfoBox}>
         Конфликт — одна и та же запись изменена и на устройстве, и на сервере. Выберите, какую версию оставить.
       </div>
@@ -438,9 +442,9 @@ const StorageTab: FC<{
   }, [refreshStats]);
 
   return (
-    <div className={styles.FormBodyParts}>
+    <div className={mainStyles.FormBodyParts}>
       {/* Обзор */}
-      <Group align="row" gap="12px" className={styles.Form}>
+      <Group align="row" gap="12px" className={mainStyles.Form}>
         <div className={styles.SyncMetricGrid}>
           <MetricCell value={dbSize != null ? formatBytes(dbSize) : "—"} label="Размер" />
           <MetricCell value={String(offlineStats?.totalRecords ?? 0)} label="Записей" />
@@ -452,7 +456,7 @@ const StorageTab: FC<{
       <Divider />
 
       {/* Действия */}
-      <Group align="row" gap="8px" className={styles.Form}>
+      <Group align="row" gap="8px" className={mainStyles.Form}>
         <Button onClick={refreshStats}><span>🔄 Обновить</span></Button>
         <Button variant="primary" onClick={handleDlAll} disabled={downloading || !isOnline}>
           <span>{downloading ? "⏳ …" : "📥 Загрузить всё для офлайна"}</span>
@@ -472,7 +476,7 @@ const StorageTab: FC<{
       <Divider />
 
       {/* Выборочная загрузка */}
-      <Group align="col" label="Подготовить данные для работы без интернета" className={styles.Form}>
+      <Group align="col" label="Подготовить данные для работы без интернета" className={mainStyles.Form}>
         <div className={styles.SyncInfoBox} style={{ marginBottom: 8 }}>
           Выберите справочники, которые нужны офлайн, и нажмите «Загрузить».
         </div>
@@ -599,9 +603,9 @@ const SyncDashboard: FC<Partial<TPane>> = (paneProps) => {
   ], [isOnline, isSyncing, syncState, pendingCount, pendingChanges, conflicts, offlineStats, syncNow, abortSync, removePending, clearAllPending, refreshStats, mode, setMode]);
 
   return (
-    <div className={styles.FormWrapper}>
+    <div className={mainStyles.FormWrapper}>
       {toolbarPortal}
-      <div className={styles.FormBody}>
+      <div className={mainStyles.FormBody}>
         <Tabs tabs={tabs} />
       </div>
     </div>

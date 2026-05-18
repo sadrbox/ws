@@ -150,6 +150,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			organizationUuid,
 			counterpartyUuid,
 			contractUuid,
+			warehouseUuid,
+			posted,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
@@ -159,6 +161,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
+				warehouseUuid: warehouseUuid || null,
+				posted: typeof posted === "boolean" ? posted : false,
 				authorUuid: req.user.uuid,
 			},
 			include: {
@@ -187,10 +191,12 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			"organizationUuid",
 			"counterpartyUuid",
 			"contractUuid",
+			"warehouseUuid",
 		]) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
+		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
 		if (req.body.date !== undefined)
 			data.date = req.body.date ? new Date(req.body.date) : null;
 		if (req.body.amount !== undefined)

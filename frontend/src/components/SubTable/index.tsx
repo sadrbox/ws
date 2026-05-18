@@ -968,11 +968,9 @@ const SubTable: FC<SubTableProps> = ({
   }, [openFormFor, ctx]);
 
   // ── renderCell wrapper ─────────────────────────────────────────────────
-  // Возвращает ТОЛЬКО внутренний контент ячейки. Обёртку с CellWrap_error /
-  // CellWrap_required и сам error-tooltip собирает Table на уровне
-  // `.TableBodyCell` (см. getCellMeta ниже) — это убирает промежуточный
-  // `<div>` из разметки и приводит все механики (activeCell, dirty,
-  // required/error) к одному уровню DOM.
+  // Возвращает ТОЛЬКО внутренний контент ячейки. error-tooltip собирает
+  // Table через getCellMeta; required/error стили применяются Field-компонентами
+  // через CellFieldStateScope → useCellFieldState.
   const renderCell = useCallback((row: TDataItem, col: TColumn): ReactNode | undefined => {
     // Для несохранённых (temp) строк скрываем служебные поля id / uuid
     if (deferRemoteChanges && typeof row.id === "number" && row.id < 0) {
@@ -1005,11 +1003,9 @@ const SubTable: FC<SubTableProps> = ({
   }, [renderCellProp, ctx, deferRemoteChanges, cellErrors, requiredFields, inlineEditing]);
 
   // ── getCellMeta ────────────────────────────────────────────────────────
-  // Возвращает классы-варианты (CellWrap_required / CellWrap_error),
-  // title (errorMsg) и визуальный errorTooltip, которые Table накладывает
-  // ПРЯМО на `.TableBodyCell`. Без этого Table вынужден был бы оборачивать
-  // содержимое ячейки в дополнительный div — а это создавало лишний слой
-  // DOM и осложняло координацию с focus-within / activeCell / dirty.
+  // Возвращает required/error-флаги и визуальный errorTooltip. Table передаёт
+  // их в CellFieldStateScope, откуда Field-компоненты читают через
+  // useCellFieldState() и применяют стили на FieldWrapper.
   const getCellMeta = useCallback((row: TDataItem, col: TColumn) => {
     const rowId = getRowId(row);
     const errorMsg = cellErrors[rowId]?.[col.identifier];
@@ -1025,8 +1021,9 @@ const SubTable: FC<SubTableProps> = ({
     })();
     if (!errorMsg && !isCellEmpty) return null;
     return {
-      className: errorMsg ? styles.CellWrap_error : styles.CellWrap_required,
-      title: errorMsg || undefined,
+      required: !errorMsg && isCellEmpty,
+      error: !!errorMsg,
+      errorMessage: errorMsg || undefined,
       errorTooltip: errorMsg
         ? <div className={styles.CellErrorTooltip}>{errorMsg}</div>
         : null,
@@ -1438,15 +1435,17 @@ const SubTable: FC<SubTableProps> = ({
       ? (row: TDataItem) => renderExpandedRowProp(row, ctx)
       : undefined,
     apiRef: tableApiRef,
-    // ── Per-cell meta (error / required) ─────────────────────────────────
-    // CellWrap_error / CellWrap_required теперь применяются прямо на
-    // `.TableBodyCell` (см. Table). Здесь только формируем мета-объект.
     getCellMeta,
     // ── Per-cell diff: сравнение текущего значения с серверным (saved) ──
     // Используется Table для подсветки изменённых ячеек при hover на
     // DirtyButton панели (см. UI/PaneItem + useDirtyHighlight + main.module.scss).
     getCellDirty: (row: TDataItem, col: TColumn) => {
       const p = row as PendingRow;
+      // Не помечаем служебные поля как dirty (id/uuid/author и варианты).
+      const colTail = col.identifier.includes('.') ? col.identifier.split('.').pop() ?? col.identifier : col.identifier;
+      const colTailLower = String(colTail).toLowerCase();
+      const EXCLUDE_COLS = new Set(['id', 'uuid', 'author', 'authorid', 'authoruuid', 'createdby', 'createdbyid', 'createdbyuuid']);
+      if (EXCLUDE_COLS.has(colTailLower)) return null;
       if (!p._pendingAction) return null;
       const getNested = (obj: unknown, path: string): unknown => {
         const parts = path.split(".");

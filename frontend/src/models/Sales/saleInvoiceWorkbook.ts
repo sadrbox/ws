@@ -44,6 +44,10 @@ export function buildSaleInvoiceWorkbook(
 		(cols.discountAmount === true ||
 			has((r) => r.discountAmount) ||
 			Number(data.totalDiscountAmount ?? 0) > 0);
+	const showNetOfIndirectTaxes =
+		cols.amountNetOfIndirectTaxes !== false &&
+		(cols.amountNetOfIndirectTaxes === true ||
+			has((r) => r.amountNetOfIndirectTaxes));
 	const showExciseRate =
 		cols.exciseRate !== false &&
 		(cols.exciseRate === true ||
@@ -55,10 +59,8 @@ export function buildSaleInvoiceWorkbook(
 			has((r) => r.exciseAmount) ||
 			Number(data.totalExciseAmount ?? 0) > 0);
 	const showVatRate =
-		cols["vatRateRef.shortName"] !== false &&
-		(cols["vatRateRef.shortName"] === true ||
-			has((r) => r.vatRate) ||
-			has((r) => r.vatAmount));
+		cols.vatRate !== false &&
+		(cols.vatRate === true || has((r) => r.vatRate) || has((r) => r.vatAmount));
 	const showVatAmt =
 		cols.vatAmount !== false &&
 		(cols.vatAmount === true ||
@@ -90,6 +92,7 @@ export function buildSaleInvoiceWorkbook(
 	];
 	if (showDiscPct) headers.push("Скидка, %");
 	if (showDiscAmt) headers.push("Сумма скидки");
+	if (showNetOfIndirectTaxes) headers.push("Стоимость");
 	if (showAmtNoVat) headers.push("Стоимость без НДС");
 	if (showExciseRate) headers.push("Ставка акциза, %");
 	if (showExciseAmt) headers.push("Сумма акциза");
@@ -136,6 +139,7 @@ export function buildSaleInvoiceWorkbook(
 		if (showDiscPct)
 			row.push(it.discountPercent != null ? Number(it.discountPercent) : "");
 		if (showDiscAmt) row.push(fmtNum(it.discountAmount));
+		if (showNetOfIndirectTaxes) row.push(fmtNum(it.amountNetOfIndirectTaxes));
 		if (showAmtNoVat) row.push(fmtNum(it.amountWithoutVat));
 		if (showExciseRate)
 			row.push(
@@ -152,10 +156,12 @@ export function buildSaleInvoiceWorkbook(
 
 	// ── Итого ──
 	// «Итого:» ставим в первую ячейку с правым выравниванием через мерж.
-	const itogoColSpan = 5 + (showDiscPct ? 1 : 0);
+	const itogoColSpan =
+		5 + (showDiscPct ? 1 : 0) + (showNetOfIndirectTaxes ? 1 : 0);
 	const totalRow: (string | number)[] = ["Итого:"];
 	for (let i = 1; i < itogoColSpan; i++) totalRow.push("");
 	if (showDiscAmt) totalRow.push(fmtNum(data.totalDiscountAmount));
+	if (showNetOfIndirectTaxes) totalRow.push("");
 	if (showAmtNoVat) totalRow.push(fmtNum(data.totalAmountWithoutVat));
 	if (showExciseRate) totalRow.push("");
 	if (showExciseAmt) totalRow.push(fmtNum(data.totalExciseAmount));

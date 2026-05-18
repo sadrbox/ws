@@ -20,6 +20,8 @@ import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import { validatePostedDocument, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { FormRequiredScope } from "src/hooks/useFormRequired";
 import { Toolbar } from "src/components/Toolbar";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import { usePrintDocument } from "src/components/PrintLayout/usePrintDocument";
@@ -134,19 +136,23 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
       authorName: d.author?.username ?? d.author?.email ?? "",
     }),
-    buildPayload: (fd) => ({
-      date: localInputToIso(fd.date),
-      description: fd.description?.trim() || null,
-      amount: fd.amount ? fd.amount : null,
-      posted: fd.posted === true,
-      organizationUuid: fd.organizationUuid || null,
-      counterpartyUuid: fd.counterpartyUuid || null,
-      contractUuid: fd.contractUuid || null,
-      warehouseUuid: fd.warehouseUuid || null,
-      vatAmount: fd.vatAmount ? fd.vatAmount : 0,
-      discountAmount: fd.discountAmount ? fd.discountAmount : 0,
-      amountWithoutVat: fd.amountWithoutVat ? fd.amountWithoutVat : 0,
-    }),
+    buildPayload: (fd) => {
+      const validation = validatePostedDocument("sale", fd as Record<string, any>, fd.posted === true);
+      if (!validation.isValid) return formatValidationErrors(validation.errors);
+      return {
+        date: localInputToIso(fd.date),
+        description: fd.description?.trim() || null,
+        amount: fd.amount ? fd.amount : null,
+        posted: fd.posted === true,
+        organizationUuid: fd.organizationUuid || null,
+        counterpartyUuid: fd.counterpartyUuid || null,
+        contractUuid: fd.contractUuid || null,
+        warehouseUuid: fd.warehouseUuid || null,
+        vatAmount: fd.vatAmount ? fd.vatAmount : 0,
+        discountAmount: fd.discountAmount ? fd.discountAmount : 0,
+        amountWithoutVat: fd.amountWithoutVat ? fd.amountWithoutVat : 0,
+      };
+    },
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
     afterLoad: invalidateSubTables,
     afterSave: invalidateSubTables,
@@ -277,8 +283,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         discountAmount: it.discountAmount != null ? Number(it.discountAmount) : undefined,
         exciseRate: it.exciseRate != null ? Number(it.exciseRate) : undefined,
         exciseAmount: it.exciseAmount != null ? Number(it.exciseAmount) : undefined,
-        amountWithoutVat: it.amountWithoutVat != null ? Number(it.amountWithoutVat) : undefined,
-        vatRate: it.vatRate != null ? Number(it.vatRate) : undefined,
+        amountWithoutVat: it.amountWithoutVat != null ? Number(it.amountWithoutVat) : undefined, amountNetOfIndirectTaxes:
+          it.amountNetOfIndirectTaxes != null
+            ? Number(it.amountNetOfIndirectTaxes)
+            : Number(it.amountWithoutVat ?? 0) - Number(it.exciseAmount ?? 0), vatRate: it.vatRate != null ? Number(it.vatRate) : undefined,
         vatAmount: it.vatAmount != null ? Number(it.vatAmount) : undefined,
         amount: Number(it.amount ?? 0),
       }));
@@ -291,6 +299,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       const PRINT_KEYS = [
         "discountPercent",
         "discountAmount",
+        "amountNetOfIndirectTaxes",
         "amountWithoutVat",
         "exciseRate",
         "exciseAmount",
@@ -395,7 +404,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               {/* ── Левая колонка: поля ── */}
               {/* Строка 1: Дата · Проведён · Статус */}
               <GroupRow>
-                <FieldDateTime label="Дата" name={`${form.formUid}_docDate`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
+                <FieldDateTime label="Дата" name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
 
 
                 <FieldToggle
@@ -410,23 +419,23 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
               <Group>
                 {/* Организация — во всю ширину */}
-                <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <LookupField label="Организация" name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
 
-                <LookupField label="Склад" name={`${form.formUid}_wh`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                <LookupField label="Склад" name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
 
               <Group>
                 {/* Контрагент — во всю ширину */}
-                <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <LookupField label="Контрагент" name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
 
                 {/* Склад | Договор — в одну строку, по 50% */}
 
-                <LookupField label="Договор" name={`${form.formUid}_contract`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
+                <LookupField label="Договор" name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
               </Group>
 
               <Group>
                 {/* Комментарий */}
-                <Field label="Комментарий" name={`${form.formUid}_desc`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
+                <Field label="Комментарий" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
               </Group>
             </GroupCol>
             <Group>
@@ -480,17 +489,16 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount]);
 
   return (
-    <>
+    <FormRequiredScope docType="sale" isPosted={form.fields.posted === true}>
       <ModelForm paneId={form.paneId} tabs={tabs}
         onSave={form.handleSave}
         onSaveAndClose={form.handleSaveAndClose}
         onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined}
         isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-        //
         readonly={!canWrite} isDirty={form.isDirty} />
       {headerActionsPortal}
-    </>
+    </FormRequiredScope>
   );
 };
 SalesForm.displayName = "SalesForm";

@@ -1,0 +1,716 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// SyncDashboard — панель «Синхронизация и оффлайн-данные».
+// Раньше жил в src/styles/main.module.scss (два блока: v1 — tab-навигация,
+// v2 — формовая компоновка). Содержимое перенесено как есть для бинарной
+// совместимости визуала.
+//
+// Общие form-классы (FormWrapper / FormBody / Form) живут в main.module.scss
+// и используются в SyncDashboard через ВТОРОЙ import — `import mainStyles
+// from "src/styles/main.module.scss"`. CSS-Modules `composes:` тут не
+// подходит: postcss-парсер не понимает SCSS-комментарии в подключаемом файле.
+// ═══════════════════════════════════════════════════════════════════════════
+
+.SyncDashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: #fafafa;
+}
+
+.SyncDashTabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e0e0e0;
+  background: #fff;
+  flex-shrink: 0;
+  padding: 0 12px;
+}
+
+.SyncDashTab {
+  position: relative;
+  padding: 10px 16px;
+  font-size: $fontsize;
+  font-weight: 500;
+  color: #666;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover {
+    color: #333;
+  }
+}
+
+.SyncDashTabActive {
+  color: #1565c0;
+
+  &::after {
+    content: "";
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #1565c0;
+    border-radius: 1px 1px 0 0;
+  }
+}
+
+.SyncDashBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #e53935;
+  color: #fff;
+  font-size: $fontsize - 2px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.SyncDashContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.SyncDashSection {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.SyncDashCard {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.SyncDashCardTitle {
+  font-size: $fontsize;
+  font-weight: 600;
+  color: #333;
+  padding: 10px 14px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.SyncDashCardBody {
+  padding: 12px 14px;
+}
+
+.SyncDashRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: $fontsize;
+  color: #333;
+  border-bottom: 1px solid #f5f5f5;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.SyncDashLabel {
+  color: #888;
+  flex-shrink: 0;
+}
+
+.SyncDashOnline {
+  color: #43a047;
+  font-weight: 600;
+}
+
+.SyncDashOffline {
+  color: #e53935;
+  font-weight: 600;
+}
+
+.SyncDashProgress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+
+  span {
+    font-size: $fontsize - 2px;
+    color: #666;
+    flex-shrink: 0;
+  }
+}
+
+.SyncDashProgressBar {
+  flex: 1;
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    background: #1565c0;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+}
+
+.SyncDashActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+  flex-wrap: wrap;
+}
+
+.SyncDashEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: #999;
+  font-size: $fontsize;
+}
+
+// ── Queue ──
+
+.SyncDashQueue {
+  display: flex;
+  flex-direction: column;
+}
+
+.SyncDashQueueItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.SyncDashQueueIcon {
+  flex-shrink: 0;
+  font-size: $fontsize + 1px;
+  padding-top: 1px;
+}
+
+.SyncDashQueueBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.SyncDashQueueLabel {
+  font-size: $fontsize;
+  color: #333;
+  font-weight: 500;
+}
+
+.SyncDashQueueMeta {
+  font-size: $fontsize - 2px;
+  color: #999;
+  margin-top: 2px;
+}
+
+.SyncDashQueueActions {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+// ── Conflicts ──
+
+.SyncDashConflict {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.SyncDashConflictHeader {
+  font-size: $fontsize;
+  font-weight: 600;
+  color: #e65100;
+  margin-bottom: 8px;
+}
+
+.SyncDashConflictDiff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.SyncDashConflictCol {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.SyncDashConflictColTitle {
+  font-size: $fontsize - 2px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #666;
+  letter-spacing: 0.5px;
+  padding: 6px 10px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.SyncDashConflictPre {
+  font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  font-size: $fontsize - 2px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+  background: #fff;
+  color: #333;
+}
+
+// ── Storage ──
+
+.SyncDashStorageTable {
+  display: flex;
+  flex-direction: column;
+}
+
+.SyncDashStorageHeader {
+  display: flex;
+  align-items: center;
+  font-size: $fontsize -2px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #888;
+  letter-spacing: 0.5px;
+  padding: 6px 0;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.SyncDashStorageRow {
+  display: flex;
+  align-items: center;
+  font-size: $fontsize;
+  padding: 5px 0;
+  border-bottom: 1px solid #f5f5f5;
+  color: #333;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.SyncDashInlineBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: $fontsize + 1px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+
+  &:hover {
+    opacity: 1;
+    background: #f5f5f5;
+  }
+
+  &:disabled {
+    opacity: 0.2;
+    cursor: default;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SyncDashboard v2 — формовая компоновка (Banner / Progress / Mode / Metric /
+// Queue / Conflict / Storage / Inline).
+// ═══════════════════════════════════════════════════════════════════════════
+
+.SyncBanner {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  transition: background .2s;
+}
+
+.SyncBanner_ok {
+  background: #e8f5e9;
+}
+
+.SyncBanner_warn {
+  background: #fff8e1;
+}
+
+.SyncBanner_error {
+  background: #fbe9e7;
+}
+
+.SyncBanner_syncing {
+  background: #e3f2fd;
+}
+
+.SyncBannerIcon {
+  font-size: 36px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.SyncBannerBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.SyncBannerTitle {
+  font-size: 17px;
+  font-weight: 600;
+  color: #222;
+}
+
+.SyncBannerSub {
+  font-size: 13px;
+  color: #555;
+  line-height: 1.4;
+}
+
+.SyncBannerMode {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.SyncProgressWrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 8px;
+}
+
+.SyncProgressTrack {
+  flex: 1;
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.SyncProgressFill {
+  height: 100%;
+  background: #1976d2;
+  border-radius: 3px;
+  transition: width .3s;
+}
+
+.SyncProgressLabel {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.SyncModeRow {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.SyncModeCard {
+  flex: 1;
+  min-width: 200px;
+  padding: 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fafafa;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  transition: border-color .2s, background .2s;
+
+  &:hover {
+    border-color: #90caf9;
+  }
+}
+
+.SyncModeCard_on {
+  border-color: #1976d2;
+  background: #e3f2fd;
+  box-shadow: 0 0 0 1px #1976d2;
+}
+
+.SyncModeCardIcon {
+  font-size: 24px;
+}
+
+.SyncModeCardTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+}
+
+.SyncModeCardDesc {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+}
+
+.SyncMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.SyncMetric {
+  text-align: center;
+  padding: 12px 8px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.SyncMetricValue {
+  font-size: 20px;
+  font-weight: 700;
+  color: #333;
+}
+
+.SyncMetricLabel {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
+}
+
+.SyncHint {
+  font-size: 12px;
+  color: #999;
+  align-self: center;
+}
+
+.SyncResultGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  font-size: 13px;
+  color: #555;
+
+  &>span:nth-child(odd) {
+    font-weight: 500;
+    color: #333;
+  }
+}
+
+.SyncInfoBox {
+  background: #f5f7fa;
+  border-left: 3px solid #90caf9;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #555;
+  border-radius: 0 6px 6px 0;
+  line-height: 1.5;
+}
+
+.SyncQueueList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.SyncQueueItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 6px;
+
+  &:hover {
+    background: #f0f0f0;
+  }
+}
+
+.SyncQueueItemIcon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.SyncQueueItemBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.SyncQueueItemTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.SyncQueueItemMeta {
+  font-size: 11px;
+  color: #999;
+}
+
+.SyncQueueItemDel {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #bbb;
+  padding: 2px 6px;
+  border-radius: 4px;
+
+  &:hover {
+    color: #e53935;
+    background: #fce4ec;
+  }
+}
+
+.SyncEmptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 8px;
+}
+
+.SyncEmptyIcon {
+  font-size: 48px;
+}
+
+.SyncEmptyTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.SyncEmptyDesc {
+  font-size: 13px;
+  color: #888;
+  text-align: center;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.SyncConflictCard {
+  border: 1px solid #ffcc80;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fffde7;
+
+  &+& {
+    margin-top: 12px;
+  }
+}
+
+.SyncConflictHeader {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e65100;
+  margin-bottom: 10px;
+}
+
+.SyncConflictCols {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.SyncConflictCol {
+  flex: 1;
+  min-width: 220px;
+}
+
+.SyncConflictColHead {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.SyncConflictPre {
+  font-size: 11px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 8px;
+  overflow: auto;
+  max-height: 200px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.SyncStorageTable {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.SyncStorageHead {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #f5f5f5;
+  font-weight: 600;
+  color: #666;
+  font-size: 12px;
+}
+
+.SyncStorageRow {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  align-items: center;
+  cursor: pointer;
+  border-top: 1px solid #f0f0f0;
+
+  &:hover {
+    background: #f9f9f9;
+  }
+}
+
+.SyncInlineBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  opacity: 0.4;
+  border-radius: 4px;
+
+  &:hover {
+    opacity: 1;
+    background: #fce4ec;
+  }
+
+  &:disabled {
+    opacity: 0.15;
+    cursor: default;
+  }
+}

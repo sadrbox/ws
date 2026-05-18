@@ -3,7 +3,7 @@ import mammoth from "mammoth";
 import * as XLSX from "xlsx";
 import apiClient from "src/services/api/client";
 import { Button } from "src/components/Button";
-import styles from "src/styles/main.module.scss";
+import styles from "./PrintPreview.module.scss";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PrintPreview — вкладка «Просмотр файла»

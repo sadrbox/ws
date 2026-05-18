@@ -12,7 +12,7 @@ import { FC, useCallback } from "react";
 import { useNetworkStatus } from "src/hooks/useOfflineSync";
 import { useAppContext } from "src/app";
 import OfflineSyncJournal from "src/components/OfflineSyncJournal";
-import styles from "src/styles/main.module.scss";
+import styles from "./OfflineIndicator.module.scss";
 
 const OfflineIndicator: FC = () => {
   const { isOnline, badgeCount, isSyncing } = useNetworkStatus();

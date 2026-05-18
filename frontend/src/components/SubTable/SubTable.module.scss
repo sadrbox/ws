@@ -45,22 +45,6 @@
 
 }
 
-/* Ошибка валидации: визуал (red inset + bg) задаётся в main.module.scss
-   через @layer table-cell-error — высший приоритет в каскаде состояний
-   ячейки. Здесь класс остаётся как маркер для селектора, CSS-переменная —
-   no-op, чтобы линтер не ругался на «пустой ruleset» (класс остаётся
-   экспортированным в CSS-modules-карте). */
-.CellWrap_error {
-  --cell-state: error;
-}
-
-/* Обязательное пустое поле: визуал (amber inset + bg) задаётся в
-   main.module.scss через @layer table-cell-required — приоритет ниже
-   error, выше dirty/activeCell/activeRow. */
-.CellWrap_required {
-  --cell-state: required;
-}
-
 /* Тултип ошибки над ячейкой */
 .CellErrorTooltip {
   position: absolute;

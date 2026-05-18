@@ -1,0 +1,73 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// OfflineIndicator — индикатор состояния сети + badge с количеством pending.
+// Раньше жил в src/styles/main.module.scss; вынесен в изолированный
+// CSS-Modules-файл компонента (один компонент — один scss).
+// ═══════════════════════════════════════════════════════════════════════════
+
+.OfflineIndicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: $fontsize - 1px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  &.OfflineStatus {
+    color: #e53935;
+  }
+
+  &.OnlineStatus {
+    color: #43a047;
+  }
+
+  &.SyncingStatus {
+    color: #fb8c00;
+  }
+}
+
+.OfflineDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.OfflineDotPulse {
+  animation: offlinePulse 1.2s ease-in-out infinite;
+}
+
+@keyframes offlinePulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.OfflineBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #e53935;
+  color: #fff;
+  font-size: $fontsize - 2px;
+  font-weight: 700;
+  line-height: 1;
+}

@@ -15,7 +15,7 @@ import {
   resolveConflictLocal,
   resolveConflictServer,
 } from "src/services/networkStatus";
-import styles from "src/styles/main.module.scss";
+import styles from "./OfflineSyncJournal.module.scss";
 
 interface ConflictResolverProps {
   entry: QueueEntry;

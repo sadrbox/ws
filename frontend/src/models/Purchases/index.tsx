@@ -1,44 +1,56 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// ─────────────────────────────────────────────────────────────────────────────
+// PurchasesForm — Поступление товаров (Покупка). Структура зеркалирует
+// SalesForm с учётом НК РК: НДС, акциз, скидка, ЭСФ-графы 4/6/7/8/13/14/15/16/17.
+// ─────────────────────────────────────────────────────────────────────────────
 import { FC, useMemo, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Divider, Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
+import { Divider, Field, FieldDate, FieldTextarea } from "src/components/Field";
+import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
+import { Icon } from "src/components/IconButton/icons";
+import { validatePostedDocument, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { FormRequiredScope } from "src/hooks/useFormRequired";
 
 const MODEL_ENDPOINT = "purchases";
 const LIST_NAME = "PurchasesList";
 const FORM_LABEL = "Поступление";
 
-const STATUS_OPTIONS = [
-  { value: "draft", label: translate("statusDraft") || "Черновик" },
-  { value: "approved", label: translate("statusApproved") || "Утверждён" },
-  { value: "cancelled", label: translate("statusCancelled") || "Отменён" },
-];
-
 interface TFields {
   id?: number; uuid?: string;
-  date: string; description: string; amount: string; status: string;
+  date: string; description: string;
+  amount: number; vatAmount: number; discountAmount: number; amountWithoutVat: number;
+  posted: boolean;
   organizationUuid: string; organizationName: string;
+  warehouseUuid: string; warehouseName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
   authorUuid: string; authorName: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
-  date: "", description: "", amount: "", status: "draft",
+  date: "", description: "",
+  amount: 0, vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
+  posted: false,
   organizationUuid: "", organizationName: "",
+  warehouseUuid: "", warehouseName: "",
   counterpartyUuid: "", counterpartyName: "",
   contractUuid: "", contractName: "",
   authorUuid: "", authorName: "",
@@ -46,13 +58,13 @@ const DEFAULT_FIELDS: TFields = {
 
 const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
+  const queryClient = useQueryClient();
   const { canWrite } = useAccessRight("Purchase");
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;
     if (!data || data.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
-
     if (data.organizationUuid) {
       init.organizationUuid = data.organizationUuid as string;
       init.organizationName = (data.organizationName as string) || "";
@@ -67,20 +79,55 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     return init;
   })();
 
+  const invalidateSubTables = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["purchaseitems"], refetchType: "active" });
+  }, [queryClient]);
+
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT,
     storageKey: "purchases-form",
     defaultFields: DEFAULT_FIELDS,
     initialFields,
     paneProps,
+    derivedFields: ["amount", "vatAmount", "amountWithoutVat", "discountAmount"],
+    tables: {
+      items: {
+        endpoint: "purchaseitems", parentField: "purchaseUuid",
+        label: "Товары поступления",
+        createPayload: (r: any) => ({
+          productUuid: r.productUuid ?? null,
+          quantity: r.quantity ?? 0,
+          price: r.price ?? 0,
+          unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
+          vatRate: r.vatRate ?? 0,
+          exciseRate: r.exciseRate ?? 0,
+          discountPercent: r.discountPercent ?? 0,
+        }),
+        updatePayload: (r: any) => ({
+          productUuid: r.productUuid ?? null,
+          quantity: r.quantity ?? 0,
+          price: r.price ?? 0,
+          unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
+          vatRate: r.vatRate ?? 0,
+          exciseRate: r.exciseRate ?? 0,
+          discountPercent: r.discountPercent ?? 0,
+        }),
+        extraSkipFields: ["purchaseUuid"],
+      },
+    },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       date: d.date?.slice(0, 10) ?? "",
       description: d.description ?? "",
-      amount: d.amount != null ? String(d.amount) : "",
-      status: d.status ?? "draft",
+      amount: d.amount != null ? Number(d.amount) : 0,
+      vatAmount: d.vatAmount != null ? Number(d.vatAmount) : 0,
+      discountAmount: d.discountAmount != null ? Number(d.discountAmount) : 0,
+      amountWithoutVat: d.amountWithoutVat != null ? Number(d.amountWithoutVat) : 0,
+      posted: d.posted === true,
       organizationUuid: d.organizationUuid ?? "",
       organizationName: d.organization?.shortName ?? "",
+      warehouseUuid: d.warehouseUuid ?? "",
+      warehouseName: d.warehouse?.shortName ?? "",
       counterpartyUuid: d.counterpartyUuid ?? "",
       counterpartyName: d.counterparty?.shortName ?? "",
       contractUuid: d.contractUuid ?? "",
@@ -88,17 +135,34 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
       authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
       authorName: d.author?.username ?? d.author?.email ?? "",
     }),
-    buildPayload: (fd) => ({
-      date: fd.date || null,
-      description: fd.description?.trim() || null,
-      amount: fd.amount ? parseFloat(fd.amount) : null,
-      status: fd.status || "draft",
-      organizationUuid: fd.organizationUuid || null,
-      counterpartyUuid: fd.counterpartyUuid || null,
-      contractUuid: fd.contractUuid || null,
-    }),
+    buildPayload: (fd) => {
+      const validation = validatePostedDocument("purchase", fd as Record<string, any>, fd.posted === true);
+      if (!validation.isValid) return formatValidationErrors(validation.errors);
+      return {
+        date: fd.date || null,
+        description: fd.description?.trim() || null,
+        amount: fd.amount ? fd.amount : null,
+        vatAmount: fd.vatAmount ? fd.vatAmount : 0,
+        discountAmount: fd.discountAmount ? fd.discountAmount : 0,
+        amountWithoutVat: fd.amountWithoutVat ? fd.amountWithoutVat : 0,
+        posted: fd.posted === true,
+        organizationUuid: fd.organizationUuid || null,
+        warehouseUuid: fd.warehouseUuid || null,
+        counterpartyUuid: fd.counterpartyUuid || null,
+        contractUuid: fd.contractUuid || null,
+      };
+    },
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
+    afterLoad: invalidateSubTables,
+    afterSave: invalidateSubTables,
   });
+
+  const items = form.useTable("items");
+
+  const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
+    form.fields.organizationUuid || null,
+    form.fields.date || null,
+  );
 
   const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
     const updates: Partial<TFields> = { contractUuid: uuid, contractName: displayValue };
@@ -107,7 +171,6 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     form.setFields(updates);
   }, [form.setFields]);
 
-  // ── Авто-подстановка ОСНОВНОГО ДОГОВОРА для пары организация/контрагент ─
   const contractScope = useMemo<Record<string, string> | null>(() => {
     const hasOrg = !!form.fields.organizationUuid;
     const hasCpty = !!form.fields.counterpartyUuid;
@@ -118,81 +181,122 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     return s;
   }, [form.fields.organizationUuid, form.fields.counterpartyUuid]);
   useAutoFillPrimary({
-    endpoint: "contracts",
-    scope: contractScope,
-    currentUuid: form.fields.contractUuid,
-    isEditMode: form.isEditMode,
-    isLoading: form.isLoading,
+    endpoint: "contracts", scope: contractScope, currentUuid: form.fields.contractUuid,
+    isEditMode: form.isEditMode, isLoading: form.isLoading,
     apply: (uuid, name) => form.setFields({ contractUuid: uuid, contractName: name } as Partial<TFields>),
   });
 
+  const handleTotalChange = useCallback((total: number, rows?: any[]) => {
+    form.setField("amount", Number(total));
+    if (rows) {
+      const vatSum = rows.reduce((s, r) => s + (Number(r.vatAmount) || 0), 0);
+      const discSum = rows.reduce((s, r) => s + (Number(r.discountAmount) || 0), 0);
+      const amtWithoutVat = Math.round((total - vatSum) * 100) / 100;
+      form.setFields({
+        vatAmount: Number(Math.round(vatSum * 100) / 100),
+        discountAmount: Number(Math.round(discSum * 100) / 100),
+        amountWithoutVat: Number(amtWithoutVat),
+      } as Partial<TFields>);
+    }
+  }, [form.setField, form.setFields]);
+
   const tabs = useMemo(() => [
     {
-      id: "general",
-      label: translate("general") || "Основное",
-      component: (
+      id: "tab-details", label: translate("general") || "Основное", component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow>
-                <FieldDate label={translate("date") || "Дата"} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="120px" />
-                <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || "-"} disabled />
-                <FieldSelect label={translate("status") || "Статус"} name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+                <FieldDate label="Дата" name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="160px" />
+                <FieldToggle name={`${form.formUid}_posted`} label="Проведён" value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
               </GroupRow>
-
               <Group>
-                <LookupField label={translate("OrganizationsList") || "Организация"} name={`${form.formUid}_org`} endpoint="organizations" displayField="shortName"
-                  value={form.fields.organizationUuid} displayValue={form.fields.organizationName}
-                  onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d })}
-                  onClear={() => form.setFields({ organizationUuid: "", organizationName: "" })}
+                <LookupField label="Организация" name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
+                  onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
+                  onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                   disabled={form.isLoading} />
+                <LookupField label="Склад" name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName"
+                  onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)}
+                  onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)}
+                  disabled={form.isLoading}
+                  extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
-
               <Group>
-                <LookupField label={translate("CounterpartiesList") || "Контрагент"} name={`${form.formUid}_cpty`} endpoint="counterparties" displayField="shortName"
-                  value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName}
-                  onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d })}
-                  onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" })}
+                <LookupField label="Контрагент" name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName"
+                  onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
+                  onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
                   disabled={form.isLoading} />
-                <LookupField label={translate("ContractsList") || "Договор"} name={`${form.formUid}_contract`} endpoint="contracts" displayField="shortName"
-                  value={form.fields.contractUuid} displayValue={form.fields.contractName}
+                <LookupField label="Договор" name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName"
                   onSelect={handleContractSelect}
-                  onClear={() => form.setFields({ contractUuid: "", contractName: "" })}
+                  onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
                   disabled={form.isLoading}
                   extraParams={{
                     ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
                     ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
-                  }}
-                />
+                  }} />
               </Group>
-
-              <GroupRow>
-                <Field label={translate("amount") || "Сумма"} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
-              </GroupRow>
-
               <Group>
-                <FieldTextarea label={translate("description") || "Описание"} name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minHeight="80px" rows={4} />
+                <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minHeight="80px" rows={4} />
               </Group>
             </GroupCol>
-            {form.isEditMode && (<Divider />)}
+            <Group>
+              <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
+                {([
+                  ...(isVatEnabled ? ([
+                    { label: "Без НДС", value: form.fields.amountWithoutVat },
+                    { label: "НДС", value: form.fields.vatAmount },
+                  ] as const) : ([] as const)),
+                  ...(useDiscount ? ([{ label: "Скидка", value: form.fields.discountAmount }] as const) : ([] as const)),
+                ] as ReadonlyArray<{ label: string; value: number | string }>).map(({ label, value }) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
+                    <span>{label}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{value || "0"}</span>
+                  </div>
+                ))}
+                <div style={{ borderTop: "1px solid #e5e7eb", margin: "2px 0 0" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
+                  <span>Итого</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
+                </div>
+              </div>
+            </Group>
+            {form.isEditMode && <><Divider /><Group align="row" gap="12px">
+              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
+              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
+              <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || ""} disabled />
+            </Group></>}
           </div>
         </div>
-      ),
+      )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect]);
+    {
+      id: "tab-items", label: "Товары поступления", component: form.isEditMode && form.fields.uuid ? (
+        <TradeDocumentItemsTable
+          parentUuid={form.fields.uuid} parentField="purchaseUuid"
+          endpoint="purchaseitems" componentName="PurchaseItemsList_part"
+          organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
+          disabled={form.isLoading} deferRemoteChanges
+          parentLabel={`Поступление: №${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
+          initialPendingRows={items.pending}
+          onTotalChange={handleTotalChange}
+          onItemsChange={items.onItemsChange}
+        />
+      ) : (
+        <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
+          Сохраните документ для добавления товаров
+        </div>
+      )
+    },
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount]);
 
   return (
-    <ModelForm
-      paneId={form.paneId}
-      tabs={tabs}
-      onSave={form.handleSave}
-      onSaveAndClose={form.handleSaveAndClose}
-      onClose={form.handleClose}
-      onReload={form.isEditMode ? form.handleReload : undefined}
-      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      readonly={!canWrite}
-      isDirty={form.isDirty}
-    />
+    <FormRequiredScope docType="purchase" isPosted={form.fields.posted === true}>
+      <ModelForm paneId={form.paneId} tabs={tabs}
+        onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+        onReload={form.isEditMode ? form.handleReload : undefined}
+        isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+        readonly={!canWrite} isDirty={form.isDirty} />
+    </FormRequiredScope>
   );
 };
 PurchasesForm.displayName = "PurchasesForm";
@@ -201,19 +305,24 @@ const PurchasesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataIt
   { variant, onSelectItem, ownerUuid, ownerField }
 ) => (
   <ModelList
-    endpoint={MODEL_ENDPOINT}
-    listName={LIST_NAME}
-    columnsJson={columnsJson}
-    FormComponent={PurchasesForm}
+    endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={PurchasesForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
-    variant={variant}
-    onSelectItem={onSelectItem}
-    ownerUuid={ownerUuid}
-    ownerField={ownerField}
+    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
     defaultSort={{ id: "desc" }}
+    renderCell={(row, col) => {
+      if (col.identifier === "posted") {
+        const isPosted = row.posted === true;
+        return (
+          <span title={isPosted ? "Документ проведён" : "Не проведён"}>
+            <Icon name={isPosted ? "posted" : "notPosted"} width={17} height={17}
+              style={{ color: isPosted ? "#10b981" : "#9ca3af", flexShrink: 0, display: "flex" }} />
+          </span>
+        );
+      }
+      return undefined;
+    }}
   />
 );
 PurchasesList.displayName = LIST_NAME;
 
 export { PurchasesForm, PurchasesList };
-

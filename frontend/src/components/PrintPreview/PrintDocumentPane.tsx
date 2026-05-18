@@ -16,7 +16,7 @@ import { Toolbar } from "src/components/Toolbar";
 import SaveDropdownButton, { type SaveDropdownOption } from "src/components/Toolbar/SaveDropdownButton";
 import { Icon } from "src/components/IconButton/icons";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
-import styles from "src/styles/main.module.scss";
+import styles from "./PrintPreview.module.scss";
 
 // ── CSS макета (применяется к содержимому iframe) ──────────────────────────
 // PRINT_CSS зависит от ориентации листа (portrait | landscape).

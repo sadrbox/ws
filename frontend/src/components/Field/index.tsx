@@ -3,7 +3,8 @@ import React, { CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useS
 import styles from "./Field.module.scss"
 import FieldActionButton from "./FieldActionButton"
 import type { IconName } from "src/components/IconButton/icons"
-import { useFieldDirty } from "src/hooks/useDirtyHighlight"
+import { useFieldDirty, useCellFieldState } from "src/hooks/useDirtyHighlight"
+import { useFormRequiredScope } from "src/hooks/useFormRequired"
 // import { TypeDateRange } from '../Table/types'
 
 import { getFormatNumerical, parseNumericInput } from 'src/components/Table/services.ts'
@@ -52,6 +53,67 @@ interface FieldAction {
 
 type TypeFieldActions = FieldAction[];
 
+// ── Общий hook для всех Field* компонентов ──────────────────────────────────
+// Объединяет: класс обёртки (с учётом variant, required, error, контекста
+// ячейки таблицы и контекста обязательных полей формы), dirty-атрибуты.
+//
+// Источники required (по приоритету):
+//   1) явный проп required=true (на компоненте)
+//   2) CellFieldStateScope.required (для ячеек SubTable)
+//   3) FormRequiredScope — автоматически, когда поле в REQUIRED_FIELDS_MAP
+//      и документ проведён (posted=true)
+//
+// Dirty-атрибуты подавляются когда поле обязательно+пустое или имеет ошибку
+// — чтобы не конкурировать визуально (аналогично логике Table.tsx для ячеек).
+function useFieldBase(params: {
+  name: string;
+  variant: FieldVariant;
+  required: boolean;
+  error: boolean;
+  value?: string | number;
+}) {
+  const { name, variant, required, error, value } = params;
+  const cellState = useCellFieldState();
+  const formRequired = useFormRequiredScope();
+  const isTable = variant === 'table';
+  const isEmpty = value === '' || value === undefined || value === null || value === 0;
+
+  // tail: часть имени после последнего `_` (напр. "formUid_date" → "date")
+  const tail = name.includes('_') ? name.slice(name.lastIndexOf('_') + 1) : name;
+  const isFormRequired = !isTable && formRequired.requiredKeys.has(tail);
+
+  const effectiveRequired = required || !!cellState.required || isFormRequired;
+  const effectiveError = error || !!cellState.error;
+
+  const rawDirty = useFieldDirty(name);
+  // Подавляем dirty когда поле обязательно+пусто или содержит ошибку
+  const dirty = (effectiveRequired && isEmpty) || effectiveError ? {} : rawDirty;
+
+  const wrapperClass = [
+    isTable ? `${styles.FieldWrapper} ${styles.tableVariant}` : styles.FieldWrapper,
+    !effectiveError && effectiveRequired && isEmpty ? styles.FieldRequired : '',
+    effectiveError ? styles.FieldError : '',
+  ].filter(Boolean).join(' ');
+
+  return { isTable, wrapperClass, dirty, effectiveRequired, effectiveError };
+}
+
+// ── Подпись поля (label + asterisk для required) ────────────────────────────
+const FieldLabelNode: FC<{
+  htmlFor: string;
+  label?: React.ReactNode;
+  required: boolean;
+  isTable: boolean;
+}> = ({ htmlFor, label, required, isTable }) => {
+  if (isTable || !label) return null;
+  return (
+    <label htmlFor={htmlFor} className={styles.FieldLabel}>
+      {label}
+      {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
+    </label>
+  );
+};
+
 // Варианты отображения Field*
 export type FieldVariant = 'default' | 'table';
 
@@ -67,6 +129,7 @@ interface TypeFieldStringProps {
   disabled?: boolean;
   placeholder?: string;
   required?: boolean;
+  error?: boolean;
   actions?: TypeFieldActions;
   variant?: FieldVariant;
 }
@@ -83,6 +146,7 @@ interface TypeFieldGroupProps {
   disabled?: boolean;
   placeholder?: string;
   required?: boolean;
+  error?: boolean;
   variant?: FieldVariant;
 }
 
@@ -126,6 +190,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   disabled = false,
   placeholder,
   required = false,
+  error = false,
   actions,
   variant = 'default',
 }) => {
@@ -169,6 +234,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       disabled={disabled}
       placeholder={placeholder}
       required={required}
+      error={error}
       variant={variant}
     />
   );
@@ -186,24 +252,15 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
   disabled = false,
   placeholder,
   required = false,
+  error = false,
   variant = 'default',
 }) => {
-  const isTable = variant === 'table';
-  const wrapperClass = isTable
-    ? `${styles.FieldWrapper} ${styles.tableVariant}`
-    : styles.FieldWrapper;
-  const dirty = useFieldDirty(name);
+  const { isTable, wrapperClass, dirty, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={style}>
-      {!isTable && label && (
-        <label htmlFor={name} className={styles.FieldLabel}>
-          {label}
-          {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
-        </label>
-      )}
-
-      <div className={styles.FieldInputWrapper} {...dirty}>
+    <div className={wrapperClass} style={style} {...dirty}>
+      <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
+      <div className={styles.FieldInputWrapper}>
         <input
           ref={inputRef}
           type="text"
@@ -215,24 +272,13 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
           autoComplete='off'
           disabled={disabled}
           placeholder={placeholder}
-          style={{
-            ...(actions && actions.length > 0 && {
-              // paddingRight: `${actions.length * 32 - 6}px`
-            })
-          }}
         />
-
         {actions && actions.length > 0 && (
           <div className={styles.FieldActions}>
             {actions.map((action, index) => {
               const meta = FIELD_ACTION_META[action.type];
               return (
-                <FieldActionButton
-                  key={index}
-                  icon={meta.icon}
-                  label={meta.label}
-                  onClick={action.onClick}
-                />
+                <FieldActionButton key={index} icon={meta.icon} label={meta.label} onClick={action.onClick} />
               );
             })}
           </div>
@@ -253,6 +299,7 @@ interface TypeFieldDateTimeProps {
   maxWidth?: string;
   disabled?: boolean;
   required?: boolean;
+  error?: boolean;
   variant?: FieldVariant;
 }
 
@@ -266,37 +313,23 @@ export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
   maxWidth,
   disabled = false,
   required = false,
+  error = false,
   variant = 'default',
 }) => {
-  const isTable = variant === 'table';
-  const wrapperClass = isTable
-    ? `${styles.FieldWrapper} ${styles.tableVariant}`
-    : styles.FieldWrapper;
-
   // Гарантируем, что value для input[type=datetime-local] имеет формат YYYY-MM-DDTHH:mm
   const safeValue = (() => {
     if (!value) return '';
-    // Если в формате YYYY-MM-DDTHH:mm или YYYY-MM-DDTHH:mm:ss — ОК
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return value;
-    // Если только дата YYYY-MM-DD — добавляем 00:00
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${value}T00:00`;
-    // Любое другое значение — пустая строка
     return '';
   })();
-  const dirty = useFieldDirty(name);
+
+  const { isTable, wrapperClass, dirty, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div
-      className={wrapperClass}
-      style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}
-    >
-      {!isTable && label && (
-        <label htmlFor={name} className={styles.FieldLabel}>
-          {label}
-          {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
-        </label>
-      )}
-      <div className={styles.FieldInputWrapper} {...dirty}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }} {...dirty}>
+      <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
+      <div className={styles.FieldInputWrapper}>
         <input
           type="datetime-local"
           id={name}
@@ -322,37 +355,23 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
   maxWidth,
   disabled = false,
   required = false,
+  error = false,
   variant = 'default',
 }) => {
-  const isTable = variant === 'table';
-  const wrapperClass = isTable
-    ? `${styles.FieldWrapper} ${styles.tableVariant}`
-    : styles.FieldWrapper;
-
   // Гарантируем, что value для input[type=date] имеет формат YYYY-MM-DD
   const safeValue = (() => {
     if (!value) return '';
-    // Если уже в формате YYYY-MM-DD — ОК
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-    // Если ISO datetime — берём первые 10 символов
     if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 10);
-    // Любое другое значение (включая русский текст) — пустая строка
     return '';
   })();
-  const dirty = useFieldDirty(name);
+
+  const { isTable, wrapperClass, dirty, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div
-      className={wrapperClass}
-      style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}
-    >
-      {!isTable && label && (
-        <label htmlFor={name} className={styles.FieldLabel}>
-          {label}
-          {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
-        </label>
-      )}
-      <div className={styles.FieldInputWrapper} {...dirty}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }} {...dirty}>
+      <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
+      <div className={styles.FieldInputWrapper}>
         <input
           type="date"
           id={name}
@@ -374,21 +393,19 @@ type TypeFieldSelectProps = {
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   disabled?: boolean;
+  required?: boolean;
+  error?: boolean;
   style?: CSSProperties;
   variant?: FieldVariant;
 };
 
-export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value, onChange, disabled = false, style, variant = 'default' }) => {
-  const isTable = variant === 'table';
-  const wrapperClass = isTable
-    ? `${styles.FieldWrapper} ${styles.tableVariant}`
-    : styles.FieldWrapper;
-  const dirty = useFieldDirty(name);
+export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value = '', onChange, disabled = false, required = false, error = false, style, variant = 'default' }) => {
+  const { isTable, wrapperClass, dirty, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={style}>
-      {!isTable && label && <label htmlFor={name} className={styles.FieldLabel}>{label}</label>}
-      <div className={styles.FieldSelectWrapper} {...dirty}>
+    <div className={wrapperClass} style={style} {...dirty}>
+      <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
+      <div className={styles.FieldSelectWrapper}>
         <select name={name} id={name} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled}>
           {options.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
@@ -414,6 +431,7 @@ interface TypeFieldNumberProps {
   disabled?: boolean;
   placeholder?: string;
   required?: boolean;
+  error?: boolean;
   step?: string;
   min?: string;
   max?: string;
@@ -434,6 +452,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   disabled = false,
   placeholder,
   required = false,
+  error = false,
   step: _step,
   min,
   max,
@@ -443,10 +462,6 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   onKeyDown,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const isTable = variant === 'table';
-  const wrapperClass = isTable
-    ? `${styles.FieldWrapper} ${styles.tableVariant}`
-    : styles.FieldWrapper;
 
   // ── Состояние фокуса: когда поле активно — показываем «сырое» число с точкой,
   // при потере фокуса — форматируем с разделителями групп разрядов и запятой.
@@ -584,25 +599,13 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
       if (action.type === 'clear' && !value) return false;
       return true;
     });
-  const dirty = useFieldDirty(name);
+  const { isTable, wrapperClass, dirty, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div
-      className={wrapperClass}
-      style={{
-        width: width ?? 'auto',
-        maxWidth: maxWidth ?? 'none',
-        minWidth: minWidth ?? 'none',
-      }}
-    >
-      {!isTable && label && (
-        <label htmlFor={name} className={styles.FieldLabel}>
-          {label}
-          {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
-        </label>
-      )}
+    <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }} {...dirty}>
+      <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
 
-      <div className={`${styles.FieldInputWrapper} ${disabled ? styles.FieldDisabled : ''}`} {...dirty}>
+      <div className={styles.FieldInputWrapper}>
         <input
           ref={inputRef}
           type="text"
@@ -664,6 +667,7 @@ interface TypeFieldTextareaProps {
   disabled?: boolean;
   placeholder?: string;
   required?: boolean;
+  error?: boolean;
 }
 
 export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
@@ -679,21 +683,33 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
   disabled = false,
   placeholder,
   required = false,
+  error = false,
 }) => {
-  const dirty = useFieldDirty(name);
+  const cellState = useCellFieldState();
+  const formRequired = useFormRequiredScope();
+  const isEmpty = value === '' || value === undefined || value === null;
+  const tail = name.includes('_') ? name.slice(name.lastIndexOf('_') + 1) : name;
+  const effectiveRequired = required || !!cellState.required || formRequired.requiredKeys.has(tail);
+  const effectiveError = error || !!cellState.error;
+
+  const rawDirty = useFieldDirty(name);
+  const dirty = (effectiveRequired && isEmpty) || effectiveError ? {} : rawDirty;
+
+  const wrapperClass = [
+    styles.FieldTextareaWrapper,
+    !effectiveError && effectiveRequired && isEmpty ? styles.FieldRequired : '',
+    effectiveError ? styles.FieldError : '',
+  ].filter(Boolean).join(' ');
+
   return (
-    <div className={styles.FieldTextareaWrapper} style={{
-      width: width ?? 'auto',
-      maxWidth: maxWidth ?? 'none',
-      minWidth: minWidth ?? 'none',
-    }}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }} {...dirty}>
       {label && (
         <label htmlFor={name} className={styles.FieldLabel}>
           {label}
-          {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
+          {effectiveRequired && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
         </label>
       )}
-      <div className={styles.FieldTextareaInputWrapper} {...dirty}>
+      <div className={styles.FieldTextareaInputWrapper}>
         <textarea
           id={name}
           name={name}

@@ -146,12 +146,14 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			organizationUuid,
 			counterpartyUuid,
 			contractUuid,
+			posted,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
 				date: date ? new Date(date) : new Date(),
 				description: description?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
+				posted: typeof posted === "boolean" ? posted : false,
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
@@ -191,6 +193,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.amount !== undefined)
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
+		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,

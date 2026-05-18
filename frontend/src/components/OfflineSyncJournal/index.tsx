@@ -8,14 +8,14 @@ import { updateEntry, type QueueEntry } from "src/services/offlineQueue";
 import { processQueue } from "src/services/networkStatus";
 import { Button } from "src/components/Button";
 import ConflictResolver from "./ConflictResolver";
-import styles from "src/styles/main.module.scss";
+import styles from "./OfflineSyncJournal.module.scss";
 
 const STATUS_CONFIG: Record<string, { icon: string; label: string; css: string }> = {
-  pending:  { icon: "⏳", label: "Ожидает",          css: styles.StatusPending },
-  syncing:  { icon: "���", label: "Синхронизация…",   css: styles.StatusSyncing },
-  synced:   { icon: "✅", label: "Синхронизировано",  css: styles.StatusSynced },
-  failed:   { icon: "❌", label: "Ошибка",            css: styles.StatusFailed },
-  conflict: { icon: "⚠️", label: "Конфликт",         css: styles.StatusConflict },
+  pending: { icon: "⏳", label: "Ожидает", css: styles.StatusPending },
+  syncing: { icon: "���", label: "Синхронизация…", css: styles.StatusSyncing },
+  synced: { icon: "✅", label: "Синхронизировано", css: styles.StatusSynced },
+  failed: { icon: "❌", label: "Ошибка", css: styles.StatusFailed },
+  conflict: { icon: "⚠️", label: "Конфликт", css: styles.StatusConflict },
 };
 
 function formatDate(iso: string): string {

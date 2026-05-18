@@ -34,6 +34,7 @@ export interface SaleItemPrintRow {
   exciseRate?: number;
   exciseAmount?: number;
   amountWithoutVat?: number;
+  amountNetOfIndirectTaxes?: number;
   vatRate?: number;
   vatAmount?: number;
   amount: number;
@@ -47,10 +48,11 @@ export interface SaleItemPrintRow {
 export interface SaleInvoicePrintColumns {
   discountPercent?: boolean;
   discountAmount?: boolean;
+  amountNetOfIndirectTaxes?: boolean;
   amountWithoutVat?: boolean;
   exciseRate?: boolean;
   exciseAmount?: boolean;
-  "vatRateRef.shortName"?: boolean;
+  vatRate?: boolean;
   vatAmount?: boolean;
 }
 
@@ -152,6 +154,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
 
   const showDiscPct = cols.discountPercent !== false && (cols.discountPercent === true || has((r) => r.discountPercent) || has((r) => r.discountAmount));
   const showDiscAmt = cols.discountAmount !== false && (cols.discountAmount === true || has((r) => r.discountAmount) || Number(data.totalDiscountAmount ?? 0) > 0);
+  const showNetOfIndirectTaxes = hasIndirectTaxes && cols.amountNetOfIndirectTaxes !== false && (cols.amountNetOfIndirectTaxes === true || has((r) => r.amountNetOfIndirectTaxes));
   // Колонка «Стоимость» имеет смысл только когда есть
   // косвенные налоги — иначе она совпадает с итоговой суммой и дублирует её.
   const showAmtNoVat = hasIndirectTaxes && cols.amountWithoutVat !== false;
@@ -159,16 +162,18 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   // документе (или явно включены пользователем через «В печать»).
   const showExciseRate = hasExcise && cols.exciseRate !== false && (cols.exciseRate === true || has((r) => r.exciseRate) || has((r) => r.exciseAmount));
   const showExciseAmt = hasExcise && cols.exciseAmount !== false && (cols.exciseAmount === true || has((r) => r.exciseAmount) || Number(data.totalExciseAmount ?? 0) > 0);
-  const showVatRate = hasVat && cols["vatRateRef.shortName"] !== false && (cols["vatRateRef.shortName"] === true || has((r) => r.vatRate) || has((r) => r.vatAmount));
+  const showVatRate = hasVat && cols.vatRate !== false && (cols.vatRate === true || has((r) => r.vatRate) || has((r) => r.vatAmount));
   const showVatAmt = hasVat && cols.vatAmount !== false && (cols.vatAmount === true || has((r) => r.vatAmount) || Number(data.totalVatAmount ?? 0) > 0);
 
   // Подсчёт ширины строки итогов: «Итого:» занимает все левые описательные
   // и количественные колонки до первой суммовой (Сумма скидки / Стоимость без НДС).
   // Базовые: №, Наименование, Ед.изм, Кол-во, Цена = 5
   const itogoColSpan = 5
-    + (showDiscPct ? 1 : 0);
+    + (showDiscPct ? 1 : 0)
+    + (showNetOfIndirectTaxes ? 1 : 0);
   const totalCols = itogoColSpan
     + (showDiscAmt ? 1 : 0)
+    + (showNetOfIndirectTaxes ? 1 : 0)
     + (showAmtNoVat ? 1 : 0)
     + (showExciseRate ? 1 : 0)
     + (showExciseAmt ? 1 : 0)
@@ -226,6 +231,9 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
             {showDiscAmt && (
               <th style={{ ...headCellStyle, width: "20mm" }}>Сумма скидки</th>
             )}
+            {showNetOfIndirectTaxes && (
+              <th style={{ ...headCellStyle, width: "22mm" }}>Стоимость</th>
+            )}
             {showAmtNoVat && (
               <th style={{ ...headCellStyle, width: "22mm" }}>{amountWithoutTaxesHeader}</th>
             )}
@@ -267,6 +275,9 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
               {showDiscAmt && (
                 <td style={{ ...cellStyle, textAlign: "right" }}>{fmt(it.discountAmount)}</td>
               )}
+              {showNetOfIndirectTaxes && (
+                <td style={{ ...cellStyle, textAlign: "right" }}>{fmt(it.amountNetOfIndirectTaxes)}</td>
+              )}
               {showAmtNoVat && (
                 <td style={{ ...cellStyle, textAlign: "right" }}>{fmt(it.amountWithoutVat)}</td>
               )}
@@ -292,6 +303,9 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
             <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700 }} colSpan={itogoColSpan}>Итого:</td>
             {showDiscAmt && (
               <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700 }}>{fmt(data.totalDiscountAmount)}</td>
+            )}
+            {showNetOfIndirectTaxes && (
+              <td style={cellStyle} />
             )}
             {showAmtNoVat && (
               <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700 }}>{fmt(data.totalAmountWithoutVat)}</td>

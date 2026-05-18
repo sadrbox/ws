@@ -291,123 +291,15 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
   // Нативный title поддерживает \n для переноса строк.
   const dirtyButtonTitle = useMemo(() => {
     if (hasStash) {
-      return "Есть несохранённые данные из прошлой сессии.\nНажмите, чтобы восстановить.";
+      return "Восстановить данные из прошлой сессии";
     }
     if (!isDirty) {
       return "Форма не содержит несохранённых изменений";
     }
-    const lines: string[] = ["Несохранённые изменения:"];
-    // Склонение для «изменение / изменения / изменений»
-    const pluralChanges = (n: number): string => {
-      const abs = Math.abs(n) % 100;
-      const n1 = abs % 10;
-      if (abs > 10 && abs < 20) return "изменений";
-      if (n1 > 1 && n1 < 5) return "изменения";
-      if (n1 === 1) return "изменение";
-      return "изменений";
-    };
-    // Попытаться извлечь человеко-понятный ярлык для объекта-сущности
-    // (counterparty, organization, warehouse и т.п.), чтобы не вываливать JSON.
-    const ENTITY_LABEL_KEYS = [
-      "shortName",
-      "fullName",
-      "name",
-      "title",
-      "username",
-      "label",
-      "code",
-      "number",
-      "uuid",
-      "id",
-    ];
-    const entityLabel = (o: Record<string, unknown>): string | null => {
-      for (const k of ENTITY_LABEL_KEYS) {
-        const val = o[k];
-        if (val === null || val === undefined || val === "") continue;
-        if (typeof val === "string" || typeof val === "number") {
-          const s = String(val);
-          return s.length > 40 ? s.slice(0, 37) + "…" : s;
-        }
-      }
-      return null;
-    };
-    const fmt = (v: unknown): string => {
-      if (v === null || v === undefined || v === "") return "—";
-      if (typeof v === "boolean") return v ? "да" : "нет";
-      if (typeof v === "number" || typeof v === "string") {
-        const s = String(v);
-        return s.length > 60 ? s.slice(0, 57) + "…" : s;
-      }
-      if (Array.isArray(v)) return `[${v.length} эл.]`;
-      if (typeof v === "object") {
-        const label = entityLabel(v as Record<string, unknown>);
-        if (label !== null) return label;
-        try {
-          const s = JSON.stringify(v);
-          return s.length > 60 ? s.slice(0, 57) + "…" : s;
-        } catch {
-          return "{объект}";
-        }
-      }
-      return String(v);
-    };
-    // Переводит имя поля в человекочитаемый ярлык.
-    // 1) Пары "*Uuid" + "*Name" сворачиваются в одну запись с базовым именем
-    //    (counterpartyUuid + counterpartyName → counterparty).
-    // 2) Имя пропускается через getTranslation/translate (i18) — порядок попыток:
-    //    a) полный ключ как есть (shortName → "Наименование");
-    //    b) ключ с обрезанным суффиксом Uuid/Name/Id (counterpartyUuid → counterparty);
-    //    c) если перевода не нашли — возвращаем сырой ключ (англоязычный fallback
-    //       через camelCase запрещён: метки должны идти только из translations.json,
-    //       сырой ключ служит сигналом «добавьте перевод»).
-    const humanizeField = (key: string): string => {
-      const direct = translate(key);
-      if (direct && direct !== key) return direct;
-      let base = key;
-      if (key.endsWith("Uuid") || key.endsWith("Name")) {
-        base = key.slice(0, -4);
-      } else if (key.endsWith("Id")) {
-        base = key.slice(0, -2);
-      }
-      if (base !== key) {
-        const t = translate(base);
-        if (t && t !== base) return t;
-      }
-      // Перевода нет — возвращаем сырой ключ, чтобы было видно, что нужно
-      // добавить запись в translations.json. Раньше тут делался camelCase
-      // split с заглавной буквой ("Short"), но это противоречит требованию
-      // «имена значений только через перевод».
-      return key;
-    };
-    // Сворачиваем "*Uuid" → пропускаем, если в diff есть пара "*Name":
-    // показываем только Name-вариант (он несёт читаемое значение).
-    const fieldNames = new Set(dirtyDiff.fields.map((f) => f.field));
-    for (const f of dirtyDiff.fields) {
-      if (f.field.endsWith("Uuid")) {
-        const pair = f.field.slice(0, -4) + "Name";
-        if (fieldNames.has(pair)) continue; // покажем Name-вариант ниже
-      }
-      const before = fmt(f.savedValue);
-      const after = fmt(f.currentValue);
-      const label = humanizeField(f.field);
-      // Если визуально одинаковы (например, оба объекта свелись к одному uuid)
-      // — пометим, что изменилось внутреннее содержимое.
-      if (before === after) {
-        lines.push(`• ${label}: изменено внутреннее содержимое`);
-      } else {
-        lines.push(`• ${label}: '${before}' → '${after}'`);
-      }
-    }
-    for (const t of dirtyDiff.tables) {
-      const tLabel = translate(t.key) || t.key;
-      lines.push(`• таблица "${tLabel}": ${t.pendingCount} ${pluralChanges(t.pendingCount)}`);
-    }
-    if (lines.length === 1) {
-      // isDirty=true, но diff пуст (напр. снапшот ещё не готов)
-      lines.push("Форма содержит несохранённые изменения");
-    }
-    return lines.join("\n");
-  }, [hasStash, isDirty, dirtyDiff]);
+    return showDiff
+      ? "Скрыть подсветку несохранённых изменений"
+      : "Показать подсветку несохранённых изменений";
+  }, [hasStash, isDirty, showDiff]);
 
   return (
     <div

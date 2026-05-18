@@ -103,11 +103,11 @@
 .DropdownMenu {
 	position: absolute;
 	top: calc(100% + 4px);
-	right: 0;
+	left: 0;
 	min-width: 180px;
 	background: #fff;
 	border: 1px solid #ccc;
-	border-radius: 6px;
+	border-radius: $radius3;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 	padding: 4px 0;
 	z-index: 1000;

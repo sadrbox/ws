@@ -176,6 +176,12 @@ function clearSession(storageKey: string): void {
 // CORE STORE (чистый JS, без React)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Синглтоны для путей "snapshot ещё не готов" — обязаны быть стабильны по
+// ссылке, иначе useSyncExternalStore уходит в infinite-loop "getSnapshot
+// should be cached".
+const EMPTY_DIFF: DirtyFieldDiff = { fields: [], tables: [] };
+const EMPTY_DIRTY_DETAILS = { fields: false, tables: false } as const;
+
 function createFormStore<F extends object>(
 	defaultFields: F,
 	tableDefs: Record<string, TableDef>,
@@ -268,7 +274,12 @@ function createFormStore<F extends object>(
 	// ── Подписчики ──
 	const listeners = new Set<Listener>();
 
+	// Монотонный счётчик мутаций — используется как ключ memo-кешей
+	// (isDirty / getDirtyDetails / getDirtyFieldDiff). Инкрементируется
+	// в notify(), чтобы любая мутация атомарно инвалидировала кеши.
+	let revision = 0;
 	function notify(): void {
+		revision++;
 		for (const l of listeners) l();
 	}
 
@@ -356,6 +367,15 @@ function createFormStore<F extends object>(
 		fields: defaultFields,
 		tables: emptyTables,
 	});
+	// Версия snapshot — инкрементируется при каждом markClean().
+	// Используется как часть ключа memo-кешей dirty-методов.
+	let snapshotRev = 0;
+	// Парсенный snapshot — кешируется один раз при markClean(),
+	// чтобы не делать JSON.parse на каждом вызове getDirtyDetails/getDirtyFieldDiff.
+	let parsedSnapshot: {
+		fields: Record<string, unknown>;
+		tables: Record<string, TableState>;
+	} = { fields: defaultFields as Record<string, unknown>, tables: emptyTables };
 
 	/** Сбросить dirty-флаг (вызывать после load / save) */
 	function markClean(): void {
@@ -363,6 +383,12 @@ function createFormStore<F extends object>(
 			fields: stripDerived(state.fields as Record<string, unknown>),
 			tables: state.tables,
 		});
+		try {
+			parsedSnapshot = JSON.parse(savedSnapshot);
+		} catch {
+			parsedSnapshot = { fields: {}, tables: {} };
+		}
+		snapshotRev++;
 		snapshotReady = true;
 		if (_paneUniqId) resolvePaneNotifications(_paneUniqId);
 		notify(); // Уведомить подписчиков (dirty-индикатор на вкладке)
@@ -386,31 +412,49 @@ function createFormStore<F extends object>(
 	}
 
 	/** Есть ли несохранённые изменения? */
+	// Memo по (revision, snapshotRev) — пересчитываем только при мутации
+	// state или замене сохранённого snapshot.
+	let isDirtyMemo: { rev: number; snapRev: number; value: boolean } | null =
+		null;
 	function isDirty(): boolean {
 		// Пока серверный snapshot не загружен — не показывать dirty
 		if (!snapshotReady) return false;
+		if (
+			isDirtyMemo &&
+			isDirtyMemo.rev === revision &&
+			isDirtyMemo.snapRev === snapshotRev
+		) {
+			return isDirtyMemo.value;
+		}
 		const current = stableStringify({
 			fields: stripDerived(state.fields as Record<string, unknown>),
 			tables: state.tables,
 		});
-		return current !== savedSnapshot;
+		const value = current !== savedSnapshot;
+		isDirtyMemo = { rev: revision, snapRev: snapshotRev, value };
+		return value;
 	}
 
 	/**
 	 * Детализация несохранённых изменений.
 	 * Возвращает отдельно: есть ли изменения в полях формы и/или в строках таблиц.
 	 */
+	let dirtyDetailsMemo: {
+		rev: number;
+		snapRev: number;
+		value: { fields: boolean; tables: boolean };
+	} | null = null;
 	function getDirtyDetails(): { fields: boolean; tables: boolean } {
-		if (!snapshotReady) return { fields: false, tables: false };
-		let parsed: { fields: unknown; tables: Record<string, TableState> } | null =
-			null;
-		try {
-			parsed = JSON.parse(savedSnapshot);
-		} catch {
-			/* ignore */
+		if (!snapshotReady) return EMPTY_DIRTY_DETAILS;
+		if (
+			dirtyDetailsMemo &&
+			dirtyDetailsMemo.rev === revision &&
+			dirtyDetailsMemo.snapRev === snapshotRev
+		) {
+			return dirtyDetailsMemo.value;
 		}
-		const savedFields = parsed?.fields;
-		const savedTables = parsed?.tables ?? {};
+		const savedFields = parsedSnapshot.fields;
+		const savedTables = parsedSnapshot.tables ?? {};
 		const fieldsDirty =
 			stableStringify(stripDerived(state.fields as Record<string, unknown>)) !==
 			stableStringify(savedFields);
@@ -419,27 +463,32 @@ function createFormStore<F extends object>(
 				stableStringify(state.tables[key]) !==
 				stableStringify(savedTables[key] ?? { pending: [] }),
 		);
-		return { fields: fieldsDirty, tables: tablesDirty };
+		const value = { fields: fieldsDirty, tables: tablesDirty };
+		dirtyDetailsMemo = { rev: revision, snapRev: snapshotRev, value };
+		return value;
 	}
 
 	/**
 	 * Полный diff несохранённых изменений — список изменённых полей с
 	 * сохранёнными (saved) и текущими (current) значениями.
 	 */
+	let dirtyDiffMemo: {
+		rev: number;
+		snapRev: number;
+		value: DirtyFieldDiff;
+	} | null = null;
 	function getDirtyFieldDiff(): DirtyFieldDiff {
-		if (!snapshotReady) return { fields: [], tables: [] };
-		let parsed: {
-			fields: Record<string, unknown>;
-			tables: Record<string, TableState>;
-		} | null = null;
-		try {
-			parsed = JSON.parse(savedSnapshot);
-		} catch {
-			/* ignore */
+		if (!snapshotReady) return EMPTY_DIFF;
+		if (
+			dirtyDiffMemo &&
+			dirtyDiffMemo.rev === revision &&
+			dirtyDiffMemo.snapRev === snapshotRev
+		) {
+			return dirtyDiffMemo.value;
 		}
-		const savedFields = parsed?.fields ?? {};
-		const savedTables = parsed?.tables ?? {};
-		const currentFields = state.fields;
+		const savedFields = parsedSnapshot.fields;
+		const savedTables = parsedSnapshot.tables ?? {};
+		const currentFields = state.fields as Record<string, unknown>;
 
 		const changedFields: DirtyFieldEntry[] = [];
 		const allKeys = new Set([
@@ -478,7 +527,9 @@ function createFormStore<F extends object>(
 			}
 		}
 
-		return { fields: changedFields, tables: changedTables };
+		const value = { fields: changedFields, tables: changedTables };
+		dirtyDiffMemo = { rev: revision, snapRev: snapshotRev, value };
+		return value;
 	}
 
 	/** Обновить pending-строки вложенной таблицы */
@@ -1132,9 +1183,6 @@ export function clearPaneStash(uniqId: string): void {
 // Позволяет показать пользователю список изменённых полей.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const EMPTY_DIFF: DirtyFieldDiff = { fields: [], tables: [] };
-const EMPTY_DIFF_JSON = JSON.stringify(EMPTY_DIFF);
-
 /** getter по uniqId панели → getDirtyFieldDiff из createFormStore */
 const paneDiffGetterMap = new Map<string, () => DirtyFieldDiff>();
 /** subscribe по uniqId панели → subscribe из createFormStore (для реактивности) */
@@ -1145,18 +1193,16 @@ export function registerPaneDiff(
 	getter: () => DirtyFieldDiff,
 	subscribe: (listener: () => void) => () => void,
 ): void {
-	// Wrap getter with stable-reference caching.
-	// useSyncExternalStore requires getSnapshot to return the same reference
-	// when data hasn't changed — otherwise React loops infinitely.
-	let cachedJson = EMPTY_DIFF_JSON;
+	// Wrap getter с identity-кешем.
+	// useSyncExternalStore требует, чтобы getSnapshot возвращал ту же ссылку
+	// при отсутствии изменений — иначе React уйдёт в бесконечный цикл.
+	// Сам getDirtyFieldDiff() уже memo по (revision, snapRev) и возвращает
+	// стабильную ссылку — pass-through. Дополнительная страховка: если
+	// ссылка изменилась, фиксируем новую.
 	let cachedResult: DirtyFieldDiff = EMPTY_DIFF;
 	const cachedGetter = (): DirtyFieldDiff => {
 		const next = getter();
-		const json = JSON.stringify(next);
-		if (json !== cachedJson) {
-			cachedJson = json;
-			cachedResult = next;
-		}
+		if (next !== cachedResult) cachedResult = next;
 		return cachedResult;
 	};
 	paneDiffGetterMap.set(uniqId, cachedGetter);

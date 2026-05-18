@@ -8,6 +8,8 @@
  *    DirtyButton (см. UI/index.tsx → setPaneShowDiff).
  *  • Поля формы (Field*) и ячейки SubTable получают `data-pane-dirty="true"`
  *    + `title="Было: …"`, если их значение расходится с saved.
+ *    Для обычных полей атрибут находится на FieldWrapper / FieldTextareaWrapper.
+ *    Для FieldToggle — на самом label с классом FieldToggle.
  *  • CSS-селектор `[data-pane-show-diff="true"] [data-pane-dirty="true"]`
  *    в main.module.scss даёт фоновую подсветку — без дополнительных классов.
  *
@@ -17,7 +19,7 @@
  * отключить логику form-level diff для табличных ячеек (там используется
  * собственный механизм сравнения с серверной строкой по uuid+column).
  */
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type FC, type ReactNode } from "react";
 import { usePaneDirtyDiff } from "./useFormStore";
 
 /** Сериализуемые data-* атрибуты + title для подсветки. */
@@ -38,8 +40,8 @@ export interface PaneScopeValue {
    * Назначение: единый механизм `data-pane-dirty` для inline-edit ячеек
    * внутри таблиц/SubTable. Таблица знает per-cell diff (через `getCellDirty`)
    * и оборачивает ячейку в `CellDirtyScope`, чтобы вложенный Field-компонент
-   * получил тот же атрибут на своей `FieldInputWrapper / FieldSelectWrapper /
-   * FieldTextareaInputWrapper`, что и поля формы верхнего уровня.
+   * получил тот же атрибут на своём FieldWrapper / FieldTextareaWrapper / FieldToggle label,
+   * что и поля формы верхнего уровня.
    */
   cellOverride?: DirtyDomProps | null;
 }
@@ -142,6 +144,19 @@ export function useFieldDirty(fieldName: string | undefined): DirtyDomProps {
   const tail = fieldName.includes("_")
     ? fieldName.slice(fieldName.lastIndexOf("_") + 1)
     : fieldName;
+  // Не подсвечиваем технические/служебные поля (id/uuid/author и варианты).
+  const tailLower = tail.toLowerCase();
+  const EXCLUDE_TAILS = new Set([
+    "id",
+    "uuid",
+    "author",
+    "authorid",
+    "authoruuid",
+    "createdby",
+    "createdbyid",
+    "createdbyuuid",
+  ]);
+  if (EXCLUDE_TAILS.has(tailLower)) return EMPTY_PROPS;
   const entry =
     diff.fields.find((f) => f.field === fieldName) ??
     diff.fields.find((f) => fieldName.endsWith(`_${f.field}`)) ??
@@ -178,3 +193,26 @@ export function useCellDirty(params: {
 }
 
 export { formatDiffValue };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CELL FIELD STATE — контекст состояния поля внутри ячейки таблицы.
+// Передаёт required / error из Table → Field-компоненты, чтобы стили
+// required/error применялись на FieldWrapper (не на TableBodyCell).
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface CellFieldState {
+  required?: boolean;
+  error?: boolean;
+  errorMessage?: string;
+}
+
+const EMPTY_CELL_STATE: CellFieldState = {};
+const CellFieldStateContext = createContext<CellFieldState>(EMPTY_CELL_STATE);
+
+export const CellFieldStateScope: FC<{ value: CellFieldState; children: ReactNode }> = ({ value, children }) => (
+  <CellFieldStateContext.Provider value={value}>
+    {children}
+  </CellFieldStateContext.Provider>
+);
+
+export const useCellFieldState = (): CellFieldState => useContext(CellFieldStateContext);

@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import styles from "./Field.module.scss";
 import { fetchList } from "src/services/offlineDataService";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
-import { useFieldDirty } from "src/hooks/useDirtyHighlight";
+import { useFieldDirty, useCellFieldState } from "src/hooks/useDirtyHighlight";
+import { useFormRequiredScope } from "src/hooks/useFormRequired";
 import { useAppContext } from "src/app";
 import SelectPaneWrapper from "./SelectPaneWrapper";
 import FieldActionButton from "./FieldActionButton";
@@ -78,6 +79,10 @@ export interface LookupFieldProps {
    * Используется для перехода фокуса на следующее поле.
    */
   onAfterSelect?: () => void;
+  /** Обязательное поле — показывает * в подписи и подсвечивает когда не выбрано */
+  required?: boolean;
+  /** Ошибка валидации — подсвечивает поле красным */
+  error?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -132,16 +137,31 @@ const LookupField: FC<LookupFieldProps> = ({
   visibleActions,
   onEnterKey,
   onAfterSelect,
+  required = false,
+  error = false,
 }) => {
   // Подавляем неиспользуемые переменные совместимости
   void _columns;
 
   const { windows: { addPane } } = useAppContext();
 
+  const cellState = useCellFieldState();
+  const formRequired = useFormRequiredScope();
   const isTable = variant === 'table';
-  const wrapperClass = isTable
-    ? `${styles.FieldWrapper} ${styles.tableVariant}`
-    : styles.FieldWrapper;
+  const tail = name.includes('_') ? name.slice(name.lastIndexOf('_') + 1) : name;
+  const isEmpty = !value;
+  const isFormRequired = !isTable && formRequired.requiredKeys.has(tail);
+  const effectiveRequired = required || !!cellState.required || isFormRequired;
+  const effectiveError = error || !!cellState.error;
+
+  const rawDirty = useFieldDirty(name);
+  const dirty = (effectiveRequired && isEmpty) || effectiveError ? {} : rawDirty;
+
+  const wrapperClass = [
+    isTable ? `${styles.FieldWrapper} ${styles.tableVariant}` : styles.FieldWrapper,
+    !effectiveError && effectiveRequired && isEmpty ? styles.FieldRequired : '',
+    effectiveError ? styles.FieldError : '',
+  ].filter(Boolean).join(' ');
 
   // ── Autocomplete state ──────────────────────────────────────────────────
   const [inputText, setInputText] = useState(displayValue || "");
@@ -458,8 +478,6 @@ const LookupField: FC<LookupFieldProps> = ({
     return parts.join(" · ");
   }, [resolvedSecondaryFields, getNestedValue]);
 
-  const dirty = useFieldDirty(name);
-
   return (
     <>
       <div
@@ -470,14 +488,16 @@ const LookupField: FC<LookupFieldProps> = ({
           minWidth: minWidth ?? "none",
         }}
         ref={wrapperRef}
+        {...dirty}
       >
         {!isTable && label && (
           <label htmlFor={name} className={styles.FieldLabel}>
             {label}
+            {effectiveRequired && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
           </label>
         )}
 
-        <div className={`${styles.FieldInputWrapper} ${disabled ? styles.FieldDisabled : ""}`} {...dirty}>
+        <div className={[styles.FieldInputWrapper, disabled ? styles.FieldDisabled : ''].filter(Boolean).join(' ')}>
           <input
             ref={inputRef}
             type="text"

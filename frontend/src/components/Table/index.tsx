@@ -1,6 +1,6 @@
 import styles from './Table.module.scss';
 import { GLOBAL_ADAPTIVE_LIMIT_REF } from 'src/hooks/useInfiniteModelList';
-import { formatDiffValue as formatDirtyValue, CellDirtyScope, type DirtyDomProps } from 'src/hooks/useDirtyHighlight';
+import { formatDiffValue as formatDirtyValue, CellDirtyScope, CellFieldStateScope, type DirtyDomProps } from 'src/hooks/useDirtyHighlight';
 
 import {
   TColumn,
@@ -53,6 +53,7 @@ import {
   FC,
   Fragment,
   KeyboardEvent as ReactKeyboardEvent,
+  isValidElement,
   memo,
   PropsWithChildren,
   Ref,
@@ -132,9 +133,9 @@ export interface TableContextProps {
   // ── Refs для inline-editing (не триггерят ререндер contextValue) ───────
   renderCellRef?: React.RefObject<((row: TDataItem, col: TColumn) => React.ReactNode | undefined) | undefined>;
   inlineEditingRef?: React.RefObject<boolean | undefined>;
-  /** Метаданные ячейки (error/required-обёртка) — переносятся на TableBodyCell. */
+  /** Метаданные ячейки (error/required) — передаются в CellFieldStateScope для Field-компонентов. */
   getCellMetaRef?: React.RefObject<
-    | ((row: TDataItem, col: TColumn) => { className?: string; title?: string; errorTooltip?: React.ReactNode } | null)
+    | ((row: TDataItem, col: TColumn) => { required?: boolean; error?: boolean; errorMessage?: string; errorTooltip?: React.ReactNode } | null)
     | undefined
   >;
   /** Per-cell diff vs saved snapshot — ref-вариант, не пересоздаёт contextValue. */
@@ -212,14 +213,11 @@ export interface TableProps {
   /** Per-cell diff vs saved snapshot для подсветки (см. SubTable). */
   getCellDirty?: (row: TDataItem, col: TColumn) => { isDirty: boolean; savedValue: unknown; currentValue: unknown } | null;
   /**
-   * Метаданные ячейки (ошибка / обязательное пустое) — применяются
-   * прямо на `.TableBodyCell` без промежуточного `CellWrap`-обёртки.
-   * Возвращает дополнительный className (хешированный CellWrap_error /
-   * CellWrap_required из стилей вызывающего компонента), tooltip (errorMsg)
-   * и опциональный визуальный errorTooltip-узел, рендерящийся рядом
-   * с контентом ячейки.
+   * Метаданные ячейки (ошибка / обязательное пустое) — передаются в
+   * CellFieldStateScope, откуда Field-компоненты читают через useCellFieldState.
+   * errorTooltip — визуальный узел ошибки, рендерящийся рядом с контентом.
    */
-  getCellMeta?: (row: TDataItem, col: TColumn) => { className?: string; title?: string; errorTooltip?: React.ReactNode } | null;
+  getCellMeta?: (row: TDataItem, col: TColumn) => { required?: boolean; error?: boolean; errorMessage?: string; errorTooltip?: React.ReactNode } | null;
   /** Если true — скрыть кнопки «Добавить»/«Удалить» (режим только чтение по правам доступа) */
   readonly?: boolean;
   /** Раскрытые строки (expand) */
@@ -1504,45 +1502,45 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           // Это устраняет промежуточный `<div .CellWrap>` из разметки и
           // гарантирует, что соседние механики (focus-within, activeRow,
           // dirty-highlight) не конфликтуют между разными уровнями DOM.
+          const cellMeta = getCellMetaRef?.current?.(row, col) ?? null;
+          const customCell = currentRenderCell?.(row, col);
+          const isReadOnlyCellNode = isValidElement(customCell)
+            && (typeof customCell.type === 'function'
+              ? (customCell.type.displayName === 'ReadOnlyCell' || customCell.type.name === 'ReadOnlyCell')
+              : false);
           const cellDirty = getCellDirtyRef?.current?.(row, col) ?? null;
-          const cellDirtyProps: DirtyDomProps | null = cellDirty?.isDirty
+          const cellDirtyProps: DirtyDomProps | null = cellDirty?.isDirty && !(cellMeta?.required || cellMeta?.error) && !isReadOnlyCellNode
             ? {
               "data-pane-dirty": "true",
               title: `Было: ${formatDirtyValue(cellDirty.savedValue)}\nСтало: ${formatDirtyValue(cellDirty.currentValue)}`,
             }
             : null;
-          const cellMeta = getCellMetaRef?.current?.(row, col) ?? null;
 
-          // Композиция className для TableBodyCell. Хешированные имена
-          // CellWrap_required / CellWrap_error приходят через cellMeta.className
-          // (из SubTable.module.scss) — это позволяет применять стили из
-          // другого модуля, не импортируя его сюда.
           const cellClassName = [
             styles.TableBodyCell,
             cellAlignClass(col),
-            cellMeta?.className,
             isCellActive ? styles.activeCell : null,
           ].filter(Boolean).join(' ');
 
-          // title: ошибка валидации важнее dirty-tooltip-а; если ничего — undefined.
-          const cellTitle = cellMeta?.title ?? cellDirtyProps?.title;
+          const cellTitle = cellMeta?.errorMessage;
 
           // <td> сохраняет за собой только то, что нужно ВНЕ DOM-зоны
           // содержимого: data-col-id для клавиатурной навигации (SubTable
           // ищет td по этому атрибуту), tabIndex для программного фокуса.
-          // Визуальная подсветка и data-* семантика перенесены на .TableBodyCell.
+          // Визуальная подсветка и data-* семантика теперь применяются
+          // не к .TableBodyCell, а к обёртке Field внутри ячейки.
           const tdProps = {
             'data-col-id': col.identifier,
             tabIndex: isCellActive ? -1 : undefined,
           } as const;
 
-          // Атрибуты, переезжающие на TableBodyCell (вместо <td>).
           const cellWrapperProps = {
             className: cellClassName,
             ...(cellTitle ? { title: cellTitle } : {}),
-            ...(cellDirtyProps ? { "data-pane-dirty": cellDirtyProps["data-pane-dirty"] } : {}),
             ...(isCellActive ? { "data-active-cell": "true" as const } : {}),
           };
+
+          const cellFieldState = cellMeta ? { required: cellMeta.required, error: cellMeta.error, errorMessage: cellMeta.errorMessage } : undefined;
 
           if (currentRenderCell) {
             const customCell = currentRenderCell(row, col);
@@ -1550,11 +1548,9 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
               return (
                 <td key={col.identifier} {...tdProps}>
                   <div {...cellWrapperProps}>
-                    {/* Внутри ячейки таблицы Field-компонент НЕ должен
-                        сам выставлять data-pane-dirty (он теперь на
-                        TableBodyCell). value={null} → useFieldDirty
-                        возвращает EMPTY_PROPS. */}
-                    <CellDirtyScope value={null}>{customCell}</CellDirtyScope>
+                    <CellFieldStateScope value={cellFieldState ?? {}}>
+                      <CellDirtyScope value={cellDirtyProps}>{customCell}</CellDirtyScope>
+                    </CellFieldStateScope>
                     {cellMeta?.errorTooltip}
                   </div>
                 </td>
