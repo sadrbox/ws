@@ -381,5 +381,6 @@
 	"PayrollPaymentsForm": "Выплата ЗП",
 	"UnitOfMeasuresForm": "Единица измерения",
 	"TaxesForm": "Налог",
-	"OrganizationAccountingSettingsForm": "Настройка учёта организации"
+	"OrganizationAccountingSettingsForm": "Настройка учёта организации",
+	"Author": "Автор"
 }

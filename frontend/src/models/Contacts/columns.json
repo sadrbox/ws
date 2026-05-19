@@ -63,5 +63,18 @@
 		"position": 4,
 		"filter": false,
 		"inlist": true
+	},
+	{
+		"identifier": "isPrimary",
+		"type": "boolean",
+		"name": "Основной",
+		"width": "80px",
+		"minWidth": "60px",
+		"alignment": "center",
+		"hint": "Основной контакт данного типа для этого владельца",
+		"visible": false,
+		"position": 5,
+		"filter": false,
+		"inlist": true
 	}
 ]

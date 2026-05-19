@@ -78,6 +78,13 @@ export interface SaleInvoicePrintData {
   managerName?: string;
   accountantName?: string;
   receiverName?: string;
+  /**
+   * Является ли организация плательщиком НДС.
+   * По НК РК ст. 412 колонка «Ставка НДС» обязательна в накладной:
+   *   true  → печатается числовая ставка (12 %, 0 % и т.д.)
+   *   false → печатается «Без НДС»; колонка суммы НДС скрывается.
+   */
+  isVatPayer?: boolean;
   /** Видимость опциональных колонок (управляется чекбоксами «В печать»). */
   columns?: SaleInvoicePrintColumns;
 }
@@ -158,19 +165,21 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   // Колонка «Стоимость» имеет смысл только когда есть
   // косвенные налоги — иначе она совпадает с итоговой суммой и дублирует её.
   const showAmtNoVat = hasIndirectTaxes && cols.amountWithoutVat !== false;
-  // Колонки НДС/акциза показываем только если они реально присутствуют в
-  // документе (или явно включены пользователем через «В печать»).
+  // Колонки акциза — только если в документе есть акциз.
   const showExciseRate = hasExcise && cols.exciseRate !== false && (cols.exciseRate === true || has((r) => r.exciseRate) || has((r) => r.exciseAmount));
   const showExciseAmt = hasExcise && cols.exciseAmount !== false && (cols.exciseAmount === true || has((r) => r.exciseAmount) || Number(data.totalExciseAmount ?? 0) > 0);
-  const showVatRate = hasVat && cols.vatRate !== false && (cols.vatRate === true || has((r) => r.vatRate) || has((r) => r.vatAmount));
-  const showVatAmt = hasVat && cols.vatAmount !== false && (cols.vatAmount === true || has((r) => r.vatAmount) || Number(data.totalVatAmount ?? 0) > 0);
 
-  // Подсчёт ширины строки итогов: «Итого:» занимает все левые описательные
-  // и количественные колонки до первой суммовой (Сумма скидки / Стоимость без НДС).
-  // Базовые: №, Наименование, Ед.изм, Кол-во, Цена = 5
-  const itogoColSpan = 5
-    + (showDiscPct ? 1 : 0)
-    + (showNetOfIndirectTaxes ? 1 : 0);
+  // По НК РК ст. 412 колонка «Ставка НДС» обязательна в накладной:
+  //   • плательщик НДС    → показываем числовую ставку (12 %, 0 % …)
+  //   • неплательщик НДС  → показываем «Без НДС» (isVatPayer=false)
+  // Колонка суммы НДС отображается только у плательщиков НДС с реальным налогом.
+  const showVatRate = cols.vatRate !== false;
+  const showVatAmt = data.isVatPayer !== false && hasVat && cols.vatAmount !== false && (cols.vatAmount === true || has((r) => r.vatAmount) || Number(data.totalVatAmount ?? 0) > 0);
+
+  // «Итого:» занимает все нечисловые левые колонки до первой суммовой.
+  // Порядок колонок: №, Наим., Ед.изм., Кол-во, Цена [, Скидка%] [, Сумма скидки] [, Стоимость] …
+  // itogoColSpan охватывает только: №, Наим., Ед.изм., Кол-во, Цена, Скидка% (не суммовые).
+  const itogoColSpan = 5 + (showDiscPct ? 1 : 0);
   const totalCols = itogoColSpan
     + (showDiscAmt ? 1 : 0)
     + (showNetOfIndirectTaxes ? 1 : 0)
@@ -290,7 +299,9 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
                 <td style={{ ...cellStyle, textAlign: "right" }}>{fmt(it.exciseAmount)}</td>
               )}
               {showVatRate && (
-                <td style={{ ...cellStyle, textAlign: "center" }}>{it.vatRate != null ? it.vatRate : ""}</td>
+                <td style={{ ...cellStyle, textAlign: "center" }}>
+                  {data.isVatPayer === false ? "Без НДС" : (it.vatRate != null ? it.vatRate : "")}
+                </td>
               )}
               {showVatAmt && (
                 <td style={{ ...cellStyle, textAlign: "right" }}>{fmt(it.vatAmount)}</td>

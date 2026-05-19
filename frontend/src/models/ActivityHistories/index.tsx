@@ -127,8 +127,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
     <ModelForm paneId={form.paneId} tabs={tabs} readonly={!canWrite}
       onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.isEditMode ? form.handleReload : undefined}
-      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      isDirty={form.isDirty} />
+      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}/>
   );
 };
 ActivityHistoriesForm.displayName = "ActivityHistoriesForm";

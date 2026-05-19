@@ -1,6 +1,5 @@
 import { FC, useId } from "react";
 import styles from "./FieldToggle.module.scss";
-import { useFieldDirty } from "src/hooks/useDirtyHighlight";
 
 export interface FieldToggleProps {
   /** Имя поля (для form-data при необходимости). */
@@ -52,7 +51,6 @@ const FieldToggle: FC<FieldToggleProps> = ({
   title,
 }) => {
   const id = useId();
-  const dirty = useFieldDirty(name);
   const handleChange = () => {
     if (disabled) return;
     onChange?.(!value);
@@ -72,9 +70,7 @@ const FieldToggle: FC<FieldToggleProps> = ({
         .filter(Boolean)
         .join(" ")}
       title={title}
-      {...dirty}
     >
-      {label && <span className={styles.label}>{label}</span>}
       <input
         id={id}
         name={name}
@@ -84,6 +80,7 @@ const FieldToggle: FC<FieldToggleProps> = ({
         onChange={handleChange}
         className={styles.input}
       />
+      {label && <span className={styles.label}>{label}</span>}
       <span className={styles.track} aria-hidden>
         <span className={styles.thumb}>
           {value && (

@@ -12,6 +12,7 @@ import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupFie
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
@@ -130,7 +131,6 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
       isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
 
       readonly={!canWrite}
-      isDirty={form.isDirty}
     />
   );
 };
@@ -180,11 +180,14 @@ export interface ContactsTableProps {
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
   initialPendingRows?: TDataItem[];
+  /** Показать кнопку «Сделать основным» — уникальный основной per тип контакта */
+  showPrimaryButton?: boolean;
 }
 
 const ContactsTable: FC<ContactsTableProps> = ({
   ownerType, parentUuid, parentName = "", disabled = false,
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
+  showPrimaryButton = false,
 }) => {
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
@@ -256,6 +259,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
+      extraButtons={showPrimaryButton ? <PrimaryToolbarButton endpoint={CT_TABLE_ENDPOINT} disabled={disabled} label="Сделать основным" /> : undefined}
     />
   );
 };

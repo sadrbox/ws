@@ -17,7 +17,7 @@
 		"hint": "UUID",
 		"type": "string",
 		"position": 2,
-		"visible": false,
+		"visible": true,
 		"inlist": false,
 		"width": "0px",
 		"minWidth": "0px",

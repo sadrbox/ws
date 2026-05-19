@@ -58,7 +58,7 @@ router.get("/files", async (req, res) => {
 // ============================================
 router.post("/files", upload.single("file"), async (req, res) => {
 	try {
-		const { ownerType, ownerUuid, description } = req.body;
+		const { ownerType, ownerUuid, comment } = req.body;
 		if (!ownerType || !ownerUuid || !req.file) {
 			return res.status(400).json({
 				success: false,
@@ -88,7 +88,7 @@ router.post("/files", upload.single("file"), async (req, res) => {
 				filePath: req.file.filename,
 				fileSize: req.file.size,
 				mimeType: req.file.mimetype,
-				description: description || null,
+				comment: comment || null,
 			},
 		});
 

@@ -18,8 +18,7 @@ export interface FormPanelProps {
  * Содержит только бизнес-действия:
  *   [Сохранить и закрыть] | [Сохранить] | [⟳ Обновить]
  *
- * Кнопка «Закрыть» (✕) и индикатор isDirty (●) управляются
- * на уровне PaneItem — они одинаковы для всех панелей.
+ * Кнопка «Закрыть» (✕) управляется на уровне PaneItem.
  */
 const FormPanel: FC<FormPanelProps> = ({
   onSaveAndClose,
@@ -36,17 +35,12 @@ const FormPanel: FC<FormPanelProps> = ({
     <>
       {effectiveSaveAndClose && (
         <Button variant="primary" onClick={effectiveSaveAndClose} disabled={isLoading}>
-          <span>Сохранить и закрыть</span>
+          <span style={{ fontWeight: 'bold' }}>Сохранить и закрыть</span>
         </Button>
       )}
       {effectiveSave && (
         <Button onClick={effectiveSave} disabled={isLoading}>
           <span>Сохранить</span>
-        </Button>
-      )}
-      {onReload && (
-        <Button onClick={onReload} disabled={isLoading}>
-          <span>Обновить</span>
         </Button>
       )}
       {onClose && (

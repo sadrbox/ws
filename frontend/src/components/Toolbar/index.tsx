@@ -87,8 +87,8 @@ const SearchButton = makeButton("search", "Поиск");
 const InlineEditButton = makeButton("editInline", "Редактирование в таблице");
 const MakePrimaryButton = makeButton("makePrimary", "Сделать основным");
 const RecalcButton = makeButton("recalc", "Пересчитать");
+const RefillButton = makeButton("restore", "Перезаполнить");
 const PrintButton = makeButton("print", "Печать");
-const DirtyButton = makeButton("restore", "Восстановить несохранённые изменения");
 
 // ─── Toolbar.CloseButton ────────────────────────────────────────────────
 
@@ -138,8 +138,8 @@ type ToolbarComponent = typeof ToolbarRoot & {
   InlineEditButton: typeof InlineEditButton;
   MakePrimaryButton: typeof MakePrimaryButton;
   RecalcButton: typeof RecalcButton;
+  RefillButton: typeof RefillButton;
   PrintButton: typeof PrintButton;
-  DirtyButton: typeof DirtyButton;
   CloseButton: typeof CloseButton;
 };
 
@@ -156,8 +156,8 @@ Toolbar.SearchButton = SearchButton;
 Toolbar.InlineEditButton = InlineEditButton;
 Toolbar.MakePrimaryButton = MakePrimaryButton;
 Toolbar.RecalcButton = RecalcButton;
+Toolbar.RefillButton = RefillButton;
 Toolbar.PrintButton = PrintButton;
-Toolbar.DirtyButton = DirtyButton;
 Toolbar.CloseButton = CloseButton;
 
 export {
@@ -173,8 +173,8 @@ export {
   InlineEditButton,
   MakePrimaryButton,
   RecalcButton,
+  RefillButton,
   PrintButton,
-  DirtyButton,
   CloseButton,
 };
 export default Toolbar;

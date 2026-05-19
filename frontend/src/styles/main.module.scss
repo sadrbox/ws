@@ -48,6 +48,39 @@ body {
 	background-color: #fff;
 }
 
+.NavbarLogo {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 6px 0 6px;
+	flex-shrink: 0;
+	text-decoration: none;
+	user-select: none;
+
+	.NavbarLogoIcon {
+		width: 28px;
+		height: 28px;
+		border-radius: 3px;
+		background: $colorPrimaryDark;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		color: #fff;
+		font-size: 13px;
+		font-weight: 800;
+		letter-spacing: -0.5px;
+	}
+
+	.NavbarLogoText {
+		font-size: 15px;
+		font-weight: 700;
+		color: $color3;
+		letter-spacing: -0.2px;
+		white-space: nowrap;
+	}
+}
+
 .NavbarWrapper {
 	position: sticky;
 	top: 0px;
@@ -55,7 +88,7 @@ body {
 	border-bottom: 0px solid $color10;
 	display: flex;
 	align-items: center;
-	box-shadow: 0px 0px 3px 1px rgba(#000, 0.4);
+	// box-shadow: 0px 0px 3px 1px rgba(#000, 0.4);
 	height: $heightFieldInput + 12px;
 	flex-wrap: nowrap;
 	flex-shrink: 0;
@@ -68,17 +101,23 @@ body {
 		height: 100%;
 		user-select: none;
 		color: $color3;
-		font-weight: 600;
+		font-weight: 500;
 		margin: 0px;
 		padding: 0 12px;
 		display: flex;
 		flex-direction: row;
 		align-items: center;
 		white-space: nowrap;
-		font-size: $fontsize;
+		font-size: $fontsize + 1px;
 		text-decoration: none;
 		flex-shrink: 0;
+
 		// transition: background 0.15s, color 0.15s;
+		&:hover {
+			// background: rgba($color3, 0.1);
+			// color: $color6;
+			text-decoration: underline;
+		}
 	}
 
 	.Active {
@@ -215,6 +254,15 @@ body {
 		display: flex;
 	}
 
+	// Логотип — на мобильных скрываем текст, оставляем только иконку
+	.NavbarLogo {
+		padding: 0 8px;
+
+		.NavbarLogoText {
+			display: none;
+		}
+	}
+
 	// Правая часть — укорачиваем
 	.NavbarRight {
 		gap: 8px;
@@ -285,7 +333,7 @@ body {
 	// NavListWrapper — одна колонка
 	.NavListWrapper {
 		h1 {
-			font-size: $fontsize + 1px;
+			font-size: $fontsize + 3px;
 		}
 	}
 
@@ -333,7 +381,7 @@ body {
 
 	.NavListWrapper {
 		h1 {
-			font-size: $fontsize;
+			font-size: $fontsize + 3px;
 		}
 	}
 
@@ -350,7 +398,7 @@ body {
 	right: 0;
 	bottom: 0;
 	display: flex;
-	padding: 6px;
+	padding: 0 6px;
 	z-index: 4;
 	background-color: #fff;
 	overflow-y: auto;
@@ -381,15 +429,16 @@ body {
 	h1 {
 		margin: 0px 0 0px 0px;
 		padding: 0px;
-		font-weight: bold;
 		// font-family: Arial, Helvetica, sans-serif;
 		// font-size: 120%;
 		color: $color6;
 		display: flex;
 		// flex: 1;
-		line-height: $heightFieldInput + 2;
-		font-weight: 600;
-		font-size: $fontsize;
+		// line-height: $heightFieldInput + 2;
+		align-items: center;
+		height: $heightFieldInput + 6px;
+		font-weight: 500;
+		font-size: $fontsize + 3px;
 		color: $color6;
 		border-bottom: 1px solid $color33;
 	}
@@ -481,6 +530,7 @@ body {
 	// overflow-y: auto;
 	display: none;
 	gap: 6px;
+	// margin: 0 -6px;
 }
 
 .PaneItemActive {
@@ -495,13 +545,17 @@ body {
 	gap: 6px;
 	align-items: center;
 	justify-content: flex-start;
-	height: $heightFieldInput + 12px;
+	height: $heightFieldInput + 6px;
 	// padding-right: 2px;
 	flex-shrink: 0;
-	// padding: 6px;
+	margin: 0 -6px;
+	padding: 0 6px;
 	background: $color30;
 	// border-bottom: 1px solid #aaa;
-	// box-shadow:0 0 12px 1px rgba($color5, 0.2);
+	// box-shadow: 0 0 12px 1px rgba(#000, 0.1);
+	// box-shadow: 0px 0px 3px 1px rgba(#000, 0.4);
+	border-bottom: 1px solid #ddd;
+	user-select: none;
 }
 
 .PaneItemHeaderLabel {
@@ -509,8 +563,8 @@ body {
 	align-items: center;
 	margin: 0;
 	padding: 0;
-	font-weight: bold;
-	font-size: $fontsize + 6;
+	font-weight: 500;
+	font-size: $fontsize + 3px;
 	color: $color6;
 	white-space: nowrap;
 	overflow: hidden;
@@ -538,51 +592,22 @@ body {
 	display: contents;
 }
 
-.PaneItemHeaderDirtyDot {
+.PaneItemStashDot {
 	display: inline-block;
 	width: 10px;
 	height: 10px;
 	border-radius: 50%;
 	background: #e8a030;
-	// margin-right: 8px;
 	flex-shrink: 0;
 	box-shadow: 0 0 0 2px rgba(#e8a030, 0.25);
+	animation: stashPulse 1.5s ease-in-out infinite;
 }
 
-.PaneItemHeaderDirtyDotStash {
-	display: inline-block;
-	width: 10px;
-	height: 10px;
-	border-radius: 50%;
-	background: #e8a030;
-	// margin-right: 8px;
-	flex-shrink: 0;
-	box-shadow: 0 0 0 2px rgba(#e8a030, 0.25);
-	animation: dirtyPulse 1.5s ease-in-out infinite;
-}
-
-.PaneItemHeaderLabelDirty {
-	color: #c27400;
-}
-
-// Кнопка-индикатор несохранённых изменений в PaneItemHeaderToolbar.
-// Показывается только когда есть что показать (isDirty || hasStash).
-// .PaneItemHeaderDirtyButton — текущая форма содержит правки (клик — тоггл подсветки).
-// .PaneItemHeaderDirtyButtonStash — есть stash из прошлой сессии (клик восстанавливает).
-.PaneItemHeaderDirtyButton {
+// Кнопка восстановления данных из прошлой сессии (stash).
+.PaneItemStashButton {
 	color: #d48806;
 	background: rgba(#d48806, 0.08);
-
-	&:hover {
-		color: #c27400;
-		background: rgba(#d48806, 0.18);
-	}
-}
-
-.PaneItemHeaderDirtyButtonStash {
-	color: #d48806;
-	background: rgba(#d48806, 0.08);
-	animation: dirtyPulse 1.5s ease-in-out infinite;
+	animation: stashPulse 1.5s ease-in-out infinite;
 
 	&:hover {
 		color: #c27400;
@@ -591,9 +616,6 @@ body {
 	}
 }
 
-// Прежде здесь была подсветка inset box-shadow для шапки панели.
-// Удалено: dirty-состояние теперь обозначается оранжевой точкой внутри
-// .PaneItemHeaderLabel (одинаковый стиль с .PaneTabItemDirtyDot).
 .PaneItemBottomToolbar {
 	display: flex;
 	flex-direction: row;
@@ -601,7 +623,7 @@ body {
 	justify-content: flex-end;
 }
 
-@keyframes dirtyPulse {
+@keyframes stashPulse {
 
 	0%,
 	100% {
@@ -785,6 +807,23 @@ body {
 	margin-top: 6px;
 }
 
+.PaneNoteOpenBtn {
+	display: inline-block;
+	margin-top: 5px;
+	border: none;
+	background: none;
+	color: #1677ff;
+	font-size: $fontsize - 2px;
+	padding: 0;
+	cursor: pointer;
+	text-decoration: underline;
+	font-weight: 500;
+
+	&:hover {
+		color: #0958d9;
+	}
+}
+
 .PaneNoteActionBtn {
 	border: 1px solid #d48806;
 	background: #fffbe6;
@@ -803,12 +842,11 @@ body {
 // ═══════════════════════════════════════════════════════════════════════════
 // TABLE CELL STATES — единый приоритетный каскад для `.TableBodyCell`.
 //
-// Атрибуты, влияющие на оформление одной и той же ячейки таблицы:
-//   1) data-pane-dirty="true"  — значение отличается от saved (в show-diff)
+// Состояния ячейки (от низкого к высокому приоритету):
+//   1) activeRow               — подсветка строки целиком
 //   2) activeCell / data-active-cell="true" — выбранная ячейка
-//   3) activeRow               — выбранная строка   (самый низкий)
 //
-// Required/error стили для ячеек с Field-компонентами теперь применяются
+// Required/error стили для ячеек с Field-компонентами применяются
 // через CellFieldStateScope → useCellFieldState() → FieldRequired/FieldError
 // классы на FieldWrapper в Field.module.scss.
 //
@@ -817,8 +855,8 @@ body {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Объявление порядка слоёв. ПОЗДНЕЕ = ВЫШЕ.
-// Порядок приоритета (снизу вверх): activeRow → dirty → activeCell.
-@layer table-cell-activeRow, table-cell-dirty, table-cell-activeCell;
+// Порядок приоритета (снизу вверх): activeRow → activeCell.
+@layer table-cell-activeRow, table-cell-activeCell;
 
 // ── Layer 5 (lowest): activeRow ────────────────────────────────────────────
 // Подсветка строки целиком. Применяется ко всем .TableBodyCell внутри tr.
@@ -844,40 +882,11 @@ body {
 	// относится к тому же уровню навигации/выделения, что и activeCell,
 	// поэтому живёт в этом же слое. Из-за источникового порядка после
 	// activeCell — перекрывает её визуал.
-	[class*="TableBodyCell"]:focus-within {
-		background: rgba($color60, 0.9);
-		box-shadow: inset 0 0 0 1px $colorPrimaryLight;
-	}
+	// [class*="TableBodyCell"]:focus-within {
+	// 	background: rgba($color60, 0.9);
+	// 	box-shadow: inset 0 0 0 1px $colorPrimaryLight;
+	// }
 }
-
-// ── Layer 3: data-pane-dirty="true" ────────────────────────────────────────
-// Подсветка изменённых полей/ячеек. Показывается:
-//   • в режиме show-diff (клик-тоггл DirtyButton выставляет
-//     data-pane-show-diff="true" на корне Pane);
-//   • НЕ показывается, пока пользователь активно вводит в это поле
-//     (:not(:focus-within)) — приоритет UX у активного ввода.
-@layer table-cell-dirty {
-
-	// Подсветка ячеек таблицы (атрибут на TableBodyCell).
-	[data-pane-show-diff="true"] [data-pane-dirty="true"][class*="TableBodyCell"]:not(:focus-within):not(:has(.ReadOnlyCell)) {
-		background: rgba(245, 158, 11, 0.18);
-		box-shadow: inset 0 0 0 1px #f59e0b !important;
-	}
-
-	// Подсветка полей формы вне таблицы (атрибут перенесён на уровень FieldWrapper / FieldTextareaWrapper).
-	// Поля формы не участвуют в табличных слоях, но логически принадлежат
-	// тому же уровню «dirty» — поэтому держим здесь же для единообразия.
-	// FieldWrapper: обычные поля (input, select, date, datetime, number)
-	// FieldTextareaWrapper: многострочное поле
-	// FieldToggle: label с атрибутом {...dirty}
-	// Селектор применяется на сам контейнер (с атрибутом data-pane-dirty)
-	[data-pane-show-diff="true"] [data-pane-dirty="true"]:is([class*="FieldWrapper"], [class*="FieldTextareaWrapper"], label[class*="FieldToggle"]):not(:focus-within) {
-		background: rgba(245, 158, 11, 0.18);
-		box-shadow: inset 0 0 0 1px #f59e0b !important;
-		// border-radius: $radius2;
-	}
-}
-
 
 .PaneHeaderClose {
 	display: flex;
@@ -1071,13 +1080,6 @@ body {
 		pointer-events: none;
 	}
 
-	.PaneTabItemDirty {
-		.PaneTabItemLabel {
-			font-weight: 600;
-			color: #c77600;
-		}
-	}
-
 	.PaneTabItemLabel {
 
 		text-overflow: ellipsis;
@@ -1095,7 +1097,7 @@ body {
 		// height: $heightFieldInput - 10px;
 	}
 
-	.PaneTabItemDirtyDot {
+	.PaneTabItemStashDot {
 		display: inline-block;
 		width: 8px;
 		height: 8px;
@@ -1104,18 +1106,7 @@ body {
 		margin-right: 4px;
 		flex: 0 0 auto;
 		box-shadow: 0 0 0 2px rgba(#e8a030, 0.25);
-	}
-
-	.PaneTabItemDirtyDotStash {
-		display: inline-block;
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background-color: #e8a030;
-		margin-right: 4px;
-		flex: 0 0 auto;
-		box-shadow: 0 0 0 2px rgba(#e8a030, 0.25);
-		animation: dirtyPulse 1.5s ease-in-out infinite;
+		animation: stashPulse 1.5s ease-in-out infinite;
 	}
 }
 
@@ -1234,7 +1225,7 @@ body {
 
 @media (min-width: 501px) and (max-width: 600px) {
 	.FormWrapper {
-		flex-direction: row;
+		flex-direction: column;
 
 		.Form {
 			flex-direction: column;
@@ -1258,7 +1249,7 @@ body {
 
 @media (min-width: 901px) {
 	.FormWrapper {
-		flex-direction: row;
+		flex-direction: column;
 
 		.Form {
 			flex-direction: column;
@@ -1276,31 +1267,6 @@ body {
 	flex-direction: column;
 	display: flex;
 }
-
-.DirtyBadge {
-	display: inline-flex;
-	align-items: center;
-	gap: 2px;
-	font-size: $fontsize - 1px;
-	color: #c77600;
-	font-weight: 600;
-	white-space: nowrap;
-	user-select: none;
-	animation: dirtyFadeIn 0.3s ease;
-}
-
-@keyframes dirtyFadeIn {
-	from {
-		opacity: 0;
-		transform: translateX(-4px);
-	}
-
-	to {
-		opacity: 1;
-		transform: translateX(0);
-	}
-}
-
 
 .FormTable {
 	// margin: 6px;

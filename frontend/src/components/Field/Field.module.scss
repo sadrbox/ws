@@ -16,7 +16,7 @@
 	width: 100%;
 	border: none;
 	// border-radius: $radius2;
-	height: $heightFieldInput + 1px;
+	height: $heightFieldInput;
 
 	margin: 1px;
 	// padding: 0px 6px !important;
@@ -98,20 +98,22 @@
 // ── Required / Error state — класс на FieldWrapper, стили на потомках ──────
 // Форма (не таблица): граница + лёгкий фон
 .FieldRequired:not(.tableVariant) {
+
 	.FieldInputWrapper,
 	.FieldSelectWrapper,
 	.FieldTextareaInputWrapper {
 		border-color: $attentionBorder;
-		background-color: rgba($attention, 0.08);
+		// background-color: rgba($attention, 0.08);
 	}
 }
 
 .FieldError:not(.tableVariant) {
+
 	.FieldInputWrapper,
 	.FieldSelectWrapper,
 	.FieldTextareaInputWrapper {
 		border-color: $attentionBorder;
-		background-color: rgba($attention, 0.04);
+		// background-color: rgba($attention, 0.04);
 	}
 }
 
@@ -119,6 +121,7 @@
 // focus-within. Focus-within box-shadow имеет ту же специфику, но объявлен позже →
 // при фокусе перекрывает required/error тень).
 .FieldRequired.tableVariant {
+
 	.FieldInputWrapper,
 	.FieldSelectWrapper {
 		box-shadow: inset 0 0 0 1px $attentionBorder;
@@ -126,6 +129,7 @@
 }
 
 .FieldError.tableVariant {
+
 	.FieldInputWrapper,
 	.FieldSelectWrapper {
 		box-shadow: inset 0 0 0 1px $attentionBorder;

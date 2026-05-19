@@ -20,7 +20,7 @@ import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { validatePostedDocument, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import { Toolbar } from "src/components/Toolbar";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
@@ -30,7 +30,7 @@ import { buildSaleInvoiceWorkbook } from "./saleInvoiceWorkbook";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import { renderToStaticMarkup } from "react-dom/server";
 import { useAppContext } from "src/app";
-import { Icon } from "src/components/IconButton/icons";
+import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
 
 const MODEL_ENDPOINT = "sales";
@@ -40,7 +40,7 @@ const FORM_LABEL = "Реализация";
 
 interface TFields {
   id?: number; uuid?: string;
-  date: string; description: string; amount: number; posted: boolean;
+  date: string; comment: string; amount: number; posted: boolean;
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
@@ -50,7 +50,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  date: "", description: "", amount: 0, posted: false,
+  date: "", comment: "", amount: 0, posted: false,
   organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "", contractUuid: "", contractName: "",
   warehouseUuid: "", warehouseName: "",
   vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
@@ -120,7 +120,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       date: isoToLocalInput(d.date),
-      description: d.description ?? "", amount: d.amount != null ? Number(d.amount) : 0,
+      comment: d.comment ?? "", amount: d.amount != null ? Number(d.amount) : 0,
       posted: d.posted === true,
       organizationUuid: d.organizationUuid ?? "",
       organizationName: d.organization?.shortName ?? "",
@@ -137,11 +137,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       authorName: d.author?.username ?? d.author?.email ?? "",
     }),
     buildPayload: (fd) => {
-      const validation = validatePostedDocument("sale", fd as Record<string, any>, fd.posted === true);
+      const validation = validateDocumentFields("sale", fd as unknown as Record<string, unknown>);
       if (!validation.isValid) return formatValidationErrors(validation.errors);
       return {
         date: localInputToIso(fd.date),
-        description: fd.description?.trim() || null,
+        comment: fd.comment?.trim() || null,
         amount: fd.amount ? fd.amount : null,
         posted: fd.posted === true,
         organizationUuid: fd.organizationUuid || null,
@@ -338,6 +338,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         totalVatAmount: Number(sale?.vatAmount ?? form.fields.vatAmount ?? 0),
         totalDiscountAmount: Number(sale?.discountAmount ?? form.fields.discountAmount ?? 0),
         totalExciseAmount: Math.round(totalExciseAmount * 100) / 100,
+        isVatPayer: isVatEnabled,
         columns: printColumns,
       };
 
@@ -379,18 +380,24 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     form.fields.counterpartyName,
     form.fields.contractName,
     form.fields.warehouseName,
+    isVatEnabled,
     addPane,
     printHtml,
   ]);
 
   // Регистрируем кнопку «Печать» в шапке панели (рядом с Reload/Close).
-  // Доступна только для сохранённого документа.
+  // Доступна только для сохранённого документа без несохранённых изменений.
   // ВАЖНО: возвращаемый ReactNode (портал) надо отрендерить в JSX,
   // иначе React не выполнит createPortal и кнопка не появится.
+  const hasDirtyItems = (saleItems.pending?.length ?? 0) > 0;
+  const printDisabled = form.isLoading || form.isDirty || hasDirtyItems;
+  const printTitle = (form.isDirty || hasDirtyItems)
+    ? "Сохраните изменения перед печатью"
+    : undefined;
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
     form.isEditMode && form.fields.uuid ? (
-      <Toolbar.PrintButton onClick={handlePrint} disabled={form.isLoading} />
+      <Toolbar.PrintButton onClick={handlePrint} disabled={printDisabled} title={printTitle} />
     ) : null,
   );
 
@@ -403,7 +410,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             <GroupCol>
               {/* ── Левая колонка: поля ── */}
               {/* Строка 1: Дата · Проведён · Статус */}
-              <GroupRow>
+              <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
                 <FieldDateTime label="Дата" name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
 
 
@@ -433,10 +440,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 <LookupField label="Договор" name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
               </Group>
 
-              <Group>
-                {/* Комментарий */}
-                <Field label="Комментарий" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} />
-              </Group>
             </GroupCol>
             <Group>
               <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
@@ -464,13 +467,15 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               </div>
             </Group>
 
-            {/* ── Служебные поля внизу: видны только для сохранённых документов ── */}
-            {form.isEditMode && <><Divider /><Group align="row" gap="12px">
-              <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-              <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-              <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || ""} disabled />
-            </Group></>}
+
           </div>
+          {/* ── Служебные поля внизу: видны только для сохранённых документов ── */}
+          {form.isEditMode && <><Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+            {/* <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled /> */}
+            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+            {/* <Field label="ID" name={`${form.formUid}_id`} value={String(form.fields.id ?? "-")} disabled /> */}
+          </Group></>}
         </div>
       )
     },
@@ -489,14 +494,14 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount]);
 
   return (
-    <FormRequiredScope docType="sale" isPosted={form.fields.posted === true}>
+    <FormRequiredScope docType="sale">
       <ModelForm paneId={form.paneId} tabs={tabs}
         onSave={form.handleSave}
         onSaveAndClose={form.handleSaveAndClose}
         onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined}
         isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-        readonly={!canWrite} isDirty={form.isDirty} />
+        readonly={!canWrite} />
       {headerActionsPortal}
     </FormRequiredScope>
   );
@@ -509,25 +514,7 @@ const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
       return d?.date ? getFormatDateOnly(d.date as string) : "";
     }} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
-    renderCell={(row, col) => {
-      if (col.identifier === "posted") {
-        const isPosted = row.posted === true;
-        return (
-          <span
-            title={isPosted ? "Документ проведён" : "Не проведён"}
-          >
-            <Icon
-              name={isPosted ? "posted" : "notPosted"}
-              width={17}
-              height={17}
-              style={{ color: isPosted ? "#10b981" : "#9ca3af", flexShrink: 0, display: "flex" }}
-            />
-            {/* {isPosted ? "Проведён" : "Черновик"} */}
-          </span>
-        );
-      }
-      return undefined;
-    }}
+    renderCell={renderPostedCell}
   />
 );
 SalesList.displayName = "SalesList";

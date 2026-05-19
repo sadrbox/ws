@@ -210,7 +210,6 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
       onReload={form.isEditMode ? form.handleReload : undefined}
       isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
       readonly={!canWrite}
-      isDirty={form.isDirty}
     />
   );
 };

@@ -433,7 +433,14 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
     }
 
     // ── Вне inline-режима для обычных колонок — дефолтный рендер Table ───
-    if (!ctx.inlineEditing) return undefined;
+    // Для ставок/процентов не отображаем «0» — пустое поле означает «не применяется».
+    if (!ctx.inlineEditing) {
+      if (id === "vatRate" || id === "exciseRate" || id === "discountPercent") {
+        const v = row[id] as number | null | undefined;
+        return <ReadOnlyCell value={v ? v : ""} column={col} inlineEditing={false} />;
+      }
+      return undefined;
+    }
 
     // ── Inline-режим: контролы редактирования ────────────────────────────
     if (id === "product.shortName") {
@@ -556,7 +563,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
       return (
         <FieldNumber
           name={`saleitem_discount_${row.id}`}
-          value={row.discountPercent != null ? String(row.discountPercent as number | string) : "0"}
+          value={row.discountPercent ? String(row.discountPercent as number | string) : ""}
           onChange={e => {
             if (ctx.deferRemoteChanges) {
               ctx.updateLocalRow(row, recalcWithFlags(row as any, { discountPercent: e.target.value }));
@@ -581,7 +588,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
       return (
         <FieldNumber
           name={`saleitem_exciserate_${row.id}`}
-          value={row.exciseRate != null ? String(row.exciseRate as number | string) : "0"}
+          value={row.exciseRate ? String(row.exciseRate as number | string) : ""}
           onChange={e => {
             if (ctx.deferRemoteChanges) {
               ctx.updateLocalRow(row, recalcWithFlags(row as any, { exciseRate: e.target.value }));
@@ -609,7 +616,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
       return (
         <FieldNumber
           name={`saleitem_vatrate_${row.id}`}
-          value={row.vatRate != null ? String(row.vatRate as number | string) : "0"}
+          value={row.vatRate ? String(row.vatRate as number | string) : ""}
           onChange={e => {
             if (ctx.deferRemoteChanges) {
               ctx.updateLocalRow(row, recalcWithFlags(row as any, { vatRate: e.target.value }));
@@ -725,6 +732,31 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
           Number(row.amountWithoutVat ?? 0) - Number(row.exciseAmount ?? 0),
       })}
       extraButtons={
+        <>
+        <RefillAllButton
+          disabled={disabled}
+          refillRow={(row) => {
+            // Перезаполняет ссылочные поля из настроек учёта/номенклатуры,
+            // затем пересчитывает суммы. В отличие от «Пересчитать»,
+            // перезаписывает ставки НДС и акциза из НУО, даже если
+            // пользователь вручную изменил их ранее.
+            const overrides: Record<string, unknown> = {};
+            const product = row.product as { unitOfMeasureUuid?: string | null; unitOfMeasure?: { uuid?: string; shortName?: string } | null } | null | undefined;
+            if (product?.unitOfMeasureUuid) {
+              overrides.unitOfMeasureUuid = product.unitOfMeasureUuid;
+              if (product.unitOfMeasure) overrides.unitOfMeasure = product.unitOfMeasure;
+            }
+            if (isVatEnabled) {
+              const d = Number(orgVatRate);
+              if (Number.isFinite(d)) overrides.vatRate = d > 0 ? d : null;
+            }
+            if (useExcise) {
+              const d = Number(orgExciseRate);
+              if (Number.isFinite(d)) overrides.exciseRate = d > 0 ? d : null;
+            }
+            return recalcWithFlags(row as any, overrides);
+          }}
+        />
         <RecalcAllButton
           disabled={disabled}
           recalcRow={(row) => {
@@ -755,6 +787,7 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
             return recalcWithFlags(row as any, refDefaults);
           }}
         />
+        </>
       }
     />
   );
@@ -763,6 +796,68 @@ const SaleItemsTable: FC<SaleItemsTableProps> = ({ saleUuid, organizationUuid, d
 SaleItemsTable.displayName = "SaleItemsTable";
 export { SaleItemsTable };
 export default SaleItemsTable;
+
+// ─────────────────────────────────────────────────────────────────────────
+// RefillAllButton — кнопка тулбара "Перезаполнить": сбрасывает ссылочные
+// поля (единица измерения из номенклатуры, ставки НДС/акциза из НУО)
+// и пересчитывает суммы. В отличие от RecalcAllButton, перезаписывает
+// ставки, даже если пользователь менял их вручную.
+// ─────────────────────────────────────────────────────────────────────────
+interface RefillAllButtonProps {
+  disabled?: boolean;
+  refillRow: (row: TDataItem) => Record<string, unknown>;
+}
+
+const RefillAllButton: FC<RefillAllButtonProps> = ({ disabled = false, refillRow }) => {
+  const subCtx = useSubTableContext();
+  const tableCtx = useTableContext();
+  const [busy, setBusy] = useState(false);
+
+  const handleClick = useCallback(async () => {
+    const rows = subCtx?.rows ?? tableCtx.rows;
+    if (!rows || rows.length === 0) return;
+    setBusy(true);
+    try {
+      const patches: Array<{ row: TDataItem; payload: Record<string, unknown> }> = [];
+      for (const row of rows) {
+        const payload = refillRow(row);
+        const realPatch: Record<string, unknown> = {};
+        for (const [key, nextVal] of Object.entries(payload)) {
+          const prev = (row as Record<string, unknown>)[key];
+          if (!isEquivalent(prev, nextVal)) {
+            realPatch[key] = nextVal;
+          }
+        }
+        if (Object.keys(realPatch).length === 0) continue;
+        patches.push({ row, payload: realPatch });
+        subCtx?.updateLocalRow(row, realPatch);
+      }
+      if (!subCtx?.deferRemoteChanges) {
+        await Promise.all(
+          patches.map(({ row, payload }) =>
+            row.uuid
+              ? apiClient.put(`/${MODEL_ENDPOINT}/${row.uuid}`, payload).catch(() => undefined)
+              : Promise.resolve(),
+          ),
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [subCtx, tableCtx, refillRow]);
+
+  const rowsForCheck = subCtx?.rows ?? tableCtx.rows;
+  const empty = !rowsForCheck || rowsForCheck.length === 0;
+
+  return (
+    <Toolbar.RefillButton
+      onClick={handleClick}
+      disabled={disabled || busy || empty}
+      loading={busy}
+      title={busy ? "Перезаполнение…" : "Перезаполнить ставки и единицы измерения из настроек учёта"}
+    />
+  );
+};
 
 // ─────────────────────────────────────────────────────────────────────────
 // RecalcAllButton — кнопка тулбара "Пересчитать": перевычисляет суммы

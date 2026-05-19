@@ -1,11 +1,14 @@
 import columnsJson from "./columns.json";
-import { createDocumentModel } from "src/utils/createDocumentModel";
+import { createCashOrderForm } from "src/models/_shared/createCashOrderForm";
 
-const { Form: CashExpenseOrdersForm, List: CashExpenseOrdersList } = createDocumentModel({
+const { Form: CashExpenseOrdersForm, List: CashExpenseOrdersList } = createCashOrderForm({
   endpoint: "cash-expense-orders",
   listName: "CashExpenseOrdersList",
   formLabel: "РКО",
   storageKey: "cash-expense-orders-form",
+  accessRightModel: "CashExpenseOrder",
+  docType: "cash_expense_order",
+  formDisplayName: "CashExpenseOrdersForm",
   columnsJson,
 });
 

@@ -18,8 +18,8 @@ import ModelList from "src/components/ModelList";
 const MODEL_ENDPOINT = "warehouses";
 const LIST_NAME = "WarehousesList";
 
-interface TFields { id?: number; uuid?: string; shortName: string; address: string; description: string; organizationUuid: string; organizationName: string; }
-const DEFAULT_FIELDS: TFields = { shortName: "", address: "", description: "", organizationUuid: "", organizationName: "" };
+interface TFields { id?: number; uuid?: string; shortName: string; address: string; comment: string; organizationUuid: string; organizationName: string; }
+const DEFAULT_FIELDS: TFields = { shortName: "", address: "", comment: "", organizationUuid: "", organizationName: "" };
 
 const WarehousesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
@@ -29,11 +29,11 @@ const WarehousesForm: FC<Partial<TPane>> = (paneProps) => {
     defaultFields: DEFAULT_FIELDS,
     initialFields: { ...DEFAULT_FIELDS, organizationUuid: defaultOrg.organizationUuid, organizationName: defaultOrg.organizationName },
     mapServerToForm: (d, prev) => ({
-      ...(prev ?? DEFAULT_FIELDS), shortName: d.shortName ?? "", address: d.address ?? "", description: d.description ?? "",
+      ...(prev ?? DEFAULT_FIELDS), shortName: d.shortName ?? "", address: d.address ?? "", comment: d.comment ?? "",
       organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? "",
       id: d.id, uuid: d.uuid,
     }),
-    buildPayload: (fd) => ({ shortName: fd.shortName?.trim() || null, address: fd.address?.trim() || null, description: fd.description?.trim() || null, organizationUuid: fd.organizationUuid || null }),
+    buildPayload: (fd) => ({ shortName: fd.shortName?.trim() || null, address: fd.address?.trim() || null, comment: fd.comment?.trim() || null, organizationUuid: fd.organizationUuid || null }),
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Склады", saved),
   });
 
@@ -52,7 +52,7 @@ const WarehousesForm: FC<Partial<TPane>> = (paneProps) => {
               onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
               onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
               minWidth="339px" disabled={form.isLoading} />
-            <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
+            <FieldTextarea label="Описание" name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
           </GroupCol>
         </div>
       </div>
@@ -62,7 +62,7 @@ const WarehousesForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      readonly={!canWrite} isDirty={form.isDirty} />
+      readonly={!canWrite} />
   );
 };
 WarehousesForm.displayName = "WarehousesForm";

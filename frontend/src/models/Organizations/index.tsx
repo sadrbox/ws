@@ -152,6 +152,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           parentName={form.fields.shortName}
           initialPendingRows={contacts.pending}
           onItemsChange={contacts.onItemsChange}
+          showPrimaryButton={form.isEditMode && canWrite}
         />
       ),
     });
@@ -169,7 +170,6 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
 
       readonly={!canWrite}
-      isDirty={form.isDirty}
     />
   );
 };

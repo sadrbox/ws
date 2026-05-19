@@ -34,6 +34,17 @@ export function buildSaleInvoiceWorkbook(
 	const has = (g: (r: SaleItemPrintRow) => number | undefined | null) =>
 		data.items.some((r) => Number(g(r) ?? 0) > 0);
 
+	// ── Режим: есть ли НДС/акциз (по фактическим значениям в документе) ──
+	const hasVat =
+		has((r) => r.vatRate) ||
+		has((r) => r.vatAmount) ||
+		Number(data.totalVatAmount ?? 0) > 0;
+	const hasExcise =
+		has((r) => r.exciseRate) ||
+		has((r) => r.exciseAmount) ||
+		Number(data.totalExciseAmount ?? 0) > 0;
+	const hasIndirectTaxes = hasVat || hasExcise;
+
 	const showDiscPct =
 		cols.discountPercent !== false &&
 		(cols.discountPercent === true ||
@@ -45,35 +56,34 @@ export function buildSaleInvoiceWorkbook(
 			has((r) => r.discountAmount) ||
 			Number(data.totalDiscountAmount ?? 0) > 0);
 	const showNetOfIndirectTaxes =
+		hasIndirectTaxes &&
 		cols.amountNetOfIndirectTaxes !== false &&
 		(cols.amountNetOfIndirectTaxes === true ||
 			has((r) => r.amountNetOfIndirectTaxes));
+	// «Стоимость без НДС» — база для НДС (вкл. акциз, если он есть).
+	const showAmtNoVat = hasIndirectTaxes && cols.amountWithoutVat !== false;
 	const showExciseRate =
+		hasExcise &&
 		cols.exciseRate !== false &&
 		(cols.exciseRate === true ||
 			has((r) => r.exciseRate) ||
 			has((r) => r.exciseAmount));
 	const showExciseAmt =
+		hasExcise &&
 		cols.exciseAmount !== false &&
 		(cols.exciseAmount === true ||
 			has((r) => r.exciseAmount) ||
 			Number(data.totalExciseAmount ?? 0) > 0);
-	const showVatRate =
-		cols.vatRate !== false &&
-		(cols.vatRate === true || has((r) => r.vatRate) || has((r) => r.vatAmount));
+	// По НК РК ст. 412 колонка «Ставка НДС» обязательна: всегда показывается.
+	// Неплательщики НДС → ячейка содержит «Без НДС».
+	const showVatRate = cols.vatRate !== false;
 	const showVatAmt =
+		data.isVatPayer !== false &&
+		hasVat &&
 		cols.vatAmount !== false &&
 		(cols.vatAmount === true ||
 			has((r) => r.vatAmount) ||
 			Number(data.totalVatAmount ?? 0) > 0);
-
-	// ── Режим: есть ли НДС/акциз ───────────────────────────────────
-	const hasVat = showVatAmt || showVatRate;
-	const hasExcise = showExciseAmt || showExciseRate;
-	const hasIndirectTaxes = hasVat || hasExcise;
-	// «Стоимость без НДС» — база для НДС (вкл. акциз, если он есть).
-	// Показывается при наличии НДС/акциза — без них дублирует итог.
-	const showAmtNoVat = hasIndirectTaxes && cols.amountWithoutVat !== false;
 
 	const priceHeader = hasExcise
 		? "Цена без налогов"
@@ -148,16 +158,22 @@ export function buildSaleInvoiceWorkbook(
 					: "",
 			);
 		if (showExciseAmt) row.push(fmtNum(it.exciseAmount));
-		if (showVatRate) row.push(it.vatRate != null ? Number(it.vatRate) : "");
+		if (showVatRate)
+			row.push(
+				data.isVatPayer === false
+					? "Без НДС"
+					: it.vatRate != null
+						? Number(it.vatRate)
+						: "",
+			);
 		if (showVatAmt) row.push(fmtNum(it.vatAmount));
 		row.push(Number(it.amount ?? 0));
 		aoa.push(row);
 	}
 
 	// ── Итого ──
-	// «Итого:» ставим в первую ячейку с правым выравниванием через мерж.
-	const itogoColSpan =
-		5 + (showDiscPct ? 1 : 0) + (showNetOfIndirectTaxes ? 1 : 0);
+	// «Итого:» занимает нечисловые колонки: №, Наим., Ед., Кол-во, Цена [, Скидка%].
+	const itogoColSpan = 5 + (showDiscPct ? 1 : 0);
 	const totalRow: (string | number)[] = ["Итого:"];
 	for (let i = 1; i < itogoColSpan; i++) totalRow.push("");
 	if (showDiscAmt) totalRow.push(fmtNum(data.totalDiscountAmount));

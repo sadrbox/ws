@@ -1,8 +1,9 @@
 /**
- * Система валидации документов при их проведении (posted=true)
+ * Валидация документов — обязательные поля.
  *
- * Определяет обязательные поля для каждого типа документа и проверяет их корректность
- * перед сохранением документа со статусом "Проведён".
+ * Правило: поля из REQUIRED_FIELDS_MAP обязательны ВСЕГДА при сохранении,
+ * независимо от статуса posted. Функция validateDocumentFields проверяет
+ * только факт заполненности — бизнес-логика posted остаётся в форме.
  */
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -15,16 +16,11 @@ export type DocumentType =
 	| "outgoing_invoice"
 	| "incoming_invoice"
 	| "payment_invoice"
-	| "inventory_transfer";
-
-export interface RequiredFieldsConfig {
-	/** Тип документа */
-	docType: DocumentType;
-	/** Массив обязательных полей (ключи из объекта fields) */
-	requiredFields: string[];
-	/** Опциональное описание для каждого документа */
-	description?: string;
-}
+	| "inventory_transfer"
+	| "cash_receipt_order"
+	| "cash_expense_order"
+	| "payroll_calculation"
+	| "payroll_payment";
 
 export interface ValidationError {
 	field: string;
@@ -37,206 +33,113 @@ export interface ValidationResult {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// КОНФИГУРАЦИЯ ОБЯЗАТЕЛЬНЫХ ПОЛЕЙ ПО ДОКУМЕНТАМ
+// КОНФИГУРАЦИЯ ОБЯЗАТЕЛЬНЫХ ПОЛЕЙ
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Конфигурация обязательных полей для документов со статусом "Проведён"
- *
- * Правило: если документ сохраняется с posted=true, то должны быть заполнены
- * все поля из соответствующего массива requiredFields.
- *
- * Исключаются системные поля:
- * - id, uuid (автогенерируемые)
- * - author, authorId, authorUuid (автоустанавливаемые)
- * - createdBy, createdById, createdByUuid (автоустанавливаемые)
+ * Обязательные поля для каждого типа документа.
+ * Проверяются при каждом сохранении (не только при проведении).
  */
-export const REQUIRED_FIELDS_MAP: Record<DocumentType, string[]> = {
-	// ──────────────────────────────────────────────────────────────────────
-	// Поступление товаров (Покупка)
-	// ──────────────────────────────────────────────────────────────────────
-	purchase: [
-		"date", // Дата документа обязательна
-		"organizationUuid", // Организация (покупатель)
-		"counterpartyUuid", // Контрагент (поставщик)
-		"warehouseUuid", // Склад получения
-		// "contractUuid" — опционально, но если указан, должен быть валидным
+export const REQUIRED_FIELDS_MAP: Record<DocumentType, readonly string[]> = {
+	// ── Торговые документы ──────────────────────────────────────────────────
+	sale: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
+		"warehouseUuid",
+		"contractUuid",
 	],
+	purchase: ["date", "organizationUuid", "counterpartyUuid", "warehouseUuid"],
 
-	// ──────────────────────────────────────────────────────────────────────
-	// Продажа товаров (Sale)
-	// ──────────────────────────────────────────────────────────────────────
-	sale: ["date", "organizationUuid", "counterpartyUuid", "warehouseUuid"],
+	// ── Счета-фактуры ────────────────────────────────────────────────────────
+	outgoing_invoice: ["date", "organizationUuid", "counterpartyUuid"],
+	incoming_invoice: ["date", "organizationUuid", "counterpartyUuid"],
+	payment_invoice: ["date", "organizationUuid", "counterpartyUuid"],
 
-	// ──────────────────────────────────────────────────────────────────────
-	// ──────────────────────────────────────────────────────────────────────
-	outgoing_invoice: [
-		"date", // Дата документа
-		"organizationUuid", // Организация (продавец)
-		"counterpartyUuid", // Контрагент (покупатель)
-		// "contractUuid" — опционально
-	],
-
-	// ──────────────────────────────────────────────────────────────────────
-	// Входящий счёт-фактура (Полученный счёт)
-	// ──────────────────────────────────────────────────────────────────────
-	incoming_invoice: [
-		"date", // Дата документа
-		"organizationUuid", // Организация (покупатель)
-		"counterpartyUuid", // Контрагент (поставщик)
-		// "contractUuid" — опционально
-	],
-
-	// ──────────────────────────────────────────────────────────────────────
-	// Расчётный счёт-фактура (Счёт за оплату)
-	// ──────────────────────────────────────────────────────────────────────
-	payment_invoice: [
-		"date", // Дата документа
-		"organizationUuid", // Организация
-		"counterpartyUuid", // Контрагент
-		// "contractUuid" — опционально
-	],
-
-	// ──────────────────────────────────────────────────────────────────────
-	// Внутреннее перемещение ТМЗ
-	// ──────────────────────────────────────────────────────────────────────
+	// ── Складские документы ──────────────────────────────────────────────────
 	inventory_transfer: [
-		"date", // Дата документа
-		"organizationUuid", // Организация
-		"fromWarehouseUuid", // Склад отправки
-		"toWarehouseUuid", // Склад получения
+		"date",
+		"organizationUuid",
+		"fromWarehouseUuid",
+		"toWarehouseUuid",
 	],
+
+	// ── Кассовые ордера ──────────────────────────────────────────────────────
+	cash_receipt_order: ["date", "organizationUuid"],
+	cash_expense_order: ["date", "organizationUuid"],
+
+	// ── Зарплата ─────────────────────────────────────────────────────────────
+	payroll_calculation: ["date", "organizationUuid", "employeeUuid"],
+	payroll_payment: ["date", "organizationUuid", "employeeUuid"],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ПУБЛИЧНЫЕ ФУНКЦИИ
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Получить конфигурацию обязательных полей для типа документа
- *
- * @param docType тип документа
- * @returns массив имён обязательных полей
- */
-export function getRequiredFieldsForDocType(docType: DocumentType): string[] {
-	return REQUIRED_FIELDS_MAP[docType] || [];
-}
-
-/**
- * Валидировать поля документа при сохранении с posted=true
- *
- * @param docType тип документа
- * @param fields объект с полями формы
- * @param isPosted флаг "Проведён"
- * @returns результат валидации {isValid, errors}
- *
- * @example
- * ```tsx
- * const result = validatePostedDocument("purchase", formFields, true);
- * if (!result.isValid) {
- *   return `Не удалось сохранить: ${result.errors[0].message}`;
- * }
- * ```
- */
-export function validatePostedDocument(
+/** Валидировать обязательные поля документа. Проверяет всегда, не зависит от posted. */
+export function validateDocumentFields(
 	docType: DocumentType,
-	fields: Record<string, any>,
-	isPosted: boolean,
+	fields: Record<string, unknown>,
 ): ValidationResult {
-	// Если не проведён — не проверяем
-	if (!isPosted) {
-		return { isValid: true, errors: [] };
-	}
-
-	const requiredFields = getRequiredFieldsForDocType(docType);
+	const required = REQUIRED_FIELDS_MAP[docType];
 	const errors: ValidationError[] = [];
 
-	for (const fieldName of requiredFields) {
+	for (const fieldName of required) {
 		const value = fields[fieldName];
-		const isEmptyString = typeof value === "string" && value.trim() === "";
+		const isEmpty =
+			value === undefined ||
+			value === null ||
+			(typeof value === "string" && value.trim() === "");
 
-		if (value === undefined || value === null || isEmptyString) {
+		if (isEmpty) {
 			errors.push({
 				field: fieldName,
-				message: `Поле "${getFieldLabel(fieldName)}" обязательно для проведённого документа`,
+				message: `Поле "${getFieldLabel(fieldName)}" обязательно`,
 			});
 		}
 	}
 
-	return {
-		isValid: errors.length === 0,
-		errors,
-	};
+	return { isValid: errors.length === 0, errors };
 }
 
-/**
- * Получить отформатированное описание ошибок валидации для вывода пользователю
- *
- * @param errors массив ошибок валидации
- * @returns строка с описанием всех ошибок
- */
+/** @deprecated Используй validateDocumentFields — проверяет всегда, не только при posted. */
+export function validatePostedDocument(
+	docType: DocumentType,
+	fields: Record<string, unknown>,
+	_isPosted?: boolean,
+): ValidationResult {
+	return validateDocumentFields(docType, fields);
+}
+
+/** Форматировать ошибки валидации для вывода пользователю. */
 export function formatValidationErrors(errors: ValidationError[]): string {
 	if (errors.length === 0) return "";
-
-	if (errors.length === 1) {
-		return errors[0].message;
-	}
-
-	const list = errors.map((e) => `• ${e.message}`).join("\n");
-	return `Ошибки валидации:\n${list}`;
+	if (errors.length === 1) return errors[0].message;
+	return `Не заполнены обязательные поля:\n${errors.map((e) => `• ${e.message}`).join("\n")}`;
 }
 
-/**
- * Получить человекочитаемое имя поля для отображения в ошибках
- *
- * @param fieldName имя поля в коде (например "organizationUuid")
- * @returns имя для показа пользователю
- */
+/** Получить массив обязательных полей для типа документа. */
+export function getRequiredFieldsForDocType(
+	docType: DocumentType,
+): readonly string[] {
+	return REQUIRED_FIELDS_MAP[docType];
+}
+
+/** Человекочитаемые метки полей для сообщений об ошибках. */
 export function getFieldLabel(fieldName: string): string {
 	const labels: Record<string, string> = {
 		date: "Дата",
-		description: "Описание",
+		comment: "Комментарий",
 		organizationUuid: "Организация",
 		counterpartyUuid: "Контрагент",
 		warehouseUuid: "Склад",
 		fromWarehouseUuid: "Склад отправки",
 		toWarehouseUuid: "Склад получения",
 		contractUuid: "Договор",
+		employeeUuid: "Сотрудник",
+		period: "Период",
+		amount: "Сумма",
 	};
-	return labels[fieldName] || fieldName;
+	return labels[fieldName] ?? fieldName;
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ЭКСПОРТ КОНФИГУРАЦИИ ДЛЯ ИСПОЛЬЗОВАНИЯ В КОМПОНЕНТАХ
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Массив всех доступных конфигураций документов (для добавления новых тестов, docs и т.д.)
- */
-export const ALL_DOCUMENT_CONFIGS: RequiredFieldsConfig[] = [
-	{
-		docType: "purchase",
-		requiredFields: REQUIRED_FIELDS_MAP.purchase,
-		description: "Поступление товаров",
-	},
-	{
-		docType: "outgoing_invoice",
-		requiredFields: REQUIRED_FIELDS_MAP.outgoing_invoice,
-		description: "Исходящий счёт-фактура",
-	},
-	{
-		docType: "incoming_invoice",
-		requiredFields: REQUIRED_FIELDS_MAP.incoming_invoice,
-		description: "Входящий счёт-фактура",
-	},
-	{
-		docType: "payment_invoice",
-		requiredFields: REQUIRED_FIELDS_MAP.payment_invoice,
-		description: "Расчётный счёт-фактура",
-	},
-	{
-		docType: "inventory_transfer",
-		requiredFields: REQUIRED_FIELDS_MAP.inventory_transfer,
-		description: "Внутреннее перемещение ТМЗ",
-	},
-];

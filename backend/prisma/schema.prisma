@@ -171,18 +171,18 @@ model Contract {
 }
 
 model AttachedFile {
-  id          Int       @id @default(autoincrement())
-  uuid        String    @unique @default(uuid())
-  ownerType   String
-  ownerUuid   String
-  fileName    String
-  filePath    String
-  fileSize    Int?
-  mimeType    String?
-  description String?
-  uploadedAt  DateTime  @default(now())
-  updatedAt   DateTime  @default(now()) @updatedAt
-  deletedAt   DateTime?
+  id         Int       @id @default(autoincrement())
+  uuid       String    @unique @default(uuid())
+  ownerType  String
+  ownerUuid  String
+  fileName   String
+  filePath   String
+  fileSize   Int?
+  mimeType   String?
+  comment    String?
+  uploadedAt DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+  deletedAt  DateTime?
 
   @@index([ownerType, ownerUuid])
   @@index([updatedAt])
@@ -209,6 +209,7 @@ model Contact {
   ownerType        String?
   ownerUuid        String?
   organizationUuid String?
+  isPrimary        Boolean       @default(false)
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   contactType      ContactType?  @relation(fields: [contactTypeUuid], references: [uuid])
@@ -216,6 +217,7 @@ model Contact {
 
   @@index([contactTypeUuid])
   @@index([ownerType, ownerUuid])
+  @@index([contactTypeUuid, ownerType, ownerUuid, isPrimary])
   @@index([organizationUuid])
   @@index([updatedAt])
   @@map("contacts")
@@ -327,7 +329,7 @@ model Warehouse {
   uuid                   String              @unique @default(uuid())
   shortName              String
   address                String?
-  description            String?
+  comment                String?
   organizationUuid       String?
   updatedAt              DateTime            @default(now()) @updatedAt
   deletedAt              DateTime?
@@ -346,7 +348,7 @@ model Sale {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
   date             DateTime      @default(now())
-  description      String?
+  comment          String?
   amount           Decimal?      @db.Decimal(18, 2)
   amountWithoutVat Decimal?      @db.Decimal(18, 2)
   vatAmount        Decimal?      @db.Decimal(18, 2)
@@ -380,7 +382,7 @@ model Purchase {
   id               Int            @id @default(autoincrement())
   uuid             String         @unique @default(uuid())
   date             DateTime       @default(now())
-  description      String?
+  comment          String?
   amount           Decimal?       @db.Decimal(18, 2)
   amountWithoutVat Decimal?       @db.Decimal(18, 2)
   vatAmount        Decimal?       @db.Decimal(18, 2)
@@ -411,26 +413,26 @@ model Purchase {
 }
 
 model OutgoingInvoice {
-  id                   Int                    @id @default(autoincrement())
-  uuid                 String                 @unique @default(uuid())
-  date                 DateTime               @default(now())
-  description          String?
-  amount               Decimal?               @db.Decimal(18, 2)
-  amountWithoutVat     Decimal?               @db.Decimal(18, 2)
-  vatAmount            Decimal?               @db.Decimal(18, 2)
-  discountAmount       Decimal?               @db.Decimal(18, 2)
+  id                   Int                   @id @default(autoincrement())
+  uuid                 String                @unique @default(uuid())
+  date                 DateTime              @default(now())
+  comment              String?
+  amount               Decimal?              @db.Decimal(18, 2)
+  amountWithoutVat     Decimal?              @db.Decimal(18, 2)
+  vatAmount            Decimal?              @db.Decimal(18, 2)
+  discountAmount       Decimal?              @db.Decimal(18, 2)
   organizationUuid     String?
   counterpartyUuid     String?
   contractUuid         String?
   authorUuid           String
-  posted               Boolean                @default(false)
-  updatedAt            DateTime               @default(now()) @updatedAt
+  posted               Boolean               @default(false)
+  updatedAt            DateTime              @default(now()) @updatedAt
   deletedAt            DateTime?
   outgoingInvoiceItems OutgoingInvoiceItem[]
-  contract             Contract?              @relation(fields: [contractUuid], references: [uuid])
-  counterparty         Counterparty?          @relation("CpOutgoingInvoices", fields: [counterpartyUuid], references: [uuid])
-  organization         Organization?          @relation("OrgOutgoingInvoices", fields: [organizationUuid], references: [uuid])
-  author               User                   @relation("OutgoingInvoiceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+  contract             Contract?             @relation(fields: [contractUuid], references: [uuid])
+  counterparty         Counterparty?         @relation("CpOutgoingInvoices", fields: [counterpartyUuid], references: [uuid])
+  organization         Organization?         @relation("OrgOutgoingInvoices", fields: [organizationUuid], references: [uuid])
+  author               User                  @relation("OutgoingInvoiceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -442,26 +444,26 @@ model OutgoingInvoice {
 }
 
 model IncomingInvoice {
-  id                   Int                    @id @default(autoincrement())
-  uuid                 String                 @unique @default(uuid())
-  date                 DateTime               @default(now())
-  description          String?
-  amount               Decimal?               @db.Decimal(18, 2)
-  amountWithoutVat     Decimal?               @db.Decimal(18, 2)
-  vatAmount            Decimal?               @db.Decimal(18, 2)
-  discountAmount       Decimal?               @db.Decimal(18, 2)
+  id                   Int                   @id @default(autoincrement())
+  uuid                 String                @unique @default(uuid())
+  date                 DateTime              @default(now())
+  comment              String?
+  amount               Decimal?              @db.Decimal(18, 2)
+  amountWithoutVat     Decimal?              @db.Decimal(18, 2)
+  vatAmount            Decimal?              @db.Decimal(18, 2)
+  discountAmount       Decimal?              @db.Decimal(18, 2)
   organizationUuid     String?
   counterpartyUuid     String?
   contractUuid         String?
   authorUuid           String
-  posted               Boolean                @default(false)
-  updatedAt            DateTime               @default(now()) @updatedAt
+  posted               Boolean               @default(false)
+  updatedAt            DateTime              @default(now()) @updatedAt
   deletedAt            DateTime?
   incomingInvoiceItems IncomingInvoiceItem[]
-  contract             Contract?              @relation(fields: [contractUuid], references: [uuid])
-  counterparty         Counterparty?          @relation("CpIncomingInvoices", fields: [counterpartyUuid], references: [uuid])
-  organization         Organization?          @relation("OrgIncomingInvoices", fields: [organizationUuid], references: [uuid])
-  author               User                   @relation("IncomingInvoiceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+  contract             Contract?             @relation(fields: [contractUuid], references: [uuid])
+  counterparty         Counterparty?         @relation("CpIncomingInvoices", fields: [counterpartyUuid], references: [uuid])
+  organization         Organization?         @relation("OrgIncomingInvoices", fields: [organizationUuid], references: [uuid])
+  author               User                  @relation("IncomingInvoiceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -473,26 +475,26 @@ model IncomingInvoice {
 }
 
 model PaymentInvoice {
-  id                  Int                   @id @default(autoincrement())
-  uuid                String                @unique @default(uuid())
-  date                DateTime              @default(now())
-  description         String?
-  amount              Decimal?              @db.Decimal(18, 2)
-  amountWithoutVat    Decimal?              @db.Decimal(18, 2)
-  vatAmount           Decimal?              @db.Decimal(18, 2)
-  discountAmount      Decimal?              @db.Decimal(18, 2)
+  id                  Int                  @id @default(autoincrement())
+  uuid                String               @unique @default(uuid())
+  date                DateTime             @default(now())
+  comment             String?
+  amount              Decimal?             @db.Decimal(18, 2)
+  amountWithoutVat    Decimal?             @db.Decimal(18, 2)
+  vatAmount           Decimal?             @db.Decimal(18, 2)
+  discountAmount      Decimal?             @db.Decimal(18, 2)
   organizationUuid    String?
   counterpartyUuid    String?
   contractUuid        String?
   authorUuid          String
-  posted              Boolean               @default(false)
-  updatedAt           DateTime              @default(now()) @updatedAt
+  posted              Boolean              @default(false)
+  updatedAt           DateTime             @default(now()) @updatedAt
   deletedAt           DateTime?
   paymentInvoiceItems PaymentInvoiceItem[]
-  contract            Contract?             @relation(fields: [contractUuid], references: [uuid])
-  counterparty        Counterparty?         @relation(fields: [counterpartyUuid], references: [uuid])
-  organization        Organization?         @relation(fields: [organizationUuid], references: [uuid])
-  author              User                  @relation("PaymentInvoiceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+  contract            Contract?            @relation(fields: [contractUuid], references: [uuid])
+  counterparty        Counterparty?        @relation(fields: [counterpartyUuid], references: [uuid])
+  organization        Organization?        @relation(fields: [organizationUuid], references: [uuid])
+  author              User                 @relation("PaymentInvoiceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -530,7 +532,7 @@ model InventoryTransfer {
   id                     Int                     @id @default(autoincrement())
   uuid                   String                  @unique @default(uuid())
   date                   DateTime                @default(now())
-  description            String?
+  comment                String?
   /// Итоговая сумма по строкам (Σ quantity × price). Без НДС/акциза —
   /// внутренние перемещения ТМЗ не облагаются косвенными налогами.
   amount                 Decimal?                @db.Decimal(18, 2)
@@ -560,7 +562,7 @@ model CashReceiptOrder {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
   date             DateTime      @default(now())
-  description      String?
+  comment          String?
   amount           Decimal?      @db.Decimal(18, 2)
   organizationUuid String?
   counterpartyUuid String?
@@ -586,7 +588,7 @@ model CashExpenseOrder {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
   date             DateTime      @default(now())
-  description      String?
+  comment          String?
   amount           Decimal?      @db.Decimal(18, 2)
   organizationUuid String?
   counterpartyUuid String?
@@ -624,18 +626,18 @@ model Brand {
 }
 
 model Product {
-  id                Int            @id @default(autoincrement())
-  uuid              String         @unique @default(uuid())
-  shortName         String
-  sku               String?
-  brandUuid         String?
-  unitOfMeasureUuid String?
-  organizationUuid  String?
-  updatedAt         DateTime       @default(now()) @updatedAt
-  deletedAt         DateTime?
-  brand             Brand?         @relation(fields: [brandUuid], references: [uuid])
-  unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
-  organization      Organization?  @relation("OrgProducts", fields: [organizationUuid], references: [uuid])
+  id                     Int                     @id @default(autoincrement())
+  uuid                   String                  @unique @default(uuid())
+  shortName              String
+  sku                    String?
+  brandUuid              String?
+  unitOfMeasureUuid      String?
+  organizationUuid       String?
+  updatedAt              DateTime                @default(now()) @updatedAt
+  deletedAt              DateTime?
+  brand                  Brand?                  @relation(fields: [brandUuid], references: [uuid])
+  unitOfMeasure          UnitOfMeasure?          @relation(fields: [unitOfMeasureUuid], references: [uuid])
+  organization           Organization?           @relation("OrgProducts", fields: [organizationUuid], references: [uuid])
   saleItems              SaleItem[]
   purchaseItems          PurchaseItem[]
   outgoingInvoiceItems   OutgoingInvoiceItem[]
@@ -863,7 +865,7 @@ model Position {
   id                  Int                  @id @default(autoincrement())
   uuid                String               @unique @default(uuid())
   shortName           String
-  description         String?
+  comment             String?
   organizationUuid    String?
   updatedAt           DateTime             @default(now()) @updatedAt
   deletedAt           DateTime?
@@ -937,7 +939,7 @@ model PayrollCalculation {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
   date             DateTime      @default(now())
-  description      String?
+  comment          String?
   period           String?       @db.VarChar(7)
   employeeUuid     String?
   organizationUuid String?
@@ -973,7 +975,7 @@ model PayrollPayment {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
   date             DateTime      @default(now())
-  description      String?
+  comment          String?
   period           String?       @db.VarChar(7)
   employeeUuid     String?
   organizationUuid String?
@@ -996,13 +998,13 @@ model PayrollPayment {
 }
 
 model UnitOfMeasure {
-  id        Int        @id @default(autoincrement())
-  uuid      String     @unique @default(uuid())
-  shortName String
-  code      String?
-  updatedAt DateTime   @default(now()) @updatedAt
-  deletedAt DateTime?
-  products  Product[]
+  id                     Int                     @id @default(autoincrement())
+  uuid                   String                  @unique @default(uuid())
+  shortName              String
+  code                   String?
+  updatedAt              DateTime                @default(now()) @updatedAt
+  deletedAt              DateTime?
+  products               Product[]
   saleItems              SaleItem[]
   purchaseItems          PurchaseItem[]
   outgoingInvoiceItems   OutgoingInvoiceItem[]

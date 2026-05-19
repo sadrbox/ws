@@ -95,7 +95,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
     });
     if (canReadContacts) result.push({
       id: "tab3", label: translate("ContactsList"), component: (
-        <ContactsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} />
+        <ContactsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
       )
     });
     return result;
@@ -104,7 +104,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      readonly={!canWrite} isDirty={form.isDirty} />
+      readonly={!canWrite} />
   );
 };
 CounterpartiesForm.displayName = "CounterpartiesForm";

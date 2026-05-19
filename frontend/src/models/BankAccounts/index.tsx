@@ -163,7 +163,6 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
       isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
 
       readonly={!canWrite}
-      isDirty={form.isDirty}
     />
   );
 };

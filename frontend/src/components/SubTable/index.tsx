@@ -13,6 +13,7 @@ import {
 } from "react";
 import { getModelColumns, getFormatColumnValue, getColumnAlignment, sortTableRows } from "src/components/Table/services";
 import {
+  CHECKBOX_COL_ID,
   computeNextActiveColId,
   computeNextActiveRowId,
   getCellNavDirection,
@@ -25,7 +26,6 @@ import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useIn
 import { useModelDelete } from "src/hooks/useModelDelete";
 import { useAppContext } from "src/app";
 import Toolbar from "src/components/Toolbar";
-import { isEquivalent, normalizeValue } from "src/utils/normalize";
 import { useQueryClient } from "@tanstack/react-query";
 import styles from "./SubTable.module.scss";
 
@@ -1245,7 +1245,21 @@ const SubTable: FC<SubTableProps> = ({
         const startColId: string | null = tableApi?.getActiveCell() ?? null;
         if (cellDir) {
           // Колоночная навигация — строка остаётся, меняем activeCell.
-          const nextCol = computeNextActiveColId(columns, startColId, cellDir);
+          // Учитываем виртуальную колонку чекбокса (CHECKBOX_COL_ID).
+          const visibleCols = columns.filter(c => c.visible !== false);
+          let nextCol: string | null;
+          if (cellDir === 'right' && startColId === CHECKBOX_COL_ID) {
+            nextCol = visibleCols.length > 0 ? visibleCols[0].identifier : CHECKBOX_COL_ID;
+          } else if (cellDir === 'left' && startColId === CHECKBOX_COL_ID) {
+            nextCol = CHECKBOX_COL_ID;
+          } else if (cellDir === 'left') {
+            const firstVisibleId = visibleCols.length > 0 ? visibleCols[0].identifier : null;
+            nextCol = startColId === firstVisibleId
+              ? CHECKBOX_COL_ID
+              : computeNextActiveColId(columns, startColId, cellDir);
+          } else {
+            nextCol = computeNextActiveColId(columns, startColId, cellDir);
+          }
           if (startRowId !== null) tableApi?.setActiveRow(startRowId);
           if (nextCol !== null) tableApi?.setActiveCell(nextCol);
           tableApi?.focusContainer();
@@ -1436,60 +1450,12 @@ const SubTable: FC<SubTableProps> = ({
       : undefined,
     apiRef: tableApiRef,
     getCellMeta,
-    // ── Per-cell diff: сравнение текущего значения с серверным (saved) ──
-    // Используется Table для подсветки изменённых ячеек при hover на
-    // DirtyButton панели (см. UI/PaneItem + useDirtyHighlight + main.module.scss).
-    getCellDirty: (row: TDataItem, col: TColumn) => {
-      const p = row as PendingRow;
-      // Не помечаем служебные поля как dirty (id/uuid/author и варианты).
-      const colTail = col.identifier.includes('.') ? col.identifier.split('.').pop() ?? col.identifier : col.identifier;
-      const colTailLower = String(colTail).toLowerCase();
-      const EXCLUDE_COLS = new Set(['id', 'uuid', 'author', 'authorid', 'authoruuid', 'createdby', 'createdbyid', 'createdbyuuid']);
-      if (EXCLUDE_COLS.has(colTailLower)) return null;
-      if (!p._pendingAction) return null;
-      const getNested = (obj: unknown, path: string): unknown => {
-        const parts = path.split(".");
-        let v: unknown = obj;
-        for (const k of parts) {
-          if (v == null || typeof v !== "object") return undefined;
-          v = (v as Record<string, unknown>)[k];
-        }
-        return v;
-      };
-      const currentValue = getNested(row, col.identifier);
-      if (p._pendingAction === "create") {
-        // Не помечаем как dirty поля, у которых пользователь не задал
-        // осмысленного значения (пусто / 0 / "" нормализуются в null).
-        // Иначе на новой строке светятся все колонки с tooltip «Было: — Стало: —».
-        if (normalizeValue(currentValue) === null) return null;
-        return { isDirty: true, savedValue: undefined, currentValue };
-      }
-      if (p._pendingAction === "delete") {
-        if (normalizeValue(currentValue) === null) return null;
-        return { isDirty: true, savedValue: currentValue, currentValue: undefined };
-      }
-      // update — ищем оригинал в серверных данных по uuid
-      const original = allItems.find(r => r.uuid && r.uuid === p.uuid);
-      if (!original) return null;
-      const savedValue = getNested(original, col.identifier);
-      // Если на серверном (saved) объекте этого ключа нет — значит колонка
-      // является ПРОИЗВОДНОЙ/ВЫЧИСЛЯЕМОЙ (например, totalAmount, vatIncluded,
-      // discountAmount пересчитываются локально при изменении quantity/price).
-      // Пользователь её напрямую не редактирует, и tooltip «Было: —» сбивает
-      // с толку. Не помечаем такие ячейки как dirty.
-      if (savedValue === undefined) return null;
-      // Используем семантическое сравнение: "30" и 30, "" и null, 0 и "0",
-      // Decimal-объект и число — всё это одно и то же значение и не должно
-      // давать ложный dirty (типичный случай: «Было: 0 / Стало: 0»).
-      if (isEquivalent(savedValue, currentValue)) return null;
-      return { isDirty: true, savedValue, currentValue };
-    },
   }), [
     componentName, displayRows, columns, adaptiveLimit, combinedLoading, error,
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
     openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
     handleCleanRefresh, handleDelete, extraButtons, inlineEditing, renderCell, getCellMeta, handleInlineAdd, onInlineAddProp, defaultNewRow,
-    renderExpandedRowProp, expandedRowIds, ctx, readonly, allItems,
+    renderExpandedRowProp, expandedRowIds, ctx, readonly,
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────

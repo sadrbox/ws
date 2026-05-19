@@ -66,8 +66,6 @@ interface ModelFormProps {
   // showReload: boolean;
   /** Только чтение (опционально) */
   readonly?: boolean;
-  /** Есть ли несохранённые изменения? */
-  isDirty?: boolean;
   /** uniqId панели для регистрации тулбара */
   paneId?: string;
 }
@@ -82,7 +80,6 @@ const ModelForm: FC<ModelFormProps> = ({
   isInitialLoading,
   // showReload,
   readonly,
-  // isDirty — не используется, индикатор через usePaneDirty в PaneItem
   paneId,
 }) => {
   // Рендерим кнопки формы в заголовок панели через портал

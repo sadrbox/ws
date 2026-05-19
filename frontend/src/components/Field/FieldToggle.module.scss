@@ -1,9 +1,10 @@
 @import "src/styles/variables.scss";
 
 .FieldToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+  gap: 6px;
   font-size: $fontsize;
   color: $color6;
   cursor: pointer;
@@ -20,7 +21,7 @@
 
   // Скрываем нативный input, оставляем доступным.
   .input {
-    position: absolute;
+    // position: absolute;
     opacity: 0;
     pointer-events: none;
     width: 0;

@@ -7,7 +7,7 @@ const router = express.Router();
 
 const MODEL = "warehouse";
 const ROUTE = "warehouses";
-const TEXT_FIELDS = ["shortName", "address", "description"];
+const TEXT_FIELDS = ["shortName", "address", "comment"];
 
 // ============================================
 // GET
@@ -154,7 +154,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ============================================
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { shortName, address, description, organizationUuid } = req.body;
+		const { shortName, address, comment, organizationUuid } = req.body;
 		if (!shortName?.trim()) {
 			return res
 				.status(400)
@@ -164,7 +164,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			data: {
 				shortName: shortName.trim(),
 				address: address?.trim() ?? null,
-				description: description?.trim() ?? null,
+				comment: comment?.trim() ?? null,
 				organizationUuid: organizationUuid || null,
 			},
 			include: { organization: true },
@@ -187,7 +187,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const where = isNumeric ? { id: numId } : { uuid: param };
 
 		const data = {};
-		const fields = ["shortName", "address", "description", "organizationUuid"];
+		const fields = ["shortName", "address", "comment", "organizationUuid"];
 		for (const f of fields) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;

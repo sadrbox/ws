@@ -173,7 +173,7 @@ thead {
 	top: 0;
 	z-index: 2;
 
-	box-shadow: 0px -3px 2px -2px rgba(34, 34, 34, 0.3) inset,
+	box-shadow:
 		0 0 6px 3px rgba(34, 34, 34, 0.3);
 
 	tr {
@@ -324,7 +324,7 @@ tbody {
 			.TableBodyCell {
 				display: flex;
 				align-items: center;
-				height: $heightFieldInput + 1px;
+				height: $heightFieldInput;
 				padding: 0;
 				white-space: nowrap;
 				text-overflow: ellipsis;
@@ -1029,6 +1029,13 @@ input[type="checkbox"] {
 .CellCenter {
 	text-align: center;
 }
+
+/* Ячейка чекбокса при data-active-cell: фон совпадает с activeRow ($color2),
+   box-shadow остаётся от @layer table-cell-activeCell.
+   Unlayered-правило всегда перекрывает любой @layer по приоритету CSS. */
+// .CellCenter [class*="TableBodyCell"][data-active-cell="true"] {
+// 	background: $color2;
+// }
 
 .CellJustifyCenter {
 	justify-content: center;

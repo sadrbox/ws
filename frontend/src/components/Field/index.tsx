@@ -3,7 +3,7 @@ import React, { CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useS
 import styles from "./Field.module.scss"
 import FieldActionButton from "./FieldActionButton"
 import type { IconName } from "src/components/IconButton/icons"
-import { useFieldDirty, useCellFieldState } from "src/hooks/useDirtyHighlight"
+import { useCellFieldState } from "src/hooks/useDirtyHighlight"
 import { useFormRequiredScope } from "src/hooks/useFormRequired"
 // import { TypeDateRange } from '../Table/types'
 
@@ -55,16 +55,13 @@ type TypeFieldActions = FieldAction[];
 
 // ── Общий hook для всех Field* компонентов ──────────────────────────────────
 // Объединяет: класс обёртки (с учётом variant, required, error, контекста
-// ячейки таблицы и контекста обязательных полей формы), dirty-атрибуты.
+// ячейки таблицы и контекста обязательных полей формы).
 //
 // Источники required (по приоритету):
 //   1) явный проп required=true (на компоненте)
 //   2) CellFieldStateScope.required (для ячеек SubTable)
 //   3) FormRequiredScope — автоматически, когда поле в REQUIRED_FIELDS_MAP
 //      и документ проведён (posted=true)
-//
-// Dirty-атрибуты подавляются когда поле обязательно+пустое или имеет ошибку
-// — чтобы не конкурировать визуально (аналогично логике Table.tsx для ячеек).
 function useFieldBase(params: {
   name: string;
   variant: FieldVariant;
@@ -85,17 +82,13 @@ function useFieldBase(params: {
   const effectiveRequired = required || !!cellState.required || isFormRequired;
   const effectiveError = error || !!cellState.error;
 
-  const rawDirty = useFieldDirty(name);
-  // Подавляем dirty когда поле обязательно+пусто или содержит ошибку
-  const dirty = (effectiveRequired && isEmpty) || effectiveError ? {} : rawDirty;
-
   const wrapperClass = [
     isTable ? `${styles.FieldWrapper} ${styles.tableVariant}` : styles.FieldWrapper,
     !effectiveError && effectiveRequired && isEmpty ? styles.FieldRequired : '',
     effectiveError ? styles.FieldError : '',
   ].filter(Boolean).join(' ');
 
-  return { isTable, wrapperClass, dirty, effectiveRequired, effectiveError };
+  return { isTable, wrapperClass, effectiveRequired, effectiveError };
 }
 
 // ── Подпись поля (label + asterisk для required) ────────────────────────────
@@ -132,6 +125,7 @@ interface TypeFieldStringProps {
   error?: boolean;
   actions?: TypeFieldActions;
   variant?: FieldVariant;
+  autoFocus?: boolean;
 }
 
 // Пропсы для FieldGroup
@@ -148,6 +142,7 @@ interface TypeFieldGroupProps {
   required?: boolean;
   error?: boolean;
   variant?: FieldVariant;
+  autoFocus?: boolean;
 }
 
 // // Иконки для действий (можно заменить на ваши SVG)
@@ -193,6 +188,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   error = false,
   actions,
   variant = 'default',
+  autoFocus,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -236,6 +232,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       required={required}
       error={error}
       variant={variant}
+      autoFocus={autoFocus}
     />
   );
 };
@@ -254,11 +251,12 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
   required = false,
   error = false,
   variant = 'default',
+  autoFocus,
 }) => {
-  const { isTable, wrapperClass, dirty, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
+  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={style} {...dirty}>
+    <div className={wrapperClass} style={style}>
       <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldInputWrapper}>
         <input
@@ -272,6 +270,7 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
           autoComplete='off'
           disabled={disabled}
           placeholder={placeholder}
+          autoFocus={autoFocus}
         />
         {actions && actions.length > 0 && (
           <div className={styles.FieldActions}>
@@ -324,10 +323,10 @@ export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
     return '';
   })();
 
-  const { isTable, wrapperClass, dirty, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
+  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }} {...dirty}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
       <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldInputWrapper}>
         <input
@@ -366,10 +365,10 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
     return '';
   })();
 
-  const { isTable, wrapperClass, dirty, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
+  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }} {...dirty}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
       <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldInputWrapper}>
         <input
@@ -400,10 +399,10 @@ type TypeFieldSelectProps = {
 };
 
 export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value = '', onChange, disabled = false, required = false, error = false, style, variant = 'default' }) => {
-  const { isTable, wrapperClass, dirty, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
+  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={style} {...dirty}>
+    <div className={wrapperClass} style={style}>
       <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldSelectWrapper}>
         <select name={name} id={name} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled}>
@@ -599,10 +598,10 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
       if (action.type === 'clear' && !value) return false;
       return true;
     });
-  const { isTable, wrapperClass, dirty, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
+  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }} {...dirty}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
       <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
 
       <div className={styles.FieldInputWrapper}>
@@ -692,9 +691,6 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
   const effectiveRequired = required || !!cellState.required || formRequired.requiredKeys.has(tail);
   const effectiveError = error || !!cellState.error;
 
-  const rawDirty = useFieldDirty(name);
-  const dirty = (effectiveRequired && isEmpty) || effectiveError ? {} : rawDirty;
-
   const wrapperClass = [
     styles.FieldTextareaWrapper,
     !effectiveError && effectiveRequired && isEmpty ? styles.FieldRequired : '',
@@ -702,7 +698,7 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
   ].filter(Boolean).join(' ');
 
   return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }} {...dirty}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
       {label && (
         <label htmlFor={name} className={styles.FieldLabel}>
           {label}

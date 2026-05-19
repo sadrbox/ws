@@ -115,17 +115,17 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
         id: "contacts", label: translate("ContactsList"), component: (
           <ContactsTable deferRemoteChanges ownerType="contactperson" parentUuid={form.fields.uuid}
             parentName={form.fields.fullName} initialPendingRows={contacts.pending}
-            onItemsChange={contacts.onItemsChange} />
+            onItemsChange={contacts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
         )
       });
     }
     return t;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.uuid, paneProps.data, contacts]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.uuid, paneProps.data, contacts, canWrite]);
 
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      readonly={!canWrite} isDirty={form.isDirty} />
+      readonly={!canWrite} />
   );
 };
 ContactPersonsForm.displayName = "ContactPersonsForm";

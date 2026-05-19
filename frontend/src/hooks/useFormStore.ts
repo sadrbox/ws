@@ -14,28 +14,11 @@ import { getCurrentUser } from "src/services/auth";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import useUID from "./useUID";
-import { stableStringify, IGNORED_DIFF_KEYS } from "src/utils/normalize";
+import { stableStringify } from "src/utils/normalize";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ТИПЫ
 // ═══════════════════════════════════════════════════════════════════════════
-
-/** Одно изменённое поле формы (для показа diff пользователю) */
-export interface DirtyFieldEntry {
-	field: string;
-	savedValue: unknown;
-	currentValue: unknown;
-}
-/** Изменения в вложенных таблицах */
-export interface DirtyTableEntry {
-	key: string;
-	pendingCount: number;
-}
-/** Полный diff несохранённых изменений */
-export interface DirtyFieldDiff {
-	fields: DirtyFieldEntry[];
-	tables: DirtyTableEntry[];
-}
 
 /** Описание одной вложенной таблицы */
 export interface TableDef {
@@ -107,7 +90,7 @@ export function getFormStoreUserId(): string {
 // Это позволяет различить «черновик моей вкладки после F5» (нужно
 // восстановить АВТОМАТИЧЕСКИ, чтобы пользователь не потерял правки при
 // случайном Ctrl+R / падении страницы) и «черновик другой вкладки / прошлой
-// сессии» (предложить восстановить через DirtyButton).
+// сессии» (предложить восстановить через кнопку stash).
 // ═══════════════════════════════════════════════════════════════════════════
 const SESSION_TOKEN_KEY = "_st";
 const TAB_ID_STORAGE_KEY = "formStore:tabId";
@@ -176,11 +159,7 @@ function clearSession(storageKey: string): void {
 // CORE STORE (чистый JS, без React)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Синглтоны для путей "snapshot ещё не готов" — обязаны быть стабильны по
-// ссылке, иначе useSyncExternalStore уходит в infinite-loop "getSnapshot
-// should be cached".
-const EMPTY_DIFF: DirtyFieldDiff = { fields: [], tables: [] };
-const EMPTY_DIRTY_DETAILS = { fields: false, tables: false } as const;
+// (singleton удалён вместе с DirtyFieldDiff)
 
 function createFormStore<F extends object>(
 	defaultFields: F,
@@ -217,7 +196,7 @@ function createFormStore<F extends object>(
 	// Пробуем восстановить из localStorage.
 	// pendingStash — несохранённые данные ПРЕДЫДУЩЕЙ сессии (другой вкладки
 	// или прошлой работы пользователя). Не подменяем поля автоматически —
-	// пользователь явно восстанавливает их кликом DirtyButton.
+	// пользователь явно восстанавливает их кликом кнопки stash.
 	// Если же черновик принадлежит ТЕКУЩЕЙ вкладке (был сохранён до F5 /
 	// случайного перезагрузки) — применяем его автоматически. Это и есть
 	// «бесшовное переживание перезагрузки» для пользователя.
@@ -242,7 +221,7 @@ function createFormStore<F extends object>(
 			hadStoredData = true;
 		} else {
 			// Другая вкладка / прошлая сессия — кладём в stash, ждём явного
-			// восстановления через DirtyButton.
+			// восстановления через кнопку stash.
 			pendingStash = merged;
 		}
 	}
@@ -435,103 +414,6 @@ function createFormStore<F extends object>(
 		return value;
 	}
 
-	/**
-	 * Детализация несохранённых изменений.
-	 * Возвращает отдельно: есть ли изменения в полях формы и/или в строках таблиц.
-	 */
-	let dirtyDetailsMemo: {
-		rev: number;
-		snapRev: number;
-		value: { fields: boolean; tables: boolean };
-	} | null = null;
-	function getDirtyDetails(): { fields: boolean; tables: boolean } {
-		if (!snapshotReady) return EMPTY_DIRTY_DETAILS;
-		if (
-			dirtyDetailsMemo &&
-			dirtyDetailsMemo.rev === revision &&
-			dirtyDetailsMemo.snapRev === snapshotRev
-		) {
-			return dirtyDetailsMemo.value;
-		}
-		const savedFields = parsedSnapshot.fields;
-		const savedTables = parsedSnapshot.tables ?? {};
-		const fieldsDirty =
-			stableStringify(stripDerived(state.fields as Record<string, unknown>)) !==
-			stableStringify(savedFields);
-		const tablesDirty = Object.keys(state.tables).some(
-			(key) =>
-				stableStringify(state.tables[key]) !==
-				stableStringify(savedTables[key] ?? { pending: [] }),
-		);
-		const value = { fields: fieldsDirty, tables: tablesDirty };
-		dirtyDetailsMemo = { rev: revision, snapRev: snapshotRev, value };
-		return value;
-	}
-
-	/**
-	 * Полный diff несохранённых изменений — список изменённых полей с
-	 * сохранёнными (saved) и текущими (current) значениями.
-	 */
-	let dirtyDiffMemo: {
-		rev: number;
-		snapRev: number;
-		value: DirtyFieldDiff;
-	} | null = null;
-	function getDirtyFieldDiff(): DirtyFieldDiff {
-		if (!snapshotReady) return EMPTY_DIFF;
-		if (
-			dirtyDiffMemo &&
-			dirtyDiffMemo.rev === revision &&
-			dirtyDiffMemo.snapRev === snapshotRev
-		) {
-			return dirtyDiffMemo.value;
-		}
-		const savedFields = parsedSnapshot.fields;
-		const savedTables = parsedSnapshot.tables ?? {};
-		const currentFields = state.fields as Record<string, unknown>;
-
-		const changedFields: DirtyFieldEntry[] = [];
-		const allKeys = new Set([
-			...Object.keys(currentFields),
-			...Object.keys(savedFields),
-		]);
-		for (const key of allKeys) {
-			// Служебные поля (createdAt/updatedAt/deletedAt) не показываем
-			// пользователю и не учитываем как «изменение».
-			if (IGNORED_DIFF_KEYS.has(key)) continue;
-			// Derived-поля (вычисляются из других значений — суммы, итоги и т.п.)
-			// тоже не показываем: их «изменение» — следствие, а не действие.
-			if (derivedFields.has(key)) continue;
-			// Сравниваем нормализованные значения — иначе появляются
-			// «ложные» правки вида '—' → '—' (null vs "" vs undefined и т.п.).
-			if (
-				stableStringify(currentFields[key] as string) !==
-				stableStringify(savedFields[key])
-			) {
-				changedFields.push({
-					field: key,
-					savedValue: savedFields[key],
-					currentValue: currentFields[key] as string,
-				});
-			}
-		}
-
-		const changedTables: DirtyTableEntry[] = [];
-		for (const key of Object.keys(state.tables)) {
-			const saved = savedTables[key] ?? { pending: [] };
-			if (stableStringify(state.tables[key]) !== stableStringify(saved)) {
-				changedTables.push({
-					key,
-					pendingCount: state.tables[key].pending.length,
-				});
-			}
-		}
-
-		const value = { fields: changedFields, tables: changedTables };
-		dirtyDiffMemo = { rev: revision, snapRev: snapshotRev, value };
-		return value;
-	}
-
 	/** Обновить pending-строки вложенной таблицы */
 	function setTablePending(tableKey: string, pending: TDataItem[]): void {
 		const prev = state.tables[tableKey];
@@ -574,15 +456,18 @@ function createFormStore<F extends object>(
 
 	/** ID панели — устанавливается из хука, используется для push-уведомлений */
 	let _paneUniqId: string | undefined;
+	/** Текущая метка панели (заголовок документа) — для контекста уведомлений */
+	let _paneLabel: string | undefined;
+	function setPaneLabel(label: string | undefined): void {
+		_paneLabel = label;
+	}
 	function setPaneUniqId(id: string | undefined): void {
 		if (_paneUniqId) {
-			unregisterPaneDiff(_paneUniqId);
 			unregisterPaneStashActions(_paneUniqId);
 			setPaneHasStash(_paneUniqId, false);
 		}
 		_paneUniqId = id;
 		if (id) {
-			registerPaneDiff(id, getDirtyFieldDiff, subscribe);
 			registerPaneStashActions(id, applyPendingStash, clearPendingStash);
 			setPaneHasStash(id, hasPendingStash());
 		}
@@ -594,7 +479,11 @@ function createFormStore<F extends object>(
 		noteType?: PaneNotification["type"],
 	): void {
 		if (msg && _paneUniqId) {
-			addPaneNotification(_paneUniqId, noteType ?? "error", msg);
+			const entityUuid = state.meta.uuid || (state.fields as any)?.uuid;
+			addPaneNotification(_paneUniqId, noteType ?? "error", msg, {
+				paneLabel: _paneLabel,
+				ref: entityUuid ? { endpoint, uuid: String(entityUuid) } : undefined,
+			});
 		}
 		setMeta({
 			error: msg,
@@ -721,6 +610,7 @@ function createFormStore<F extends object>(
 	): Promise<{ success: boolean; savedData?: any }> {
 		setMeta({ isLoading: true });
 		setError(null);
+		_paneLabel = buildPaneLabel(state.fields);
 
 		const payloadOrError = buildPayload(state.fields);
 		if (typeof payloadOrError === "string") {
@@ -768,7 +658,11 @@ function createFormStore<F extends object>(
 				dismissNetworkNotifications(_paneUniqId);
 			}
 
-			if (uniqId) updatePaneLabel(uniqId, buildPaneLabel(saved));
+			if (uniqId) {
+				const label = buildPaneLabel(saved);
+				_paneLabel = label;
+				updatePaneLabel(uniqId, label);
+			}
 			return { success: true, savedData: saved };
 		} catch (err: any) {
 			let msg = "Не удалось сохранить";
@@ -861,7 +755,6 @@ function createFormStore<F extends object>(
 		previousStorageKeys.length = 0;
 		listeners.clear();
 		if (_paneUniqId) {
-			unregisterPaneDiff(_paneUniqId);
 			unregisterPaneStashActions(_paneUniqId);
 			setPaneHasStash(_paneUniqId, false);
 		}
@@ -932,6 +825,7 @@ function createFormStore<F extends object>(
 		setMeta,
 		setError,
 		setPaneUniqId,
+		setPaneLabel,
 
 		// API
 		load,
@@ -941,8 +835,6 @@ function createFormStore<F extends object>(
 
 		// Dirty tracking
 		isDirty,
-		getDirtyDetails,
-		getDirtyFieldDiff,
 		markClean,
 		getUserChangeSeq,
 
@@ -1027,49 +919,9 @@ export const formStoreAPI = (() => {
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DIRTY PANES STORE — глобальный реактивный Set<uniqId> для индикации
-// несохранённых изменений на вкладках. Использует useSyncExternalStore.
-// ═══════════════════════════════════════════════════════════════════════════
-
-const dirtySet = new Set<string>();
-const dirtyListeners = new Set<() => void>();
-
-function notifyDirtyListeners(): void {
-	for (const l of dirtyListeners) l();
-}
-
-/** Пометить панель как dirty/clean. Вызывается из useFormStore при мутациях. */
-export function setPaneDirty(uniqId: string, dirty: boolean): void {
-	const had = dirtySet.has(uniqId);
-	if (dirty && !had) {
-		dirtySet.add(uniqId);
-		notifyDirtyListeners();
-	} else if (!dirty && had) {
-		dirtySet.delete(uniqId);
-		notifyDirtyListeners();
-	}
-}
-
-function subscribeDirty(listener: () => void): () => void {
-	dirtyListeners.add(listener);
-	return () => {
-		dirtyListeners.delete(listener);
-	};
-}
-
-/** Хук: подписка на dirty-состояние конкретной панели. */
-export function usePaneDirty(uniqId: string): boolean {
-	return useSyncExternalStore(
-		subscribeDirty,
-		() => dirtySet.has(uniqId),
-		() => false,
-	);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // PENDING STASH STORE — реактивный Set<uniqId> для индикации, что в форме
 // есть несохранённые данные из прошлой сессии (доступные к восстановлению
-// через DirtyButton в PaneItemHeaderToolbar).
+// через кнопку stash в PaneItemHeaderToolbar).
 // ═══════════════════════════════════════════════════════════════════════════
 
 const stashSet = new Set<string>();
@@ -1107,48 +959,6 @@ export function usePaneHasPendingStash(uniqId: string): boolean {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SHOW-DIFF HOVER STATE — реактивный флаг "показать подсветку расхождений
-// на полях/ячейках формы". Активируется при наведении на DirtyButton в
-// PaneItemHeaderToolbar. Используется компонентами Field*/SubTable
-// (через data-pane-show-diff на корне Pane + data-pane-dirty на узлах).
-// ═══════════════════════════════════════════════════════════════════════════
-
-const showDiffSet = new Set<string>();
-const showDiffListeners = new Set<() => void>();
-
-function notifyShowDiffListeners(): void {
-	for (const l of showDiffListeners) l();
-}
-
-/** Установить флаг показа подсветки расхождений для панели. */
-export function setPaneShowDiff(uniqId: string, on: boolean): void {
-	const had = showDiffSet.has(uniqId);
-	if (on && !had) {
-		showDiffSet.add(uniqId);
-		notifyShowDiffListeners();
-	} else if (!on && had) {
-		showDiffSet.delete(uniqId);
-		notifyShowDiffListeners();
-	}
-}
-
-function subscribeShowDiff(listener: () => void): () => void {
-	showDiffListeners.add(listener);
-	return () => {
-		showDiffListeners.delete(listener);
-	};
-}
-
-/** Хук: показывать ли подсветку расхождений на полях/ячейках панели. */
-export function usePaneShowDiff(uniqId: string): boolean {
-	return useSyncExternalStore(
-		subscribeShowDiff,
-		() => showDiffSet.has(uniqId),
-		() => false,
-	);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // APPLY STASH REGISTRY — даёт кнопке возможность вызвать applyPendingStash
 // конкретной панели без прямого доступа к её store.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1179,64 +989,6 @@ export function clearPaneStash(uniqId: string): void {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DIRTY DIFF REGISTRY — доступ к getDirtyFieldDiff конкретной панели.
-// Позволяет показать пользователю список изменённых полей.
-// ═══════════════════════════════════════════════════════════════════════════
-
-/** getter по uniqId панели → getDirtyFieldDiff из createFormStore */
-const paneDiffGetterMap = new Map<string, () => DirtyFieldDiff>();
-/** subscribe по uniqId панели → subscribe из createFormStore (для реактивности) */
-const paneDiffSubMap = new Map<string, (listener: () => void) => () => void>();
-
-export function registerPaneDiff(
-	uniqId: string,
-	getter: () => DirtyFieldDiff,
-	subscribe: (listener: () => void) => () => void,
-): void {
-	// Wrap getter с identity-кешем.
-	// useSyncExternalStore требует, чтобы getSnapshot возвращал ту же ссылку
-	// при отсутствии изменений — иначе React уйдёт в бесконечный цикл.
-	// Сам getDirtyFieldDiff() уже memo по (revision, snapRev) и возвращает
-	// стабильную ссылку — pass-through. Дополнительная страховка: если
-	// ссылка изменилась, фиксируем новую.
-	let cachedResult: DirtyFieldDiff = EMPTY_DIFF;
-	const cachedGetter = (): DirtyFieldDiff => {
-		const next = getter();
-		if (next !== cachedResult) cachedResult = next;
-		return cachedResult;
-	};
-	paneDiffGetterMap.set(uniqId, cachedGetter);
-	paneDiffSubMap.set(uniqId, subscribe);
-}
-
-export function unregisterPaneDiff(uniqId: string): void {
-	paneDiffGetterMap.delete(uniqId);
-	paneDiffSubMap.delete(uniqId);
-}
-
-/** Получить текущий diff (не реактивно) */
-export function getPaneDirtyDiff(uniqId: string): DirtyFieldDiff {
-	return paneDiffGetterMap.get(uniqId)?.() ?? EMPTY_DIFF;
-}
-
-/** Хук: реактивная подписка на diff несохранённых изменений панели. */
-export function usePaneDirtyDiff(uniqId: string): DirtyFieldDiff {
-	const stableSubscribe = useCallback(
-		(listener: () => void) => {
-			const sub = paneDiffSubMap.get(uniqId);
-			if (!sub) return () => {};
-			return sub(listener);
-		},
-		[uniqId],
-	);
-	return useSyncExternalStore(
-		stableSubscribe,
-		() => paneDiffGetterMap.get(uniqId)?.() ?? EMPTY_DIFF,
-		() => EMPTY_DIFF,
-	);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // PANE NOTIFICATIONS — уведомления привязанные к конкретной панели.
 // Используется для информирования пользователя о состоянии формы
 // (например: «данные восстановлены из предыдущей сессии»).
@@ -1255,6 +1007,8 @@ export interface PaneNotification {
 	actions?: PaneNotificationAction[];
 	/** Уведомление неактуально (форма сохранена/обновлена) — действия заблокированы */
 	resolved?: boolean;
+	/** Ссылка на объект-источник уведомления — для перехода к форме документа */
+	ref?: { endpoint: string; uuid: string };
 }
 
 /** Запись в локальном журнале уведомлений (localStorage) */
@@ -1340,7 +1094,7 @@ export function addPaneNotification(
 	const ts = Date.now();
 	const id = nextNoteId++;
 	const list = paneNotesMap.get(uniqId) ?? [];
-	list.push({ id, type, text, timestamp: ts, actions });
+	list.push({ id, type, text, timestamp: ts, actions, ref: context?.ref });
 	paneNotesMap.set(uniqId, list);
 	notifyNoteListeners();
 
@@ -1356,6 +1110,17 @@ export function addPaneNotification(
 	});
 	saveJournal(journal);
 	notifyJournalListeners();
+
+	// Показываем всплывающий тост
+	const toastType =
+		type === "error" ? "error" :
+		type === "warning" ? "warning" :
+		type === "info" ? "info" : "success";
+	window.dispatchEvent(
+		new CustomEvent("ui_toast", {
+			detail: { message: text, type: toastType, title: context?.paneLabel },
+		}),
+	);
 }
 
 /** Удалить конкретное уведомление */
@@ -1502,9 +1267,6 @@ export interface UseFormStoreReturn<F extends object> {
 	/** Мета: isLoading, isEditMode, error и т.д. */
 	meta: FormStoreState<F>["meta"];
 
-	/** Есть ли несохранённые изменения? (реактивно) */
-	isDirty: boolean;
-
 	// ── Гранулярные хуки (для оптимизации ре-рендеров) ──
 
 	/** Подписка на одно поле. Ре-рендер только при изменении этого поля. */
@@ -1554,6 +1316,8 @@ export interface UseFormStoreReturn<F extends object> {
 	 *  Используется для отображения скелетона вместо мигания пустых disabled-полей. */
 	isInitialLoading: boolean;
 	isEditMode: boolean;
+	/** true если поля формы были изменены относительно последнего сохранённого состояния. */
+	isDirty: boolean;
 	error: string | null;
 	errorRevision: number;
 	setError: (msg: string | null) => void;
@@ -1709,25 +1473,9 @@ export function useFormStore<F extends object>(
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uniqId, store]);
 
-	// ── Синхронизация dirty-состояния → индикатор на вкладке ──
-	useEffect(() => {
-		if (!uniqId) return;
-		// Первоначальная проверка
-		setPaneDirty(uniqId, store.isDirty());
-		// Подписка на изменения store
-		const unsub = store.subscribe(() => {
-			setPaneDirty(uniqId, store.isDirty());
-		});
-		return () => {
-			unsub();
-			setPaneDirty(uniqId, false);
-			clearPaneNotifications(uniqId);
-		};
-	}, [uniqId, store]);
-
 	// ── Несохранённые данные из прошлой сессии больше не вызывают уведомление.
 	// Они хранятся в store.pendingStash и доступны к восстановлению через
-	// DirtyButton в PaneItemHeaderToolbar (см. UI/index.tsx → applyPaneStash).
+	// кнопку stash в PaneItemHeaderToolbar (см. UI/index.tsx → applyPaneStash).
 
 	// ── Гранулярный useField ──
 	const useField = useCallback(
@@ -2013,9 +1761,6 @@ export function useFormStore<F extends object>(
 		tables: snapshot.tables,
 		meta: snapshot.meta,
 
-		// Dirty-состояние (реактивно — обновляется при каждом snapshot)
-		isDirty: store.isDirty(),
-
 		// Гранулярные хуки
 		useField,
 		useTable,
@@ -2045,6 +1790,7 @@ export function useFormStore<F extends object>(
 		// Цель — убрать визуальный эффект "мигания" пустых/disabled полей.
 		isInitialLoading: !store.isInitialFetchDone(),
 		isEditMode: snapshot.meta.isEditMode,
+		isDirty: store.isDirty(),
 		error: snapshot.meta.error,
 		errorRevision: snapshot.meta.errorRevision,
 		setError: store.setError,

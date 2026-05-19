@@ -25,8 +25,8 @@ import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
-import { Icon } from "src/components/IconButton/icons";
-import { validatePostedDocument, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { renderPostedCell } from "src/models/_shared/renderPostedCell";
+import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 
 const MODEL_ENDPOINT = "purchases";
@@ -35,7 +35,7 @@ const FORM_LABEL = "Поступление";
 
 interface TFields {
   id?: number; uuid?: string;
-  date: string; description: string;
+  date: string; comment: string;
   amount: number; vatAmount: number; discountAmount: number; amountWithoutVat: number;
   posted: boolean;
   organizationUuid: string; organizationName: string;
@@ -46,7 +46,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  date: "", description: "",
+  date: "", comment: "",
   amount: 0, vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
   posted: false,
   organizationUuid: "", organizationName: "",
@@ -118,7 +118,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       date: d.date?.slice(0, 10) ?? "",
-      description: d.description ?? "",
+      comment: d.comment ?? "",
       amount: d.amount != null ? Number(d.amount) : 0,
       vatAmount: d.vatAmount != null ? Number(d.vatAmount) : 0,
       discountAmount: d.discountAmount != null ? Number(d.discountAmount) : 0,
@@ -136,11 +136,11 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
       authorName: d.author?.username ?? d.author?.email ?? "",
     }),
     buildPayload: (fd) => {
-      const validation = validatePostedDocument("purchase", fd as Record<string, any>, fd.posted === true);
+      const validation = validateDocumentFields("purchase", fd as unknown as Record<string, unknown>);
       if (!validation.isValid) return formatValidationErrors(validation.errors);
       return {
         date: fd.date || null,
-        description: fd.description?.trim() || null,
+        comment: fd.comment?.trim() || null,
         amount: fd.amount ? fd.amount : null,
         vatAmount: fd.vatAmount ? fd.vatAmount : 0,
         discountAmount: fd.discountAmount ? fd.discountAmount : 0,
@@ -236,7 +236,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
                   }} />
               </Group>
               <Group>
-                <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minHeight="80px" rows={4} />
+                <FieldTextarea label="Описание" name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} minHeight="80px" rows={4} />
               </Group>
             </GroupCol>
             <Group>
@@ -290,12 +290,12 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount]);
 
   return (
-    <FormRequiredScope docType="purchase" isPosted={form.fields.posted === true}>
+    <FormRequiredScope docType="purchase">
       <ModelForm paneId={form.paneId} tabs={tabs}
         onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined}
         isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-        readonly={!canWrite} isDirty={form.isDirty} />
+        readonly={!canWrite} />
     </FormRequiredScope>
   );
 };
@@ -309,18 +309,7 @@ const PurchasesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataIt
     getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
     variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
     defaultSort={{ id: "desc" }}
-    renderCell={(row, col) => {
-      if (col.identifier === "posted") {
-        const isPosted = row.posted === true;
-        return (
-          <span title={isPosted ? "Документ проведён" : "Не проведён"}>
-            <Icon name={isPosted ? "posted" : "notPosted"} width={17} height={17}
-              style={{ color: isPosted ? "#10b981" : "#9ca3af", flexShrink: 0, display: "flex" }} />
-          </span>
-        );
-      }
-      return undefined;
-    }}
+    renderCell={renderPostedCell}
   />
 );
 PurchasesList.displayName = LIST_NAME;

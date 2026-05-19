@@ -10,12 +10,25 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import styles from "./UIToast.module.scss";
 
+const MessageLines: FC<{ text: string }> = ({ text }) => {
+  const lines = text.split("\n");
+  if (lines.length === 1) return <span className={styles.Message}>{text}</span>;
+  return (
+    <ul className={styles.Lines}>
+      {lines.map((line, i) => (
+        <li key={i} className={styles.Line}>{line}</li>
+      ))}
+    </ul>
+  );
+};
+
 export type UIToastType = "error" | "warning" | "info" | "success";
 
 export interface UIToastDetail {
   message: string;
   type?: UIToastType;
   duration?: number; // мс, по умолчанию 4000
+  title?: string;   // контекст: имя документа / панели
 }
 
 interface ToastItem extends UIToastDetail {
@@ -90,7 +103,10 @@ const UIToast: FC = () => {
           role="alert"
         >
           <span className={styles.Icon}>{ICONS[toast.type!]}</span>
-          <span className={styles.Message}>{toast.message}</span>
+          <div className={styles.Body}>
+            {toast.title && <div className={styles.Title}>{toast.title}</div>}
+            <MessageLines text={toast.message} />
+          </div>
           <button
             className={styles.Close}
             onClick={() => dismiss(toast.id)}

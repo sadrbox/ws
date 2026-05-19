@@ -1,17 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// ─────────────────────────────────────────────────────────────────────────────
-// createInvoiceLikeForm — фабрика для трёх типов счёт-фактур РК
-// (исходящая, входящая, на оплату). Все три используют одну и ту же
-// структуру по аналогу SalesForm: dt+posted, организация/контрагент/договор,
-// сводка по налогам, вкладка строк с TradeDocumentItemsTable.
-//
-// Соответствие НК РК ст. 412 (электронная счёт-фактура), ст. 422 (ставка НДС).
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Фабрика для кассовых ордеров (ПКО/РКО).
+ * Оба документа имеют идентичную структуру — отличаются только endpoint/docType/метки.
+ */
 import { FC, useMemo, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
-import { Divider, Field, FieldDate, FieldTextarea } from "src/components/Field";
+import type { TTableVariant } from "src/components/Table";
+import { Field, FieldDate, FieldTextarea, Divider } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
@@ -19,33 +16,30 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessRight } from "src/hooks/useAccessRight";
-import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
-import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
+import ModelList from "src/components/ModelList";
+import type { DocumentType } from "src/utils/validatePostedDocument";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
+import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 
-export interface InvoiceLikeFormConfig {
+export interface CashOrderFormConfig {
   endpoint: string;
-  itemsEndpoint: string;
-  itemsParentField: string;
-  storageKey: string;
   listName: string;
   formLabel: string;
-  itemsTabLabel: string;
-  itemsComponentName: string;
+  storageKey: string;
   accessRightModel: string;
+  docType: DocumentType;
   formDisplayName: string;
-  docType: "outgoing_invoice" | "incoming_invoice" | "payment_invoice";
+  columnsJson: any;
 }
 
 interface TFields {
   id?: number; uuid?: string;
-  date: string; comment: string;
-  amount: number; vatAmount: number; discountAmount: number; amountWithoutVat: number;
+  date: string; comment: string; amount: string;
   posted: boolean;
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
@@ -54,8 +48,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  date: "", comment: "",
-  amount: 0, vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
+  date: "", comment: "", amount: "",
   posted: false,
   organizationUuid: "", organizationName: "",
   counterpartyUuid: "", counterpartyName: "",
@@ -63,10 +56,12 @@ const DEFAULT_FIELDS: TFields = {
   authorUuid: "", authorName: "",
 };
 
-export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TPane>> {
+export function createCashOrderForm(cfg: CashOrderFormConfig): {
+  Form: FC<Partial<TPane>>;
+  List: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }>;
+} {
   const Form: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
-    const queryClient = useQueryClient();
     const { canWrite } = useAccessRight(cfg.accessRightModel);
 
     const initialFields: TFields | undefined = (() => {
@@ -87,50 +82,17 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       return init;
     })();
 
-    const invalidateSubTables = useCallback(async () => {
-      await queryClient.invalidateQueries({ queryKey: [cfg.itemsEndpoint], refetchType: "active" });
-    }, [queryClient]);
-
     const form = useFormStore<TFields>({
       endpoint: cfg.endpoint,
       storageKey: cfg.storageKey,
       defaultFields: DEFAULT_FIELDS,
       initialFields,
       paneProps,
-      derivedFields: ["amount", "vatAmount", "amountWithoutVat", "discountAmount"],
-      tables: {
-        items: {
-          endpoint: cfg.itemsEndpoint, parentField: cfg.itemsParentField,
-          label: cfg.itemsTabLabel,
-          createPayload: (r: any) => ({
-            productUuid: r.productUuid ?? null,
-            quantity: r.quantity ?? 0,
-            price: r.price ?? 0,
-            unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
-            vatRate: r.vatRate ?? 0,
-            exciseRate: r.exciseRate ?? 0,
-            discountPercent: r.discountPercent ?? 0,
-          }),
-          updatePayload: (r: any) => ({
-            productUuid: r.productUuid ?? null,
-            quantity: r.quantity ?? 0,
-            price: r.price ?? 0,
-            unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
-            vatRate: r.vatRate ?? 0,
-            exciseRate: r.exciseRate ?? 0,
-            discountPercent: r.discountPercent ?? 0,
-          }),
-          extraSkipFields: [cfg.itemsParentField],
-        },
-      },
       mapServerToForm: (d, prev) => ({
         ...(prev ?? DEFAULT_FIELDS), ...d,
         date: d.date?.slice(0, 10) ?? "",
         comment: d.comment ?? "",
-        amount: d.amount != null ? Number(d.amount) : 0,
-        vatAmount: d.vatAmount != null ? Number(d.vatAmount) : 0,
-        discountAmount: d.discountAmount != null ? Number(d.discountAmount) : 0,
-        amountWithoutVat: d.amountWithoutVat != null ? Number(d.amountWithoutVat) : 0,
+        amount: d.amount != null ? String(d.amount) : "",
         posted: d.posted === true,
         organizationUuid: d.organizationUuid ?? "",
         organizationName: d.organization?.shortName ?? "",
@@ -144,14 +106,10 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       buildPayload: (fd) => {
         const validation = validateDocumentFields(cfg.docType, fd as unknown as Record<string, unknown>);
         if (!validation.isValid) return formatValidationErrors(validation.errors);
-
         return {
           date: fd.date || null,
           comment: fd.comment?.trim() || null,
-          amount: fd.amount ? fd.amount : null,
-          vatAmount: fd.vatAmount ? fd.vatAmount : 0,
-          discountAmount: fd.discountAmount ? fd.discountAmount : 0,
-          amountWithoutVat: fd.amountWithoutVat ? fd.amountWithoutVat : 0,
+          amount: fd.amount ? parseFloat(fd.amount) : null,
           posted: fd.posted === true,
           organizationUuid: fd.organizationUuid || null,
           counterpartyUuid: fd.counterpartyUuid || null,
@@ -159,16 +117,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
         };
       },
       buildPaneLabel: (saved) => makeDocLabel(cfg.listName, cfg.formLabel, saved, "date"),
-      afterLoad: invalidateSubTables,
-      afterSave: invalidateSubTables,
     });
-
-    const items = form.useTable("items");
-
-    const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
-      form.fields.organizationUuid || null,
-      form.fields.date || null,
-    );
 
     const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
       const updates: Partial<TFields> = { contractUuid: uuid, contractName: displayValue };
@@ -186,29 +135,18 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       if (hasCpty) s.counterpartyUuid = form.fields.counterpartyUuid;
       return s;
     }, [form.fields.organizationUuid, form.fields.counterpartyUuid]);
+
     useAutoFillPrimary({
       endpoint: "contracts", scope: contractScope, currentUuid: form.fields.contractUuid,
       isEditMode: form.isEditMode, isLoading: form.isLoading,
       apply: (uuid, name) => form.setFields({ contractUuid: uuid, contractName: name } as Partial<TFields>),
     });
 
-    const handleTotalChange = useCallback((total: number, rows?: any[]) => {
-      form.setField("amount", Number(total));
-      if (rows) {
-        const vatSum = rows.reduce((s, r) => s + (Number(r.vatAmount) || 0), 0);
-        const discSum = rows.reduce((s, r) => s + (Number(r.discountAmount) || 0), 0);
-        const amtWithoutVat = Math.round((total - vatSum) * 100) / 100;
-        form.setFields({
-          vatAmount: Number(Math.round(vatSum * 100) / 100),
-          discountAmount: Number(Math.round(discSum * 100) / 100),
-          amountWithoutVat: Number(amtWithoutVat),
-        } as Partial<TFields>);
-      }
-    }, [form.setField, form.setFields]);
-
     const tabs = useMemo(() => [
       {
-        id: "tab-details", label: translate("general") || "Основное", component: (
+        id: "tab-details",
+        label: translate("general") || "Основное",
+        component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
@@ -236,70 +174,50 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                       ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
                     }} />
                 </Group>
+                <GroupRow>
+                  <Field label="Сумма" name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
+                </GroupRow>
                 <Group>
                   <FieldTextarea label="Описание" name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} minHeight="80px" rows={4} />
                 </Group>
               </GroupCol>
-              <Group>
-                <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
-                  {([
-                    ...(isVatEnabled ? ([
-                      { label: "Без НДС", value: form.fields.amountWithoutVat },
-                      { label: "НДС", value: form.fields.vatAmount },
-                    ] as const) : ([] as const)),
-                    ...(useDiscount ? ([{ label: "Скидка", value: form.fields.discountAmount }] as const) : ([] as const)),
-                  ] as ReadonlyArray<{ label: string; value: number | string }>).map(({ label, value }) => (
-                    <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
-                      <span>{label}</span>
-                      <span style={{ fontVariantNumeric: "tabular-nums" }}>{value || "0"}</span>
-                    </div>
-                  ))}
-                  <div style={{ borderTop: "1px solid #e5e7eb", margin: "2px 0 0" }} />
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
-                    <span>Итого</span>
-                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
-                  </div>
-                </div>
-              </Group>
-              {form.isEditMode && <><Divider /><Group align="row" gap="12px">
+              {form.isEditMode && <><Divider /><GroupRow>
                 <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
                 <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
                 <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || ""} disabled />
-              </Group></>}
+              </GroupRow></>}
             </div>
           </div>
-        )
+        ),
       },
-      {
-        id: "tab-items", label: cfg.itemsTabLabel, component: form.isEditMode && form.fields.uuid ? (
-          <TradeDocumentItemsTable
-            parentUuid={form.fields.uuid} parentField={cfg.itemsParentField}
-            endpoint={cfg.itemsEndpoint} componentName={cfg.itemsComponentName}
-            organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
-            disabled={form.isLoading} deferRemoteChanges
-            parentLabel={`${cfg.formLabel}: №${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
-            initialPendingRows={items.pending}
-            onTotalChange={handleTotalChange}
-            onItemsChange={items.onItemsChange}
-          />
-        ) : (
-          <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
-            Сохраните документ для добавления товаров
-          </div>
-        )
-      },
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount]);
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, canWrite]);
 
     return (
       <FormRequiredScope docType={cfg.docType}>
-        <ModelForm paneId={form.paneId} tabs={tabs}
+        <ModelForm
+          paneId={form.paneId} tabs={tabs}
           onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
           onReload={form.isEditMode ? form.handleReload : undefined}
           isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-          readonly={!canWrite} />
+          readonly={!canWrite}
+        />
       </FormRequiredScope>
     );
   };
   Form.displayName = cfg.formDisplayName;
-  return Form;
+
+  const List: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
+    { variant, onSelectItem, ownerUuid, ownerField }
+  ) => (
+    <ModelList
+      endpoint={cfg.endpoint} listName={cfg.listName} columnsJson={cfg.columnsJson} FormComponent={Form}
+      getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
+      variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
+      defaultSort={{ id: "desc" }}
+      renderCell={renderPostedCell}
+    />
+  );
+  List.displayName = cfg.listName;
+
+  return { Form, List };
 }

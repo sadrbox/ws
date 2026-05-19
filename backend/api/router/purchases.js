@@ -7,7 +7,7 @@ const router = express.Router();
 
 const MODEL = "purchase";
 const ROUTE = "purchases";
-const TEXT_FIELDS = ["description"];
+const TEXT_FIELDS = ["comment"];
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -145,7 +145,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		}
 		const {
 			date,
-			description,
+			comment,
 			amount,
 			organizationUuid,
 			counterpartyUuid,
@@ -156,7 +156,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		const item = await prisma[MODEL].create({
 			data: {
 				date: date ? new Date(date) : new Date(),
-				description: description?.trim() ?? null,
+				comment: comment?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
@@ -187,7 +187,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
 		for (const f of [
-			"description",
+			"comment",
 			"organizationUuid",
 			"counterpartyUuid",
 			"contractUuid",

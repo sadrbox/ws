@@ -1,6 +1,6 @@
 import styles from './Table.module.scss';
 import { GLOBAL_ADAPTIVE_LIMIT_REF } from 'src/hooks/useInfiniteModelList';
-import { formatDiffValue as formatDirtyValue, CellDirtyScope, CellFieldStateScope, type DirtyDomProps } from 'src/hooks/useDirtyHighlight';
+import { CellFieldStateScope } from 'src/hooks/useDirtyHighlight';
 
 import {
   TColumn,
@@ -13,6 +13,7 @@ import {
 import { getTranslateColumn } from 'src/i18';
 import { getFormatColumnValue } from './services';
 import {
+  CHECKBOX_COL_ID,
   computeNextActiveColId,
   computeNextActiveRowId,
   getCellNavDirection,
@@ -23,6 +24,7 @@ import Modal from '../Modal';
 import { Button } from '../Button';
 import { LoadingSpinner } from '../UI';
 import Toolbar from 'src/components/Toolbar';
+import { Field } from 'src/components/Field';
 
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -53,7 +55,6 @@ import {
   FC,
   Fragment,
   KeyboardEvent as ReactKeyboardEvent,
-  isValidElement,
   memo,
   PropsWithChildren,
   Ref,
@@ -138,12 +139,6 @@ export interface TableContextProps {
     | ((row: TDataItem, col: TColumn) => { required?: boolean; error?: boolean; errorMessage?: string; errorTooltip?: React.ReactNode } | null)
     | undefined
   >;
-  /** Per-cell diff vs saved snapshot — ref-вариант, не пересоздаёт contextValue. */
-  getCellDirtyRef?: React.RefObject<
-    | ((row: TDataItem, col: TColumn) => { isDirty: boolean; savedValue: unknown; currentValue: unknown } | null)
-    | undefined
-  >;
-
   // ── Expandable rows ────────────────────────────────────────────────────
   /** UUID строк, которые сейчас раскрыты */
   expandedRowIds?: Set<string>;
@@ -210,8 +205,6 @@ export interface TableProps {
   inlineEditing?: boolean;
   renderCell?: (row: TDataItem, col: TColumn) => React.ReactNode | undefined;
   onInlineAdd?: () => void;
-  /** Per-cell diff vs saved snapshot для подсветки (см. SubTable). */
-  getCellDirty?: (row: TDataItem, col: TColumn) => { isDirty: boolean; savedValue: unknown; currentValue: unknown } | null;
   /**
    * Метаданные ячейки (ошибка / обязательное пустое) — передаются в
    * CellFieldStateScope, откуда Field-компоненты читают через useCellFieldState.
@@ -344,7 +337,6 @@ const Table: FC<TableProps> = memo((props) => {
     inlineEditing,
     renderCell,
     onInlineAdd,
-    getCellDirty,
     getCellMeta,
     readonly: isReadonly = false,
     expandedRowIds,
@@ -361,8 +353,6 @@ const Table: FC<TableProps> = memo((props) => {
   renderCellRef.current = renderCell;
   const inlineEditingRef = useRef(inlineEditing);
   inlineEditingRef.current = inlineEditing;
-  const getCellDirtyRef = useRef(getCellDirty);
-  getCellDirtyRef.current = getCellDirty;
   const getCellMetaRef = useRef(getCellMeta);
   getCellMetaRef.current = getCellMeta;
 
@@ -480,7 +470,7 @@ const Table: FC<TableProps> = memo((props) => {
       actions: extendedActions,
       hasNextPage, isFetchingNextPage,
       inlineEditing, renderCell, onInlineAdd,
-      renderCellRef, inlineEditingRef, getCellDirtyRef, getCellMetaRef,
+      renderCellRef, inlineEditingRef, getCellMetaRef,
       scrollRef,
       expandedRowIds,
       renderExpandedRow,
@@ -597,6 +587,48 @@ const Table: FC<TableProps> = memo((props) => {
       handleDeleteClick();
       return;
     }
+    // ── Пробел: переключить выделение активной строки (только в SubTable,
+    // когда activeCell находится на колонке чекбокса) ──────────────────────
+    if (e.key === ' ' && variant === 'embedded' && activeCell === CHECKBOX_COL_ID && activeRow !== null) {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = activeRow;
+      if (isAllSelectedMode) {
+        setExcludedRows(prev => {
+          const next = new Set(prev);
+          if (next.has(id)) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
+          if (next.size >= rows.length) {
+            setIsAllSelectedMode(false);
+            setExcludedRows(new Set());
+            setSelectedRows(new Set());
+            return new Set();
+          }
+          return next;
+        });
+      } else {
+        setSelectedRows(prev => {
+          const next = new Set(prev);
+          if (next.has(id)) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
+          const allLoadedIds = rows.map(r => r.id);
+          if (allLoadedIds.every(rid => next.has(rid))) {
+            setIsAllSelectedMode(true);
+            setExcludedRows(new Set());
+            setSelectedRows(new Set());
+            return new Set();
+          }
+          return next;
+        });
+      }
+      return;
+    }
     // ── Enter: открыть форму активной строки ─────────────────────────────
     // Работает только в обычных списках (*List, variant === 'default').
     //  - SubTable (variant === 'embedded') обрабатывает Enter сам в capture-фазе
@@ -616,7 +648,7 @@ const Table: FC<TableProps> = memo((props) => {
       openModelForm({ data: row, onSave: refetch, onClose: () => { } });
       return;
     }
-    // ── Колоночная (cell-level) навигация: ArrowLeft/ArrowRight/Home/End ──
+    // ── Колоночная (cell-level) навигация: ArrowLeft/ArrowRight ───────────
     // ВНИМАНИЕ: activeCell-навигация работает только во встроенных таблицах
     // (variant === 'embedded', т.е. внутри SubTable). В обычных списках (*List)
     // активная ячейка не используется — стрелки Left/Right/Home/End там
@@ -633,7 +665,26 @@ const Table: FC<TableProps> = memo((props) => {
       }
       // Если activeRow нет — берём первую видимую строку (как точку старта).
       const startRowId = activeRow ?? rows[0].id;
-      const nextColId = computeNextActiveColId(columns, activeCell, cellDir);
+      // Вычисляем следующую колонку с учётом виртуальной колонки чекбокса.
+      const visibleCols = columns.filter(c => c.visible !== false);
+      let nextColId: string | null;
+      if (cellDir === 'right' && activeCell === CHECKBOX_COL_ID) {
+        // Вправо от чекбокса → первая колонка данных
+        nextColId = visibleCols.length > 0 ? visibleCols[0].identifier : CHECKBOX_COL_ID;
+      } else if (cellDir === 'left' && activeCell === CHECKBOX_COL_ID) {
+        // Уже в крайней левой позиции — остаёмся
+        nextColId = CHECKBOX_COL_ID;
+      } else if (cellDir === 'left') {
+        // Если активная — первая колонка данных, переходим к чекбоксу
+        const firstVisibleId = visibleCols.length > 0 ? visibleCols[0].identifier : null;
+        if (activeCell === firstVisibleId) {
+          nextColId = CHECKBOX_COL_ID;
+        } else {
+          nextColId = computeNextActiveColId(columns, activeCell, cellDir);
+        }
+      } else {
+        nextColId = computeNextActiveColId(columns, activeCell, cellDir);
+      }
       if (nextColId === null) return;
       e.preventDefault();
       e.stopPropagation();
@@ -650,7 +701,7 @@ const Table: FC<TableProps> = memo((props) => {
     e.preventDefault();
     e.stopPropagation();
     setActiveRow(nextId);
-  }, [handleCreate, handleDeleteClick, rows, activeRow, activeCell, columns, variant, onSelectItem, openModelForm, refetch]);
+  }, [handleCreate, handleDeleteClick, rows, activeRow, activeCell, columns, variant, onSelectItem, openModelForm, refetch, isAllSelectedMode, selectedRows, excludedRows, setSelectedRows, setIsAllSelectedMode, setExcludedRows]);
 
   const handleConfigOpen = useCallback(() => {
     setConfigModalAction('open');
@@ -1285,7 +1336,6 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     rows,
     renderCellRef,
     inlineEditingRef,
-    getCellDirtyRef,
     getCellMetaRef,
     expandedRowIds,
     renderExpandedRow,
@@ -1302,6 +1352,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   } = useTableContext();
 
   const isActive = activeRow === row.id;
+  const isCheckboxCellActive = variant === 'embedded' && isActive && activeCell === CHECKBOX_COL_ID;
 
   // Строка выбрана если:
   // 1. Режим "все" И строка НЕ в исключениях
@@ -1480,8 +1531,21 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         data-primary={row.isPrimary && variant === 'embedded' ? "true" : undefined}
       >
         {variant !== 'select' && (
-          <td className={styles.CellCenter}>
-            <div className={`${styles.TableBodyCell} ${styles.CellJustifyCenter}`}>
+          <td
+            className={styles.CellCenter}
+            data-col-id={CHECKBOX_COL_ID}
+            onClick={e => {
+              e.stopPropagation();
+              if (variant === 'embedded') {
+                setActiveRow?.(row.id);
+                setActiveCell?.(CHECKBOX_COL_ID);
+              }
+            }}
+          >
+            <div
+              className={[styles.TableBodyCell, styles.CellJustifyCenter, isCheckboxCellActive ? styles.activeCell : undefined].filter(Boolean).join(' ')}
+              {...(isCheckboxCellActive ? { 'data-active-cell': 'true' as const } : {})}
+            >
               <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading} />
             </div>
           </td>
@@ -1494,27 +1558,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           // (SubTable); в *List (variant !== 'embedded') ячеечного выделения нет.
           const isCellActive = variant === 'embedded' && isActive && activeCell === col.identifier;
 
-          // ── Per-cell diff vs saved snapshot (см. SubTable.getCellDirty) ──
-          // ── Per-cell meta (error / required) — от вызывающего ────────
-          // Все атрибуты подсветки (data-pane-dirty, data-active-cell)
-          // и классы-обёртки (CellWrap_required / CellWrap_error, activeCell)
-          // унифицированы НА ОДНОМ узле — `.TableBodyCell` (div ниже).
-          // Это устраняет промежуточный `<div .CellWrap>` из разметки и
-          // гарантирует, что соседние механики (focus-within, activeRow,
-          // dirty-highlight) не конфликтуют между разными уровнями DOM.
           const cellMeta = getCellMetaRef?.current?.(row, col) ?? null;
-          const customCell = currentRenderCell?.(row, col);
-          const isReadOnlyCellNode = isValidElement(customCell)
-            && (typeof customCell.type === 'function'
-              ? (customCell.type.displayName === 'ReadOnlyCell' || customCell.type.name === 'ReadOnlyCell')
-              : false);
-          const cellDirty = getCellDirtyRef?.current?.(row, col) ?? null;
-          const cellDirtyProps: DirtyDomProps | null = cellDirty?.isDirty && !(cellMeta?.required || cellMeta?.error) && !isReadOnlyCellNode
-            ? {
-              "data-pane-dirty": "true",
-              title: `Было: ${formatDirtyValue(cellDirty.savedValue)}\nСтало: ${formatDirtyValue(cellDirty.currentValue)}`,
-            }
-            : null;
 
           const cellClassName = [
             styles.TableBodyCell,
@@ -1549,7 +1593,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
                 <td key={col.identifier} {...tdProps}>
                   <div {...cellWrapperProps}>
                     <CellFieldStateScope value={cellFieldState ?? {}}>
-                      <CellDirtyScope value={cellDirtyProps}>{customCell}</CellDirtyScope>
+                      {customCell}
                     </CellFieldStateScope>
                     {cellMeta?.errorTooltip}
                   </div>
@@ -1900,25 +1944,14 @@ const FieldFastSearchInternal = memo(({ value, onChange }: {
   }, []);
 
   return (
-    <div className={styles.FilterGroup}>
-      <div className={styles.SearchContainer}>
-        <input
-          type="text"
-          name="fastSearch"
-          value={inputValue}
-          onChange={(e) => handleChange(e.target.value)}
-          placeholder="Быстрый поиск"
-          className={styles.SearchInput}
-          autoComplete="off"
-          autoFocus
-        // title="Быстрый поиск по всем полям"
-        />
-        <Toolbar.CloseButton
-          onClick={handleClear}
-          title="Очистить"
-        />
-      </div>
-    </div>
+    <Field
+      name="fastSearch"
+      value={inputValue}
+      onChange={(e) => handleChange(e.target.value)}
+      placeholder="Быстрый поиск"
+      autoFocus
+      actions={[{ type: 'clear', onClick: handleClear }]}
+    />
   );
 }, (prevProps, nextProps) => {
   // Custom comparison для memo

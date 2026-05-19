@@ -25,9 +25,9 @@ import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
-import { validatePostedDocument, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
-import { Icon } from "src/components/IconButton/icons";
+import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 
 const MODEL_ENDPOINT = "inventory-transfers";
 const LIST_NAME = "InventoryTransfersList";
@@ -35,7 +35,7 @@ const FORM_LABEL = "Перемещение ТМЗ";
 
 interface TFields {
   id?: number; uuid?: string;
-  documentNumber: string; date: string; description: string;
+  documentNumber: string; date: string; comment: string;
   amount: number; posted: boolean;
   fromWarehouseUuid: string; fromWarehouseName: string;
   toWarehouseUuid: string; toWarehouseName: string;
@@ -44,7 +44,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  documentNumber: "", date: "", description: "",
+  documentNumber: "", date: "", comment: "",
   amount: 0, posted: false,
   fromWarehouseUuid: "", fromWarehouseName: "",
   toWarehouseUuid: "", toWarehouseName: "",
@@ -97,7 +97,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       ...(prev ?? DEFAULT_FIELDS), ...d,
       documentNumber: d.documentNumber ?? "",
       date: d.date?.slice(0, 10) ?? "",
-      description: d.description ?? "",
+      comment: d.comment ?? "",
       amount: d.amount != null ? Number(d.amount) : 0,
       posted: d.posted === true,
       fromWarehouseUuid: d.fromWarehouseUuid ?? "",
@@ -110,12 +110,12 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       authorName: d.author?.username ?? d.author?.email ?? "",
     }),
     buildPayload: (fd) => {
-      const validation = validatePostedDocument("inventory_transfer", fd as Record<string, any>, fd.posted === true);
+      const validation = validateDocumentFields("inventory_transfer", fd as unknown as Record<string, unknown>);
       if (!validation.isValid) return formatValidationErrors(validation.errors);
       return {
         documentNumber: fd.documentNumber?.trim() || null,
         date: fd.date || null,
-        description: fd.description?.trim() || null,
+        comment: fd.comment?.trim() || null,
         amount: fd.amount ? fd.amount : null,
         posted: fd.posted === true,
         fromWarehouseUuid: fd.fromWarehouseUuid || null,
@@ -164,7 +164,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
                   extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
               <Group>
-                <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minHeight="80px" rows={4} />
+                <FieldTextarea label="Описание" name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} minHeight="80px" rows={4} />
               </Group>
             </GroupCol>
             <Group>
@@ -209,12 +209,12 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, canWrite, items]);
 
   return (
-    <FormRequiredScope docType="inventory_transfer" isPosted={form.fields.posted === true}>
+    <FormRequiredScope docType="inventory_transfer">
       <ModelForm paneId={form.paneId} tabs={tabs}
         onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined}
         isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-        readonly={!canWrite} isDirty={form.isDirty} />
+        readonly={!canWrite} />
     </FormRequiredScope>
   );
 };
@@ -224,18 +224,7 @@ const InventoryTransfersList: FC<{ variant?: TTableVariant; onSelectItem?: (item
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={InventoryTransfersForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }}
-    renderCell={(row, col) => {
-      if (col.identifier === "posted") {
-        const isPosted = row.posted === true;
-        return (
-          <span title={isPosted ? "Документ проведён" : "Не проведён"}>
-            <Icon name={isPosted ? "posted" : "notPosted"} width={17} height={17}
-              style={{ color: isPosted ? "#10b981" : "#9ca3af", flexShrink: 0, display: "flex" }} />
-          </span>
-        );
-      }
-      return undefined;
-    }}
+    renderCell={renderPostedCell}
   />
 );
 InventoryTransfersList.displayName = LIST_NAME;

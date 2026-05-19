@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import type { TPane } from "src/app/types";
 import { FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupRow, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
-import { useFormStore, setPaneDirty, formStoreAPI } from "src/hooks/useFormStore";
+import { useFormStore, formStoreAPI } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import ModelForm from "src/components/ModelForm";
@@ -393,7 +393,6 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
       onReload={form.isEditMode ? form.handleReload : undefined}
       isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
       readonly={!canWrite}
-      isDirty={form.isDirty}
     />
   );
 };
@@ -409,9 +408,6 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
   const saleDate = embedded?.saleDate ?? null;
   const initialFields = useMemo(() => mapDataToFields(data, data?.saleUuid as string | undefined), [data]);
   const [fields, setFieldsState] = useState<TFields>(initialFields);
-  const initialSnapshotRef = useRef(JSON.stringify(initialFields));
-  const isDirty = JSON.stringify(fields) !== initialSnapshotRef.current;
-
   const setFields = useCallback((patch: Partial<TFields>) => {
     setFieldsState((prev) => {
       const next = { ...prev, ...patch };
@@ -434,18 +430,6 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
     formStoreAPI.register(uniqId, { reload: handleReload });
     return () => formStoreAPI.unregister(uniqId);
   }, [uniqId, handleReload]);
-
-  useEffect(() => {
-    if (!uniqId) return;
-    setPaneDirty(uniqId, isDirty);
-  }, [uniqId, isDirty]);
-
-  useEffect(() => {
-    if (!uniqId) return undefined;
-    return () => {
-      setPaneDirty(uniqId, false);
-    };
-  }, [uniqId]);
 
   const handleClose = useCallback(() => {
     if (paneProps.onClose) void paneProps.onClose();
@@ -476,10 +460,9 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
       onSave={handleClose}
       onSaveAndClose={handleClose}
       onClose={handleClose}
-      onReload={isDirty ? handleReload : undefined}
+      onReload={handleReload}
       isLoading={false}
       readonly={!canWrite}
-      isDirty={isDirty}
     />
   );
 };

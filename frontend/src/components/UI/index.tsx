@@ -1,4 +1,4 @@
-import React, { CSSProperties, FC, PropsWithChildren, useEffect, useState, useCallback, useMemo, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo } from 'react';
+import React, { CSSProperties, FC, PropsWithChildren, useEffect, useState, useCallback, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo } from 'react';
 import styles from "../../styles/main.module.scss"
 import modalManager from 'src/components/Modal/modalManager';
 import { createPortal } from 'react-dom';
@@ -9,14 +9,14 @@ import { translate } from 'src/i18';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app/context';
-import { ReloadButton, CloseButton, DirtyButton, IconButton } from 'src/components/Toolbar';
+import { ReloadButton, CloseButton, IconButton } from 'src/components/Toolbar';
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
-import { usePaneDirty, usePaneDirtyDiff, usePaneNotifications, dismissPaneNotification, usePaneHasPendingStash, applyPaneStash, setPaneShowDiff, usePaneShowDiff } from 'src/hooks/useFormStore';
-import { PaneScopeProvider } from 'src/hooks/useDirtyHighlight';
+import { usePaneNotifications, dismissPaneNotification, usePaneHasPendingStash, applyPaneStash } from 'src/hooks/useFormStore';
+import { openFormByRef, canOpenByRef } from 'src/utils/openFormByRef';
 import { CounterpartiesList } from 'src/models/Counterparties';
 import { ContactTypesList } from 'src/models/ContactTypes';
 import { ContactsList } from 'src/models/Contacts';
@@ -54,7 +54,6 @@ import OfflineIndicator from 'src/components/OfflineIndicator';
 import UIToast from 'src/components/UIToast';
 import { getAccessLevel } from 'src/hooks/useAccessRight';
 import { usePersistenceMode } from 'src/services/persistenceMode';
-// import { usePaneDirty, usePaneNotifications, dismissPaneNotification, usePaneReload } from 'src/hooks/useFormStore';
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -98,7 +97,7 @@ export const Container: FC = () => {
   );
 }
 
-/** Одна вкладка — отдельный компонент, чтобы можно было использовать хук usePaneDirty */
+/** Одна вкладка — отдельный компонент */
 const PaneTabItem: FC<{
   pane: { uniqId: string; label: string; isSelector?: boolean; selectorPaneId?: string };
   isActive: boolean;
@@ -106,10 +105,6 @@ const PaneTabItem: FC<{
   onActivate: () => void;
   onClose: () => void;
 }> = ({ pane, isActive, isLocked, onActivate, onClose }) => {
-  const isDirty = usePaneDirty(pane.uniqId);
-  const hasStash = usePaneHasPendingStash(pane.uniqId);
-  const showDirtyDot = isDirty || hasStash;
-
   return (
     <div
       className={[
@@ -117,20 +112,13 @@ const PaneTabItem: FC<{
         isActive && styles.PaneTabItemActive,
         pane.isSelector && styles.PaneTabItemSelector,
         isLocked && styles.PaneTabItemDisabled,
-        showDirtyDot && styles.PaneTabItemDirty,
       ].filter(Boolean).join(" ")}
       onClick={isLocked ? undefined : onActivate}
-      title={pane.label + (isDirty ? " · есть несохранённые изменения" : hasStash ? " · есть данные прошлой сессии" : "")}
+      title={pane.label}
       role="tab"
       tabIndex={isLocked ? -1 : 0}
       aria-disabled={isLocked}
     >
-      {showDirtyDot && (
-        <span
-          className={hasStash ? styles.PaneTabItemDirtyDotStash : styles.PaneTabItemDirtyDot}
-          aria-label={isDirty ? "Несохранённые изменения" : "Данные прошлой сессии"}
-        />
-      )}
       <span className={styles.PaneTabItemLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
       {!isLocked && (
         <IconButton
@@ -190,8 +178,6 @@ export const Panes: FC = () => {
 const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({ pane: p, isActive, onClose }) => {
   const { refCallback: slot } = usePaneToolbarSlot(p.uniqId);
   const { refCallback: headerSlot } = usePaneHeaderActionsSlot(p.uniqId);
-  const isDirty = usePaneDirty(p.uniqId);
-  const dirtyDiff = usePaneDirtyDiff(p.uniqId);
   const hasStash = usePaneHasPendingStash(p.uniqId);
   const hasToolbar = useHasToolbar(p.uniqId);
   const onReload = usePaneReload(p.uniqId);
@@ -251,72 +237,22 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
     };
   }, [isActive, p.uniqId]);
 
-  // Кнопка Dirty: показывается ТОЛЬКО когда есть смысл — есть несохранённые
-  // изменения в текущей сессии (isDirty) или stash из прошлой сессии.
-  // В «чистом» состоянии кнопка не нужна: освежить данные с сервера можно
-  // через отдельную кнопку «Обновить», а тоггл подсветки расхождений
-  // подсвечивать тоже нечего.
-  // При наличии stash — пульсирует, по клику восстанавливает данные.
-  // При isDirty — работает как ТОГГЛ подсветки расхождений
-  // (аналогично кнопке «Редактирование в таблице»).
-  const showDirtyButton = hasToolbar && (isDirty || hasStash);
-  const dirtyButtonClass = hasStash
-    ? styles.PaneItemHeaderDirtyButtonStash
-    : styles.PaneItemHeaderDirtyButton;
-
-  // Подсветка расхождений: реактивный флаг на панели. Управляется кликом
-  // по DirtyButton (тоггл). При наведении мышью на саму кнопку даём
-  // временный предпросмотр — но клик «защёлкивает» состояние.
-  const showDiff = usePaneShowDiff(p.uniqId);
-  const handleDirtyClick = useCallback(() => {
-    if (hasStash) {
-      applyPaneStash(p.uniqId);
-      return;
-    }
-    setPaneShowDiff(p.uniqId, !showDiff);
-  }, [hasStash, p.uniqId, showDiff]);
-  // При размонтировании Pane сбрасываем флаг.
-  useEffect(() => () => setPaneShowDiff(p.uniqId, false), [p.uniqId]);
-  // Если форма стала чистой (после save / undo / ручного отката) — гасим
-  // подсветку: иначе на disabled-кнопке остаётся «active»-стиль, а на Pane
-  // — атрибут data-pane-show-diff="true", хотя подсвечивать уже нечего.
-  useEffect(() => {
-    if (!isDirty && !hasStash && showDiff) {
-      setPaneShowDiff(p.uniqId, false);
-    }
-  }, [isDirty, hasStash, showDiff, p.uniqId]);
-
-  // Детальный tooltip для кнопки Dirty: показывает список изменённых полей
-  // в формате "Поле: 'старое' → 'новое'". Для вложенных таблиц — количество правок.
-  // Нативный title поддерживает \n для переноса строк.
-  const dirtyButtonTitle = useMemo(() => {
-    if (hasStash) {
-      return "Восстановить данные из прошлой сессии";
-    }
-    if (!isDirty) {
-      return "Форма не содержит несохранённых изменений";
-    }
-    return showDiff
-      ? "Скрыть подсветку несохранённых изменений"
-      : "Показать подсветку несохранённых изменений";
-  }, [hasStash, isDirty, showDiff]);
+  // Stash button: показывается если есть несохранённые данные из прошлой сессии.
+  const showStashButton = hasToolbar && hasStash;
 
   return (
     <div
       ref={paneRootRef}
       className={[styles.PaneItem, isActive && styles.PaneItemActive].filter(Boolean).join(" ")}
-      data-pane-show-diff={showDiff ? "true" : undefined}
     >
       <div className={styles.PaneItemHeader}>
         <h2 className={styles.PaneItemHeaderLabel}>
           {p.label}
-          {(isDirty || hasStash) && (
+          {hasStash && (
             <span
-              className={hasStash ? styles.PaneItemHeaderDirtyDotStash : styles.PaneItemHeaderDirtyDot}
-              aria-label={isDirty ? "Несохранённые изменения" : "Данные прошлой сессии"}
-              title={hasStash
-                ? "Есть несохранённые данные из прошлой сессии"
-                : "Форма содержит несохранённые изменения"}
+              className={styles.PaneItemStashDot}
+              aria-label="Данные прошлой сессии"
+              title="Есть несохранённые данные из прошлой сессии"
             />
           )}
         </h2>
@@ -324,21 +260,18 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
           {/* Слот для дополнительных кнопок от конкретной формы (напр. «Печать»).
               Регистрируются через usePaneHeaderActions(paneId, <…/>). */}
           <div ref={headerSlot} className={styles.PaneItemHeaderActionsSlot} />
-          {showDirtyButton && (
-            <DirtyButton
-              onClick={handleDirtyClick}
-              active={showDiff}
-              className={dirtyButtonClass}
-              title={dirtyButtonTitle}
+          {showStashButton && (
+            <ReloadButton
+              onClick={() => applyPaneStash(p.uniqId)}
+              className={styles.PaneItemStashButton}
+              title="Восстановить данные из прошлой сессии"
             />
           )}
           {hasToolbar && <ReloadButton onClick={onReload} />}
           <CloseButton onClick={onClose} />
         </div>
       </div>
-      <PaneScopeProvider paneId={p.uniqId}>
-        <Component {...p} />
-      </PaneScopeProvider>
+      <Component {...p} />
       {hasToolbar && <div className={styles.PaneItemBottomToolbar}>
         <ToolbarSlot ref={slot} />
       </div>}
@@ -451,40 +384,9 @@ const NavbarPaneBell: FC = () => {
   const [showNotes, setShowNotes] = useState(false);
   const bellRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const prevCountRef = useRef(notifications.length);
-  const autoOpenRef = useRef(false);
-  const hoverRef = useRef(false);
 
   // Закрыть попover при смене панели
   useEffect(() => { setShowNotes(false); }, [activePane]);
-
-  // Авто-открыть попover при появлении новых уведомлений
-  useEffect(() => {
-    if (notifications.length > prevCountRef.current) {
-      setShowNotes(true);
-      autoOpenRef.current = true;
-    }
-    prevCountRef.current = notifications.length;
-  }, [notifications.length]);
-
-  // Авто-скрыть через 6 сек если открыт автоматически (но не пока hover)
-  useEffect(() => {
-    if (!showNotes || !autoOpenRef.current) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const schedule = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (!hoverRef.current) {
-          setShowNotes(false);
-          autoOpenRef.current = false;
-        } else {
-          schedule();
-        }
-      }, 6000);
-    };
-    schedule();
-    return () => { if (timer) clearTimeout(timer); };
-  }, [showNotes]);
 
   // Закрыть попover при клике вне
   useEffect(() => {
@@ -501,23 +403,19 @@ const NavbarPaneBell: FC = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, [showNotes]);
 
-  // Колокольчик теперь отвечает ТОЛЬКО за обычные уведомления; индикация
-  // несохранённых изменений вынесена в DirtyButton (PaneItemHeaderToolbar).
-  const showBell = notifications.length > 0;
-
   const openJournal = useCallback(() => {
     setShowNotes(false);
     addPane({ component: NotificationsList, label: "Центр уведомлений" });
   }, [addPane]);
 
-  if (!activePane || !showBell) return null;
+  if (!activePane || notifications.length === 0) return null;
 
   return (
     <div className={styles.PaneNoteBellWrap}>
       <button
         ref={bellRef}
         className={[styles.NavbarBellBtn, styles.PaneNoteBell].join(" ")}
-        onClick={() => { autoOpenRef.current = false; setShowNotes((v) => !v); }}
+        onClick={() => setShowNotes((v) => !v)}
         title="Уведомления активной панели"
         type="button"
       >
@@ -525,19 +423,12 @@ const NavbarPaneBell: FC = () => {
           <path d="M8 1.5a4 4 0 0 0-4 4v2.7L2.7 10.5a.75.75 0 0 0 .53 1.28h9.54a.75.75 0 0 0 .53-1.28L12 8.2V5.5a4 4 0 0 0-4-4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
           <path d="M6.5 12.5a1.5 1.5 0 0 0 3 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
         </svg>
-        {notifications.length > 0 && (
-          <span className={styles.PaneNoteBadge}>{notifications.length}</span>
-        )}
+        <span className={styles.PaneNoteBadge}>{notifications.length}</span>
       </button>
       {showNotes && (
-        <div
-          ref={popoverRef}
-          className={styles.PaneNotePopover}
-          onMouseEnter={() => { hoverRef.current = true; }}
-          onMouseLeave={() => { hoverRef.current = false; }}
-        >
+        <div ref={popoverRef} className={styles.PaneNotePopover}>
           <div className={styles.PaneNotePopoverHeader}>
-            <span>Уведомления</span>
+            <span>Уведомления панели</span>
             <button className={styles.PaneNoteJournalLink} onClick={openJournal} type="button">
               Журнал ➜
             </button>
@@ -556,6 +447,16 @@ const NavbarPaneBell: FC = () => {
               <span className={styles.PaneNoteIcon}>{n.type === "error" ? "❌" : n.type === "warning" ? "⚠️" : "ℹ️"}</span>
               <span className={styles.PaneNoteText}>
                 {n.text}
+                {n.ref && canOpenByRef(n.ref.endpoint) && (
+                  <button
+                    className={styles.PaneNoteOpenBtn}
+                    type="button"
+                    onClick={() => {
+                      void openFormByRef(n.ref!, addPane);
+                      setShowNotes(false);
+                    }}
+                  >Открыть ➜</button>
+                )}
                 {n.actions && n.actions.length > 0 && !n.resolved && (
                   <span className={styles.PaneNoteActions}>
                     {n.actions.map((a, i) => (
@@ -639,6 +540,12 @@ export const Navbar: React.FC = () => {
         >
           <span />
         </button>
+
+        {/* Логотип приложения */}
+        <div className={styles.NavbarLogo}>
+          <div className={styles.NavbarLogoIcon}>G</div>
+          {/* <span className={styles.NavbarLogoText}>Gidra</span> */}
+        </div>
 
         {/* Десктопные навигационные ссылки (скрыты на мобильных через CSS) */}
         {props.map(nav => (

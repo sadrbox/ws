@@ -110,6 +110,9 @@ export function computeNextActiveRowId<R extends TNavRow>(
 // Колоночная (cell-level) навигация
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Виртуальный идентификатор колонки чекбокса (выбор строки). */
+export const CHECKBOX_COL_ID = "__checkbox";
+
 export type TCellNavDirection = "left" | "right";
 
 /**

@@ -172,7 +172,6 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
         isLoading={form.isLoading}
         isInitialLoading={form.isInitialLoading}
         readonly={!access.canWrite}
-        isDirty={form.isDirty}
       />
     );
   };

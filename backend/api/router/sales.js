@@ -7,7 +7,7 @@ const router = express.Router();
 
 const MODEL = "sale";
 const ROUTE = "sales";
-const TEXT_FIELDS = ["description"];
+const TEXT_FIELDS = ["comment"];
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -163,7 +163,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		}
 		const {
 			date,
-			description,
+			comment,
 			amount,
 			amountWithoutVat,
 			vatAmount,
@@ -177,7 +177,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		const item = await prisma[MODEL].create({
 			data: {
 				date: date ? new Date(date) : new Date(),
-				description: description?.trim() ?? null,
+				comment: comment?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
 				amountWithoutVat:
 					amountWithoutVat != null ? parseFloat(amountWithoutVat) : null,
@@ -214,7 +214,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
 		const strFields = [
-			"description",
+			"comment",
 			"organizationUuid",
 			"counterpartyUuid",
 			"contractUuid",

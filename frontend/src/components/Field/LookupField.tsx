@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import styles from "./Field.module.scss";
 import { fetchList } from "src/services/offlineDataService";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
-import { useFieldDirty, useCellFieldState } from "src/hooks/useDirtyHighlight";
+import { useCellFieldState } from "src/hooks/useDirtyHighlight";
 import { useFormRequiredScope } from "src/hooks/useFormRequired";
 import { useAppContext } from "src/app";
 import SelectPaneWrapper from "./SelectPaneWrapper";
@@ -153,9 +153,6 @@ const LookupField: FC<LookupFieldProps> = ({
   const isFormRequired = !isTable && formRequired.requiredKeys.has(tail);
   const effectiveRequired = required || !!cellState.required || isFormRequired;
   const effectiveError = error || !!cellState.error;
-
-  const rawDirty = useFieldDirty(name);
-  const dirty = (effectiveRequired && isEmpty) || effectiveError ? {} : rawDirty;
 
   const wrapperClass = [
     isTable ? `${styles.FieldWrapper} ${styles.tableVariant}` : styles.FieldWrapper,
@@ -488,7 +485,6 @@ const LookupField: FC<LookupFieldProps> = ({
           minWidth: minWidth ?? "none",
         }}
         ref={wrapperRef}
-        {...dirty}
       >
         {!isTable && label && (
           <label htmlFor={name} className={styles.FieldLabel}>

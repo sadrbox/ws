@@ -5,7 +5,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { getFormatDateOnly } from "src/utils/main.module";
 import ModelList from "src/components/ModelList";
-import { Icon } from "src/components/IconButton/icons";
+import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { createInvoiceLikeForm } from "src/models/_shared/createInvoiceLikeForm";
 
 const MODEL_ENDPOINT = "payment-invoices";
@@ -33,18 +33,7 @@ const PaymentInvoicesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: T
     getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
     variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
     defaultSort={{ id: "desc" }}
-    renderCell={(row, col) => {
-      if (col.identifier === "posted") {
-        const isPosted = row.posted === true;
-        return (
-          <span title={isPosted ? "Документ проведён" : "Не проведён"}>
-            <Icon name={isPosted ? "posted" : "notPosted"} width={17} height={17}
-              style={{ color: isPosted ? "#10b981" : "#9ca3af", flexShrink: 0, display: "flex" }} />
-          </span>
-        );
-      }
-      return undefined;
-    }}
+    renderCell={renderPostedCell}
   />
 );
 PaymentInvoicesList.displayName = LIST_NAME;

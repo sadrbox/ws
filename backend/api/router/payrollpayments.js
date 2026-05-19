@@ -6,7 +6,7 @@ import { handleDelete } from "../../utils/checkReferences.js";
 const router = express.Router();
 const MODEL = "payrollPayment";
 const ROUTE = "payroll-payments";
-const TEXT_FIELDS = ["description", "period"];
+const TEXT_FIELDS = ["comment", "period"];
 const INCLUDE = {
 	employee: true,
 	organization: true,
@@ -139,7 +139,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		}
 		const {
 			date,
-			description,
+			comment,
 			period,
 			employeeUuid,
 			organizationUuid,
@@ -149,7 +149,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		const item = await prisma[MODEL].create({
 			data: {
 				date: date ? new Date(date) : new Date(),
-				description: description?.trim() ?? null,
+				comment: comment?.trim() ?? null,
 				period: period?.trim() ?? null,
 				employeeUuid: employeeUuid || null,
 				organizationUuid: organizationUuid || null,
@@ -174,7 +174,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
 		const strFields = [
-			"description",
+			"comment",
 			"period",
 			"employeeUuid",
 			"organizationUuid",

@@ -1,19 +1,14 @@
 /**
- * useFormRequired — контекст для автоматической подсветки обязательных полей
- * в формах документов.
+ * useFormRequired — контекст для автоматической подсветки обязательных полей.
  *
- * Принцип: FormRequiredScope оборачивает форму и принимает тип документа +
- * флаг posted. При posted=true активирует набор ключей из REQUIRED_FIELDS_MAP.
+ * FormRequiredScope оборачивает форму и предоставляет набор ключей обязательных
+ * полей из REQUIRED_FIELDS_MAP. Подсветка активна всегда (не только при posted=true).
  * Field-компоненты читают контекст через useFormRequiredScope() и добавляют
- * класс FieldRequired к FieldWrapper, когда tail имени поля совпадает с
- * обязательным ключом и значение пустое.
+ * класс FieldRequired к FieldWrapper, когда tail имени поля совпадает с ключом
+ * и значение пустое.
  *
- * Сопоставление имён работает по tail — части после последнего `_`,
- * аналогично useFieldDirty: поле с name="${formUid}_organizationUuid"
- * → tail "organizationUuid" → совпадает с ключом "organizationUuid".
- *
- * Механизм единый для всех Field* компонентов через useFieldBase (Field/index.tsx)
- * и отдельно в LookupField и FieldTextarea.
+ * Сопоставление имён работает по tail — части после последнего `_`:
+ * поле `${formUid}_organizationUuid` → tail "organizationUuid" → совпадает.
  */
 import { createContext, FC, ReactNode, useContext, useMemo } from "react";
 import type { DocumentType } from "src/utils/validatePostedDocument";
@@ -29,12 +24,11 @@ const FormRequiredContext = createContext<FormRequiredState>(EMPTY);
 
 export const FormRequiredScope: FC<{
   docType: DocumentType;
-  isPosted: boolean;
   children: ReactNode;
-}> = ({ docType, isPosted, children }) => {
+}> = ({ docType, children }) => {
   const value = useMemo<FormRequiredState>(
-    () => isPosted ? { requiredKeys: new Set(REQUIRED_FIELDS_MAP[docType]) } : EMPTY,
-    [docType, isPosted],
+    () => ({ requiredKeys: new Set(REQUIRED_FIELDS_MAP[docType]) }),
+    [docType],
   );
   return (
     <FormRequiredContext.Provider value={value}>

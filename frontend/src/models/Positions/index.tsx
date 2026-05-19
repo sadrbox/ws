@@ -10,7 +10,7 @@ const { Form: PositionsForm, List: PositionsList } = createSimpleModel({
   accessRight: "Position",
   fields: [
     { key: "shortName", label: "Наименование *", required: true, requiredMessage: "Наименование обязательно" },
-    { key: "description", label: "Описание" },
+    { key: "comment", label: "Описание" },
   ],
 });
 

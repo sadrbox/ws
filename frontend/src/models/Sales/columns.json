@@ -18,7 +18,7 @@
 		"type": "string",
 		"position": 2,
 		"visible": false,
-		"inlist": true,
+		"inlist": false,
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left"
@@ -35,18 +35,7 @@
 		"inlist": true,
 		"position": 3
 	},
-	{
-		"identifier": "description",
-		"type": "string",
-		"name": "Описание",
-		"width": "200px",
-		"minWidth": "80px",
-		"alignment": "left",
-		"hint": "Описание",
-		"visible": true,
-		"inlist": true,
-		"position": 4
-	},
+
 	{
 		"identifier": "amount",
 		"type": "number",
@@ -106,5 +95,17 @@
 		"visible": true,
 		"inlist": true,
 		"position": 10
+	},
+	{
+		"identifier": "comment",
+		"type": "string",
+		"name": "Описание",
+		"width": "200px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Описание",
+		"visible": true,
+		"inlist": true,
+		"position": 4
 	}
 ]

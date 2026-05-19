@@ -6,6 +6,7 @@ import {
   clearNotificationJournal,
   type NotificationJournalEntry,
 } from "src/hooks/useFormStore";
+import { openFormByRef, canOpenByRef } from "src/utils/openFormByRef";
 import styles from "./NotificationToast.module.scss";
 
 /**
@@ -74,11 +75,16 @@ const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
   }, [addPane, markAllRead]);
 
   const openEntry = useCallback(
-    (_entry: NotificationJournalEntry) => {
-      // Универсального открытия по endpoint нет — направляем в центр уведомлений.
-      openCenter();
+    (entry: NotificationJournalEntry) => {
+      if (entry.ref && canOpenByRef(entry.ref.endpoint)) {
+        void openFormByRef(entry.ref, addPane, entry.paneLabel);
+        setIsOpen(false);
+        markAllRead();
+      } else {
+        openCenter();
+      }
     },
-    [openCenter],
+    [openCenter, addPane, markAllRead],
   );
 
   if (!userUuid) return null;
@@ -120,26 +126,41 @@ const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
                 {t("noNotifications") || "Нет уведомлений"}
               </div>
             ) : (
-              recent.map((n) => (
-                <div
-                  key={n.id}
-                  className={`${styles.Item} ${n.timestamp > lastSeenAt ? styles.ItemSlideIn : ""
-                    }`}
-                >
+              recent.map((n) => {
+                const hasLink = !!n.ref && canOpenByRef(n.ref.endpoint);
+                return (
                   <div
-                    className={styles.ItemContent}
-                    onClick={() => openEntry(n)}
+                    key={n.id}
+                    className={`${styles.Item} ${n.timestamp > lastSeenAt ? styles.ItemSlideIn : ""}`}
                   >
-                    <div className={styles.ItemTitle}>
-                      {n.paneLabel || n.type}
-                    </div>
-                    <div className={styles.ItemMessage}>{n.text}</div>
-                    <div className={styles.ItemTime}>
-                      {new Date(n.timestamp).toLocaleString("ru-RU")}
+                    <div className={styles.ItemContent}>
+                      <div className={styles.ItemHeader}>
+                        <span className={`${styles.TypeBadge} ${styles[`type_${n.type}`]}`}>{n.type}</span>
+                        {n.paneLabel && <span className={styles.PaneLabel}>{n.paneLabel}</span>}
+                      </div>
+                      <div className={styles.ItemMessage}>
+                        {n.text.split("\n").map((line, i) => (
+                          <div key={i}>{line}</div>
+                        ))}
+                      </div>
+                      <div className={styles.ItemFooter}>
+                        <span className={styles.ItemTime}>
+                          {new Date(n.timestamp).toLocaleString("ru-RU")}
+                        </span>
+                        {hasLink && (
+                          <button
+                            className={styles.ItemOpenBtn}
+                            type="button"
+                            onClick={() => openEntry(n)}
+                          >
+                            Открыть ➜
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 

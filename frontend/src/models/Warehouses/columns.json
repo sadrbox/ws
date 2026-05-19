@@ -52,7 +52,7 @@
 		"inlist": true
 	},
 	{
-		"identifier": "description",
+		"identifier": "comment",
 		"type": "string",
 		"name": "Описание",
 		"width": "300px",
