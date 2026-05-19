@@ -7,7 +7,7 @@ import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app";
@@ -110,11 +110,9 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     {
-      id: "general", label: translate("general"), component: (
+      id: "tab-details", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
-            </GroupRow>
             <GroupCol>
               <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
               <Field label="IBAN *" name={`${form.formUid}_iban`} minWidth="339px" value={form.fields.iban} onChange={e => form.setField("iban", e.target.value)} disabled={form.isLoading} />

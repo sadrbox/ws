@@ -413,7 +413,7 @@ router.post(`/${ROUTE}/safe-delete`, async (req, res) => {
 			refs.sort((a, b) => b.total - a.total);
 			return res.status(409).json({
 				success: false,
-				message: `Нельзя удалить: запись используется в ${totalRefs} ссылках`,
+				message: `Невозможно удалить — запись используется в ${totalRefs} ссылках`,
 				refs,
 				totalRefs,
 			});

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useSyncExternalStore, useEffect } from "react";
+import { useCallback, useRef, useSyncExternalStore, useEffect, useMemo } from "react";
 import { useAppContext } from "src/app";
 import { isNetworkError } from "src/services/networkUtils";
 import { getIsOnline } from "src/services/networkStatus";
@@ -194,13 +194,12 @@ function createFormStore<F extends object>(
 	};
 
 	// Пробуем восстановить из localStorage.
-	// pendingStash — несохранённые данные ПРЕДЫДУЩЕЙ сессии (другой вкладки
-	// или прошлой работы пользователя). Не подменяем поля автоматически —
-	// пользователь явно восстанавливает их кликом кнопки stash.
-	// Если же черновик принадлежит ТЕКУЩЕЙ вкладке (был сохранён до F5 /
-	// случайного перезагрузки) — применяем его автоматически. Это и есть
-	// «бесшовное переживание перезагрузки» для пользователя.
-	let hadStoredData = false;
+	// Несохранённые данные ВСЕГДА кладём в stash — пользователь явно
+	// восстанавливает их кликом кнопки stash, независимо от того,
+	// принадлежат ли они текущей вкладке (F5) или другой сессии.
+	// Авто-восстановление после F5 было убрано: форма должна показывать
+	// актуальные данные с сервера, а не потенциально устаревшие из памяти.
+	const hadStoredData = false;
 	let pendingStash: { fields: F; tables: Record<string, TableState> } | null =
 		null;
 	const restored = restoreFromSession<F>(currentStorageKey);
@@ -215,15 +214,7 @@ function createFormStore<F extends object>(
 				return t;
 			})(),
 		};
-		if (restored.fromCurrentSession) {
-			// Та же вкладка после F5 — авто-применяем черновик в state.
-			state = { ...state, fields: merged.fields, tables: merged.tables };
-			hadStoredData = true;
-		} else {
-			// Другая вкладка / прошлая сессия — кладём в stash, ждём явного
-			// восстановления через кнопку stash.
-			pendingStash = merged;
-		}
+		pendingStash = merged;
 	}
 
 	// snapshotReady = false пока серверный snapshot не загружен (при hadStoredData).
@@ -233,9 +224,7 @@ function createFormStore<F extends object>(
 	// Флаг: первая загрузка с сервера завершена (успех ИЛИ ошибка).
 	// Используется для отображения скелетона в ModelForm вместо мигания
 	// disabled-полей. Для новых записей (без uuid) — сразу true, фетч не нужен.
-	// Если данные восстановлены из sessionStorage (hadStoredData) — тоже true,
-	// поскольку у нас уже есть что показать (фоновый фетч обновит savedSnapshot).
-	let initialFetchDone = !uuid || hadStoredData;
+	let initialFetchDone = !uuid;
 	function isInitialFetchDone(): boolean {
 		return initialFetchDone;
 	}
@@ -462,15 +451,7 @@ function createFormStore<F extends object>(
 		_paneLabel = label;
 	}
 	function setPaneUniqId(id: string | undefined): void {
-		if (_paneUniqId) {
-			unregisterPaneStashActions(_paneUniqId);
-			setPaneHasStash(_paneUniqId, false);
-		}
 		_paneUniqId = id;
-		if (id) {
-			registerPaneStashActions(id, applyPendingStash, clearPendingStash);
-			setPaneHasStash(id, hasPendingStash());
-		}
 	}
 
 	/** Установить ошибку: пушит уведомление в колокольчик панели */
@@ -535,7 +516,11 @@ function createFormStore<F extends object>(
 				}
 			}
 
-			const mapped = await Promise.resolve(mapServerToForm(d, state.fields));
+			const mapped = await Promise.resolve(
+				snapshotOnly
+					? mapServerToForm(d, undefined)   // pure server state — don't let dirty prev bleed into snapshot
+					: mapServerToForm(d, state.fields),
+			);
 
 			if (snapshotOnly) {
 				savedSnapshot = stableStringify({
@@ -590,6 +575,12 @@ function createFormStore<F extends object>(
 			// Даже при ошибке — снимаем скелетон, чтобы пользователь увидел
 			// сообщение об ошибке вместо бесконечной анимации загрузки.
 			markInitialFetchDone();
+			// Если снапшот не был установлен (F5-восстановление + сервер недоступен),
+			// разблокируем isDirty — иначе dirty-индикатор никогда не покажется.
+			if (!snapshotReady) {
+				snapshotReady = true;
+				notify();
+			}
 		}
 	}
 
@@ -754,10 +745,6 @@ function createFormStore<F extends object>(
 		for (const k of previousStorageKeys) storeCache.delete(k);
 		previousStorageKeys.length = 0;
 		listeners.clear();
-		if (_paneUniqId) {
-			unregisterPaneStashActions(_paneUniqId);
-			setPaneHasStash(_paneUniqId, false);
-		}
 	}
 
 	/**
@@ -779,10 +766,11 @@ function createFormStore<F extends object>(
 	}
 
 	// ── Pending stash (несохранённые данные из прошлой сессии) ─────────────
+	// Используется только при открытии формы через "Несохранённые записи".
 	function hasPendingStash(): boolean {
 		return pendingStash !== null;
 	}
-	/** Применить stash к state (восстановить последнее dirty-состояние). */
+	/** Применить stash к state. Вызывается при открытии через "Несохранённые записи". */
 	function applyPendingStash(): void {
 		if (!pendingStash) return;
 		state = {
@@ -793,14 +781,30 @@ function createFormStore<F extends object>(
 		pendingStash = null;
 		notify();
 		schedulePersist();
-		if (_paneUniqId) setPaneHasStash(_paneUniqId, false);
 	}
-	/** Сбросить stash (пользователь отказался восстанавливать). */
+	/** Сбросить stash без применения. */
 	function clearPendingStash(): void {
 		if (!pendingStash) return;
 		pendingStash = null;
 		notify();
-		if (_paneUniqId) setPaneHasStash(_paneUniqId, false);
+	}
+
+	/**
+	 * Возвращает Set ключей полей, значения которых отличаются от сохранённого snapshot.
+	 * Используется для подсветки изменённых полей при открытии через "Несохранённые записи".
+	 */
+	const EMPTY_KEY_SET = new Set<string>();
+	function getDirtyFieldKeys(): Set<string> {
+		if (!snapshotReady) return EMPTY_KEY_SET;
+		const snap = parsedSnapshot.fields as Record<string, unknown>;
+		const curr = state.fields as Record<string, unknown>;
+		const dirty = new Set<string>();
+		for (const key of Object.keys(curr)) {
+			if (stableStringify(curr[key]) !== stableStringify(snap[key])) {
+				dirty.add(key);
+			}
+		}
+		return dirty;
 	}
 
 	const storeResult = {
@@ -842,10 +846,11 @@ function createFormStore<F extends object>(
 		migrateStorageKey,
 		getStorageKey,
 
-		// Pending stash (несохранённые данные прошлой сессии)
+		// Pending stash (несохранённые данные прошлой сессии — только для UnsavedForms)
 		hasPendingStash,
 		applyPendingStash,
 		clearPendingStash,
+		getDirtyFieldKeys,
 
 		// Cleanup
 		destroy,
@@ -918,74 +923,44 @@ export const formStoreAPI = (() => {
 	};
 })();
 
+
 // ═══════════════════════════════════════════════════════════════════════════
-// PENDING STASH STORE — реактивный Set<uniqId> для индикации, что в форме
-// есть несохранённые данные из прошлой сессии (доступные к восстановлению
-// через кнопку stash в PaneItemHeaderToolbar).
+// DIRTY PANE STORE — реактивный Set<uniqId> для отображения индикатора
+// «есть несохранённые изменения» на вкладке панели.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const stashSet = new Set<string>();
-const stashListeners = new Set<() => void>();
+const dirtySet = new Set<string>();
+const dirtyListeners = new Set<() => void>();
 
-function notifyStashListeners(): void {
-	for (const l of stashListeners) l();
+function notifyDirtyListeners(): void {
+	for (const l of dirtyListeners) l();
 }
 
-export function setPaneHasStash(uniqId: string, has: boolean): void {
-	const had = stashSet.has(uniqId);
-	if (has && !had) {
-		stashSet.add(uniqId);
-		notifyStashListeners();
-	} else if (!has && had) {
-		stashSet.delete(uniqId);
-		notifyStashListeners();
+export function setPaneDirty(uniqId: string, isDirty: boolean): void {
+	const was = dirtySet.has(uniqId);
+	if (isDirty && !was) {
+		dirtySet.add(uniqId);
+		notifyDirtyListeners();
+	} else if (!isDirty && was) {
+		dirtySet.delete(uniqId);
+		notifyDirtyListeners();
 	}
 }
 
-function subscribeStash(listener: () => void): () => void {
-	stashListeners.add(listener);
+function subscribeDirty(listener: () => void): () => void {
+	dirtyListeners.add(listener);
 	return () => {
-		stashListeners.delete(listener);
+		dirtyListeners.delete(listener);
 	};
 }
 
-/** Хук: есть ли в форме несохранённые данные из прошлой сессии. */
-export function usePaneHasPendingStash(uniqId: string): boolean {
+/** Хук: есть ли несохранённые изменения в форме (для индикатора на вкладке). */
+export function usePaneIsDirty(uniqId: string): boolean {
 	return useSyncExternalStore(
-		subscribeStash,
-		() => stashSet.has(uniqId),
+		subscribeDirty,
+		() => dirtySet.has(uniqId),
 		() => false,
 	);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// APPLY STASH REGISTRY — даёт кнопке возможность вызвать applyPendingStash
-// конкретной панели без прямого доступа к её store.
-// ═══════════════════════════════════════════════════════════════════════════
-
-const paneApplyStashMap = new Map<string, () => void>();
-const paneClearStashMap = new Map<string, () => void>();
-
-export function registerPaneStashActions(
-	uniqId: string,
-	apply: () => void,
-	clear: () => void,
-): void {
-	paneApplyStashMap.set(uniqId, apply);
-	paneClearStashMap.set(uniqId, clear);
-}
-
-export function unregisterPaneStashActions(uniqId: string): void {
-	paneApplyStashMap.delete(uniqId);
-	paneClearStashMap.delete(uniqId);
-}
-
-export function applyPaneStash(uniqId: string): void {
-	paneApplyStashMap.get(uniqId)?.();
-}
-
-export function clearPaneStash(uniqId: string): void {
-	paneClearStashMap.get(uniqId)?.();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1188,6 +1163,7 @@ export function usePaneNotifications(uniqId: string): PaneNotification[] {
 }
 
 const emptyNotes: PaneNotification[] = [];
+const EMPTY_DIRTY_KEYS = new Set<string>();
 
 function getOrCreate<F extends object>(
 	defaultFields: F,
@@ -1323,6 +1299,10 @@ export interface UseFormStoreReturn<F extends object> {
 	setError: (msg: string | null) => void;
 	clearFormStorage: () => void;
 	submit: () => Promise<boolean>;
+	/** true если форма открыта через список "Несохранённые записи" */
+	isFromUnsaved: boolean;
+	/** Ключи полей, значения которых отличаются от сохранённого состояния (для подсветки) */
+	unsavedFields: Set<string>;
 }
 
 /**
@@ -1371,6 +1351,9 @@ export function useFormStore<F extends object>(
 		((data as any)?._formStorageKey as string) ||
 		`${STORAGE_PREFIX}${userId}:${storageKey}:${uuid ?? uniqId ?? "new"}`;
 	const effectiveDefaults = initialFields ?? defaultFields;
+	// Открыта через "Несохранённые записи" — нужно автоматически применить stash
+	// и подсветить поля с изменёнными значениями.
+	const isFromUnsaved = !!((data as any)?._formStorageKey);
 
 	// Создаём/получаем store из кэша.
 	// Set из derivedFields передаётся в createFormStore при ПЕРВОМ создании
@@ -1395,6 +1378,27 @@ export function useFormStore<F extends object>(
 			// При размонтировании панели — отвязать обработчики, чтобы
 			// не висели подписки на закрытую вкладку.
 			store.setPaneUniqId(undefined);
+		};
+	}, [store, uniqId]);
+
+	// ── Открыто через "Несохранённые записи": применяем stash сразу при монтировании ──
+	useEffect(() => {
+		if (isFromUnsaved && store.hasPendingStash()) {
+			store.applyPendingStash();
+		}
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []); // только при монтировании
+
+	// ── Dirty indicator: обновляем глобальный dirtySet при каждом изменении store ──
+	useEffect(() => {
+		if (!uniqId) return;
+		setPaneDirty(uniqId, store.isDirty());
+		const unsub = store.subscribe(() => {
+			setPaneDirty(uniqId, store.isDirty());
+		});
+		return () => {
+			unsub();
+			setPaneDirty(uniqId, false);
 		};
 	}, [store, uniqId]);
 
@@ -1472,10 +1476,6 @@ export function useFormStore<F extends object>(
 		return unregister;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [uniqId, store]);
-
-	// ── Несохранённые данные из прошлой сессии больше не вызывают уведомление.
-	// Они хранятся в store.pendingStash и доступны к восстановлению через
-	// кнопку stash в PaneItemHeaderToolbar (см. UI/index.tsx → applyPaneStash).
 
 	// ── Гранулярный useField ──
 	const useField = useCallback(
@@ -1753,6 +1753,14 @@ export function useFormStore<F extends object>(
 		storeCache.delete(store.getStorageKey());
 	}, [store]);
 
+	// Поля с несохранёнными изменениями — только когда форма открыта через "Несохранённые записи".
+	// Реактивно пересчитывается при изменении snapshot (после загрузки серверного snapshot).
+	const unsavedFields = useMemo(
+		() => (isFromUnsaved && store.isSnapshotReady() ? store.getDirtyFieldKeys() : EMPTY_DIRTY_KEYS),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[snapshot, isFromUnsaved, store],
+	);
+
 	return {
 		store,
 
@@ -1796,5 +1804,8 @@ export function useFormStore<F extends object>(
 		setError: store.setError,
 		clearFormStorage,
 		submit,
+		// Открыто через "Несохранённые записи"
+		isFromUnsaved,
+		unsavedFields,
 	};
 }

@@ -95,6 +95,22 @@
 	// background-color: red;
 }
 
+// ── Unsaved changes highlight — поле открыто через "Несохранённые записи" ──
+// Лёгкая подсветка label синим, без изменения border (не путать с required/error).
+.FieldDirty:not(.tableVariant) {
+	.FieldLabel {
+		color: #1976d2;
+		font-weight: 500;
+	}
+
+	.FieldInputWrapper,
+	.FieldSelectWrapper,
+	.FieldTextareaInputWrapper {
+		border-color: #90caf9;
+		background-color: rgba(#1976d2, 0.04);
+	}
+}
+
 // ── Required / Error state — класс на FieldWrapper, стили на потомках ──────
 // Форма (не таблица): граница + лёгкий фон
 .FieldRequired:not(.tableVariant) {

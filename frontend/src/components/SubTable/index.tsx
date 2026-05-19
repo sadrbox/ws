@@ -11,7 +11,7 @@ import {
   FC, useMemo, useCallback, useState, useEffect, useRef, ReactNode,
   createContext, useContext, type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { getModelColumns, getFormatColumnValue, getColumnAlignment, sortTableRows } from "src/components/Table/services";
+import { getModelColumns, getFormatColumnValue, getColumnAlignment, sortTableRows, matchRowBySearch } from "src/components/Table/services";
 import {
   CHECKBOX_COL_ID,
   computeNextActiveColId,
@@ -507,6 +507,8 @@ const SubTable: FC<SubTableProps> = ({
   );
   // Флаг: были ли initialPendingRows уже применены (мерж выполняется один раз)
   const pendingAppliedRef = useRef(false);
+  // Счётчик для принудительного запуска основного эффекта после применения stash
+  const [mergeTrigger, setMergeTrigger] = useState(0);
 
   // Сброс pendingAppliedRef когда pending очищается (после commit) —
   // это позволяет повторный мерж при следующем восстановлении из sessionStorage.
@@ -538,6 +540,10 @@ const SubTable: FC<SubTableProps> = ({
       // Не полагаемся на setTimeout(invalidateQueries) в родителе — SubTable
       // сам гарантирует обновление кэша после коммита.
       void queryClient.invalidateQueries({ queryKey: [model] });
+    } else if (deferRemoteChanges && curLen > 0 && prevLen === 0) {
+      // stash применён — сбрасываем флаг мержа и запускаем основной эффект заново
+      pendingAppliedRef.current = false;
+      setMergeTrigger(v => v + 1);
     }
   }, [deferRemoteChanges, initialPendingRows, queryClient, model]);
 
@@ -655,7 +661,7 @@ const SubTable: FC<SubTableProps> = ({
     if (deferRemoteChanges && (hadDirtyRows || contentChanged)) {
       notifyParent(clean);
     }
-  }, [allItems, dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allItems, dataUpdatedAt, mergeTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = useMemo(() => {
     return cachedRowsRef.current;
@@ -935,25 +941,13 @@ const SubTable: FC<SubTableProps> = ({
     if (!search) return sorted;
     // Если задан кастомный filterRows — используем его
     if (filterRows) return filterRows(sorted, search);
-    // Иначе — дефолтный поиск по всем полям строки (включая вложенные объекты)
+    // Иначе — поиск только по видимым колонкам (включая ссылочные поля)
     // Нормализуем слова поиска: заменяем запятую на точку, чтобы "3,5" находило числа "3.5"
     const words = search.toLowerCase().split(/\s+/).filter(Boolean)
       .map(w => w.replace(',', '.'));
-    return sorted.filter((row: TDataItem) => {
-      const parts: string[] = [];
-      const collect = (obj: unknown) => {
-        if (obj == null) return;
-        if (typeof obj === "object") {
-          for (const v of Object.values(obj as Record<string, unknown>)) collect(v);
-        } else {
-          parts.push(String(obj as string | number | boolean).toLowerCase());
-        }
-      };
-      collect(row);
-      const haystack = parts.join(" ");
-      return words.every(w => haystack.includes(w));
-    });
-  }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow]);
+    const visibleCols = columns.filter(c => c.visible);
+    return sorted.filter((row: TDataItem) => matchRowBySearch(row, visibleCols, words));
+  }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow, columns]);
 
   // Синхронизируем ref c актуальным displayRows (используется в ctx.rows
   // и в клавиатурном обработчике для навигации).

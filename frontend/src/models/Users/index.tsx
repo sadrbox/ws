@@ -80,11 +80,9 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
       {
-        id: "general", label: translate("general"), component: (
+        id: "tab-details", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
-              <GroupRow style={{ justifyContent: "space-between", marginTop: "6px" }}>
-              </GroupRow>
               <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
                   <GroupRow>

@@ -379,10 +379,10 @@ const App: React.FC = () => {
   // ────────────────────────────────────────────────
   const { confirm, confirmState } = useConfirm();
 
-  const reloadPane = useCallback((uniqId: string) => {
+  const reloadPane = useCallback(async (uniqId: string) => {
     const api = formStoreAPI.get(uniqId);
     if (api?.reload) {
-      void api.reload();
+      await api.reload();
     }
   }, []);
 

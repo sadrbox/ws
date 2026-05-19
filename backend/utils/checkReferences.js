@@ -211,8 +211,8 @@ export const REFERENCE_LABELS = {
  */
 export function formatReferencesMessage(refs) {
 	if (!refs.length) return "";
-	const parts = refs.map((r) => `${r.label} (${r.count})`);
-	return `Запись используется в: ${parts.join(", ")}. Сначала удалите или измените связанные записи.`;
+	const lines = refs.map((r) => `• ${r.label}: ${r.count} шт.`);
+	return `Невозможно удалить — запись используется в других документах:\n${lines.join("\n")}`;
 }
 
 /**
@@ -294,8 +294,7 @@ export async function handleDelete({
 		if (error.code === "P2003") {
 			return res.status(409).json({
 				success: false,
-				message:
-					"Невозможно удалить: запись используется в других данных. Сначала удалите или измените связанные записи.",
+				message: "Невозможно удалить — запись используется в других документах",
 			});
 		}
 		console.error(`DELETE ${modelName} error:`, error);

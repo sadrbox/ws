@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
+import { translate } from "src/i18";
 import type { TPane } from "src/app/types";
 import { FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
@@ -368,8 +369,8 @@ const SaleItemsStandaloneForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     {
-      id: "general",
-      label: "Основное",
+      id: "tab-details",
+      label: translate("general"),
       component: (
         <SaleItemsFieldsForm
           fields={form.fields}
@@ -438,8 +439,8 @@ const SaleItemsEmbeddedForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     {
-      id: "general",
-      label: "Основное",
+      id: "tab-details",
+      label: translate("general"),
       component: (
         <SaleItemsFieldsForm
           fields={fields}

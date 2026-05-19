@@ -112,7 +112,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => {
     const t: { id: string; label: string; component: React.ReactNode }[] = [
       {
-        id: "general", label: translate("general"), component: (
+        id: "tab-details", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>

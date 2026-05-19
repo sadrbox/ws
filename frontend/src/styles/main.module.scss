@@ -592,28 +592,16 @@ body {
 	display: contents;
 }
 
-.PaneItemStashDot {
+// Индикатор несохранённых изменений текущей сессии.
+.PaneItemDirtyDot {
 	display: inline-block;
-	width: 10px;
-	height: 10px;
+	width: 8px;
+	height: 8px;
 	border-radius: 50%;
 	background: #e8a030;
 	flex-shrink: 0;
-	box-shadow: 0 0 0 2px rgba(#e8a030, 0.25);
-	animation: stashPulse 1.5s ease-in-out infinite;
-}
-
-// Кнопка восстановления данных из прошлой сессии (stash).
-.PaneItemStashButton {
-	color: #d48806;
-	background: rgba(#d48806, 0.08);
-	animation: stashPulse 1.5s ease-in-out infinite;
-
-	&:hover {
-		color: #c27400;
-		background: rgba(#d48806, 0.18);
-		animation: none;
-	}
+	margin-left: 4px;
+	vertical-align: middle;
 }
 
 .PaneItemBottomToolbar {
@@ -621,18 +609,6 @@ body {
 	flex-direction: row;
 	gap: 6px;
 	justify-content: flex-end;
-}
-
-@keyframes stashPulse {
-
-	0%,
-	100% {
-		opacity: 1;
-	}
-
-	50% {
-		opacity: 0.4;
-	}
 }
 
 .PaneHeaderControl {
@@ -1064,18 +1040,8 @@ body {
 		// height: $heightFieldInput - 10px;
 	}
 
-	.PaneTabItemStashDot {
-		display: inline-block;
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background-color: #e8a030;
-		margin-right: 4px;
-		flex: 0 0 auto;
-		box-shadow: 0 0 0 2px rgba(#e8a030, 0.25);
-		animation: stashPulse 1.5s ease-in-out infinite;
-	}
 }
+
 
 
 
@@ -1202,7 +1168,7 @@ body {
 
 @media (min-width: 601px) and (max-width: 900px) {
 	.FormWrapper {
-		flex-direction: row;
+		flex-direction: column;
 
 		.Form {
 			flex-direction: column;

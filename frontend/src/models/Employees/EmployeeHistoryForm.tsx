@@ -90,7 +90,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     {
-      id: "general", label: translate("general"), component: (
+      id: "tab-details", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
@@ -126,7 +126,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
               onClear={() => form.setFields({ positionUuid: "", positionName: "" } as any)}
               disabled={form.isLoading} />
             <FieldNumber label="Оклад" name={`${form.formUid}_salary`} width="180px"
-              value={Number(form.fields.salary)} onChange={e => form.setField("salary", e.target.value)}
+              value={form.fields.salary} onChange={e => form.setField("salary", e.target.value)}
               disabled={form.isLoading} step="0.1" textAlign="right" />
           </div>
           <GroupRow style={{ justifyContent: "left" }}>

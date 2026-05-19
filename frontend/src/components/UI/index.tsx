@@ -15,7 +15,7 @@ import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src
 import { ToolbarSlot } from 'src/components/Toolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
-import { usePaneNotifications, dismissPaneNotification, usePaneHasPendingStash, applyPaneStash } from 'src/hooks/useFormStore';
+import { usePaneNotifications, dismissPaneNotification, usePaneIsDirty } from 'src/hooks/useFormStore';
 import { openFormByRef, canOpenByRef } from 'src/utils/openFormByRef';
 import { CounterpartiesList } from 'src/models/Counterparties';
 import { ContactTypesList } from 'src/models/ContactTypes';
@@ -180,8 +180,8 @@ export const Panes: FC = () => {
 const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({ pane: p, isActive, onClose }) => {
   const { refCallback: slot } = usePaneToolbarSlot(p.uniqId);
   const { refCallback: headerSlot } = usePaneHeaderActionsSlot(p.uniqId);
-  const hasStash = usePaneHasPendingStash(p.uniqId);
   const hasToolbar = useHasToolbar(p.uniqId);
+  const isDirty = usePaneIsDirty(p.uniqId);
   const onReload = usePaneReload(p.uniqId);
   const Component = p.component as FC<any>;
 
@@ -239,9 +239,6 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
     };
   }, [isActive, p.uniqId]);
 
-  // Stash button: показывается если есть несохранённые данные из прошлой сессии.
-  const showStashButton = hasToolbar && hasStash;
-
   return (
     <div
       ref={paneRootRef}
@@ -250,11 +247,11 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
       <div className={styles.PaneItemHeader}>
         <h2 className={styles.PaneItemHeaderLabel}>
           {p.label}
-          {hasStash && (
+          {isDirty && (
             <span
-              className={styles.PaneItemStashDot}
-              aria-label="Данные прошлой сессии"
-              title="Есть несохранённые данные из прошлой сессии"
+              className={styles.PaneItemDirtyDot}
+              aria-label="Несохранённые изменения"
+              title="Есть несохранённые изменения"
             />
           )}
         </h2>
@@ -262,13 +259,6 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
           {/* Слот для дополнительных кнопок от конкретной формы (напр. «Печать»).
               Регистрируются через usePaneHeaderActions(paneId, <…/>). */}
           <div ref={headerSlot} className={styles.PaneItemHeaderActionsSlot} />
-          {showStashButton && (
-            <ReloadButton
-              onClick={() => applyPaneStash(p.uniqId)}
-              className={styles.PaneItemStashButton}
-              title="Восстановить данные из прошлой сессии"
-            />
-          )}
           {hasToolbar && <ReloadButton onClick={onReload} />}
           <CloseButton onClick={onClose} />
         </div>

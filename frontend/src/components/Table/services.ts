@@ -195,6 +195,52 @@ function getFormatNumericalID(n: number): string {
 	return n.toString();
 }
 
+/**
+ * Быстрый поиск строки по видимым колонкам.
+ *
+ * Ищет только по ВИДИМЫМ колонкам (visible=true), поддерживает ссылочные
+ * поля (объекты с вложенными данными, например unitOfMeasure.shortName).
+ * Слова поиска должны быть предварительно нормализованы (toLowerCase, trim,
+ * замена запятой на точку).
+ */
+export function matchRowBySearch(
+	row: TDataItem,
+	visibleColumns: TColumn[],
+	searchWords: string[],
+): boolean {
+	if (searchWords.length === 0) return true;
+	const parts: string[] = [];
+
+	const collectStrings = (obj: unknown) => {
+		if (obj == null) return;
+		if (typeof obj === "object") {
+			for (const v of Object.values(obj as Record<string, unknown>)) {
+				collectStrings(v);
+			}
+		} else if (typeof obj === "string" || typeof obj === "number" || typeof obj === "boolean") {
+			parts.push(String(obj).toLowerCase());
+		}
+	};
+
+	for (const col of visibleColumns) {
+		const rawValue = getNestedValue(row, col.identifier);
+		if (rawValue == null) continue;
+		if (typeof rawValue === "object") {
+			// Ссылочное поле — собираем все строковые значения из объекта
+			collectStrings(rawValue);
+		} else {
+			// Примитивное поле — используем форматированное значение
+			const formatted = getFormatColumnValue(row, col);
+			if (formatted !== "" && formatted != null) {
+				parts.push(String(formatted).toLowerCase());
+			}
+		}
+	}
+
+	const haystack = parts.join(" ");
+	return searchWords.every((w) => haystack.includes(w));
+}
+
 // Формат числа /////////////////////////////////////////////////////////////////////////
 export function getFormatNumerical(n: number): string {
 	const formater = new Intl.NumberFormat("ru-RU", {

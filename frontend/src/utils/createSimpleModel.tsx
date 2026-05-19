@@ -137,7 +137,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
 
     const tabs = useMemo(() => [
       {
-        id: "general",
+        id: "tab-details",
         label: translate("general"),
         component: (
           <div className={styles.FormWrapper}>
@@ -152,6 +152,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
                     value={form.fields[f.key] ?? ""}
                     onChange={(e) => form.setField(f.key, e.target.value)}
                     disabled={form.isLoading}
+                    isDirty={form.unsavedFields.has(f.key)}
                   />
                 ))}
               </Group>

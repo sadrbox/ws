@@ -145,7 +145,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
     const tabs = useMemo(() => [
       {
         id: "tab-details",
-        label: translate("general") || "Основное",
+        label: translate("general"),
         component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>

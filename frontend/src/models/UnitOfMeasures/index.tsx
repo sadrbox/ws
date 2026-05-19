@@ -14,4 +14,4 @@ const { Form: UnitOfMeasuresForm, List: UnitOfMeasuresList } = createSimpleModel
   ],
 });
 
-export { UnitOfMeasuresList, UnitOfMeasuresForm };
+export { UnitOfMeasuresList, UnitOfMeasuresForm }; 

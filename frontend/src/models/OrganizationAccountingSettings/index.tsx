@@ -159,7 +159,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(
     () => [
       {
-        id: "general",
+        id: "tab-details",
         label: translate("general"),
         component: (
           <div className={styles.FormWrapper}>

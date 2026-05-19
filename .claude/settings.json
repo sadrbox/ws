@@ -4,7 +4,8 @@
       "Bash(node --input-type=module --experimental-vm-modules)",
       "Bash(echo \"exit: $?\")",
       "Bash(node --check /mnt/ws/app/backend/api/router/refreplacement.js)",
-      "Bash(node --check /mnt/ws/app/backend/utils/checkReferences.js)"
+      "Bash(node --check /mnt/ws/app/backend/utils/checkReferences.js)",
+      "Bash(grep -n 'attentionBorder\\\\|$attention\\\\|define\\\\|colors\\\\|@use\\\\|@import\\\\|_vars\\\\|_colors' /mnt/ws/app/frontend/src/components/Field/Field.module.scss)"
     ]
   }
 }

@@ -68,8 +68,9 @@ function useFieldBase(params: {
   required: boolean;
   error: boolean;
   value?: string | number;
+  isDirty?: boolean;
 }) {
-  const { name, variant, required, error, value } = params;
+  const { name, variant, required, error, value, isDirty } = params;
   const cellState = useCellFieldState();
   const formRequired = useFormRequiredScope();
   const isTable = variant === 'table';
@@ -86,6 +87,7 @@ function useFieldBase(params: {
     isTable ? `${styles.FieldWrapper} ${styles.tableVariant}` : styles.FieldWrapper,
     !effectiveError && effectiveRequired && isEmpty ? styles.FieldRequired : '',
     effectiveError ? styles.FieldError : '',
+    isDirty && !isTable ? styles.FieldDirty : '',
   ].filter(Boolean).join(' ');
 
   return { isTable, wrapperClass, effectiveRequired, effectiveError };
@@ -126,6 +128,8 @@ interface TypeFieldStringProps {
   actions?: TypeFieldActions;
   variant?: FieldVariant;
   autoFocus?: boolean;
+  /** Поле имеет несохранённые изменения (при открытии через "Несохранённые записи") */
+  isDirty?: boolean;
 }
 
 // Пропсы для FieldGroup
@@ -189,6 +193,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   actions,
   variant = 'default',
   autoFocus,
+  isDirty,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -233,12 +238,13 @@ export const Field: FC<TypeFieldStringProps> = ({
       error={error}
       variant={variant}
       autoFocus={autoFocus}
+      isDirty={isDirty}
     />
   );
 };
 
 // Компонент FieldGroup
-export const FieldGroup: FC<TypeFieldGroupProps> = ({
+export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean }> = ({
   name,
   label,
   value = '',
@@ -252,8 +258,9 @@ export const FieldGroup: FC<TypeFieldGroupProps> = ({
   error = false,
   variant = 'default',
   autoFocus,
+  isDirty,
 }) => {
-  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
+  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value, isDirty });
 
   return (
     <div className={wrapperClass} style={style}>

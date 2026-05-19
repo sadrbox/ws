@@ -6,7 +6,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
@@ -38,13 +38,9 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const tabs = useMemo(() => [
-    { id: "general", label: translate("general"), component: (
+    { id: "tab-details", label: translate("general"), component: (
       <div className={styles.FormWrapper}>
         <div className={styles.Form}>
-          {form.isEditMode && (
-            <GroupRow>
-            </GroupRow>
-          )}
           <GroupCol>
             <Field label="Наименование *" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
             <Field label="Артикул" name={`${form.formUid}_sku`} minWidth="200px" value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
