@@ -52,13 +52,13 @@ function buildModelToTable() {
  * Преобразует имя Prisma-модели (`unitOfMeasure` / `UnitOfMeasure`) в SQL-имя
  * таблицы (`units_of_measure`). Если на вход уже SQL-имя — возвращает как есть.
  */
-function resolveTableName(name) {
+export function resolveTableName(name) {
 	if (!name) return name;
 	const map = buildModelToTable();
 	return map[name] || name;
 }
 
-async function loadFkMap() {
+export async function loadFkMap() {
 	if (fkMapCache) return fkMapCache;
 
 	const { rows } = await pool.query(`
@@ -167,7 +167,7 @@ export async function findReferences(targetTable, keyValues) {
 /**
  * Человекочитаемое название таблицы для сообщения пользователю.
  */
-const REFERENCE_LABELS = {
+export const REFERENCE_LABELS = {
 	products: "Номенклатура",
 	sale_items: "Строки реализации",
 	purchase_items: "Строки поступления",

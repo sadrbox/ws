@@ -401,32 +401,22 @@ tbody {
 						border: 0px transparent;
 					}
 
-					// ── activeCell: ячейка-«фокус» внутри активной строки ─────
-					// Атрибут data-active-cell="true" и класс .activeCell теперь
-					// живут НЕПОСРЕДСТВЕННО на .TableBodyCell (а не на <td>).
-					// Так все механики оформления ячейки (focus-within, dirty,
-					// required/error через CellWrap_*) находятся на одном узле
-					// DOM и не конфликтуют между разными уровнями.
-					//
-					// Визуал (background + box-shadow) задаётся в main.module.scss
-					// через @layer table-cell-activeCell — там единый
-					// приоритетный каскад для всех состояний ячейки.
-					&.activeCell,
-					&[data-active-cell="true"] {
+					// ── activeCell: выбранная ячейка внутри активной строки ─────
+					&.activeCell {
 						position: relative;
 						z-index: 6;
 						outline: none;
 						font-weight: 500;
+						background: rgba($color1, 0.2);
+						box-shadow: inset 0 0 0 1px rgba($color1, 0.5);
 					}
 
-					// ── focus: поле в фокусе ──────────────────────────────────
-					// :focus-within срабатывает на TableBodyCell, когда любой
-					// input/textarea/select внутри получает фокус. Визуал
-					// (background + box-shadow) — в main.module.scss
-					// (@layer table-cell-activeCell, последнее правило в слое).
-					&:focus-within {
-						position: relative;
-						z-index: 7;
+					// ── focus-within: поле получило фокус (ввод) ─────────────
+					// Приоритет выше .activeCell — желтый фон поверх синего.
+					&:not(:has(input[type="checkbox"])):focus-within {
+						background: rgba(#fc0, 0.2);
+						box-shadow: inset 0 0 0 1px rgba(#fc0, 0.6);
+						outline: none;
 					}
 				}
 
@@ -1030,12 +1020,6 @@ input[type="checkbox"] {
 	text-align: center;
 }
 
-/* Ячейка чекбокса при data-active-cell: фон совпадает с activeRow ($color2),
-   box-shadow остаётся от @layer table-cell-activeCell.
-   Unlayered-правило всегда перекрывает любой @layer по приоритету CSS. */
-// .CellCenter [class*="TableBodyCell"][data-active-cell="true"] {
-// 	background: $color2;
-// }
 
 .CellJustifyCenter {
 	justify-content: center;

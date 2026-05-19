@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --input-type=module --experimental-vm-modules)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(node --check /mnt/ws/app/backend/api/router/refreplacement.js)",
+      "Bash(node --check /mnt/ws/app/backend/utils/checkReferences.js)"
+    ]
+  }
+}

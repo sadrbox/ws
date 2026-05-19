@@ -23,6 +23,19 @@
 		"visible": false,
 		"position": 2,
 		"filter": false,
+		"inlist": false
+	},
+	{
+		"identifier": "contactType.shortName",
+		"type": "string",
+		"name": "Тип контакта",
+		"width": "250px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Тип контакта",
+		"visible": true,
+		"position": 2,
+		"filter": false,
 		"inlist": true
 	},
 	{
@@ -34,23 +47,11 @@
 		"alignment": "left",
 		"hint": "Значение контакта",
 		"visible": true,
-		"position": 2,
-		"filter": false,
-		"inlist": true
-	},
-	{
-		"identifier": "contactType.shortName",
-		"type": "string",
-		"name": "Тип контакта",
-		"width": "250px",
-		"minWidth": "80px",
-		"alignment": "left",
-		"hint": "Тип контакта",
-		"visible": true,
 		"position": 3,
 		"filter": false,
 		"inlist": true
 	},
+
 	{
 		"identifier": "ownerName",
 		"type": "string",

@@ -46,23 +46,29 @@ $infoBg: #e4f6f9;
 $infoBorder: #117a8b;
 $infoText: #0b525c;
 
+// success — успех, подтверждение (зелёный)
+$success: #28a745;
+$successBg: #e6f4ea;
+$successBorder: #1e7e34;
+$successText: #145523;
+
 // warning — предупреждение (жёлто-оранжевый)
 $warning: #f0ad4e;
 $warningBg: #fdf3e1;
 $warningBorder: #c98a2e;
 $warningText: #7a4d12;
 
-// silver — нейтральный / выключенный
-$silverPrimary: $silver; // совместимость с уже существующим $silver
-$silverBg: $silverLightest;
-$silverBorder: $silverDark;
-$silverText: $color6;
-
 // attention — критическое предупреждение / ошибка (красный)
 $attention: #dc3545;
 $attentionBg: #fde2e4;
 $attentionBorder: #b02a37;
 $attentionText: #6b1119;
+
+// silver — нейтральный / выключенный
+$silverPrimary: $silver;
+$silverBg: $silverLightest;
+$silverBorder: $silverDark;
+$silverText: $color6;
 
 $radius1: 1px;
 $radius2: 2px;

@@ -8,7 +8,7 @@ import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
-import { Field, FieldDate, FieldTextarea, Divider } from "src/components/Field";
+import { Field, FieldDate } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
@@ -150,7 +150,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <GroupRow>
+                <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
                   <FieldDate label="Дата" name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="160px" />
                   <FieldToggle name={`${form.formUid}_posted`} label="Проведён" value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
                 </GroupRow>
@@ -177,15 +177,11 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                 <GroupRow>
                   <Field label="Сумма" name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
                 </GroupRow>
-                <Group>
-                  <FieldTextarea label="Описание" name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} minHeight="80px" rows={4} />
-                </Group>
               </GroupCol>
-              {form.isEditMode && <><Divider /><GroupRow>
-                <Field label="ID" name={`${form.formUid}_id`} width="100px" value={String(form.fields.id ?? "-")} disabled />
-                <Field label="UUID" name={`${form.formUid}_uuid`} width="300px" value={String(form.fields.uuid ?? "-")} disabled />
-                <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || ""} disabled />
-              </GroupRow></>}
+              {form.isEditMode && <><Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+                <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+              </Group></>}
             </div>
           </div>
         ),

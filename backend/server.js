@@ -65,6 +65,7 @@ import unitOfMeasuresRouter from "./api/router/unitofmeasures.js";
 import taxesRouter from "./api/router/taxes.js";
 import organizationAccountingSettingsRouter from "./api/router/organizationaccountingsettings.js";
 import syncRouter from "./api/router/sync.js";
+import refReplacementRouter from "./api/router/refreplacement.js";
 
 const app = express();
 
@@ -268,6 +269,7 @@ app.use("/api/v1", unitOfMeasuresRouter);
 app.use("/api/v1", taxesRouter);
 app.use("/api/v1", organizationAccountingSettingsRouter);
 app.use("/api/v1", syncRouter);
+app.use("/api/v1", refReplacementRouter);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. ОБРАБОТКА 404

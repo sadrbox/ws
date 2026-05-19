@@ -1454,20 +1454,12 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
       clickedFocusedInputRef.current = false;
       return;
     }
-    // Проверяем: есть ли уже сфокусированное поле в ЭТОЙ же строке (не только в кликнутом поле)
-    const tr = e.currentTarget as HTMLElement;
-    const active = document.activeElement as HTMLElement | null;
-    const rowHasFocusedInput =
-      active !== null &&
-      ((active.tagName === 'INPUT' && (active as HTMLInputElement).type !== 'checkbox') ||
-        active.tagName === 'TEXTAREA') &&
-      tr.contains(active);
-    if (rowHasFocusedInput) {
-      // В строке уже есть фокус → разрешаем переключение фокуса одиночным кликом
-      // (стандартное поведение браузера: перевести курсор, выделить текст и т.д.)
+    // Разрешаем стандартное поведение только если клик по тому же полю,
+    // которое уже в фокусе (перемещение курсора, выделение текста внутри поля).
+    // Для любого другого поля — блокируем авто-фокус; фокус только по двойному клику.
+    if (target === document.activeElement) {
       clickedFocusedInputRef.current = true;
     } else {
-      // В строке нет фокуса → блокируем авто-фокус; фокус только по двойному клику
       clickedFocusedInputRef.current = false;
       e.preventDefault();
     }
@@ -1544,7 +1536,6 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           >
             <div
               className={[styles.TableBodyCell, styles.CellJustifyCenter, isCheckboxCellActive ? styles.activeCell : undefined].filter(Boolean).join(' ')}
-              {...(isCheckboxCellActive ? { 'data-active-cell': 'true' as const } : {})}
             >
               <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading} />
             </div>
@@ -1568,11 +1559,6 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
 
           const cellTitle = cellMeta?.errorMessage;
 
-          // <td> сохраняет за собой только то, что нужно ВНЕ DOM-зоны
-          // содержимого: data-col-id для клавиатурной навигации (SubTable
-          // ищет td по этому атрибуту), tabIndex для программного фокуса.
-          // Визуальная подсветка и data-* семантика теперь применяются
-          // не к .TableBodyCell, а к обёртке Field внутри ячейки.
           const tdProps = {
             'data-col-id': col.identifier,
             tabIndex: isCellActive ? -1 : undefined,
@@ -1581,7 +1567,6 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
           const cellWrapperProps = {
             className: cellClassName,
             ...(cellTitle ? { title: cellTitle } : {}),
-            ...(isCellActive ? { "data-active-cell": "true" as const } : {}),
           };
 
           const cellFieldState = cellMeta ? { required: cellMeta.required, error: cellMeta.error, errorMessage: cellMeta.errorMessage } : undefined;

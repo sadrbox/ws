@@ -111,6 +111,7 @@ router.get("/contacttypes", async (req, res) => {
 
 		// ── Итоговый where ────────────────────────────────────────────────────
 		const baseWhere = {
+			deletedAt: null,
 			...searchWhereClause,
 			...dateRangeFilter,
 			...filterWhereClause,

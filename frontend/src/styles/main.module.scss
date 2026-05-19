@@ -840,52 +840,19 @@ body {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TABLE CELL STATES — единый приоритетный каскад для `.TableBodyCell`.
-//
-// Состояния ячейки (от низкого к высокому приоритету):
-//   1) activeRow               — подсветка строки целиком
-//   2) activeCell / data-active-cell="true" — выбранная ячейка
-//
-// Required/error стили для ячеек с Field-компонентами применяются
-// через CellFieldStateScope → useCellFieldState() → FieldRequired/FieldError
-// классы на FieldWrapper в Field.module.scss.
-//
-// Применяется через CSS `@layer`: порядок ОБЪЯВЛЕНИЯ слоёв определяет
-// приоритет. Объявленный ПОЗЖЕ слой ВСЕГДА перекрывает ранее объявленные.
+// TABLE CELL STATES — подсветка строки через @layer.
+// activeCell и :focus-within стилизуются в Table.module.scss (unlayered CSS
+// всегда перекрывает @layer, поэтому приоритет соблюдается автоматически:
+// activeRow < activeCell < focus-within).
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Объявление порядка слоёв. ПОЗДНЕЕ = ВЫШЕ.
-// Порядок приоритета (снизу вверх): activeRow → activeCell.
-@layer table-cell-activeRow, table-cell-activeCell;
+@layer table-cell-activeRow;
 
-// ── Layer 5 (lowest): activeRow ────────────────────────────────────────────
 // Подсветка строки целиком. Применяется ко всем .TableBodyCell внутри tr.
 @layer table-cell-activeRow {
 	tr[class*="activeRow"] [class*="TableBodyCell"] {
 		background: $color2;
 	}
-}
-
-// ── Layer 4: activeCell / data-active-cell="true" ──────────────────────────
-// Активная (выделенная) ячейка — синий inset + слегка усиленный фон.
-// :focus-within остаётся отдельным визуальным состоянием поверх activeCell
-// (более насыщенный синий) — это разный UX-уровень (навигация vs ввод).
-@layer table-cell-activeCell {
-
-	[class*="TableBodyCell"].activeCell,
-	[class*="TableBodyCell"][data-active-cell="true"] {
-		background: rgba($color1, 0.2);
-		box-shadow: inset 0 0 0 1px rgba($color1, 0.5);
-	}
-
-	// focus-within = идёт ввод в input/textarea/select ячейки. Семантически
-	// относится к тому же уровню навигации/выделения, что и activeCell,
-	// поэтому живёт в этом же слое. Из-за источникового порядка после
-	// activeCell — перекрывает её визуал.
-	// [class*="TableBodyCell"]:focus-within {
-	// 	background: rgba($color60, 0.9);
-	// 	box-shadow: inset 0 0 0 1px $colorPrimaryLight;
-	// }
 }
 
 .PaneHeaderClose {

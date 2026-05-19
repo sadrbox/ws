@@ -48,6 +48,8 @@ import { PayrollCalculationsList } from 'src/models/PayrollCalculations';
 import { PayrollPaymentsList } from 'src/models/PayrollPayments';
 import { UnsavedFormsList } from 'src/models/UnsavedForms';
 import { SyncDashboard } from 'src/models/SyncDashboard';
+import { SearchReplaceRefsForm } from 'src/models/SearchReplaceRefs';
+import { OrphanRefsForm } from 'src/models/OrphanRefs';
 // AccessRightsModuleList загружается динамически (разрыв цикла UI→AccessRights→app→UI)
 import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
@@ -742,6 +744,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>}
               {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: "Центр уведомлений" })}>Центр уведомлений</li>}
               <li onClick={() => addPane({ component: UnsavedFormsList })}>Несохранённые записи</li>
+              <li onClick={() => addPane({ component: OrphanRefsForm, label: 'Контроль удалённых ссылок' })}>Контроль удалённых ссылок</li>
+              <li onClick={() => addPane({ component: SearchReplaceRefsForm, label: 'Поиск и замена ссылок' })}>Поиск и замена ссылок</li>
               <li onClick={() => addPane({ component: SyncDashboard, label: 'Синхронизация и оффлайн-данные' })}>Синхронизация и оффлайн-данные</li>
             </ul>
           </div>
