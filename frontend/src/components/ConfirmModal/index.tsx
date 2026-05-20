@@ -2,6 +2,7 @@ import { FC } from "react";
 import type { ConfirmState } from "src/hooks/useConfirm";
 // Button is provided by Modal's buttons area
 import Modal from "src/components/Modal";
+import { translate } from "src/i18";
 
 /**
  * ConfirmModal now uses shared Modal component so it benefits from
@@ -12,12 +13,12 @@ const ConfirmModal: FC<ConfirmState> = ({ isOpen, message, onConfirm, onCancel }
 
   return (
     <Modal
-      title="Подтверждение"
+      title={translate("confirmation")}
       onClose={onCancel}
       style={{ maxWidth: 420 }}
       buttons={[
-        { label: "Да", onClick: onConfirm, variant: "secondary" },
-        { label: "Отмена", onClick: onCancel, variant: "secondary" },
+        { label: translate("yes"), onClick: onConfirm, variant: "secondary" },
+        { label: translate("cancel"), onClick: onCancel, variant: "secondary" },
       ]}
     >
       <div>

@@ -24,7 +24,6 @@ SET
 CREATE TABLE IF NOT EXISTS "sales" (
   "id" SERIAL NOT NULL,
   "uuid" TEXT NOT NULL,
-  "documentNumber" TEXT,
   "documentDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "description" TEXT,
   "amount" DECIMAL(18, 2),
@@ -62,7 +61,6 @@ SET
 CREATE TABLE IF NOT EXISTS "purchases" (
   "id" SERIAL NOT NULL,
   "uuid" TEXT NOT NULL,
-  "documentNumber" TEXT,
   "documentDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "description" TEXT,
   "amount" DECIMAL(18, 2),
@@ -100,7 +98,6 @@ SET
 CREATE TABLE IF NOT EXISTS "outgoing_invoices" (
   "id" SERIAL NOT NULL,
   "uuid" TEXT NOT NULL,
-  "documentNumber" TEXT,
   "documentDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "description" TEXT,
   "amount" DECIMAL(18, 2),
@@ -137,7 +134,6 @@ SET
 CREATE TABLE IF NOT EXISTS "incoming_invoices" (
   "id" SERIAL NOT NULL,
   "uuid" TEXT NOT NULL,
-  "documentNumber" TEXT,
   "documentDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "description" TEXT,
   "amount" DECIMAL(18, 2),
@@ -174,7 +170,6 @@ SET
 CREATE TABLE IF NOT EXISTS "payment_invoices" (
   "id" SERIAL NOT NULL,
   "uuid" TEXT NOT NULL,
-  "documentNumber" TEXT,
   "documentDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "description" TEXT,
   "amount" DECIMAL(18, 2),
@@ -238,7 +233,6 @@ SET
 CREATE TABLE IF NOT EXISTS "inventory_transfers" (
   "id" SERIAL NOT NULL,
   "uuid" TEXT NOT NULL,
-  "documentNumber" TEXT,
   "documentDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "description" TEXT,
   "status" TEXT NOT NULL DEFAULT 'draft',
@@ -284,7 +278,6 @@ SET
 CREATE TABLE IF NOT EXISTS "cash_receipt_orders" (
   "id" SERIAL NOT NULL,
   "uuid" TEXT NOT NULL,
-  "documentNumber" TEXT,
   "documentDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "description" TEXT,
   "amount" DECIMAL(18, 2),
@@ -321,7 +314,6 @@ SET
 CREATE TABLE IF NOT EXISTS "cash_expense_orders" (
   "id" SERIAL NOT NULL,
   "uuid" TEXT NOT NULL,
-  "documentNumber" TEXT,
   "documentDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "description" TEXT,
   "amount" DECIMAL(18, 2),

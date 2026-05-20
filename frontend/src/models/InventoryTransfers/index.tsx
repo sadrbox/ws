@@ -26,7 +26,7 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
-import { FormRequiredScope } from "src/hooks/useFormRequired";
+import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 
 const MODEL_ENDPOINT = "inventory-transfers";
@@ -35,7 +35,7 @@ const FORM_LABEL = "Перемещение ТМЗ";
 
 interface TFields {
   id?: number; uuid?: string;
-  documentNumber: string; date: string; comment: string;
+  date: string; comment: string;
   amount: number; posted: boolean;
   fromWarehouseUuid: string; fromWarehouseName: string;
   toWarehouseUuid: string; toWarehouseName: string;
@@ -44,7 +44,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  documentNumber: "", date: "", comment: "",
+  date: "", comment: "",
   amount: 0, posted: false,
   fromWarehouseUuid: "", fromWarehouseName: "",
   toWarehouseUuid: "", toWarehouseName: "",
@@ -95,7 +95,6 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      documentNumber: d.documentNumber ?? "",
       date: d.date?.slice(0, 10) ?? "",
       comment: d.comment ?? "",
       amount: d.amount != null ? Number(d.amount) : 0,
@@ -113,7 +112,6 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       const validation = validateDocumentFields("inventory_transfer", fd as unknown as Record<string, unknown>);
       if (!validation.isValid) return formatValidationErrors(validation.errors);
       return {
-        documentNumber: fd.documentNumber?.trim() || null,
         date: fd.date || null,
         comment: fd.comment?.trim() || null,
         amount: fd.amount ? fd.amount : null,
@@ -136,28 +134,27 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
 
   const tabs = useMemo(() => [
     {
-      id: "tab-details", label: translate("general") || "Основное", component: (
+      id: "tab-details", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                <Field label="Номер документа" name={`${form.formUid}_documentNumber`} width="200px" value={form.fields.documentNumber} onChange={e => form.setField("documentNumber", e.target.value)} disabled={form.isLoading} />
-                <FieldDate label="Дата документа" name={`${form.formUid}_date`} width="160px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
-                <FieldToggle name={`${form.formUid}_posted`} label="Проведён" value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
+                <FieldDate label={translate("date")} name={`${form.formUid}_date`} width="160px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
+                <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
               </GroupRow>
               <Group>
-                <LookupField label="Организация" name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
+                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
                   onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                   disabled={form.isLoading} />
               </Group>
               <Group>
-                <LookupField label="Со склада" name={`${form.formUid}_fromWarehouseUuid`} value={form.fields.fromWarehouseUuid} displayValue={form.fields.fromWarehouseName} endpoint="warehouses" displayField="shortName"
+                <LookupField label={translate("fromWarehouse")} name={`${form.formUid}_fromWarehouseUuid`} value={form.fields.fromWarehouseUuid} displayValue={form.fields.fromWarehouseName} endpoint="warehouses" displayField="shortName"
                   onSelect={(u, d) => form.setFields({ fromWarehouseUuid: u, fromWarehouseName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ fromWarehouseUuid: "", fromWarehouseName: "" } as Partial<TFields>)}
                   disabled={form.isLoading}
                   extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-                <LookupField label="На склад" name={`${form.formUid}_toWarehouseUuid`} value={form.fields.toWarehouseUuid} displayValue={form.fields.toWarehouseName} endpoint="warehouses" displayField="shortName"
+                <LookupField label={translate("toWarehouse")} name={`${form.formUid}_toWarehouseUuid`} value={form.fields.toWarehouseUuid} displayValue={form.fields.toWarehouseName} endpoint="warehouses" displayField="shortName"
                   onSelect={(u, d) => form.setFields({ toWarehouseUuid: u, toWarehouseName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ toWarehouseUuid: "", toWarehouseName: "" } as Partial<TFields>)}
                   disabled={form.isLoading}
@@ -167,7 +164,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
             <Group>
               <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14 }}>
-                  <span>Итого</span>
+                  <span>{translate("total")}</span>
                   <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
                 </div>
                 <div style={{ color: "#9ca3af", fontSize: 11 }}>
@@ -175,30 +172,30 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
                 </div>
               </div>
             </Group>
-            {form.isEditMode && <><Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
-              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-            </Group></>}
           </div>
+          {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+          </Group>}
         </div>
       )
     },
     {
-      id: "tab-items", label: "Товары перемещения", component: form.isEditMode && form.fields.uuid ? (
+      id: "tab-items", label: translate("tabTMZ"), component: form.isEditMode && form.fields.uuid ? (
         <TradeDocumentItemsTable
           parentUuid={form.fields.uuid} parentField="inventoryTransferUuid"
           endpoint="inventorytransferitems" componentName="InventoryTransferItemsList_part"
           hasTaxes={false}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
-          parentLabel={`Перемещение: №${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
+          parentLabel={`${translate("InventoryTransfersList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           initialPendingRows={items.pending}
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}
         />
       ) : (
         <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
-          Сохраните документ для добавления товаров
+          {translate("saveDocumentFirst")}
         </div>
       )
     },
@@ -206,11 +203,13 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <FormRequiredScope docType="inventory_transfer">
-      <ModelForm paneId={form.paneId} tabs={tabs}
-        onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-        onReload={form.isEditMode ? form.handleReload : undefined}
-        isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-        readonly={!canWrite} />
+      <FormDirtyScope dirtyKeys={form.unsavedFields}>
+        <ModelForm paneId={form.paneId} tabs={tabs}
+          onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+          onReload={form.isEditMode ? form.handleReload : undefined}
+          isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+          readonly={!canWrite} />
+      </FormDirtyScope>
     </FormRequiredScope>
   );
 };

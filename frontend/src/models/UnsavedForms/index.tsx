@@ -26,12 +26,12 @@ const TABLE_LABELS: Record<string, string> = {
   contacts: "Контакты",
   bankAccounts: "Банковские счета",
   contracts: "Договора",
-  saleItems: "Позиции реализации",
+  saleItems: "Товары, услуги реализации",
   history: "Кадровая история",
-  purchaseItems: "Позиции поступления",
-  outgoingItems: "Позиции СФ исходящей",
-  incomingItems: "Позиции СФ входящей",
-  paymentItems: "Позиции счёта на оплату",
+  purchaseItems: "Товары, услуги поступления",
+  outgoingItems: "Товары, услуги счет-фактуры исходящей",
+  incomingItems: "Товары, услуги счет-фактуры входящей",
+  paymentItems: "Товары, услуги счета на оплату",
 };
 
 /** Извлечь сводку по pending-строкам SubTable из данных формы (новый формат) */
@@ -65,7 +65,7 @@ function getDescription(data: Record<string, unknown>): string {
   // Пробуем стандартные поля
   const candidates = [
     "shortName", "displayName", "username", "fullName", "bin",
-    "modelName", "documentNumber", "name", "title",
+    "modelName", "name", "title",
   ];
   const parts: string[] = [];
   for (const field of candidates) {
@@ -262,18 +262,18 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
     error: null as Error | null,
     hasNextPage: false,
     isFetchingNextPage: false,
-    pagination: { page: 1, limit: 500, onPageChange: () => {}, onLimitChange: () => {} },
-    sorting: { sort: { id: "asc" as const }, onSortChange: () => {} },
-    filtering: { filters: undefined, onFilterChange: () => {}, onClearAll: () => {} },
-    search: { value: "", onChange: () => {} },
+    pagination: { page: 1, limit: 500, onPageChange: () => { }, onLimitChange: () => { } },
+    sorting: { sort: { id: "asc" as const }, onSortChange: () => { } },
+    filtering: { filters: undefined, onFilterChange: () => { }, onClearAll: () => { } },
+    search: { value: "", onChange: () => { } },
     actions: {
       openModelForm: ({ data }: { data?: TDataItem }) => {
         if (data) openUnsavedForm(data as UnsavedRow);
       },
       refetch: loadEntries,
       setColumns,
-      fetchNextPage: () => {},
-      setAdaptiveLimit: () => {},
+      fetchNextPage: () => { },
+      setAdaptiveLimit: () => { },
     },
     onDelete: handleDeleteEntries,
     renderCell,

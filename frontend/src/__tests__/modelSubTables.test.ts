@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from "vitest";
 
+import { ACCESS_LEVEL_OPTIONS } from "../models/AccessRights/index";
 import cashExpenseOrdersCols from "../models/CashExpenseOrders/columns.json";
 import cashReceiptOrdersCols from "../models/CashReceiptOrders/columns.json";
 import incomingInvoicesCols from "../models/IncomingInvoices/columns.json";
@@ -405,11 +406,7 @@ describe("AccessRightsTable — filterRows", () => {
 		Sale: "Продажи",
 		Product: "Товары",
 	};
-	const accessLevelMap: Record<string, string> = {
-		full: "Полный",
-		readonly: "Только чтение",
-		none: "Нет доступа",
-	};
+	const accessLevelMap = Object.fromEntries(ACCESS_LEVEL_OPTIONS.map(o => [o.value, o.label]));
 	const rows = [
 		{ id: 1, modelName: "Organization", accessLevel: "full" },
 		{ id: 2, modelName: "Sale", accessLevel: "readonly" },

@@ -94,7 +94,7 @@ const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
       <button
         className={styles.BellButton}
         onClick={() => setIsOpen((prev) => !prev)}
-        title={t("notifications") || "Уведомления"}
+        title={t("notifications") || translate("notifications")}
         type="button"
       >
         🔔
@@ -115,7 +115,7 @@ const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
                 onClick={markAllRead}
                 type="button"
               >
-                {t("markAllRead") || "Прочитать всё"}
+                {t("markAllRead") || translate("markAllRead")}
               </button>
             )}
           </div>
@@ -123,7 +123,7 @@ const NotificationToast: FC<{ userUuid?: string }> = ({ userUuid }) => {
           <div className={styles.PanelBody}>
             {recent.length === 0 ? (
               <div className={styles.Empty}>
-                {t("noNotifications") || "Нет уведомлений"}
+                {t("noNotifications") || translate("noNotifications")}
               </div>
             ) : (
               recent.map((n) => {

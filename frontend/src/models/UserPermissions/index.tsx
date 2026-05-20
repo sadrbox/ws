@@ -97,6 +97,7 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
         parentField: "userUuid",
         label: translate("accessRights"),
         skipParentField: true,
+        batchEndpoint: "access-rights/batch",
         createPayload: (r: any) => ({
           userUuid: r.userUuid ?? null,
           organizationUuid: r.organizationUuid ?? null,

@@ -1,35 +1,43 @@
 /**
- * useFormRequired — контекст для автоматической подсветки обязательных полей.
+ * useFormRequired / useFormDirty — контексты для подсветки полей формы.
  *
- * FormRequiredScope оборачивает форму и предоставляет набор ключей обязательных
- * полей из REQUIRED_FIELDS_MAP. Подсветка активна всегда (не только при posted=true).
- * Field-компоненты читают контекст через useFormRequiredScope() и добавляют
- * класс FieldRequired к FieldWrapper, когда tail имени поля совпадает с ключом
- * и значение пустое.
+ * FormRequiredScope — обязательные поля:
+ *   Принимает docType (из REQUIRED_FIELDS_MAP) или requiredKeys (для справочников).
+ *   Field-компоненты читают контекст через useFormRequiredScope() и добавляют
+ *   класс FieldRequired, когда tail имени поля совпадает с ключом и значение пустое.
  *
- * Сопоставление имён работает по tail — части после последнего `_`:
+ * FormDirtyScope — несохранённые поля:
+ *   Принимает dirtyKeys (form.unsavedFields). Field-компоненты читают контекст
+ *   через useFormDirtyScope() и добавляют класс FieldDirty автоматически.
+ *
+ * Сопоставление работает по tail — части после последнего `_`:
  * поле `${formUid}_organizationUuid` → tail "organizationUuid" → совпадает.
  */
 import { createContext, FC, ReactNode, useContext, useMemo } from "react";
 import type { DocumentType } from "src/utils/validatePostedDocument";
 import { REQUIRED_FIELDS_MAP } from "src/utils/validatePostedDocument";
 
+// ── Required ─────────────────────────────────────────────────────────────────
+
 export interface FormRequiredState {
   requiredKeys: ReadonlySet<string>;
 }
 
-const EMPTY: FormRequiredState = { requiredKeys: new Set<string>() };
-
+const EMPTY_SET = new Set<string>();
+const EMPTY: FormRequiredState = { requiredKeys: EMPTY_SET };
 const FormRequiredContext = createContext<FormRequiredState>(EMPTY);
 
 export const FormRequiredScope: FC<{
-  docType: DocumentType;
+  docType?: DocumentType;
+  requiredKeys?: readonly string[];
   children: ReactNode;
-}> = ({ docType, children }) => {
-  const value = useMemo<FormRequiredState>(
-    () => ({ requiredKeys: new Set(REQUIRED_FIELDS_MAP[docType]) }),
-    [docType],
-  );
+}> = ({ docType, requiredKeys, children }) => {
+  const value = useMemo<FormRequiredState>(() => {
+    if (docType) return { requiredKeys: new Set(REQUIRED_FIELDS_MAP[docType]) };
+    if (requiredKeys?.length) return { requiredKeys: new Set(requiredKeys) };
+    return EMPTY;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docType, requiredKeys?.join(",")]);
   return (
     <FormRequiredContext.Provider value={value}>
       {children}
@@ -38,3 +46,13 @@ export const FormRequiredScope: FC<{
 };
 
 export const useFormRequiredScope = (): FormRequiredState => useContext(FormRequiredContext);
+
+// ── Dirty ─────────────────────────────────────────────────────────────────────
+
+const FormDirtyContext = createContext<ReadonlySet<string>>(EMPTY_SET);
+
+export const FormDirtyScope: FC<{ dirtyKeys: ReadonlySet<string>; children: ReactNode }> = ({ dirtyKeys, children }) => (
+  <FormDirtyContext.Provider value={dirtyKeys}>{children}</FormDirtyContext.Provider>
+);
+
+export const useFormDirtyScope = (): ReadonlySet<string> => useContext(FormDirtyContext);

@@ -25,67 +25,54 @@ const ROUTE = "ref-replace";
 // label: человекочитаемое название справочника
 const MODEL_CONFIG = {
 	unitOfMeasure: { displayField: "shortName", label: "Единицы измерения" },
-	tax:           { displayField: "shortName", label: "Налоги" },
-	contactType:   { displayField: "shortName", label: "Типы контактов" },
-	brand:         { displayField: "shortName", label: "Бренды" },
-	currency:      { displayField: "shortName", label: "Валюты" },
-	warehouse:     { displayField: "shortName", label: "Склады" },
-	employee:      { displayField: "fullName",  label: "Сотрудники" },
-	position:      { displayField: "shortName", label: "Должности" },
-	counterparty:  { displayField: "shortName", label: "Контрагенты" },
-	organization:  { displayField: "shortName", label: "Организации" },
+	tax: { displayField: "shortName", label: "Налоги" },
+	brand: { displayField: "shortName", label: "Бренды" },
+	currency: { displayField: "shortName", label: "Валюты" },
+	warehouse: { displayField: "shortName", label: "Склады" },
+	employee: { displayField: "fullName", label: "Сотрудники" },
+	position: { displayField: "shortName", label: "Должности" },
+	counterparty: { displayField: "shortName", label: "Контрагенты" },
+	organization: { displayField: "shortName", label: "Организации" },
 };
 
 // ── Отображаемое поле по DB-имени таблицы (для сканирования orphans) ─────────
 const TABLE_DISPLAY_FIELD = {
-	products:              "shortName",
-	sales:                 "documentNumber",
-	purchases:             "documentNumber",
-	outgoing_invoices:     "documentNumber",
-	incoming_invoices:     "documentNumber",
-	payment_invoices:      "documentNumber",
-	inventory_transfers:   "documentNumber",
-	cash_receipt_orders:   "documentNumber",
-	cash_expense_orders:   "documentNumber",
-	payroll_calculations:  "documentNumber",
-	payroll_payments:      "documentNumber",
-	employees:             "fullName",
-	contracts:             "shortName",
-	contacts:              "value",
-	counterparties:        "shortName",
-	organizations:         "shortName",
-	warehouses:            "shortName",
-	currencies:            "shortName",
-	brands:                "shortName",
-	taxes:                 "shortName",
-	units_of_measure:      "shortName",
-	contact_types:         "shortName",
-	positions:             "shortName",
-	users:                 "username",
-	bank_accounts:         "bankName",
-	contact_persons:       "fullName",
-	todos:                 "title",
+	products: "shortName",
+	employees: "fullName",
+	contracts: "shortName",
+	contacts: "value",
+	counterparties: "shortName",
+	organizations: "shortName",
+	warehouses: "shortName",
+	currencies: "shortName",
+	brands: "shortName",
+	taxes: "shortName",
+	units_of_measure: "shortName",
+	positions: "shortName",
+	users: "username",
+	bank_accounts: "bankName",
+	contact_persons: "fullName",
+	todos: "title",
 };
 
 // ── Человекочитаемое имя FK-колонки ──────────────────────────────────────────
 const COLUMN_LABELS = {
-	unitOfMeasureUuid:  "Единица измерения",
-	taxUuid:            "Налог",
-	brandUuid:          "Бренд",
-	warehouseUuid:      "Склад",
-	warehouseFromUuid:  "Склад (откуда)",
-	warehouseToUuid:    "Склад (куда)",
-	currencyUuid:       "Валюта",
-	counterpartyUuid:   "Контрагент",
-	organizationUuid:   "Организация",
-	employeeUuid:       "Сотрудник",
-	positionUuid:       "Должность",
-	contactTypeUuid:    "Тип контакта",
-	authorUuid:         "Автор",
-	contractUuid:       "Договор",
-	bankAccountUuid:    "Банковский счёт",
-	userUuid:           "Пользователь",
-	ownerUuid:          "Владелец",
+	unitOfMeasureUuid: "Единица измерения",
+	taxUuid: "Налог",
+	brandUuid: "Бренд",
+	warehouseUuid: "Склад",
+	warehouseFromUuid: "Склад (откуда)",
+	warehouseToUuid: "Склад (куда)",
+	currencyUuid: "Валюта",
+	counterpartyUuid: "Контрагент",
+	organizationUuid: "Организация",
+	employeeUuid: "Сотрудник",
+	positionUuid: "Должность",
+	authorUuid: "Автор",
+	contractUuid: "Договор",
+	bankAccountUuid: "Банковский счёт",
+	userUuid: "Пользователь",
+	ownerUuid: "Владелец",
 };
 
 // ── GET /ref-replace/models ───────────────────────────────────────────────────
@@ -357,16 +344,24 @@ router.post(`/${ROUTE}/safe-delete`, async (req, res) => {
 	try {
 		const { model: modelName, uuid } = req.body;
 		if (!modelName || !MODEL_CONFIG[modelName])
-			return res.status(400).json({ success: false, message: "Неизвестная модель" });
+			return res
+				.status(400)
+				.json({ success: false, message: "Неизвестная модель" });
 		if (!uuid)
-			return res.status(400).json({ success: false, message: "Не указан UUID" });
+			return res
+				.status(400)
+				.json({ success: false, message: "Не указан UUID" });
 
 		const cfg = MODEL_CONFIG[modelName];
 		const record = await prisma[modelName].findUnique({ where: { uuid } });
 		if (!record)
-			return res.status(404).json({ success: false, message: "Запись не найдена" });
+			return res
+				.status(404)
+				.json({ success: false, message: "Запись не найдена" });
 		if (record.deletedAt)
-			return res.status(400).json({ success: false, message: "Запись уже удалена" });
+			return res
+				.status(400)
+				.json({ success: false, message: "Запись уже удалена" });
 
 		// Проверяем ссылки (все, включая мягко удалённые строки)
 		const tableName = resolveTableName(modelName);
@@ -510,20 +505,20 @@ router.get(`/${ROUTE}/orphans`, async (req, res) => {
 
 					if (rows.length > 0) {
 						groups.push({
-							table:        ref.table,
-							column:       ref.column,
-							columnLabel:  COLUMN_LABELS[ref.column] ?? ref.column,
-							tableLabel:   REFERENCE_LABELS[ref.table] ?? ref.table,
+							table: ref.table,
+							column: ref.column,
+							columnLabel: COLUMN_LABELS[ref.column] ?? ref.column,
+							tableLabel: REFERENCE_LABELS[ref.table] ?? ref.table,
 							refTable,
 							refTableLabel: REFERENCE_LABELS[refTable] ?? refTable,
-							totalFound:   rows.length,
-							hasMore:      rows.length === limitPerGroup,
+							totalFound: rows.length,
+							hasMore: rows.length === limitPerGroup,
 							records: rows.map((r) => ({
-								uuid:        r.record_uuid,
-								id:          r.record_id,
-								label:       r.record_label ?? r.record_uuid,
-								refUuid:     r.ref_uuid,
-								refLabel:    r.ref_label ?? r.ref_uuid,
+								uuid: r.record_uuid,
+								id: r.record_id,
+								label: r.record_label ?? r.record_uuid,
+								refUuid: r.ref_uuid,
+								refLabel: r.ref_label ?? r.ref_uuid,
 								refDeletedAt: r.ref_deleted_at,
 							})),
 						});

@@ -17,7 +17,7 @@ import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
-import { FormRequiredScope } from "src/hooks/useFormRequired";
+import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 
 const MODEL_ENDPOINT = "payroll-calculations";
@@ -26,7 +26,7 @@ const FORM_LABEL = "Начисление ЗП";
 
 interface TFields {
   id?: number; uuid?: string;
-  documentNumber: string; date: string; comment: string;
+  date: string; comment: string;
   period: string;
   employeeUuid: string; employeeName: string;
   organizationUuid: string; organizationName: string;
@@ -40,7 +40,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  documentNumber: "", date: "", comment: "",
+  date: "", comment: "",
   period: "",
   employeeUuid: "", employeeName: "",
   organizationUuid: "", organizationName: "",
@@ -95,7 +95,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
     endpoint: MODEL_ENDPOINT, storageKey: "payroll-calculations-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      documentNumber: d.documentNumber ?? "", date: d.date?.slice(0, 10) ?? "",
+      date: d.date?.slice(0, 10) ?? "",
       comment: d.comment ?? "", period: d.period ?? "",
       employeeUuid: d.employeeUuid ?? "",
       employeeName: d.employee?.fullName ?? "",
@@ -120,7 +120,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
       const validation = validateDocumentFields("payroll_calculation", fd as unknown as Record<string, unknown>);
       if (!validation.isValid) return formatValidationErrors(validation.errors);
       return {
-        documentNumber: fd.documentNumber?.trim() || null, date: fd.date || null,
+        date: fd.date || null,
         comment: fd.comment?.trim() || null, period: fd.period?.trim() || null,
         employeeUuid: fd.employeeUuid || null, organizationUuid: fd.organizationUuid || null,
         positionUuid: fd.positionUuid || null,
@@ -158,41 +158,42 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                <FieldDate label="Дата документа" name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
-                <Field label="Период (ГГГГ-ММ)" name={`${form.formUid}_period`} value={form.fields.period} onChange={e => form.setField("period", e.target.value)} disabled={form.isLoading} width="140px" />
-                <FieldToggle name={`${form.formUid}_posted`} label="Проведён" value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
+                <FieldDate label={translate("documentDate")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
+                <Field label={translate("periodYYYYMM")} name={`${form.formUid}_period`} value={form.fields.period} onChange={e => form.setField("period", e.target.value)} disabled={form.isLoading} width="140px" />
+                <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
               </GroupRow>
               <Group>
-                <LookupField label="Организация" name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
-                <LookupField label="Сотрудник" name={`${form.formUid}_employeeUuid`} value={form.fields.employeeUuid} displayValue={form.fields.employeeName} endpoint="employees" displayField="fullName" onSelect={(u, d) => form.setFields({ employeeUuid: u, employeeName: d } as Partial<TFields>)} onClear={() => form.setFields({ employeeUuid: "", employeeName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <LookupField label={translate("employee")} name={`${form.formUid}_employeeUuid`} value={form.fields.employeeUuid} displayValue={form.fields.employeeName} endpoint="employees" displayField="fullName" onSelect={(u, d) => form.setFields({ employeeUuid: u, employeeName: d } as Partial<TFields>)} onClear={() => form.setFields({ employeeUuid: "", employeeName: "" } as Partial<TFields>)} disabled={form.isLoading} />
               </Group>
               <Group>
-                <LookupField label="Должность" name={`${form.formUid}_positionUuid`} value={form.fields.positionUuid} displayValue={form.fields.positionName} endpoint="positions" displayField="shortName" onSelect={(u, d) => form.setFields({ positionUuid: u, positionName: d } as Partial<TFields>)} onClear={() => form.setFields({ positionUuid: "", positionName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <LookupField label={translate("position.shortName")} name={`${form.formUid}_positionUuid`} value={form.fields.positionUuid} displayValue={form.fields.positionName} endpoint="positions" displayField="shortName" onSelect={(u, d) => form.setFields({ positionUuid: u, positionName: d } as Partial<TFields>)} onClear={() => form.setFields({ positionUuid: "", positionName: "" } as Partial<TFields>)} disabled={form.isLoading} />
               </Group>
               <Divider />
-              <h3 style={{ margin: 0, fontSize: 13, color: "#555" }}>Расчёт заработной платы (НК РК)</h3>
+              <h3 style={{ margin: 0, fontSize: 13, color: "#555" }}>{translate("payrollCalcTitle")}</h3>
               <GroupRow>
-                <Field label="Оклад (начислено)" name={`${form.formUid}_baseSalary`} value={form.fields.baseSalary} onChange={e => handleSalaryChange(e.target.value)} disabled={form.isLoading} width="160px" />
-                <Field label="ОПВ (10%)" name={`${form.formUid}_opv`} value={form.fields.opv} disabled width="130px" />
-                <Field label="ВОСМС (2%)" name={`${form.formUid}_vosms`} value={form.fields.vosms} disabled width="130px" />
-                <Field label="ИПН (10%)" name={`${form.formUid}_ipn`} value={form.fields.ipn} disabled width="130px" />
+                <Field label={translate("baseSalaryCharged")} name={`${form.formUid}_baseSalary`} value={form.fields.baseSalary} onChange={e => handleSalaryChange(e.target.value)} disabled={form.isLoading} width="160px" />
+                <Field label={translate("opv")} name={`${form.formUid}_opv`} value={form.fields.opv} disabled width="130px" />
+                <Field label={translate("vosms")} name={`${form.formUid}_vosms`} value={form.fields.vosms} disabled width="130px" />
+                <Field label={translate("ipn")} name={`${form.formUid}_ipn`} value={form.fields.ipn} disabled width="130px" />
               </GroupRow>
               <GroupRow>
-                <Field label="СО (3.5%)" name={`${form.formUid}_socialContrib`} value={form.fields.socialContrib} disabled width="130px" />
-                <Field label="Соц. налог (9.5%−СО)" name={`${form.formUid}_socialTax`} value={form.fields.socialTax} disabled width="160px" />
-                <Field label="ООСМС (3%)" name={`${form.formUid}_oosms`} value={form.fields.oosms} disabled width="130px" />
+                <Field label={translate("socialContrib")} name={`${form.formUid}_socialContrib`} value={form.fields.socialContrib} disabled width="130px" />
+                <Field label={translate("socialTax")} name={`${form.formUid}_socialTax`} value={form.fields.socialTax} disabled width="160px" />
+                <Field label={translate("oosms")} name={`${form.formUid}_oosms`} value={form.fields.oosms} disabled width="130px" />
               </GroupRow>
               <Divider />
               <GroupRow>
-                <Field label="К выдаче (на руки)" name={`${form.formUid}_netSalary`} value={form.fields.netSalary} disabled width="180px" />
-                <Field label="Расход работодателя" name={`${form.formUid}_totalExpense`} value={form.fields.totalExpense} disabled width="180px" />
+                <Field label={translate("netSalaryHands")} name={`${form.formUid}_netSalary`} value={form.fields.netSalary} disabled width="180px" />
+                <Field label={translate("totalExpenseLabel")} name={`${form.formUid}_totalExpense`} value={form.fields.totalExpense} disabled width="180px" />
               </GroupRow>
             </GroupCol>
-            {form.isEditMode && <><Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
-              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-            </Group></>}
+
           </div>
+          {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+          </Group>}
         </div>
       )
     },
@@ -200,9 +201,11 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <FormRequiredScope docType="payroll_calculation">
-      <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-        onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-        readonly={!canWrite} />
+      <FormDirtyScope dirtyKeys={form.unsavedFields}>
+        <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+          onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+          readonly={!canWrite} />
+      </FormDirtyScope>
     </FormRequiredScope>
   );
 };

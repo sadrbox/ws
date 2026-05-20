@@ -3,6 +3,7 @@
  */
 
 import { FC, useCallback, useState } from "react";
+import { translate } from "src/i18";
 import { useOfflineSync } from "src/hooks/useOfflineSync";
 import { updateEntry, type QueueEntry } from "src/services/offlineQueue";
 import { processQueue } from "src/services/networkStatus";
@@ -11,11 +12,11 @@ import ConflictResolver from "./ConflictResolver";
 import styles from "./OfflineSyncJournal.module.scss";
 
 const STATUS_CONFIG: Record<string, { icon: string; label: string; css: string }> = {
-  pending: { icon: "⏳", label: "Ожидает", css: styles.StatusPending },
-  syncing: { icon: "���", label: "Синхронизация…", css: styles.StatusSyncing },
-  synced: { icon: "✅", label: "Синхронизировано", css: styles.StatusSynced },
-  failed: { icon: "❌", label: "Ошибка", css: styles.StatusFailed },
-  conflict: { icon: "⚠️", label: "Конфликт", css: styles.StatusConflict },
+  pending: { icon: "⏳", label: translate("statusPending"), css: styles.StatusPending },
+  syncing: { icon: "🔄", label: translate("statusSyncing"), css: styles.StatusSyncing },
+  synced: { icon: "✅", label: translate("statusSynced"), css: styles.StatusSynced },
+  failed: { icon: "❌", label: translate("statusFailed"), css: styles.StatusFailed },
+  conflict: { icon: "⚠️", label: translate("statusConflict"), css: styles.StatusConflict },
 };
 
 function formatDate(iso: string): string {
@@ -59,19 +60,19 @@ const OfflineSyncJournal: FC = () => {
     <div className={styles.SyncJournal}>
       <div className={styles.SyncJournalHeader}>
         <div className={styles.SyncJournalTitle}>
-          Журнал синхронизации
+          {translate("syncJournalTitle")}
         </div>
         <div className={styles.SyncJournalSummary}>
           {summary.pending > 0 && <span>⏳ {summary.pending}</span>}
           {summary.conflict > 0 && <span>⚠️ {summary.conflict}</span>}
           {summary.failed > 0 && <span>❌ {summary.failed}</span>}
           {summary.synced > 0 && <span>✅ {summary.synced}</span>}
-          <span>Всего: {summary.total}</span>
+          <span>{translate("total")}: {summary.total}</span>
         </div>
         <div className={styles.SyncJournalActions}>
           {summary.synced > 0 && (
             <Button onClick={clearSynced} disabled={isSyncing}>
-              <span>Очистить ✅</span>
+              <span>{translate("clear")} ✅</span>
             </Button>
           )}
           <Button
@@ -79,7 +80,7 @@ const OfflineSyncJournal: FC = () => {
             onClick={syncNow}
             disabled={isSyncing || !isOnline || summary.pending === 0}
           >
-            <span>{isSyncing ? "Синхронизация…" : "Синхронизировать"}</span>
+            <span>{isSyncing ? translate("statusSyncing") + "…" : translate("syncNow")}</span>
           </Button>
         </div>
       </div>
@@ -87,7 +88,7 @@ const OfflineSyncJournal: FC = () => {
       <div className={styles.SyncJournalBody}>
         {entries.length === 0 ? (
           <div className={styles.SyncJournalEmpty}>
-            Очередь пуста — все данные синхронизированы
+            {translate("syncQueueEmpty")}
           </div>
         ) : (
           entries.map((entry) => {
@@ -101,7 +102,7 @@ const OfflineSyncJournal: FC = () => {
                   <div className={styles.SyncEntryLabel}>{entry.label}</div>
                   <div className={styles.SyncEntryMeta}>
                     {entry.method} {entry.url} · {formatDate(entry.createdAt)}
-                    {entry.attempts > 0 && ` · Попыток: ${entry.attempts}`}
+                    {entry.attempts > 0 && ` · ${translate("attempts")}: ${entry.attempts}`}
                   </div>
                   {entry.lastError && (
                     <div className={styles.SyncEntryError}>{entry.lastError}</div>
@@ -110,12 +111,12 @@ const OfflineSyncJournal: FC = () => {
                 <div className={styles.SyncEntryActions}>
                   {entry.status === "conflict" && (
                     <Button onClick={() => setConflictEntry(entry)}>
-                      <span>Разрешить</span>
+                      <span>{translate("resolve")}</span>
                     </Button>
                   )}
                   {entry.status === "failed" && (
                     <Button onClick={() => handleRetry(entry)}>
-                      <span>Повторить</span>
+                      <span>{translate("retry")}</span>
                     </Button>
                   )}
                   {entry.status !== "syncing" && (

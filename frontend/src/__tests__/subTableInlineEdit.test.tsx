@@ -8,6 +8,7 @@
  * 5. ModelRightsTable: filterRows работает правильно
  */
 import { describe, it, expect } from "vitest";
+import { ACCESS_LEVEL_OPTIONS } from "../models/AccessRights/index";
 
 // ─── Паттерн 1: оптимистичный апдейт handleInlineChange ──────────────────────
 
@@ -124,7 +125,6 @@ describe("SubTable ctx.disabled", () => {
 // ─── Паттерн 4: ModelRightsTable.defaultNewRow ───────────────────────────────
 
 const MODEL_NAME_OPTIONS_SAMPLE = [
-  { value: "", label: "— Выберите —" },
   { value: "Organization", label: "Организации" },
   { value: "Counterparty", label: "Контрагенты" },
 ];
@@ -173,11 +173,7 @@ const modelNameMap: Record<string, string> = {
   Sale: "Продажи",
   Contract: "Договора",
 };
-const accessLevelMap: Record<string, string> = {
-  full: "Полный",
-  readonly: "Только чтение",
-  none: "Нет доступа",
-};
+const accessLevelMap = Object.fromEntries(ACCESS_LEVEL_OPTIONS.map(o => [o.value, o.label]));
 
 function filterRowsFn(
   rows: Array<Record<string, unknown>>,

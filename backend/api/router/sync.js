@@ -24,7 +24,6 @@ const MODEL_MAP = {
 	counterparties: "counterparty",
 	contracts: "contract",
 	contacts: "contact",
-	contacttypes: "contactType",
 	contactpersons: "contactPerson",
 	bankaccounts: "bankAccount",
 	todos: "todo",
@@ -59,8 +58,7 @@ const INCLUDE_MAP = {
 	organization: {},
 	counterparty: {},
 	contract: { organization: true, counterparty: true },
-	contact: { contactType: true },
-	contactType: {},
+	contact: {},
 	contactPerson: {},
 	bankAccount: { currency: true },
 	todo: {

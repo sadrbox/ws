@@ -13,7 +13,7 @@ import { initialSync, startPeriodicSync, stopPeriodicSync } from "src/services/s
 import { clearOfflineDb } from "src/services/offlineDb";
 import { registerServiceWorker } from "src/services/registerSW";
 
-import { getTranslation } from "src/i18";
+import { translate, getTranslation } from "src/i18";
 import { Navbar, NavList, ErrorBoundary, Screen, LoadingSpinner, Container } from "../components/UI";
 import { TComponentNode, TPane, TypeAppContextProps, TypeNavbarProps } from "./types";
 import useUID from "src/hooks/useUID";
@@ -230,10 +230,10 @@ const App: React.FC = () => {
   // Навбар (можно вынести в отдельный хук / компонент позже)
   const initialNavbar: TypeNavbarProps[] =
     [
-      { id: useUID(), isActive: false, title: "Торговля", component: <NavList label="Trade" /> },
-      { id: useUID(), isActive: false, title: "Кадровый учёт", component: <NavList label="HR" /> },
-      { id: useUID(), isActive: false, title: "CRM", component: <NavList label="CRM" /> },
-      { id: useUID(), isActive: false, title: "Настройки", component: <NavList label="Settings" /> },
+      { id: useUID(), isActive: false, title: translate("trade"), component: <NavList label="Trade" /> },
+      { id: useUID(), isActive: false, title: translate("hr"), component: <NavList label="HR" /> },
+      { id: useUID(), isActive: false, title: translate("crm"), component: <NavList label="CRM" /> },
+      { id: useUID(), isActive: false, title: translate("settings"), component: <NavList label="Settings" /> },
     ]
 
 

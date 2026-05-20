@@ -8,7 +8,6 @@ export const ENDPOINT_TO_MODEL: Record<string, string> = {
 	contracts: "Contract",
 	"contract-files": "AttachedFile",
 	contractfiles: "AttachedFile",
-	contacttypes: "ContactType",
 	contacts: "Contact",
 	contactpersons: "ContactPerson",
 	bankaccounts: "BankAccount",

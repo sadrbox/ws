@@ -26,7 +26,7 @@
 		"inlist": false
 	},
 	{
-		"identifier": "contactType.shortName",
+		"identifier": "contactType",
 		"type": "string",
 		"name": "Тип контакта",
 		"width": "250px",

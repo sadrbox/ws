@@ -1,5 +1,6 @@
 import { FC } from "react";
 import { Button } from "src/components/Button";
+import { translate } from "src/i18";
 
 export interface FormPanelProps {
   onSaveAndClose?: () => void;
@@ -35,17 +36,17 @@ const FormPanel: FC<FormPanelProps> = ({
     <>
       {effectiveSaveAndClose && (
         <Button variant="primary" onClick={effectiveSaveAndClose} disabled={isLoading}>
-          <span style={{ fontWeight: 'bold' }}>Сохранить и закрыть</span>
+          <span style={{ fontWeight: 'bold' }}>{translate("saveAndClose")}</span>
         </Button>
       )}
       {effectiveSave && (
         <Button onClick={effectiveSave} disabled={isLoading}>
-          <span>Сохранить</span>
+          <span>{translate("save")}</span>
         </Button>
       )}
       {onClose && (
         <Button onClick={onClose} disabled={isLoading}>
-          <span>Закрыть</span>
+          <span>{translate("close")}</span>
         </Button>
       )}
     </>

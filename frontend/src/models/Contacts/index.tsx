@@ -4,10 +4,9 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field } from "src/components/Field";
+import { Field, FieldSelect } from "src/components/Field";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
-import LookupField from "src/components/Field/LookupField";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,21 +21,38 @@ import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "contacts";
+
+export const CONTACT_TYPE_VALUES = [
+  "legal_address", "actual_address", "telephone",
+  "whatsapp", "telegram", "instagram", "facebook", "email", "website", "fax", "other",
+] as const;
+
+export type ContactTypeValue = (typeof CONTACT_TYPE_VALUES)[number];
+
+export const CONTACT_TYPE_OPTIONS = [
+  { value: "", label: "—" },
+  ...CONTACT_TYPE_VALUES.map((v) => ({ value: v, label: translate(`ct_${v}`) })),
+];
+
+export const contactTypeLabel = (value: string | null | undefined): string => {
+  if (!value) return "";
+  return translate(`ct_${value}`) || value;
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface TFields {
+interface TContactFields {
   id?: number;
   uuid?: string;
   value: string;
-  contactTypeUuid: string;
-  contactTypeName: string;
+  contactType: string;
   ownerType: OwnerType;
   ownerUuid: string;
   ownerName: string;
 }
 
-const DEFAULT_FIELDS: TFields = {
-  value: "", contactTypeUuid: "", contactTypeName: "",
+const DEFAULT_FIELDS: TContactFields = {
+  value: "", contactType: "",
   ownerType: "", ownerUuid: "", ownerName: "",
 };
 
@@ -44,7 +60,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Contact");
   const data = paneProps.data;
 
-  const initialFields: TFields | undefined = (() => {
+  const initialFields: TContactFields | undefined = (() => {
     if (!data || data.uuid) return undefined;
     if (data.ownerType) {
       return {
@@ -57,7 +73,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
     return undefined;
   })();
 
-  const form = useFormStore<TFields>({
+  const form = useFormStore<TContactFields>({
     endpoint: MODEL_ENDPOINT,
     storageKey: "contacts-form",
     defaultFields: DEFAULT_FIELDS,
@@ -69,8 +85,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
       return {
         ...(prev ?? DEFAULT_FIELDS),
         value: d.value ?? "",
-        contactTypeUuid: d.contactTypeUuid ?? "",
-        contactTypeName: d.contactType?.shortName ?? d.contactType?.name ?? "",
+        contactType: d.contactType ?? "",
         ownerType: (d.ownerType as OwnerType) ?? "",
         ownerUuid: d.ownerUuid ?? "",
         ownerName: oName,
@@ -79,15 +94,16 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
       };
     },
     buildPayload: (fd) => {
-      if (!fd.value?.trim()) return "Значение обязательно";
+      if (!fd.value?.trim()) return translate("valueRequired");
+      if (!fd.contactType) return translate("contactTypeRequired");
       return {
         value: fd.value.trim(),
-        contactTypeUuid: fd.contactTypeUuid || null,
+        contactType: fd.contactType,
         ownerType: fd.ownerType || null,
         ownerUuid: fd.ownerUuid || null,
       };
     },
-    buildPaneLabel: (saved) => makePaneLabel("ContactsList", "Контакты", saved),
+    buildPaneLabel: (saved) => makePaneLabel("ContactsList", translate("ContactsList"), saved),
   });
 
   const tabs = useMemo(() => [
@@ -96,14 +112,14 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label="Значение *" name={`${form.formUid}_value`} minWidth="339px" value={form.fields.value} onChange={e => form.setField("value", e.target.value)} disabled={form.isLoading} />
-              <LookupField
-                label="Тип контакта" name={`${form.formUid}_contactTypeUuid`} minWidth="339px"
-                value={form.fields.contactTypeUuid} displayValue={form.fields.contactTypeName}
-                endpoint="contacttypes" displayField="shortName"
-                columns={[{ key: "shortName", label: "Наименование" }]}
-                onSelect={(uuid: string, display: string) => form.setFields({ contactTypeUuid: uuid, contactTypeName: display } as any)}
+              <Field label={`${translate("value")}`} name={`${form.formUid}_value`} minWidth="339px" value={form.fields.value} onChange={e => form.setField("value", e.target.value)} disabled={form.isLoading} />
+              <FieldSelect
+                label={`${translate("contactType")}`} name={`${form.formUid}_contactType`}
+                value={form.fields.contactType}
+                options={CONTACT_TYPE_OPTIONS}
+                onChange={e => form.setField("contactType", e.target.value)}
                 disabled={form.isLoading}
+                required
               />
               <OwnerLookupField
                 ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
@@ -129,7 +145,6 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
       onClose={form.handleClose}
       onReload={form.isEditMode ? form.handleReload : undefined}
       isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-
       readonly={!canWrite}
     />
   );
@@ -147,6 +162,13 @@ interface ContactsListProps {
   ownerField?: string;
 }
 
+const contactsListRenderCell = (row: TDataItem, col: TColumn) => {
+  if (col.identifier === "contactType") {
+    return <span>{contactTypeLabel(row.contactType as string)}</span>;
+  }
+  return undefined;
+};
+
 const ContactsList: FC<ContactsListProps> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
   <ModelList
     endpoint={MODEL_ENDPOINT}
@@ -157,6 +179,7 @@ const ContactsList: FC<ContactsListProps> = ({ variant, onSelectItem, ownerUuid,
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}
     ownerField={ownerField}
+    renderCell={contactsListRenderCell}
   />
 );
 
@@ -166,21 +189,16 @@ ContactsList.displayName = "ContactsList";
 // TABLE — SubTable для вложенного списка контактов
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CT_TABLE_ENDPOINT = "contacts";
-const CT_TABLE_COMPONENT = "ContactsList_part";
+const CT_TABLE_COMPONENT = "ContactsTable";
 
 export interface ContactsTableProps {
-  /** Тип владельца: "organization", "counterparty", "employee", "contactperson", "user" */
   ownerType: string;
-  /** UUID владельца */
   parentUuid: string;
-  /** Имя владельца (для передачи в форму) */
   parentName?: string;
   disabled?: boolean;
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
   initialPendingRows?: TDataItem[];
-  /** Показать кнопку «Сделать основным» — уникальный основной per тип контакта */
   showPrimaryButton?: boolean;
 }
 
@@ -197,34 +215,30 @@ const ContactsTable: FC<ContactsTableProps> = ({
       if (ctx.inlineEditing) return <Field label="" name={`contact_val_${row.id}`} value={(row.value as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "value", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
       return <span>{(row.value as string) ?? ""}</span>;
     }
-    if (col.identifier === "contactType.shortName") {
+    if (col.identifier === "contactType") {
       if (ctx.inlineEditing) return (
-        <LookupField
+        <FieldSelect
           label="" name={`contact_type_${row.id}`}
-          value={(row.contactTypeUuid as string) ?? ""}
-          displayValue={(row.contactType as any)?.shortName ?? ""}
-          endpoint="contacttypes" displayField="shortName"
-          columns={[{ key: "shortName", label: "Наименование" }]}
-          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "contactTypeUuid", uuid, {
-            contactType: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
-          })}
-          onClear={() => ctx.handleLookupChange(row, "contactTypeUuid", null, { contactType: null })}
-          disabled={ctx.disabled} width="100%" variant="table"
+          value={(row.contactType as string) ?? ""}
+          options={CONTACT_TYPE_OPTIONS}
+          onChange={e => ctx.handleInlineChange(row, "contactType", e.target.value)}
+          disabled={ctx.disabled}
+          variant="table"
         />
       );
-      return <span>{(row.contactType as any)?.shortName ?? ""}</span>;
+      return <span>{contactTypeLabel(row.contactType as string)}</span>;
     }
     return undefined;
   }, []);
 
-  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
+  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
     const refresh = () => {
-      void queryClient.invalidateQueries({ queryKey: [CT_TABLE_ENDPOINT] });
-      _ctx.refetch();
+      void queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
+      ctx.refetch();
     };
     addPane({
-      label: makePaneLabelFromData("ContactsList", "Контакты", isEdit ? data as any : null),
+      label: makePaneLabelFromData("ContactsList", translate("ContactsList"), isEdit ? data as any : null),
       component: ContactsForm,
       data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
       onSave: refresh,
@@ -232,9 +246,8 @@ const ContactsTable: FC<ContactsTableProps> = ({
     });
   }, [addPane, ownerType, parentUuid, parentName, queryClient]);
 
-  const defaultNewRow = useMemo(() => ({ value: "", contactTypeUuid: null }), []);
+  const defaultNewRow = useMemo(() => ({ value: "", contactType: "" }), []);
 
-  // Скрываем ownerName в SubTable — владелец известен из контекста
   const adjustedColumns = useMemo(
     () => (columnsJson as any[]).map((col: any) =>
       col.identifier === "ownerName" ? { ...col, visible: false, inlist: false } : col,
@@ -244,7 +257,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
 
   return (
     <SubTable
-      model={CT_TABLE_ENDPOINT}
+      model={MODEL_ENDPOINT}
       componentName={CT_TABLE_COMPONENT}
       columnsJson={adjustedColumns}
       parentKey="ownerUuid"
@@ -259,7 +272,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
-      extraButtons={showPrimaryButton ? <PrimaryToolbarButton endpoint={CT_TABLE_ENDPOINT} disabled={disabled} label="Сделать основным" /> : undefined}
+      extraButtons={showPrimaryButton ? <PrimaryToolbarButton endpoint={MODEL_ENDPOINT} disabled={disabled} label={translate("makePrimary")} /> : undefined}
     />
   );
 };

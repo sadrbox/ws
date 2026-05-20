@@ -23,7 +23,7 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import type { DocumentType } from "src/utils/validatePostedDocument";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
-import { FormRequiredScope } from "src/hooks/useFormRequired";
+import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 
 export interface CashOrderFormConfig {
@@ -151,21 +151,21 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
             <div className={styles.Form}>
               <GroupCol>
                 <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                  <FieldDate label="Дата" name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="160px" />
-                  <FieldToggle name={`${form.formUid}_posted`} label="Проведён" value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
+                  <FieldDate label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="160px" />
+                  <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
                 </GroupRow>
                 <Group>
-                  <LookupField label="Организация" name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
+                  <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
                     onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
                     onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                     disabled={form.isLoading} />
                 </Group>
                 <Group>
-                  <LookupField label="Контрагент" name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName"
+                  <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName"
                     onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
                     onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
                     disabled={form.isLoading} />
-                  <LookupField label="Договор" name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName"
+                  <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName"
                     onSelect={handleContractSelect}
                     onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
                     disabled={form.isLoading}
@@ -175,14 +175,14 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                     }} />
                 </Group>
                 <GroupRow>
-                  <Field label="Сумма" name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
+                  <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
                 </GroupRow>
               </GroupCol>
-              {form.isEditMode && <><Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
-                <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-                <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-              </Group></>}
             </div>
+            {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+            </Group>}
           </div>
         ),
       },
@@ -190,13 +190,15 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
 
     return (
       <FormRequiredScope docType={cfg.docType}>
-        <ModelForm
-          paneId={form.paneId} tabs={tabs}
-          onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-          onReload={form.isEditMode ? form.handleReload : undefined}
-          isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-          readonly={!canWrite}
-        />
+        <FormDirtyScope dirtyKeys={form.unsavedFields}>
+          <ModelForm
+            paneId={form.paneId} tabs={tabs}
+            onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+            onReload={form.isEditMode ? form.handleReload : undefined}
+            isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+            readonly={!canWrite}
+          />
+        </FormDirtyScope>
       </FormRequiredScope>
     );
   };

@@ -12,7 +12,6 @@ const ALL_MODEL_NAMES = [
 	"Counterparty",
 	"Contract",
 	"AttachedFile",
-	"ContactType",
 	"Contact",
 	"ContactPerson",
 	"BankAccount",

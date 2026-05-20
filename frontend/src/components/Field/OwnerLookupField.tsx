@@ -1,4 +1,5 @@
 import { FC, useCallback, useMemo } from "react";
+import { translate } from "src/i18";
 import LookupField from "./LookupField";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -35,10 +36,10 @@ export interface OwnerLookupFieldProps {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const ALL_OWNER_TYPES: { value: OwnerType; label: string }[] = [
-  { value: "organization", label: "Организация" },
-  { value: "counterparty", label: "Контрагент" },
-  { value: "contactperson", label: "Контактное лицо" },
-  { value: "employee", label: "Сотрудник" },
+  { value: "organization", label: translate("organization") },
+  { value: "counterparty", label: translate("counterparty") },
+  { value: "contactperson", label: translate("contactPerson") },
+  { value: "employee", label: translate("employee") },
 ];
 
 const OWNER_ENDPOINT_MAP: Record<string, string> = {
@@ -49,10 +50,10 @@ const OWNER_ENDPOINT_MAP: Record<string, string> = {
 };
 
 const OWNER_TYPE_LABEL_MAP: Record<string, string> = {
-  organization: "Организация",
-  counterparty: "Контрагент",
-  contactperson: "Контактное лицо",
-  employee: "Сотрудник",
+  organization: translate("organization"),
+  counterparty: translate("counterparty"),
+  contactperson: translate("contactPerson"),
+  employee: translate("employee"),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -93,12 +94,12 @@ const OwnerLookupField: FC<OwnerLookupFieldProps> = ({
   }, [onOwnerChange, ownerType, typeLocked]);
 
   const currentType = ownerType || (typeOptions.length === 1 ? typeOptions[0].value : "");
-  const typeLabel = OWNER_TYPE_LABEL_MAP[currentType] || "Владелец";
+  const typeLabel = OWNER_TYPE_LABEL_MAP[currentType] || translate("owner");
 
   // Определяем label: если тип зафиксирован или выбран — "Владелец (Тип)", иначе select в label
   const labelContent = useMemo(() => {
     if (typeLocked && ownerType) {
-      return `Владелец (${typeLabel})`;
+      return `${translate("owner")} (${typeLabel})`;
     }
     return null; // будет рендериться кастомный label с select
   }, [typeLocked, ownerType, typeLabel]);
@@ -148,7 +149,7 @@ const OwnerLookupField: FC<OwnerLookupFieldProps> = ({
             outline: "none",
           }}
         >
-          <option value="">— тип —</option>
+          <option value="">— {translate("type")} —</option>
           {typeOptions.map(opt => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}

@@ -156,6 +156,8 @@ export interface SubTableProps {
    * Используй ctx.toggleExpandRow и ctx.expandedRowIds в renderCell для кнопок.
    */
   renderExpandedRow?: (row: TDataItem, ctx: SubTableContext) => ReactNode;
+  /** Если true — кнопка «Добавить» отображается как disabled */
+  disableAdd?: boolean;
   /**
    * Вычисляет дополнительные (динамические) поля строки, которые
    * отсутствуют в БД, но нужны для клиентской сортировки/фильтрации.
@@ -412,6 +414,7 @@ const SubTable: FC<SubTableProps> = ({
   requiredFields,
   renderExpandedRow: renderExpandedRowProp,
   computeRow,
+  disableAdd = false,
 }) => {
   const queryClient = useQueryClient();
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
@@ -1111,6 +1114,7 @@ const SubTable: FC<SubTableProps> = ({
     if (readonly) return;
     const target = e.target as HTMLElement | null;
     const isInputTarget = target instanceof HTMLInputElement && !target.disabled && target.type !== "checkbox";
+    const isSelectTarget = target instanceof HTMLSelectElement && !target.disabled;
     const isTextAreaTarget = target instanceof HTMLTextAreaElement;
     const isLookupOpen = target?.getAttribute("aria-expanded") === "true";
     const container = containerRef.current;
@@ -1273,6 +1277,9 @@ const SubTable: FC<SubTableProps> = ({
     // ── Enter: вход/выход из редактирования строки ─────────────────────
     if (e.key !== "Enter") return;
     if (isLookupOpen) return;
+    // Когда фокус на select — не перехватываем Enter, браузер сам обрабатывает
+    // открытие/закрытие dropdown. Попытка вмешаться заблокировала бы нативное поведение.
+    if (isSelectTarget) return;
 
     // Хелпер: все редактируемые input-ы внутри tbody / строки.
     const collectInputs = (root: ParentNode): HTMLInputElement[] =>
@@ -1309,11 +1316,16 @@ const SubTable: FC<SubTableProps> = ({
         const cellInput = td.querySelector<HTMLInputElement | HTMLTextAreaElement>(
           'input:not([disabled]):not([type="checkbox"]), textarea:not([disabled])'
         );
+        const cellSelect = !cellInput
+          ? td.querySelector<HTMLSelectElement>('select:not([disabled])')
+          : null;
         e.preventDefault();
         e.stopPropagation();
         if (cellInput) {
           cellInput.focus();
           try { (cellInput as HTMLInputElement).select?.(); } catch { /* ignore */ }
+        } else if (cellSelect) {
+          cellSelect.focus();
         } else {
           // Нередактируемая ячейка — индикация «пульс» (data-pulse="true"),
           // снимаем атрибут после короткой задержки, чтобы CSS-анимация
@@ -1438,6 +1450,7 @@ const SubTable: FC<SubTableProps> = ({
     renderCell,
     onInlineAdd: !readonly && inlineEditing && (onInlineAddProp || defaultNewRow) ? handleInlineAdd : undefined,
     readonly,
+    disableAdd,
     expandedRowIds: renderExpandedRowProp ? expandedRowIds : undefined,
     renderExpandedRow: renderExpandedRowProp
       ? (row: TDataItem) => renderExpandedRowProp(row, ctx)
@@ -1449,7 +1462,7 @@ const SubTable: FC<SubTableProps> = ({
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
     openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
     handleCleanRefresh, handleDelete, extraButtons, inlineEditing, renderCell, getCellMeta, handleInlineAdd, onInlineAddProp, defaultNewRow,
-    renderExpandedRowProp, expandedRowIds, ctx, readonly,
+    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd,
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────

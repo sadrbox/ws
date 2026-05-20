@@ -189,35 +189,35 @@ model AttachedFile {
   @@map("attached_files")
 }
 
-model ContactType {
-  id        Int       @id @default(autoincrement())
-  uuid      String    @unique @default(uuid())
-  shortName String    @unique
-  updatedAt DateTime  @default(now()) @updatedAt
-  deletedAt DateTime?
-  contacts  Contact[]
-
-  @@index([updatedAt])
-  @@map("contact_types")
+enum ContactType {
+  legal_address
+  actual_address
+  telephone
+  whatsapp
+  telegram
+  instagram
+  facebook
+  email
+  website
+  fax
+  other
 }
 
 model Contact {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
   value            String        @default("")
-  contactTypeUuid  String?
+  contactType      ContactType
   ownerType        String?
   ownerUuid        String?
   organizationUuid String?
   isPrimary        Boolean       @default(false)
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
-  contactType      ContactType?  @relation(fields: [contactTypeUuid], references: [uuid])
   organization     Organization? @relation("OrgContacts", fields: [organizationUuid], references: [uuid])
 
-  @@index([contactTypeUuid])
   @@index([ownerType, ownerUuid])
-  @@index([contactTypeUuid, ownerType, ownerUuid, isPrimary])
+  @@index([contactType, ownerType, ownerUuid, isPrimary])
   @@index([organizationUuid])
   @@index([updatedAt])
   @@map("contacts")

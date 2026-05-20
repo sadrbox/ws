@@ -197,6 +197,51 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
+// ── POST /access-rights/batch ───────────────────────────────────────────
+router.post(`/${ROUTE}/batch`, async (req, res) => {
+	try {
+		const { operations } = req.body;
+		if (!Array.isArray(operations) || operations.length === 0)
+			return res.status(400).json({ success: false, message: "operations обязателен" });
+
+		await prisma.$transaction(async (tx) => {
+			for (const op of operations) {
+				const { action, uuid, data } = op;
+				if (action === "create" && data) {
+					await tx[MODEL].upsert({
+						where: {
+							userUuid_organizationUuid_modelName: {
+								userUuid: data.userUuid,
+								organizationUuid: data.organizationUuid ?? null,
+								modelName: data.modelName?.trim() ?? "",
+							},
+						},
+						update: { accessLevel: data.accessLevel?.trim() || "none" },
+						create: {
+							modelName: data.modelName?.trim() ?? "",
+							accessLevel: data.accessLevel?.trim() || "none",
+							userUuid: data.userUuid,
+							organizationUuid: data.organizationUuid ?? null,
+						},
+					});
+				} else if (action === "update" && uuid && data) {
+					await tx[MODEL].update({
+						where: { uuid },
+						data: { accessLevel: data.accessLevel?.trim() || "none" },
+					});
+				} else if (action === "delete" && uuid) {
+					await tx[MODEL].delete({ where: { uuid } });
+				}
+			}
+		});
+
+		return res.status(200).json({ success: true });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/batch error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {

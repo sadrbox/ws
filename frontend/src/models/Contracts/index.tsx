@@ -20,6 +20,7 @@ import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
@@ -116,7 +117,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <Field label="Наименование *" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
+                <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
                 <Field label="Номер договора" name={`${form.formUid}_contractNumber`} minWidth="339px" value={form.fields.contractNumber} onChange={e => form.setField("contractNumber", e.target.value)} disabled={form.isLoading} />
                 <FieldDate label="Дата начала" name={`${form.formUid}_startDate`} minWidth="200px" value={form.fields.startDate} onChange={e => form.setField("startDate", e.target.value)} disabled={form.isLoading} />
                 <FieldDate label="Дата окончания" name={`${form.formUid}_endDate`} minWidth="200px" value={form.fields.endDate} onChange={e => form.setField("endDate", e.target.value)} disabled={form.isLoading} />
@@ -137,16 +138,18 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, filesRevision, handleFilesChange]);
 
   return (
-    <ModelForm
-      paneId={form.paneId}
-      tabs={tabs}
-      onSave={form.handleSave}
-      onSaveAndClose={form.handleSaveAndClose}
-      onClose={form.handleClose}
-      onReload={form.isEditMode ? form.handleReload : undefined}
-      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      readonly={!canWrite}
-    />
+    <FormRequiredScope requiredKeys={["shortName"]}>
+      <ModelForm
+        paneId={form.paneId}
+        tabs={tabs}
+        onSave={form.handleSave}
+        onSaveAndClose={form.handleSaveAndClose}
+        onClose={form.handleClose}
+        onReload={form.isEditMode ? form.handleReload : undefined}
+        isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+        readonly={!canWrite}
+      />
+    </FormRequiredScope>
   );
 };
 ContractsForm.displayName = "ContractsForm";

@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback } from "react";
+import { FC, useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useAppContext } from "src/app";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -28,7 +28,6 @@ export const ACCESS_LEVEL_OPTIONS = [
 ];
 
 export const MODEL_NAME_OPTIONS = [
-  { value: "", label: "— " + (translate("select") || "Выберите") + " —" },
   ...[
     { value: "Organization", i18: "OrganizationsList" },
     { value: "Counterparty", i18: "CounterpartiesList" },
@@ -41,7 +40,6 @@ export const MODEL_NAME_OPTIONS = [
     { value: "Employee", i18: "EmployeesList" },
     { value: "Contact", i18: "ContactsList" },
     { value: "ContactPerson", i18: "ContactPersonsList" },
-    { value: "ContactType", i18: "ContactTypesList" },
     { value: "Position", i18: "PositionsList" },
     { value: "BankAccount", i18: "BankAccountsList" },
     { value: "Currency", i18: "CurrenciesList" },
@@ -220,6 +218,27 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
 
+  const [currentRows, setCurrentRows] = useState<TDataItem[]>(initialPendingRows ?? []);
+  const handleItemsChange = useCallback((items: TDataItem[]) => {
+    setCurrentRows(items);
+    onItemsChange?.(items);
+  }, [onItemsChange]);
+
+  const allModelsUsed = useMemo(() => {
+    const usedModels = new Set(currentRows.map(r => r.modelName as string).filter(Boolean));
+    return MODEL_NAME_OPTIONS.every(o => usedModels.has(o.value));
+  }, [currentRows]);
+
+  const prevAllModelsUsedRef = useRef(false);
+  useEffect(() => {
+    if (allModelsUsed && !prevAllModelsUsedRef.current) {
+      window.dispatchEvent(new CustomEvent("ui_toast", {
+        detail: { message: translate("allModelsAssigned"), type: "info" },
+      }));
+    }
+    prevAllModelsUsedRef.current = allModelsUsed;
+  }, [allModelsUsed]);
+
   const modelNameMap = useMemo(
     () => Object.fromEntries(MODEL_NAME_OPTIONS.filter(o => o.value).map(o => [o.value, o.label])),
     [],
@@ -256,7 +275,7 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
             .filter(Boolean),
         );
         const availableOptions = MODEL_NAME_OPTIONS.filter(
-          o => !o.value || !usedByOthers.has(o.value),
+          o => !usedByOthers.has(o.value),
         );
         return (
           <FieldSelect
@@ -289,6 +308,10 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
 
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
+    if (!isEdit) {
+      const usedModels = new Set(currentRows.map(r => r.modelName as string).filter(Boolean));
+      if (!MODEL_NAME_OPTIONS.some(o => !usedModels.has(o.value))) return;
+    }
     const newData = !isEdit && userUuid
       ? { userUuid, ...(organizationUuid ? { organizationUuid } : {}) } as unknown as TDataItem
       : data;
@@ -303,16 +326,13 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
       onSave: refresh,
       onClose: refresh,
     });
-  }, [addPane, userUuid, organizationUuid, queryClient]);
+  }, [addPane, userUuid, organizationUuid, queryClient, currentRows]);
 
-  // console.log("Тестирование:", MODEL_NAME_OPTIONS.find(o => o.value)?.value, notAddedModels, initialPendingRows);
-
-  // console.log(onItemsChange);
   const defaultNewRow = useMemo(() => {
-    if (!userUuid) return undefined;
+    if (!userUuid || allModelsUsed) return undefined;
     return (rows: TDataItem[]) => {
-      const usedModels = new Set(rows.map(r => r.modelName as string).filter(Boolean));
-      const firstUnused = MODEL_NAME_OPTIONS.find(o => o.value && !usedModels.has(o.value))?.value ?? "";
+      const used = new Set(rows.map(r => r.modelName as string).filter(Boolean));
+      const firstUnused = MODEL_NAME_OPTIONS.find(o => !used.has(o.value))?.value ?? "";
       return {
         modelName: firstUnused,
         accessLevel: "none" as const,
@@ -320,7 +340,7 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
         ...(organizationUuid ? { organizationUuid } : {}),
       };
     };
-  }, [userUuid, organizationUuid]);
+  }, [userUuid, organizationUuid, allModelsUsed]);
 
   return (
     <SubTable
@@ -335,7 +355,7 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
       disabled={!userUuid}
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
-      onItemsChange={onItemsChange}
+      onItemsChange={handleItemsChange}
       emptyMessage={userUuid
         ? (translate("noAccessRights"))
         : (translate("saveUserFirst"))
@@ -343,6 +363,7 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
+      disableAdd={allModelsUsed}
       extraQueryParams={organizationUuid ? { organizationUuid } : undefined}
       filterRows={filterRows}
     />

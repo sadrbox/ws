@@ -1,25 +1,39 @@
 import { TColumn } from "src/components/Table/types";
-import translations from "./translations.json" with { type: "json" };
+import translationsRu from "./translations.json" with { type: "json" };
+import translationsKk from "./translations.kk.json" with { type: "json" };
+
+const _lang = (() => {
+	try { return localStorage.getItem("lang") ?? "ru"; } catch { return "ru"; }
+})();
+
+const translations: Record<string, string> = _lang === "kk"
+	? { ...(translationsRu as Record<string, string>), ...(translationsKk as Record<string, string>) }
+	: (translationsRu as Record<string, string>);
+
+export function getLanguage(): "ru" | "kk" {
+	return _lang as "ru" | "kk";
+}
+
+export function setLanguage(lang: "ru" | "kk"): void {
+	try { localStorage.setItem("lang", lang); } catch { /* ignore */ }
+	window.location.reload();
+}
 
 export function getTranslation(word: string | undefined | null): string {
 	const normalizedWord = word?.toLowerCase()?.replace(/\s/g, "") || "";
 
-	const translate: [string, string] | undefined = Object.entries(
-		translations,
-	).find(([value]) => {
-		const normalizedKey = value.toLowerCase().replace(/\s/g, "");
+	const entry = Object.entries(translations).find(([key]) => {
+		const normalizedKey = key.toLowerCase().replace(/\s/g, "");
 		return normalizedKey === normalizedWord;
 	});
 
-	return translate !== undefined ? translate[1] : word || "";
+	return entry !== undefined ? entry[1] : word || "";
 }
 
 export const translate = (word: string) => getTranslation(word);
 
 /**
  * Перевод серверных сообщений об ошибках на понятный пользователю язык.
- * Принимает строку (часто на английском) и возвращает локализованную версию.
- * Если перевод не найден — возвращает оригинал.
  */
 const errorTranslations: [RegExp, string][] = [
 	// ── Общие серверные ошибки ──
@@ -30,6 +44,7 @@ const errorTranslations: [RegExp, string][] = [
 	[/forbidden/i, "Доступ запрещён"],
 	[/invalid credentials/i, "Неверные учётные данные"],
 	// ── Валидация полей (field required) ──
+	[/contactType\s+is\s+required/i, translate("contactTypeRequired")],
 	[/shortName\s*required/i, "Укажите наименование"],
 	[/contractNumber\s*required/i, "Укажите номер договора"],
 	[/bin\s*required/i, "Укажите БИН"],
@@ -60,9 +75,6 @@ export function getTranslateColumn(column: TColumn): string | undefined {
 	if (column.identifier) {
 		const id = column.identifier.toString();
 		const translated = getTranslation(id);
-		// Если для identifier нет перевода — getTranslation возвращает сам id.
-		// В этом случае предпочитаем явное column.name (например, для
-		// динамически генерируемых колонок типа `tax_<uuid>`).
 		if (translated && translated !== id) return translated;
 		return column.name || id;
 	}

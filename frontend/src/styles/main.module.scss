@@ -333,13 +333,15 @@ body {
 	// NavListWrapper — одна колонка
 	.NavListWrapper {
 		h1 {
-			font-size: $fontsize + 3px;
+			font-size: $fontsize + 2px;
+			font-weight: 600;
 		}
 	}
 
 	.NavSection {
 		flex-direction: column;
 		gap: 12px;
+		padding: 6px 6px;
 	}
 
 	.NavGroup {
@@ -381,7 +383,8 @@ body {
 
 	.NavListWrapper {
 		h1 {
-			font-size: $fontsize + 3px;
+			font-size: $fontsize + 2px;
+			font-weight: 600;
 		}
 	}
 
@@ -425,10 +428,11 @@ body {
 	gap: 6px;
 	flex: 1;
 	overflow-y: auto;
+	margin: 0 -6px;
 
 	h1 {
-		margin: 0px 0 0px 0px;
-		padding: 0px;
+		margin: 0px 0px;
+		padding: 0px 6px;
 		// font-family: Arial, Helvetica, sans-serif;
 		// font-size: 120%;
 		color: $color6;
@@ -437,23 +441,24 @@ body {
 		// line-height: $heightFieldInput + 2;
 		align-items: center;
 		height: $heightFieldInput + 6px;
-		font-weight: 500;
-		font-size: $fontsize + 3px;
+		font-size: $fontsize + 2px;
+		font-weight: 600;
 		color: $color6;
-		border-bottom: 1px solid $color33;
+		// border-bottom: 1px solid $color33;
 	}
 }
 
 .NavSection {
-	display: flex;
+	display: inline-flex;
 	flex-direction: row;
 	flex-wrap: wrap;
 	gap: 24px;
-	padding: 6px 0;
+	padding: 6px 6px;
 }
 
 .NavGroup {
-	min-width: 200px;
+	// min-width: 200px;
+	flex: 0 0 250px; // фиксированная ширина 250px, не растёт и не сжимается
 	display: flex;
 	flex-direction: column;
 
@@ -554,7 +559,7 @@ body {
 	// border-bottom: 1px solid #aaa;
 	// box-shadow: 0 0 12px 1px rgba(#000, 0.1);
 	// box-shadow: 0px 0px 3px 1px rgba(#000, 0.4);
-	border-bottom: 1px solid #ddd;
+	// border-bottom: 1px solid #ddd;
 	user-select: none;
 }
 
@@ -563,8 +568,8 @@ body {
 	align-items: center;
 	margin: 0;
 	padding: 0;
-	font-weight: 500;
-	font-size: $fontsize + 3px;
+	font-weight: 600;
+	font-size: $fontsize + 2px;
 	color: $color6;
 	white-space: nowrap;
 	overflow: hidden;

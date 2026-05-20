@@ -135,9 +135,6 @@ router.get("/contacts", async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			orderBy,
-			include: {
-				contactType: true,
-			},
 		};
 
 		if (cursorNumber !== null) {
@@ -179,18 +176,8 @@ router.get("/contacts/:id", async (req, res) => {
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 
 		const item = isNumeric
-			? await prisma.contact.findUnique({
-					where: { id: numId },
-					include: {
-						contactType: true,
-					},
-				})
-			: await prisma.contact.findUnique({
-					where: { uuid: param },
-					include: {
-						contactType: true,
-					},
-				});
+			? await prisma.contact.findUnique({ where: { id: numId } })
+			: await prisma.contact.findUnique({ where: { uuid: param } });
 
 		if (!item) {
 			return res
@@ -210,12 +197,16 @@ router.get("/contacts/:id", async (req, res) => {
 // ============================================
 router.post("/contacts", async (req, res) => {
 	try {
-		const { value, contactTypeUuid, ownerType, ownerUuid, isPrimary } = req.body;
+		const { value, contactType, ownerType, ownerUuid, isPrimary } = req.body;
+
+		if (!contactType) {
+			return res.status(400).json({ success: false, message: "contactType is required" });
+		}
 
 		const makePrimary = isPrimary === true;
 		const createData = {
 			value: typeof value === "string" ? value.trim() : "",
-			contactTypeUuid: contactTypeUuid || null,
+			contactType,
 			ownerType: ownerType?.trim() || null,
 			ownerUuid: ownerUuid?.trim() || null,
 			organizationUuid: req.user?.organizationUuid ?? null,
@@ -224,10 +215,10 @@ router.post("/contacts", async (req, res) => {
 
 		const item = await prisma.$transaction(async (tx) => {
 			// Сбрасываем флаг у других контактов того же типа и владельца
-			if (makePrimary && createData.contactTypeUuid && createData.ownerType && createData.ownerUuid) {
+			if (makePrimary && createData.contactType && createData.ownerType && createData.ownerUuid) {
 				await tx.contact.updateMany({
 					where: {
-						contactTypeUuid: createData.contactTypeUuid,
+						contactType: createData.contactType,
 						ownerType: createData.ownerType,
 						ownerUuid: createData.ownerUuid,
 						isPrimary: true,
@@ -235,7 +226,7 @@ router.post("/contacts", async (req, res) => {
 					data: { isPrimary: false },
 				});
 			}
-			return tx.contact.create({ data: createData, include: { contactType: true } });
+			return tx.contact.create({ data: createData });
 		});
 
 		return res.status(201).json({ success: true, item });
@@ -255,10 +246,10 @@ router.put("/contacts/:id", async (req, res) => {
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 
-		const { value, contactTypeUuid, ownerType, ownerUuid, isPrimary } = req.body;
+		const { value, contactType, ownerType, ownerUuid, isPrimary } = req.body;
 		const data = {};
 		if (value !== undefined) data.value = value?.trim() ?? null;
-		if (contactTypeUuid !== undefined) data.contactTypeUuid = contactTypeUuid || null;
+		if (contactType !== undefined) data.contactType = contactType || null;
 		if (ownerType !== undefined) data.ownerType = ownerType?.trim() || null;
 		if (ownerUuid !== undefined) data.ownerUuid = ownerUuid?.trim() || null;
 		if (isPrimary !== undefined) data.isPrimary = !!isPrimary;
@@ -269,13 +260,13 @@ router.put("/contacts/:id", async (req, res) => {
 			if (data.isPrimary === true) {
 				const current = await tx.contact.findUnique({ where: whereClause });
 				if (current) {
-					const typeUuid = data.contactTypeUuid ?? current.contactTypeUuid;
+					const cType = data.contactType ?? current.contactType;
 					const oType = data.ownerType ?? current.ownerType;
 					const oUuid = data.ownerUuid ?? current.ownerUuid;
-					if (typeUuid && oType && oUuid) {
+					if (cType && oType && oUuid) {
 						await tx.contact.updateMany({
 							where: {
-								contactTypeUuid: typeUuid,
+								contactType: cType,
 								ownerType: oType,
 								ownerUuid: oUuid,
 								isPrimary: true,
@@ -286,11 +277,7 @@ router.put("/contacts/:id", async (req, res) => {
 					}
 				}
 			}
-			return tx.contact.update({
-				where: whereClause,
-				data,
-				include: { contactType: true },
-			});
+			return tx.contact.update({ where: whereClause, data });
 		});
 
 		return res.status(200).json({ success: true, item });

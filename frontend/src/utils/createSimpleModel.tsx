@@ -23,6 +23,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { FormDirtyScope, FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { Group } from "src/components/UI";
@@ -35,7 +36,7 @@ import { Group } from "src/components/UI";
 export interface SimpleFieldDef {
   /** Ключ в объекте fields (напр. "shortName", "code") */
   key: string;
-  /** Русская метка (напр. "Наименование *") */
+  /** Русская метка (напр. "Наименование") */
   label: string;
   /** Обязательное поле — добавится валидация в buildPayload */
   required?: boolean;
@@ -99,6 +100,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
 
   // requiredKeys + validationMap
   const requiredFields = fields.filter((f) => f.required);
+  const requiredKeys = requiredFields.map((f) => f.key);
 
   // ─── FORM ───────────────────────────────────────────────────────────
 
@@ -152,7 +154,6 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
                     value={form.fields[f.key] ?? ""}
                     onChange={(e) => form.setField(f.key, e.target.value)}
                     disabled={form.isLoading}
-                    isDirty={form.unsavedFields.has(f.key)}
                   />
                 ))}
               </Group>
@@ -163,17 +164,21 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
     ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField]);
 
     return (
-      <ModelForm
-        paneId={form.paneId}
-        tabs={tabs}
-        onSave={form.handleSave}
-        onSaveAndClose={form.handleSaveAndClose}
-        onClose={form.handleClose}
-        onReload={form.isEditMode ? form.handleReload : undefined}
-        isLoading={form.isLoading}
-        isInitialLoading={form.isInitialLoading}
-        readonly={!access.canWrite}
-      />
+      <FormRequiredScope requiredKeys={requiredKeys}>
+        <FormDirtyScope dirtyKeys={form.unsavedFields}>
+          <ModelForm
+            paneId={form.paneId}
+            tabs={tabs}
+            onSave={form.handleSave}
+            onSaveAndClose={form.handleSaveAndClose}
+            onClose={form.handleClose}
+            onReload={form.isEditMode ? form.handleReload : undefined}
+            isLoading={form.isLoading}
+            isInitialLoading={form.isInitialLoading}
+            readonly={!access.canWrite}
+          />
+        </FormDirtyScope>
+      </FormRequiredScope>
     );
   };
   SimpleForm.displayName = `${listName.replace("List", "")}Form`;

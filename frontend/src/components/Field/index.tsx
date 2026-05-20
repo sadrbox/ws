@@ -4,7 +4,7 @@ import styles from "./Field.module.scss"
 import FieldActionButton from "./FieldActionButton"
 import type { IconName } from "src/components/IconButton/icons"
 import { useCellFieldState } from "src/hooks/useDirtyHighlight"
-import { useFormRequiredScope } from "src/hooks/useFormRequired"
+import { useFormRequiredScope, useFormDirtyScope } from "src/hooks/useFormRequired"
 // import { TypeDateRange } from '../Table/types'
 
 import { getFormatNumerical, parseNumericInput } from 'src/components/Table/services.ts'
@@ -54,14 +54,8 @@ interface FieldAction {
 type TypeFieldActions = FieldAction[];
 
 // ── Общий hook для всех Field* компонентов ──────────────────────────────────
-// Объединяет: класс обёртки (с учётом variant, required, error, контекста
-// ячейки таблицы и контекста обязательных полей формы).
-//
-// Источники required (по приоритету):
-//   1) явный проп required=true (на компоненте)
-//   2) CellFieldStateScope.required (для ячеек SubTable)
-//   3) FormRequiredScope — автоматически, когда поле в REQUIRED_FIELDS_MAP
-//      и документ проведён (posted=true)
+// Источники required: явный проп → CellFieldStateScope → FormRequiredScope
+// Источники dirty:    явный проп isDirty → FormDirtyScope
 function useFieldBase(params: {
   name: string;
   variant: FieldVariant;
@@ -70,24 +64,25 @@ function useFieldBase(params: {
   value?: string | number;
   isDirty?: boolean;
 }) {
-  const { name, variant, required, error, value, isDirty } = params;
+  const { name, variant, required, error, value, isDirty: isDirtyProp } = params;
   const cellState = useCellFieldState();
   const formRequired = useFormRequiredScope();
+  const formDirty = useFormDirtyScope();
   const isTable = variant === 'table';
   const isEmpty = value === '' || value === undefined || value === null || value === 0;
 
   // tail: часть имени после последнего `_` (напр. "formUid_date" → "date")
   const tail = name.includes('_') ? name.slice(name.lastIndexOf('_') + 1) : name;
-  const isFormRequired = !isTable && formRequired.requiredKeys.has(tail);
 
-  const effectiveRequired = required || !!cellState.required || isFormRequired;
+  const effectiveRequired = required || !!cellState.required || (!isTable && formRequired.requiredKeys.has(tail));
   const effectiveError = error || !!cellState.error;
+  const effectiveDirty = !isTable && (isDirtyProp || formDirty.has(tail));
 
   const wrapperClass = [
     isTable ? `${styles.FieldWrapper} ${styles.tableVariant}` : styles.FieldWrapper,
     !effectiveError && effectiveRequired && isEmpty ? styles.FieldRequired : '',
     effectiveError ? styles.FieldError : '',
-    isDirty && !isTable ? styles.FieldDirty : '',
+    effectiveDirty ? styles.FieldDirty : '',
   ].filter(Boolean).join(' ');
 
   return { isTable, wrapperClass, effectiveRequired, effectiveError };

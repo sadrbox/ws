@@ -8,6 +8,7 @@
  *   }))
  */
 import { FC, useCallback, useEffect, useRef, useState } from "react";
+import { translate } from "src/i18";
 import styles from "./UIToast.module.scss";
 
 const MessageLines: FC<{ text: string }> = ({ text }) => {
@@ -110,7 +111,7 @@ const UIToast: FC = () => {
           <button
             className={styles.Close}
             onClick={() => dismiss(toast.id)}
-            aria-label="Закрыть"
+            aria-label={translate("close")}
             type="button"
           >
             ×

@@ -41,7 +41,7 @@ export interface LookupFieldProps {
   onSelect: (uuid: string, displayValue: string, item: Record<string, any>) => void;
   /** Колбэк при очистке */
   onClear?: () => void;
-  /** Endpoint API, напр. "organizations", "counterparties", "contacttypes" */
+  /** Endpoint API, напр. "organizations", "counterparties" */
   endpoint: string;
   /** Поле для отображения (по умолчанию "shortName") */
   displayField?: string;
@@ -99,10 +99,9 @@ const defaultSecondaryFieldsMap: Record<string, string[]> = {
   products: ["sku", "brand.shortName"],
   employees: ["iin", "position"],
   users: ["employee.fullName"],
-  contracts: ["documentNumber"],
+  // contracts: ["documentNumber"],
   bankaccounts: ["iban"],
   currencies: ["code", "symbol"],
-  contacttypes: [],
   warehouses: ["code"],
   brands: [],
 };

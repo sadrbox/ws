@@ -9,7 +9,7 @@ const { Form: UnitOfMeasuresForm, List: UnitOfMeasuresList } = createSimpleModel
   columnsJson,
   accessRight: "UnitOfMeasure",
   fields: [
-    { key: "shortName", label: "Наименование *", required: true, requiredMessage: "Наименование обязательно" },
+    { key: "shortName", label: "Наименование", required: true, requiredMessage: "Наименование обязательно" },
     { key: "code", label: "Код" },
   ],
 });

@@ -9,7 +9,7 @@ const { Form: BrandsForm, List: BrandsList } = createSimpleModel({
   columnsJson,
   accessRight: "Brand",
   fields: [
-    { key: "shortName", label: "Наименование *", required: true, requiredMessage: "Наименование обязательно" },
+    { key: "shortName", label: "Наименование", required: true, requiredMessage: "Наименование обязательно" },
   ],
 });
 

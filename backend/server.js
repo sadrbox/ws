@@ -30,7 +30,6 @@ import organizationsRouter from "./api/router/organizations.js";
 import contractsRouter from "./api/router/contracts.js";
 import filesRouter from "./api/router/files.js";
 import bankAccountsRouter from "./api/router/bankaccounts.js";
-import contactTypesRouter from "./api/router/contacttypes.js";
 import contactsRouter from "./api/router/contacts.js";
 import contactPersonsRouter from "./api/router/contactpersons.js";
 import usersRouter from "./api/router/users.js";
@@ -66,6 +65,7 @@ import taxesRouter from "./api/router/taxes.js";
 import organizationAccountingSettingsRouter from "./api/router/organizationaccountingsettings.js";
 import syncRouter from "./api/router/sync.js";
 import refReplacementRouter from "./api/router/refreplacement.js";
+import reportsRouter from "./api/router/reports.js";
 
 const app = express();
 
@@ -234,7 +234,6 @@ app.use("/api/v1", organizationsRouter);
 app.use("/api/v1", contractsRouter);
 app.use("/api/v1", filesRouter);
 app.use("/api/v1", bankAccountsRouter);
-app.use("/api/v1", contactTypesRouter);
 app.use("/api/v1", contactsRouter);
 app.use("/api/v1", contactPersonsRouter);
 app.use("/api/v1", usersRouter);
@@ -270,6 +269,7 @@ app.use("/api/v1", taxesRouter);
 app.use("/api/v1", organizationAccountingSettingsRouter);
 app.use("/api/v1", syncRouter);
 app.use("/api/v1", refReplacementRouter);
+app.use("/api/v1", reportsRouter);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. ОБРАБОТКА 404

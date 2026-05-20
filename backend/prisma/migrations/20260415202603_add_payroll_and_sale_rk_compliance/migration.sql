@@ -131,7 +131,6 @@ ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 CREATE TABLE "payroll_calculations" (
     "id" SERIAL NOT NULL,
     "uuid" TEXT NOT NULL,
-    "documentNumber" TEXT,
     "documentDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "description" TEXT,
     "period" VARCHAR(7),
@@ -158,7 +157,6 @@ CREATE TABLE "payroll_calculations" (
 CREATE TABLE "payroll_payments" (
     "id" SERIAL NOT NULL,
     "uuid" TEXT NOT NULL,
-    "documentNumber" TEXT,
     "documentDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "description" TEXT,
     "period" VARCHAR(7),

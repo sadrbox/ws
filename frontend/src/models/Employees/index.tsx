@@ -18,6 +18,7 @@ import AvatarUpload from "src/components/AvatarUpload";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
+import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
@@ -57,8 +58,8 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
       contacts: {
         endpoint: "contacts", parentField: "ownerUuid",
         label: translate("ContactsList"),
-        createPayload: (r: any) => ({ value: r.value ?? "", contactTypeUuid: r.contactTypeUuid ?? null }),
-        updatePayload: (r: any) => ({ value: r.value ?? "", contactTypeUuid: r.contactTypeUuid ?? null }),
+        createPayload: (r: any) => ({ value: r.value ?? "", contactType: r.contactType ?? null }),
+        updatePayload: (r: any) => ({ value: r.value ?? "", contactType: r.contactType ?? null }),
         extraFields: { ownerType: "employee" },
       },
       history: {
@@ -148,9 +149,11 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, handleNameFieldChange, contacts, history, canReadContacts, canReadEmployeeHistory, canWrite]);
 
   return (
-    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-      onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      readonly={!canWrite} />
+    <FormRequiredScope requiredKeys={["lastName"]}>
+      <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+        onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+        readonly={!canWrite} />
+    </FormRequiredScope>
   );
 };
 EmployeesForm.displayName = "EmployeesForm";
@@ -230,7 +233,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
       return <span>{(row.position as any)?.shortName ?? ""}</span>;
     }
     if (col.identifier === "salary") {
-      if (ctx.inlineEditing) return <FieldNumber name={`hist_salary_${row.id}`} value={row.salary != null ? Number(row.salary) : 0} onChange={e => ctx.handleInlineChange(row, "salary", e.target.value)} disabled={ctx.disabled} step="0.1" textAlign="right" width="100%" actions={[]} variant="table" />;
+      if (ctx.inlineEditing) return <FieldNumber name={`hist_salary_${row.id}`} value={row.salary != null ? String(row.salary) : ""} onChange={e => ctx.handleInlineChange(row, "salary", e.target.value)} disabled={ctx.disabled} step="0.1" textAlign="right" width="100%" actions={[]} variant="table" />;
       return <span>{row.salary != null ? String(Number(row.salary)) : ""}</span>;
     }
     return undefined;

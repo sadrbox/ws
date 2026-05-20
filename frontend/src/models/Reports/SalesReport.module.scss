@@ -1,0 +1,106 @@
+// Стили макета «Отчёт о реализации товаров (услуг)» — ландшафтный A4.
+// Рендерится внутри ReportPane.ReportSheet (белый лист, шрифт уже задан).
+
+.Report {
+  width: 100%;
+}
+
+// ── Шапка ────────────────────────────────────────────────────────────────────
+
+.OrgName {
+  font-size: 11pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4pt;
+}
+
+.Title {
+  font-size: 11pt;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 3pt;
+}
+
+.SortLine {
+  font-size: 8.5pt;
+  color: #444;
+  margin-bottom: 8pt;
+}
+
+// ── Таблица ──────────────────────────────────────────────────────────────────
+
+.Table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8.5pt;
+  font-family: "Times New Roman", Times, serif;
+  table-layout: auto;
+
+  th,
+  td {
+    border: 0.5pt solid #000;
+    padding: 2pt 3pt;
+    vertical-align: middle;
+  }
+
+  th {
+    background: #e8e8e8;
+    font-weight: 600;
+    text-align: center;
+    vertical-align: middle;
+    line-height: 1.25;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  tbody tr:nth-child(even) {
+    background: #fafafa;
+  }
+}
+
+.ColN {
+  text-align: center !important;
+  width: 20pt;
+  white-space: nowrap;
+}
+
+.ColName {
+  text-align: left !important;
+  min-width: 100pt;
+}
+
+.ColNum {
+  text-align: right !important;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 48pt;
+}
+
+// ── Итоговая строка ───────────────────────────────────────────────────────────
+
+.TotalRow {
+  font-weight: 700;
+  background: #e8e8e8 !important;
+
+  td {
+    border-top: 1pt solid #000;
+  }
+
+  .ColNum {
+    text-align: right !important;
+  }
+}
+
+// ── Печать: убрать фоны, сохранить рамки ─────────────────────────────────────
+
+@media print {
+  .Table {
+    th,
+    .TotalRow td {
+      background: #e8e8e8 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

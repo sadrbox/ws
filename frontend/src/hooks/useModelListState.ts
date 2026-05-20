@@ -7,7 +7,7 @@ import {
 } from "src/hooks/useInfiniteModelList";
 import useQueryParams from "src/hooks/useQueryParams";
 import { useModelDelete } from "src/hooks/useModelDelete";
-import { getModelColumns } from "src/components/Table/services";
+import { getModelColumns, matchRowBySearch } from "src/components/Table/services";
 import type {
 	TColumn,
 	TDataItem,
@@ -92,13 +92,13 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		[],
 	);
 
+	// search не передаётся на бэкенд — фильтрация только client-side (см. rows ниже)
 	const params = useMemo(
 		() => ({
 			sort,
-			search,
 			filter: ownerFilter ? { ...ownerFilter, ...filter } : filter,
 		}),
-		[sort, search, filter, ownerFilter],
+		[sort, filter, ownerFilter],
 	);
 
 	const {
@@ -123,19 +123,30 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		setCacheVersion((v) => v + 1);
 	}, [allItems]);
 
-	// Защитный слой: фильтруем строки на фронтенде по ownerFilter,
-	// чтобы гарантировать отображение только записей владельца
+	// Client-side фильтрация:
+	// 1. ownerFilter — гарантирует отображение только записей владельца
+	// 2. search — только по ВИДИМЫМ колонкам, включая ссылочные (reference) поля
 	const rows = useMemo(() => {
-		const cached = cachedRowsRef.current;
-		if (!ownerFilter) return cached;
-		return cached.filter((row: TDataItem) => {
-			for (const [field, cond] of Object.entries(ownerFilter)) {
-				if (cond.operator === "equals" && (row as any)[field] !== cond.value)
-					return false;
-			}
-			return true;
-		});
-	}, [cacheVersion, ownerFilter]);
+		let result = cachedRowsRef.current;
+
+		if (ownerFilter) {
+			result = result.filter((row: TDataItem) => {
+				for (const [field, cond] of Object.entries(ownerFilter)) {
+					if (cond.operator === "equals" && (row as any)[field] !== cond.value)
+						return false;
+				}
+				return true;
+			});
+		}
+
+		if (search) {
+			const visibleCols = columns.filter(c => c.visible);
+			const words = search.toLowerCase().split(/\s+/).filter(Boolean).map(w => w.replace(",", "."));
+			result = result.filter((row: TDataItem) => matchRowBySearch(row, visibleCols, words));
+		}
+
+		return result;
+	}, [cacheVersion, ownerFilter, search, columns]);
 
 	// ── Handlers ───────────────────────────────────────────────────────────
 	const handleSortChange = useCallback(
@@ -165,10 +176,8 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		[setFilter],
 	);
 
-	// Нормализуем поисковый запрос: заменяем запятую на точку,
-	// чтобы "3,5" корректно находило числовые значения на бэкенде
 	const handleSearch = useCallback(
-		(v: string) => setSearch(v.trim().replace(",", ".")),
+		(v: string) => setSearch(v.trim()),
 		[setSearch],
 	);
 	const clearFilters = useCallback(() => {

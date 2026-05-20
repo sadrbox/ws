@@ -5,6 +5,7 @@ import styles from './Modal.module.scss';
 import { useAppContext } from 'src/app/context';
 import { TypeFormMethod } from '../Table/types';
 import { Button } from '../Button';
+import { translate } from 'src/i18';
 // import { useAppContext } from 'src/app/AppContextProvider';
 
 type ModalButton = {
@@ -148,8 +149,8 @@ const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, classNa
                 <Button key={i} onClick={btn.onClick} variant={btn.variant ?? 'primary'}>{btn.label}</Button>
               ))
               : <>
-                {onApply && <Button onClick={onApplyAndClose} variant="secondary">Применить</Button>}
-                <Button onClick={handleClose} variant="secondary">Отмена</Button>
+                {onApply && <Button onClick={onApplyAndClose} variant="secondary">{translate("apply")}</Button>}
+                <Button onClick={handleClose} variant="secondary">{translate("cancel")}</Button>
               </>
             }
           </div>

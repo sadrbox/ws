@@ -22,6 +22,7 @@ import IconButton, {
   type IconButtonProps,
 } from "src/components/IconButton/IconButton";
 import { Icon, type IconName, CloseIcon } from "src/components/IconButton/icons";
+import { translate } from "src/i18";
 import styles from "./Toolbar.module.scss";
 
 // ─── Toolbar (контейнер) ────────────────────────────────────────────────
@@ -80,15 +81,15 @@ function makeButton(name: IconName, label: string) {
   return Cmp;
 }
 
-const ReloadButton = makeButton("reload", "Обновить");
-const SettingsButton = makeButton("settings", "Настройки колонок");
-const PeriodButton = makeButton("calendar", "Период");
-const SearchButton = makeButton("search", "Поиск");
-const InlineEditButton = makeButton("editInline", "Редактирование в таблице");
-const MakePrimaryButton = makeButton("makePrimary", "Сделать основным");
-const RecalcButton = makeButton("recalc", "Пересчитать");
-const RefillButton = makeButton("restore", "Перезаполнить");
-const PrintButton = makeButton("print", "Печать");
+const ReloadButton = makeButton("reload", translate("refresh"));
+const SettingsButton = makeButton("settings", translate("columnSettings"));
+const PeriodButton = makeButton("calendar", translate("period"));
+const SearchButton = makeButton("search", translate("search"));
+const InlineEditButton = makeButton("editInline", translate("inlineEdit"));
+const MakePrimaryButton = makeButton("makePrimary", translate("makePrimary"));
+const RecalcButton = makeButton("recalc", translate("recalc"));
+const RefillButton = makeButton("restore", translate("restore"));
+const PrintButton = makeButton("print", translate("print"));
 
 // ─── Toolbar.CloseButton ────────────────────────────────────────────────
 
@@ -99,8 +100,8 @@ const CloseButton: FC<Omit<ToolbarIconButtonProps, "icon" | "children">> = ({
 }) => (
   <ToolbarIconButton
     className={[styles.CloseButton, className].filter(Boolean).join(" ")}
-    title={title ?? "Закрыть"}
-    aria-label="Закрыть"
+    title={title ?? translate("close")}
+    aria-label={translate("close")}
     {...props}
   >
     <CloseIcon />

@@ -34,9 +34,10 @@ export function makePaneLabel(
 	displayValue?: string,
 ): string {
 	const name = resolveFormName(listName, fallback);
-	const id = saved.id ?? "?";
+	const id = saved.id;
+	if (!id) return `${name}: ${translate("new")}`;
 	const detail = displayValue ?? saved.shortName;
-	return detail ? `${name}: №${id} · ${detail}` : `${name}: №${id}`;
+	return detail ? `${name}: ID ${id} · ${detail}` : `${name}: ID ${id}`;
 }
 
 /**
@@ -50,11 +51,12 @@ export function makeDocLabel(
 	dateField = "date",
 ): string {
 	const name = resolveFormName(listName, fallback);
-	const id = saved.id ?? "?";
+	const id = saved.id;
+	if (!id) return `${name}: ${translate("new")}`;
 	const date = saved[dateField]
 		? getFormatDateOnly(String(saved[dateField]))
 		: undefined;
-	return date ? `${name}: №${id} · ${date}` : `${name}: №${id}`;
+	return date ? `${name}: ID ${id} · ${date}` : `${name}: ID ${id}`;
 }
 
 /**
@@ -71,5 +73,5 @@ export function makePaneLabelFromData(
 	if (!data?.uuid && !data?.id) return `${name}: ${translate("new")}`;
 	const id = data.id ?? "?";
 	const detail = displayValue ?? data.shortName;
-	return detail ? `${name}: №${id} · ${detail}` : `${name}: №${id}`;
+	return detail ? `${name}: ID ${id} · ${detail}` : `${name}: ID ${id}`;
 }

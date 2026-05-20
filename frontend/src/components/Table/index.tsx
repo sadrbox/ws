@@ -10,7 +10,7 @@ import {
   TypeModalFormProps,
 } from './types';
 
-import { getTranslateColumn } from 'src/i18';
+import { getTranslateColumn, translate } from 'src/i18';
 import { getFormatColumnValue } from './services';
 import {
   CHECKBOX_COL_ID,
@@ -130,6 +130,8 @@ export interface TableContextProps {
   inlineEditing?: boolean;
   renderCell?: (row: TDataItem, col: TColumn) => React.ReactNode | undefined;
   onInlineAdd?: () => void;
+  /** Если true — кнопка «Добавить» disabled */
+  disableAdd?: boolean;
 
   // ── Refs для inline-editing (не триггерят ререндер contextValue) ───────
   renderCellRef?: React.RefObject<((row: TDataItem, col: TColumn) => React.ReactNode | undefined) | undefined>;
@@ -213,6 +215,8 @@ export interface TableProps {
   getCellMeta?: (row: TDataItem, col: TColumn) => { required?: boolean; error?: boolean; errorMessage?: string; errorTooltip?: React.ReactNode } | null;
   /** Если true — скрыть кнопки «Добавить»/«Удалить» (режим только чтение по правам доступа) */
   readonly?: boolean;
+  /** Если true — кнопка «Добавить» отображается как disabled */
+  disableAdd?: boolean;
   /** Раскрытые строки (expand) */
   expandedRowIds?: Set<string>;
   /** Рендер содержимого раскрытой строки */
@@ -262,6 +266,8 @@ interface TableControlPanelProps {
   extraButtons?: React.ReactNode;
   /** Если true — скрыть кнопки «Добавить»/«Удалить» (режим только чтение) */
   readonly?: boolean;
+  /** Если true — кнопка «Добавить» отображается как disabled */
+  disableAdd?: boolean;
 }
 
 const TableControlPanel = memo(({
@@ -280,6 +286,7 @@ const TableControlPanel = memo(({
   search,
   extraButtons,
   readonly: isReadonly = false,
+  disableAdd = false,
 }: TableControlPanelProps) => {
   const isSelect = variant === 'select';
   const hideWrite = isSelect || isReadonly;
@@ -287,7 +294,7 @@ const TableControlPanel = memo(({
     <Toolbar
       right={visibleFastSearch ? <FieldFastSearchInternal value={search.value} onChange={search.onChange} /> : undefined}
     >
-      {!hideWrite && <Button onClick={onAddClick} disabled={isLoading}><span>Добавить</span></Button>}
+      {!hideWrite && <Button onClick={onAddClick} disabled={isLoading || disableAdd} title={disableAdd ? translate("allModelsAssigned") : undefined}><span>Добавить</span></Button>}
       {!hideWrite && <Button onClick={onDeleteClick} disabled={isLoading || !hasSelection} title={!hasSelection ? "Выделите одну или несколько строк" : undefined}><span>Удалить</span></Button>}
       {!isSelect && extraButtons}
       {!isSelect && <Toolbar.Divider />}
@@ -313,7 +320,8 @@ const TableControlPanel = memo(({
     prevProps.onDeleteClick === nextProps.onDeleteClick &&
     prevProps.onAddClick === nextProps.onAddClick &&
     prevProps.hasSelection === nextProps.hasSelection &&
-    prevProps.readonly === nextProps.readonly
+    prevProps.readonly === nextProps.readonly &&
+    prevProps.disableAdd === nextProps.disableAdd
   );
 });
 
@@ -339,6 +347,7 @@ const Table: FC<TableProps> = memo((props) => {
     onInlineAdd,
     getCellMeta,
     readonly: isReadonly = false,
+    disableAdd = false,
     expandedRowIds,
     renderExpandedRow,
     apiRef,
@@ -779,6 +788,7 @@ const Table: FC<TableProps> = memo((props) => {
           search={search}
           extraButtons={extraButtons}
           readonly={isReadonly}
+          disableAdd={disableAdd}
         />
 
         {showDateRangeButton && hasDateRange && (

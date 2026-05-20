@@ -27,7 +27,7 @@ import ModelList from "src/components/ModelList";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
-import { FormRequiredScope } from "src/hooks/useFormRequired";
+import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 
 const MODEL_ENDPOINT = "purchases";
 const LIST_NAME = "PurchasesList";
@@ -207,26 +207,26 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                <FieldDate label="Дата" name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="160px" />
-                <FieldToggle name={`${form.formUid}_posted`} label="Проведён" value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
+                <FieldDate label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="160px" />
+                <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
               </GroupRow>
               <Group>
-                <LookupField label="Организация" name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
+                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
                   onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                   disabled={form.isLoading} />
-                <LookupField label="Склад" name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName"
+                <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName"
                   onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)}
                   disabled={form.isLoading}
                   extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
               <Group>
-                <LookupField label="Контрагент" name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName"
+                <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName"
                   onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
                   disabled={form.isLoading} />
-                <LookupField label="Договор" name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName"
+                <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName"
                   onSelect={handleContractSelect}
                   onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
                   disabled={form.isLoading}
@@ -240,10 +240,10 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
               <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
                 {([
                   ...(isVatEnabled ? ([
-                    { label: "Без НДС", value: form.fields.amountWithoutVat },
-                    { label: "НДС", value: form.fields.vatAmount },
+                    { label: translate("amountWithoutVatLabel"), value: form.fields.amountWithoutVat },
+                    { label: translate("vatLabel"), value: form.fields.vatAmount },
                   ] as const) : ([] as const)),
-                  ...(useDiscount ? ([{ label: "Скидка", value: form.fields.discountAmount }] as const) : ([] as const)),
+                  ...(useDiscount ? ([{ label: translate("discount"), value: form.fields.discountAmount }] as const) : ([] as const)),
                 ] as ReadonlyArray<{ label: string; value: number | string }>).map(({ label, value }) => (
                   <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
                     <span>{label}</span>
@@ -252,35 +252,34 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
                 ))}
                 <div style={{ borderTop: "1px solid #e5e7eb", margin: "2px 0 0" }} />
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
-                  <span>Итого</span>
+                  <span>{translate("total")}</span>
                   <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
                 </div>
               </div>
             </Group>
-
           </div>
-          {form.isEditMode && <><Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+          {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
             <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
             <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-          </Group></>}
+          </Group>}
         </div>
       )
     },
     {
-      id: "tab-items", label: "Товары поступления", component: form.isEditMode && form.fields.uuid ? (
+      id: "tab-items", label: translate("SaleItemsList"), component: form.isEditMode && form.fields.uuid ? (
         <TradeDocumentItemsTable
           parentUuid={form.fields.uuid} parentField="purchaseUuid"
           endpoint="purchaseitems" componentName="PurchaseItemsList_part"
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
-          parentLabel={`Поступление: №${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
+          parentLabel={`${translate("PurchasesList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           initialPendingRows={items.pending}
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}
         />
       ) : (
         <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
-          Сохраните документ для добавления товаров
+          {translate("saveDocumentFirst")}
         </div>
       )
     },
@@ -288,11 +287,13 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <FormRequiredScope docType="purchase">
-      <ModelForm paneId={form.paneId} tabs={tabs}
-        onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-        onReload={form.isEditMode ? form.handleReload : undefined}
-        isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-        readonly={!canWrite} />
+      <FormDirtyScope dirtyKeys={form.unsavedFields}>
+        <ModelForm paneId={form.paneId} tabs={tabs}
+          onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+          onReload={form.isEditMode ? form.handleReload : undefined}
+          isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+          readonly={!canWrite} />
+      </FormDirtyScope>
     </FormRequiredScope>
   );
 };

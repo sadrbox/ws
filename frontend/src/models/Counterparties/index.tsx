@@ -13,6 +13,7 @@ import ContractsTable from "../Contracts/ContractsTable";
 import ContactsTable from "../Contacts/ContactsTable";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
@@ -53,10 +54,10 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
     mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", shortName: d.shortName ?? "", displayName: d.displayName ?? "" }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
-      if (!bin || !/^\d{12}$/.test(bin)) return "БИН должен состоять ровно из 12 цифр";
+      if (!bin || !/^\d{12}$/.test(bin)) return translate("binMustBe12Digits");
       return { bin, shortName: fd.shortName?.trim() || null, displayName: fd.displayName?.trim() || null };
     },
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Контрагенты", saved, saved.shortName || saved.bin),
+    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, translate("counterparty"), saved, saved.shortName || saved.bin),
     afterLoad: invalidateSubTables,
     afterSave: invalidateSubTables,
   });
@@ -74,9 +75,9 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
-                <Field label="Полное наименование" name={`${form.formUid}_displayName`} minWidth="339px" value={form.fields.displayName} onChange={e => form.setField("displayName", e.target.value)} disabled={form.isLoading} />
-                <Field label="БИН / ИНН *" name={`${form.formUid}_bin`} minWidth="339px" value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} />
+                <Field label={translate("shortName")} name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("displayName")} name={`${form.formUid}_displayName`} minWidth="339px" value={form.fields.displayName} onChange={e => form.setField("displayName", e.target.value)} disabled={form.isLoading} />
+                <Field label={`${translate("binIin")} *`} name={`${form.formUid}_bin`} minWidth="339px" value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} />
               </GroupCol>
             </div>
           </div>
@@ -102,9 +103,11 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts, canWrite, ownerUuid]);
 
   return (
-    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-      onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      readonly={!canWrite} />
+    <FormRequiredScope requiredKeys={["bin"]}>
+      <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+        onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+        readonly={!canWrite} />
+    </FormRequiredScope>
   );
 };
 CounterpartiesForm.displayName = "CounterpartiesForm";

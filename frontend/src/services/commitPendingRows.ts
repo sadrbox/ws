@@ -37,6 +37,8 @@ export async function commitPendingRows(
 		extraFields?: Record<string, unknown>;
 		/** Если true — не добавлять [parentField]: parentUuid к payload (createPayload сам отвечает за все поля) */
 		skipParentField?: boolean;
+		/** Batch endpoint (без /). Если задан — все строки отправляются одним POST /{batchEndpoint} */
+		batchEndpoint?: string;
 	},
 ): Promise<void> {
 	if (!rows.length) return;
@@ -47,6 +49,41 @@ export async function commitPendingRows(
 		for (const f of options.extraSkipFields) skipSet.add(f);
 	}
 
+	// ── Batch mode ────────────────────────────────────────────────────────────
+	if (options?.batchEndpoint) {
+		const operations: unknown[] = [];
+		for (const row of rows) {
+			if (!row._pendingAction) continue;
+			const extra = options?.extraFields ?? {};
+			if (row._pendingAction === "create") {
+				const hasData = Object.entries(row).some(
+					([k, v]) => !skipSet.has(k) && v !== "" && v !== null && v !== undefined && v !== 0,
+				);
+				if (!hasData) continue;
+				const data = options?.createPayload
+					? { ...options.createPayload(row), ...(options?.skipParentField ? {} : { [parentField]: parentUuid }), ...extra }
+					: { ...buildGenericPayload(row, parentField, parentUuid), ...extra };
+				operations.push({ action: "create", data });
+			} else if (row._pendingAction === "update" && row.uuid) {
+				const data = options?.updatePayload
+					? { ...options.updatePayload(row), ...(options?.skipParentField ? {} : { [parentField]: parentUuid }), ...extra }
+					: { ...buildGenericPayload(row, parentField, parentUuid), ...extra };
+				operations.push({ action: "update", uuid: row.uuid, data });
+			} else if (row._pendingAction === "delete" && row.uuid) {
+				operations.push({ action: "delete", uuid: row.uuid });
+			}
+		}
+		if (!operations.length) return;
+		try {
+			await apiClient.post(`/${options.batchEndpoint}`, { operations });
+		} catch (err: any) {
+			const serverMsg = translateError(err.response?.data?.message) || translateError(err.message);
+			throw new Error(serverMsg ? `${tableName}: ${serverMsg}` : `Ошибка сохранения (${tableName})`);
+		}
+		return;
+	}
+
+	// ── Поштучный режим (default) ─────────────────────────────────────────────
 	for (const row of rows) {
 		if (!row._pendingAction) continue;
 

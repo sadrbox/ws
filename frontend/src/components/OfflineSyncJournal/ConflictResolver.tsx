@@ -10,6 +10,7 @@
 
 import { FC, useCallback, useMemo, useState } from "react";
 import { Button } from "src/components/Button";
+import { translate } from "src/i18";
 import type { QueueEntry } from "src/services/offlineQueue";
 import {
   resolveConflictLocal,
@@ -64,10 +65,10 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ entry, onClose }) => {
     const ok = await resolveConflictLocal(entry.id);
     setIsProcessing(false);
     if (ok) {
-      setResult("✅ Локальные данные отправлены на сервер");
+      setResult("✅ " + translate("conflictResolverLocalAccepted"));
       setTimeout(onClose, 1000);
     } else {
-      setResult("❌ Не удалось отправить. Попробуйте позже.");
+      setResult("❌ " + translate("conflictResolverLocalFailed"));
     }
   }, [entry.id, onClose]);
 
@@ -76,7 +77,7 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ entry, onClose }) => {
     setIsProcessing(true);
     await resolveConflictServer(entry.id);
     setIsProcessing(false);
-    setResult("✅ Серверная версия принята, локальные изменения отброшены");
+    setResult("✅ " + translate("conflictResolverServerAccepted"));
     setTimeout(onClose, 800);
   }, [entry.id, onClose]);
 
@@ -84,11 +85,11 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ entry, onClose }) => {
     <div className={styles.ConflictResolver}>
       {/* Header */}
       <div className={styles.ConflictHeader}>
-        ⚠️ Конфликт: {entry.label}
+        ⚠️ {translate("conflictResolverTitle")} {entry.label}
       </div>
       <div className={styles.ConflictDescription}>
-        Данные были изменены на сервере, пока вы работали оффлайн.
-        Выберите, какую версию сохранить.
+        {translate("conflictResolverDescriptionLine1")}
+        {translate("conflictResolverDescriptionLine2")}
         {entry.lastError && (
           <div style={{ color: "#e53935", marginTop: 4, fontSize: 12 }}>{entry.lastError}</div>
         )}
@@ -98,7 +99,7 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ entry, onClose }) => {
       <div className={styles.ConflictColumns}>
         {/* Local */}
         <div className={styles.ConflictColumn}>
-          <div className={styles.ConflictColumnTitle}>🖥️ Ваши изменения (локально)</div>
+          <div className={styles.ConflictColumnTitle}>🖥️ {translate("conflictResolverLocalTitle")}</div>
           {localData ? (
             keys.map(key => {
               const localVal = formatValue((localData as any)[key]);
@@ -114,13 +115,13 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ entry, onClose }) => {
               );
             })
           ) : (
-            <div style={{ fontSize: 12, color: "#999" }}>Нет данных</div>
+            <div style={{ fontSize: 12, color: "#999" }}>{translate("conflictResolverNoData")}</div>
           )}
         </div>
 
         {/* Server */}
         <div className={styles.ConflictColumn}>
-          <div className={styles.ConflictColumnTitle}>☁️ Серверная версия</div>
+          <div className={styles.ConflictColumnTitle}>☁️ {translate("conflictResolverServerTitle")}</div>
           {serverData ? (
             keys.map(key => {
               const localVal = localData ? formatValue((localData as any)[key]) : "—";
@@ -136,7 +137,7 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ entry, onClose }) => {
               );
             })
           ) : (
-            <div style={{ fontSize: 12, color: "#999" }}>Не удалось загрузить серверную версию</div>
+            <div style={{ fontSize: 12, color: "#999" }}>{translate("conflictResolverServerLoadError")}</div>
           )}
         </div>
       </div>
@@ -151,13 +152,13 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ entry, onClose }) => {
       {/* Actions */}
       <div className={styles.ConflictActions}>
         <Button onClick={onClose} disabled={isProcessing}>
-          <span>← Назад</span>
+          <span>← {translate("back")}</span>
         </Button>
         <Button onClick={handleAcceptServer} disabled={isProcessing}>
-          <span>Принять серверную</span>
+          <span>{translate("conflictResolverAcceptServer")}</span>
         </Button>
         <Button variant="primary" onClick={handleAcceptLocal} disabled={isProcessing}>
-          <span>Принять локальную</span>
+          <span>{translate("conflictResolverAcceptLocal")}</span>
         </Button>
       </div>
     </div>

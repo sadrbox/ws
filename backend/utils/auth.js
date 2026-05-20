@@ -141,7 +141,6 @@ const ROUTE_TO_MODEL = {
 	counterparties: "Counterparty",
 	contracts: "Contract",
 	"contract-files": "AttachedFile",
-	contacttypes: "ContactType",
 	contacts: "Contact",
 	contactpersons: "ContactPerson",
 	bankaccounts: "BankAccount",

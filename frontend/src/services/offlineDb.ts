@@ -52,7 +52,6 @@ export const SYNCABLE_TABLES = [
 	"counterparties",
 	"contracts",
 	"contacts",
-	"contacttypes",
 	"contactpersons",
 	"bankaccounts",
 	"users",
@@ -95,7 +94,6 @@ class OfflineDatabase extends Dexie {
 	counterparties!: EntityTable<SyncRecord, "id">;
 	contracts!: EntityTable<SyncRecord, "id">;
 	contacts!: EntityTable<SyncRecord, "id">;
-	contacttypes!: EntityTable<SyncRecord, "id">;
 	contactpersons!: EntityTable<SyncRecord, "id">;
 	bankaccounts!: EntityTable<SyncRecord, "id">;
 	users!: EntityTable<SyncRecord, "id">;
@@ -138,8 +136,7 @@ class OfflineDatabase extends Dexie {
 			contracts:
 				"++id, &uuid, updatedAt, deletedAt, organizationUuid, counterpartyUuid, shortName",
 			contacts:
-				"++id, &uuid, updatedAt, deletedAt, contactTypeUuid, ownerType, ownerUuid",
-			contacttypes: "++id, &uuid, updatedAt, deletedAt, shortName",
+				"++id, &uuid, updatedAt, deletedAt, contactType, ownerType, ownerUuid",
 			contactpersons:
 				"++id, &uuid, updatedAt, deletedAt, ownerType, ownerUuid, fullName",
 			bankaccounts:

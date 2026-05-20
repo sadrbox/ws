@@ -52,14 +52,6 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Контрагенты",
 	},
 	{
-		endpoint: "contacttypes",
-		module: () => import("src/models/ContactTypes"),
-		formName: "ContactTypesForm",
-		listName: "ContactTypesList",
-		storageKey: "contact-types-form",
-		label: "Типы контактов",
-	},
-	{
 		endpoint: "contactpersons",
 		module: () => import("src/models/ContactPersons"),
 		formName: "ContactPersonsForm",
@@ -185,7 +177,7 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		formName: "IncomingInvoicesForm",
 		listName: "IncomingInvoicesList",
 		storageKey: "incoming-invoices-form",
-		label: "СФ входящие",
+		label: "Счет-фактуры входящие",
 	},
 	{
 		endpoint: "outgoing-invoices",
@@ -193,7 +185,7 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		formName: "OutgoingInvoicesForm",
 		listName: "OutgoingInvoicesList",
 		storageKey: "outgoing-invoices-form",
-		label: "СФ исходящие",
+		label: "Счет-фактуры исходящие",
 	},
 	{
 		endpoint: "payment-invoices",
@@ -209,7 +201,7 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		formName: "CashReceiptOrdersForm",
 		listName: "CashReceiptOrdersList",
 		storageKey: "cash-receipt-orders-form",
-		label: "ПКО",
+		label: "Приходный кассовый ордер",
 	},
 	{
 		endpoint: "cash-expense-orders",
@@ -217,7 +209,7 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		formName: "CashExpenseOrdersForm",
 		listName: "CashExpenseOrdersList",
 		storageKey: "cash-expense-orders-form",
-		label: "РКО",
+		label: "Расходный кассовый ордер",
 	},
 	{
 		endpoint: "inventory-transfers",

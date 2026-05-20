@@ -13,6 +13,7 @@ import ContractsTable from "../Contracts/ContractsTable";
 import ContactsTable from "../Contacts/ContactsTable";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
@@ -160,17 +161,18 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts, canWrite, ownerUuid]);
 
   return (
-    <ModelForm
-      paneId={form.paneId}
-      tabs={tabs}
-      onSave={form.handleSave}
-      onSaveAndClose={form.handleSaveAndClose}
-      onClose={form.handleClose}
-      onReload={form.isEditMode ? form.handleReload : undefined}
-      isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-
-      readonly={!canWrite}
-    />
+    <FormRequiredScope requiredKeys={["bin"]}>
+      <ModelForm
+        paneId={form.paneId}
+        tabs={tabs}
+        onSave={form.handleSave}
+        onSaveAndClose={form.handleSaveAndClose}
+        onClose={form.handleClose}
+        onReload={form.isEditMode ? form.handleReload : undefined}
+        isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+        readonly={!canWrite}
+      />
+    </FormRequiredScope>
   );
 };
 OrganizationsForm.displayName = "OrganizationsForm";

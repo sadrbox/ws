@@ -1,4 +1,5 @@
 import { FC, ReactNode, useRef } from "react";
+import { translate } from "src/i18";
 import FormPanel from "src/components/FormPanel";
 import Tabs from "src/components/Tabs";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
@@ -13,7 +14,7 @@ import skeletonStyles from "./ModelForm.module.scss";
  * пользователь видел изменяющиеся данные, а не скелетон.
  */
 const FormSkeleton: FC = () => (
-  <div className={skeletonStyles.SkeletonRoot} aria-busy="true" aria-label="Загрузка формы">
+  <div className={skeletonStyles.SkeletonRoot} aria-busy="true" aria-label={translate("loadingForm")}>
     <div className={skeletonStyles.SkeletonRow}>
       <div className={`${skeletonStyles.SkeletonField} ${skeletonStyles.SkeletonFieldNarrow}`} />
       <div className={`${skeletonStyles.SkeletonField} ${skeletonStyles.SkeletonFieldNarrow}`} />

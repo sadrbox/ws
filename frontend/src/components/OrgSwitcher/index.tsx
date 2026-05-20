@@ -11,11 +11,12 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { useAppContext } from "src/app/context";
 import { switchOrganization, type OrgEntry } from "src/services/auth";
+import { translate } from "src/i18";
 import styles from "./OrgSwitcher.module.scss";
 
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Администратор",
-  member: "Сотрудник",
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  admin: "roleAdmin",
+  member: "roleMember",
 };
 
 const OrgSwitcher: FC = () => {
@@ -52,7 +53,7 @@ const OrgSwitcher: FC = () => {
       try {
         const result = await switchOrganization(orgUuid);
         if (!result.success) {
-          setError(result.message || "Ошибка переключения");
+          setError(result.message || translate("switchOrganizationError"));
         } else {
           setOpen(false);
         }
@@ -70,7 +71,7 @@ const OrgSwitcher: FC = () => {
   const activeLabel =
     activeOrg?.organization?.shortName ||
     activeOrg?.organization?.displayName ||
-    (user.organizationUuid ? "Организация" : "Без организации");
+    (user.organizationUuid ? translate("organization") : translate("noOrganization"));
 
   return (
     <div className={styles.OrgSwitcher} ref={dropdownRef}>
@@ -78,7 +79,7 @@ const OrgSwitcher: FC = () => {
         className={styles.OrgButton}
         onClick={() => { setOpen((p) => !p); setError(null); }}
         disabled={loading}
-        title="Переключить организацию"
+        title={translate("switchOrganization")}
         type="button"
       >
         <span className={styles.OrgIcon}>🏢</span>
@@ -88,7 +89,7 @@ const OrgSwitcher: FC = () => {
 
       {open && (
         <div className={styles.OrgDropdown}>
-          <div className={styles.OrgDropdownHeader}>Организация</div>
+          <div className={styles.OrgDropdownHeader}>{translate("organization")}</div>
 
           {orgs.map((o) => {
             const isActive = o.organizationUuid === user.organizationUuid;
@@ -110,9 +111,7 @@ const OrgSwitcher: FC = () => {
                 type="button"
               >
                 <span className={styles.OrgItemName}>{name}</span>
-                <span className={styles.OrgItemRole}>
-                  {ROLE_LABELS[o.role] ?? o.role}
-                </span>
+                <span className={styles.OrgItemRole}>{translate(ROLE_LABEL_KEYS[o.role] ?? o.role)}</span>
                 {isActive && <span className={styles.OrgActiveCheck}>✓</span>}
               </button>
             );

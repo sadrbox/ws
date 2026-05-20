@@ -72,7 +72,7 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupRow>
               <Field
-                label="Наименование *"
+                label="Наименование"
                 name={`${form.formUid}_shortName`}
                 minWidth="280px"
                 value={form.fields.shortName}

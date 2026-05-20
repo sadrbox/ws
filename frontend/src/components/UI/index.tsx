@@ -4,7 +4,7 @@ import modalManager from 'src/components/Modal/modalManager';
 import { createPortal } from 'react-dom';
 import { ContractsList } from 'src/models/Contracts';
 // Divider is imported in components that use it; not used here
-import { translate } from 'src/i18';
+import { translate, getLanguage, setLanguage } from 'src/i18';
 // import { CounterpartiesList } from 'src/models/Organizations';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
@@ -15,10 +15,9 @@ import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src
 import { ToolbarSlot } from 'src/components/Toolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
-import { usePaneNotifications, dismissPaneNotification, usePaneIsDirty } from 'src/hooks/useFormStore';
+import { useAllPaneNotifications, dismissPaneNotification, usePaneIsDirty } from 'src/hooks/useFormStore';
 import { openFormByRef, canOpenByRef } from 'src/utils/openFormByRef';
 import { CounterpartiesList } from 'src/models/Counterparties';
-import { ContactTypesList } from 'src/models/ContactTypes';
 import { ContactsList } from 'src/models/Contacts';
 import { ContactPersonsList } from 'src/models/ContactPersons';
 import { UsersList } from 'src/models/Users';
@@ -46,6 +45,7 @@ import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
 import { PayrollCalculationsList } from 'src/models/PayrollCalculations';
 import { PayrollPaymentsList } from 'src/models/PayrollPayments';
+import { SalesReport, MaterialStatement, CashReport } from 'src/models/Reports';
 import { UnsavedFormsList } from 'src/models/UnsavedForms';
 import { SyncDashboard } from 'src/models/SyncDashboard';
 import { SearchReplaceRefsForm } from 'src/models/SearchReplaceRefs';
@@ -127,8 +127,8 @@ const PaneTabItem: FC<{
           icon="close"
           size="sm"
           className={styles.PaneTabItemClose}
-          aria-label="Закрыть"
-          title="Закрыть"
+          aria-label={translate("close")}
+          title={translate("close")}
           onClick={(e) => { e.stopPropagation(); onClose(); }}
         />
       )}
@@ -250,8 +250,8 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
           {isDirty && (
             <span
               className={styles.PaneItemDirtyDot}
-              aria-label="Несохранённые изменения"
-              title="Есть несохранённые изменения"
+              aria-label={translate("unsavedChanges")}
+              title={translate("hasUnsavedChanges")}
             />
           )}
         </h2>
@@ -348,6 +348,24 @@ export const Screen = forwardRef<HTMLDivElement, ScreenProps>(({ children }, ref
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LanguageSwitcher — переключатель RU / ҚАЗ в Navbar
+// ═══════════════════════════════════════════════════════════════════════════
+
+const LanguageSwitcher: FC = () => {
+  const lang = getLanguage();
+  return (
+    <button
+      type="button"
+      className={styles.PersistenceToggle}
+      onClick={() => setLanguage(lang === "ru" ? "kk" : "ru")}
+      title={lang === "ru" ? translate("switchToKazakh") : translate("switchToRussian")}
+    >
+      {lang === "ru" ? "RU" : "ҚАЗ"}
+    </button>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // PersistenceModeToggle — переключатель offline-first / transactional в Navbar
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -359,9 +377,9 @@ const PersistenceModeToggle: FC = () => {
       type="button"
       className={styles.PersistenceToggle}
       onClick={() => setMode(isOF ? "transactional" : "offline-first")}
-      title={isOF ? "Режим: Offline-First (данные кэшируются локально)" : "Режим: Транзакционный (только сервер)"}
+      title={isOF ? translate("offlineFirstMode") : translate("transactionalMode")}
     >
-      {isOF ? "⚡ Offline" : "🔗 Online"}
+      {isOF ? "⚡ " + translate("offline") : "🔗 " + translate("online")}
     </button>
   );
 };
@@ -371,14 +389,13 @@ const PersistenceModeToggle: FC = () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const NavbarPaneBell: FC = () => {
-  const { windows: { activePane, addPane } } = useAppContext();
-  const notifications = usePaneNotifications(activePane ?? "");
+  const { windows: { addPane } } = useAppContext();
+  const groups = useAllPaneNotifications();
   const [showNotes, setShowNotes] = useState(false);
   const bellRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Закрыть попover при смене панели
-  useEffect(() => { setShowNotes(false); }, [activePane]);
+  const totalCount = groups.reduce((sum, g) => sum + g.notifications.length, 0);
 
   // Закрыть попover при клике вне
   useEffect(() => {
@@ -397,10 +414,10 @@ const NavbarPaneBell: FC = () => {
 
   const openJournal = useCallback(() => {
     setShowNotes(false);
-    addPane({ component: NotificationsList, label: "Центр уведомлений" });
+    addPane({ component: NotificationsList, label: translate("notificationsCenter") });
   }, [addPane]);
 
-  if (!activePane || notifications.length === 0) return null;
+  if (totalCount === 0) return null;
 
   return (
     <div className={styles.PaneNoteBellWrap}>
@@ -408,71 +425,73 @@ const NavbarPaneBell: FC = () => {
         ref={bellRef}
         className={[styles.NavbarBellBtn, styles.PaneNoteBell].join(" ")}
         onClick={() => setShowNotes((v) => !v)}
-        title="Уведомления активной панели"
+        title={translate("panelNotifications")}
         type="button"
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M8 1.5a4 4 0 0 0-4 4v2.7L2.7 10.5a.75.75 0 0 0 .53 1.28h9.54a.75.75 0 0 0 .53-1.28L12 8.2V5.5a4 4 0 0 0-4-4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
           <path d="M6.5 12.5a1.5 1.5 0 0 0 3 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
         </svg>
-        <span className={styles.PaneNoteBadge}>{notifications.length}</span>
+        <span className={styles.PaneNoteBadge}>{totalCount}</span>
       </button>
       {showNotes && (
         <div ref={popoverRef} className={styles.PaneNotePopover}>
           <div className={styles.PaneNotePopoverHeader}>
-            <span>Уведомления панели</span>
+            <span>{translate("notifications")}</span>
             <button className={styles.PaneNoteJournalLink} onClick={openJournal} type="button">
-              Журнал ➜
+              {translate("journal")} ➜
             </button>
           </div>
-          {notifications.map((n) => (
-            <div
-              key={n.id}
-              className={[
-                styles.PaneNoteItem,
-                n.type === "error" ? styles.PaneNoteError
-                  : n.type === "warning" ? styles.PaneNoteWarning
-                    : styles.PaneNoteInfo,
-                n.resolved ? styles.PaneNoteResolved : "",
-              ].filter(Boolean).join(" ")}
-            >
-              <span className={styles.PaneNoteIcon}>{n.type === "error" ? "❌" : n.type === "warning" ? "⚠️" : "ℹ️"}</span>
-              <span className={styles.PaneNoteText}>
-                {n.text}
-                {n.ref && canOpenByRef(n.ref.endpoint) && (
-                  <button
-                    className={styles.PaneNoteOpenBtn}
-                    type="button"
-                    onClick={() => {
-                      void openFormByRef(n.ref!, addPane);
-                      setShowNotes(false);
-                    }}
-                  >Открыть ➜</button>
-                )}
-                {n.actions && n.actions.length > 0 && !n.resolved && (
-                  <span className={styles.PaneNoteActions}>
-                    {n.actions.map((a, i) => (
-                      <button
-                        key={i}
-                        className={styles.PaneNoteActionBtn}
-                        type="button"
-                        onClick={() => {
-                          void a.onClick();
-                          dismissPaneNotification(activePane, n.id);
-                        }}
-                      >{a.label}</button>
-                    ))}
-                  </span>
-                )}
-              </span>
-              <button
-                className={styles.PaneNoteDismiss}
-                onClick={() => dismissPaneNotification(activePane, n.id)}
-                title="Скрыть"
-                type="button"
-              >✕</button>
-            </div>
-          ))}
+          {groups.flatMap((g) =>
+            g.notifications.map((n) => (
+              <div
+                key={n.id}
+                className={[
+                  styles.PaneNoteItem,
+                  n.type === "error" ? styles.PaneNoteError
+                    : n.type === "warning" ? styles.PaneNoteWarning
+                      : styles.PaneNoteInfo,
+                  n.resolved ? styles.PaneNoteResolved : "",
+                ].filter(Boolean).join(" ")}
+              >
+                <span className={styles.PaneNoteIcon}>{n.type === "error" ? "❌" : n.type === "warning" ? "⚠️" : "ℹ️"}</span>
+                <span className={styles.PaneNoteText}>
+                  {n.text}
+                  {n.ref && canOpenByRef(n.ref.endpoint) && (
+                    <button
+                      className={styles.PaneNoteOpenBtn}
+                      type="button"
+                      onClick={() => {
+                        void openFormByRef(n.ref!, addPane);
+                        setShowNotes(false);
+                      }}
+                    >{translate("open")} ➜</button>
+                  )}
+                  {n.actions && n.actions.length > 0 && !n.resolved && (
+                    <span className={styles.PaneNoteActions}>
+                      {n.actions.map((a, i) => (
+                        <button
+                          key={i}
+                          className={styles.PaneNoteActionBtn}
+                          type="button"
+                          onClick={() => {
+                            void a.onClick();
+                            dismissPaneNotification(g.paneId, n.id);
+                          }}
+                        >{a.label}</button>
+                      ))}
+                    </span>
+                  )}
+                </span>
+                <button
+                  className={styles.PaneNoteDismiss}
+                  onClick={() => dismissPaneNotification(g.paneId, n.id)}
+                  title={translate("hide")}
+                  type="button"
+                >✕</button>
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -527,7 +546,7 @@ export const Navbar: React.FC = () => {
         <button
           className={styles.NavbarBurger}
           onClick={toggleMobileMenu}
-          aria-label="Меню"
+          aria-label={translate("menu")}
           type="button"
         >
           <span />
@@ -550,6 +569,7 @@ export const Navbar: React.FC = () => {
 
         {/* Правая часть: индикаторы, имя, выход */}
         <div className={styles.NavbarRight}>
+          <LanguageSwitcher />
           <PersistenceModeToggle />
           <NavbarPaneBell />
           <OfflineIndicator />
@@ -565,9 +585,9 @@ export const Navbar: React.FC = () => {
               href="#"
               onClick={(e) => { e.preventDefault(); context.auth.logout(); }}
               className={styles.NavbarLogout}
-              title="Выйти из системы"
+              title={translate("logoutTooltip")}
             >
-              Выход
+              {translate("logout")}
             </a>
           )}
         </div>
@@ -621,42 +641,50 @@ export const NavList = ({ label }: TypeNavListProps) => {
   if (label.toLocaleLowerCase() === "Trade".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
-        <h1>Торговля</h1>
+        <h1>{translate("trade")}</h1>
         <div className={styles.NavSection}>
           <div className={styles.NavGroup}>
-            <h3>Продажи</h3>
+            <h3>{translate("sales")}</h3>
             <ul className={styles.NavList}>
-              {can("Sale") && <li onClick={() => addPane({ component: SalesList })}>Реализация товара и услуг</li>}
-              {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList })}>Электронная счет-фактура (исходящие)</li>}
-              {can("PaymentInvoice") && <li onClick={() => addPane({ component: PaymentInvoicesList })}>Счет на оплату</li>}
+              {can("Sale") && <li onClick={() => addPane({ component: SalesList, label: translate("saleRealization") })}>{translate("saleRealization")}</li>}
+              {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("outgoingInvoice") })}>{translate("outgoingInvoice")}</li>}
+              {can("PaymentInvoice") && <li onClick={() => addPane({ component: PaymentInvoicesList, label: translate("paymentInvoice") })}>{translate("paymentInvoice")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
-            <h3>Закупка</h3>
+            <h3>{translate("purchase")}</h3>
             <ul className={styles.NavList}>
-              {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList })}>Поступление товара и услуг</li>}
-              {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList })}>Электронная счет-фактура (входящие)</li>}
+              {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList, label: translate("purchaseReceipt") })}>{translate("purchaseReceipt")}</li>}
+              {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList, label: translate("incomingInvoice") })}>{translate("incomingInvoice")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
-            <h3>Склад</h3>
+            <h3>{translate("warehouse")}</h3>
             <ul className={styles.NavList}>
-              {can("Warehouse") && <li onClick={() => addPane({ component: WarehousesList })}>Склады</li>}
-              {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList })}>Перемещение ТМЗ</li>}
+              {can("Warehouse") && <li onClick={() => addPane({ component: WarehousesList, label: translate("WarehousesList") })}>{translate("WarehousesList")}</li>}
+              {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList, label: translate("InventoryTransfersList") })}>{translate("InventoryTransfersList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
-            <h3>Касса</h3>
+            <h3>{translate("cash")}</h3>
             <ul className={styles.NavList}>
-              {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList })}>Приходный кассовый ордер</li>}
-              {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList })}>Расходный кассовый ордер</li>}
+              {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList, label: translate("CashReceiptOrdersList") })}>{translate("CashReceiptOrdersList")}</li>}
+              {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList, label: translate("CashExpenseOrdersList") })}>{translate("CashExpenseOrdersList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
-            <h3>Справочники</h3>
+            <h3>{translate("reports")}</h3>
             <ul className={styles.NavList}>
-              {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>Номенклатура</li>}
-              {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>Бренды</li>}
+              {can("Sale") && <li onClick={() => addPane({ component: SalesReport, label: translate("SalesReportList") })}>{translate("SalesReportList")}</li>}
+              {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: MaterialStatement, label: translate("MaterialStatementList") })}>{translate("MaterialStatementList")}</li>}
+              {(can("CashReceiptOrder") || can("CashExpenseOrder")) && <li onClick={() => addPane({ component: CashReport, label: translate("CashReportList") })}>{translate("CashReportList")}</li>}
+            </ul>
+          </div>
+          <div className={styles.NavGroup}>
+            <h3>{translate("directories")}</h3>
+            <ul className={styles.NavList}>
+              {can("Product") && <li onClick={() => addPane({ component: ProductsList, label: translate("ProductsList") })}>{translate("ProductsList")}</li>}
+              {can("Brand") && <li onClick={() => addPane({ component: BrandsList, label: translate("BrandsList") })}>{translate("BrandsList")}</li>}
             </ul>
           </div>
         </div>
@@ -665,20 +693,20 @@ export const NavList = ({ label }: TypeNavListProps) => {
   } else if (label.toLocaleLowerCase() === "HR".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
-        <h1>Кадровый учёт</h1>
+        <h1>{translate("hr")}</h1>
         <div className={styles.NavSection}>
           <div className={styles.NavGroup}>
-            <h3>Документы</h3>
+            <h3>{translate("documents")}</h3>
             <ul className={styles.NavList}>
-              {can("PayrollCalculation") && <li onClick={() => addPane({ component: PayrollCalculationsList })}>Начисление заработной платы</li>}
-              {can("PayrollPayment") && <li onClick={() => addPane({ component: PayrollPaymentsList })}>Выплата заработной платы</li>}
+              {can("PayrollCalculation") && <li onClick={() => addPane({ component: PayrollCalculationsList, label: translate("PayrollCalculationsList") })}>{translate("PayrollCalculationsList")}</li>}
+              {can("PayrollPayment") && <li onClick={() => addPane({ component: PayrollPaymentsList, label: translate("PayrollPaymentsList") })}>{translate("PayrollPaymentsList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
-            <h3>Справочники</h3>
+            <h3>{translate("directories")}</h3>
             <ul className={styles.NavList}>
-              {can("Employee") && <li onClick={() => addPane({ component: EmployeesList })}>Сотрудники</li>}
-              {can("Position") && <li onClick={() => addPane({ component: PositionsList })}>Должности</li>}
+              {can("Employee") && <li onClick={() => addPane({ component: EmployeesList, label: translate("EmployeesList") })}>{translate("EmployeesList")}</li>}
+              {can("Position") && <li onClick={() => addPane({ component: PositionsList, label: translate("PositionsList") })}>{translate("PositionsList")}</li>}
             </ul>
           </div>
         </div>
@@ -687,13 +715,13 @@ export const NavList = ({ label }: TypeNavListProps) => {
   } else if (label.toLocaleLowerCase() === "CRM".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
-        <h1>CRM</h1>
+        <h1>{translate("crm")}</h1>
         <div className={styles.NavSection}>
           <div className={styles.NavGroup}>
-            <h3>Управление задачами</h3>
+            <h3>{translate("taskManagement")}</h3>
             <ul className={styles.NavList}>
-              {can("Todo") && <li onClick={() => addPane({ component: TodosList })}>Задачи</li>}
-              {can("ScheduledTask") && <li onClick={() => addPane({ component: ScheduledTasksList })}>Регламентные задачи</li>}
+              {can("Todo") && <li onClick={() => addPane({ component: TodosList, label: translate("TodosList") })}>{translate("TodosList")}</li>}
+              {can("ScheduledTask") && <li onClick={() => addPane({ component: ScheduledTasksList, label: translate("ScheduledTasksList") })}>{translate("ScheduledTasksList")}</li>}
             </ul>
           </div>
         </div>
@@ -702,41 +730,40 @@ export const NavList = ({ label }: TypeNavListProps) => {
   } else if (label.toLocaleLowerCase() === "Settings".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
-        <h1>Настройки</h1>
+        <h1>{translate("settings")}</h1>
         <div className={styles.NavSection}>
           <div className={styles.NavGroup}>
-            <h3>Справочники</h3>
+            <h3>{translate("directories")}</h3>
             <ul className={styles.NavList}>
-              {can("Organization") && <li onClick={() => addPane({ component: OrganizationsList })}>Организации</li>}
-              {can("Counterparty") && <li onClick={() => addPane({ component: CounterpartiesList })}>Контрагенты</li>}
-              {can("Contract") && <li onClick={() => addPane({ component: ContractsList })}>Договора</li>}
-              {can("BankAccount") && <li onClick={() => addPane({ component: BankAccountsList })}>Банковские счета</li>}
-              {can("ContactType") && <li onClick={() => addPane({ component: ContactTypesList })}>Типы контактов</li>}
-              {can("Contact") && <li onClick={() => addPane({ component: ContactsList })}>Контакты</li>}
-              {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>Контактные лица</li>}
-              {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList })}>Валюты</li>}
+              {can("Organization") && <li onClick={() => addPane({ component: OrganizationsList, label: translate("OrganizationsList") })}>{translate("OrganizationsList")}</li>}
+              {can("Counterparty") && <li onClick={() => addPane({ component: CounterpartiesList, label: translate("CounterpartiesList") })}>{translate("CounterpartiesList")}</li>}
+              {can("Contract") && <li onClick={() => addPane({ component: ContractsList, label: translate("ContractsList") })}>{translate("ContractsList")}</li>}
+              {can("BankAccount") && <li onClick={() => addPane({ component: BankAccountsList, label: translate("BankAccountsList") })}>{translate("BankAccountsList")}</li>}
+              {can("Contact") && <li onClick={() => addPane({ component: ContactsList, label: translate("ContactsList") })}>{translate("ContactsList")}</li>}
+              {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList, label: translate("ContactPersonsList") })}>{translate("ContactPersonsList")}</li>}
+              {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList, label: translate("CurrenciesList") })}>{translate("CurrenciesList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
-            <h3>Учёт</h3>
+            <h3>{translate("accounting")}</h3>
             <ul className={styles.NavList}>
-              {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>Настройки учёта организации</li>}
-              {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList })}>Единицы измерения</li>}
-              {can("Tax") && <li onClick={() => addPane({ component: TaxesList })}>Налоги</li>}
+              {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList, label: translate("OrganizationAccountingSettingsList") })}>{translate("OrganizationAccountingSettingsList")}</li>}
+              {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList, label: translate("UnitOfMeasuresList") })}>{translate("UnitOfMeasuresList")}</li>}
+              {can("Tax") && <li onClick={() => addPane({ component: TaxesList, label: translate("TaxesList") })}>{translate("TaxesList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
-            <h3>Администрирование</h3>
+            <h3>{translate("administration")}</h3>
             <ul className={styles.NavList}>
-              {can("User") && <li onClick={() => addPane({ component: UsersList })}>Пользователи</li>}
-              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/UserPermissions"); addPane({ component: m.UserPermissionsModuleList, label: "Права пользователей" }); }}>Права пользователей</li>}
-              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/AccessRights"); addPane({ component: m.AccessRightsList, label: "Права доступа" }); }}>Права доступа</li>}
-              {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>История активности</li>}
-              {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: "Центр уведомлений" })}>Центр уведомлений</li>}
-              <li onClick={() => addPane({ component: UnsavedFormsList })}>Несохранённые записи</li>
-              <li onClick={() => addPane({ component: OrphanRefsForm, label: 'Контроль удалённых ссылок' })}>Контроль удалённых ссылок</li>
-              <li onClick={() => addPane({ component: SearchReplaceRefsForm, label: 'Поиск и замена ссылок' })}>Поиск и замена ссылок</li>
-              <li onClick={() => addPane({ component: SyncDashboard, label: 'Синхронизация и оффлайн-данные' })}>Синхронизация и оффлайн-данные</li>
+              {can("User") && <li onClick={() => addPane({ component: UsersList, label: translate("UsersList") })}>{translate("UsersList")}</li>}
+              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/UserPermissions"); addPane({ component: m.UserPermissionsModuleList, label: translate("userPermissions") }); }}>{translate("userPermissions")}</li>}
+              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/AccessRights"); addPane({ component: m.AccessRightsList, label: translate("accessRights") }); }}>{translate("accessRights")}</li>}
+              {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList, label: translate("ActivityHistoriesList") })}>{translate("ActivityHistoriesList")}</li>}
+              {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</li>}
+              <li onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</li>
+              <li onClick={() => addPane({ component: OrphanRefsForm, label: translate("deletedReferenceControl") })}>{translate("deletedReferenceControl")}</li>
+              <li onClick={() => addPane({ component: SearchReplaceRefsForm, label: translate("searchReplaceReferences") })}>{translate("searchReplaceReferences")}</li>
+              <li onClick={() => addPane({ component: SyncDashboard, label: translate("syncOfflineData") })}>{translate("syncOfflineData")}</li>
             </ul>
           </div>
         </div>
@@ -782,7 +809,7 @@ export const LoadingFallback: React.FC = () => {
   return (
     <div className="flex items-center justify-center min-h-screen">
       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      <span className="ml-3 text-lg">Загрузка...</span>
+      <span className="ml-3 text-lg">{translate("loading")}</span>
     </div>
   );
 };

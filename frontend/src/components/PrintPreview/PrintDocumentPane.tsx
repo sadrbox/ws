@@ -17,6 +17,7 @@ import SaveDropdownButton, { type SaveDropdownOption } from "src/components/Tool
 import { Icon } from "src/components/IconButton/icons";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import styles from "./PrintPreview.module.scss";
+import { translate } from "src/i18";
 
 // ── CSS макета (применяется к содержимому iframe) ──────────────────────────
 // PRINT_CSS зависит от ориентации листа (portrait | landscape).
@@ -153,7 +154,7 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
   const exportXlsx = (bookType: "xlsx" | "biff8") => {
     const wb = data?.workbook ?? workbookFromHtml(fullHtml);
     if (!wb) {
-      alert("Не удалось собрать таблицы для экспорта");
+      alert(translate("printDocumentExportError"));
       return;
     }
     const ab = XLSX.write(wb, { type: "array", bookType });
@@ -178,10 +179,10 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
   };
 
   const saveOptions: SaveDropdownOption[] = [
-    { id: "xlsx", label: "Excel (.xlsx)", icon: <Icon name="save" /> },
-    { id: "xls", label: "Excel 97-2003 (.xls)", icon: <Icon name="save" /> },
-    { id: "doc", label: "Word (.doc)", icon: <Icon name="save" /> },
-    { id: "pdf", label: "PDF (.pdf)", icon: <Icon name="print" />, hint: "Открывает диалог печати — выберите «Сохранить как PDF»" },
+    { id: "xlsx", label: translate("excelXlsx"), icon: <Icon name="save" /> },
+    { id: "xls", label: translate("excelXls"), icon: <Icon name="save" /> },
+    { id: "doc", label: translate("wordDoc"), icon: <Icon name="save" /> },
+    { id: "pdf", label: translate("pdf"), icon: <Icon name="print" />, hint: translate("printSaveHint") },
   ];
 
   // Регистрируем кнопки «Сохранить ▾», переключатель ориентации и «Печать»
@@ -193,24 +194,24 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
         <SaveDropdownButton
           options={saveOptions}
           onSelect={onSelectFormat}
-          title="Сохранить как…"
+          title={translate("saveAs")}
         />
         <select
           className={styles.PrintOrientationSelect}
           value={orientation}
           onChange={(e) => setOrientation(e.target.value as PageOrientation)}
-          title="Ориентация листа"
-          aria-label="Ориентация листа"
+          title={translate("pageOrientation")}
+          aria-label={translate("pageOrientation")}
         >
-          <option value="portrait">Книжная</option>
-          <option value="landscape">Альбомная</option>
+          <option value="portrait">{translate("portrait")}</option>
+          <option value="landscape">{translate("landscape")}</option>
         </select>
-        <Toolbar.PrintButton onClick={handlePrintPdf} title="Печать" />
+        <Toolbar.PrintButton onClick={handlePrintPdf} title={translate("print")} />
       </>
     ) : null,
   );
 
-  if (!data) return <div style={{ padding: 16 }}>Нет данных для печати</div>;
+  if (!data) return <div style={{ padding: 16 }}>{translate("noPrintData")}</div>;
 
   return (
     <div className={styles.PrintPreview}>

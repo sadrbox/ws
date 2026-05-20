@@ -12,6 +12,7 @@ import AvatarUpload from "src/components/AvatarUpload";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { useFormStore } from "src/hooks/useFormStore";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { UserPermissionsTable } from "src/models/UserPermissions";
@@ -125,9 +126,11 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields, userPermissions]);
 
   return (
-    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-      onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      readonly={!canWrite} />
+    <FormRequiredScope requiredKeys={["username"]}>
+      <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+        onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+        readonly={!canWrite} />
+    </FormRequiredScope>
   );
 };
 UsersForm.displayName = "UsersForm";

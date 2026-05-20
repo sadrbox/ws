@@ -1,48 +1,16 @@
 /*
   Warnings:
 
-  - You are about to drop the column `documentNumber` on the `cash_expense_orders` table. All the data in the column will be lost.
-  - You are about to drop the column `documentNumber` on the `cash_receipt_orders` table. All the data in the column will be lost.
-  - You are about to drop the column `documentNumber` on the `incoming_invoices` table. All the data in the column will be lost.
-  - You are about to drop the column `documentNumber` on the `inventory_transfers` table. All the data in the column will be lost.
-  - You are about to drop the column `documentNumber` on the `outgoing_invoices` table. All the data in the column will be lost.
-  - You are about to drop the column `documentNumber` on the `payment_invoices` table. All the data in the column will be lost.
-  - You are about to drop the column `documentNumber` on the `payroll_calculations` table. All the data in the column will be lost.
-  - You are about to drop the column `documentNumber` on the `payroll_payments` table. All the data in the column will be lost.
-  - You are about to drop the column `documentNumber` on the `purchases` table. All the data in the column will be lost.
+
   - You are about to drop the column `unitOfMeasure` on the `sale_items` table. All the data in the column will be lost.
-  - You are about to drop the column `documentNumber` on the `sales` table. All the data in the column will be lost.
 
 */
--- AlterTable
-ALTER TABLE "cash_expense_orders" DROP COLUMN "documentNumber";
 
--- AlterTable
-ALTER TABLE "cash_receipt_orders" DROP COLUMN "documentNumber";
-
--- AlterTable
-ALTER TABLE "incoming_invoices" DROP COLUMN "documentNumber";
-
--- AlterTable
-ALTER TABLE "inventory_transfers" DROP COLUMN "documentNumber";
-
--- AlterTable
-ALTER TABLE "outgoing_invoices" DROP COLUMN "documentNumber";
-
--- AlterTable
-ALTER TABLE "payment_invoices" DROP COLUMN "documentNumber";
-
--- AlterTable
-ALTER TABLE "payroll_calculations" DROP COLUMN "documentNumber";
-
--- AlterTable
-ALTER TABLE "payroll_payments" DROP COLUMN "documentNumber";
 
 -- AlterTable
 ALTER TABLE "products" ADD COLUMN     "unitOfMeasureUuid" TEXT;
 
 -- AlterTable
-ALTER TABLE "purchases" DROP COLUMN "documentNumber";
 
 -- AlterTable
 ALTER TABLE "sale_items" DROP COLUMN "unitOfMeasure",
@@ -50,7 +18,6 @@ ADD COLUMN     "unitOfMeasureUuid" TEXT,
 ADD COLUMN     "vatRateUuid" TEXT;
 
 -- AlterTable
-ALTER TABLE "sales" DROP COLUMN "documentNumber";
 
 -- CreateTable
 CREATE TABLE "units_of_measure" (

@@ -11,6 +11,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 
@@ -38,30 +39,34 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const tabs = useMemo(() => [
-    { id: "tab-details", label: translate("general"), component: (
-      <div className={styles.FormWrapper}>
-        <div className={styles.Form}>
-          <GroupCol>
-            <Field label="Наименование *" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
-            <Field label="Артикул" name={`${form.formUid}_sku`} minWidth="200px" value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
-            <LookupField label="Бренд" name={`${form.formUid}_brand`} minWidth="339px" value={form.fields.brandUuid} displayValue={form.fields.brandName} endpoint="brands" displayField="shortName"
-              columns={[{ key: "shortName", label: "Наименование" }]}
-              onSelect={(uuid, display) => form.setFields({ brandUuid: uuid, brandName: display } as Partial<TFields>)}
-              onClear={() => form.setFields({ brandUuid: "", brandName: "" } as Partial<TFields>)} disabled={form.isLoading} />
-            <LookupField label="Ед. изм." name={`${form.formUid}_unitOfMeasure`} minWidth="200px" value={form.fields.unitOfMeasureUuid} displayValue={form.fields.unitOfMeasureName} endpoint="unit-of-measures" displayField="shortName"
-              columns={[{ key: "shortName", label: "Наименование" }, { key: "code", label: "Код" }]}
-              onSelect={(uuid, display) => form.setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display } as Partial<TFields>)}
-              onClear={() => form.setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" } as Partial<TFields>)} disabled={form.isLoading} />
-          </GroupCol>
+    {
+      id: "tab-details", label: translate("general"), component: (
+        <div className={styles.FormWrapper}>
+          <div className={styles.Form}>
+            <GroupCol>
+              <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
+              <Field label="Артикул" name={`${form.formUid}_sku`} minWidth="200px" value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
+              <LookupField label="Бренд" name={`${form.formUid}_brand`} minWidth="339px" value={form.fields.brandUuid} displayValue={form.fields.brandName} endpoint="brands" displayField="shortName"
+                columns={[{ key: "shortName", label: "Наименование" }]}
+                onSelect={(uuid, display) => form.setFields({ brandUuid: uuid, brandName: display } as Partial<TFields>)}
+                onClear={() => form.setFields({ brandUuid: "", brandName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+              <LookupField label="Ед. изм." name={`${form.formUid}_unitOfMeasure`} minWidth="200px" value={form.fields.unitOfMeasureUuid} displayValue={form.fields.unitOfMeasureName} endpoint="unit-of-measures" displayField="shortName"
+                columns={[{ key: "shortName", label: "Наименование" }, { key: "code", label: "Код" }]}
+                onSelect={(uuid, display) => form.setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display } as Partial<TFields>)}
+                onClear={() => form.setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+            </GroupCol>
+          </div>
         </div>
-      </div>
-    )},
+      )
+    },
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);
 
   return (
-    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
-      onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      readonly={!canWrite} />
+    <FormRequiredScope requiredKeys={["shortName"]}>
+      <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+        onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+        readonly={!canWrite} />
+    </FormRequiredScope>
   );
 };
 ProductsForm.displayName = "ProductsForm";

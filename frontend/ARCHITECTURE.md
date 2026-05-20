@@ -24,16 +24,16 @@
 
 Бизнес-приложение (ERP/CRM) с MDI-интерфейсом (Multiple Document Interface), построенное на:
 
-| Технология | Назначение |
-|---|---|
-| **React 18+** | UI, `useSyncExternalStore` для гранулярных подписок |
-| **TypeScript** | Типизация |
-| **Vite** | Сборка и dev-сервер |
-| **React Query (TanStack)** | Кэширование серверных списков, `useInfiniteQuery` |
-| **Dexie (IndexedDB)** | Offline-first хранилище данных |
-| **Axios** | HTTP-клиент с interceptors (retry, offline) |
-| **SCSS Modules** | Стилизация |
-| **Service Worker** | Кэширование статических ресурсов |
+| Технология                 | Назначение                                          |
+| -------------------------- | --------------------------------------------------- |
+| **React 18+**              | UI, `useSyncExternalStore` для гранулярных подписок |
+| **TypeScript**             | Типизация                                           |
+| **Vite**                   | Сборка и dev-сервер                                 |
+| **React Query (TanStack)** | Кэширование серверных списков, `useInfiniteQuery`   |
+| **Dexie (IndexedDB)**      | Offline-first хранилище данных                      |
+| **Axios**                  | HTTP-клиент с interceptors (retry, offline)         |
+| **SCSS Modules**           | Стилизация                                          |
+| **Service Worker**         | Кэширование статических ресурсов                    |
 
 ### Ключевые архитектурные решения
 
@@ -203,35 +203,35 @@ src/
 
 #### Опции (`UseFormStoreOptions<F>`)
 
-| Параметр | Описание |
-|---|---|
-| `endpoint` | API endpoint (`"organizations"`) |
-| `storageKey` | Ключ sessionStorage (`"organizations-form"`) |
-| `defaultFields` | Значения по умолчанию |
-| `tables?` | Определения вложенных таблиц (`Record<string, TableDef>`) |
-| `paneProps` | Props панели (из MDI) |
-| `initialFields?` | Начальные значения (для create с предзаполнением) |
-| `mapServerToForm` | Маппинг ответа сервера → fields |
-| `buildPayload` | Формирование payload → `Record | string` (строка = ошибка валидации) |
-| `buildPaneLabel` | Метка панели после save |
-| `afterLoad?` | Callback после загрузки |
-| `afterSave?` | Callback после сохранения (invalidate и т.д.) |
+| Параметр          | Описание                                                  |
+| ----------------- | --------------------------------------------------------- | ----------------------------------- |
+| `endpoint`        | API endpoint (`"organizations"`)                          |
+| `storageKey`      | Ключ sessionStorage (`"organizations-form"`)              |
+| `defaultFields`   | Значения по умолчанию                                     |
+| `tables?`         | Определения вложенных таблиц (`Record<string, TableDef>`) |
+| `paneProps`       | Props панели (из MDI)                                     |
+| `initialFields?`  | Начальные значения (для create с предзаполнением)         |
+| `mapServerToForm` | Маппинг ответа сервера → fields                           |
+| `buildPayload`    | Формирование payload → `Record                            | string` (строка = ошибка валидации) |
+| `buildPaneLabel`  | Метка панели после save                                   |
+| `afterLoad?`      | Callback после загрузки                                   |
+| `afterSave?`      | Callback после сохранения (invalidate и т.д.)             |
 
 #### Возвращаемое значение (`UseFormStoreReturn<F>`)
 
-| Поле | Описание |
-|---|---|
-| `fields`, `tables`, `meta` | Реактивные данные (через `useSyncExternalStore`) |
-| `isDirty` | Есть ли несохранённые изменения |
-| `useField(key)` | Гранулярная подписка на одно поле: `[value, setter]` |
-| `useTable(key)` | Подписка на pending-строки таблицы |
-| `setField(key, value)` | Обновить поле |
-| `setFields(patch)` | Обновить несколько полей |
-| `loadFromServer(uuid)` | Загрузить с сервера |
-| `handleSave()` | Сохранить |
-| `handleSaveAndClose()` | Сохранить + закрыть панель |
-| `handleClose()` | Закрыть с проверкой dirty |
-| `submit()` | Внутренний submit (fields + tables) |
+| Поле                       | Описание                                             |
+| -------------------------- | ---------------------------------------------------- |
+| `fields`, `tables`, `meta` | Реактивные данные (через `useSyncExternalStore`)     |
+| `isDirty`                  | Есть ли несохранённые изменения                      |
+| `useField(key)`            | Гранулярная подписка на одно поле: `[value, setter]` |
+| `useTable(key)`            | Подписка на pending-строки таблицы                   |
+| `setField(key, value)`     | Обновить поле                                        |
+| `setFields(patch)`         | Обновить несколько полей                             |
+| `loadFromServer(uuid)`     | Загрузить с сервера                                  |
+| `handleSave()`             | Сохранить                                            |
+| `handleSaveAndClose()`     | Сохранить + закрыть панель                           |
+| `handleClose()`            | Закрыть с проверкой dirty                            |
+| `submit()`                 | Внутренний submit (fields + tables)                  |
 
 #### Жизненный цикл формы
 
@@ -246,16 +246,16 @@ src/
 
 #### Подсистемы в `useFormStore.ts`
 
-| Подсистема | Описание |
-|---|---|
-| **Dirty Panes Store** | Глобальный `Set<uniqId>` для индикации несохранённых изменений на вкладках |
-| `setPaneDirty(id, bool)` | Отметить панель dirty/clean |
-| `usePaneDirty(id)` | Хук подписки на dirty-состояние |
-| **PaneItem Notifications** | Уведомления привязанные к панели |
-| `addPaneNotification(id, type, text, ctx?, actions?)` | Добавить уведомление (+ localStorage журнал) |
-| `dismissPaneNotification(id, noteId)` | Удалить уведомление |
-| `usePaneNotifications(id)` | Хук подписки на уведомления панели |
-| **Notification Journal** | Персистентный журнал всех уведомлений в localStorage |
+| Подсистема                                            | Описание                                                                   |
+| ----------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Dirty Panes Store**                                 | Глобальный `Set<uniqId>` для индикации несохранённых изменений на вкладках |
+| `setPaneDirty(id, bool)`                              | Отметить панель dirty/clean                                                |
+| `usePaneDirty(id)`                                    | Хук подписки на dirty-состояние                                            |
+| **PaneItem Notifications**                            | Уведомления привязанные к панели                                           |
+| `addPaneNotification(id, type, text, ctx?, actions?)` | Добавить уведомление (+ localStorage журнал)                               |
+| `dismissPaneNotification(id, noteId)`                 | Удалить уведомление                                                        |
+| `usePaneNotifications(id)`                            | Хук подписки на Уведомления                                                |
+| **Notification Journal**                              | Персистентный журнал всех уведомлений в localStorage                       |
 
 ---
 
@@ -265,11 +265,11 @@ src/
 
 Обёртка над `useInfiniteQuery` для загрузки списков с курсорной пагинацией.
 
-| Опция | Описание |
-|---|---|
-| `model` | API endpoint |
-| `params` | `{ sort, search, filter, extra }` |
-| `queryOptions` | Дополнительные опции React Query |
+| Опция          | Описание                          |
+| -------------- | --------------------------------- |
+| `model`        | API endpoint                      |
+| `params`       | `{ sort, search, filter, extra }` |
+| `queryOptions` | Дополнительные опции React Query  |
 
 **Offline-поддержка:** При ошибке сети — fallback на `offlineDataService.fetchList()`.
 
@@ -282,6 +282,7 @@ src/
 **Файл:** `src/hooks/useModelListState.ts`
 
 Инкапсулирует весь бойлерплейт List-компонента:
+
 - `columns`, `sort`, `search`, `filter` state
 - Подключение `useInfiniteModelList`
 - `handleSortChange`, `handleFilterChange`, `handleSearch`
@@ -320,14 +321,14 @@ const handleDelete = useModelDelete("organizations", refetch);
 
 Реактивный хук для UI синхронизации:
 
-| Поле | Описание |
-|---|---|
-| `isOnline` | Статус сети (через `subscribeNetwork`) |
-| `isSyncing` | Идёт ли синхронизация |
-| `pendingChanges` | Массив `PendingChange` из Dexie |
-| `syncState` | `{ status, progress, message, lastSyncAt }` |
-| `syncNow()` | Ручной запуск `fullSync()` |
-| `offlineStats` | Статистика: кол-во записей по таблицам |
+| Поле             | Описание                                    |
+| ---------------- | ------------------------------------------- |
+| `isOnline`       | Статус сети (через `subscribeNetwork`)      |
+| `isSyncing`      | Идёт ли синхронизация                       |
+| `pendingChanges` | Массив `PendingChange` из Dexie             |
+| `syncState`      | `{ status, progress, message, lastSyncAt }` |
+| `syncNow()`      | Ручной запуск `fullSync()`                  |
+| `offlineStats`   | Статистика: кол-во записей по таблицам      |
 
 ---
 
@@ -349,7 +350,9 @@ const { canRead, canWrite, accessLevel } = useAccessRight("Organization");
 
 ```typescript
 const { confirm, confirmState } = useConfirm();
-if (await confirm("Удалить?")) { /* delete */ }
+if (await confirm("Удалить?")) {
+	/* delete */
+}
 // <ConfirmModal {...confirmState} />
 ```
 
@@ -413,14 +416,15 @@ const uid = useUID(); // crypto.randomUUID(), стабильный на врем
 
 **Axios instance** с 4-мя interceptors:
 
-| Interceptor | Описание |
-|---|---|
-| **Request: Auth** | Добавляет `Authorization: Bearer {token}`, убирает Content-Type для FormData |
-| **Response: 401** | При 401 → очищает токен → `dispatchEvent("auth_logout")` |
-| **Response: 429 Retry** | Exponential backoff (1s→2s→4s) + jitter, макс. 3 ретрая |
-| **Response: Offline** | При ошибке сети + мутирующий запрос → возвращает `{ _offline: true }` |
+| Interceptor             | Описание                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| **Request: Auth**       | Добавляет `Authorization: Bearer {token}`, убирает Content-Type для FormData |
+| **Response: 401**       | При 401 → очищает токен → `dispatchEvent("auth_logout")`                     |
+| **Response: 429 Retry** | Exponential backoff (1s→2s→4s) + jitter, макс. 3 ретрая                      |
+| **Response: Offline**   | При ошибке сети + мутирующий запрос → возвращает `{ _offline: true }`        |
 
 **Типизированные сокращения:**
+
 ```typescript
 api.get<T>(url), api.post<T>(url, data), api.put<T>(...), api.delete<T>(...)
 ```
@@ -429,14 +433,14 @@ api.get<T>(url), api.post<T>(url, data), api.put<T>(...), api.delete<T>(...)
 
 ### `auth.ts` — аутентификация
 
-| Функция | Описание |
-|---|---|
-| `login(username, password)` | Логин + offline-fallback (SHA-256 хэш в localStorage) |
-| `logout()` | Очистка токена + offline credentials |
-| `verifyToken()` | GET `/auth/me`, при сетевой ошибке → cached user |
-| `getCurrentUser()` | Из localStorage |
-| `registerOrganization(data)` | Регистрация орг. + первого пользователя |
-| `joinOrganization(data)` | Присоединение по invite-коду |
+| Функция                      | Описание                                              |
+| ---------------------------- | ----------------------------------------------------- |
+| `login(username, password)`  | Логин + offline-fallback (SHA-256 хэш в localStorage) |
+| `logout()`                   | Очистка токена + offline credentials                  |
+| `verifyToken()`              | GET `/auth/me`, при сетевой ошибке → cached user      |
+| `getCurrentUser()`           | Из localStorage                                       |
+| `registerOrganization(data)` | Регистрация орг. + первого пользователя               |
+| `joinOrganization(data)`     | Присоединение по invite-коду                          |
 
 **Offline-логин:** При первом успешном входе credentials хэшируются (SHA-256 через Web Crypto API) и кэшируются. При ошибке сети — проверяются против хэша.
 
@@ -449,20 +453,21 @@ api.get<T>(url), api.post<T>(url, data), api.put<T>(...), api.delete<T>(...)
 **30 sync-enabled таблиц** (`SYNCABLE_TABLES`): organizations, counterparties, contracts, contacts, employees, sales, products, etc.
 
 **Служебные таблицы:**
+
 - `_syncMeta` — `lastSyncAt` для каждой таблицы
 - `_pendingChanges` — локальные изменения, ожидающие push
 
 **API:**
 
-| Функция | Описание |
-|---|---|
-| `upsertRecords(table, records)` | Bulk upsert по uuid |
-| `getRecordByUuid(table, uuid)` | Одна запись |
+| Функция                         | Описание                                                 |
+| ------------------------------- | -------------------------------------------------------- |
+| `upsertRecords(table, records)` | Bulk upsert по uuid                                      |
+| `getRecordByUuid(table, uuid)`  | Одна запись                                              |
 | `getActiveRecords(table, opts)` | Все активные (без deletedAt), с пагинацией и сортировкой |
-| `searchRecords(table, query)` | Полнотекстовый поиск |
-| `addPendingChange(change)` | Добавить в очередь push |
-| `getOfflineDbStats()` | Статистика по таблицам |
-| `clearOfflineDb()` | Очистить всё (при logout) |
+| `searchRecords(table, query)`   | Полнотекстовый поиск                                     |
+| `addPendingChange(change)`      | Добавить в очередь push                                  |
+| `getOfflineDbStats()`           | Статистика по таблицам                                   |
+| `clearOfflineDb()`              | Очистить всё (при logout)                                |
 
 ---
 
@@ -471,25 +476,27 @@ api.get<T>(url), api.post<T>(url, data), api.put<T>(...), api.delete<T>(...)
 Прозрачная offline-first прокси между UI и данными.
 
 **READ:**
+
 ```
 Online  → apiClient.get() → кэш в Dexie → return
 Offline → Dexie → return { fromCache: true }
 ```
 
 **WRITE:**
+
 ```
 Online  → apiClient.post/put() → кэш в Dexie → return
          ↓ ошибка сети
 Offline → upsert в Dexie → addPendingChange → return { offline: true }
 ```
 
-| Функция | Описание |
-|---|---|
-| `fetchList(endpoint, params)` | Список с пагинацией |
-| `fetchOne(endpoint, uuid)` | Одна запись |
-| `createRecord(endpoint, data)` | Создание |
+| Функция                              | Описание                       |
+| ------------------------------------ | ------------------------------ |
+| `fetchList(endpoint, params)`        | Список с пагинацией            |
+| `fetchOne(endpoint, uuid)`           | Одна запись                    |
+| `createRecord(endpoint, data)`       | Создание                       |
 | `updateRecord(endpoint, uuid, data)` | Обновление (мержит с existing) |
-| `deleteRecord(endpoint, uuid)` | Soft delete |
+| `deleteRecord(endpoint, uuid)`       | Soft delete                    |
 
 ---
 
@@ -503,18 +510,19 @@ Offline → upsert в Dexie → addPendingChange → return { offline: true }
 ```
 
 **Стратегия:**
+
 1. **Push** — отправить `_pendingChanges` → POST `/sync/push`
 2. **Pull** — скачать изменения → POST `/sync/pull` с `lastSyncAt`
 
-| Функция | Описание |
-|---|---|
-| `fullSync(tables?)` | Полная push+pull синхронизация |
-| `pullSingleTable(table)` | Инкрементальный pull одной таблицы |
-| `initialSync()` | При первом входе |
-| `startPeriodicSync(ms)` | Запуск по таймеру (5 мин) |
-| `abortSyncManager()` | Отмена текущей синхронизации |
-| `resolveConflictKeepLocal/Server(conflict)` | Разрешение конфликтов |
-| `getSyncState()` | `{ status, progress, message, lastResult, lastSyncAt }` |
+| Функция                                     | Описание                                                |
+| ------------------------------------------- | ------------------------------------------------------- |
+| `fullSync(tables?)`                         | Полная push+pull синхронизация                          |
+| `pullSingleTable(table)`                    | Инкрементальный pull одной таблицы                      |
+| `initialSync()`                             | При первом входе                                        |
+| `startPeriodicSync(ms)`                     | Запуск по таймеру (5 мин)                               |
+| `abortSyncManager()`                        | Отмена текущей синхронизации                            |
+| `resolveConflictKeepLocal/Server(conflict)` | Разрешение конфликтов                                   |
+| `getSyncState()`                            | `{ status, progress, message, lastResult, lastSyncAt }` |
 
 **Блокировка:** `isSyncing` flag предотвращает параллельный запуск.
 
@@ -522,12 +530,12 @@ Offline → upsert в Dexie → addPendingChange → return { offline: true }
 
 ### `networkStatus.ts` — мониторинг сети
 
-| Функция | Описание |
-|---|---|
-| `getIsOnline()` | Текущий статус |
-| `subscribeNetwork(listener)` | Подписка на изменения |
-| `startHealthCheck(interval)` | Периодический ping (`HEAD /api/health`) |
-| `triggerSync()` | Запуск синхронизации при переходе online |
+| Функция                      | Описание                                 |
+| ---------------------------- | ---------------------------------------- |
+| `getIsOnline()`              | Текущий статус                           |
+| `subscribeNetwork(listener)` | Подписка на изменения                    |
+| `startHealthCheck(interval)` | Периодический ping (`HEAD /api/health`)  |
+| `triggerSync()`              | Запуск синхронизации при переходе online |
 
 **Intelligent backoff:** Exponential backoff при offline (base × 2^failures, max 5 мин). Переход в offline только после 2+ последовательных неудач.
 
@@ -538,9 +546,9 @@ Offline → upsert в Dexie → addPendingChange → return { offline: true }
 Сохранение/восстановление кэша React Query в IndexedDB для мгновенного offline-отображения данных.
 
 ```typescript
-restoreQueryCache(queryClient);     // При старте
-persistQueryCache(queryClient);     // Подписка на изменения (debounced)
-clearPersistedCache();              // При logout
+restoreQueryCache(queryClient); // При старте
+persistQueryCache(queryClient); // Подписка на изменения (debounced)
+clearPersistedCache(); // При logout
 ```
 
 ---
@@ -574,18 +582,18 @@ commitPendingRows("contacts", rows, parentUuid, "ownerUuid", "Контакты",
 
 ### `UI/index.tsx` — системные компоненты
 
-| Компонент | Описание |
-|---|---|
-| `Screen` | Корневой layout (flex: navbar + content) |
-| `Navbar` | Верхняя панель навигации (меню + right-section) |
-| `NavbarPaneBell` | Колокольчик уведомлений активной панели (auto-open при новых) |
-| `Content` | MDI-контейнер: рендерит все `PaneItem` |
-| `PaneItem` | Обёртка одной панели: заголовок + toolbar-slot + body |
-| `PaneHeaderControls` | Кнопки заголовка: dirty-dot + close |
-| `NavList` | Меню навигации (Торговля / CRM / HR / Настройки) |
-| `Group` | Flex-контейнер с gap |
-| `ErrorBoundary` | Обёртка ошибок с fallback |
-| `LoadingSpinner` / `LoadingFallback` | Индикаторы загрузки |
+| Компонент                            | Описание                                                      |
+| ------------------------------------ | ------------------------------------------------------------- |
+| `Screen`                             | Корневой layout (flex: navbar + content)                      |
+| `Navbar`                             | Верхняя панель навигации (меню + right-section)               |
+| `NavbarPaneBell`                     | Колокольчик уведомлений активной панели (auto-open при новых) |
+| `Content`                            | MDI-контейнер: рендерит все `PaneItem`                        |
+| `PaneItem`                           | Обёртка одной панели: заголовок + toolbar-slot + body         |
+| `PaneHeaderControls`                 | Кнопки заголовка: dirty-dot + close                           |
+| `NavList`                            | Меню навигации (Торговля / CRM / HR / Настройки)              |
+| `Group`                              | Flex-контейнер с gap                                          |
+| `ErrorBoundary`                      | Обёртка ошибок с fallback                                     |
+| `LoadingSpinner` / `LoadingFallback` | Индикаторы загрузки                                           |
 
 ### `ModelForm` — обёртка формы
 
@@ -628,7 +636,7 @@ Infinite scroll, серверная сортировка, фильтрация, 
 
 Генерирует Form + List для типовых документов: Purchases, PaymentInvoices, OutgoingInvoices, IncomingInvoices, CashExpenseOrders, CashReceiptOrders.
 
-**Общая структура:** documentNumber, documentDate, description, amount, status, organizationUuid, counterpartyUuid, contractUuid.
+**Общая структура:** documentDate, description, amount, status, organizationUuid, counterpartyUuid, contractUuid.
 
 **Автозаполнение:** При выборе договора → организация и контрагент заполняются из данных договора.
 
@@ -639,15 +647,19 @@ Infinite scroll, серверная сортировка, фильтрация, 
 Генерирует Form + List для простых справочников: Brands, Currencies, Positions.
 
 **Конфиг:**
+
 ```typescript
 createSimpleModel({
-  endpoint: "brands", listName: "BrandsList", storageKey: "brands-form",
-  formLabel: "Бренды", columnsJson,
-  fields: [
-    { key: "shortName", label: "Наименование *", required: true },
-    { key: "description", label: "Описание" },
-  ],
-  accessRight: "Brand",
+	endpoint: "brands",
+	listName: "BrandsList",
+	storageKey: "brands-form",
+	formLabel: "Бренды",
+	columnsJson,
+	fields: [
+		{ key: "shortName", label: "Наименование", required: true },
+		{ key: "description", label: "Описание" },
+	],
+	accessRight: "Brand",
 });
 ```
 
@@ -656,7 +668,7 @@ createSimpleModel({
 ### `buildPaneLabel.ts` — заголовки панелей
 
 ```typescript
-makePaneLabel("OrganizationsList", "Организации", savedData)
+makePaneLabel("OrganizationsList", "Организации", savedData);
 // → "Организации: ТОО Строй-Снаб"
 ```
 
@@ -688,6 +700,7 @@ ENDPOINT_TO_MODEL["organizations"] → "Organization"
 ```
 
 **API:**
+
 - `getByEndpoint(endpoint)` — найти запись
 - `loadFormByEndpoint(endpoint)` — lazy-загрузка Form-компонента
 
@@ -731,16 +744,17 @@ openFormByEndpoint("organizations", uuid, addPane);
 
 ### Состояния сети
 
-| Состояние | READ | WRITE |
-|---|---|---|
-| **Online** | API → кэш Dexie | API → кэш Dexie |
-| **Offline** | Dexie | Dexie + `_pendingChanges` |
-| **Online→Offline** | Fallback на Dexie | Interceptor → `{ _offline: true }` |
-| **Offline→Online** | `handleOnline()` → `triggerSync()` | `fullSync()` → push pending |
+| Состояние          | READ                               | WRITE                              |
+| ------------------ | ---------------------------------- | ---------------------------------- |
+| **Online**         | API → кэш Dexie                    | API → кэш Dexie                    |
+| **Offline**        | Dexie                              | Dexie + `_pendingChanges`          |
+| **Online→Offline** | Fallback на Dexie                  | Interceptor → `{ _offline: true }` |
+| **Offline→Online** | `handleOnline()` → `triggerSync()` | `fullSync()` → push pending        |
 
 ### Конфликты
 
 При push: если `serverUpdatedAt > clientUpdatedAt` → конфликт. Варианты:
+
 - `resolveConflictKeepLocal()` — перезаписать сервер
 - `resolveConflictKeepServer()` — обновить локальную версию
 
@@ -790,6 +804,7 @@ openFormByEndpoint("organizations", uuid, addPane);
 ### ⚠️ Дублирование `isNetworkError` (5 копий)
 
 **Проблема:** Функция проверки сетевой ошибки дублируется в 5 файлах:
+
 - `offlineQueue.ts` → `isNetworkError()`
 - `api/client.ts` → `isNetworkLikeError()`
 - `offlineDataService.ts` → `isNetworkLike()`
@@ -835,4 +850,4 @@ openFormByEndpoint("organizations", uuid, addPane);
 
 ---
 
-*Конец документации.*
+_Конец документации._

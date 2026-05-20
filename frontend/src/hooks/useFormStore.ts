@@ -1,4 +1,10 @@
-import { useCallback, useRef, useSyncExternalStore, useEffect, useMemo } from "react";
+import {
+	useCallback,
+	useRef,
+	useSyncExternalStore,
+	useEffect,
+	useMemo,
+} from "react";
 import { useAppContext } from "src/app";
 import { isNetworkError } from "src/services/networkUtils";
 import { getIsOnline } from "src/services/networkStatus";
@@ -36,6 +42,8 @@ export interface TableDef {
 	extraSkipFields?: string[];
 	/** Если true — не добавлять [parentField]: parentUuid к payload createPayload/updatePayload (createPayload сам отвечает за все поля) */
 	skipParentField?: boolean;
+	/** Batch endpoint (без /). Если задан — все pending-строки отправляются одним POST /{batchEndpoint}/batch */
+	batchEndpoint?: string;
 }
 
 /** Описание полей формы: ключ → значение по умолчанию */
@@ -518,7 +526,7 @@ function createFormStore<F extends object>(
 
 			const mapped = await Promise.resolve(
 				snapshotOnly
-					? mapServerToForm(d, undefined)   // pure server state — don't let dirty prev bleed into snapshot
+					? mapServerToForm(d, undefined) // pure server state — don't let dirty prev bleed into snapshot
 					: mapServerToForm(d, state.fields),
 			);
 
@@ -706,6 +714,7 @@ function createFormStore<F extends object>(
 					extraSkipFields: tableDef.extraSkipFields,
 					extraFields: tableDef.extraFields,
 					skipParentField: tableDef.skipParentField,
+					batchEndpoint: tableDef.batchEndpoint,
 				},
 			);
 		}
@@ -733,6 +742,7 @@ function createFormStore<F extends object>(
 				extraSkipFields: tableDef.extraSkipFields,
 				extraFields: tableDef.extraFields,
 				skipParentField: tableDef.skipParentField,
+				batchEndpoint: tableDef.batchEndpoint,
 			},
 		);
 		clearTablePending(tableKey);
@@ -923,7 +933,6 @@ export const formStoreAPI = (() => {
 	};
 })();
 
-
 // ═══════════════════════════════════════════════════════════════════════════
 // DIRTY PANE STORE — реактивный Set<uniqId> для отображения индикатора
 // «есть несохранённые изменения» на вкладке панели.
@@ -1088,9 +1097,13 @@ export function addPaneNotification(
 
 	// Показываем всплывающий тост
 	const toastType =
-		type === "error" ? "error" :
-		type === "warning" ? "warning" :
-		type === "info" ? "info" : "success";
+		type === "error"
+			? "error"
+			: type === "warning"
+				? "warning"
+				: type === "info"
+					? "info"
+					: "success";
 	window.dispatchEvent(
 		new CustomEvent("ui_toast", {
 			detail: { message: text, type: toastType, title: context?.paneLabel },
@@ -1123,7 +1136,7 @@ export function dismissNetworkNotifications(uniqId: string): void {
 	notifyNoteListeners();
 }
 
-/** Очистить все уведомления панели */
+/** Очистить все Уведомления */
 export function clearPaneNotifications(uniqId: string): void {
 	if (paneNotesMap.has(uniqId)) {
 		paneNotesMap.delete(uniqId);
@@ -1131,7 +1144,7 @@ export function clearPaneNotifications(uniqId: string): void {
 	}
 }
 
-/** Пометить все уведомления панели как неактуальные (resolved).
+/** Пометить все Уведомления как неактуальные (resolved).
  *  Уведомления остаются видимыми, но действия (кнопки) блокируются. */
 export function resolvePaneNotifications(uniqId: string): void {
 	const list = paneNotesMap.get(uniqId);
@@ -1159,6 +1172,28 @@ export function usePaneNotifications(uniqId: string): PaneNotification[] {
 		subscribeNotes,
 		() => paneNotesMap.get(uniqId) ?? emptyNotes,
 		() => emptyNotes,
+	);
+}
+
+export interface PaneNotificationGroup {
+	paneId: string;
+	notifications: PaneNotification[];
+}
+
+const emptyGroups: PaneNotificationGroup[] = [];
+
+/** Хук: уведомления всех панелей сгруппированные по paneId. */
+export function useAllPaneNotifications(): PaneNotificationGroup[] {
+	return useSyncExternalStore(
+		subscribeNotes,
+		() => {
+			if (paneNotesMap.size === 0) return emptyGroups;
+			return Array.from(paneNotesMap.entries()).map(([paneId, notifications]) => ({
+				paneId,
+				notifications,
+			}));
+		},
+		() => emptyGroups,
 	);
 }
 
@@ -1353,7 +1388,7 @@ export function useFormStore<F extends object>(
 	const effectiveDefaults = initialFields ?? defaultFields;
 	// Открыта через "Несохранённые записи" — нужно автоматически применить stash
 	// и подсветить поля с изменёнными значениями.
-	const isFromUnsaved = !!((data as any)?._formStorageKey);
+	const isFromUnsaved = !!(data as any)?._formStorageKey;
 
 	// Создаём/получаем store из кэша.
 	// Set из derivedFields передаётся в createFormStore при ПЕРВОМ создании
@@ -1386,7 +1421,7 @@ export function useFormStore<F extends object>(
 		if (isFromUnsaved && store.hasPendingStash()) {
 			store.applyPendingStash();
 		}
-	// eslint-disable-next-line react-hooks/exhaustive-deps
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []); // только при монтировании
 
 	// ── Dirty indicator: обновляем глобальный dirtySet при каждом изменении store ──
@@ -1462,9 +1497,7 @@ export function useFormStore<F extends object>(
 				void onCloseRef.current?.();
 				return true;
 			}
-			const answer = await confirm(
-				`Имеются несохранённые изменения.\nЗакрыть без сохранения ? `,
-			);
+			const answer = await confirm(`Закрыть без сохранения ? `);
 			if (!answer) return false;
 			// Очистка при подтверждённом закрытии
 			store.clearStorage();
@@ -1685,9 +1718,7 @@ export function useFormStore<F extends object>(
 		} else {
 			// Нет uniqId — прямое закрытие с проверкой
 			if (store.isDirty()) {
-				const answer = await confirm(
-					`Имеются несохранённые изменения.\nЗакрыть без сохранения?`,
-				);
+				const answer = await confirm(`Закрыть без сохранения?`);
 				if (!answer) return;
 			}
 			store.clearStorage();
@@ -1698,9 +1729,7 @@ export function useFormStore<F extends object>(
 
 	const handleReload = useCallback(async () => {
 		if (store.isDirty()) {
-			const answer = await confirm(
-				`Имеются несохранённые изменения.\nПерезагрузить данные с сервера и потерять правки?`,
-			);
+			const answer = await confirm(`Обновить данные?`);
 			if (!answer) return;
 		}
 		// При reload отбрасываем pending-stash (несохранённые правки из прошлого
@@ -1756,7 +1785,10 @@ export function useFormStore<F extends object>(
 	// Поля с несохранёнными изменениями — только когда форма открыта через "Несохранённые записи".
 	// Реактивно пересчитывается при изменении snapshot (после загрузки серверного snapshot).
 	const unsavedFields = useMemo(
-		() => (isFromUnsaved && store.isSnapshotReady() ? store.getDirtyFieldKeys() : EMPTY_DIRTY_KEYS),
+		() =>
+			isFromUnsaved && store.isSnapshotReady()
+				? store.getDirtyFieldKeys()
+				: EMPTY_DIRTY_KEYS,
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[snapshot, isFromUnsaved, store],
 	);

@@ -1,4 +1,5 @@
 import { FC, useCallback, useEffect, useState, useRef } from "react";
+import { translate } from "src/i18";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
 import apiClient from "src/services/api/client";
@@ -101,7 +102,7 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
       const cur = selRef.current;
       if (cur && !ids.has(cur)) setSelected(items[0]?.uuid ?? "");
       else if (!cur && items.length) setSelected(items[0].uuid);
-    } catch { setError("Не удалось загрузить список файлов"); }
+    } catch { setError(translate("printPreviewFileListError")); }
     finally { setLoading(false); }
   }, [ownerUuid, ownerType]);
 
@@ -203,23 +204,23 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
           onChange={e => setSelected(e.target.value)}
           disabled={busy || !files.length}
         >
-          {!files.length && <option value="">{loading ? "Загрузка…" : "Нет файлов"}</option>}
+          {!files.length && <option value="">{loading ? translate("loadingEllipsis") : translate("noFiles")}</option>}
           {files.map(f => <option key={f.uuid} value={f.uuid}>{f.fileName}</option>)}
         </select>
 
         <div className={styles.PrintToolbarActions}>
           <Button onClick={() => selected && convert(selected)} disabled={!selected || converting}>
-            ↻ Обновить
+            {translate("refresh")}
           </Button>
           <Button variant="primary" onClick={print} disabled={!src || converting}>
-            🖨️ Печать
+            🖨️ {translate("print")}
           </Button>
         </div>
       </div>
 
       {/* Статус */}
       {error && <div className={styles.PrintError}>{error}</div>}
-      {converting && <div className={styles.PrintLoading}>Загрузка файла…</div>}
+      {converting && <div className={styles.PrintLoading}>{translate("loadingFile")}</div>}
 
       {/* Область просмотра — тёмный фон */}
       <div className={styles.PrintViewport}>
