@@ -1,4 +1,5 @@
-import React, { CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { getTranslation } from "src/i18"
 
 import styles from "./Field.module.scss"
 import FieldActionButton from "./FieldActionButton"
@@ -69,7 +70,9 @@ function useFieldBase(params: {
   const formRequired = useFormRequiredScope();
   const formDirty = useFormDirtyScope();
   const isTable = variant === 'table';
-  const isEmpty = value === '' || value === undefined || value === null || value === 0;
+  // Header fields: matches validateDocumentFields (null/undefined/"" only).
+  // Table cells: matches isItemFieldEmpty (null/undefined/""/0).
+  const isEmpty = value === '' || value === undefined || value === null || (isTable && value === 0);
 
   // tail: часть имени после последнего `_` (напр. "formUid_date" → "date")
   const tail = name.includes('_') ? name.slice(name.lastIndexOf('_') + 1) : name;
@@ -98,7 +101,7 @@ const FieldLabelNode: FC<{
   if (isTable || !label) return null;
   return (
     <label htmlFor={htmlFor} className={styles.FieldLabel}>
-      {label}
+      {typeof label === 'string' ? getTranslation(label) : label}
       {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
     </label>
   );
@@ -440,6 +443,8 @@ interface TypeFieldNumberProps {
   actions?: TypeFieldActions;
   variant?: FieldVariant;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  /** Если true — значение 0 отображается как пустое поле (пока не в фокусе) */
+  zeroAsEmpty?: boolean;
 }
 
 export const FieldNumber: FC<TypeFieldNumberProps> = ({
@@ -461,6 +466,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   actions,
   variant = 'default',
   onKeyDown,
+  zeroAsEmpty = false,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -495,8 +501,9 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     if (isFocused) return editText;
     if (rawValue === '') return '';
     const n = parseNumericInput(rawValue);
+    if (zeroAsEmpty && n === 0) return '';
     return n != null ? getFormatNumerical(n) : rawValue;
-  }, [isFocused, editText, rawValue]);
+  }, [isFocused, editText, rawValue, zeroAsEmpty]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -703,7 +710,7 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
     <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
       {label && (
         <label htmlFor={name} className={styles.FieldLabel}>
-          {label}
+          {typeof label === 'string' ? getTranslation(label) : label}
           {effectiveRequired && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
         </label>
       )}
@@ -724,3 +731,224 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
   );
 };
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FieldPeriod — поле выбора периода «Месяц Год» (значение YYYY-MM)
+// Используется в зарплатных и других документах, где период = конкретный месяц.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MONTHS_RU = [
+  "Январь", "Февраль", "Март", "Апрель",
+  "Май", "Июнь", "Июль", "Август",
+  "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+];
+
+const MONTHS_SHORT = [
+  "Янв", "Фев", "Мар", "Апр",
+  "Май", "Июн", "Июл", "Авг",
+  "Сен", "Окт", "Ноя", "Дек",
+];
+
+interface FieldPeriodProps {
+  label?: string;
+  name: string;
+  /** Период в формате "YYYY-MM". Пустая строка — текущий месяц как дефолт отображения. */
+  value?: string;
+  onChange?: (e: { target: { value: string; name: string } }) => void;
+  disabled?: boolean;
+  required?: boolean;
+  error?: boolean;
+  variant?: FieldVariant;
+  width?: string;
+}
+
+function parsePeriod(value: string): [number, number] {
+  const now = new Date();
+  const m = /^(\d{4})-(\d{2})$/.exec(value);
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    if (mo >= 1 && mo <= 12) return [y, mo];
+  }
+  return [now.getFullYear(), now.getMonth() + 1];
+}
+
+export const FieldPeriod: FC<FieldPeriodProps> = ({
+  label,
+  name,
+  value = '',
+  onChange,
+  disabled = false,
+  required = false,
+  error = false,
+  variant = 'default',
+  width,
+}) => {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const [selYear, selMonth] = useMemo(() => parsePeriod(value), [value]);
+  // dropYear: год, отображаемый в picker-е (независим от выбранного)
+  const [dropYear, setDropYear] = useState<number>(selYear);
+
+  // Синхронизируем dropYear с selYear при изменении value извне
+  useEffect(() => { setDropYear(selYear); }, [selYear]);
+
+  const emit = useCallback((y: number, m: number) => {
+    onChange?.({ target: { value: `${y}-${String(m).padStart(2, '0')}`, name } });
+  }, [onChange, name]);
+
+  // При монтировании: если value пусто — эмитим текущий период
+  useEffect(() => {
+    if (!value) {
+      const now = new Date();
+      emit(now.getFullYear(), now.getMonth() + 1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Закрытие по клику вне компонента
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Изменение периода на ±delta месяцев
+  const shiftPeriod = useCallback((delta: number) => {
+    let m = selMonth - 1 + delta; // 0-based
+    let y = selYear;
+    y += Math.floor(m / 12);
+    m = ((m % 12) + 12) % 12;
+    emit(y, m + 1);
+  }, [selYear, selMonth, emit]);
+
+  // Прокрутка колесом на триггере
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (disabled) return;
+    e.preventDefault();
+    shiftPeriod(e.deltaY > 0 ? 1 : -1);
+  }, [disabled, shiftPeriod]);
+
+  // Стрелки на триггере
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (disabled) return;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); shiftPeriod(-1); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); shiftPeriod(1); }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); }
+    if (e.key === 'Escape') setOpen(false);
+  }, [disabled, shiftPeriod]);
+
+  const selectMonth = useCallback((m: number) => {
+    emit(dropYear, m);
+    setOpen(false);
+  }, [dropYear, emit]);
+
+  const displayText = value
+    ? `${MONTHS_RU[selMonth - 1]} ${selYear}`
+    : '—';
+
+  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({
+    name, variant, required, error, value,
+  });
+
+  const triggerId = `${name}_trigger`;
+
+  return (
+    <div ref={rootRef} className={wrapperClass} style={{ width: width ?? 'auto', position: 'relative' }}>
+      <FieldLabelNode htmlFor={triggerId} label={label} required={effectiveRequired} isTable={isTable} />
+
+      {/* Trigger */}
+      <div
+        id={triggerId}
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        tabIndex={disabled ? -1 : 0}
+        className={styles.FieldSelectWrapper}
+        style={{
+          cursor: disabled ? 'default' : 'pointer',
+          userSelect: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingLeft: 6,
+          paddingRight: 6,
+          gap: 4,
+          opacity: disabled ? 0.6 : 1,
+        }}
+        onClick={() => { if (!disabled) setOpen(o => !o); }}
+        onWheel={handleWheel}
+        onKeyDown={handleKeyDown}
+      >
+        <span style={{ fontSize: 'var(--fontsize, 13px)', whiteSpace: 'nowrap' }}>{displayText}</span>
+        <span style={{ fontSize: 9, color: '#888', lineHeight: 1 }}>▾</span>
+      </div>
+
+      {/* Dropdown picker */}
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          zIndex: 9999,
+          background: '#fff',
+          border: '1px solid #d0d0d0',
+          borderRadius: 6,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.13)',
+          padding: '8px',
+          minWidth: 190,
+          marginTop: 2,
+        }}>
+          {/* Year nav */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <button
+              type="button"
+              onClick={() => setDropYear(y => y - 1)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '0 6px', color: '#444' }}
+            >◄</button>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>{dropYear}</span>
+            <button
+              type="button"
+              onClick={() => setDropYear(y => y + 1)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '0 6px', color: '#444' }}
+            >►</button>
+          </div>
+
+          {/* Month grid 3×4 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+            {MONTHS_SHORT.map((mon, i) => {
+              const mNum = i + 1;
+              const isSelected = dropYear === selYear && mNum === selMonth;
+              return (
+                <button
+                  key={mNum}
+                  type="button"
+                  onClick={() => selectMonth(mNum)}
+                  style={{
+                    padding: '5px 2px',
+                    fontSize: 12,
+                    borderRadius: 4,
+                    border: isSelected ? '1.5px solid #1976d2' : '1px solid transparent',
+                    background: isSelected ? '#e3f0fb' : 'transparent',
+                    color: isSelected ? '#1565c0' : '#333',
+                    fontWeight: isSelected ? 600 : 400,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                  }}
+                >
+                  {mon}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

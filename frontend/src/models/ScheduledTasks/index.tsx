@@ -26,14 +26,14 @@ const STATUS_OPTIONS = [
 
 interface TFields {
   id?: number; uuid?: string;
-  shortName: string; description: string; cronExpr: string; status: string;
+  name: string; description: string; cronExpr: string; status: string;
   lastRunAt: string; nextRunAt: string;
   organizationUuid: string; organizationName: string;
   authorUuid: string; authorName: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
-  shortName: "", description: "", cronExpr: "", status: "active",
+  name: "", description: "", cronExpr: "", status: "active",
   lastRunAt: "", nextRunAt: "", organizationUuid: "", organizationName: "",
   authorUuid: "", authorName: "",
 };
@@ -44,16 +44,16 @@ const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
     endpoint: MODEL_ENDPOINT, storageKey: "scheduled-tasks-form", defaultFields: DEFAULT_FIELDS, paneProps,
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      shortName: d.shortName ?? "", description: d.description ?? "",
+      name: d.name ?? "", description: d.description ?? "",
       cronExpr: d.cronExpr ?? "", status: d.status ?? "active",
       lastRunAt: d.lastRunAt?.slice(0, 16) ?? "", nextRunAt: d.nextRunAt?.slice(0, 16) ?? "",
       organizationUuid: d.organizationUuid ?? "",
-      organizationName: d.organization?.shortName ?? "",
+      organizationName: d.organization?.name ?? "",
       authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
       authorName: d.author?.username ?? d.author?.email ?? "",
     }),
     buildPayload: (fd) => ({
-      shortName: fd.shortName?.trim() || null, description: fd.description?.trim() || null,
+      name: fd.name?.trim() || null, description: fd.description?.trim() || null,
       cronExpr: fd.cronExpr?.trim() || null, status: fd.status || "active",
       lastRunAt: fd.lastRunAt || null, nextRunAt: fd.nextRunAt || null,
       organizationUuid: fd.organizationUuid || null,
@@ -67,14 +67,14 @@ const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="339px" value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
               <Field label="Cron выражение" name={`${form.formUid}_cron`} minWidth="339px" value={form.fields.cronExpr} onChange={e => form.setField("cronExpr", e.target.value)} disabled={form.isLoading} />
-              <FieldSelect label="Статус" name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
-              <FieldDateTime label="Последний запуск" name={`${form.formUid}_lastRun`} minWidth="200px" value={form.fields.lastRunAt} onChange={e => form.setField("lastRunAt", e.target.value)} disabled={form.isLoading} />
-              <Field label="Автор" name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || "-"} disabled />
-              <FieldDateTime label="Следующий запуск" name={`${form.formUid}_nextRun`} minWidth="200px" value={form.fields.nextRunAt} onChange={e => form.setField("nextRunAt", e.target.value)} disabled={form.isLoading} />
-              <LookupField label="Организация" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-              <FieldTextarea label="Описание" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
+              <FieldSelect label={translate("status")} name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
+              <FieldDateTime label={translate("lastRunAt")} name={`${form.formUid}_lastRun`} minWidth="200px" value={form.fields.lastRunAt} onChange={e => form.setField("lastRunAt", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("Author")} name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || "-"} disabled />
+              <FieldDateTime label={translate("nextRunAt")} name={`${form.formUid}_nextRun`} minWidth="200px" value={form.fields.nextRunAt} onChange={e => form.setField("nextRunAt", e.target.value)} disabled={form.isLoading} />
+              <LookupField label={translate("organization")} name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+              <FieldTextarea label={translate("description")} name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
             </GroupCol>
           </div>
         </div>
@@ -92,7 +92,7 @@ ScheduledTasksForm.displayName = "ScheduledTasksForm";
 
 const ScheduledTasksList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={ScheduledTasksForm}
-    getLabel={(d) => d?.shortName ? (d.shortName as string).slice(0, 50) : "?"} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => d?.name ? (d.name as string).slice(0, 50) : "?"} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
 );
 ScheduledTasksList.displayName = "ScheduledTasksList";

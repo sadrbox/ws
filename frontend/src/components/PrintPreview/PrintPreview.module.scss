@@ -79,18 +79,7 @@
   text-align: center;
 }
 
-// ── Область просмотра — тёмный фон как в нативном PDF-viewer ──────────────
-.PrintViewport {
-  flex: 1;
-  min-height: 0;
-  overflow: auto; // разрешаем вертикальную прокрутку контейнера
-  background: #2b2b2b;
-  border-radius: $radius2;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 16px 0;
-}
+// Viewport и IframeDoc перенесены в DocViewport/DocViewport.module.scss.
 
 // PDF — нативный viewer: растягиваем на всю область
 .PrintIframePdf {
@@ -99,22 +88,6 @@
   height: 100%;
   border: none;
   background: #525659;
-}
-
-// Документы (HTML/DOCX/TXT/IMG) — белый «лист» с тенью по центру тёмного фона.
-// Ширина точно соответствует A4 (210mm = ~793px @96dpi), чтобы не было ни
-// горизонтальной прокрутки, ни обрезки содержимого по ширине.
-.PrintIframeDoc {
-  width: 210mm;
-  max-width: calc(100% - 32px);
-  height: 100%;
-  min-height: 297mm;
-  border: none;
-  margin: 0 auto;
-  background: #fff;
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
-  border-radius: 2px;
-  display: block;
 }
 
 // Переключатель ориентации листа в шапке PrintDocumentPane.
@@ -161,14 +134,7 @@
     display: none !important;
   }
 
-  .PrintViewport {
-    overflow: visible;
-    background: none;
-    padding: 0;
-  }
-
-  .PrintIframePdf,
-  .PrintIframeDoc {
+  .PrintIframePdf {
     width: 100% !important;
     height: 100vh !important;
     max-width: none;

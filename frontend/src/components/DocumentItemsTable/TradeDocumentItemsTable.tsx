@@ -8,7 +8,7 @@
 //
 // Соответствие законодательству РК:
 //   • НК РК ст. 412 — графы ЭСФ: 4/6/7/8/13/14/15/16/17
-//   • НК РК ст. 422 — ставка НДС 0..100%
+//   • НК РК ст. 422 — Ставка НДС, % 0..100%
 //   • НК РК ст. 463 — акциз (база afterDiscount, метод ADDED)
 //   • НК РК ст. 372 п.2 пп.3 — внутренние перемещения ТМЗ не являются
 //                              облагаемым оборотом (hasTaxes=false)
@@ -77,10 +77,12 @@ export interface TradeDocumentItemsTableProps {
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
   initialPendingRows?: TDataItem[];
-  /** Если false (ТМЗ) — НДС/акциз/скидка отключаются принудительно. */
+  /** Если false (ТМЗ) — НДС/акциз/Сумма скидки отключаются принудительно. */
   hasTaxes?: boolean;
   /** Сообщение, когда у документа нет строк. */
   emptyMessage?: string;
+  /** Показывать подсветку обязательных полей (только после неудачной попытки сохранения). */
+  showRequiredHighlight?: boolean;
 }
 
 const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
@@ -97,6 +99,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   initialPendingRows,
   hasTaxes = true,
   emptyMessage = "Сохраните документ для добавления позиций.",
+  showRequiredHighlight = false,
 }) => {
   const queryClient = useQueryClient();
   const settings = useOrgAccountingSettings(organizationUuid ?? null, documentDate ?? null);
@@ -124,12 +127,12 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     }
     if (useDiscount) {
       let baseNote: string;
-      if (isVatEnabled && useExcise) baseNote = "Итого скидка вычитается из базы для НДС и акциза";
-      else if (isVatEnabled) baseNote = "Итого скидка вычитается из базы для НДС";
-      else if (useExcise) baseNote = "Итого скидка вычитается из базы для акциза";
+      if (isVatEnabled && useExcise) baseNote = "Итого Сумма скидки вычитается из базы для НДС и акциза";
+      else if (isVatEnabled) baseNote = "Итого Сумма скидки вычитается из базы для НДС";
+      else if (useExcise) baseNote = "Итого Сумма скидки вычитается из базы для акциза";
       else baseNote = "Уменьшает итоговую стоимость строки";
       dynHints["discountAmount"] = {
-        hint: "Сумма скидки (надбавки).\nСумма скидки = Количество × Цена × Скидка % ÷ 100\n(" + baseNote + ")",
+        hint: "Сумма скидки (надбавки).\nСумма скидки = Количество × Цена × Процент скидки, % ÷ 100\n(" + baseNote + ")",
       };
     }
     if (isVatEnabled) {
@@ -137,7 +140,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       const baseFor = useExcise ? "= база до начисления акциза и НДС" : "= база до начисления НДС";
       const afterDiscount = useDiscount ? ", после скидки" : "";
       dynHints["amountNetOfIndirectTaxes"] = {
-        hint: `Стоимость без НДС и без акциза — графа 13 ЭСФ РК (ст. 412 НК РК)${afterDiscount}.\n${formula}\n${baseFor}`,
+        hint: `Облагаемый оборот по НДС и без акциза — графа 13 ЭСФ РК (ст. 412 НК РК)${afterDiscount}.\n${formula}\n${baseFor}`,
       };
     }
     if (isVatEnabled) {
@@ -146,13 +149,13 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       else if (useDiscount) lines.push("Облагаемый оборот НДС = Количество × Цена − Сумма скидки");
       else lines.push("Облагаемый оборот НДС = Количество × Цена");
       lines.push("= база для расчёта НДС");
-      lines.push("НДС = Облагаемый оборот × Ставка НДС ÷ 100");
+      lines.push("НДС = Облагаемый оборот × Ставка НДС, % ÷ 100");
       dynHints["amountWithoutVat"] = { hint: lines.join("\n") };
     }
     if (useExcise) {
       const baseLabel = isVatEnabled ? "Стоимость" : (useDiscount ? "(Количество × Цена − Сумма скидки)" : "(Количество × Цена)");
       dynHints["exciseAmount"] = {
-        hint: `Сумма акциза — графа 14 ЭСФ РК.\nСумма акциза = ${baseLabel} × Ставка акциза ÷ 100\n(НК РК ст. 463; начисляется сверху — ADDED)`,
+        hint: `Сумма акциза — графа 14 ЭСФ РК.\nСумма акциза = ${baseLabel} × Ставка акциза, % ÷ 100\n(НК РК ст. 463; начисляется сверху — ADDED)`,
       };
     }
     {
@@ -160,7 +163,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       let name: string | undefined;
       if (isVatEnabled) {
         lines.push("Стоимость товаров (работ, услуг) с косвенными налогами — графа 17 ЭСФ РК.");
-        lines.push("Стоимость с НДС = Облагаемый оборот + Сумма НДС");
+        lines.push("Сумма = Облагаемый оборот + Сумма НДС");
       } else {
         name = "Стоимость";
         if (useExcise) {
@@ -205,19 +208,12 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   const recalcWithFlags = useCallback(
     (row: any, patch: Record<string, unknown>): Record<string, unknown> => {
       const enforced: Record<string, unknown> = { ...patch };
+      if (enforced.vatRate === "") enforced.vatRate = 0;
+      if (enforced.exciseRate === "") enforced.exciseRate = 0;
       if (!isVatEnabled) enforced.vatRate = 0;
       if (!useDiscount) { enforced.discountPercent = 0; enforced.discountAmount = 0; }
       if (!useExcise) { enforced.exciseRate = 0; enforced.exciseAmount = 0; }
       const merged = { ...row, ...enforced } as Record<string, unknown>;
-      const isBlank = (v: unknown) => v === null || v === undefined || v === "";
-      if (isVatEnabled && isBlank(merged.vatRate)) {
-        const d = Number(orgVatRate);
-        if (Number.isFinite(d) && d > 0) enforced.vatRate = d;
-      }
-      if (useExcise && isBlank(merged.exciseRate)) {
-        const d = Number(orgExciseRate);
-        if (Number.isFinite(d) && d > 0) enforced.exciseRate = d;
-      }
       // Для ТМЗ (hasTaxes=false) — простая формула: amount = qty × price
       if (!hasTaxes) {
         const qty = Number(merged.quantity ?? 0) || 0;
@@ -229,7 +225,8 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     [isVatEnabled, useDiscount, useExcise, vatCalculationMethod, orgVatRate, orgExciseRate, hasTaxes],
   );
 
-  const requiredFields = useMemo(() => ["product.shortName", "quantity", "price", "unitOfMeasure.shortName"], []);
+  const allRequiredFields = useMemo(() => ["product.name", "quantity", "price", "unitOfMeasure.name"], []);
+  const requiredFields = showRequiredHighlight ? allRequiredFields : undefined;
 
   const handleItemsChange = useCallback((items: TDataItem[]) => {
     if (onTotalChange) {
@@ -330,29 +327,29 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     }
     if (!ctx.inlineEditing) return undefined;
 
-    if (id === "product.shortName") {
+    if (id === "product.name") {
       return (
         <LookupField
           label=""
           name={`docitem_product_${row.id}`}
           value={(row.productUuid as string) ?? ""}
-          displayValue={(row.product as any)?.shortName ?? ""}
+          displayValue={(row.product as any)?.name ?? ""}
           endpoint="products"
-          displayField="shortName"
+          displayField="name"
           columns={[
-            { key: "shortName", label: "Наименование" },
+            { key: "name", label: "Наименование" },
             { key: "sku", label: "Артикул" },
-            { key: "brand.shortName", label: "Бренд" },
+            { key: "brand.name", label: "Бренд" },
           ]}
           onSelect={(uuid, _dv, item) => {
             const extra: Record<string, unknown> = {
-              product: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
+              product: item && uuid ? { uuid, name: item.name ?? "" } : null,
             };
             const umUuid = item?.unitOfMeasureUuid as string | undefined;
-            const um = item?.unitOfMeasure as { uuid?: string; shortName?: string; name?: string } | undefined;
+            const um = item?.unitOfMeasure as { uuid?: string; name?: string } | undefined;
             if (umUuid) {
               extra.unitOfMeasureUuid = umUuid;
-              extra.unitOfMeasure = um ? { uuid: um.uuid ?? umUuid, shortName: um.shortName ?? um.name ?? "" } : { uuid: umUuid, shortName: "" };
+              extra.unitOfMeasure = um ? { uuid: um.uuid ?? umUuid, name: um.name ?? "" } : { uuid: umUuid, name: "" };
             }
             ctx.handleLookupChange(row, "productUuid", uuid, extra);
           }}
@@ -369,7 +366,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       return (
         <FieldNumber
           name={`docitem_qty_${row.id}`}
-          value={row.quantity != null ? String(row.quantity as number | string) : "0"}
+          value={row.quantity != null ? String(row.quantity as number | string) : ""}
           onChange={e => {
             if (ctx.deferRemoteChanges) { ctx.updateLocalRow(row, recalcWithFlags(row as any, { quantity: e.target.value })); return; }
             ctx.handleInlineChange(row, "quantity", e.target.value);
@@ -387,7 +384,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       return (
         <FieldNumber
           name={`docitem_price_${row.id}`}
-          value={row.price != null ? String(row.price as number | string) : "0"}
+          value={row.price != null ? String(row.price as number | string) : ""}
           onChange={e => {
             if (ctx.deferRemoteChanges) { ctx.updateLocalRow(row, recalcWithFlags(row as any, { price: e.target.value })); return; }
             ctx.handleInlineChange(row, "price", e.target.value);
@@ -402,21 +399,21 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
         />
       );
     }
-    if (id === "unitOfMeasure.shortName") {
+    if (id === "unitOfMeasure.name") {
       return (
         <LookupField
           label=""
           name={`docitem_uom_${row.id}`}
           value={(row.unitOfMeasureUuid as string) ?? ""}
-          displayValue={(row.unitOfMeasure as any)?.shortName ?? ""}
+          displayValue={(row.unitOfMeasure as any)?.name ?? ""}
           endpoint="unit-of-measures"
-          displayField="shortName"
+          displayField="name"
           columns={[
-            { key: "shortName", label: "Наименование" },
+            { key: "name", label: "Наименование" },
             { key: "code", label: "Код" },
           ]}
           onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "unitOfMeasureUuid", uuid, {
-            unitOfMeasure: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null,
+            unitOfMeasure: item && uuid ? { uuid, name: item.name ?? "" } : null,
           })}
           onClear={() => ctx.handleLookupChange(row, "unitOfMeasureUuid", null, { unitOfMeasure: null })}
           onEnterKey={() => focusNextInRow(document.activeElement)}
@@ -432,7 +429,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       return (
         <FieldNumber
           name={`docitem_discount_${row.id}`}
-          value={row.discountPercent != null ? String(row.discountPercent as number | string) : "0"}
+          value={row.discountPercent != null ? String(row.discountPercent as number | string) : ""}
           onChange={e => {
             if (ctx.deferRemoteChanges) { ctx.updateLocalRow(row, recalcWithFlags(row as any, { discountPercent: e.target.value })); return; }
             ctx.handleInlineChange(row, "discountPercent", e.target.value);
@@ -448,7 +445,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       return (
         <FieldNumber
           name={`docitem_exciserate_${row.id}`}
-          value={row.exciseRate != null ? String(row.exciseRate as number | string) : "0"}
+          value={row.exciseRate != null ? String(row.exciseRate as number | string) : ""}
           onChange={e => {
             if (ctx.deferRemoteChanges) { ctx.updateLocalRow(row, recalcWithFlags(row as any, { exciseRate: e.target.value })); return; }
             ctx.handleInlineChange(row, "exciseRate", e.target.value);
@@ -464,7 +461,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       return (
         <FieldNumber
           name={`docitem_vatrate_${row.id}`}
-          value={row.vatRate != null ? String(row.vatRate as number | string) : "0"}
+          value={row.vatRate != null ? String(row.vatRate as number | string) : ""}
           onChange={e => {
             if (ctx.deferRemoteChanges) { ctx.updateLocalRow(row, recalcWithFlags(row as any, { vatRate: e.target.value })); return; }
             ctx.handleInlineChange(row, "vatRate", e.target.value);
@@ -481,17 +478,17 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
 
   const defaultNewRow = useMemo(() => ({
     productUuid: null,
-    quantity: 0,
-    price: 0,
+    quantity: null,
+    price: null,
     unitOfMeasureUuid: null,
     vatRate: isVatEnabled ? Number(orgVatRate) || 0 : 0,
-    discountPercent: 0,
-    discountAmount: 0,
+    discountPercent: null,
+    discountAmount: null,
     exciseRate: useExcise ? Number(orgExciseRate) || 0 : 0,
-    exciseAmount: 0,
-    vatAmount: 0,
-    amountWithoutVat: 0,
-    amount: 0,
+    exciseAmount: null,
+    vatAmount: null,
+    amountWithoutVat: null,
+    amount: null,
   }), [isVatEnabled, orgVatRate, useExcise, orgExciseRate]);
 
   return (
@@ -522,7 +519,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           disabled={disabled}
           recalcRow={(row) => {
             const refDefaults: Record<string, unknown> = {};
-            const product = row.product as { unitOfMeasureUuid?: string | null; unitOfMeasure?: { uuid?: string; shortName?: string } | null } | null | undefined;
+            const product = row.product as { unitOfMeasureUuid?: string | null; unitOfMeasure?: { uuid?: string; name?: string } | null } | null | undefined;
             if (!row.unitOfMeasureUuid && product?.unitOfMeasureUuid) {
               refDefaults.unitOfMeasureUuid = product.unitOfMeasureUuid;
               if (product.unitOfMeasure) refDefaults.unitOfMeasure = product.unitOfMeasure;

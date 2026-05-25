@@ -38,9 +38,9 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;
-    if (!data || data.uuid) return undefined;
+    if (data?.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
-    if (data.ownerType) { init.ownerType = data.ownerType as OwnerType; init.ownerUuid = (data.ownerUuid as string) || ""; init.ownerName = (data.ownerName as string) || ""; }
+    if (data?.ownerType) { init.ownerType = data?.ownerType as OwnerType; init.ownerUuid = (data?.ownerUuid as string) || ""; init.ownerName = (data?.ownerName as string) || ""; }
     return init;
   })();
 
@@ -95,7 +95,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
             <div className={styles.Form}>
               <GroupCol>
                 <GroupRow>
-                  <Field label="ФИО" name={`${form.formUid}_fullName`} value={form.fields.fullName} onChange={e => form.setField("fullName", e.target.value)} disabled={form.isLoading} />
+                  <Field label={translate("fullName")} name={`${form.formUid}_fullName`} value={form.fields.fullName} onChange={e => form.setField("fullName", e.target.value)} disabled={form.isLoading} />
                   {form.isEditMode && form.fields.uuid && (
                     <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
                   )}
@@ -103,7 +103,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
                 <OwnerLookupField name={`${form.formUid}_owner`} ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
                   onOwnerChange={({ ownerType, ownerUuid, ownerName }) => form.setFields({ ownerType, ownerUuid, ownerName } as Partial<TFields>)}
                   disabled={form.isLoading} typeLocked={!form.uuid && !!paneProps.data?.ownerType} allowedTypes={["organization", "counterparty"]} />
-                <Field label="Комментарий" name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
               </GroupCol>
             </div>
           </div>

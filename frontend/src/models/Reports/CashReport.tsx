@@ -9,11 +9,11 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { Group, GroupRow } from "src/components/UI";
+import { GroupRow } from "src/components/UI";
 import { getFormatDateOnly } from "src/utils/main.module";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
-import reportStyles from "./report.module.scss";
+import styles from "./report.module.scss";
 
 interface CashRow {
   uuid: string;
@@ -27,6 +27,13 @@ interface CashRow {
 
 const fmt = (n: number) =>
   n.toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function formatPeriod(from: string, to: string): string {
+  if (!from) return "";
+  const f = getFormatDateOnly(from) || from;
+  const t = to ? getFormatDateOnly(to) || to : "";
+  return t ? `${f} — ${t}` : f;
+}
 
 interface CashReportProps {
   uniqId?: string;
@@ -65,14 +72,14 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
         uuid: d.uuid,
         date: d.date?.slice(0, 10) ?? "",
         type,
-        counterpartyName: d.counterparty?.shortName ?? "",
-        contractName: d.contract?.shortName ?? "",
+        counterpartyName: d.counterparty?.name ?? "",
+        contractName: d.contract?.name ?? "",
         amount: Number(d.amount ?? 0),
         posted: d.posted === true,
       });
       const all: CashRow[] = [
-        ...pkItems.map(d => toRow(d, "receipt")),
-        ...rkItems.map(d => toRow(d, "expense")),
+        ...pkItems.map(d => toRow(d, "receipt")).filter(r => r.posted),
+        ...rkItems.map(d => toRow(d, "expense")).filter(r => r.posted),
       ];
       all.sort((a, b) => a.date.localeCompare(b.date));
       return all;
@@ -84,44 +91,49 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
   const totalExpenses = rows.filter(r => r.type === "expense").reduce((s, r) => s + r.amount, 0);
   const balance = totalReceipts - totalExpenses;
 
+  const period = formatPeriod(dateFrom, dateTo);
+
   const form = (
     <>
       <GroupRow>
         <FieldDate label={translate("reportPeriodFrom")} name="cr_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
         <FieldDate label={translate("reportPeriodTo")} name="cr_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
       </GroupRow>
-      <Group>
-        <LookupField label={translate("organization")} name="cr_org" value={orgUuid} displayValue={orgName}
-          endpoint="organizations" displayField="shortName"
-          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
-          onClear={() => { setOrgUuid(""); setOrgName(""); }} />
-      </Group>
+      <LookupField label={translate("organization")} name="cr_org" value={orgUuid} displayValue={orgName}
+        endpoint="organizations" displayField="name"
+        onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
+        onClear={() => { setOrgUuid(""); setOrgName(""); }} />
     </>
   );
 
   let running = 0;
 
   const layout = (
-    <>
-      <div className={reportStyles.ReportSummary} style={{ marginBottom: "8mm", display: "flex", gap: "24px", fontSize: "10pt" }}>
+    <div className={styles.Report}>
+      {orgName && <div className={styles.OrgName}>{orgName}</div>}
+      <div className={styles.Title}>{translate("CashReportList")}</div>
+      {period && <div className={styles.SubTitle}>{translate("reportPeriodLabel")} {period}</div>}
+
+      <div className={styles.Summary}>
         <span>{translate("reportTotalReceipts")}: <strong>{fmt(totalReceipts)}</strong></span>
         <span>{translate("reportTotalExpenses")}: <strong>{fmt(totalExpenses)}</strong></span>
         <span>
           {translate("reportCashBalance")}:{" "}
-          <strong style={balance < 0 ? { color: "#dc2626" } : undefined}>{fmt(balance)}</strong>
+          <strong className={balance < 0 ? styles.Negative : undefined}>{fmt(balance)}</strong>
         </span>
       </div>
-      <table className={reportStyles.ReportTable}>
+
+      <table className={styles.Table}>
         <thead>
           <tr>
-            <th>№</th>
-            <th>{translate("reportDate")}</th>
-            <th>{translate("reportOrderType")}</th>
-            <th>{translate("reportCounterparty")}</th>
-            <th>{translate("contract")}</th>
-            <th className={reportStyles.NumCol} style={{ textAlign: "right" }}>{translate("reportIncoming")}</th>
-            <th className={reportStyles.NumCol} style={{ textAlign: "right" }}>{translate("reportOutgoing")}</th>
-            <th className={reportStyles.NumCol} style={{ textAlign: "right" }}>{translate("reportBalance")}</th>
+            <th className={styles.ColN}>№</th>
+            <th className={styles.ColDate}>{translate("reportDate")}</th>
+            <th className={styles.ColTag}>{translate("reportOrderType")}</th>
+            <th className={styles.ColName}>{translate("reportCounterparty")}</th>
+            <th className={styles.ColName}>{translate("contract")}</th>
+            <th className={styles.ColNum}>{translate("reportIncoming")}</th>
+            <th className={styles.ColNum}>{translate("reportOutgoing")}</th>
+            <th className={styles.ColNum}>{translate("reportBalance")}</th>
           </tr>
         </thead>
         <tbody>
@@ -130,20 +142,19 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
             const expense = row.type === "expense" ? row.amount : 0;
             running = running + receipt - expense;
             return (
-              <tr key={row.uuid} className={!row.posted ? reportStyles.Unposted : undefined}>
-                <td>{idx + 1}</td>
-                <td>{getFormatDateOnly(row.date)}</td>
-                <td>
-                  <span className={row.type === "receipt" ? reportStyles.TagReceipt : reportStyles.TagExpense}>
+              <tr key={row.uuid} className={!row.posted ? styles.Unposted : undefined}>
+                <td className={styles.ColN}>{idx + 1}</td>
+                <td className={styles.ColDate}>{getFormatDateOnly(row.date)}</td>
+                <td className={styles.ColTag}>
+                  <span className={row.type === "receipt" ? styles.TagReceipt : styles.TagExpense}>
                     {row.type === "receipt" ? translate("cashReceiptAbbr") : translate("cashExpenseAbbr")}
                   </span>
                 </td>
-                <td>{row.counterpartyName}</td>
-                <td>{row.contractName}</td>
-                <td className={reportStyles.NumCol} style={{ textAlign: "right" }}>{receipt > 0 ? fmt(receipt) : ""}</td>
-                <td className={reportStyles.NumCol} style={{ textAlign: "right" }}>{expense > 0 ? fmt(expense) : ""}</td>
-                <td className={`${reportStyles.NumCol} ${running < 0 ? reportStyles.Negative : ""}`}
-                  style={{ textAlign: "right", ...(running < 0 ? { color: "#dc2626" } : {}) }}>
+                <td className={styles.ColName}>{row.counterpartyName}</td>
+                <td className={styles.ColName}>{row.contractName}</td>
+                <td className={styles.ColNum}>{receipt > 0 ? fmt(receipt) : "—"}</td>
+                <td className={styles.ColNum}>{expense > 0 ? fmt(expense) : "—"}</td>
+                <td className={`${styles.ColNum}${running < 0 ? ` ${styles.Negative}` : ""}`}>
                   {fmt(running)}
                 </td>
               </tr>
@@ -151,18 +162,17 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
           })}
         </tbody>
         <tfoot>
-          <tr className={reportStyles.TotalRow} style={{ fontWeight: 600 }}>
+          <tr className={styles.TotalRow}>
             <td colSpan={5}>{translate("total")}</td>
-            <td className={reportStyles.NumCol} style={{ textAlign: "right" }}>{fmt(totalReceipts)}</td>
-            <td className={reportStyles.NumCol} style={{ textAlign: "right" }}>{fmt(totalExpenses)}</td>
-            <td className={`${reportStyles.NumCol} ${balance < 0 ? reportStyles.Negative : ""}`}
-              style={{ textAlign: "right", ...(balance < 0 ? { color: "#dc2626" } : {}) }}>
+            <td className={styles.ColNum}>{fmt(totalReceipts)}</td>
+            <td className={styles.ColNum}>{fmt(totalExpenses)}</td>
+            <td className={`${styles.ColNum}${balance < 0 ? ` ${styles.Negative}` : ""}`}>
               {fmt(balance)}
             </td>
           </tr>
         </tfoot>
       </table>
-    </>
+    </div>
   );
 
   return (
@@ -174,6 +184,8 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
       isEmpty={!isLoading && rows.length === 0}
       fileBaseName={translate("CashReportList")}
       title={translate("CashReportList")}
+      orientation="landscape"
+      sheetFit="content"
     />
   );
 };

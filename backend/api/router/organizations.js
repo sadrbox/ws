@@ -67,7 +67,7 @@ router.get("/organizations", async (req, res) => {
 		}
 
 		// ── Поиск ─────────────────────────────────────────────────────────────
-		const TEXT_FIELDS = ["bin", "shortName", "displayName"];
+		const TEXT_FIELDS = ["bin", "name", "displayName"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 
@@ -204,7 +204,7 @@ router.get("/organizations/:id", async (req, res) => {
 // ============================================
 router.post("/organizations", async (req, res) => {
 	try {
-		const { bin, shortName, displayName } = req.body;
+		const { bin, name, displayName } = req.body;
 
 		if (!bin || typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
 			return res.status(400).json({
@@ -216,7 +216,7 @@ router.post("/organizations", async (req, res) => {
 		const item = await prisma.organization.create({
 			data: {
 				bin: bin.trim(),
-				shortName: shortName?.trim() ?? null,
+				name: name?.trim() ?? null,
 				displayName: displayName?.trim() ?? null,
 			},
 		});
@@ -244,11 +244,11 @@ router.put("/organizations/:id", async (req, res) => {
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 
-		const { bin, shortName, displayName } = req.body;
+		const { bin, name, displayName } = req.body;
 		const data = {};
 
 		if (bin !== undefined) data.bin = bin.trim();
-		if (shortName !== undefined) data.shortName = shortName?.trim() ?? null;
+		if (name !== undefined) data.name = name?.trim() ?? null;
 		if (displayName !== undefined)
 			data.displayName = displayName?.trim() ?? null;
 

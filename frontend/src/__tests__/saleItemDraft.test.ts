@@ -7,7 +7,7 @@ import {
 
 describe("saleItemDraft", () => {
 	it("recalculates discount, VAT included and total amount", () => {
-		// 2×100 = 200, скидка 10% → 180, НДС 12% INCLUDED → vat=19.29
+		// 2×100 = 200, Сумма скидки 10% → 180, НДС 12% INCLUDED → vat=19.29
 		// amountWithoutVat = 180 − 19.29 = 160.71
 		expect(recalcSaleItemAmounts("2", "100", "12", "10")).toEqual({
 			discountAmount: 20,
@@ -62,7 +62,7 @@ describe("saleItemDraft", () => {
 		});
 	});
 
-	it("отрицательная сумма скидки приводится к 0", () => {
+	it("отрицательная Сумма скидки приводится к 0", () => {
 		const row = { quantity: "1", price: "100", vatRate: "0" };
 		expect(withSaleItemRecalcFromDiscountAmount(row, "-10")).toEqual({
 			discountAmount: 0,
@@ -74,7 +74,7 @@ describe("saleItemDraft", () => {
 		});
 	});
 
-	it("сумма скидки не превышает базы", () => {
+	it("Сумма скидки не превышает базы", () => {
 		const row = { quantity: "1", price: "100", vatRate: "0" };
 		expect(withSaleItemRecalcFromDiscountAmount(row, "500")).toEqual({
 			discountAmount: 100,
@@ -119,7 +119,7 @@ describe("saleItemDraft", () => {
 	});
 
 	it("ADDED со скидкой: vat считается от afterDiscount", () => {
-		// 100×10 = 1000, скидка 10% → after=900, vat ADDED 12% = 108, amount=1008
+		// 100×10 = 1000, Сумма скидки 10% → after=900, vat ADDED 12% = 108, amount=1008
 		expect(recalcSaleItemAmounts(100, 10, 12, 10, "ADDED")).toEqual({
 			discountAmount: 100,
 			exciseAmount: 0,

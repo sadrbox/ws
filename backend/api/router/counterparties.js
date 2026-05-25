@@ -27,12 +27,12 @@ const validateCounterpartyData = (data) => {
 		errors.push(binValidation.error);
 	}
 
-	// Валидация shortName
-	if (data.shortName !== undefined && data.shortName !== null) {
-		if (typeof data.shortName !== "string") {
-			errors.push("shortName должен быть строкой");
-		} else if (data.shortName.trim().length > 255) {
-			errors.push("shortName не должен превышать 255 символов");
+	// Валидация name
+	if (data.name !== undefined && data.name !== null) {
+		if (typeof data.name !== "string") {
+			errors.push("name должен быть строкой");
+		} else if (data.name.trim().length > 255) {
+			errors.push("name не должен превышать 255 символов");
 		}
 	}
 
@@ -53,7 +53,7 @@ const validateCounterpartyData = (data) => {
 // ============================================
 router.post("/counterparties", async (req, res) => {
 	try {
-		const { bin, shortName, displayName } = req.body;
+		const { bin, name, displayName } = req.body;
 
 		// 1. Ранняя проверка наличия
 		if (!bin || typeof bin !== "string") {
@@ -68,7 +68,7 @@ router.post("/counterparties", async (req, res) => {
 		// 3. Валидация (предполагаем, что validate... теперь принимает уже trimmed значения)
 		const errors = validateCounterpartyData({
 			bin: normalizedBin,
-			shortName: shortName?.trim() ?? null,
+			name: name?.trim() ?? null,
 			displayName: displayName?.trim() ?? null,
 		});
 
@@ -89,7 +89,7 @@ router.post("/counterparties", async (req, res) => {
 			return tx.counterparty.create({
 				data: {
 					bin: normalizedBin,
-					shortName: shortName?.trim() ?? null,
+					name: name?.trim() ?? null,
 					displayName: displayName?.trim() ?? null,
 					organizationUuid: req.user?.organizationUuid ?? null,
 				},
@@ -176,7 +176,7 @@ router.get("/counterparties", async (req, res) => {
 		}
 
 		// ── Поиск ─────────────────────────────────────────────────────────────
-		const TEXT_FIELDS = ["bin", "shortName", "displayName"];
+		const TEXT_FIELDS = ["bin", "name", "displayName"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 
@@ -349,7 +349,7 @@ router.get("/counterparties/uuid/:uuid", async (req, res) => {
 router.put("/counterparties/:uuid", async (req, res) => {
 	try {
 		const { uuid } = req.params;
-		const { bin, shortName, displayName } = req.body;
+		const { bin, name, displayName } = req.body;
 
 		if (
 			typeof uuid !== "string" ||
@@ -380,11 +380,11 @@ router.put("/counterparties/:uuid", async (req, res) => {
 		// Валидация только изменяемых полей
 		const errors = [];
 
-		if (shortName !== undefined && shortName !== null) {
-			if (typeof shortName !== "string") {
-				errors.push("shortName должен быть строкой");
-			} else if (shortName.trim().length > 255) {
-				errors.push("shortName не должен превышать 255 символов");
+		if (name !== undefined && name !== null) {
+			if (typeof name !== "string") {
+				errors.push("name должен быть строкой");
+			} else if (name.trim().length > 255) {
+				errors.push("name не должен превышать 255 символов");
 			}
 		}
 
@@ -405,8 +405,8 @@ router.put("/counterparties/:uuid", async (req, res) => {
 
 		// Подготовка данных для обновления
 		const updateData = {};
-		if (shortName !== undefined) {
-			updateData.shortName = shortName?.trim() || null;
+		if (name !== undefined) {
+			updateData.name = name?.trim() || null;
 		}
 		if (displayName !== undefined) {
 			updateData.displayName = displayName?.trim() || null;
@@ -466,7 +466,7 @@ router.patch("/counterparties/:uuid", async (req, res) => {
 		}
 
 		// Фильтруем только допустимые поля для обновления
-		const allowedFields = ["shortName", "displayName"];
+		const allowedFields = ["name", "displayName"];
 		const updateData = {};
 
 		for (const field of allowedFields) {
@@ -620,7 +620,7 @@ router.get("/counterparties/export/list", async (req, res) => {
 			select: {
 				id: true,
 				bin: true,
-				shortName: true,
+				name: true,
 				displayName: true,
 			},
 		});
@@ -631,7 +631,7 @@ router.get("/counterparties/export/list", async (req, res) => {
 			const csvRows = [headers.join(",")];
 
 			counterparties.forEach((cp) => {
-				const row = [cp.id, cp.bin, cp.shortName || "", cp.displayName || ""];
+				const row = [cp.id, cp.bin, cp.name || "", cp.displayName || ""];
 				csvRows.push(row.map((val) => `"${val}"`).join(","));
 			});
 

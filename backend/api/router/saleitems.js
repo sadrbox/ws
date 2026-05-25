@@ -10,7 +10,7 @@ const ROUTE = "saleitems";
  * Пересчёт массива налогов с учётом calculationMethod каждого:
  *   INCLUDED ("в т.ч."):  taxAmount = base * rate / (100 + rate)
  *   ADDED   ("сверху"):   taxAmount = base * rate / 100
- * Возвращает массив записей `{ taxUuid, code, shortName, rate, method, amount }`.
+ * Возвращает массив записей `{ taxUuid, code, name, rate, method, amount }`.
  * Базовая стоимость строки (amountAfterDiscount) при INCLUDED не меняется,
  * при ADDED итоговый `amount` строки = afterDiscount + Σ ADDED-сумм.
  */
@@ -20,7 +20,7 @@ function recalcTaxes(amountAfterDiscount, taxes) {
 		const rate = Number(t?.rate ?? 0) || 0;
 		const taxUuid = String(t?.taxUuid ?? "");
 		const code = t?.code ?? null;
-		const shortName = t?.shortName ?? null;
+		const name = t?.name ?? null;
 		const rawMethod = String(
 			t?.calculationMethod ?? t?.method ?? "INCLUDED",
 		).toUpperCase();
@@ -33,7 +33,7 @@ function recalcTaxes(amountAfterDiscount, taxes) {
 						100
 					: Math.round(((amountAfterDiscount * rate) / 100) * 100) / 100;
 		}
-		return { taxUuid, code, shortName, rate, method, amount };
+		return { taxUuid, code, name, rate, method, amount };
 	});
 }
 
@@ -179,8 +179,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 
 		// Поля, которые требуют nested-сортировки Prisma
 		const NESTED_SORT_FIELDS = {
-			"product.shortName": { product: { shortName: "asc" } },
-			"unitOfMeasure.shortName": { unitOfMeasure: { shortName: "asc" } },
+			"product.name": { product: { name: "asc" } },
+			"unitOfMeasure.name": { unitOfMeasure: { name: "asc" } },
 		};
 
 		const orderBy = [];
@@ -193,7 +193,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					for (const [f, d] of Object.entries(s)) {
 						if (d !== "asc" && d !== "desc") continue;
 						if (NESTED_SORT_FIELDS[f]) {
-							// Транслируем "product.shortName" → { product: { shortName: d } }
+							// Транслируем "product.name" → { product: { name: d } }
 							const nested = JSON.parse(JSON.stringify(NESTED_SORT_FIELDS[f]));
 							// Подставляем направление сортировки в последний уровень
 							const setDir = (obj) => {
@@ -363,7 +363,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (vRate !== undefined) data.vatRate = vRate;
 		if (exRate !== undefined) data.exciseRate = exRate;
 
-		// Если обновились кол-во, цена, скидка, НДС, акциз или taxes — пересчитать суммы
+		// Если обновились кол-во, цена, Сумма скидки, НДС, акциз или taxes — пересчитать суммы
 		const recalcNeeded =
 			qty !== undefined ||
 			prc !== undefined ||

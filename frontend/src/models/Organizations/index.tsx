@@ -11,6 +11,8 @@ import styles from "src/styles/main.module.scss";
 import BankAccountsTable from "../BankAccounts/BankAccountsTable";
 import ContractsTable from "../Contracts/ContractsTable";
 import ContactsTable from "../Contacts/ContactsTable";
+import { WarehousesTable } from "../Warehouses";
+import { CashboxesTable } from "../Cashboxes";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
@@ -29,17 +31,19 @@ interface TFields {
   id?: number;
   uuid?: string;
   bin: string;
-  shortName: string;
+  name: string;
   displayName: string;
 }
 
-const DEFAULT_FIELDS: TFields = { bin: "", shortName: "", displayName: "" };
+const DEFAULT_FIELDS: TFields = { bin: "", name: "", displayName: "" };
 
 const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Organization");
   const { canRead: canReadBankAccounts } = useAccessRight("BankAccount");
   const { canRead: canReadContracts } = useAccessRight("Contract");
   const { canRead: canReadContacts } = useAccessRight("Contact");
+  const { canRead: canReadWarehouses } = useAccessRight("Warehouse");
+  const { canRead: canReadCashboxes } = useAccessRight("Cashbox");
   const queryClient = useQueryClient();
 
   // refetchType: "active" — ждём завершение refetch смонтированных
@@ -50,6 +54,8 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       queryClient.invalidateQueries({ queryKey: ["contacts"], refetchType: "active" }),
       queryClient.invalidateQueries({ queryKey: ["bankaccounts"], refetchType: "active" }),
       queryClient.invalidateQueries({ queryKey: ["contracts"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["warehouses"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["cashboxes"], refetchType: "active" }),
     ]);
   }, [queryClient]);
 
@@ -76,21 +82,31 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
         parentField: "organizationUuid",
         label: translate("ContractsList"),
       },
+      warehouses: {
+        endpoint: "warehouses",
+        parentField: "organizationUuid",
+        label: translate("WarehousesList"),
+      },
+      cashboxes: {
+        endpoint: "cashboxes",
+        parentField: "organizationUuid",
+        label: translate("CashboxesList"),
+      },
     },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       ...d,
       bin: d.bin ?? "",
-      shortName: d.shortName ?? "",
+      name: d.name ?? "",
       displayName: d.displayName ?? "",
     }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
       if (!bin || !/^\d{12}$/.test(bin)) return "БИН должен состоять ровно из 12 цифр";
-      return { bin, shortName: fd.shortName?.trim() || null, displayName: fd.displayName?.trim() || null };
+      return { bin, name: fd.name?.trim() || null, displayName: fd.displayName?.trim() || null };
     },
     buildPaneLabel: (saved) =>
-      makePaneLabel(LIST_NAME, "Организации", saved, saved.shortName || saved.bin),
+      makePaneLabel(LIST_NAME, "Организации", saved, saved.name || saved.bin),
     afterLoad: invalidateSubTables,
     afterSave: invalidateSubTables,
   });
@@ -99,6 +115,8 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const contacts = form.useTable("contacts");
   const bankAccounts = form.useTable("bankAccounts");
   const contracts = form.useTable("contracts");
+  const warehouses = form.useTable("warehouses");
+  const cashboxes = form.useTable("cashboxes");
 
   const ownerUuid = form.fields.uuid ?? "";
 
@@ -109,9 +127,9 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <Field label="Наименование" name={`${form.formUid}_shortName`} value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
-                <Field label="Полное наименование" name={`${form.formUid}_displayName`} value={form.fields.displayName} onChange={e => form.setField("displayName", e.target.value)} disabled={form.isLoading} />
-                <Field label="БИН / ИНН *" name={`${form.formUid}_bin`} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} />
+                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("displayName")} name={`${form.formUid}_displayName`} value={form.fields.displayName} onChange={e => form.setField("displayName", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("binIin")} name={`${form.formUid}_bin`} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} required={!form.isEditMode} />
               </GroupCol>
             </div>
           </div>
@@ -124,7 +142,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           deferRemoteChanges={true}
           ownerType="organization"
           parentUuid={form.fields.uuid ?? ""}
-          parentName={form.fields.shortName}
+          parentName={form.fields.name}
           initialPendingRows={bankAccounts.pending}
           onItemsChange={bankAccounts.onItemsChange}
           showPrimaryButton={form.isEditMode && canWrite}
@@ -137,9 +155,34 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           deferRemoteChanges={true}
           parentKey="organizationUuid"
           parentUuid={form.fields.uuid ?? ""}
-          parentName={form.fields.shortName}
+          parentName={form.fields.name}
           initialPendingRows={contracts.pending}
           onItemsChange={contracts.onItemsChange}
+          showPrimaryButton={form.isEditMode && canWrite}
+        />
+      ),
+    });
+
+    if (canReadWarehouses) result.push({
+      id: "tab4", label: translate("WarehousesList"), component: (
+        <WarehousesTable
+          deferRemoteChanges={true}
+          parentUuid={form.fields.uuid ?? ""}
+          parentName={form.fields.name}
+          initialPendingRows={warehouses.pending}
+          onItemsChange={warehouses.onItemsChange}
+          showPrimaryButton={form.isEditMode && canWrite}
+        />
+      ),
+    });
+    if (canReadCashboxes) result.push({
+      id: "tab5", label: translate("CashboxesList"), component: (
+        <CashboxesTable
+          deferRemoteChanges={true}
+          parentUuid={form.fields.uuid ?? ""}
+          parentName={form.fields.name}
+          initialPendingRows={cashboxes.pending}
+          onItemsChange={cashboxes.onItemsChange}
           showPrimaryButton={form.isEditMode && canWrite}
         />
       ),
@@ -150,7 +193,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           deferRemoteChanges={true}
           ownerType="organization"
           parentUuid={form.fields.uuid ?? ""}
-          parentName={form.fields.shortName}
+          parentName={form.fields.name}
           initialPendingRows={contacts.pending}
           onItemsChange={contacts.onItemsChange}
           showPrimaryButton={form.isEditMode && canWrite}
@@ -158,10 +201,10 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       ),
     });
     return result;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts, canWrite, ownerUuid]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, warehouses, cashboxes, canReadBankAccounts, canReadContracts, canReadContacts, canReadWarehouses, canReadCashboxes, canWrite, ownerUuid]);
 
   return (
-    <FormRequiredScope requiredKeys={["bin"]}>
+    <FormRequiredScope requiredKeys={["bin"]} active={form.meta.headerValidationFailed}>
       <ModelForm
         paneId={form.paneId}
         tabs={tabs}
@@ -187,7 +230,7 @@ const OrganizationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDa
     listName={LIST_NAME}
     columnsJson={columnsJson}
     FormComponent={OrganizationsForm}
-    getLabel={(d) => d?.shortName as string || "?"}
+    getLabel={(d) => d?.name as string || "?"}
     variant={variant}
     onSelectItem={onSelectItem}
   />

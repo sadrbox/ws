@@ -31,7 +31,7 @@ const MODEL_ENDPOINT = "bankaccounts";
 interface TFields {
   id?: number;
   uuid?: string;
-  shortName: string;
+  name: string;
   iban: string;
   bik: string;
   bankName: string;
@@ -43,7 +43,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  shortName: "", iban: "", bik: "", bankName: "",
+  name: "", iban: "", bik: "", bankName: "",
   currencyUuid: "", currencyName: "",
   ownerType: "", ownerUuid: "", ownerName: "",
 };
@@ -54,12 +54,12 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("BankAccount");
 
   const initialFields: TFields | undefined = (() => {
-    if (!data || data.uuid) return undefined;
+    if (data?.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
-    if (data.ownerType) {
-      init.ownerType = data.ownerType as OwnerType;
-      init.ownerUuid = (data.ownerUuid as string) || "";
-      init.ownerName = (data.ownerName as string) || "";
+    if (data?.ownerType) {
+      init.ownerType = data?.ownerType as OwnerType;
+      init.ownerUuid = (data?.ownerUuid as string) || "";
+      init.ownerName = (data?.ownerName as string) || "";
     } else if (defaultOrg.organizationUuid) {
       init.ownerType = "organization";
       init.ownerUuid = defaultOrg.organizationUuid;
@@ -79,12 +79,12 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
       const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
       return {
         ...(prev ?? DEFAULT_FIELDS),
-        shortName: d.shortName ?? "",
+        name: d.name ?? "",
         iban: d.iban ?? "",
         bik: d.bik ?? "",
         bankName: d.bankName ?? "",
         currencyUuid: d.currencyUuid ?? "",
-        currencyName: d.currency ? `${d.currency.code} — ${d.currency.shortName}` : "",
+        currencyName: d.currency ? `${d.currency.code} — ${d.currency.name}` : "",
         ownerType: (d.ownerType as OwnerType) ?? "",
         ownerUuid: d.ownerUuid ?? "",
         ownerName: oName,
@@ -95,7 +95,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
     buildPayload: (fd) => {
       if (!fd.iban?.trim()) return "IBAN обязателен";
       return {
-        shortName: fd.shortName?.trim() || null,
+        name: fd.name?.trim() || null,
         iban: fd.iban.trim(),
         bik: fd.bik?.trim() || null,
         bankName: fd.bankName?.trim() || null,
@@ -105,7 +105,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
       };
     },
     buildPaneLabel: (saved) =>
-      makePaneLabel("BankAccountsList", "Банковские счета", saved, saved.shortName || saved.iban),
+      makePaneLabel("BankAccountsList", "Банковские счета", saved, saved.name || saved.iban),
   });
 
   const tabs = useMemo(() => [
@@ -114,19 +114,19 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
-              <Field label="IBAN *" name={`${form.formUid}_iban`} minWidth="339px" value={form.fields.iban} onChange={e => form.setField("iban", e.target.value)} disabled={form.isLoading} />
-              <Field label="БИК" name={`${form.formUid}_bik`} minWidth="200px" value={form.fields.bik} onChange={e => form.setField("bik", e.target.value)} disabled={form.isLoading} />
-              <Field label="Название банка" name={`${form.formUid}_bankName`} minWidth="339px" value={form.fields.bankName} onChange={e => form.setField("bankName", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="339px" value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("iban")} name={`${form.formUid}_iban`} minWidth="339px" value={form.fields.iban} onChange={e => form.setField("iban", e.target.value)} disabled={form.isLoading} required />
+              <Field label={translate("bik")} name={`${form.formUid}_bik`} minWidth="200px" value={form.fields.bik} onChange={e => form.setField("bik", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("bankName")} name={`${form.formUid}_bankName`} minWidth="339px" value={form.fields.bankName} onChange={e => form.setField("bankName", e.target.value)} disabled={form.isLoading} />
               <LookupField
-                label="Валюта"
+                label={translate("currency")}
                 name={`${form.formUid}_currency`}
                 value={form.fields.currencyUuid}
                 displayValue={form.fields.currencyName}
                 endpoint="currencies"
                 displayField="code"
                 onSelect={(uuid, _display, item) =>
-                  form.setFields({ currencyUuid: uuid, currencyName: `${item.code} — ${item.shortName}` } as any)
+                  form.setFields({ currencyUuid: uuid, currencyName: `${item.code} — ${item.name}` } as any)
                 }
                 onClear={() =>
                   form.setFields({ currencyUuid: "", currencyName: "" } as any)
@@ -183,7 +183,7 @@ const BankAccountsList: FC<BankAccountsListProps> = ({ variant, onSelectItem, ow
     listName="BankAccountsList"
     columnsJson={columnsJson}
     FormComponent={BankAccountsForm}
-    getLabel={(d) => (d?.shortName as string | undefined) || (d?.iban as string | undefined) || ""}
+    getLabel={(d) => (d?.name as string | undefined) || (d?.iban as string | undefined) || ""}
     variant={variant}
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}
@@ -227,9 +227,9 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
   const queryClient = useQueryClient();
 
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
-    if (col.identifier === "shortName") {
-      if (ctx.inlineEditing) return <Field label="" name={`ba_shortName_${row.id}`} value={(row.shortName as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "shortName", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
-      return <span>{(row.shortName as string) ?? ""}</span>;
+    if (col.identifier === "name") {
+      if (ctx.inlineEditing) return <Field label="" name={`ba_name_${row.id}`} value={(row.name as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "name", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <span>{(row.name as string) ?? ""}</span>;
     }
     if (col.identifier === "iban") {
       if (ctx.inlineEditing) return <Field label="" name={`ba_iban_${row.id}`} value={(row.iban as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "iban", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
@@ -253,7 +253,7 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
       _ctx.refetch();
     };
     addPane({
-      label: makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? data as any : null, (data?.shortName || data?.iban) as string),
+      label: makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? data as any : null, (data?.name || data?.iban) as string),
       component: BankAccountsForm,
       data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
       onSave: refresh,
@@ -262,7 +262,7 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
   }, [addPane, ownerType, parentUuid, parentName, queryClient]);
 
   const defaultNewRow = useMemo(() => ({
-    shortName: "", iban: "", bik: "", bankName: "", currencyUuid: null,
+    name: "", iban: "", bik: "", bankName: "", currencyUuid: null,
   }), []);
 
   // Скрываем колонку ownerName в SubTable (владелец известен из контекста)

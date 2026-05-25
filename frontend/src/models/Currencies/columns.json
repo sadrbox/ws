@@ -2,66 +2,51 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"name": "Id",
 		"width": "80px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Номер",
 		"visible": true,
-		"position": 1,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "uuid",
 		"type": "string",
-		"name": "UUID",
 		"width": "0px",
 		"minWidth": "0px",
 		"alignment": "left",
 		"hint": "UUID",
 		"visible": false,
-		"position": 2,
-		"filter": false,
 		"inlist": false
 	},
 	{
 		"identifier": "code",
 		"type": "string",
-		"name": "Код",
 		"width": "100px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Код валюты (ISO 4217)",
 		"visible": true,
-		"position": 3,
-		"filter": false,
 		"inlist": true
 	},
 	{
-		"identifier": "shortName",
+		"identifier": "name",
 		"type": "string",
-		"name": "Наименование",
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Наименование валюты",
 		"visible": true,
-		"position": 4,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "symbol",
 		"type": "string",
-		"name": "Символ",
 		"width": "80px",
 		"minWidth": "60px",
 		"alignment": "left",
 		"hint": "Символ валюты",
 		"visible": true,
-		"position": 5,
-		"filter": false,
 		"inlist": true
 	}
 ]

@@ -1,4 +1,5 @@
 export { SalesReport } from "./SalesReport";
+export { ProductDetailReport } from "./ProductDetailReport";
 export { MaterialStatement } from "./MaterialStatement";
 export { CashReport } from "./CashReport";
 export { default as ReportPane } from "src/components/ReportPane";

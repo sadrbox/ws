@@ -17,6 +17,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma, pool } from "../prisma/prisma-client.js";
+import { checkOwnership } from "./auth.js";
 
 /**
  * Кэш карты FK: { [referencedTable]: Array<{ table, column, refColumn }> }
@@ -196,8 +197,8 @@ export const REFERENCE_LABELS = {
 	employee_histories: "Кадровая история",
 	positions: "Должности",
 	users: "Пользователи",
-	user_permissions: "Права пользователей",
-	access_rights: "Права доступа",
+	user_permissions: "Права доступа",
+	access_rights: "Разрешения пользователей",
 	files: "Файлы",
 	todos: "Задачи",
 	notifications: "Уведомления",
@@ -266,7 +267,7 @@ export async function handleDelete({
 
 	try {
 		const existing = await prisma[modelName].findUnique({ where });
-		if (!existing) {
+		if (!existing || (req && !checkOwnership(existing, req))) {
 			return res.status(404).json({ success: false, message: notFoundMessage });
 		}
 

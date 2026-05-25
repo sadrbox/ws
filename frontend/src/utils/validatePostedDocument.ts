@@ -13,6 +13,8 @@
 export type DocumentType =
 	| "purchase"
 	| "sale"
+	| "sale_return"
+	| "purchase_return"
 	| "outgoing_invoice"
 	| "incoming_invoice"
 	| "payment_invoice"
@@ -49,12 +51,48 @@ export const REQUIRED_FIELDS_MAP: Record<DocumentType, readonly string[]> = {
 		"warehouseUuid",
 		"contractUuid",
 	],
-	purchase: ["date", "organizationUuid", "counterpartyUuid", "warehouseUuid"],
+	sale_return: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
+		"warehouseUuid",
+		"contractUuid",
+	],
+	purchase: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
+		"warehouseUuid",
+	],
+	purchase_return: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
+		"warehouseUuid",
+	],
 
 	// ── Счета-фактуры ────────────────────────────────────────────────────────
-	outgoing_invoice: ["date", "organizationUuid", "counterpartyUuid"],
-	incoming_invoice: ["date", "organizationUuid", "counterpartyUuid"],
-	payment_invoice: ["date", "organizationUuid", "counterpartyUuid"],
+	outgoing_invoice: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
+		"warehouseUuid",
+		"contractUuid",
+	],
+	incoming_invoice: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
+		"warehouseUuid",
+		"contractUuid",
+	],
+	payment_invoice: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
+		"warehouseUuid",
+		"contractUuid",
+	],
 
 	// ── Складские документы ──────────────────────────────────────────────────
 	inventory_transfer: [
@@ -65,8 +103,18 @@ export const REQUIRED_FIELDS_MAP: Record<DocumentType, readonly string[]> = {
 	],
 
 	// ── Кассовые ордера ──────────────────────────────────────────────────────
-	cash_receipt_order: ["date", "organizationUuid"],
-	cash_expense_order: ["date", "organizationUuid"],
+	cash_receipt_order: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
+		"contractUuid",
+	],
+	cash_expense_order: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
+		"contractUuid",
+	],
 
 	// ── Зарплата ─────────────────────────────────────────────────────────────
 	payroll_calculation: ["date", "organizationUuid", "employeeUuid"],

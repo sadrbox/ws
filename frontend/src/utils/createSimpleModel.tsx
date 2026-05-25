@@ -34,7 +34,7 @@ import { Group } from "src/components/UI";
 
 /** Описание одного поля формы */
 export interface SimpleFieldDef {
-  /** Ключ в объекте fields (напр. "shortName", "code") */
+  /** Ключ в объекте fields (напр. "name", "code") */
   key: string;
   /** Русская метка (напр. "Наименование") */
   label: string;

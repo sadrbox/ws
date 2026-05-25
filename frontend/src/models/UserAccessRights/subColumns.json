@@ -2,40 +2,31 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"name": "Id",
 		"width": "80px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Номер",
 		"visible": false,
-		"position": 1,
-		"filter": false,
 		"inlist": true
 	},
 	{
-		"identifier": "organization.shortName",
+		"identifier": "organization.name",
 		"type": "string",
-		"name": "Организация",
 		"width": "300px",
 		"minWidth": "120px",
 		"alignment": "left",
 		"hint": "Краткое наименование организации",
 		"visible": true,
-		"position": 2,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "role",
 		"type": "string",
-		"name": "Роль",
 		"width": "180px",
 		"minWidth": "120px",
 		"alignment": "left",
 		"hint": "Роль пользователя в организации",
 		"visible": true,
-		"position": 3,
-		"filter": false,
 		"inlist": true
 	}
 ]

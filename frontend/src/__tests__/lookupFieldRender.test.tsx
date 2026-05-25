@@ -24,9 +24,9 @@ import LookupField from "src/components/Field/LookupField";
 import { fetchList } from "src/services/offlineDataService";
 
 const ITEMS = [
-	{ uuid: "a", shortName: "Alpha" },
-	{ uuid: "b", shortName: "Beta" },
-	{ uuid: "c", shortName: "Gamma" },
+	{ uuid: "a", name: "Alpha" },
+	{ uuid: "b", name: "Beta" },
+	{ uuid: "c", name: "Gamma" },
 ];
 
 describe("LookupField — клавиатурная навигация (RTL)", () => {

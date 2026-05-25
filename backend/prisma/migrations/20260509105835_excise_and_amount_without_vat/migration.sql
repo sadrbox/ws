@@ -1,4 +1,4 @@
--- SaleItem: акциз (НК РК ст. 463) + стоимость без НДС (графа 13 ЭСФ).
+-- SaleItem: акциз (НК РК ст. 463) + Облагаемый оборот по НДС (графа 13 ЭСФ).
 ALTER TABLE "sale_items"
   ADD COLUMN IF NOT EXISTS "amountWithoutVat" DECIMAL(18,2) NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS "exciseRate" DECIMAL(8,4) NOT NULL DEFAULT 0,

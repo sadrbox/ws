@@ -51,26 +51,26 @@ describe("SubTable: serverSort — фильтрация несортируемы
 	});
 
 	it("смешанный sort: несортируемое поле удаляется, остальные остаются", () => {
-		const sort = { lineNumber: "asc", "product.shortName": "asc" } as Record<
+		const sort = { lineNumber: "asc", "product.name": "asc" } as Record<
 			string,
 			"asc" | "desc"
 		>;
 		const columns: Pick<TColumn, "identifier" | "sortable">[] = [
 			{ identifier: "lineNumber", sortable: false },
-			{ identifier: "product.shortName", sortable: undefined },
+			{ identifier: "product.name", sortable: undefined },
 		];
 		const result = computeServerSort(sort, columns);
-		expect(result).toEqual({ "product.shortName": "asc" });
+		expect(result).toEqual({ "product.name": "asc" });
 	});
 
 	it("все поля sortable:true → sort передаётся без изменений", () => {
-		const sort = { id: "desc", shortName: "asc" } as Record<
+		const sort = { id: "desc", name: "asc" } as Record<
 			string,
 			"asc" | "desc"
 		>;
 		const columns: Pick<TColumn, "identifier" | "sortable">[] = [
 			{ identifier: "id", sortable: true },
-			{ identifier: "shortName", sortable: true },
+			{ identifier: "name", sortable: true },
 		];
 		const result = computeServerSort(sort, columns);
 		expect(result).toEqual(sort);

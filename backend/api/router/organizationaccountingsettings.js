@@ -13,7 +13,7 @@ const INCLUDE = { organization: true };
  *   - 1 активная запись на организацию (deletedAt IS NULL).
  *     organizationUuid = NULL → глобальные настройки (fallback).
  *   - useVat:                включает учёт НДС в строках документов;
- *   - vatRate:               ставка НДС, % (справочник VatRate удалён);
+ *   - vatRate:               Ставка НДС, % (справочник VatRate удалён);
  *   - vatCalculationMethod:  "INCLUDED" (в сумме) | "ADDED" (сверху);
  *   - useDiscount:           включает колонки скидок в SaleItemsTable;
  *   - startDate:             дата начала действия настроек (историчность).
@@ -76,7 +76,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			where.AND = searchWords.map((w) => ({
 				organization: {
 					OR: [
-						{ shortName: { contains: w, mode: "insensitive" } },
+						{ name: { contains: w, mode: "insensitive" } },
 						{ displayName: { contains: w, mode: "insensitive" } },
 					],
 				},
@@ -271,7 +271,7 @@ async function buildBodyData(body, existing = null) {
 		? Boolean(body.useVat)
 		: Boolean(existing?.useVat);
 
-	// vatRate — числовая ставка НДС, %. Раньше была ссылкой на справочник
+	// vatRate — числовая Ставка НДС, %. Раньше была ссылкой на справочник
 	// VatRate (vatRateUuid) — справочник удалён, значение хранится напрямую.
 	let vatRate;
 	if (Object.prototype.hasOwnProperty.call(body, "vatRate")) {
@@ -303,7 +303,7 @@ async function buildBodyData(body, existing = null) {
 		: Boolean(existing?.useDiscount);
 
 	// useExcise — флаг использования акциза (НК РК ст. 463). Включает колонки
-	// «Ставка акциза» и «Сумма акциза» в строках документов продажи.
+	// «Ставка акциза, %» и «Сумма акциза» в строках документов продажи.
 	const useExcise = Object.prototype.hasOwnProperty.call(body, "useExcise")
 		? Boolean(body.useExcise)
 		: Boolean(existing?.useExcise);
@@ -370,7 +370,7 @@ async function validateAgainstPostedDocs(newData, existing) {
 	const prevExciseRate = Number(existing?.exciseRate ?? 0) || 0;
 
 	// Любое изменение значений (флаг ВКЛ/ВЫКЛ, ставка, метод расчёта НДС,
-	// ставка акциза) при наличии проведённых документов с фактически
+	// Ставка акциза, %) при наличии проведённых документов с фактически
 	// применённой соответствующей настройкой — запрещено: уже проведённые
 	// документы изменять нельзя.
 	const newUseVat = Boolean(newData.useVat);
@@ -412,7 +412,7 @@ async function validateAgainstPostedDocs(newData, existing) {
 			select: { uuid: true },
 		});
 		if (found)
-			return "Нельзя изменить настройки скидок: существуют проведённые документы со скидками";
+			return "Нельзя изменить настройки скидок: существуют проведённые документы со Сумма скидкими";
 	}
 	if (changingExcise) {
 		const found = await prisma.saleItem.findFirst({

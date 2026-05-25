@@ -28,22 +28,28 @@ export const PrimaryToolbarButton: FC<PrimaryToolbarButtonProps> = ({
   const alreadyPrimary = activeRow?.isPrimary === true;
 
   const handleClick = useCallback(async () => {
-    if (!activeUuid || alreadyPrimary || busy) return;
+    if (!activeUuid || busy) return;
     setBusy(true);
     try {
-      await api.put(`/${endpoint}/${activeUuid}`, { isPrimary: true });
-      // Инвалидируем кэш — SubTable получит актуальные isPrimary-значения при следующем рендере.
+      // Toggle: если уже основной — снимаем флаг, иначе — устанавливаем
+      await api.put(`/${endpoint}/${activeUuid}`, { isPrimary: !alreadyPrimary });
       await queryClient.invalidateQueries({ queryKey: [endpoint] });
     } finally {
       setBusy(false);
     }
   }, [activeUuid, alreadyPrimary, busy, endpoint, queryClient]);
 
+  const title = busy
+    ? "Сохранение…"
+    : alreadyPrimary
+      ? "Убрать основным"
+      : label;
+
   return (
     <Toolbar.MakePrimaryButton
       onClick={handleClick}
-      disabled={disabled || !activeUuid || alreadyPrimary || busy}
-      title={busy ? "Сохранение…" : alreadyPrimary ? "Уже основной" : label}
+      disabled={disabled || !activeUuid || busy}
+      title={title}
       loading={busy}
     />
   );

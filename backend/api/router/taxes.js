@@ -6,7 +6,7 @@ const router = express.Router();
 
 const MODEL = "tax";
 const ROUTE = "taxes";
-const TEXT_FIELDS = ["shortName", "code"];
+const TEXT_FIELDS = ["name", "code"];
 
 // ── GET list ────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -39,7 +39,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					}
 			} catch {}
 		}
-		if (orderBy.length === 0) orderBy.push({ shortName: "asc" });
+		if (orderBy.length === 0) orderBy.push({ name: "asc" });
 		else if (!orderBy.some((o) => "id" in o)) orderBy.push({ id: "asc" });
 
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
@@ -121,13 +121,13 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { shortName, code, rate, calculationMethod } = req.body;
-		if (!shortName?.trim())
+		const { name, code, rate, calculationMethod } = req.body;
+		if (!name?.trim())
 			return res
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
 		const data = {
-			shortName: shortName.trim(),
+			name: name.trim(),
 			code: code?.trim() || null,
 			rate:
 				rate === undefined || rate === null || rate === ""
@@ -162,8 +162,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
-		if (req.body.shortName !== undefined)
-			data.shortName = req.body.shortName?.trim() ?? null;
+		if (req.body.name !== undefined)
+			data.name = req.body.name?.trim() ?? null;
 		if (req.body.code !== undefined) data.code = req.body.code?.trim() || null;
 		if (req.body.rate !== undefined) {
 			if (req.body.rate === null || req.body.rate === "") data.rate = null;

@@ -49,17 +49,30 @@ const ICONS: Record<UIToastType, string> = {
 const UIToast: FC = () => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  // remaining ms per toast when paused (id → ms left)
+  const remaining = useRef<Map<number, number>>(new Map());
+  // start time of current timer (id → Date.now())
+  const startedAt = useRef<Map<number, number>>(new Map());
 
   const dismiss = useCallback((id: number) => {
-    // Помечаем как closing для анимации
     setToasts((prev) =>
       prev.map((t) => (t.id === id ? { ...t, closing: true } : t)),
     );
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
       timers.current.delete(id);
+      remaining.current.delete(id);
+      startedAt.current.delete(id);
     }, 280); // длительность CSS-анимации
   }, []);
+
+  const scheduleTimer = useCallback((id: number, ms: number) => {
+    clearTimeout(timers.current.get(id));
+    remaining.current.set(id, ms);
+    startedAt.current.set(id, Date.now());
+    const timer = setTimeout(() => dismiss(id), ms);
+    timers.current.set(id, timer);
+  }, [dismiss]);
 
   const addToast = useCallback(
     (detail: UIToastDetail) => {
@@ -72,11 +85,26 @@ const UIToast: FC = () => {
         closing: false,
       };
       setToasts((prev) => [...prev.slice(-4), item]); // не более 5 одновременно
-      const timer = setTimeout(() => dismiss(id), duration);
-      timers.current.set(id, timer);
+      scheduleTimer(id, duration);
     },
-    [dismiss],
+    [scheduleTimer],
   );
+
+  const handleMouseEnter = useCallback((id: number) => {
+    const timer = timers.current.get(id);
+    if (timer == null) return;
+    clearTimeout(timer);
+    timers.current.delete(id);
+    const elapsed = Date.now() - (startedAt.current.get(id) ?? Date.now());
+    const left = Math.max((remaining.current.get(id) ?? 0) - elapsed, 0);
+    remaining.current.set(id, left);
+  }, []);
+
+  const handleMouseLeave = useCallback((id: number) => {
+    const left = remaining.current.get(id);
+    if (left == null) return;
+    scheduleTimer(id, left);
+  }, [scheduleTimer]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -102,6 +130,8 @@ const UIToast: FC = () => {
           key={toast.id}
           className={`${styles.Toast} ${styles[toast.type!]} ${toast.closing ? styles.closing : ""}`}
           role="alert"
+          onMouseEnter={() => handleMouseEnter(toast.id)}
+          onMouseLeave={() => handleMouseLeave(toast.id)}
         >
           <span className={styles.Icon}>{ICONS[toast.type!]}</span>
           <div className={styles.Body}>

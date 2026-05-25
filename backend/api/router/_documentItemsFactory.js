@@ -31,7 +31,7 @@ function recalcTaxes(amountAfterDiscount, taxes) {
 		const rate = Number(t?.rate ?? 0) || 0;
 		const taxUuid = String(t?.taxUuid ?? "");
 		const code = t?.code ?? null;
-		const shortName = t?.shortName ?? null;
+		const name = t?.name ?? null;
 		const rawMethod = String(
 			t?.calculationMethod ?? t?.method ?? "INCLUDED",
 		).toUpperCase();
@@ -44,7 +44,7 @@ function recalcTaxes(amountAfterDiscount, taxes) {
 						100
 					: Math.round(((amountAfterDiscount * rate) / 100) * 100) / 100;
 		}
-		return { taxUuid, code, shortName, rate, method, amount };
+		return { taxUuid, code, name, rate, method, amount };
 	});
 }
 
@@ -106,6 +106,49 @@ function recalcLineAmounts(input) {
 		amountWithoutVat,
 		taxes: recomputedTaxes,
 	};
+}
+
+/**
+ * Загрузить денормализованные поля родительского документа для записи в строку.
+ * Возвращает { date, posted, organizationUuid, counterpartyUuid }.
+ */
+async function loadParentDenormFields(PARENT_MODEL, parentUuid) {
+	if (!parentUuid) return {};
+	try {
+		const doc = await prisma[PARENT_MODEL].findUnique({
+			where: { uuid: parentUuid },
+			select: { date: true, posted: true, organizationUuid: true, counterpartyUuid: true },
+		});
+		if (!doc) return {};
+		return {
+			date: doc.date ?? null,
+			posted: doc.posted === true,
+			organizationUuid: doc.organizationUuid ?? null,
+			counterpartyUuid: doc.counterpartyUuid ?? null,
+		};
+	} catch {
+		return {};
+	}
+}
+
+/**
+ * Синхронизировать денормализованные поля всех строк документа.
+ * Вызывается из роутера родительского документа после его обновления.
+ */
+export async function syncItemsFromParent(ITEM_MODEL, PARENT_FIELD, parentUuid, parentData) {
+	try {
+		await prisma[ITEM_MODEL].updateMany({
+			where: { [PARENT_FIELD]: parentUuid },
+			data: {
+				date: parentData.date ?? null,
+				posted: parentData.posted === true,
+				organizationUuid: parentData.organizationUuid ?? null,
+				counterpartyUuid: parentData.counterpartyUuid ?? null,
+			},
+		});
+	} catch (err) {
+		console.error(`syncItemsFromParent(${ITEM_MODEL}) error:`, err);
+	}
 }
 
 /**
@@ -197,8 +240,8 @@ export function createDocumentItemsRouter({
 	}
 
 	const NESTED_SORT_FIELDS = {
-		"product.shortName": { product: { shortName: "asc" } },
-		"unitOfMeasure.shortName": { unitOfMeasure: { shortName: "asc" } },
+		"product.name": { product: { name: "asc" } },
+		"unitOfMeasure.name": { unitOfMeasure: { name: "asc" } },
 	};
 
 	// ── GET list ─────────────────────────────────────────────────────────
@@ -306,6 +349,7 @@ export function createDocumentItemsRouter({
 					.json({ success: false, message: `${PARENT_FIELD} обязателен` });
 			const qty = quantity != null ? parseFloat(quantity) : 0;
 			const prc = price != null ? parseFloat(price) : 0;
+			const denorm = await loadParentDenormFields(PARENT_MODEL, parentUuid);
 
 			let data;
 			if (hasTaxes) {
@@ -341,6 +385,7 @@ export function createDocumentItemsRouter({
 					discountPercent: discPct,
 					discountAmount: calc.discountAmount,
 					taxes: calc.taxes ?? undefined,
+					...denorm,
 				};
 			} else {
 				const amount = Math.round(qty * prc * 100) / 100;

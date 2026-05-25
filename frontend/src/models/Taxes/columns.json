@@ -1,10 +1,8 @@
 [
 	{
 		"identifier": "id",
-		"name": "ID",
 		"hint": "Внутренний номер",
 		"type": "number",
-		"position": 1,
 		"visible": true,
 		"inlist": true,
 		"width": "70px",
@@ -13,10 +11,8 @@
 	},
 	{
 		"identifier": "uuid",
-		"name": "UUID",
 		"hint": "UUID",
 		"type": "string",
-		"position": 2,
 		"visible": false,
 		"inlist": false,
 		"width": "0px",
@@ -24,11 +20,9 @@
 		"alignment": "left"
 	},
 	{
-		"identifier": "shortName",
-		"name": "Наименование",
+		"identifier": "name",
 		"hint": "Наименование налога (например, НДС)",
 		"type": "string",
-		"position": 3,
 		"visible": true,
 		"inlist": true,
 		"width": "240px",
@@ -37,10 +31,8 @@
 	},
 	{
 		"identifier": "code",
-		"name": "Код",
 		"hint": "Машинный код (VAT, EXCISE, SALES_TAX)",
 		"type": "string",
-		"position": 4,
 		"visible": true,
 		"inlist": true,
 		"width": "140px",
@@ -49,10 +41,8 @@
 	},
 	{
 		"identifier": "rate",
-		"name": "Ставка, %",
 		"hint": "Дефолтная ставка налога",
 		"type": "number",
-		"position": 5,
 		"visible": true,
 		"inlist": true,
 		"width": "120px",

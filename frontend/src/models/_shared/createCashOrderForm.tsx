@@ -44,6 +44,7 @@ interface TFields {
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
+  cashboxUuid: string; cashboxName: string;
   authorUuid: string; authorName: string;
 }
 
@@ -53,6 +54,7 @@ const DEFAULT_FIELDS: TFields = {
   organizationUuid: "", organizationName: "",
   counterpartyUuid: "", counterpartyName: "",
   contractUuid: "", contractName: "",
+  cashboxUuid: "", cashboxName: "",
   authorUuid: "", authorName: "",
 };
 
@@ -66,18 +68,19 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
 
     const initialFields: TFields | undefined = (() => {
       const data = paneProps.data;
-      if (!data || data.uuid) return undefined;
+      if (data?.uuid) return undefined;
       const init = { ...DEFAULT_FIELDS };
-      if (data.organizationUuid) {
-        init.organizationUuid = data.organizationUuid as string;
-        init.organizationName = (data.organizationName as string) || "";
+      init.date = new Date().toISOString().slice(0, 10);
+      if (data?.organizationUuid) {
+        init.organizationUuid = data?.organizationUuid as string;
+        init.organizationName = (data?.organizationName as string) || "";
       } else if (defaultOrg.organizationUuid) {
         init.organizationUuid = defaultOrg.organizationUuid;
         init.organizationName = defaultOrg.organizationName;
       }
-      if (data.counterpartyUuid) {
-        init.counterpartyUuid = data.counterpartyUuid as string;
-        init.counterpartyName = (data.counterpartyName as string) || "";
+      if (data?.counterpartyUuid) {
+        init.counterpartyUuid = data?.counterpartyUuid as string;
+        init.counterpartyName = (data?.counterpartyName as string) || "";
       }
       return init;
     })();
@@ -95,11 +98,13 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
         amount: d.amount != null ? String(d.amount) : "",
         posted: d.posted === true,
         organizationUuid: d.organizationUuid ?? "",
-        organizationName: d.organization?.shortName ?? "",
+        organizationName: d.organization?.name ?? "",
         counterpartyUuid: d.counterpartyUuid ?? "",
-        counterpartyName: d.counterparty?.shortName ?? "",
+        counterpartyName: d.counterparty?.name ?? "",
         contractUuid: d.contractUuid ?? "",
-        contractName: d.contract?.shortName ?? "",
+        contractName: d.contract?.name ?? "",
+        cashboxUuid: d.cashboxUuid ?? "",
+        cashboxName: d.cashbox?.name ?? "",
         authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
         authorName: d.author?.username ?? d.author?.email ?? "",
       }),
@@ -114,6 +119,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
           organizationUuid: fd.organizationUuid || null,
           counterpartyUuid: fd.counterpartyUuid || null,
           contractUuid: fd.contractUuid || null,
+          cashboxUuid: fd.cashboxUuid || null,
         };
       },
       buildPaneLabel: (saved) => makeDocLabel(cfg.listName, cfg.formLabel, saved, "date"),
@@ -121,25 +127,36 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
 
     const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
       const updates: Partial<TFields> = { contractUuid: uuid, contractName: displayValue };
-      if (item.organizationUuid) { updates.organizationUuid = item.organizationUuid; updates.organizationName = item.organization?.shortName ?? ""; }
-      if (item.counterpartyUuid) { updates.counterpartyUuid = item.counterpartyUuid; updates.counterpartyName = item.counterparty?.shortName ?? ""; }
+      if (item.organizationUuid) { updates.organizationUuid = item.organizationUuid; updates.organizationName = item.organization?.name ?? ""; }
+      if (item.counterpartyUuid) { updates.counterpartyUuid = item.counterpartyUuid; updates.counterpartyName = item.counterparty?.name ?? ""; }
       form.setFields(updates);
     }, [form.setFields]);
 
     const contractScope = useMemo<Record<string, string> | null>(() => {
-      const hasOrg = !!form.fields.organizationUuid;
-      const hasCpty = !!form.fields.counterpartyUuid;
-      if (!hasOrg && !hasCpty) return null;
-      const s: Record<string, string> = {};
-      if (hasOrg) s.organizationUuid = form.fields.organizationUuid;
-      if (hasCpty) s.counterpartyUuid = form.fields.counterpartyUuid;
+      if (!form.fields.organizationUuid) return null;
+      const s: Record<string, string> = { organizationUuid: form.fields.organizationUuid };
+      if (form.fields.counterpartyUuid) s.counterpartyUuid = form.fields.counterpartyUuid;
       return s;
     }, [form.fields.organizationUuid, form.fields.counterpartyUuid]);
 
     useAutoFillPrimary({
       endpoint: "contracts", scope: contractScope, currentUuid: form.fields.contractUuid,
       isEditMode: form.isEditMode, isLoading: form.isLoading,
-      apply: (uuid, name) => form.setFields({ contractUuid: uuid, contractName: name } as Partial<TFields>),
+      apply: (uuid, name) => form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
+    });
+
+    const cashboxScope = useMemo<Record<string, string> | null>(
+      () => form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : null,
+      [form.fields.organizationUuid],
+    );
+
+    useAutoFillPrimary({
+      endpoint: "cashboxes",
+      scope: cashboxScope,
+      currentUuid: form.fields.cashboxUuid,
+      isEditMode: form.isEditMode,
+      isLoading: form.isLoading,
+      apply: (uuid, name) => form.setFieldsInitial({ cashboxUuid: uuid, cashboxName: name } as Partial<TFields>),
     });
 
     const tabs = useMemo(() => [
@@ -155,17 +172,17 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                   <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
                 </GroupRow>
                 <Group>
-                  <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
+                  <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
                     onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
                     onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                     disabled={form.isLoading} />
                 </Group>
                 <Group>
-                  <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName"
+                  <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name"
                     onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
                     onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
                     disabled={form.isLoading} />
-                  <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName"
+                  <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name"
                     onSelect={handleContractSelect}
                     onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
                     disabled={form.isLoading}
@@ -176,6 +193,11 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                 </Group>
                 <GroupRow>
                   <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
+                  <LookupField label={translate("cashbox")} name={`${form.formUid}_cashboxUuid`} value={form.fields.cashboxUuid} displayValue={form.fields.cashboxName} endpoint="cashboxes" displayField="name"
+                    onSelect={(u, d) => form.setFields({ cashboxUuid: u, cashboxName: d } as Partial<TFields>)}
+                    onClear={() => form.setFields({ cashboxUuid: "", cashboxName: "" } as Partial<TFields>)}
+                    disabled={form.isLoading}
+                    extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
                 </GroupRow>
               </GroupCol>
             </div>
@@ -189,7 +211,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
     ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, canWrite]);
 
     return (
-      <FormRequiredScope docType={cfg.docType}>
+      <FormRequiredScope docType={cfg.docType} active={form.meta.headerValidationFailed}>
         <FormDirtyScope dirtyKeys={form.unsavedFields}>
           <ModelForm
             paneId={form.paneId} tabs={tabs}

@@ -3,6 +3,7 @@
  */
 
 import { FC, useCallback, useState } from "react";
+import { getFormatDate } from "src/utils/main.module";
 import { translate } from "src/i18";
 import { useOfflineSync } from "src/hooks/useOfflineSync";
 import { updateEntry, type QueueEntry } from "src/services/offlineQueue";
@@ -20,12 +21,7 @@ const STATUS_CONFIG: Record<string, { icon: string; label: string; css: string }
 };
 
 function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString("ru-RU", {
-      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
-    });
-  } catch { return iso; }
+  return getFormatDate(iso) || iso;
 }
 
 const OfflineSyncJournal: FC = () => {

@@ -58,8 +58,8 @@ const DEFAULT_FIELDS: TFields = {
 // ─────────────────────────────────────────────────────────────────────────
 // Форма «Настройки учёта организации»: организация (LookupField), дата
 // начала действия, переключатели «Использовать НДС» и «Использовать скидки»,
-// числовая ставка НДС и способ расчёта (сверху / в сумме) — активны только при useVat.
-// Справочник «Ставки НДС» удалён — согласно НК РК ставка НДС одна на организацию
+// числовая Ставка НДС, % и способ расчёта (сверху / в сумме) — активны только при useVat.
+// Справочник «Ставки НДС» удалён — согласно НК РК Ставка НДС, % одна на организацию
 // на дату.
 // При сохранении создаётся новая запись журнала; старая для этой организации
 // помечается deletedAt.
@@ -78,7 +78,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
       ...d,
       organizationUuid: (d.organizationUuid as string) ?? null,
       organizationName:
-        (d.organization as { shortName?: string } | null)?.shortName ?? "",
+        (d.organization as { name?: string } | null)?.name ?? "",
       startDate:
         typeof d.startDate === "string" && d.startDate
           ? String(d.startDate).slice(0, 10)
@@ -104,13 +104,13 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
         fd.useVat &&
         (!Number.isFinite(vatRateNum) || vatRateNum < 0 || vatRateNum > 100)
       )
-        return "Ставка НДС должна быть от 0 до 100% (НК РК ст. 422; стандарт 12%)";
+        return "Ставка НДС, % должна быть от 0 до 100% (НК РК ст. 422; стандарт 12%)";
       const exciseRateNum =
         fd.exciseRate === "" || fd.exciseRate == null
           ? 0
           : Number(fd.exciseRate);
       if (fd.useExcise && (!Number.isFinite(exciseRateNum) || exciseRateNum < 0))
-        return "Некорректная ставка акциза";
+        return "Некорректная Ставка акциза, %";
       return {
         organizationUuid: fd.organizationUuid || null,
         startDate: fd.startDate || todayIso(),
@@ -123,8 +123,8 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
       };
     },
     buildPaneLabel: (saved) => {
-      const orgName = (saved as { organization?: { shortName?: string } } | null)
-        ?.organization?.shortName;
+      const orgName = (saved as { organization?: { name?: string } } | null)
+        ?.organization?.name;
       return makePaneLabel(
         LIST_NAME,
         "Настройки учёта организации",
@@ -166,14 +166,14 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
             <div className={styles.Form}>
               <GroupRow>
                 <LookupField
-                  label="Организация"
+                  label={translate("organization")}
                   name={`${form.formUid}_org`}
                   value={form.fields.organizationUuid ?? ""}
                   displayValue={form.fields.organizationName}
                   endpoint="organizations"
-                  displayField="shortName"
+                  displayField="name"
                   columns={[
-                    { key: "shortName", label: "Краткое имя" },
+                    { key: "name", label: "Краткое имя" },
                     { key: "bin", label: "БИН" },
                   ]}
                   onSelect={(uuid, display) =>
@@ -189,7 +189,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   width="320px"
                 />
                 <FieldDate
-                  label="Дата начала *"
+                  label={translate("startDate")}
                   name={`${form.formUid}_startDate`}
                   value={form.fields.startDate}
                   onChange={(e) => form.setField("startDate", e.target.value)}
@@ -234,7 +234,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   <span style={{ fontWeight: 500 }}>Использовать НДС</span>
                 </label>
                 <FieldNumber
-                  label="Ставка НДС, %"
+                  label={translate("vatRate")}
                   name={`${form.formUid}_vatRate`}
                   value={form.fields.vatRate ?? "12"}
                   onChange={(e) => form.setField("vatRate", e.target.value)}
@@ -272,7 +272,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   </select>
                 </label>
                 <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
-                  НК РК: стандартная ставка НДС — 12%, расчёт «в сумме»
+                  НК РК: стандартная Ставка НДС, % — 12%, расчёт «в сумме»
                   или «сверху» определяется учётной политикой организации.
                 </span>
               </GroupRow>
@@ -298,7 +298,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     disabled={form.isLoading || !canWrite || lockDiscount}
                     title={
                       lockDiscount
-                        ? "Нельзя изменить флаг скидок: есть проведённые документы со скидками"
+                        ? "Нельзя изменить флаг скидок: есть проведённые документы со Сумма скидкими"
                         : undefined
                     }
                   />
@@ -306,7 +306,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                 </label>
                 <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
                   При включении в строках документов продажи отображаются колонки
-                  «Процент скидки» и «Скидка».
+                  «Процент скидки» и «Сумма скидки».
                 </span>
               </GroupRow>
 
@@ -339,13 +339,13 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                 </label>
                 <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
                   При включении в строках документов продажи отображаются колонки
-                  «Ставка акциза» и «Сумма акциза» (НК РК ст. 463).
+                  «Ставка акциза, %» и «Сумма акциза» (НК РК ст. 463).
                 </span>
               </GroupRow>
 
               <GroupRow style={{ marginTop: 12 }}>
                 <FieldNumber
-                  label="Ставка акциза, %"
+                  label={translate("exciseRate")}
                   name="exciseRate"
                   value={form.fields.exciseRate ?? "0"}
                   onChange={(e) => form.setField("exciseRate", e.target.value)}
@@ -396,13 +396,13 @@ OrganizationAccountingSettingsForm.displayName = "OrganizationAccountingSettings
 // Список
 // ─────────────────────────────────────────────────────────────────────────
 const renderListCell = (row: TDataItem, col: TColumn) => {
-  if (col.identifier === "organization.shortName") {
-    const org = row.organization as { shortName?: string } | null | undefined;
-    if (!org?.shortName)
+  if (col.identifier === "organization.name") {
+    const org = row.organization as { name?: string } | null | undefined;
+    if (!org?.name)
       return (
         <span style={{ color: "#9ca3af", fontStyle: "italic" }}>Глобальные</span>
       );
-    return <span>{org.shortName}</span>;
+    return <span>{org.name}</span>;
   }
   if (col.identifier === "vatRate") {
     const useVat = Boolean(row.useVat);
@@ -453,7 +453,7 @@ const OrganizationAccountingSettingsList: FC<{
       columnsJson={columnsJson}
       FormComponent={OrganizationAccountingSettingsForm}
       getLabel={(d) =>
-        ((d?.organization as { shortName?: string } | null)?.shortName as string) ||
+        ((d?.organization as { name?: string } | null)?.name as string) ||
         "Глобальные"
       }
       variant={variant}

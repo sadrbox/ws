@@ -12,6 +12,7 @@ import type {
 	SaleInvoicePrintData,
 	SaleItemPrintRow,
 } from "./SaleInvoicePrint";
+import { getFormatDateOnly } from "src/utils/main.module";
 
 const fmtNum = (v: number | null | undefined): number | string => {
 	if (v == null || v === 0) return "";
@@ -20,11 +21,7 @@ const fmtNum = (v: number | null | undefined): number | string => {
 
 const fmtDate = (d?: string): string => {
 	if (!d) return "";
-	try {
-		return new Date(d).toLocaleDateString("ru-RU");
-	} catch {
-		return d;
-	}
+	return getFormatDateOnly(d) || d;
 };
 
 export function buildSaleInvoiceWorkbook(
@@ -60,7 +57,7 @@ export function buildSaleInvoiceWorkbook(
 		cols.amountNetOfIndirectTaxes !== false &&
 		(cols.amountNetOfIndirectTaxes === true ||
 			has((r) => r.amountNetOfIndirectTaxes));
-	// «Стоимость без НДС» — база для НДС (вкл. акциз, если он есть).
+	// «Облагаемый оборот по НДС» — база для НДС (вкл. акциз, если он есть).
 	const showAmtNoVat = hasIndirectTaxes && cols.amountWithoutVat !== false;
 	const showExciseRate =
 		hasExcise &&
@@ -74,7 +71,7 @@ export function buildSaleInvoiceWorkbook(
 		(cols.exciseAmount === true ||
 			has((r) => r.exciseAmount) ||
 			Number(data.totalExciseAmount ?? 0) > 0);
-	// По НК РК ст. 412 колонка «Ставка НДС» обязательна: всегда показывается.
+	// По НК РК ст. 412 колонка «Ставка НДС, %» обязательна: всегда показывается.
 	// Неплательщики НДС → ячейка содержит «Без НДС».
 	const showVatRate = cols.vatRate !== false;
 	const showVatAmt =
@@ -86,11 +83,11 @@ export function buildSaleInvoiceWorkbook(
 			Number(data.totalVatAmount ?? 0) > 0);
 
 	const priceHeader = hasExcise
-		? "Цена без налогов"
+		? "Цена"
 		: hasVat
-			? "Цена без НДС"
-			: "Цена";
-	const totalHeader = hasIndirectTaxes ? "Стоимость с НДС" : "Сумма";
+			? "Цена"
+			: "Цена"; /*Цена без НДС» при наличии НДС, иначе просто «Цена»*/
+	const totalHeader = hasIndirectTaxes ? "Сумма" : "Сумма";
 
 	// Заголовки таблицы
 	const headers: string[] = [
@@ -100,10 +97,10 @@ export function buildSaleInvoiceWorkbook(
 		"Кол-во",
 		priceHeader,
 	];
-	if (showDiscPct) headers.push("Скидка, %");
+	if (showDiscPct) headers.push("Процент скидки, %");
 	if (showDiscAmt) headers.push("Сумма скидки");
 	if (showNetOfIndirectTaxes) headers.push("Стоимость");
-	if (showAmtNoVat) headers.push("Стоимость без НДС");
+	if (showAmtNoVat) headers.push("Облагаемый оборот по НДС");
 	if (showExciseRate) headers.push("Ставка акциза, %");
 	if (showExciseAmt) headers.push("Сумма акциза");
 	if (showVatRate) headers.push("Ставка НДС, %");
@@ -172,7 +169,7 @@ export function buildSaleInvoiceWorkbook(
 	}
 
 	// ── Итого ──
-	// «Итого:» занимает нечисловые колонки: №, Наим., Ед., Кол-во, Цена [, Скидка%].
+	// «Итого:» занимает нечисловые колонки: №, Наим., Ед., Кол-во, Цена [, Процент скидки, %].
 	const itogoColSpan = 5 + (showDiscPct ? 1 : 0);
 	const totalRow: (string | number)[] = ["Итого:"];
 	for (let i = 1; i < itogoColSpan; i++) totalRow.push("");

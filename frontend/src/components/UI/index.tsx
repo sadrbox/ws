@@ -26,7 +26,9 @@ import { NotificationsList } from 'src/models/Notifications';
 import { WarehousesList } from 'src/models/Warehouses';
 import { SalesList } from 'src/models/Sales';
 // import { SalesBoardForm } from 'src/models/Sales/SalesBoardForm';
+import { SalesReturnsList } from 'src/models/SalesReturns';
 import { PurchasesList } from 'src/models/Purchases';
+import { PurchaseReturnsList } from 'src/models/PurchaseReturns';
 import { OutgoingInvoicesList } from 'src/models/OutgoingInvoices';
 import { IncomingInvoicesList } from 'src/models/IncomingInvoices';
 import { PaymentInvoicesList } from 'src/models/PaymentInvoices';
@@ -40,6 +42,7 @@ import { ProductsList } from 'src/models/Products';
 import { UnitOfMeasuresList } from 'src/models/UnitOfMeasures';
 import { TaxesList } from 'src/models/Taxes';
 import { OrganizationAccountingSettingsList } from 'src/models/OrganizationAccountingSettings';
+import GeneralSettings from 'src/models/GeneralSettings';
 import { CurrenciesList } from 'src/models/Currencies';
 import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
@@ -50,7 +53,7 @@ import { UnsavedFormsList } from 'src/models/UnsavedForms';
 import { SyncDashboard } from 'src/models/SyncDashboard';
 import { SearchReplaceRefsForm } from 'src/models/SearchReplaceRefs';
 import { OrphanRefsForm } from 'src/models/OrphanRefs';
-// AccessRightsModuleList загружается динамически (разрыв цикла UI→AccessRights→app→UI)
+// UserAccessRightsModuleList/UserPermissionsList загружаются динамически (разрыв цикла UI→models→app→UI)
 import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
 import UIToast from 'src/components/UIToast';
@@ -647,6 +650,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>{translate("sales")}</h3>
             <ul className={styles.NavList}>
               {can("Sale") && <li onClick={() => addPane({ component: SalesList, label: translate("saleRealization") })}>{translate("saleRealization")}</li>}
+              {can("SaleReturn") && <li onClick={() => addPane({ component: SalesReturnsList, label: translate("SalesReturnsList") })}>{translate("SalesReturnsList")}</li>}
               {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("outgoingInvoice") })}>{translate("outgoingInvoice")}</li>}
               {can("PaymentInvoice") && <li onClick={() => addPane({ component: PaymentInvoicesList, label: translate("paymentInvoice") })}>{translate("paymentInvoice")}</li>}
             </ul>
@@ -655,6 +659,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>{translate("purchase")}</h3>
             <ul className={styles.NavList}>
               {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList, label: translate("purchaseReceipt") })}>{translate("purchaseReceipt")}</li>}
+              {can("PurchaseReturn") && <li onClick={() => addPane({ component: PurchaseReturnsList, label: translate("PurchaseReturnsList") })}>{translate("PurchaseReturnsList")}</li>}
               {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList, label: translate("incomingInvoice") })}>{translate("incomingInvoice")}</li>}
             </ul>
           </div>
@@ -753,11 +758,16 @@ export const NavList = ({ label }: TypeNavListProps) => {
             </ul>
           </div>
           <div className={styles.NavGroup}>
+            <h3>{translate("generalSettings")}</h3>
+            <ul className={styles.NavList}>
+              <li onClick={() => addPane({ component: GeneralSettings, label: translate("generalSettings") })}>{translate("generalSettings")}</li>
+            </ul>
+          </div>
+          <div className={styles.NavGroup}>
             <h3>{translate("administration")}</h3>
             <ul className={styles.NavList}>
               {can("User") && <li onClick={() => addPane({ component: UsersList, label: translate("UsersList") })}>{translate("UsersList")}</li>}
-              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/UserPermissions"); addPane({ component: m.UserPermissionsModuleList, label: translate("userPermissions") }); }}>{translate("userPermissions")}</li>}
-              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/AccessRights"); addPane({ component: m.AccessRightsList, label: translate("accessRights") }); }}>{translate("accessRights")}</li>}
+              {can("AccessRight") && <li onClick={async () => { const m = await import("src/models/UserAccessRights"); addPane({ component: m.UserAccessRightsModuleList, label: translate("userAccessRights") }); }}>{translate("userAccessRights")}</li>}
               {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList, label: translate("ActivityHistoriesList") })}>{translate("ActivityHistoriesList")}</li>}
               {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</li>}
               <li onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</li>

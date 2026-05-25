@@ -2,6 +2,7 @@ import { FC, useState, useCallback, useEffect, useMemo } from "react";
 import { FieldSelect } from "src/components/Field";
 import { GroupRow, GroupCol } from "src/components/UI";
 import { Button } from "src/components/Button";
+import { getFormatDate } from "src/utils/main.module";
 import Table from "src/components/Table";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import apiClient from "src/services/api/client";
@@ -44,10 +45,10 @@ const StepCard: FC<{ step: number; title: string; active: boolean; children: Rea
 // ── Refs table ────────────────────────────────────────────────────────────────
 
 const REFS_COLUMNS_INIT: TColumn[] = [
-  { position: 0, identifier: "label",    name: "Раздел",      type: "string", visible: true, filter: false, inlist: true, sortable: false },
-  { position: 1, identifier: "tableCol", name: "Таблица.поле", type: "string", visible: true, filter: false, inlist: true, sortable: false, width: "160px", minWidth: "100px" },
-  { position: 2, identifier: "total",    name: "Всего",        type: "number", visible: true, filter: false, inlist: true, sortable: false, width: "70px",  minWidth: "60px" },
-  { position: 3, identifier: "active",   name: "Активных",     type: "number", visible: true, filter: false, inlist: true, sortable: false, width: "80px",  minWidth: "60px" },
+  { position: 0, identifier: "label",    type: "string", visible: true, filter: false, inlist: true, sortable: false },
+  { position: 1, identifier: "tableCol", type: "string", visible: true, filter: false, inlist: true, sortable: false, width: "160px", minWidth: "100px" },
+  { position: 2, identifier: "total",    type: "number", visible: true, filter: false, inlist: true, sortable: false, width: "70px",  minWidth: "60px" },
+  { position: 3, identifier: "active",   type: "number", visible: true, filter: false, inlist: true, sortable: false, width: "80px",  minWidth: "60px" },
 ];
 
 const NOOP = () => {};
@@ -106,8 +107,7 @@ const RefsTable: FC<{ refs: RefEntry[] }> = ({ refs }) => {
 
 const ProtocolBlock: FC<{ summary: ExecuteSummary; entries: ProtocolEntry[] }> = ({ summary, entries }) => {
   function fmtDate(iso: string) {
-    try { return new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
-    catch { return iso; }
+    return getFormatDate(iso) || iso;
   }
   return (
     <div style={{ border: "1px solid #c8e6c9", borderRadius: 3, overflow: "hidden", fontSize: 12 }}>
@@ -146,7 +146,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState("");
   const [records, setRecords] = useState<RecordItem[]>([]);
-  const [displayField, setDisplayField] = useState("shortName");
+  const [displayField, setDisplayField] = useState("name");
   const [sourceUuid, setSourceUuid] = useState("");
   const [targetUuid, setTargetUuid] = useState("");
   const [refs, setRefs] = useState<RefEntry[] | null>(null);
@@ -171,7 +171,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
     setIsLoadingRecords(true);
     setError(null);
     apiClient.get(`/ref-replace/records?model=${selectedModel}&includeDeleted=true`)
-      .then(r => { setRecords(r.data.items ?? []); setDisplayField(r.data.displayField ?? "shortName"); setSourceUuid(""); setTargetUuid(""); setRefs(null); setSourceInfo(null); setDeleted(null); })
+      .then(r => { setRecords(r.data.items ?? []); setDisplayField(r.data.displayField ?? "name"); setSourceUuid(""); setTargetUuid(""); setRefs(null); setSourceInfo(null); setDeleted(null); })
       .catch(err => setError(err?.response?.data?.message ?? "Ошибка загрузки записей"))
       .finally(() => setIsLoadingRecords(false));
   }, [selectedModel]);
@@ -230,7 +230,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
       setSourceUuid(""); setTargetUuid(""); setRefs(null); setSourceInfo(null);
       setIsLoadingRecords(true);
       apiClient.get(`/ref-replace/records?model=${selectedModel}&includeDeleted=true`)
-        .then(res => { setRecords(res.data.items ?? []); setDisplayField(res.data.displayField ?? "shortName"); })
+        .then(res => { setRecords(res.data.items ?? []); setDisplayField(res.data.displayField ?? "name"); })
         .catch(() => {})
         .finally(() => setIsLoadingRecords(false));
     } catch (err: unknown) {

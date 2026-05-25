@@ -5,7 +5,7 @@ import { getFormatDateOnly } from "src/utils/main.module";
  * Префикс заголовка панели формы.
  *
  * Правило: для форм используется ключ `*Form` (единственное число — «Сотрудник»,
- * «Реализация», «Номенклатура»), с fallback на `*List` (множественное), затем
+ * Реализация товара и услуг, «Номенклатура»), с fallback на `*List` (множественное), затем
  * — переданный fallback-текст.
  *
  * Принимает имя как `*List`, так и `*Form` / `*Table` — нормализует к `*Form`.
@@ -36,12 +36,12 @@ export function makePaneLabel(
 	const name = resolveFormName(listName, fallback);
 	const id = saved.id;
 	if (!id) return `${name}: ${translate("new")}`;
-	const detail = displayValue ?? saved.shortName;
+	const detail = displayValue ?? saved.name;
 	return detail ? `${name}: ID ${id} · ${detail}` : `${name}: ID ${id}`;
 }
 
 /**
- * Метка для ДОКУМЕНТОВ: "Реализация: №4 · 21.04.2026"
+ * Метка для ДОКУМЕНТОВ: "Реализация товара и услуг: №4 · 21.04.2026"
  * dateField — имя поля даты в saved (по умолчанию "date")
  */
 export function makeDocLabel(
@@ -72,6 +72,6 @@ export function makePaneLabelFromData(
 	const name = resolveFormName(listName, fallback);
 	if (!data?.uuid && !data?.id) return `${name}: ${translate("new")}`;
 	const id = data.id ?? "?";
-	const detail = displayValue ?? data.shortName;
+	const detail = displayValue ?? data.name;
 	return detail ? `${name}: ID ${id} · ${detail}` : `${name}: ID ${id}`;
 }

@@ -7,7 +7,7 @@ import { tenantFilter } from "../../utils/auth.js";
 const router = express.Router();
 
 // Текстовые поля для полнотекстового поиска
-const TEXT_FIELDS = ["shortName", "iban", "bik", "bankName"];
+const TEXT_FIELDS = ["name", "iban", "bik", "bankName"];
 
 // ============================================
 // GET /bankaccounts — курсорная пагинация
@@ -243,7 +243,7 @@ function buildBankAccountOwnerScope({
 router.post("/bankaccounts", async (req, res) => {
 	try {
 		const {
-			shortName,
+			name,
 			iban,
 			bik,
 			bankName,
@@ -263,7 +263,7 @@ router.post("/bankaccounts", async (req, res) => {
 		const makePrimary = isPrimary === true;
 		const orgUuid = req.user?.organizationUuid ?? null;
 		const createData = {
-			shortName: shortName?.trim() ?? null,
+			name: name?.trim() ?? null,
 			iban: iban.trim(),
 			bik: bik?.trim() ?? null,
 			bankName: bankName?.trim() ?? null,
@@ -318,7 +318,7 @@ router.put("/bankaccounts/:id", async (req, res) => {
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 
 		const {
-			shortName,
+			name,
 			iban,
 			bik,
 			bankName,
@@ -329,7 +329,7 @@ router.put("/bankaccounts/:id", async (req, res) => {
 		} = req.body;
 		const data = {};
 
-		if (shortName !== undefined) data.shortName = shortName?.trim() ?? null;
+		if (name !== undefined) data.name = name?.trim() ?? null;
 		if (iban !== undefined) data.iban = iban.trim();
 		if (bik !== undefined) data.bik = bik?.trim() ?? null;
 		if (bankName !== undefined) data.bankName = bankName?.trim() ?? null;

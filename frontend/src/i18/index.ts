@@ -3,19 +3,31 @@ import translationsRu from "./translations.json" with { type: "json" };
 import translationsKk from "./translations.kk.json" with { type: "json" };
 
 const _lang = (() => {
-	try { return localStorage.getItem("lang") ?? "ru"; } catch { return "ru"; }
+	try {
+		return localStorage.getItem("lang") ?? "ru";
+	} catch {
+		return "ru";
+	}
 })();
 
-const translations: Record<string, string> = _lang === "kk"
-	? { ...(translationsRu as Record<string, string>), ...(translationsKk as Record<string, string>) }
-	: (translationsRu as Record<string, string>);
+const translations: Record<string, string> =
+	_lang === "kk"
+		? {
+				...(translationsRu as Record<string, string>),
+				...(translationsKk as Record<string, string>),
+			}
+		: (translationsRu as Record<string, string>);
 
 export function getLanguage(): "ru" | "kk" {
 	return _lang as "ru" | "kk";
 }
 
 export function setLanguage(lang: "ru" | "kk"): void {
-	try { localStorage.setItem("lang", lang); } catch { /* ignore */ }
+	try {
+		localStorage.setItem("lang", lang);
+	} catch {
+		/* ignore */
+	}
 	window.location.reload();
 }
 
@@ -45,10 +57,9 @@ const errorTranslations: [RegExp, string][] = [
 	[/invalid credentials/i, "Неверные учётные данные"],
 	// ── Валидация полей (field required) ──
 	[/contactType\s+is\s+required/i, translate("contactTypeRequired")],
-	[/shortName\s*required/i, "Укажите наименование"],
+	[/name\s*required/i, "Укажите наименование"],
 	[/contractNumber\s*required/i, "Укажите номер договора"],
 	[/bin\s*required/i, "Укажите БИН"],
-	[/name\s*required/i, "Укажите наименование"],
 	[/username\s*required/i, "Укажите имя пользователя"],
 	[/password\s*required/i, "Укажите пароль"],
 	[/email\s*required/i, "Укажите email"],
@@ -76,7 +87,7 @@ export function getTranslateColumn(column: TColumn): string | undefined {
 		const id = column.identifier.toString();
 		const translated = getTranslation(id);
 		if (translated && translated !== id) return translated;
-		return column.name || id;
+		return id;
 	}
-	return column.name || column.identifier;
+	return column.identifier;
 }

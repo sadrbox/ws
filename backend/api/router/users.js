@@ -428,7 +428,7 @@ router.get("/users/:id/organizations", async (req, res) => {
 			},
 			include: {
 				organization: {
-					select: { uuid: true, bin: true, shortName: true, displayName: true },
+					select: { uuid: true, bin: true, name: true, displayName: true },
 				},
 			},
 			orderBy: { createdAt: "asc" },
@@ -488,7 +488,7 @@ router.post("/users/:id/organizations", async (req, res) => {
 			create: { userUuid: targetUser.uuid, organizationUuid, role },
 			include: {
 				organization: {
-					select: { uuid: true, bin: true, shortName: true, displayName: true },
+					select: { uuid: true, bin: true, name: true, displayName: true },
 				},
 			},
 		});
@@ -536,7 +536,7 @@ router.put("/users/:id/organizations/:orgUuid", async (req, res) => {
 			data: { role },
 			include: {
 				organization: {
-					select: { uuid: true, bin: true, shortName: true, displayName: true },
+					select: { uuid: true, bin: true, name: true, displayName: true },
 				},
 			},
 		});

@@ -67,9 +67,9 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
       eventDate: d.eventDate ? new Date(d.eventDate).toISOString().slice(0, 10) : "",
       eventType: d.eventType ?? "hire",
       organizationUuid: d.organizationUuid ?? "",
-      organizationName: d.organization?.shortName ?? "",
+      organizationName: d.organization?.name ?? "",
       positionUuid: d.positionUuid ?? "",
-      positionName: d.position?.shortName ?? "",
+      positionName: d.position?.name ?? "",
       salary: d.salary != null ? String(Number(d.salary)) : "",
       employeeUuid: d.employeeUuid ?? employeeUuid ?? "",
     }),
@@ -94,38 +94,38 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <FieldDate label="Дата события *" name={`${form.formUid}_eventDate`} width="180px"
+              <FieldDate label={translate("eventDate")} name={`${form.formUid}_eventDate`} width="180px"
                 value={form.fields.eventDate} onChange={e => form.setField("eventDate", e.target.value)}
-                disabled={form.isLoading} />
-              <FieldSelect label="Тип события *" name={`${form.formUid}_eventType`}
+                disabled={form.isLoading} required />
+              <FieldSelect label={translate("eventType")} name={`${form.formUid}_eventType`}
                 value={form.fields.eventType} onChange={e => form.setField("eventType", e.target.value)}
-                disabled={form.isLoading} options={EVENT_TYPE_OPTIONS} style={{ width: "180px" }} />
+                disabled={form.isLoading} options={EVENT_TYPE_OPTIONS} style={{ width: "180px" }} required />
             </div>
-            <LookupField label="Организация" name={`${form.formUid}_org`} width="339px"
+            <LookupField label={translate("organization")} name={`${form.formUid}_org`} width="339px"
               value={form.fields.organizationUuid} displayValue={form.fields.organizationName}
-              endpoint="organizations" displayField="shortName"
-              columns={[{ key: "shortName", label: "Наименование" }, { key: "bin", label: "БИН" }]}
+              endpoint="organizations" displayField="name"
+              columns={[{ key: "name", label: "Наименование" }, { key: "bin", label: "БИН" }]}
               onSelect={(uuid) => {
                 void apiClient.get(`/organizations/${uuid}`).then(r => {
                   const o = r.data?.item ?? r.data;
-                  form.setFields({ organizationUuid: o.uuid, organizationName: o.shortName ?? "" } as any);
+                  form.setFields({ organizationUuid: o.uuid, organizationName: o.name ?? "" } as any);
                 });
               }}
               onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as any)}
               disabled={form.isLoading} />
-            <LookupField label="Должность" name={`${form.formUid}_pos`} width="339px"
+            <LookupField label={translate("position.name")} name={`${form.formUid}_pos`} width="339px"
               value={form.fields.positionUuid} displayValue={form.fields.positionName}
-              endpoint="positions" displayField="shortName"
-              columns={[{ key: "shortName", label: "Наименование" }]}
+              endpoint="positions" displayField="name"
+              columns={[{ key: "name", label: "Наименование" }]}
               onSelect={(uuid) => {
                 void apiClient.get(`/positions/${uuid}`).then(r => {
                   const o = r.data?.item ?? r.data;
-                  form.setFields({ positionUuid: o.uuid, positionName: o.shortName ?? "" } as any);
+                  form.setFields({ positionUuid: o.uuid, positionName: o.name ?? "" } as any);
                 });
               }}
               onClear={() => form.setFields({ positionUuid: "", positionName: "" } as any)}
               disabled={form.isLoading} />
-            <FieldNumber label="Оклад" name={`${form.formUid}_salary`} width="180px"
+            <FieldNumber label={translate("salary")} name={`${form.formUid}_salary`} width="180px"
               value={form.fields.salary} onChange={e => form.setField("salary", e.target.value)}
               disabled={form.isLoading} step="0.1" textAlign="right" />
           </div>

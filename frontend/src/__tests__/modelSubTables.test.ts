@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { ACCESS_LEVEL_OPTIONS } from "../models/AccessRights/index";
+import { ACCESS_LEVEL_OPTIONS } from "../models/UserPermissions/index";
 import cashExpenseOrdersCols from "../models/CashExpenseOrders/columns.json";
 import cashReceiptOrdersCols from "../models/CashReceiptOrders/columns.json";
 import incomingInvoicesCols from "../models/IncomingInvoices/columns.json";
@@ -23,8 +23,8 @@ import unitOfMeasuresCols from "../models/UnitOfMeasures/columns.json";
 import bankAccountsCols from "../models/BankAccounts/columns.json";
 import contactsCols from "../models/Contacts/columns.json";
 import contractsCols from "../models/Contracts/columns.json";
-import accessRightsCols from "../models/AccessRights/columns.json";
-import userPermissionsSubCols from "../models/UserPermissions/subColumns.json";
+import accessRightsCols from "../models/UserPermissions/columns.json";
+import userPermissionsSubCols from "../models/UserAccessRights/subColumns.json";
 
 // ─── Вспомогательные функции (воспроизводят логику компонентов) ───────────────
 
@@ -79,13 +79,13 @@ function ehValidateEventDate(value: unknown): string | undefined {
 describe("BankAccountsTable", () => {
 	it("defaultNewRow содержит обязательные поля", () => {
 		const defaultNewRow = {
-			shortName: "",
+			name: "",
 			iban: "",
 			bik: "",
 			bankName: "",
 			currencyUuid: null,
 		};
-		expect(defaultNewRow).toHaveProperty("shortName");
+		expect(defaultNewRow).toHaveProperty("name");
 		expect(defaultNewRow).toHaveProperty("iban");
 		expect(defaultNewRow).toHaveProperty("bik");
 		expect(defaultNewRow).toHaveProperty("bankName");
@@ -94,7 +94,7 @@ describe("BankAccountsTable", () => {
 
 	it("adjustedColumns скрывает ownerName", () => {
 		const cols = [
-			{ identifier: "shortName", visible: true, inlist: true },
+			{ identifier: "name", visible: true, inlist: true },
 			{ identifier: "ownerName", visible: true, inlist: true },
 			{ identifier: "iban", visible: true, inlist: true },
 		];
@@ -106,11 +106,11 @@ describe("BankAccountsTable", () => {
 
 	it("adjustedColumns не затрагивает другие колонки", () => {
 		const cols = [
-			{ identifier: "shortName", visible: true, inlist: true },
+			{ identifier: "name", visible: true, inlist: true },
 			{ identifier: "ownerName", visible: true, inlist: true },
 		];
 		const result = bankAccountsAdjustColumns(cols);
-		const shortCol = result.find((c) => c.identifier === "shortName");
+		const shortCol = result.find((c) => c.identifier === "name");
 		expect(shortCol?.visible).toBe(true);
 		expect(shortCol?.inlist).toBe(true);
 	});
@@ -145,18 +145,18 @@ describe("ContactsTable", () => {
 
 describe("ContractsTable", () => {
 	const cols = [
-		{ identifier: "counterparty.shortName", visible: true, inlist: true },
-		{ identifier: "organization.shortName", visible: true, inlist: true },
-		{ identifier: "shortName", visible: true, inlist: true },
+		{ identifier: "counterparty.name", visible: true, inlist: true },
+		{ identifier: "organization.name", visible: true, inlist: true },
+		{ identifier: "name", visible: true, inlist: true },
 	];
 
 	it("скрывает counterparty когда родитель — organization", () => {
 		const result = contractsAdjustColumns(
 			cols,
-			"counterparty.shortName",
-			"organization.shortName",
+			"counterparty.name",
+			"organization.name",
 		);
-		const cp = result.find((c) => c.identifier === "counterparty.shortName");
+		const cp = result.find((c) => c.identifier === "counterparty.name");
 		expect(cp?.visible).toBe(false);
 		expect(cp?.inlist).toBe(false);
 	});
@@ -164,10 +164,10 @@ describe("ContractsTable", () => {
 	it("показывает organization когда родитель — counterparty", () => {
 		const result = contractsAdjustColumns(
 			cols,
-			"counterparty.shortName",
-			"organization.shortName",
+			"counterparty.name",
+			"organization.name",
 		);
-		const org = result.find((c) => c.identifier === "organization.shortName");
+		const org = result.find((c) => c.identifier === "organization.name");
 		expect(org?.visible).toBe(true);
 		expect(org?.inlist).toBe(true);
 	});
@@ -175,10 +175,10 @@ describe("ContractsTable", () => {
 	it("скрывает organization когда родитель — counterparty", () => {
 		const result = contractsAdjustColumns(
 			cols,
-			"organization.shortName",
-			"counterparty.shortName",
+			"organization.name",
+			"counterparty.name",
 		);
-		const org = result.find((c) => c.identifier === "organization.shortName");
+		const org = result.find((c) => c.identifier === "organization.name");
 		expect(org?.visible).toBe(false);
 		expect(org?.inlist).toBe(false);
 	});
@@ -186,10 +186,10 @@ describe("ContractsTable", () => {
 	it("не затрагивает нейтральные колонки", () => {
 		const result = contractsAdjustColumns(
 			cols,
-			"counterparty.shortName",
-			"organization.shortName",
+			"counterparty.name",
+			"organization.name",
 		);
-		const sc = result.find((c) => c.identifier === "shortName");
+		const sc = result.find((c) => c.identifier === "name");
 		expect(sc?.visible).toBe(true);
 	});
 });
@@ -521,10 +521,10 @@ describe("UserPermissionsTable — roleMap", () => {
 });
 
 describe("UserPermissions subColumns.json — структура", () => {
-	it("содержит поля id, organization.shortName, role", () => {
+	it("содержит поля id, organization.name, role", () => {
 		const ids = (userPermissionsSubCols as any[]).map((c: any) => c.identifier);
 		expect(ids).toContain("id");
-		expect(ids).toContain("organization.shortName");
+		expect(ids).toContain("organization.name");
 		expect(ids).toContain("role");
 	});
 
@@ -605,7 +605,7 @@ describe("*Table components — deferred SubTable pattern contract", () => {
 		});
 	});
 
-	it("SaleItemsTable поддерживает deferred-пропсы", () => {
+	it("TradeDocumentItemsTable поддерживает deferred-пропсы", () => {
 		checkDeferredProps({
 			deferRemoteChanges: true,
 			onItemsChange: () => {},

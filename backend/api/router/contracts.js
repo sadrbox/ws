@@ -1,6 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { handleDelete } from "../../utils/checkReferences.js";
+import { checkOwnership } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -55,7 +56,7 @@ router.get("/contracts", async (req, res) => {
 		// пользовательской сортировки колонок.
 		orderBy.unshift({ isPrimary: "desc" });
 
-		const TEXT_FIELDS = ["shortName", "contractNumber"];
+		const TEXT_FIELDS = ["name", "contractNumber"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 		if (searchWords.length > 0) {
@@ -189,7 +190,7 @@ router.get("/contracts/:id", async (req, res) => {
 			where: whereClause,
 			include: { organization: true, counterparty: true },
 		});
-		if (!item)
+		if (!item || !checkOwnership(item, req))
 			return res.status(404).json({ success: false, message: "Not found" });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -216,7 +217,7 @@ function buildContractOwnerScope({ organizationUuid, counterpartyUuid }) {
 router.post("/contracts", async (req, res) => {
 	try {
 		const {
-			shortName,
+			name,
 			contractNumber,
 			contractText,
 			startDate,
@@ -225,14 +226,14 @@ router.post("/contracts", async (req, res) => {
 			counterpartyUuid,
 			isPrimary,
 		} = req.body;
-		if (!shortName || typeof shortName !== "string")
+		if (!name || typeof name !== "string")
 			return res
 				.status(400)
-				.json({ success: false, message: "shortName required" });
+				.json({ success: false, message: "name required" });
 
 		const makePrimary = isPrimary === true;
 		const createData = {
-			shortName: shortName.trim(),
+			name: name.trim(),
 			contractNumber: contractNumber?.trim() ?? null,
 			contractText: contractText ?? null,
 			startDate: startDate ? new Date(startDate) : null,
@@ -271,7 +272,7 @@ router.put("/contracts/:id", async (req, res) => {
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 		const {
-			shortName,
+			name,
 			contractNumber,
 			contractText,
 			startDate,
@@ -282,7 +283,7 @@ router.put("/contracts/:id", async (req, res) => {
 		} = req.body;
 
 		const data = {};
-		if (shortName !== undefined) data.shortName = shortName.trim();
+		if (name !== undefined) data.name = name.trim();
 		if (contractNumber !== undefined)
 			data.contractNumber = contractNumber?.trim() ?? null;
 		if (contractText !== undefined) data.contractText = contractText ?? null;
@@ -296,6 +297,9 @@ router.put("/contracts/:id", async (req, res) => {
 			data.counterpartyUuid = counterpartyUuid || null;
 		if (isPrimary !== undefined) data.isPrimary = !!isPrimary;
 
+		const preCheck = await prisma.contract.findUnique({ where: whereClause, select: { organizationUuid: true } });
+		if (!preCheck || !checkOwnership(preCheck, req))
+			return res.status(404).json({ success: false, message: "Not found" });
 		const item = await prisma.$transaction(async (tx) => {
 			if (data.isPrimary === true) {
 				const current = await tx.contract.findUnique({ where: whereClause });

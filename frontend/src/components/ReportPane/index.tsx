@@ -31,6 +31,7 @@ import SaveDropdownButton, { type SaveDropdownOption } from "src/components/Tool
 import { Toolbar } from "src/components/Toolbar";
 import { Icon } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
+import { DocViewport, DocSheet, DocStatus } from "src/components/DocViewport";
 import styles from "./ReportPane.module.scss";
 
 // ── Типы ────────────────────────────────────────────────────────────────────
@@ -193,22 +194,17 @@ const ReportPane: FC<ReportPaneProps> = ({
         </div>
       )}
 
-      <div className={styles.ReportViewport}>
+      <DocViewport>
         {isLoading ? (
-          <div className={styles.ReportStatus}>{translate("loading")}</div>
+          <DocStatus>{translate("loading")}</DocStatus>
         ) : isEmpty ? (
-          <div className={styles.ReportStatus}>{emptyMessage ?? translate("noData")}</div>
+          <DocStatus>{emptyMessage ?? translate("noData")}</DocStatus>
         ) : (
-          <div
-            className={styles.ReportSheet}
-            ref={layoutRef}
-            data-orientation={orientation}
-            data-fit={sheetFit}
-          >
+          <DocSheet ref={layoutRef} orientation={orientation} fit={sheetFit}>
             {layout}
-          </div>
+          </DocSheet>
         )}
-      </div>
+      </DocViewport>
     </div>
   );
 };

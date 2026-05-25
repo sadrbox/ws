@@ -9,7 +9,7 @@ const { Form: PositionsForm, List: PositionsList } = createSimpleModel({
   columnsJson,
   accessRight: "Position",
   fields: [
-    { key: "shortName", label: "Наименование", required: true, requiredMessage: "Наименование обязательно" },
+    { key: "name", label: "Наименование", required: true, requiredMessage: "Наименование обязательно" },
     { key: "comment", label: "Описание" },
   ],
 });

@@ -4,7 +4,7 @@ import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
-const TEXT_FIELDS = ["shortName", "description", "status"];
+const TEXT_FIELDS = ["name", "description", "status"];
 
 const INCLUDE = {
 	organization: true,
@@ -198,7 +198,7 @@ router.get("/todos/:id", async (req, res) => {
 router.post("/todos", async (req, res) => {
 	try {
 		const {
-			shortName,
+			name,
 			description,
 			status,
 			organizationUuid,
@@ -211,7 +211,7 @@ router.post("/todos", async (req, res) => {
 
 		const item = await prisma.todo.create({
 			data: {
-				shortName: shortName?.trim() ?? null,
+				name: name?.trim() ?? null,
 				description: description?.trim() ?? null,
 				status: status || "new",
 				organizationUuid: organizationUuid || null,
@@ -251,7 +251,7 @@ router.put("/todos/:id", async (req, res) => {
 		}
 
 		const {
-			shortName,
+			name,
 			description,
 			status,
 			organizationUuid,
@@ -263,7 +263,7 @@ router.put("/todos/:id", async (req, res) => {
 		} = req.body;
 
 		const data = {};
-		if (shortName !== undefined) data.shortName = shortName?.trim() ?? null;
+		if (name !== undefined) data.name = name?.trim() ?? null;
 		if (description !== undefined)
 			data.description = description?.trim() ?? null;
 		if (status !== undefined) data.status = status;

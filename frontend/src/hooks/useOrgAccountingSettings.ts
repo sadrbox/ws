@@ -15,7 +15,7 @@ export interface OrgAccountingSettingItem {
 	startDate: string;
 	/** Учитывать ли НДС в строках документов продажи. */
 	useVat: boolean;
-	/** Числовая ставка НДС, % (ранее бралась из справочника VatRate, который удалён). */
+	/** Числовая Ставка НДС, % (ранее бралась из справочника VatRate, который удалён). */
 	vatRate: number | string | null;
 	/** Способ расчёта НДС: "INCLUDED" — в сумме; "ADDED" — сверху. */
 	vatCalculationMethod: "INCLUDED" | "ADDED" | string;
@@ -29,7 +29,7 @@ export interface OrgAccountingSettingItem {
 	deletedAt: string | null;
 	organization?: {
 		uuid: string;
-		shortName: string | null;
+		name: string | null;
 	} | null;
 }
 
@@ -103,7 +103,7 @@ export function useOrgAccountingSettings(
 	return useMemo(() => {
 		const item = query.data?.item ?? null;
 		const useVat = Boolean(item?.useVat);
-		// НК РК ст. 422: ставка НДС может быть от 0 до 100% (стандарт — 12%,
+		// НК РК ст. 422: Ставка НДС, % может быть от 0 до 100% (стандарт — 12%,
 		// для ряда товаров — 0%). Используем точное значение из настроек.
 		const vatRate = useVat ? Number(item?.vatRate ?? 0) || 0 : 0;
 		const calcMethod = String(
@@ -112,12 +112,12 @@ export function useOrgAccountingSettings(
 		return {
 			item,
 			useVat,
-			/** Числовая ставка НДС, %. 0 при отключённом useVat либо при
+			/** Числовая Ставка НДС, %. 0 при отключённом useVat либо при
 			 *  явно установленной ставке 0% (НК РК — экспорт, ряд категорий). */
 			vatRate,
 			useDiscount: Boolean(item?.useDiscount),
 			useExcise: Boolean(item?.useExcise),
-			/** Дефолтная ставка акциза (число). 0 при отключённом useExcise. */
+			/** Дефолтная Ставка акциза, % (число). 0 при отключённом useExcise. */
 			exciseRate: item?.useExcise ? Number(item?.exciseRate ?? 0) || 0 : 0,
 			isLoading: query.isLoading,
 			/** НДС учитывается. Соответствует флагу useVat — колонки НДС

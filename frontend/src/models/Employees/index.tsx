@@ -110,15 +110,15 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
               <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, maxWidth: 640 }}>
                   <GroupRow>
-                    <Field label="Фамилия *" name={`${form.formUid}_lastName`} minWidth="200px" value={form.fields.lastName} onChange={e => handleNameFieldChange("lastName", e.target.value)} disabled={form.isLoading} />
-                    <Field label="Имя" name={`${form.formUid}_firstName`} minWidth="180px" value={form.fields.firstName} onChange={e => handleNameFieldChange("firstName", e.target.value)} disabled={form.isLoading} />
-                    <Field label="Отчество" name={`${form.formUid}_middleName`} minWidth="180px" value={form.fields.middleName} onChange={e => handleNameFieldChange("middleName", e.target.value)} disabled={form.isLoading} />
+                    <Field label={translate("lastName")} name={`${form.formUid}_lastName`} minWidth="200px" value={form.fields.lastName} onChange={e => handleNameFieldChange("lastName", e.target.value)} disabled={form.isLoading} required />
+                    <Field label={translate("firstName")} name={`${form.formUid}_firstName`} minWidth="180px" value={form.fields.firstName} onChange={e => handleNameFieldChange("firstName", e.target.value)} disabled={form.isLoading} />
+                    <Field label={translate("middleName")} name={`${form.formUid}_middleName`} minWidth="180px" value={form.fields.middleName} onChange={e => handleNameFieldChange("middleName", e.target.value)} disabled={form.isLoading} />
                   </GroupRow>
                   <GroupRow>
-                    <Field label="ФИО" name={`${form.formUid}_fullName`} minWidth="400px" value={form.fields.fullName} disabled />
+                    <Field label={translate("fullName")} name={`${form.formUid}_fullName`} minWidth="400px" value={form.fields.fullName} disabled />
                   </GroupRow>
                   <GroupRow>
-                    <Field label="ИИН" name={`${form.formUid}_iin`} minWidth="200px" value={form.fields.iin} onChange={e => form.setField("iin", e.target.value)} disabled={form.isLoading} />
+                    <Field label={translate("iin")} name={`${form.formUid}_iin`} minWidth="200px" value={form.fields.iin} onChange={e => form.setField("iin", e.target.value)} disabled={form.isLoading} />
                   </GroupRow>
                 </div>
                 {form.isEditMode && form.fields.uuid && (
@@ -149,7 +149,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, handleNameFieldChange, contacts, history, canReadContacts, canReadEmployeeHistory, canWrite]);
 
   return (
-    <FormRequiredScope requiredKeys={["lastName"]}>
+    <FormRequiredScope requiredKeys={["lastName"]} active={form.meta.headerValidationFailed}>
       <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />
@@ -214,23 +214,23 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
       if (ctx.inlineEditing) return <FieldSelect name={`hist_event_${row.id}`} options={EVENT_TYPE_OPTIONS} value={(row.eventType as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "eventType", e.target.value)} disabled={ctx.disabled} variant="table" />;
       return <span>{eventTypeMap[row.eventType as string] ?? row.eventType}</span>;
     }
-    if (col.identifier === "organization.shortName") {
+    if (col.identifier === "organization.name") {
       if (ctx.inlineEditing) return (
-        <LookupField label="" name={`hist_org_${row.id}`} value={(row.organizationUuid as string) ?? ""} displayValue={(row.organization as any)?.shortName ?? ""} endpoint="organizations" displayField="shortName"
-          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "organizationUuid", uuid, { organization: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null })}
+        <LookupField label="" name={`hist_org_${row.id}`} value={(row.organizationUuid as string) ?? ""} displayValue={(row.organization as any)?.name ?? ""} endpoint="organizations" displayField="name"
+          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "organizationUuid", uuid, { organization: item && uuid ? { uuid, name: item.name ?? "" } : null })}
           onClear={() => ctx.handleLookupChange(row, "organizationUuid", null, { organization: null })}
           disabled={ctx.disabled} width="100%" variant="table" />
       );
-      return <span>{(row.organization as any)?.shortName ?? ""}</span>;
+      return <span>{(row.organization as any)?.name ?? ""}</span>;
     }
-    if (col.identifier === "position.shortName") {
+    if (col.identifier === "position.name") {
       if (ctx.inlineEditing) return (
-        <LookupField label="" name={`hist_pos_${row.id}`} value={(row.positionUuid as string) ?? ""} displayValue={(row.position as any)?.shortName ?? ""} endpoint="positions" displayField="shortName"
-          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "positionUuid", uuid, { position: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null })}
+        <LookupField label="" name={`hist_pos_${row.id}`} value={(row.positionUuid as string) ?? ""} displayValue={(row.position as any)?.name ?? ""} endpoint="positions" displayField="name"
+          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "positionUuid", uuid, { position: item && uuid ? { uuid, name: item.name ?? "" } : null })}
           onClear={() => ctx.handleLookupChange(row, "positionUuid", null, { position: null })}
           disabled={ctx.disabled} width="100%" variant="table" />
       );
-      return <span>{(row.position as any)?.shortName ?? ""}</span>;
+      return <span>{(row.position as any)?.name ?? ""}</span>;
     }
     if (col.identifier === "salary") {
       if (ctx.inlineEditing) return <FieldNumber name={`hist_salary_${row.id}`} value={row.salary != null ? String(row.salary) : ""} onChange={e => ctx.handleInlineChange(row, "salary", e.target.value)} disabled={ctx.disabled} step="0.1" textAlign="right" width="100%" actions={[]} variant="table" />;

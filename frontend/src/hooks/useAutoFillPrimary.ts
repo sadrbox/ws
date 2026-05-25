@@ -25,7 +25,7 @@ import { usePrimaryChild } from "src/hooks/usePrimaryChild";
 export function useAutoFillPrimary(opts: {
 	/** API endpoint ("bankaccounts", "contracts" и т.п.). */
 	endpoint: string;
-	/** Поле для имени (по умолчанию "shortName"). */
+	/** Поле для имени (по умолчанию "name"). */
 	displayField?: string;
 	/** Фильтр-владелец (например, { organizationUuid, counterpartyUuid }). */
 	scope: Record<string, string> | null;
@@ -42,7 +42,7 @@ export function useAutoFillPrimary(opts: {
 }) {
 	const {
 		endpoint,
-		displayField = "shortName",
+		displayField = "name",
 		scope,
 		currentUuid,
 		isEditMode,

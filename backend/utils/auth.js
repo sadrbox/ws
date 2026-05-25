@@ -133,6 +133,61 @@ export function tenantFilter(req, field = "organizationUuid") {
 	return { [field]: req.user.organizationUuid };
 }
 
+/**
+ * Проверяет, имеет ли текущий пользователь доступ к конкретной записи.
+ * Возвращает false → должен следовать ответ 404 (не 403, чтобы не раскрывать существование).
+ *
+ * @param {object|null} item   — запись из БД (может быть null)
+ * @param {object}      req    — Express request с req.user
+ * @param {string}      field  — поле организации в записи (по умолчанию "organizationUuid")
+ */
+export function checkOwnership(item, req, field = "organizationUuid") {
+	if (!item) return false;
+	if (!req.user) return false;
+	if (req.user.isSuperAdmin) return true;
+
+	const itemOrgUuid = item[field] ?? null;
+	if (itemOrgUuid === null) return true; // глобальная запись — доступна всем
+
+	const activeOrg = req.user.organizationUuid ?? null;
+	const allowedOrgs = req.user.allowedOrgUuids ?? [];
+
+	if (activeOrg && itemOrgUuid === activeOrg) return true;
+	if (allowedOrgs.includes(itemOrgUuid)) return true;
+
+	return false;
+}
+
+/**
+ * Проверяет, что FK-поля в body документа ссылаются на записи из организаций,
+ * доступных текущему пользователю. Принимает массив { model, uuid } — пар,
+ * где model — camelCase Prisma-модель с полем organizationUuid.
+ *
+ * Возвращает null если всё ок, или строку с сообщением об ошибке.
+ *
+ * @param {object} req   — Express request
+ * @param {object} tx    — Prisma client или transaction
+ * @param {Array}  checks — [{ model: "warehouse", uuid: "..." }, ...]
+ */
+export async function checkFkOwnership(req, tx, checks) {
+	if (!req.user || req.user.isSuperAdmin) return null;
+	for (const { model, uuid } of checks) {
+		if (!uuid) continue;
+		try {
+			const record = await tx[model].findUnique({
+				where: { uuid },
+				select: { organizationUuid: true },
+			});
+			if (!checkOwnership(record, req)) {
+				return `Запись ${model} (${uuid}) не принадлежит вашей организации`;
+			}
+		} catch {
+			// Модель не имеет organizationUuid — пропускаем
+		}
+	}
+	return null;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Маппинг URL-путей → имя модели в AccessRight (PascalCase из ALL_MODEL_NAMES)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -147,8 +202,13 @@ const ROUTE_TO_MODEL = {
 	activityhistories: "ActivityHistory",
 	todos: "Todo",
 	warehouses: "Warehouse",
+	cashboxes: "Cashbox",
 	sales: "Sale",
+	"sale-returns": "SaleReturn",
+	"sale-return-items": "SaleReturnItem",
 	purchases: "Purchase",
+	"purchase-returns": "PurchaseReturn",
+	"purchase-return-items": "PurchaseReturnItem",
 	"outgoing-invoices": "OutgoingInvoice",
 	"incoming-invoices": "IncomingInvoice",
 	"payment-invoices": "PaymentInvoice",

@@ -41,6 +41,8 @@ import styles from "./SubTable.module.scss";
 type PendingRow = TDataItem & {
   _pendingAction?: "create" | "update" | "delete";
   _untouched?: boolean;
+  /** Визуальная позиция строки (1-based) в момент отправки родителю. */
+  _lineNumber?: number;
 };
 
 /** Хелпер: безопасный каст к PendingRow (TDataItem уже типизирован, но без приватных полей) */
@@ -85,7 +87,7 @@ export interface SubTableProps {
   /** Отключить все действия (в режиме loading родителя) */
   disabled?: boolean;
   /**
-   * Режим "только чтение" (права доступа).
+   * Режим "только чтение" (Разрешения пользователей).
    * Скрывает кнопки Добавить/Удалить, отключает inline-editing,
    * блокирует открытие форм редактирования.
    */
@@ -131,7 +133,7 @@ export interface SubTableProps {
   /**
    * Идентификаторы полей, которые обязательны для логики/расчётов.
    * Ячейки с пустым/нулевым значением будут выделены оранжевой рамкой.
-   * Пример: ["product.shortName", "quantity"]
+   * Пример: ["product.name", "quantity"]
    */
   requiredFields?: string[];
   /**
@@ -244,9 +246,9 @@ export const useSubTableContext = (): SubTableContext | null =>
 //     пользователю, что поле не редактируется (анимация .flashReadOnly).
 //
 // API:
-//   <ReadOnlyCell row column inlineEditing />              // значение из row[column.identifier]
-//   <ReadOnlyCell value={x} column inlineEditing />        // override значения
-//   <ReadOnlyCell value={x} inlineEditing />               // без column: number → ru-RU, иначе String
+//   <ReadOnlyCell row column />              // значение из row[column.identifier]
+//   <ReadOnlyCell value={x} column />        // override значения
+//   <ReadOnlyCell value={x} />               // без column: number → ru-RU, иначе String
 export interface ReadOnlyCellProps {
   /** Строка таблицы. Если задан column и не задан value — значение берётся отсюда. */
   row?: TDataItem;
@@ -254,8 +256,6 @@ export interface ReadOnlyCellProps {
   column?: TColumn;
   /** Override значения (используется для вычисляемых полей, напр. lineNumber). */
   value?: unknown;
-  /** Если true — клик запускает flash-анимацию (read-only клик в inline-режиме). */
-  inlineEditing?: boolean;
 }
 
 function formatReadOnlyValue(
@@ -301,28 +301,8 @@ export const ReadOnlyCell: FC<ReadOnlyCellProps> = ({
   row,
   column,
   value,
-  inlineEditing = false,
 }) => {
   const display = formatReadOnlyValue(value, row, column);
-
-  // Единый механизм индикации «нельзя редактировать»:
-  // выставляем data-pulse="true" на ближайший <td> — то же самое делает
-  // SubTable.handleContainerKeyDown при Enter на нередактируемой ячейке.
-  // CSS-правило (td[data-pulse="true"] → animation activeCellPulse) живёт
-  // в Table.module.scss и работает на любой строке таблицы.
-  const handleClick = useCallback((e: React.MouseEvent<HTMLSpanElement>) => {
-    if (!inlineEditing) return;
-    const td = (e.currentTarget as HTMLElement).closest("td");
-    if (!td) return;
-    // Снимаем атрибут перед установкой, чтобы повторный клик заново
-    // запускал CSS-анимацию (иначе браузер не перезапускает её).
-    td.removeAttribute("data-pulse");
-    // void reflow → форсируем рестарт анимации.
-    void (td as HTMLElement).offsetWidth;
-    td.setAttribute("data-pulse", "true");
-    window.setTimeout(() => td.removeAttribute("data-pulse"), 300);
-  }, [inlineEditing]);
-
   const cls = styles.ReadOnlyCell;
 
   // Горизонтальное выравнивание: number/position → справа,
@@ -334,7 +314,7 @@ export const ReadOnlyCell: FC<ReadOnlyCellProps> = ({
       : "flex-start";
 
   return (
-    <span className={cls} onClick={handleClick} style={{ justifyContent: justify, textAlign: align }}>
+    <span className={cls} style={{ justifyContent: justify, textAlign: align }}>
       {display}
     </span>
   );
@@ -525,18 +505,18 @@ const SubTable: FC<SubTableProps> = ({
       // pending очищен после коммита — сбрасываем флаг мержа
       pendingAppliedRef.current = false;
 
-      // Очищаем dirty-маркеры и temp-строки из кэша.
-      // После коммита данные уже на сервере, а ветка B при следующем allItems
-      // должна выполнить чистую замену кэша (без мержа старых dirty-строк).
-      cachedRowsRef.current = cachedRowsRef.current
-        .filter(r => !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")))
-        .map(r => {
-          if (r._pendingAction) {
-            const { _pendingAction: _a, _untouched: _u, ...rest } = r;
-            return rest as PendingRow;
-          }
-          return r;
-        });
+      // Убираем _pendingAction-маркеры, но tmp-строки оставляем в кэше.
+      // Они останутся видимы до прихода ответа refetch — без мерцания.
+      // Ветка B основного эффекта заменит их реальными данными сервера
+      // когда allItems обновится. dirtyRows не подберёт эти строки (нет
+      // _pendingAction) и дубликатов не будет.
+      cachedRowsRef.current = cachedRowsRef.current.map(r => {
+        if (r._pendingAction) {
+          const { _pendingAction: _a, _untouched: _u, ...rest } = r;
+          return rest as PendingRow;
+        }
+        return r;
+      });
       setCacheVersion(v => v + 1);
 
       // Принудительно запрашиваем свежие данные с сервера.
@@ -596,7 +576,16 @@ const SubTable: FC<SubTableProps> = ({
    */
   const notifyParent = useCallback((items: PendingRow[]) => {
     if (!onItemsChangeRef.current) return;
-    const filtered = items.filter(r => !r._untouched);
+    // Нумеруем только видимые (не удалённые) строки — чтобы _lineNumber совпадал
+    // с номером строки в displayRows (ctx.rows тоже фильтрует _pendingAction==="delete").
+    // Присваиваем ДО фильтрации _untouched, чтобы пустые нетронутые строки не
+    // сдвигали нумерацию заполненных.
+    let visIdx = 0;
+    const withNums = items.map(r => {
+      if (r._pendingAction !== "delete") visIdx++;
+      return { ...r, _lineNumber: r._pendingAction !== "delete" ? visIdx : 0 };
+    });
+    const filtered = withNums.filter(r => !r._untouched);
     onItemsChangeRef.current(filtered);
   }, []);
 
@@ -643,7 +632,16 @@ const SubTable: FC<SubTableProps> = ({
       return;
     }
 
-    // Нет pending-строк — чистая замена кэша
+    // Нет pending-строк — чистая замена кэша.
+    // Исключение: если кэш содержит tmp-строки (уже закоммиченные, но ещё
+    // не подтверждённые refetch) и сервер вернул 0 строк — ждём refetch.
+    // Это устраняет мерцание в момент когда parentUuid только что появился
+    // (новый документ) и query ещё не успела вернуть свежие данные.
+    const hasTmpRows = deferRemoteChanges && prev.some(r =>
+      typeof r.uuid === "string" && r.uuid.startsWith("tmp-"),
+    );
+    if (hasTmpRows && clean.length === 0) return;
+
     const hadDirtyRows = prev.some(r => r._pendingAction);
     const countChanged = prev.length !== clean.length;
     // Сравниваем содержимое: проверяем id, uuid и все скалярные поля (deep compare).
@@ -920,7 +918,7 @@ const SubTable: FC<SubTableProps> = ({
     }
 
     // 3. Применяем клиентскую сортировку: корректно обрабатывает ссылочные поля
-    //    (напр. "unitOfMeasure.shortName") и pending-строки, не отправленные на сервер.
+    //    (напр. "unitOfMeasure.name") и pending-строки, не отправленные на сервер.
     //    sortTableRows использует getNestedValue → поддерживает dot-notation.
     //    Pending create строки выносим из сортировки и приклеиваем В КОНЕЦ —
     //    новая добавленная строка всегда отображается после последней существующей,
@@ -932,9 +930,17 @@ const SubTable: FC<SubTableProps> = ({
     const enriched = computeRow
       ? visible.map(r => ({ ...r, ...computeRow(r) }))
       : visible;
-    const pendingCreates = enriched.filter(r => r._pendingAction === "create");
+    // Новые (несохранённые) строки — либо активный pending create, либо
+    // уже закоммиченные tmp-строки (отрицательный id / uuid "tmp-...") до
+    // прихода refetch. Оба случая приклеиваем В КОНЕЦ, чтобы порядок не
+    // менялся в момент между commit и подтверждением с сервера.
+    const isTmpRow = (r: PendingRow) =>
+      r._pendingAction === "create" ||
+      (typeof r.id === "number" && r.id < 0) ||
+      (typeof r.uuid === "string" && r.uuid.startsWith("tmp-"));
+    const pendingCreates = enriched.filter(isTmpRow);
     const others = pendingCreates.length
-      ? enriched.filter(r => r._pendingAction !== "create")
+      ? enriched.filter(r => !isTmpRow(r))
       : enriched;
     const sortedOthers = sortTableRows(others, sort);
     const sorted = pendingCreates.length
@@ -993,10 +999,10 @@ const SubTable: FC<SubTableProps> = ({
         if (val == null || typeof val !== "object") return true;
         val = (val as Record<string, unknown>)[p];
       }
-      return val === null || val === undefined || val === "" || val === 0;
+      return val === null || val === undefined || val === "";
     })();
     if (!hasError && !isCellEmpty) return undefined;
-    return <ReadOnlyCell row={row} column={col} inlineEditing={inlineEditing} />;
+    return <ReadOnlyCell row={row} column={col} />;
   }, [renderCellProp, ctx, deferRemoteChanges, cellErrors, requiredFields, inlineEditing]);
 
   // ── getCellMeta ────────────────────────────────────────────────────────
@@ -1014,7 +1020,9 @@ const SubTable: FC<SubTableProps> = ({
         if (val == null || typeof val !== "object") return true;
         val = (val as Record<string, unknown>)[p];
       }
-      return val === null || val === undefined || val === "" || val === 0;
+      if (val === null || val === undefined || val === "") return true;
+      const n = Number(val);
+      return !isNaN(n) && n === 0;
     })();
     if (!errorMsg && !isCellEmpty) return null;
     return {
@@ -1125,7 +1133,7 @@ const SubTable: FC<SubTableProps> = ({
     // на контейнер таблицы, чтобы клавиатурная навигация (Up/Down/Left/Right
     // /Insert/Delete/Home/End/PgUp/PgDn) продолжала работать. Без этого
     // фокус остаётся «нигде», и события клавиатуры не достигают onKeyDown.
-    if (e.key === "Escape" && (isInputTarget || isTextAreaTarget)) {
+    if (e.key === "Escape" && (isInputTarget || isTextAreaTarget || isSelectTarget)) {
       e.preventDefault();
       e.stopPropagation();
       (target as HTMLElement).blur();
@@ -1148,7 +1156,7 @@ const SubTable: FC<SubTableProps> = ({
     // через handleScrollKeyDown — здесь дублировать не нужно.
     if (!inlineEditing) {
       if (e.key !== "Enter") return;
-      if (isInputTarget || isTextAreaTarget || isLookupOpen) return;
+      if (isInputTarget || isTextAreaTarget || isSelectTarget || isLookupOpen) return;
       const activeId = tableApi?.getActiveRow() ?? null;
       if (activeId === null) return;
       const row = displayRowsRef.current.find(r => r.id === activeId);
@@ -1163,7 +1171,7 @@ const SubTable: FC<SubTableProps> = ({
     // Если фокус в input/textarea — НЕ перехватываем (поле в фокусе должно
     // работать штатно, управление таблицей отключено). Insert работает
     // только когда фокус на контейнере таблицы.
-    if (e.key === "Insert" && !isInputTarget && !isTextAreaTarget) {
+    if (e.key === "Insert" && !isInputTarget && !isTextAreaTarget && !isSelectTarget) {
       if (!onInlineAddProp && !defaultNewRow) return;
       e.preventDefault();
       e.stopPropagation();
@@ -1197,7 +1205,7 @@ const SubTable: FC<SubTableProps> = ({
 
     // ── Delete: удалить ВЫБРАННЫЕ чекбоксом строки (с подтверждением) ──
     // Внутри input/textarea — пропускаем (стандартное удаление символа).
-    if (e.key === "Delete" && !isInputTarget && !isTextAreaTarget) {
+    if (e.key === "Delete" && !isInputTarget && !isTextAreaTarget && !isSelectTarget) {
       const rows = displayRowsRef.current;
       if (rows.length === 0) return;
       const selectedIds = new Set<number>();
@@ -1231,7 +1239,7 @@ const SubTable: FC<SubTableProps> = ({
     // (каретка влево/вправо, выделение Home/End внутри текста, ввод символов).
     // Управление таблицей работает ТОЛЬКО когда фокус на контейнере таблицы
     // (после Escape или клика по строке). Это унифицирует поведение с Table.
-    if (!isLookupOpen && !isInputTarget && !isTextAreaTarget) {
+    if (!isLookupOpen && !isInputTarget && !isTextAreaTarget && !isSelectTarget) {
       const rowDir = getTableNavDirection(e.key);
       const cellDir = getCellNavDirection(e.key);
       if (rowDir || cellDir) {

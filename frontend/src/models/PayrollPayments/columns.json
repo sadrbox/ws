@@ -1,10 +1,8 @@
 [
 	{
 		"identifier": "id",
-		"name": "ID",
 		"hint": "Внутренний номер",
 		"type": "number",
-		"position": 1,
 		"visible": true,
 		"inlist": true,
 		"width": "70px",
@@ -13,10 +11,8 @@
 	},
 	{
 		"identifier": "uuid",
-		"name": "UUID",
 		"hint": "UUID",
 		"type": "string",
-		"position": 2,
 		"visible": false,
 		"inlist": false,
 		"width": "0px",
@@ -25,10 +21,8 @@
 	},
 	{
 		"identifier": "date",
-		"name": "Дата",
 		"hint": "Дата документа",
 		"type": "datetime",
-		"position": 3,
 		"visible": true,
 		"inlist": true,
 		"width": "120px",
@@ -37,10 +31,8 @@
 	},
 	{
 		"identifier": "period",
-		"name": "Период",
 		"hint": "Период выплаты (ГГГГ-ММ)",
 		"type": "string",
-		"position": 4,
 		"visible": true,
 		"inlist": true,
 		"width": "100px",
@@ -49,10 +41,8 @@
 	},
 	{
 		"identifier": "employee.fullName",
-		"name": "Сотрудник",
 		"hint": "ФИО сотрудника",
 		"type": "string",
-		"position": 5,
 		"visible": true,
 		"inlist": true,
 		"width": "200px",
@@ -61,10 +51,8 @@
 	},
 	{
 		"identifier": "amount",
-		"name": "Сумма",
 		"hint": "Сумма выплаты",
 		"type": "number",
-		"position": 6,
 		"visible": true,
 		"inlist": true,
 		"width": "120px",
@@ -73,10 +61,8 @@
 	},
 	{
 		"identifier": "paymentMethod",
-		"name": "Способ выплаты",
 		"hint": "Способ выплаты",
 		"type": "string",
-		"position": 7,
 		"visible": true,
 		"inlist": true,
 		"width": "140px",
@@ -84,11 +70,9 @@
 		"alignment": "left"
 	},
 	{
-		"identifier": "organization.shortName",
-		"name": "Организация",
+		"identifier": "organization.name",
 		"hint": "Организация",
 		"type": "string",
-		"position": 9,
 		"visible": true,
 		"inlist": true,
 		"width": "180px",

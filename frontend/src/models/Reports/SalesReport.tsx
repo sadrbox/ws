@@ -6,8 +6,10 @@ import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
+import { useAppContext } from "src/app";
 import ReportPane from "src/components/ReportPane";
-import styles from "./SalesReport.module.scss";
+import { ProductDetailReport } from "./ProductDetailReport";
+import styles from "./report.module.scss";
 
 // ─── number formatter ────────────────────────────────────────────────────────
 
@@ -63,6 +65,7 @@ function monthLabel(dateFrom: string, dateTo: string): string {
 // ─── component ───────────────────────────────────────────────────────────────
 
 const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
+  const { windows: { addPane } } = useAppContext();
   const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } =
     useDefaultOrganization();
 
@@ -127,6 +130,22 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
 
   const period = monthLabel(dateFrom, dateTo);
 
+  const openDetail = useCallback((row: ProductRow) => {
+    if (!row.productUuid) return;
+    addPane({
+      component: ProductDetailReport,
+      label: `${translate("reportProductMovements")}: ${row.productName}`,
+      data: {
+        productUuid: row.productUuid,
+        productName: row.productName,
+        initialDateFrom: dateFrom,
+        initialDateTo: dateTo,
+        initialOrgUuid: orgUuid,
+        initialOrgName: orgName,
+      },
+    });
+  }, [addPane, dateFrom, dateTo, orgUuid, orgName]);
+
   const form = (
     <>
       <GroupRow>
@@ -135,11 +154,11 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
       </GroupRow>
       <GroupRow>
         <LookupField label={translate("organization")} name="sf_org" value={orgUuid} displayValue={orgName}
-          endpoint="organizations" displayField="shortName"
+          endpoint="organizations" displayField="name"
           onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
           onClear={() => { setOrgUuid(""); setOrgName(""); }} />
         <LookupField label={translate("counterparty")} name="sf_cpty" value={cptyUuid} displayValue={cptyName}
-          endpoint="counterparties" displayField="shortName"
+          endpoint="counterparties" displayField="name"
           onSelect={(u, d) => { setCptyUuid(u); setCptyName(d); }}
           onClear={() => { setCptyUuid(""); setCptyName(""); }} />
       </GroupRow>
@@ -179,7 +198,7 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
         </thead>
         <tbody>
           {rows.map((row, idx) => (
-            <tr key={row.productUuid ?? idx}>
+            <tr key={row.productUuid ?? idx} className={row.productUuid ? styles.ClickableRow : undefined} onClick={() => openDetail(row)} title={row.productUuid ? translate("reportProductMovements") : undefined}>
               <td className={styles.ColN}>{idx + 1}</td>
               <td className={styles.ColName}>{row.productName}</td>
               <td className={styles.ColNum}>{fmtQty(row.qtySale)}</td>

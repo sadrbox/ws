@@ -2,66 +2,51 @@
 	{
 		"identifier": "eventDate",
 		"type": "date",
-		"name": "Дата",
 		"width": "140px",
 		"minWidth": "120px",
 		"alignment": "left",
 		"hint": "Дата события",
 		"visible": true,
-		"position": 1,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "eventType",
 		"type": "string",
-		"name": "Событие",
 		"width": "140px",
 		"minWidth": "120px",
 		"alignment": "left",
 		"hint": "Тип события",
 		"visible": true,
-		"position": 2,
-		"filter": false,
 		"inlist": true
 	},
 	{
-		"identifier": "organization.shortName",
+		"identifier": "organization.name",
 		"type": "string",
-		"name": "Организация",
 		"width": "200px",
 		"minWidth": "180px",
 		"alignment": "left",
 		"hint": "Организация",
 		"visible": true,
-		"position": 3,
-		"filter": false,
 		"inlist": true
 	},
 	{
-		"identifier": "position.shortName",
+		"identifier": "position.name",
 		"type": "string",
-		"name": "Должность",
 		"width": "200px",
 		"minWidth": "180px",
 		"alignment": "left",
 		"hint": "Должность",
 		"visible": true,
-		"position": 4,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "salary",
 		"type": "number",
-		"name": "Оклад",
 		"width": "130px",
 		"minWidth": "100px",
 		"alignment": "right",
 		"hint": "Оклад",
 		"visible": true,
-		"position": 5,
-		"filter": false,
 		"inlist": true
 	}
 ]

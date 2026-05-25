@@ -7,7 +7,7 @@ const router = express.Router();
 
 const MODEL = "brand";
 const ROUTE = "brands";
-const TEXT_FIELDS = ["shortName"];
+const TEXT_FIELDS = ["name"];
 
 // ── GET list ────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -126,14 +126,14 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { shortName } = req.body;
-		if (!shortName?.trim())
+		const { name } = req.body;
+		if (!name?.trim())
 			return res
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
 		const item = await prisma[MODEL].create({
 			data: {
-				shortName: shortName.trim(),
+				name: name.trim(),
 				organizationUuid: req.user?.organizationUuid ?? null,
 			},
 		});
@@ -152,8 +152,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
-		if (req.body.shortName !== undefined)
-			data.shortName = req.body.shortName?.trim() ?? null;
+		if (req.body.name !== undefined)
+			data.name = req.body.name?.trim() ?? null;
 		const item = await prisma[MODEL].update({ where: w, data });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

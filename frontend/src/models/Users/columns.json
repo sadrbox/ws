@@ -2,67 +2,51 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"name": "Id",
 		"width": "80px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Номер",
 		"visible": true,
-		"position": 1,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "uuid",
 		"type": "string",
-		"name": "UUID",
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Уникальный идентификатор",
 		"visible": false,
-		"position": 2,
-		"filter": false,
 		"inlist": false
 	},
 	{
 		"identifier": "username",
 		"type": "string",
-		"name": "Логин",
 		"width": "150px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Имя пользователя",
 		"visible": true,
-		"position": 3,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "employee.fullName",
 		"type": "string",
-		"name": "Сотрудник",
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "ФИО сотрудника",
 		"visible": true,
-		"position": 4,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "employee.iin",
 		"type": "string",
-		"name": "ИИН",
 		"width": "140px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "ИИН сотрудника",
 		"visible": true,
-		"position": 5,
-		"filter": false,
 		"inlist": true
 	}
-    
 ]

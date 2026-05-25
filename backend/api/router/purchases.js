@@ -1,7 +1,8 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership, checkFkOwnership } from "../../utils/auth.js";
 import { handleDelete } from "../../utils/checkReferences.js";
+import { syncItemsFromParent } from "./_documentItemsFactory.js";
 
 const router = express.Router();
 
@@ -85,6 +86,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				organization: true,
 				counterparty: true,
 				contract: true,
+				warehouse: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		};
@@ -123,10 +125,11 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 				organization: true,
 				counterparty: true,
 				contract: true,
+				warehouse: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
-		if (!item)
+		if (!item || !checkOwnership(item, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -153,6 +156,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			warehouseUuid,
 			posted,
 		} = req.body;
+		const fkError = await checkFkOwnership(req, prisma, [
+			{ model: "warehouse", uuid: warehouseUuid },
+		]);
+		if (fkError) return res.status(403).json({ success: false, message: fkError });
 		const item = await prisma[MODEL].create({
 			data: {
 				date: date ? new Date(date) : new Date(),
@@ -169,6 +176,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				organization: true,
 				counterparty: true,
 				contract: true,
+				warehouse: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
@@ -202,6 +210,13 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.amount !== undefined)
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
+		if (data.warehouseUuid) {
+			const fkError = await checkFkOwnership(req, prisma, [{ model: "warehouse", uuid: data.warehouseUuid }]);
+			if (fkError) return res.status(403).json({ success: false, message: fkError });
+		}
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true } });
+		if (!existing || !checkOwnership(existing, req))
+			return res.status(404).json({ success: false, message: "Не найдено" });
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -209,9 +224,11 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				organization: true,
 				counterparty: true,
 				contract: true,
+				warehouse: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
+		await syncItemsFromParent("purchaseItem", "purchaseUuid", item.uuid, item);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2025")

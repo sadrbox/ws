@@ -98,14 +98,7 @@
 	contain: layout style paint;
 }
 
-// Обёртка скролл-области + оверлей — для корректного абсолютного позиционирования
-.TableScrollContainer {
-	position: relative;
-	flex: 1;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-}
+
 
 .TableFilter {
 	display: flex;
@@ -158,355 +151,74 @@
 	}
 }
 
-/* Table itself */
-table {
-	border-collapse: separate;
-	border-spacing: 0;
-	width: 100%;
-	height: 100%;
-	table-layout: fixed;
-}
-
-thead {
-	background: $color31;
-	position: sticky;
-	top: 0;
-	z-index: 2;
-
-	// box-shadow:
-	// 0 0 6px 3px rgba(34, 34, 34, 0.3);
-
-	tr {
-		th {
-			padding: 0;
-			font-weight: 500;
-			user-select: none;
-			position: relative;
-			border: 0;
-			// border-bottom: 1px solid $color34;
-			border-right: 1px solid $color34;
-
-			// &:not(:last-child) {
-			// 	border-right: 1px solid transparent !important;
-			// }
-			// &::after {
-			// 	content: "";
-			// 	position: absolute;
-			// 	right: -1px;
-			// 	bottom: 0;
-			// 	height: 100%;
-			// 	width: 1px;
-			// 	border-right: 1px solid $color34;
-			// }
-			&:first-child {
-				border-left: 0;
-			}
-
-			&:last-child {
-				border-right: 0;
-			}
-		}
-
-		.TableHeaderCell {
-			display: flex;
-			align-items: center;
-			height: $heightFieldInput;
-			padding: 1px;
-			// margin: 1px;
-			overflow: hidden;
-			white-space: nowrap;
-			text-overflow: ellipsis;
-			cursor: default;
-			justify-content: space-between;
-			border: 1px solid transparent;
-
-			span {
-				padding: 0px 6px;
-				overflow: hidden;
-				white-space: nowrap;
-				text-overflow: ellipsis;
-			}
-		}
-
-		.ResizeHandle {
-			position: absolute;
-			right: -3px;
-			top: 0;
-			bottom: 0;
-			width: 5px;
-			cursor: col-resize;
-			z-index: 3;
-
-			&:hover {
-				background: rgba(#4a90d9, 0.35);
-			}
-		}
-	}
-
-
-	// &::after {
-	// 	content: "";
-	// 	position: absolute;
-	// 	left: 0;
-	// 	right: 0;
-	// 	bottom: 0;
-	// 	height: 1px;
-	// 	background: $color34;
-	// }
-}
-
-tr:has(+ tr.activeRow) {
-	td {
-		border-bottom: 1px solid $color1 !important;
-	}
-}
-
-tr[data-primary="true"] {
-	td .TableBodyCell {
-		font-weight: 700 !important;
-
-		// Применяем bold ко всем потомкам, включая span/input/select
-		// и кастомные рендеры ячеек (LookupField и т.п.)
-		* {
-			font-weight: 700 !important;
-		}
-	}
-}
-
-/* Filler row — занимает остаток высоты, чтобы tfoot прижимался
-   к низу TableScrollWrapper. Реальные строки tbody при этом
-   сохраняют свою фиксированную высоту. */
-.TableFillerRow {
-	height: 100%;
-
-	td {
-		padding: 0 !important;
-		border: 0 !important;
-		background: transparent !important;
-
-		&::after {
-			display: none !important;
-		}
-	}
-}
-
-tbody {
-	// outline: none;
-	// margin-top: 10px;
-	// position: relative;
-	// Оптимизация для производительности при виртуализации
-	will-change: transform;
-	transform: translate3d(0, 0, 0);
-	contain: layout style paint;
-	// will-change: contents;
-	// contain: content;
+// Обёртка скролл-области + оверлей — для корректного абсолютного позиционирования
+.TableScrollContainer {
 	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	z-index: 1;
 
-	tr {
-		// cursor: pointer;
-		// Оптимизация для каждой строки
-		will-change: auto;
-		transform: translate3d(0, 0, 0);
-
-		&:first-child {
-			td {
-				border-top: 1px solid $color34;
-				// border: 0px !important;
-			}
-		}
-
-		&>td {
-
-
-			padding: 0;
-			// border-top: 1px solid $color34;
-			border-bottom: 1px solid $color34;
-			border-right: 1px solid $color34;
-			// border-left: 0px solid $color34;
-
-			.TableBodyCell {
-				display: flex;
-				align-items: center;
-				height: $heightFieldInput;
-				padding: 0;
-				white-space: nowrap;
-				text-overflow: ellipsis;
-				overflow: hidden;
-				user-select: none;
-				border: 1px solid #fff;
-				// position: relative нужен для абсолютно-позиционированных
-				// потомков (CellErrorTooltip из SubTable, который теперь
-				// рендерится прямо внутри .TableBodyCell, без промежуточного
-				// `.CellWrap`-обёртки).
-				position: relative;
-
-				// Поля ввода без фокуса наследуют pointer от tr;
-				// при получении фокуса — cursor меняется на text мгновенно через :focus
-				input:not([type="checkbox"]),
-				textarea,
-				select {
-					cursor: default !important;
-				}
-
-				input:not([type="checkbox"]):focus,
-				textarea:focus,
-				select:focus {
-					cursor: text;
-					user-select: text;
-				}
-
-
-
-
-
-				&>input[type="text"] {
-					width: 100%;
-					border: 0px transparent;
-				}
-
-				span {
-					padding: 0px 6px;
-					overflow: hidden;
-					white-space: nowrap;
-					text-overflow: ellipsis;
-				}
-			}
-
-			&:first-child {
-				border-left: 0;
-			}
-
-			&:last-child {
-				border-right: 0;
-			}
-		}
-
-		&.activeRow {
-			// position: static;
-			z-index: 5;
-			// Оптимизируем активную строку
-			will-change: background-color, box-shadow;
-
-			&:first-child {
-				td {
-					border-top: 1px solid $color1;
-				}
-			}
-
-			td {
-				.TableBodyCell {
-					// Фоновая подсветка строки (`background: $color2`) теперь
-					// задаётся в main.module.scss через @layer table-cell-activeRow.
-					// Здесь оставлены только структурные/контентные правила.
-
-					&>input[type="text"] {
-						width: 100%;
-						border: 0px transparent;
-					}
-
-					// ── activeCell: выбранная ячейка внутри активной строки ─────
-					&.activeCell {
-						position: relative;
-						z-index: 6;
-						outline: none;
-						font-weight: 500;
-						background: rgba($color1, 0.2);
-						box-shadow: inset 0 0 0 1px rgba($color1, 0.5);
-					}
-
-					// ── focus-within: поле получило фокус (ввод) ─────────────
-					// Приоритет выше .activeCell — желтый фон поверх синего.
-					&:not(:has(input[type="checkbox"])):focus-within {
-						background: rgba(#fc0, 0.2);
-						box-shadow: inset 0 0 0 1px rgba(#fc0, 0.6);
-						outline: none;
-					}
-				}
-
-				// border-top: 1px solid $color1;
-				border-bottom: 1px solid $color1;
-				border-right: 1px solid $color1;
-
-				// border-left: 0px solid $color1;
-				&:last-child {
-					border-right: 0px;
-				}
-
-			}
-		}
-
-		&:last-child {
-			border: none !important;
-
-			&>td {
-				border: none !important;
-			}
-		}
+	/* Table itself */
+	table {
+		border-collapse: separate;
+		border-spacing: 0;
+		width: 100%;
+		height: 100%;
+		table-layout: fixed;
 	}
 
-}
+	thead {
+		background: $color31;
+		position: sticky;
+		top: 0;
+		z-index: 2;
 
-/* ── data-pulse: единая индикация «нельзя редактировать» ──────────────
- * Кратковременная (~300 ms) анимация на любой <td>, у которой стоит
- * data-pulse="true". Атрибут выставляется в двух местах:
- *   1) SubTable.handleContainerKeyDown — Enter на нередактируемую ячейку;
- *   2) ReadOnlyCell.onClick — клик по read-only содержимому ячейки в
- *      режиме inline-editing.
- * Селектор — на любой td в любой строке (вне tr.activeRow), чтобы
- * срабатывало и на неактивной строке. */
-td[data-pulse="true"] {
-	animation: activeCellPulse 280ms ease-out 1;
-}
+		box-shadow: 0 0 3px 0px $color6;
 
-/* tfoot — итоги колонок, sticky bottom внутри скролла, в стиле thead */
-tfoot {
-	background: $color31;
-	position: sticky;
-	bottom: 0;
-	// z-index: 9992;
-	// box-shadow: 0 0px 6px 0px rgba($color6, 0.3);
+		tr {
+			th {
+				padding: 0;
+				font-weight: 500;
+				user-select: none;
+				position: relative;
+				border: 0;
+				// border-bottom: 1px solid $color34;
+				border-right: 1px solid $color34;
 
-	tr {
-		td {
-			position: relative;
-			padding: 0;
-			font-weight: 500;
-			user-select: none;
-			border-top: 1px solid $color34;
-			border-bottom: 0;
-			border-right: 1px solid $color34;
-			// border-right: 1px solid transparent !important;
+				// &:not(:last-child) {
+				// 	border-right: 1px solid transparent !important;
+				// }
+				// &::after {
+				// 	content: "";
+				// 	position: absolute;
+				// 	right: -1px;
+				// 	bottom: 0;
+				// 	height: 100%;
+				// 	width: 1px;
+				// 	border-right: 1px solid $color34;
+				// }
+				&:first-child {
+					border-left: 0;
+				}
 
-			&::after {
-				// content: "";
-				// position: absolute;
-				// top: 0;
-				// right: -1px;
-				// bottom: 0;
-				// height: 100%;
-				// width: 1px;
-				// border-right: 1px solid $color34;
+				&:last-child {
+					border-right: 0;
+				}
 			}
 
-			&:first-child {
-				border-left: 0;
-			}
-
-			&:last-child {
-				border-right: 0;
-			}
-
-			.TableFooterCell {
+			.TableHeaderCell {
 				display: flex;
 				align-items: center;
 				height: $heightFieldInput;
 				padding: 1px;
-				// margin: 0px 3px;
+				// margin: 1px;
 				overflow: hidden;
 				white-space: nowrap;
 				text-overflow: ellipsis;
 				cursor: default;
-				justify-content: flex-end;
+				justify-content: space-between;
 				border: 1px solid transparent;
 
 				span {
@@ -516,10 +228,301 @@ tfoot {
 					text-overflow: ellipsis;
 				}
 			}
+
+			.ResizeHandle {
+				position: absolute;
+				right: -3px;
+				top: 0;
+				bottom: 0;
+				width: 5px;
+				cursor: col-resize;
+				z-index: 3;
+
+				&:hover {
+					background: rgba(#4a90d9, 0.35);
+				}
+			}
+		}
+
+
+		// &::after {
+		// 	content: "";
+		// 	position: absolute;
+		// 	left: 0;
+		// 	right: 0;
+		// 	bottom: 0;
+		// 	height: 1px;
+		// 	background: $color34;
+		// }
+	}
+
+	tr:has(+ tr.activeRow) {
+		td {
+			border-bottom: 1px solid $color1 !important;
 		}
 	}
 
+	tr[data-primary="true"] {
+		td .TableBodyCell {
+			font-weight: 700 !important;
 
+			// Применяем bold ко всем потомкам, включая span/input/select
+			// и кастомные рендеры ячеек (LookupField и т.п.)
+			* {
+				font-weight: 700 !important;
+			}
+		}
+	}
+
+	/* Filler row — занимает остаток высоты, чтобы tfoot прижимался
+   к низу TableScrollWrapper. Реальные строки tbody при этом
+   сохраняют свою фиксированную высоту. */
+	.TableFillerRow {
+		height: 100%;
+
+		td {
+			padding: 0 !important;
+			border: 0 !important;
+			background: transparent !important;
+
+			&::after {
+				display: none !important;
+			}
+		}
+	}
+
+	tbody {
+		// outline: none;
+		// margin-top: 10px;
+		// position: relative;
+		// Оптимизация для производительности при виртуализации
+		will-change: transform;
+		transform: translate3d(0, 0, 0);
+		contain: layout style paint;
+		// will-change: contents;
+		// contain: content;
+		position: relative;
+
+		tr {
+			// cursor: pointer;
+			// Оптимизация для каждой строки
+			will-change: auto;
+			transform: translate3d(0, 0, 0);
+
+			&:first-child {
+				td {
+					border-top: 1px solid $color34;
+					// border: 0px !important;
+				}
+			}
+
+			&>td {
+
+
+				padding: 0;
+				// border-top: 1px solid $color34;
+				border-bottom: 1px solid $color34;
+				border-right: 1px solid $color34;
+				// border-left: 0px solid $color34;
+
+				.TableBodyCell {
+					display: flex;
+					align-items: center;
+					height: $heightFieldInput;
+					padding: 0;
+					white-space: nowrap;
+					text-overflow: ellipsis;
+					overflow: hidden;
+					user-select: none;
+					border: 1px solid #fff;
+					// position: relative нужен для абсолютно-позиционированных
+					// потомков (CellErrorTooltip из SubTable, который теперь
+					// рендерится прямо внутри .TableBodyCell, без промежуточного
+					// `.CellWrap`-обёртки).
+					position: relative;
+
+					// Поля ввода без фокуса наследуют pointer от tr;
+					// при получении фокуса — cursor меняется на text мгновенно через :focus
+					input:not([type="checkbox"]),
+					textarea,
+					select {
+						cursor: default !important;
+					}
+
+					input:not([type="checkbox"]):focus,
+					textarea:focus,
+					select:focus {
+						cursor: text;
+						user-select: text;
+					}
+
+
+
+
+
+					&>input[type="text"] {
+						width: 100%;
+						border: 0px transparent;
+					}
+
+					span {
+						padding: 0px 6px;
+						overflow: hidden;
+						white-space: nowrap;
+						text-overflow: ellipsis;
+					}
+				}
+
+				&:first-child {
+					border-left: 0;
+				}
+
+				&:last-child {
+					border-right: 0;
+				}
+			}
+
+			&.activeRow {
+				// position: static;
+				z-index: 5;
+				// Оптимизируем активную строку
+				will-change: background-color, box-shadow;
+
+				&:first-child {
+					td {
+						border-top: 1px solid $color1;
+					}
+				}
+
+				td {
+					.TableBodyCell {
+						// Фоновая подсветка строки (`background: $color2`) теперь
+						// задаётся в main.module.scss через @layer table-cell-activeRow.
+						// Здесь оставлены только структурные/контентные правила.
+
+						&>input[type="text"] {
+							width: 100%;
+							border: 0px transparent;
+						}
+
+						// ── activeCell: выбранная ячейка внутри активной строки ─────
+						&.activeCell {
+							position: relative;
+							z-index: 6;
+							outline: none;
+							font-weight: 500;
+							background: rgba($color1, 0.2);
+							box-shadow: inset 0 0 0 1px rgba($color1, 0.5);
+						}
+
+						// ── focus-within: поле получило фокус (ввод) ─────────────
+						// Приоритет выше .activeCell — желтый фон поверх синего.
+						&:not(:has(input[type="checkbox"])):focus-within {
+							background: rgba(#fc0, 0.2);
+							box-shadow: inset 0 0 0 1px rgba(#fc0, 0.6);
+							outline: none;
+						}
+					}
+
+					// border-top: 1px solid $color1;
+					border-bottom: 1px solid $color1;
+					border-right: 1px solid $color1;
+
+					// border-left: 0px solid $color1;
+					&:last-child {
+						border-right: 0px;
+					}
+
+				}
+			}
+
+			&:last-child {
+				border: none !important;
+
+				&>td {
+					border: none !important;
+				}
+			}
+		}
+
+	}
+
+	/* ── data-pulse: единая индикация «нельзя редактировать» ──────────────
+ * Кратковременная (~300 ms) анимация на любой <td>, у которой стоит
+ * data-pulse="true". Атрибут выставляется в двух местах:
+ *   1) SubTable.handleContainerKeyDown — Enter на нередактируемую ячейку;
+ *   2) ReadOnlyCell.onClick — клик по read-only содержимому ячейки в
+ *      режиме inline-editing.
+ * Селектор — на любой td в любой строке (вне tr.activeRow), чтобы
+ * срабатывало и на неактивной строке. */
+	td[data-pulse="true"] {
+		animation: activeCellPulse 280ms ease-out 1;
+	}
+
+	/* tfoot — итоги колонок, sticky bottom внутри скролла, в стиле thead */
+	tfoot {
+		background: $color31;
+		position: sticky;
+		bottom: 0;
+		// z-index: 9992;
+		// box-shadow: 0 0 -3px 0px $color6;
+		// box-shadow: 0 0px 6px 0px rgba($color6, 0.3);
+
+		tr {
+			td {
+				position: relative;
+				padding: 0;
+				font-weight: 500;
+				user-select: none;
+				border-top: 1px solid $color34;
+				border-bottom: 0;
+				border-right: 1px solid $color34;
+				// border-right: 1px solid transparent !important;
+
+				&::after {
+					// content: "";
+					// position: absolute;
+					// top: 0;
+					// right: -1px;
+					// bottom: 0;
+					// height: 100%;
+					// width: 1px;
+					// border-right: 1px solid $color34;
+				}
+
+				&:first-child {
+					border-left: 0;
+				}
+
+				&:last-child {
+					border-right: 0;
+				}
+
+				.TableFooterCell {
+					display: flex;
+					align-items: center;
+					height: $heightFieldInput;
+					padding: 1px;
+					// margin: 0px 3px;
+					overflow: hidden;
+					white-space: nowrap;
+					text-overflow: ellipsis;
+					cursor: default;
+					justify-content: flex-end;
+					border: 1px solid transparent;
+
+					span {
+						padding: 0px 6px;
+						overflow: hidden;
+						white-space: nowrap;
+						text-overflow: ellipsis;
+					}
+				}
+			}
+		}
+
+
+	}
 }
 
 /* TableStatusBar — строка состояния, снаружи скролла, всегда внизу TableWrapper */
@@ -1072,6 +1075,11 @@ input[type="checkbox"] {
 		opacity: 0.3;
 		pointer-events: none;
 	}
+}
+
+/* Обязательная ячейка без значения (read-only): такой же inset-бордер как FieldRequired.tableVariant */
+.CellRequired {
+	box-shadow: inset 0 0 0 1px #b02a37;
 }
 
 /* TableBodyCell с will-change/transform — расширение основного класса */

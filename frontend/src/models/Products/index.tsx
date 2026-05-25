@@ -5,6 +5,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
+import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -18,8 +19,8 @@ import ModelList from "src/components/ModelList";
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
 
-interface TFields { id?: number; uuid?: string; shortName: string; sku: string; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; }
-const DEFAULT_FIELDS: TFields = { shortName: "", sku: "", brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "" };
+interface TFields { id?: number; uuid?: string; name: string; sku: string; isService: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; }
+const DEFAULT_FIELDS: TFields = { name: "", sku: "", isService: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "" };
 
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Product");
@@ -27,13 +28,14 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
     endpoint: MODEL_ENDPOINT, storageKey: "products-form", defaultFields: DEFAULT_FIELDS, paneProps,
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      shortName: d.shortName ?? "", sku: d.sku ?? "",
-      brandUuid: d.brandUuid ?? "", brandName: d.brand?.shortName ?? "",
-      unitOfMeasureUuid: d.unitOfMeasureUuid ?? "", unitOfMeasureName: d.unitOfMeasure?.shortName ?? "",
+      name: d.name ?? "", sku: d.sku ?? "",
+      isService: d.isService === true,
+      brandUuid: d.brandUuid ?? "", brandName: d.brand?.name ?? "",
+      unitOfMeasureUuid: d.unitOfMeasureUuid ?? "", unitOfMeasureName: d.unitOfMeasure?.name ?? "",
     }),
     buildPayload: (fd) => {
-      if (!fd.shortName?.trim()) return "Наименование обязательно";
-      return { shortName: fd.shortName.trim(), sku: fd.sku?.trim() || null, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null };
+      if (!fd.name?.trim()) return "Наименование обязательно";
+      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, isService: fd.isService === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
   });
@@ -44,14 +46,15 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
-              <Field label="Артикул" name={`${form.formUid}_sku`} minWidth="200px" value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
-              <LookupField label="Бренд" name={`${form.formUid}_brand`} minWidth="339px" value={form.fields.brandUuid} displayValue={form.fields.brandName} endpoint="brands" displayField="shortName"
-                columns={[{ key: "shortName", label: "Наименование" }]}
+              <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="339px" value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("sku")} name={`${form.formUid}_sku`} minWidth="200px" value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
+              <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
+              <LookupField label={translate("brand")} name={`${form.formUid}_brand`} minWidth="339px" value={form.fields.brandUuid} displayValue={form.fields.brandName} endpoint="brands" displayField="name"
+                columns={[{ key: "name", label: "Наименование" }]}
                 onSelect={(uuid, display) => form.setFields({ brandUuid: uuid, brandName: display } as Partial<TFields>)}
                 onClear={() => form.setFields({ brandUuid: "", brandName: "" } as Partial<TFields>)} disabled={form.isLoading} />
-              <LookupField label="Ед. изм." name={`${form.formUid}_unitOfMeasure`} minWidth="200px" value={form.fields.unitOfMeasureUuid} displayValue={form.fields.unitOfMeasureName} endpoint="unit-of-measures" displayField="shortName"
-                columns={[{ key: "shortName", label: "Наименование" }, { key: "code", label: "Код" }]}
+              <LookupField label={translate("unitOfMeasure")} name={`${form.formUid}_unitOfMeasure`} minWidth="200px" value={form.fields.unitOfMeasureUuid} displayValue={form.fields.unitOfMeasureName} endpoint="unit-of-measures" displayField="name"
+                columns={[{ key: "name", label: "Наименование" }, { key: "code", label: "Код" }]}
                 onSelect={(uuid, display) => form.setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display } as Partial<TFields>)}
                 onClear={() => form.setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" } as Partial<TFields>)} disabled={form.isLoading} />
             </GroupCol>
@@ -62,7 +65,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);
 
   return (
-    <FormRequiredScope requiredKeys={["shortName"]}>
+    <FormRequiredScope requiredKeys={["name"]} active={form.meta.headerValidationFailed}>
       <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />
@@ -73,7 +76,7 @@ ProductsForm.displayName = "ProductsForm";
 
 const ProductsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={ProductsForm}
-    getLabel={(d) => d?.shortName as string || "?"} variant={variant} onSelectItem={onSelectItem} />
+    getLabel={(d) => d?.name as string || "?"} variant={variant} onSelectItem={onSelectItem} />
 );
 ProductsList.displayName = "ProductsList";
 export { ProductsList, ProductsForm };

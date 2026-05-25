@@ -32,7 +32,7 @@ const MODEL_ENDPOINT = "contracts";
 interface TFields {
   id?: number;
   uuid?: string;
-  shortName: string;
+  name: string;
   contractNumber: string;
   contractText: string;
   startDate: string;
@@ -44,7 +44,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  shortName: "", contractNumber: "", contractText: "",
+  name: "", contractNumber: "", contractText: "",
   startDate: "", endDate: "",
   organizationUuid: "", organizationName: "",
   counterpartyUuid: "", counterpartyName: "",
@@ -58,18 +58,18 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
   const handleFilesChange = useCallback(() => setFilesRevision(r => r + 1), []);
 
   const initialFields: TFields | undefined = (() => {
-    if (!data || data.uuid) return undefined;
+    if (data?.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
-    if (data.organizationUuid) {
-      init.organizationUuid = data.organizationUuid as string;
-      init.organizationName = (data.organizationName as string) || "";
+    if (data?.organizationUuid) {
+      init.organizationUuid = data?.organizationUuid as string;
+      init.organizationName = (data?.organizationName as string) || "";
     } else if (defaultOrg.organizationUuid) {
       init.organizationUuid = defaultOrg.organizationUuid;
       init.organizationName = defaultOrg.organizationName;
     }
-    if (data.counterpartyUuid) {
-      init.counterpartyUuid = data.counterpartyUuid as string;
-      init.counterpartyName = (data.counterpartyName as string) || "";
+    if (data?.counterpartyUuid) {
+      init.counterpartyUuid = data?.counterpartyUuid as string;
+      init.counterpartyName = (data?.counterpartyName as string) || "";
     }
     return init;
   })();
@@ -82,22 +82,22 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
     paneProps,
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
-      shortName: d.shortName ?? "",
+      name: d.name ?? "",
       contractNumber: d.contractNumber ?? "",
       contractText: d.contractText ?? "",
       startDate: d.startDate?.slice(0, 10) ?? "",
       endDate: d.endDate?.slice(0, 10) ?? "",
       organizationUuid: d.organizationUuid ?? "",
-      organizationName: d.organization?.shortName ?? "",
+      organizationName: d.organization?.name ?? "",
       counterpartyUuid: d.counterpartyUuid ?? "",
-      counterpartyName: d.counterparty?.shortName ?? "",
+      counterpartyName: d.counterparty?.name ?? "",
       id: d.id,
       uuid: d.uuid,
     }),
     buildPayload: (fd) => {
-      if (!fd.shortName?.trim()) return "Наименование обязательно";
+      if (!fd.name?.trim()) return "Наименование обязательно";
       return {
-        shortName: fd.shortName.trim(),
+        name: fd.name.trim(),
         contractNumber: fd.contractNumber?.trim() || null,
         contractText: fd.contractText?.trim() || null,
         startDate: fd.startDate || null,
@@ -107,7 +107,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
       };
     },
     buildPaneLabel: (saved) =>
-      makePaneLabel("ContractsList", "Договора", saved, saved.shortName || saved.contractNumber),
+      makePaneLabel("ContractsList", "Договора", saved, saved.name || saved.contractNumber),
   });
 
   const tabs = useMemo(() => {
@@ -117,12 +117,12 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <Field label="Наименование" name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
-                <Field label="Номер договора" name={`${form.formUid}_contractNumber`} minWidth="339px" value={form.fields.contractNumber} onChange={e => form.setField("contractNumber", e.target.value)} disabled={form.isLoading} />
-                <FieldDate label="Дата начала" name={`${form.formUid}_startDate`} minWidth="200px" value={form.fields.startDate} onChange={e => form.setField("startDate", e.target.value)} disabled={form.isLoading} />
-                <FieldDate label="Дата окончания" name={`${form.formUid}_endDate`} minWidth="200px" value={form.fields.endDate} onChange={e => form.setField("endDate", e.target.value)} disabled={form.isLoading} />
-                <LookupField label="Организация (владелец)" name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} minWidth="339px" />
-                <LookupField label="Контрагент" name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} minWidth="339px" />
+                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="339px" value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("contractNumber")} name={`${form.formUid}_contractNumber`} minWidth="339px" value={form.fields.contractNumber} onChange={e => form.setField("contractNumber", e.target.value)} disabled={form.isLoading} />
+                <FieldDate label={translate("startDate")} name={`${form.formUid}_startDate`} minWidth="200px" value={form.fields.startDate} onChange={e => form.setField("startDate", e.target.value)} disabled={form.isLoading} />
+                <FieldDate label={translate("endDate")} name={`${form.formUid}_endDate`} minWidth="200px" value={form.fields.endDate} onChange={e => form.setField("endDate", e.target.value)} disabled={form.isLoading} />
+                <LookupField label={translate("organizationOwner")} name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} minWidth="339px" />
+                <LookupField label={translate("counterparty")} name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} minWidth="339px" />
               </GroupCol>
             </div>
 
@@ -138,7 +138,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, filesRevision, handleFilesChange]);
 
   return (
-    <FormRequiredScope requiredKeys={["shortName"]}>
+    <FormRequiredScope requiredKeys={["name"]} active={form.meta.headerValidationFailed}>
       <ModelForm
         paneId={form.paneId}
         tabs={tabs}
@@ -173,7 +173,7 @@ const ContractsList: FC<ContractsListProps> = ({ variant, onSelectItem, ownerUui
     listName="ContractsList"
     columnsJson={columnsJson}
     FormComponent={ContractsForm}
-    getLabel={(d) => (d?.shortName as string | undefined) || (d?.contractNumber as string | undefined) || ""}
+    getLabel={(d) => (d?.name as string | undefined) || (d?.contractNumber as string | undefined) || ""}
     variant={variant}
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}
@@ -215,9 +215,9 @@ const ContractsTable: FC<ContractsTableProps> = ({
   const queryClient = useQueryClient();
 
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
-    if (col.identifier === "shortName") {
-      if (ctx.inlineEditing) return <Field label="" name={`ct_shortName_${row.id}`} value={(row.shortName as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "shortName", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
-      return <span>{(row.shortName as string) ?? ""}</span>;
+    if (col.identifier === "name") {
+      if (ctx.inlineEditing) return <Field label="" name={`ct_name_${row.id}`} value={(row.name as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "name", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <span>{(row.name as string) ?? ""}</span>;
     }
     if (col.identifier === "contractNumber") {
       if (ctx.inlineEditing) return <Field label="" name={`ct_num_${row.id}`} value={(row.contractNumber as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "contractNumber", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
@@ -233,23 +233,23 @@ const ContractsTable: FC<ContractsTableProps> = ({
       if (ctx.inlineEditing) return <FieldDate label="" name={`ct_endDate_${row.id}`} value={val} onChange={e => ctx.handleInlineChange(row, "endDate", e.target.value)} disabled={ctx.disabled} variant="table" />;
       return <span>{val ? getFormatDateOnly(val) : ""}</span>;
     }
-    if (col.identifier === "counterparty.shortName") {
+    if (col.identifier === "counterparty.name") {
       if (ctx.inlineEditing) return (
-        <LookupField label="" name={`ct_cpty_${row.id}`} value={(row.counterpartyUuid as string) ?? ""} displayValue={(row.counterparty as any)?.shortName ?? ""} endpoint="counterparties" displayField="shortName"
-          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "counterpartyUuid", uuid, { counterparty: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null })}
+        <LookupField label="" name={`ct_cpty_${row.id}`} value={(row.counterpartyUuid as string) ?? ""} displayValue={(row.counterparty as any)?.name ?? ""} endpoint="counterparties" displayField="name"
+          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "counterpartyUuid", uuid, { counterparty: item && uuid ? { uuid, name: item.name ?? "" } : null })}
           onClear={() => ctx.handleLookupChange(row, "counterpartyUuid", null, { counterparty: null })}
           disabled={ctx.disabled} width="100%" variant="table" />
       );
-      return <span>{(row.counterparty as any)?.shortName ?? ""}</span>;
+      return <span>{(row.counterparty as any)?.name ?? ""}</span>;
     }
-    if (col.identifier === "organization.shortName") {
+    if (col.identifier === "organization.name") {
       if (ctx.inlineEditing) return (
-        <LookupField label="" name={`ct_org_${row.id}`} value={(row.organizationUuid as string) ?? ""} displayValue={(row.organization as any)?.shortName ?? ""} endpoint="organizations" displayField="shortName"
-          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "organizationUuid", uuid, { organization: item && uuid ? { uuid, shortName: item.shortName ?? "" } : null })}
+        <LookupField label="" name={`ct_org_${row.id}`} value={(row.organizationUuid as string) ?? ""} displayValue={(row.organization as any)?.name ?? ""} endpoint="organizations" displayField="name"
+          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "organizationUuid", uuid, { organization: item && uuid ? { uuid, name: item.name ?? "" } : null })}
           onClear={() => ctx.handleLookupChange(row, "organizationUuid", null, { organization: null })}
           disabled={ctx.disabled} width="100%" variant="table" />
       );
-      return <span>{(row.organization as any)?.shortName ?? ""}</span>;
+      return <span>{(row.organization as any)?.name ?? ""}</span>;
     }
     return undefined;
   }, []);
@@ -262,7 +262,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
     };
     const nameKey = parentKey.replace(/Uuid$/, "Name");
     addPane({
-      label: makePaneLabelFromData("ContractsList", "Договора", isEdit ? data as any : null, (data?.shortName || data?.contractNumber) as string),
+      label: makePaneLabelFromData("ContractsList", "Договора", isEdit ? data as any : null, (data?.name || data?.contractNumber) as string),
       component: ContractsForm,
       data: isEdit ? data : { [parentKey]: parentUuid, [nameKey]: parentName } as any,
       onSave: refresh,
@@ -271,13 +271,13 @@ const ContractsTable: FC<ContractsTableProps> = ({
   }, [addPane, parentKey, parentUuid, parentName, queryClient]);
 
   const defaultNewRow = useMemo(() => ({
-    shortName: "", contractNumber: "", startDate: null, endDate: null,
+    name: "", contractNumber: "", startDate: null, endDate: null,
   }), []);
 
   // Скрываем колонку «другой стороны» — родительская и так известна
   const adjustedColumns = useMemo(() => {
-    const hideId = parentKey === "organizationUuid" ? "organization.shortName" : "counterparty.shortName";
-    const showId = parentKey === "organizationUuid" ? "counterparty.shortName" : "organization.shortName";
+    const hideId = parentKey === "organizationUuid" ? "organization.name" : "counterparty.name";
+    const showId = parentKey === "organizationUuid" ? "counterparty.name" : "organization.name";
     return (columnsJson as any[]).map((col: any) => {
       if (col.identifier === hideId) return { ...col, visible: false, inlist: false };
       if (col.identifier === showId) return { ...col, visible: true, inlist: true };

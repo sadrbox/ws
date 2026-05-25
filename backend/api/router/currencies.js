@@ -6,7 +6,7 @@ const router = express.Router();
 
 const MODEL = "currency";
 const ROUTE = "currencies";
-const TEXT_FIELDS = ["code", "shortName", "symbol"];
+const TEXT_FIELDS = ["code", "name", "symbol"];
 
 // ── GET list ────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -125,19 +125,19 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { code, shortName, symbol } = req.body;
+		const { code, name, symbol } = req.body;
 		if (!code?.trim())
 			return res
 				.status(400)
 				.json({ success: false, message: "Код валюты обязателен" });
-		if (!shortName?.trim())
+		if (!name?.trim())
 			return res
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
 		const item = await prisma[MODEL].create({
 			data: {
 				code: code.trim().toUpperCase(),
-				shortName: shortName.trim(),
+				name: name.trim(),
 				symbol: symbol?.trim() || null,
 			},
 		});
@@ -163,8 +163,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const data = {};
 		if (req.body.code !== undefined)
 			data.code = req.body.code?.trim()?.toUpperCase() ?? null;
-		if (req.body.shortName !== undefined)
-			data.shortName = req.body.shortName?.trim() ?? null;
+		if (req.body.name !== undefined)
+			data.name = req.body.name?.trim() ?? null;
 		if (req.body.symbol !== undefined)
 			data.symbol = req.body.symbol?.trim() || null;
 		const item = await prisma[MODEL].update({ where: w, data });

@@ -2,53 +2,41 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"name": "Id",
 		"width": "80px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Номер",
 		"visible": false,
-		"position": 1,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "user.username",
 		"type": "string",
-		"name": "Пользователь",
 		"width": "200px",
 		"minWidth": "120px",
 		"alignment": "left",
 		"hint": "Логин пользователя",
 		"visible": true,
-		"position": 2,
-		"filter": false,
 		"inlist": true
 	},
 	{
-		"identifier": "organization.shortName",
+		"identifier": "organization.name",
 		"type": "string",
-		"name": "Организация",
 		"width": "300px",
 		"minWidth": "120px",
 		"alignment": "left",
 		"hint": "Краткое наименование организации",
 		"visible": true,
-		"position": 3,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "role",
 		"type": "string",
-		"name": "Роль",
 		"width": "160px",
 		"minWidth": "100px",
 		"alignment": "left",
 		"hint": "Роль пользователя в организации",
 		"visible": true,
-		"position": 4,
-		"filter": false,
 		"inlist": true
 	}
 ]

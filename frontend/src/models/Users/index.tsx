@@ -15,7 +15,7 @@ import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { UserPermissionsTable } from "src/models/UserPermissions";
+import { UserAccessRightsTable } from "src/models/UserAccessRights";
 import { TDataItem } from "src/components/Table/types";
 
 const MODEL_ENDPOINT = "users";
@@ -89,14 +89,14 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
                   <GroupRow>
                     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                       <GroupRow>
-                        <Field label="Логин *" name={`${form.formUid}_username`} minWidth="150px" value={form.fields.username} onChange={e => form.setField("username", e.target.value)} disabled={form.isLoading} />
-                        <Field label={form.isEditMode ? "Новый пароль" : "Пароль"} name={`${form.formUid}_password`} minWidth="150px" value={form.fields.password} onChange={e => form.setField("password", e.target.value)} disabled={form.isLoading} />
+                        <Field label={translate("loginLabel")} name={`${form.formUid}_username`} minWidth="150px" value={form.fields.username} onChange={e => form.setField("username", e.target.value)} disabled={form.isLoading} required />
+                        <Field label={form.isEditMode ? translate("newPassword") : translate("password")} name={`${form.formUid}_password`} minWidth="150px" value={form.fields.password} onChange={e => form.setField("password", e.target.value)} disabled={form.isLoading} />
                       </GroupRow>
                       {form.isEditMode && form.fields.uuid && (
                         <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
                       )}
                     </div>
-                    <LookupField label="Сотрудник" name={`${form.formUid}_employee`} value={form.fields.employeeUuid} displayValue={form.fields.employeeName} endpoint="employees" displayField="fullName" minWidth="400px" disabled={form.isLoading}
+                    <LookupField label={translate("employee")} name={`${form.formUid}_employee`} value={form.fields.employeeUuid} displayValue={form.fields.employeeName} endpoint="employees" displayField="fullName" minWidth="400px" disabled={form.isLoading}
                       onSelect={(uuid, displayValue) => form.setFields({ employeeUuid: uuid, employeeName: displayValue } as Partial<TFields>)}
                       onClear={() => form.setFields({ employeeUuid: "", employeeName: "" } as Partial<TFields>)} />
                   </GroupRow>
@@ -110,10 +110,10 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
     ];
     if (form.isEditMode && form.fields.uuid) {
       result.push({
-        id: "userPermissions",
-        label: translate("userPermissions"),
+        id: "userAccessRights",
+        label: translate("userAccessRights"),
         component: (
-          <UserPermissionsTable
+          <UserAccessRightsTable
             userUuid={form.fields.uuid}
             deferRemoteChanges={true}
             initialPendingRows={userPermissions.pending}
@@ -126,7 +126,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields, userPermissions]);
 
   return (
-    <FormRequiredScope requiredKeys={["username"]}>
+    <FormRequiredScope requiredKeys={["username"]} active={form.meta.headerValidationFailed}>
       <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />

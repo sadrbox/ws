@@ -105,10 +105,10 @@ const OwnerLookupField: FC<OwnerLookupFieldProps> = ({
   }, [typeLocked, ownerType, typeLabel]);
 
   const endpoint = OWNER_ENDPOINT_MAP[currentType] || "organizations";
-  const displayField = (currentType === "contactperson" || currentType === "employee") ? "fullName" : "shortName";
+  const displayField = (currentType === "contactperson" || currentType === "employee") ? "fullName" : "name";
   const columns = (currentType === "contactperson" || currentType === "employee")
     ? [{ key: "fullName", label: "ФИО" }]
-    : [{ key: "shortName", label: "Наименование" }, { key: "bin", label: "БИН" }];
+    : [{ key: "name", label: "Наименование" }, { key: "bin", label: "БИН" }];
 
   // Если тип зафиксирован — простой LookupField
   if (labelContent) {

@@ -14,7 +14,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
   const [bin, setBin] = useState("");
-  const [shortName, setShortName] = useState("");
+  const [orgName, setOrgName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [inviteResult, setInviteResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +26,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   }, [mode]);
 
   const resetFields = useCallback(() => {
-    setUsername(""); setPassword(""); setEmail(""); setBin(""); setShortName(""); setInviteCode("");
+    setUsername(""); setPassword(""); setEmail(""); setBin(""); setOrgName(""); setInviteCode("");
     setError(null); setInviteResult(null);
   }, []);
 
@@ -60,7 +60,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
     try {
       const result = await registerOrganization({
-        bin: trimmedBin, shortName: shortName.trim() || undefined,
+        bin: trimmedBin, name: orgName.trim() || undefined,
         username: trimmedUsername, password, email: email.trim() || undefined,
       });
       if (result.success) {
@@ -69,7 +69,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
       } else setError(result.message || "Ошибка регистрации");
     } catch { setError("Ошибка соединения с сервером"); }
     finally { setIsLoading(false); }
-  }, [bin, shortName, username, password, email, onLoginSuccess]);
+  }, [bin, orgName, username, password, email, onLoginSuccess]);
 
   // ── JOIN ──
   const handleJoin = useCallback(async (e: React.FormEvent) => {
@@ -116,9 +116,9 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
                 onChange={e => setBin(e.target.value)} disabled={isLoading} placeholder="12 цифр" autoComplete="off" />
             </div>
             <div className={styles.field}>
-              <label htmlFor="reg_shortName">Наименование организации</label>
-              <input id="reg_shortName" type="text" value={shortName}
-                onChange={e => setShortName(e.target.value)} disabled={isLoading} placeholder="Краткое наименование" />
+              <label htmlFor="reg_name">Наименование организации</label>
+              <input id="reg_name" type="text" value={orgName}
+                onChange={e => setOrgName(e.target.value)} disabled={isLoading} placeholder="Краткое наименование" />
             </div>
           </>
         )}

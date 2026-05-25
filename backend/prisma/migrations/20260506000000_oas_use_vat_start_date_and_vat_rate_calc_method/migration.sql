@@ -7,7 +7,7 @@ ALTER TABLE "organization_accounting_settings"
   ADD COLUMN "startDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   ADD COLUMN "useVat"    BOOLEAN      NOT NULL DEFAULT false;
 
--- Бэкфилл useVat по факту: если ставка НДС задана — включаем учёт
+-- Бэкфилл useVat по факту: если Ставка НДС, % задана — включаем учёт
 UPDATE "organization_accounting_settings"
    SET "useVat" = true
  WHERE "vatRateUuid" IS NOT NULL;

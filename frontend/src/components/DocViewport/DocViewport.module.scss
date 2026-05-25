@@ -1,0 +1,193 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// DocViewport — единый тёмный контейнер-просмотрщик для отчётов и печатных
+// форм. Заменяет дублирующиеся .ReportViewport и .PrintViewport.
+//
+// Структура:
+//   .DocViewport          — тёмный фон, overflow:auto
+//     .DocSheet           — белый «лист» A4 (React-контент)
+//     .DocIframe          — белый iframe A4 (HTML-строка)
+//     .DocStatus          — заглушка загрузки / пустых данных
+// ═══════════════════════════════════════════════════════════════════════════
+
+.DocViewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #2b2b2b;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  position: relative;
+}
+
+// Обёртка контента — на неё применяется CSS zoom
+.DocContent {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px 16px 8px;
+}
+
+// Плавающая панель масштаба — прилипает к нижнему краю при скролле
+.ZoomControls {
+  position: sticky;
+  bottom: 12px;
+  align-self: flex-end;
+  margin-right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 3px 4px;
+  user-select: none;
+  pointer-events: all;
+}
+
+.ZoomBtn {
+  all: unset;
+  cursor: pointer;
+  color: #e0e0e0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 120ms;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+}
+
+.ZoomLabel {
+  cursor: pointer;
+  color: #d0d0d0;
+  font-size: 11px;
+  font-weight: 500;
+  min-width: 36px;
+  text-align: center;
+  border-radius: 4px;
+  padding: 2px 4px;
+  transition: background 120ms, color 120ms;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+}
+
+// ── Белый «лист» A4 для React-контента ─────────────────────────────────────
+.DocSheet {
+  background: #fff;
+  flex-shrink: 0;
+
+  // Portrait (по умолчанию): 210 × 297 mm
+  width: 210mm;
+  min-height: 297mm;
+
+  // Landscape: 297 × 210 mm
+  &[data-orientation="landscape"] {
+    width: 297mm;
+    min-height: 210mm;
+  }
+
+  // Ширина по содержимому (для XLSX-таблиц с произвольным числом колонок)
+  &[data-fit="content"] {
+    width: max-content;
+    min-width: 210mm;
+    overflow: visible;
+  }
+
+  // border-radius: 2px;
+  padding: 6mm;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  font-family: "Times New Roman",
+  Times,
+  serif;
+  font-size: 10pt;
+  color: #000;
+}
+
+// ── Белый iframe A4 для HTML-строк (PrintDocumentPane) ─────────────────────
+.DocIframe {
+  width: 210mm;
+  max-width: calc(100% - 32px);
+  height: 100%;
+  min-height: 297mm;
+  border: none;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+  border-radius: 2px;
+  display: block;
+
+  &[data-orientation="landscape"] {
+    width: 297mm;
+    min-height: 210mm;
+  }
+}
+
+// ── Статус (загрузка / нет данных) ─────────────────────────────────────────
+.DocStatus {
+  color: #9ca3af;
+  font-size: 14px;
+  padding: 32px 16px;
+  text-align: center;
+  align-self: center;
+}
+
+// ── Запасные правила для прямого window.print() ────────────────────────────
+@media print {
+  .DocViewport {
+    display: block;
+    overflow: visible;
+    background: none;
+    padding: 0;
+  }
+
+  .DocContent {
+    display: block;
+    padding: 0;
+    zoom: 1 !important;
+  }
+
+  .ZoomControls {
+    display: none;
+  }
+
+  .DocSheet {
+    box-shadow: none;
+    min-height: 0;
+    padding: 0;
+    width: 100% !important;
+    overflow: visible;
+  }
+
+  .DocStatus {
+    display: none;
+  }
+
+  .DocIframe {
+    width: 100% !important;
+    height: 100vh !important;
+    max-width: none;
+    margin: 0;
+    box-shadow: none;
+  }
+}

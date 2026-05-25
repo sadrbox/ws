@@ -35,7 +35,7 @@ export interface LookupFieldProps {
   name: string;
   /** Текущий UUID (значение для хранения) */
   value?: string;
-  /** Отображаемое значение (shortName, value и т.д.) */
+  /** Отображаемое значение (name, value и т.д.) */
   displayValue?: string;
   /** Колбэк при выборе элемента: (uuid, displayValue, item) */
   onSelect: (uuid: string, displayValue: string, item: Record<string, any>) => void;
@@ -43,7 +43,7 @@ export interface LookupFieldProps {
   onClear?: () => void;
   /** Endpoint API, напр. "organizations", "counterparties" */
   endpoint: string;
-  /** Поле для отображения (по умолчанию "shortName") */
+  /** Поле для отображения (по умолчанию "name") */
   displayField?: string;
   /** Дополнительные колонки (совместимость, не используется в новой версии) */
   columns?: { key: string; label: string }[];
@@ -60,7 +60,7 @@ export interface LookupFieldProps {
   /** Вариант отображения: default (форма) или table (внутри ячейки таблицы) */
   variant?: FieldVariant;
   /** Поля для отображения справа в автокомплите (напр. ["bin"] → показывает "(123456789012)").
-   *  Поддерживает вложенные ключи через точку: "brand.shortName".
+   *  Поддерживает вложенные ключи через точку: "brand.name".
    *  Если не указан — берётся из defaultSecondaryFieldsMap по endpoint. */
   secondaryFields?: string[];
   /** Дополнительные query-параметры для фильтрации (передаются в autocomplete и SelectPaneWrapper).
@@ -92,11 +92,11 @@ export interface LookupFieldProps {
 // ── Поля для отображения в выпадающем списке автокомплита ──────────────
 // Ключ — endpoint, значение — массив полей, которые показываются
 // справа в скобках рядом с основным displayField.
-// Поддерживает вложенные ключи через точку: "brand.shortName"
+// Поддерживает вложенные ключи через точку: "brand.name"
 const defaultSecondaryFieldsMap: Record<string, string[]> = {
   organizations: ["bin"],
   counterparties: ["bin", "iin"],
-  products: ["sku", "brand.shortName"],
+  products: ["sku", "brand.name"],
   employees: ["iin", "position"],
   users: ["employee.fullName"],
   // contracts: ["documentNumber"],
@@ -122,7 +122,7 @@ const LookupField: FC<LookupFieldProps> = ({
   onSelect,
   onClear,
   endpoint,
-  displayField = "shortName",
+  displayField = "name",
   columns: _columns,
   width,
   minWidth,
@@ -258,7 +258,7 @@ const LookupField: FC<LookupFieldProps> = ({
       data: { endpoint, listComponent, extraParams } as any,
       onSelectResult: (item: Record<string, any>) => {
         const uuid = item.uuid as string;
-        const display = String(item[displayField] ?? item.shortName ?? item.value ?? item.name ?? uuid);
+        const display = String(item[displayField] ?? item.value ?? item.name ?? uuid);
         onSelect(uuid, display, item);
         setIsDropdownOpen(false);
         setInputText(display);
@@ -300,7 +300,7 @@ const LookupField: FC<LookupFieldProps> = ({
 
   const handleSelectItem = useCallback((item: Record<string, any>) => {
     const uuid = item.uuid as string;
-    const display = String(item[displayField] ?? item.shortName ?? item.value ?? item.name ?? uuid);
+    const display = String(item[displayField] ?? item.value ?? item.name ?? uuid);
     onSelect(uuid, display, item);
     setIsDropdownOpen(false);
     setInputText(display);
@@ -441,10 +441,10 @@ const LookupField: FC<LookupFieldProps> = ({
 
   // Получить отображаемое поле элемента
   const getItemDisplay = useCallback((item: Record<string, any>) => {
-    return String(item[displayField] ?? item.shortName ?? item.value ?? item.name ?? item.uuid ?? "");
+    return String(item[displayField] ?? item.value ?? item.name ?? item.uuid ?? "");
   }, [displayField]);
 
-  // Вспомогательная: получить значение по ключу с поддержкой вложенности ("brand.shortName")
+  // Вспомогательная: получить значение по ключу с поддержкой вложенности ("brand.name")
   const getNestedValue = useCallback((item: Record<string, any>, key: string): string => {
     const parts = key.split(".");
     let val: any = item;
@@ -487,7 +487,7 @@ const LookupField: FC<LookupFieldProps> = ({
       >
         {!isTable && label && (
           <label htmlFor={name} className={styles.FieldLabel}>
-            {label}
+            {typeof label === 'string' ? translate(label) : label}
             {effectiveRequired && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
           </label>
         )}

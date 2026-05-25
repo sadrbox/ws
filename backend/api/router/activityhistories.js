@@ -274,8 +274,8 @@ router.get("/activityhistories", async (req, res) => {
 
 		// ── Сортировка ────────────────────────────────────────────────────────
 		// Клиент шлёт sort как JSON-строку: { "field": "asc"|"desc" }
-		// Поддерживается точечная нотация для связей: "organization.shortName"
-		// → преобразуется в { organization: { shortName: "asc" } } для Prisma
+		// Поддерживается точечная нотация для связей: "organization.name"
+		// → преобразуется в { organization: { name: "asc" } } для Prisma
 		const orderBy = [];
 		const sortParam =
 			typeof req.query.sort === "string" ? req.query.sort : null;
@@ -287,7 +287,7 @@ router.get("/activityhistories", async (req, res) => {
 					for (const [field, dir] of Object.entries(sortObj)) {
 						if (dir !== "asc" && dir !== "desc") continue;
 
-						// Точечная нотация: "organization.shortName" → { organization: { shortName: dir } }
+						// Точечная нотация: "organization.name" → { organization: { name: dir } }
 						if (field.includes(".")) {
 							const parts = field.split(".");
 							// Строим вложенный объект справа налево

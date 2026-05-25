@@ -11,6 +11,7 @@
  */
 
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
+import { translate } from "src/i18";
 import { useOfflineSync, type OfflineStats } from "src/hooks/useOfflineSync";
 import { type SyncConflict } from "src/services/syncManager";
 import { pullSingleTable, fullSync } from "src/services/syncManager";
@@ -23,6 +24,7 @@ import { Group } from "src/components/UI";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import Tabs from "src/components/Tabs";
+import { getFormatDate } from "src/utils/main.module";
 import styles from "./SyncDashboard.module.scss";
 // Общие form-классы (FormWrapper/FormBody/Form) живут в главном модуле стилей
 // и используются также другими формами. Импортируем отдельно — `composes:`
@@ -36,12 +38,7 @@ import type { TPane } from "src/app/types";
 
 function formatDate(iso?: string | null): string {
   if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("ru-RU", {
-      day: "2-digit", month: "2-digit", year: "numeric",
-      hour: "2-digit", minute: "2-digit", second: "2-digit",
-    });
-  } catch { return iso; }
+  return getFormatDate(iso) || iso;
 }
 
 function formatBytes(bytes: number): string {
@@ -78,7 +75,7 @@ const TABLE_LABELS: Record<string, string> = {
   contactpersons: "Контактные лица",
   bankaccounts: "Банковские счета", users: "Пользователи",
   todos: "Задачи", notifications: "Уведомления",
-  warehouses: "Склады", sales: "Реализация",
+  warehouses: "Склады", sales: "Реализация товара и услуг",
   purchases: "Поступления", "outgoing-invoices": "Счета-фактуры исходящие",
   "incoming-invoices": "Счета-фактуры входящие", "payment-invoices": "Счета на оплату",
   "scheduled-tasks": "Регламентные задачи", "inventory-transfers": "Перемещение ТМЗ",
@@ -86,8 +83,8 @@ const TABLE_LABELS: Record<string, string> = {
   brands: "Бренды", products: "Номенклатура",
   saleitems: "Товары, услуги реализации", employees: "Сотрудники",
   positions: "Должности", "employee-histories": "Кадровая история",
-  "access-rights": "Права доступа", currencies: "Валюты",
-  "payroll-calculations": "Начисление ЗП", "payroll-payments": "Выплата ЗП",
+  "access-rights": "Разрешения пользователей", currencies: "Валюты",
+  "payroll-calculations": "Начисление заработной платы", "payroll-payments": "Выплата заработной платы",
 };
 
 function getTableLabel(t: string): string { return TABLE_LABELS[t] ?? t; }
@@ -163,7 +160,7 @@ const MainTab: FC<{
     )}
 
     {/* Режим работы */}
-    <Group align="col" label="Режим работы с данными" className={mainStyles.Form}>
+    <Group align="col" label={translate("syncMode")} className={mainStyles.Form}>
       <div className={styles.SyncModeRow}>
         <button
           type="button"
@@ -196,9 +193,9 @@ const MainTab: FC<{
     <Group align="row" gap="12px" className={mainStyles.Form}>
       <div className={styles.SyncMetricGrid}>
         <MetricCell value={isOnline ? "🟢" : "🔴"} label={isOnline ? "Подключён" : "Нет связи"} />
-        <MetricCell value={String(pendingCount)} label="Не отправлено" />
-        <MetricCell value={String(offlineStats?.totalRecords ?? 0)} label="Записей на устройстве" />
-        <MetricCell value={timeAgo(syncState.lastSyncAt)} label="Синхронизация" />
+        <MetricCell value={String(pendingCount)} label={translate("pendingSync")} />
+        <MetricCell value={String(offlineStats?.totalRecords ?? 0)} label={translate("offlineRecords")} />
+        <MetricCell value={timeAgo(syncState.lastSyncAt)} label={translate("syncTime")} />
       </div>
     </Group>
 
@@ -220,7 +217,7 @@ const MainTab: FC<{
     {syncState.lastResult && (
       <>
         <Divider />
-        <Group align="col" label="Результат последней синхронизации" className={mainStyles.Form}>
+        <Group align="col" label={translate("syncResult")} className={mainStyles.Form}>
           <div className={styles.SyncResultGrid}>
             <span>Статус</span><span>{syncState.lastResult.success ? "✅ Успешно" : "❌ С ошибками"}</span>
             <span>Загружено</span><span>{syncState.lastResult.pulled} записей</span>
@@ -446,10 +443,10 @@ const StorageTab: FC<{
       {/* Обзор */}
       <Group align="row" gap="12px" className={mainStyles.Form}>
         <div className={styles.SyncMetricGrid}>
-          <MetricCell value={dbSize != null ? formatBytes(dbSize) : "—"} label="Размер" />
-          <MetricCell value={String(offlineStats?.totalRecords ?? 0)} label="Записей" />
-          <MetricCell value={String(withData.length)} label="Таблиц" />
-          <MetricCell value={String(offlineStats?.pendingChanges ?? 0)} label="Ожидают" />
+          <MetricCell value={dbSize != null ? formatBytes(dbSize) : "—"} label={translate("dbSize")} />
+          <MetricCell value={String(offlineStats?.totalRecords ?? 0)} label={translate("records")} />
+          <MetricCell value={String(withData.length)} label={translate("tableCount")} />
+          <MetricCell value={String(offlineStats?.pendingChanges ?? 0)} label={translate("pendingCount")} />
         </div>
       </Group>
 
@@ -476,7 +473,7 @@ const StorageTab: FC<{
       <Divider />
 
       {/* Выборочная загрузка */}
-      <Group align="col" label="Подготовить данные для работы без интернета" className={mainStyles.Form}>
+      <Group align="col" label={translate("offlineSetup")} className={mainStyles.Form}>
         <div className={styles.SyncInfoBox} style={{ marginBottom: 8 }}>
           Выберите справочники, которые нужны офлайн, и нажмите «Загрузить».
         </div>

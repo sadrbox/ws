@@ -10,23 +10,21 @@ export type TOrder = {
 export type TDataItem = {
   id: number;
   uuid: string;
-  // shortName?: string;
+  // name?: string;
   [key: string | number]: unknown;
 };
 export type TColumnFooter = 'sum' | 'avg' | 'min' | 'max' | 'count' | 'none';
 
 export type TColumn = {
-  position: number;
   identifier: string;
   type: string;
-  name: string;
+  name?: string;
   width?: string;
   minWidth?: string;
   hint?: string;
   alignment?: string;
   sortable?: boolean;
   visible: boolean;
-  filter: boolean;
   inlist: boolean;
   footer?: TColumnFooter; // итог колонки в tfoot
   /**
@@ -47,6 +45,8 @@ export type TColumn = {
    * но сортировка по ней выполняется клиентски (`sortTableRows`).
    */
   dynamic?: boolean;
+  /** Максимальное количество знаков после запятой при отображении числовых значений. */
+  decimals?: number;
 };
 export type TypeModelStates = {
   activeRow?: number | null;

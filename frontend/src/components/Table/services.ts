@@ -152,7 +152,7 @@ export function getFormatColumnValue(
 		column.identifier !== "position" &&
 		column.type === "number"
 	) {
-		return getFormatNumerical(rawValue as number);
+		return getFormatNumerical(rawValue as number, column.decimals);
 	} else if (column.identifier === "position" && column.type === "position") {
 		return rawValue + "";
 	} else if (column.type === "date") {
@@ -199,7 +199,7 @@ function getFormatNumericalID(n: number): string {
  * Быстрый поиск строки по видимым колонкам.
  *
  * Ищет только по ВИДИМЫМ колонкам (visible=true), поддерживает ссылочные
- * поля (объекты с вложенными данными, например unitOfMeasure.shortName).
+ * поля (объекты с вложенными данными, например unitOfMeasure.name).
  * Слова поиска должны быть предварительно нормализованы (toLowerCase, trim,
  * замена запятой на точку).
  */
@@ -242,13 +242,11 @@ export function matchRowBySearch(
 }
 
 // Формат числа /////////////////////////////////////////////////////////////////////////
-export function getFormatNumerical(n: number): string {
-	const formater = new Intl.NumberFormat("ru-RU", {
+export function getFormatNumerical(n: number, maxDecimals = 9): string {
+	return new Intl.NumberFormat("ru-RU", {
 		style: "decimal",
-		// minimumFractionDigits: 9,
-		maximumFractionDigits: 9,
-	});
-	return formater.format(n);
+		maximumFractionDigits: maxDecimals,
+	}).format(n);
 }
 
 /**

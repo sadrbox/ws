@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
@@ -146,7 +146,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			where: w,
 			include: { organization: true },
 		});
-		if (!item)
+		if (!item || !checkOwnership(item, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -238,6 +238,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				data.fullName = [ln, fn, mn].filter(Boolean).join(" ") || null;
 			}
 		}
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true } });
+		if (!existing || !checkOwnership(existing, req))
+			return res.status(404).json({ success: false, message: "Не найдено" });
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,

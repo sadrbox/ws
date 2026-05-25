@@ -1,0 +1,42 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"type": "string",
+		"width": "300px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Уникальный идентификатор",
+		"visible": false,
+		"inlist": true
+	},
+	{
+		"identifier": "modelName",
+		"type": "string",
+		"width": "250px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Название модели",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "accessLevel",
+		"type": "string",
+		"width": "180px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Уровень доступа",
+		"visible": true,
+		"inlist": true
+	}
+]

@@ -14,8 +14,8 @@ const OWNER_ENDPOINT_MAP: Record<string, string> = {
  * Определяет какое поле использовать для отображаемого имени
  */
 const OWNER_DISPLAY_FIELD_MAP: Record<string, string> = {
-  organization: "shortName",
-  counterparty: "shortName",
+  organization: "name",
+  counterparty: "name",
   contactperson: "fullName",
   employee: "fullName",
 };
@@ -36,8 +36,8 @@ export async function resolveOwnerName(
   try {
     const res = await apiClient.get(`/${endpoint}/${ownerUuid}`);
     const item = res.data?.item ?? res.data;
-    const displayField = OWNER_DISPLAY_FIELD_MAP[ownerType] || "shortName";
-    return item?.[displayField] ?? item?.shortName ?? item?.fullName ?? "";
+    const displayField = OWNER_DISPLAY_FIELD_MAP[ownerType] || "name";
+    return item?.[displayField] ?? item?.name ?? item?.fullName ?? "";
   } catch {
     return "";
   }

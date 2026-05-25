@@ -161,7 +161,7 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		formName: "SalesForm",
 		listName: "SalesList",
 		storageKey: "sales-form",
-		label: "Реализация",
+		label: "Реализация товара и услуг",
 	},
 	{
 		endpoint: "purchases",
@@ -229,18 +229,10 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 	},
 	{
 		endpoint: "user-permissions",
-		module: () => import("src/models/UserPermissions"),
-		formName: "UserPermissionsForm",
-		listName: "UserPermissionsList",
-		storageKey: "user-permissions-form",
-		label: "Уровень доступа пользователей",
-	},
-	{
-		endpoint: "access-rights",
-		module: () => import("src/models/AccessRights"),
-		formName: "AccessRightsForm",
-		listName: "AccessRightsList",
-		storageKey: "access-rights-form",
+		module: () => import("src/models/UserAccessRights"),
+		formName: "UserAccessRightsForm",
+		listName: "UserAccessRightsList",
+		storageKey: "user-access-rights-form",
 		label: "Права доступа",
 	},
 	{
@@ -249,7 +241,7 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		formName: "PayrollCalculationsForm",
 		listName: "PayrollCalculationsList",
 		storageKey: "payroll-calculations-form",
-		label: "Начисление ЗП",
+		label: "Начисление заработной платы",
 	},
 	{
 		endpoint: "payroll-payments",
@@ -257,7 +249,7 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		formName: "PayrollPaymentsForm",
 		listName: "PayrollPaymentsList",
 		storageKey: "payroll-payments-form",
-		label: "Выплата ЗП",
+		label: "Выплата заработной платы",
 	},
 	{
 		endpoint: "unit-of-measures",

@@ -7,7 +7,7 @@ const router = express.Router();
 
 const MODEL = "position";
 const ROUTE = "positions";
-const TEXT_FIELDS = ["shortName", "comment"];
+const TEXT_FIELDS = ["name", "comment"];
 
 // ── GET list ────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -126,15 +126,15 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { shortName, comment } = req.body;
-		if (!shortName?.trim())
+		const { name, comment } = req.body;
+		if (!name?.trim())
 			return res.status(400).json({
 				success: false,
-				message: "Наименование обязательно (shortName)",
+				message: "Наименование обязательно (name)",
 			});
 		const item = await prisma[MODEL].create({
 			data: {
-				shortName: shortName.trim(),
+				name: name.trim(),
 				comment: comment?.trim() ?? null,
 				organizationUuid: req.user?.organizationUuid ?? null,
 			},
@@ -154,8 +154,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
-		if (req.body.shortName !== undefined)
-			data.shortName = req.body.shortName?.trim() ?? null;
+		if (req.body.name !== undefined)
+			data.name = req.body.name?.trim() ?? null;
 		if (req.body.comment !== undefined)
 			data.comment = req.body.comment?.trim() ?? null;
 		const item = await prisma[MODEL].update({ where: w, data });

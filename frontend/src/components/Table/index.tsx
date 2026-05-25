@@ -458,7 +458,7 @@ const Table: FC<TableProps> = memo((props) => {
   const currentEndDate = (filtering.filters?.dateRange as any)?.endDate as string || '';
   const hasDateRange = !!(currentStartDate || currentEndDate);
   const showDateRangeButton = useMemo(
-    () => enableDateRange && columns.some((column) => column.visible && column.name?.trim() === 'Дата'),
+    () => enableDateRange && columns.some((column) => column.visible && (column.type === 'date' || column.type === 'datetime')),
     [enableDateRange, columns],
   );
 
@@ -1435,7 +1435,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     }
     // Для всех остальных кликов — снимаем фокус с любого активного поля ввода
     const active = document.activeElement as HTMLElement | null;
-    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') && (active as HTMLInputElement).type !== 'checkbox') {
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT') && (active as HTMLInputElement).type !== 'checkbox') {
       active.blur();
     }
     // Гарантируем, что фокус остаётся на scroll-контейнере таблицы, чтобы
@@ -1459,7 +1459,8 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     const target = e.target as HTMLElement;
     const isEditableInput =
       (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'checkbox') ||
-      target.tagName === 'TEXTAREA';
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT';
     if (!isEditableInput) {
       clickedFocusedInputRef.current = false;
       return;
@@ -1481,10 +1482,23 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
       const target = e.target as HTMLElement;
       const isEditableField =
         (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'checkbox') ||
-        target.tagName === 'TEXTAREA';
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT';
       if (isEditableField) {
         (target as HTMLInputElement).focus();
-        try { (target as HTMLInputElement).select(); } catch { /* ignore */ }
+        // select() для SELECT-элемента не определён — вызываем только для текстовых полей
+        if (target.tagName !== 'SELECT') {
+          try { (target as HTMLInputElement).select(); } catch { /* ignore */ }
+        }
+      } else {
+        // Двойной клик по нередактируемой ячейке — пульс-индикация
+        const td = (target as HTMLElement).closest('td');
+        if (td) {
+          td.removeAttribute('data-pulse');
+          void (td as HTMLElement).offsetWidth;
+          td.setAttribute('data-pulse', 'true');
+          window.setTimeout(() => td.removeAttribute('data-pulse'), 300);
+        }
       }
       return;
     }
@@ -1574,11 +1588,6 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
             tabIndex: isCellActive ? -1 : undefined,
           } as const;
 
-          const cellWrapperProps = {
-            className: cellClassName,
-            ...(cellTitle ? { title: cellTitle } : {}),
-          };
-
           const cellFieldState = cellMeta ? { required: cellMeta.required, error: cellMeta.error, errorMessage: cellMeta.errorMessage } : undefined;
 
           if (currentRenderCell) {
@@ -1586,7 +1595,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
             if (customCell !== undefined) {
               return (
                 <td key={col.identifier} {...tdProps}>
-                  <div {...cellWrapperProps}>
+                  <div className={cellClassName} {...(cellTitle ? { title: cellTitle } : {})}>
                     <CellFieldStateScope value={cellFieldState ?? {}}>
                       {customCell}
                     </CellFieldStateScope>
@@ -1596,10 +1605,15 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
               );
             }
           }
+          // Fallback: plain read-only span. CellRequired applied here since no Field handles it.
+          const fallbackClassName = [
+            cellClassName,
+            cellMeta?.required ? styles.CellRequired : null,
+          ].filter(Boolean).join(' ');
           const value = getFormatColumnValue(row, col);
           return (
             <td key={col.identifier} {...tdProps}>
-              <div {...cellWrapperProps}>
+              <div className={fallbackClassName} {...(cellTitle ? { title: cellTitle } : {})}>
                 <span>{value}</span>
                 {cellMeta?.errorTooltip}
               </div>

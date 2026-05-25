@@ -19,13 +19,13 @@ const LIST_NAME = "TaxesList";
 interface TFields {
   id?: number;
   uuid?: string;
-  shortName: string;
+  name: string;
   code: string;
   rate: string;
   /** "INCLUDED" — налог в стоимости; "ADDED" — начисляется сверху. */
   calculationMethod: "INCLUDED" | "ADDED";
 }
-const DEFAULT_FIELDS: TFields = { shortName: "", code: "", rate: "", calculationMethod: "INCLUDED" };
+const DEFAULT_FIELDS: TFields = { name: "", code: "", rate: "", calculationMethod: "INCLUDED" };
 
 const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Tax");
@@ -37,7 +37,7 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       ...d,
-      shortName: d.shortName ?? "",
+      name: d.name ?? "",
       code: d.code ?? "",
       rate: d.rate !== undefined && d.rate !== null ? String(d.rate) : "",
       calculationMethod:
@@ -46,7 +46,7 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
           : "INCLUDED",
     }),
     buildPayload: (fd) => {
-      if (!fd.shortName?.trim()) return "Наименование обязательно";
+      if (!fd.name?.trim()) return "Наименование обязательно";
       let rateNum: number | null = null;
       if (fd.rate !== "" && fd.rate != null) {
         const n = parseFloat(fd.rate);
@@ -54,7 +54,7 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
         rateNum = n;
       }
       return {
-        shortName: fd.shortName.trim(),
+        name: fd.name.trim(),
         code: fd.code?.trim() || null,
         rate: rateNum,
         calculationMethod: fd.calculationMethod === "ADDED" ? "ADDED" : "INCLUDED",
@@ -72,15 +72,15 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupRow>
               <Field
-                label="Наименование"
-                name={`${form.formUid}_shortName`}
+                label={translate("name")}
+                name={`${form.formUid}_name`}
                 minWidth="280px"
-                value={form.fields.shortName}
-                onChange={(e) => form.setField("shortName", e.target.value)}
+                value={form.fields.name}
+                onChange={(e) => form.setField("name", e.target.value)}
                 disabled={form.isLoading}
               />
               <Field
-                label="Код"
+                label={translate("code")}
                 name={`${form.formUid}_code`}
                 minWidth="160px"
                 value={form.fields.code}
@@ -88,7 +88,7 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading}
               />
               <Field
-                label="Ставка, %"
+                label={translate("rate")}
                 name={`${form.formUid}_rate`}
                 minWidth="150px"
                 value={form.fields.rate}
@@ -96,7 +96,7 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading}
               />
               <FieldSelect
-                label="Способ расчёта налога"
+                label={translate("taxMethod")}
                 name={`${form.formUid}_method`}
                 value={form.fields.calculationMethod}
                 options={[
@@ -143,7 +143,7 @@ const TaxesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
     listName={LIST_NAME}
     columnsJson={columnsJson}
     FormComponent={TaxesForm}
-    getLabel={(d) => (d?.shortName as string) || "?"}
+    getLabel={(d) => (d?.name as string) || "?"}
     variant={variant}
     onSelectItem={onSelectItem}
   />

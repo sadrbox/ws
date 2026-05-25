@@ -40,7 +40,7 @@ function normalizeMethod(v: unknown): "INCLUDED" | "ADDED" {
  *   amountWithoutVat = amount − vatAmount
  *
  * ВАЖНО: `amountWithoutVat` — это БАЗА НДС (afterDiscount + exciseAmount),
- * т.е. «стоимость без НДС, но С АКЦИЗОМ». По НК РК ст.381 акциз входит в
+ * т.е. «Облагаемый оборот по НДС, но С АКЦИЗОМ». По НК РК ст.381 акциз входит в
  * облагаемый оборот по НДС, поэтому такая база — корректна.
  *
  * Графа 13 ЭСФ РК (НК РК ст.412) — «Стоимость без КОСВЕННЫХ налогов»
@@ -101,7 +101,7 @@ export function recalcSaleItemAmounts(
 export interface SaleItemTaxEntry {
 	taxUuid: string;
 	code: string | null;
-	shortName: string | null;
+	name: string | null;
 	rate: number;
 	amount: number;
 	/**
@@ -129,7 +129,7 @@ export function recalcSaleItemTaxes(
 	taxes: ReadonlyArray<{
 		taxUuid: string;
 		code?: string | null;
-		shortName?: string | null;
+		name?: string | null;
 		rate?: unknown;
 		calculationMethod?: string | null;
 		method?: string | null;
@@ -153,7 +153,7 @@ export function recalcSaleItemTaxes(
 		return {
 			taxUuid: String(t.taxUuid),
 			code: t.code ?? null,
-			shortName: t.shortName ?? null,
+			name: t.name ?? null,
 			rate,
 			method,
 			amount,

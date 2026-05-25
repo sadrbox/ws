@@ -2,53 +2,51 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"name": "Id",
 		"width": "80px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Номер",
 		"visible": true,
-		"position": 1,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "uuid",
 		"type": "string",
-		"name": "UUID",
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Уникальный идентификатор",
 		"visible": false,
-		"position": 2,
-		"filter": false,
 		"inlist": true
 	},
 	{
-		"identifier": "modelName",
+		"identifier": "name",
 		"type": "string",
-		"name": "Модель",
+		"width": "300px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Наименование",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "isPrimary",
+		"type": "boolean",
+		"width": "100px",
+		"minWidth": "70px",
+		"alignment": "center",
+		"hint": "Основная касса",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "organization.name",
+		"type": "string",
 		"width": "250px",
 		"minWidth": "80px",
 		"alignment": "left",
-		"hint": "Название модели",
+		"hint": "Организация",
 		"visible": true,
-		"position": 3,
-		"filter": true,
-		"inlist": true
-	},
-	{
-		"identifier": "accessLevel",
-		"type": "string",
-		"name": "Уровень доступа",
-		"width": "180px",
-		"minWidth": "80px",
-		"alignment": "left",
-		"hint": "Уровень доступа",
-		"visible": true,
-		"position": 4,
-		"filter": true,
 		"inlist": true
 	}
 ]

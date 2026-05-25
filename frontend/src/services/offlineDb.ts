@@ -131,10 +131,10 @@ class OfflineDatabase extends Dexie {
 			// ── Бизнес-таблицы ──
 			// Формат: "primaryKey, &uniqueIndex, normalIndex, ..."
 			// ++id — autoIncrement PK, &uuid — уникальный индекс, updatedAt — для delta-sync
-			organizations: "++id, &uuid, updatedAt, deletedAt, bin, shortName",
-			counterparties: "++id, &uuid, updatedAt, deletedAt, bin, shortName",
+			organizations: "++id, &uuid, updatedAt, deletedAt, bin, name",
+			counterparties: "++id, &uuid, updatedAt, deletedAt, bin, name",
 			contracts:
-				"++id, &uuid, updatedAt, deletedAt, organizationUuid, counterpartyUuid, shortName",
+				"++id, &uuid, updatedAt, deletedAt, organizationUuid, counterpartyUuid, name",
 			contacts:
 				"++id, &uuid, updatedAt, deletedAt, contactType, ownerType, ownerUuid",
 			contactpersons:
@@ -148,7 +148,7 @@ class OfflineDatabase extends Dexie {
 			notifications:
 				"++id, &uuid, updatedAt, deletedAt, userUuid, todoUuid, isRead",
 			warehouses:
-				"++id, &uuid, updatedAt, deletedAt, organizationUuid, shortName",
+				"++id, &uuid, updatedAt, deletedAt, organizationUuid, name",
 			sales:
 				"++id, &uuid, updatedAt, deletedAt, organizationUuid, counterpartyUuid, contractUuid, documentDate, status",
 			purchases:
@@ -167,16 +167,16 @@ class OfflineDatabase extends Dexie {
 				"++id, &uuid, updatedAt, deletedAt, organizationUuid, counterpartyUuid, contractUuid, documentDate, status",
 			"cash-expense-orders":
 				"++id, &uuid, updatedAt, deletedAt, organizationUuid, counterpartyUuid, contractUuid, documentDate, status",
-			brands: "++id, &uuid, updatedAt, deletedAt, shortName",
-			products: "++id, &uuid, updatedAt, deletedAt, brandUuid, shortName, sku",
+			brands: "++id, &uuid, updatedAt, deletedAt, name",
+			products: "++id, &uuid, updatedAt, deletedAt, brandUuid, name, sku",
 			saleitems: "++id, &uuid, updatedAt, deletedAt, saleUuid, productUuid",
 			employees:
 				"++id, &uuid, updatedAt, deletedAt, organizationUuid, fullName, iin",
-			positions: "++id, &uuid, updatedAt, deletedAt, shortName",
+			positions: "++id, &uuid, updatedAt, deletedAt, name",
 			"employee-histories":
 				"++id, &uuid, updatedAt, deletedAt, employeeUuid, positionUuid, organizationUuid",
 			"access-rights": "++id, &uuid, updatedAt, deletedAt, userUuid, modelName",
-			currencies: "++id, &uuid, updatedAt, deletedAt, code, shortName",
+			currencies: "++id, &uuid, updatedAt, deletedAt, code, name",
 		});
 
 		// v3: добавлены таблицы кадрового учёта

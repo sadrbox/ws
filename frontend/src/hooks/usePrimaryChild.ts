@@ -27,7 +27,7 @@ export function usePrimaryChild(params: {
 }) {
 	const {
 		endpoint,
-		displayField = "shortName",
+		displayField = "name",
 		scope,
 		enabled = true,
 	} = params;

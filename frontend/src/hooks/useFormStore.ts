@@ -23,6 +23,17 @@ import useUID from "./useUID";
 import { stableStringify } from "src/utils/normalize";
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Возвращает true, если значение обязательного поля считается пустым: null/undefined/""/числовой 0 (включая "0.0000"). */
+export const isItemFieldEmpty = (value: unknown): boolean => {
+	if (value === null || value === undefined || value === "") return true;
+	const n = Number(value);
+	return !isNaN(n) && n === 0;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ТИПЫ
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -44,6 +55,10 @@ export interface TableDef {
 	skipParentField?: boolean;
 	/** Batch endpoint (без /). Если задан — все pending-строки отправляются одним POST /{batchEndpoint}/batch */
 	batchEndpoint?: string;
+	/** Поля, обязательные в каждой не-удалённой строке. Сохранение блокируется, если хотя бы одно пустое. */
+	requiredItemFields?: string[];
+	/** Читаемые имена для обязательных полей (field → label), используются в сообщении об ошибке. */
+	requiredItemFieldLabels?: Record<string, string>;
 }
 
 /** Описание полей формы: ключ → значение по умолчанию */
@@ -68,6 +83,8 @@ export interface FormStoreState<F extends object> {
 		isEditMode: boolean;
 		error: string | null;
 		errorRevision: number;
+		tablesValidationFailed: boolean;
+		headerValidationFailed: boolean;
 	};
 }
 
@@ -198,6 +215,8 @@ function createFormStore<F extends object>(
 			isEditMode: !!uuid,
 			error: null,
 			errorRevision: 0,
+			tablesValidationFailed: false,
+				headerValidationFailed: false,
 		},
 	};
 
@@ -324,6 +343,36 @@ function createFormStore<F extends object>(
 		schedulePersist();
 	}
 
+	/**
+	 * Обновить поля формы без изменения dirty-состояния.
+	 * Используется для программного заполнения начальных значений
+	 * (например, авто-подстановка основного договора / банковского счёта).
+	 * Только патч-поля сливаются в savedSnapshot — реальные изменения
+	 * пользователя в других полях сохраняются нетронутыми.
+	 */
+	function setFieldsInitial(patch: Partial<F>): void {
+		state = {
+			...state,
+			fields: { ...state.fields, ...patch },
+		};
+		// Сливаем только патч-поля в сохранённый снапшот, чтобы
+		// авто-подстановка не воспринималась как изменение пользователя.
+		const mergedSnapFields: Record<string, unknown> = { ...parsedSnapshot.fields };
+		for (const k of Object.keys(patch)) {
+			if (derivedFields.has(k)) continue;
+			mergedSnapFields[k] = (state.fields as Record<string, unknown>)[k];
+		}
+		savedSnapshot = stableStringify({ fields: mergedSnapFields, tables: parsedSnapshot.tables });
+		try {
+			parsedSnapshot = JSON.parse(savedSnapshot) as typeof parsedSnapshot;
+		} catch {
+			parsedSnapshot = { fields: mergedSnapFields, tables: parsedSnapshot.tables };
+		}
+		snapshotRev++;
+		notify();
+		schedulePersist();
+	}
+
 	/** Заменить все поля формы целиком */
 	function replaceFields(fields: F): void {
 		state = { ...state, fields };
@@ -334,15 +383,14 @@ function createFormStore<F extends object>(
 	// ── Dirty tracking ──────────────────────────────────────────────────
 	// savedSnapshot хранит JSON-строку «чистого» состояния (после load / save).
 	// isDirty() сравнивает текущее состояние с последним сохранённым.
-	// ⚠️ Инициализация = начальные defaults + пустые таблицы (ДО восстановления из sessionStorage).
-	// Если данные были восстановлены из session — isDirty() вернёт true, что корректно.
-	// Снимок формируется stableStringify — нормализация значений (null/undefined/"",
-	// число-строка, трим, сортировка ключей, Decimal/Date) исключает
-	// ложный dirty от повторной записи тех же значений / технических ре-render'ов.
-	let savedSnapshot: string = stableStringify({
-		fields: defaultFields,
+	// ⚠️ Инициализация применяет stripDerived — то же самое что делает markClean().
+	// Без этого derived-поля (amount: 0 и т.п.) попадают в снапшот, но исключаются
+	// из current в isDirty(), что даёт немедленный ложный dirty при открытии формы.
+	const _initSnapStr = stableStringify({
+		fields: stripDerived(defaultFields as unknown as Record<string, unknown>),
 		tables: emptyTables,
 	});
+	let savedSnapshot: string = _initSnapStr;
 	// Версия snapshot — инкрементируется при каждом markClean().
 	// Используется как часть ключа memo-кешей dirty-методов.
 	let snapshotRev = 0;
@@ -351,7 +399,12 @@ function createFormStore<F extends object>(
 	let parsedSnapshot: {
 		fields: Record<string, unknown>;
 		tables: Record<string, TableState>;
-	} = { fields: defaultFields as Record<string, unknown>, tables: emptyTables };
+	};
+	try {
+		parsedSnapshot = JSON.parse(_initSnapStr);
+	} catch {
+		parsedSnapshot = { fields: {}, tables: emptyTables };
+	}
 
 	/** Сбросить dirty-флаг (вызывать после load / save) */
 	function markClean(): void {
@@ -614,7 +667,7 @@ function createFormStore<F extends object>(
 		const payloadOrError = buildPayload(state.fields);
 		if (typeof payloadOrError === "string") {
 			setError(payloadOrError);
-			setMeta({ isLoading: false });
+			setMeta({ isLoading: false, headerValidationFailed: true });
 			return { success: false };
 		}
 
@@ -828,6 +881,7 @@ function createFormStore<F extends object>(
 		// Мутации fields
 		setField,
 		setFields,
+		setFieldsInitial,
 		replaceFields,
 
 		// Мутации tables
@@ -1060,8 +1114,12 @@ export function clearNotificationJournal(): void {
 let nextNoteId = 1;
 const paneNotesMap = new Map<string, PaneNotification[]>();
 const noteListeners = new Set<() => void>();
+let groupsSnapshot: PaneNotificationGroup[] = [];
 
 function notifyNoteListeners(): void {
+	groupsSnapshot = paneNotesMap.size === 0
+		? emptyGroups
+		: Array.from(paneNotesMap.entries()).map(([paneId, notifications]) => ({ paneId, notifications }));
 	for (const l of noteListeners) l();
 }
 
@@ -1186,13 +1244,7 @@ const emptyGroups: PaneNotificationGroup[] = [];
 export function useAllPaneNotifications(): PaneNotificationGroup[] {
 	return useSyncExternalStore(
 		subscribeNotes,
-		() => {
-			if (paneNotesMap.size === 0) return emptyGroups;
-			return Array.from(paneNotesMap.entries()).map(([paneId, notifications]) => ({
-				paneId,
-				notifications,
-			}));
-		},
+		() => groupsSnapshot,
 		() => emptyGroups,
 	);
 }
@@ -1295,6 +1347,8 @@ export interface UseFormStoreReturn<F extends object> {
 	setField: <K extends keyof F>(field: K, value: F[K]) => void;
 	/** Обновить несколько полей */
 	setFields: (patch: Partial<F>) => void;
+	/** Обновить поля без изменения dirty-состояния (для авто-подстановки начальных значений) */
+	setFieldsInitial: (patch: Partial<F>) => void;
 
 	/** Загрузить с сервера (GET).
 	 * @param opts.noCache — обойти HTTP-кэш браузера (для кнопки «Обновить»). */
@@ -1546,14 +1600,32 @@ export function useFormStore<F extends object>(
 			);
 
 			// onItemsChange — колбэк для SubTable.onItemsChange
-			// Фильтрует строки с _pendingAction и сохраняет в store
+			// Фильтрует строки с _pendingAction и сохраняет в store.
+			// Если флаг tablesValidationFailed поднят — перепроверяем обязательные поля:
+			// сбрасываем флаг только когда все required-поля во всех строках заполнены.
 			// eslint-disable-next-line react-hooks/rules-of-hooks
 			const onItemsChange = useCallback(
 				(items: TDataItem[] | undefined) => {
 					const all = items ?? [];
 					const pending = all.filter((r: any) => r._pendingAction);
 					store.setTablePending(tableKey, pending);
+					if (store.getSnapshot().meta.tablesValidationFailed) {
+						const def = tableDefs[tableKey];
+						if (!def?.requiredItemFields?.length) {
+							store.setMeta({ tablesValidationFailed: false });
+							return;
+						}
+						const toCheck = pending.filter((r: any) => r._pendingAction !== "delete");
+						const allFilled = toCheck.every((r: any) =>
+							def.requiredItemFields!.every(f => !isItemFieldEmpty(r[f]))
+						);
+						if (allFilled) {
+							store.setMeta({ tablesValidationFailed: false });
+						}
+					}
 				},
+				// tableDefs is stable (from options destructure, same reference across renders)
+				// eslint-disable-next-line react-hooks/exhaustive-deps
 				[tableKey],
 			);
 
@@ -1590,6 +1662,33 @@ export function useFormStore<F extends object>(
 			// В конце явно сбрасываем isLoading, если caller не запросил
 			// сохранение isLoading=true (используется handleSaveAndClose, чтобы
 			// поля не «прыгали» enabled↔disabled во время анмаунта панели).
+
+			// Проверка обязательных полей в pending-строках вложенных таблиц
+			for (const [tableKey, def] of Object.entries(tableDefs)) {
+				if (!def.requiredItemFields?.length) continue;
+				const { pending } = store.getSnapshot().tables[tableKey] ?? { pending: [] };
+				const toSave = pending.filter((r: any) => r._pendingAction !== "delete");
+				// Группируем по полю: { fieldKey → [lineNum, ...] }
+				const fieldToLines: Record<string, number[]> = {};
+				toSave.forEach((r: any, idx: number) => {
+					const lineNum: number = (r._lineNumber as number | undefined) ?? idx + 1;
+					for (const f of def.requiredItemFields!) {
+						if (isItemFieldEmpty(r[f])) {
+							(fieldToLines[f] ??= []).push(lineNum);
+						}
+					}
+				});
+				const parts = Object.entries(fieldToLines).map(([f, nums]) => {
+					const label = def.requiredItemFieldLabels?.[f] ?? f;
+					return `«${label}» в стр. ${nums.join(", ")}`;
+				});
+				if (parts.length > 0) {
+					store.setError(`«${def.label}»: не заполнено\n   - ${parts.join(";\n   - ")}`);
+					store.setMeta({ tablesValidationFailed: true });
+					return false;
+				}
+			}
+
 			const { success, savedData } = await store.submitFields(
 				buildPayloadRef.current,
 				mapRef.current,
@@ -1604,14 +1703,15 @@ export function useFormStore<F extends object>(
 			}
 
 			// Коммит всех pending-таблиц.
-			// Важно: НЕ очищаем pending здесь — сначала дадим afterSave
-			// (invalidate + refetch SubTable) принести свежие данные, иначе
-			// SubTable между шагами успевает отрисовать устаревшие строки
-			// из локального кэша react-query.
+			// clear: true — сбрасываем pending сразу после успешного коммита,
+			// ДО вызова afterSave. Это позволяет React завершить re-render
+			// (initialPendingRows → []) до того, как afterSave дождётся refetch.
+			// Когда refetch прилетит, SubTable увидит пустой pending и выполнит
+			// чистую замену кэша без мержа — дубликаты исключены.
 			const parentUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid ?? "";
 			if (Object.keys(tableDefs).length > 0 && parentUuid) {
 				try {
-					await store.commitAllTables(parentUuid, { clear: false });
+					await store.commitAllTables(parentUuid, { clear: true });
 				} catch (e: any) {
 					store.setError(e?.message || "Не удалось сохранить вложенные данные");
 					if (!keepLoading) store.setMeta({ isLoading: false });
@@ -1620,8 +1720,6 @@ export function useFormStore<F extends object>(
 			}
 
 			// afterSave — дополнительная логика (invalidate queries, refetch и т.д.).
-			// Должна возвращать Promise, чтобы мы дождались появления свежих
-			// данных ДО очистки pending. См. комментарий выше.
 			if (afterSaveRef.current) {
 				try {
 					await afterSaveRef.current(savedData);
@@ -1632,12 +1730,7 @@ export function useFormStore<F extends object>(
 				}
 			}
 
-			// Теперь, когда серверные данные SubTable уже актуальны (afterSave
-			// дождался refetch), безопасно сбрасываем локальные pending-строки.
-			if (Object.keys(tableDefs).length > 0 && parentUuid) {
-				store.clearAllTablesPending();
-			}
-
+			store.setMeta({ tablesValidationFailed: false, headerValidationFailed: false });
 			void onSaveRef.current?.();
 			store.markClean();
 
@@ -1808,6 +1901,7 @@ export function useFormStore<F extends object>(
 		// Прямые мутации
 		setField: store.setField,
 		setFields: store.setFields,
+		setFieldsInitial: store.setFieldsInitial,
 
 		// API
 		loadFromServer,

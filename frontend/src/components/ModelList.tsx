@@ -41,7 +41,7 @@ const t = (key: string): string => translate(key) || key;
  *   listName="OrganizationsList"
  *   columnsJson={columnsJson}
  *   FormComponent={OrganizationsForm}
- *   getLabel={(d) => d?.shortName || "?"}
+ *   getLabel={(d) => d?.name || "?"}
  * />
  * ```
  */

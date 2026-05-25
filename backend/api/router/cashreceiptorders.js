@@ -1,6 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete } from "../../utils/checkReferences.js";
 const router = express.Router();
 const MODEL = "cashReceiptOrder";
@@ -83,6 +83,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				organization: true,
 				counterparty: true,
 				contract: true,
+				cashbox: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		};
@@ -120,10 +121,11 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 				organization: true,
 				counterparty: true,
 				contract: true,
+				cashbox: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
-		if (!item)
+		if (!item || !checkOwnership(item, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -146,6 +148,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			organizationUuid,
 			counterpartyUuid,
 			contractUuid,
+			cashboxUuid,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
@@ -155,12 +158,14 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
+				cashboxUuid: cashboxUuid || null,
 				authorUuid: req.user.uuid,
 			},
 			include: {
 				organization: true,
 				counterparty: true,
 				contract: true,
+				cashbox: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
@@ -182,6 +187,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			"organizationUuid",
 			"counterpartyUuid",
 			"contractUuid",
+			"cashboxUuid",
 		]) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
@@ -191,6 +197,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.amount !== undefined)
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
+		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true } });
+		if (!existing || !checkOwnership(existing, req))
+			return res.status(404).json({ success: false, message: "Не найдено" });
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -198,6 +208,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				organization: true,
 				counterparty: true,
 				contract: true,
+				cashbox: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});

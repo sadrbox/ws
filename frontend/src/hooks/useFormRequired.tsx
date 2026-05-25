@@ -30,14 +30,18 @@ const FormRequiredContext = createContext<FormRequiredState>(EMPTY);
 export const FormRequiredScope: FC<{
   docType?: DocumentType;
   requiredKeys?: readonly string[];
+  /** Активирует подсветку обязательных полей. По умолчанию false — подсветка
+   *  не показывается, пока не будет явно включена (например, после неудачного сохранения). */
+  active?: boolean;
   children: ReactNode;
-}> = ({ docType, requiredKeys, children }) => {
+}> = ({ docType, requiredKeys, active = false, children }) => {
   const value = useMemo<FormRequiredState>(() => {
+    if (!active) return EMPTY;
     if (docType) return { requiredKeys: new Set(REQUIRED_FIELDS_MAP[docType]) };
     if (requiredKeys?.length) return { requiredKeys: new Set(requiredKeys) };
     return EMPTY;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docType, requiredKeys?.join(",")]);
+  }, [active, docType, requiredKeys?.join(",")]);
   return (
     <FormRequiredContext.Provider value={value}>
       {children}

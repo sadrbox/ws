@@ -302,7 +302,7 @@ router.use(cors());
 
 router.post("/counterparties", async (req, res) => {
 	try {
-		const { bin, shortName, displayName } = req.body;
+		const { bin, name, displayName } = req.body;
 
 		// Валидация
 		const errors = [];
@@ -313,8 +313,8 @@ router.post("/counterparties", async (req, res) => {
 			errors.push("BIN должен состоять ровно из 12 цифр");
 		}
 
-		if (shortName && typeof shortName !== "string") {
-			errors.push("shortName должен быть строкой");
+		if (name && typeof name !== "string") {
+			errors.push("name должен быть строкой");
 		}
 
 		if (displayName && typeof displayName !== "string") {
@@ -331,7 +331,7 @@ router.post("/counterparties", async (req, res) => {
 		const counterparty = await prisma.counterparty.create({
 			data: {
 				bin: bin.trim(),
-				shortName: shortName?.trim() || null,
+				name: name?.trim() || null,
 				displayName: displayName?.trim() || null,
 			},
 		});

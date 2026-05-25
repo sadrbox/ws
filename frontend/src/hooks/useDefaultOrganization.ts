@@ -14,8 +14,12 @@ export function useDefaultOrganization(): {
 		const user = auth.user;
 		// Берём organizationUuid непосредственно из пользователя
 		if (user?.organizationUuid) {
-			// Название организации — из employee.organization (если есть) или пустая строка
-			const orgName = user.employee?.organization?.shortName || "";
+			const orgName =
+				user.userPermissions?.find(
+					(up) => up.organizationUuid === user.organizationUuid,
+				)?.organization?.name ||
+				user.employee?.organization?.name ||
+				"";
 			return {
 				organizationUuid: user.organizationUuid,
 				organizationName: orgName,

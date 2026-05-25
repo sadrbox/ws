@@ -4,8 +4,8 @@ import { prisma } from "../prisma/prisma-client.js";
  * Маппинг ownerType → { model, displayField }
  */
 const OWNER_CONFIG = {
-	organization: { model: "organization", field: "shortName" },
-	counterparty: { model: "counterparty", field: "shortName" },
+	organization: { model: "organization", field: "name" },
+	counterparty: { model: "counterparty", field: "name" },
 	contactperson: { model: "contactPerson", field: "fullName" },
 	employee: { model: "employee", field: "fullName" },
 };

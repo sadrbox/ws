@@ -1,4 +1,5 @@
 import { FC, useId } from "react";
+import { getTranslation } from "src/i18";
 import styles from "./FieldToggle.module.scss";
 
 export interface FieldToggleProps {
@@ -80,7 +81,7 @@ const FieldToggle: FC<FieldToggleProps> = ({
         onChange={handleChange}
         className={styles.input}
       />
-      {label && <span className={styles.label}>{label}</span>}
+      {label && <span className={styles.label}>{getTranslation(label)}</span>}
       <span className={styles.track} aria-hidden>
         <span className={styles.thumb}>
           {value && (

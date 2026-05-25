@@ -2,66 +2,51 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"name": "Id",
 		"width": "80px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Номер",
 		"visible": true,
-		"position": 1,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "uuid",
 		"type": "string",
-		"name": "UUID",
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Уникальный идентификатор",
 		"visible": false,
-		"position": 2,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "bin",
 		"type": "string",
-		"name": "БИН",
 		"width": "150px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "БИН",
 		"visible": true,
-		"position": 2,
-		"filter": false,
 		"inlist": true
 	},
 	{
-		"identifier": "shortName",
+		"identifier": "name",
 		"type": "string",
-		"name": "Наименование",
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Наименование",
 		"visible": true,
-		"position": 3,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "displayName",
 		"type": "string",
-		"name": "Полное наименование",
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Полное наименование",
 		"visible": true,
-		"position": 4,
-		"filter": false,
 		"inlist": true
 	}
 ]

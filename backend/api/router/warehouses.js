@@ -1,13 +1,13 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
 
 const MODEL = "warehouse";
 const ROUTE = "warehouses";
-const TEXT_FIELDS = ["shortName", "address", "comment"];
+const TEXT_FIELDS = ["name", "address", "comment"];
 
 // ============================================
 // GET
@@ -33,8 +33,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				? req.query.filter
 				: {};
 
-		// Сортировка
-		const orderBy = [];
+		// Сортировка — основной склад всегда первым
+		const orderBy = [{ isPrimary: "desc" }];
 		const sortParam =
 			typeof req.query.sort === "string" ? req.query.sort : null;
 		if (sortParam) {
@@ -48,8 +48,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				}
 			} catch {}
 		}
-		if (orderBy.length === 0) orderBy.push({ id: "asc" });
-		else if (!orderBy.some((o) => "id" in o)) orderBy.push({ id: "asc" });
+		if (!orderBy.some((o) => "id" in o)) orderBy.push({ id: "asc" });
 
 		// Поиск
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
@@ -140,7 +139,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			where,
 			include: { organization: true },
 		});
-		if (!item)
+		if (!item || !checkOwnership(item, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -154,21 +153,36 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ============================================
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { shortName, address, comment, organizationUuid } = req.body;
-		if (!shortName?.trim()) {
+		const { name, address, comment, organizationUuid, isPrimary } =
+			req.body;
+		if (!name?.trim()) {
 			return res
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
 		}
-		const item = await prisma[MODEL].create({
-			data: {
-				shortName: shortName.trim(),
-				address: address?.trim() ?? null,
-				comment: comment?.trim() ?? null,
-				organizationUuid: organizationUuid || null,
-			},
-			include: { organization: true },
+
+		const makePrimary = isPrimary === true;
+		const orgUuid = organizationUuid || req.user?.organizationUuid || null;
+
+		const item = await prisma.$transaction(async (tx) => {
+			if (makePrimary && orgUuid) {
+				await tx.warehouse.updateMany({
+					where: { organizationUuid: orgUuid, isPrimary: true },
+					data: { isPrimary: false },
+				});
+			}
+			return tx.warehouse.create({
+				data: {
+					name: name.trim(),
+					address: address?.trim() ?? null,
+					comment: comment?.trim() ?? null,
+					organizationUuid: orgUuid,
+					isPrimary: makePrimary,
+				},
+				include: { organization: true },
+			});
 		});
+
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
 		console.error(`POST /${ROUTE} error:`, error);
@@ -187,17 +201,37 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const where = isNumeric ? { id: numId } : { uuid: param };
 
 		const data = {};
-		const fields = ["shortName", "address", "comment", "organizationUuid"];
-		for (const f of fields) {
+		const scalarFields = ["name", "address", "comment", "organizationUuid"];
+		for (const f of scalarFields) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
+		if (req.body.isPrimary !== undefined) data.isPrimary = !!req.body.isPrimary;
 
-		const item = await prisma[MODEL].update({
-			where,
-			data,
-			include: { organization: true },
+		const preCheck = await prisma.warehouse.findUnique({ where, select: { organizationUuid: true } });
+		if (!preCheck || !checkOwnership(preCheck, req))
+			return res.status(404).json({ success: false, message: "Не найдено" });
+		const item = await prisma.$transaction(async (tx) => {
+			if (data.isPrimary === true) {
+				const current = await tx.warehouse.findUnique({ where });
+				if (current?.organizationUuid) {
+					await tx.warehouse.updateMany({
+						where: {
+							organizationUuid: current.organizationUuid,
+							isPrimary: true,
+							NOT: { uuid: current.uuid },
+						},
+						data: { isPrimary: false },
+					});
+				}
+			}
+			return tx.warehouse.update({
+				where,
+				data,
+				include: { organization: true },
+			});
 		});
+
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2025")

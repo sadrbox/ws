@@ -2,80 +2,61 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"name": "Id",
 		"width": "80px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Номер",
 		"visible": true,
-		"position": 1,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "uuid",
 		"type": "string",
-		"name": "UUID",
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Уникальный идентификатор",
 		"visible": false,
-		"position": 2,
-		"filter": false,
 		"inlist": false
 	},
 	{
 		"identifier": "contactType",
 		"type": "string",
-		"name": "Тип контакта",
 		"width": "250px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Тип контакта",
 		"visible": true,
-		"position": 2,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "value",
 		"type": "string",
-		"name": "Значение",
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Значение контакта",
 		"visible": true,
-		"position": 3,
-		"filter": false,
 		"inlist": true
 	},
-
 	{
 		"identifier": "ownerName",
 		"type": "string",
-		"name": "Владелец",
 		"width": "250px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Владелец контакта",
 		"visible": true,
-		"position": 4,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "isPrimary",
 		"type": "boolean",
-		"name": "Основной",
 		"width": "80px",
 		"minWidth": "60px",
 		"alignment": "center",
 		"hint": "Основной контакт данного типа для этого владельца",
 		"visible": false,
-		"position": 5,
-		"filter": false,
 		"inlist": true
 	}
 ]

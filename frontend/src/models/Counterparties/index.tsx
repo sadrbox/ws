@@ -21,8 +21,8 @@ import { makePaneLabel } from "src/utils/buildPaneLabel";
 const MODEL_ENDPOINT = "counterparties";
 const LIST_NAME = "CounterpartiesList";
 
-interface TFields { id?: number; uuid?: string; bin: string; shortName: string; displayName: string; }
-const DEFAULT_FIELDS: TFields = { bin: "", shortName: "", displayName: "" };
+interface TFields { id?: number; uuid?: string; bin: string; name: string; displayName: string; }
+const DEFAULT_FIELDS: TFields = { bin: "", name: "", displayName: "" };
 
 const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Counterparty");
@@ -51,13 +51,13 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
       bankAccounts: { endpoint: "bankaccounts", parentField: "ownerUuid", label: translate("BankAccountsList") || "Банковские счета", extraFields: { ownerType: "counterparty" } },
       contracts: { endpoint: "contracts", parentField: "counterpartyUuid", label: translate("ContractsList") || "Договора" },
     },
-    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", shortName: d.shortName ?? "", displayName: d.displayName ?? "" }),
+    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", name: d.name ?? "", displayName: d.displayName ?? "" }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
       if (!bin || !/^\d{12}$/.test(bin)) return translate("binMustBe12Digits");
-      return { bin, shortName: fd.shortName?.trim() || null, displayName: fd.displayName?.trim() || null };
+      return { bin, name: fd.name?.trim() || null, displayName: fd.displayName?.trim() || null };
     },
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, translate("counterparty"), saved, saved.shortName || saved.bin),
+    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, translate("counterparty"), saved, saved.name || saved.bin),
     afterLoad: invalidateSubTables,
     afterSave: invalidateSubTables,
   });
@@ -75,9 +75,9 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <Field label={translate("shortName")} name={`${form.formUid}_shortName`} minWidth="339px" value={form.fields.shortName} onChange={e => form.setField("shortName", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="339px" value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
                 <Field label={translate("displayName")} name={`${form.formUid}_displayName`} minWidth="339px" value={form.fields.displayName} onChange={e => form.setField("displayName", e.target.value)} disabled={form.isLoading} />
-                <Field label={`${translate("binIin")} *`} name={`${form.formUid}_bin`} minWidth="339px" value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} />
+                <Field label={`${translate("binIin")}`} name={`${form.formUid}_bin`} minWidth="339px" value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} />
               </GroupCol>
             </div>
           </div>
@@ -86,24 +86,24 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
     ];
     if (canReadBankAccounts) result.push({
       id: "tab1", label: translate("BankAccountsList"), component: (
-        <BankAccountsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={bankAccounts.pending} onItemsChange={bankAccounts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
+        <BankAccountsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.name} initialPendingRows={bankAccounts.pending} onItemsChange={bankAccounts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
       )
     });
     if (canReadContracts) result.push({
       id: "tab2", label: translate("ContractsList"), component: (
-        <ContractsTable deferRemoteChanges parentKey="counterpartyUuid" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contracts.pending} onItemsChange={contracts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
+        <ContractsTable deferRemoteChanges parentKey="counterpartyUuid" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.name} initialPendingRows={contracts.pending} onItemsChange={contracts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
       )
     });
     if (canReadContacts) result.push({
       id: "tab3", label: translate("ContactsList"), component: (
-        <ContactsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.shortName} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
+        <ContactsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.name} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
       )
     });
     return result;
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts, canWrite, ownerUuid]);
 
   return (
-    <FormRequiredScope requiredKeys={["bin"]}>
+    <FormRequiredScope requiredKeys={["bin"]} active={form.meta.headerValidationFailed}>
       <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />
@@ -122,7 +122,7 @@ const CounterpartiesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TD
     listName={LIST_NAME}
     columnsJson={columnsJson}
     FormComponent={CounterpartiesForm}
-    getLabel={(d) => d?.shortName as string || "?"}
+    getLabel={(d) => d?.name as string || "?"}
     variant={variant}
     onSelectItem={onSelectItem}
   />

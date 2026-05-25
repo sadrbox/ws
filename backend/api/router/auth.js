@@ -6,6 +6,23 @@ import { generateToken, authMiddleware } from "../../utils/auth.js";
 
 const router = express.Router();
 
+/**
+ * Загружает accessRights, отфильтрованные по активной организации.
+ * Возвращает только права для activeOrg + глобальные права (organizationUuid = null).
+ * Если нет активной орг — только глобальные права.
+ */
+async function loadAccessRights(userUuid, organizationUuid) {
+	try {
+		const orgUuid = organizationUuid || null;
+		const where = orgUuid
+			? { userUuid, OR: [{ organizationUuid: orgUuid }, { organizationUuid: null }] }
+			: { userUuid, organizationUuid: null };
+		return await prisma.accessRight.findMany({ where, orderBy: { modelName: "asc" } });
+	} catch (_) {
+		return [];
+	}
+}
+
 // ── Полный список моделей для назначения прав ───────────────────────────
 const ALL_MODEL_NAMES = [
 	"Organization",
@@ -87,7 +104,12 @@ router.post("/auth/login", async (req, res) => {
 						organizationUuid: true,
 						role: true,
 						organization: {
-							select: { uuid: true, shortName: true, displayName: true, bin: true },
+							select: {
+								uuid: true,
+								name: true,
+								displayName: true,
+								bin: true,
+							},
 						},
 					},
 				},
@@ -101,6 +123,12 @@ router.post("/auth/login", async (req, res) => {
 						iin: true,
 						avatarPath: true,
 						organizationUuid: true,
+						organization: {
+							select: {
+								uuid: true,
+								name: true,
+							},
+						},
 					},
 				},
 			},
@@ -115,16 +143,8 @@ router.post("/auth/login", async (req, res) => {
 			});
 		}
 
-		// Подгружаем accessRights
-		let accessRights = [];
-		try {
-			accessRights = await prisma.accessRight.findMany({
-				where: { userUuid: user.uuid },
-				orderBy: { modelName: "asc" },
-			});
-		} catch (_) {
-			// Таблица access_rights ещё не создана — игнорируем
-		}
+		// Подгружаем accessRights (только для активной орг + глобальные)
+		const accessRights = await loadAccessRights(user.uuid, user.organizationUuid);
 
 		// Есть ли у пользователя установленный пароль?
 		const hasPassword = user.password && user.password.trim() !== "";
@@ -175,7 +195,7 @@ router.post("/auth/login", async (req, res) => {
 		// Генерируем JWT-токен
 		const token = generateToken(user);
 
-		// Определяем права доступа
+		// Определяем Разрешения пользователей
 		const isSuperOrDevAdmin =
 			user.isSuperAdmin || (isDev && trimmedUsername.toLowerCase() === "admin");
 		const rights = isSuperOrDevAdmin
@@ -240,7 +260,12 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 						organizationUuid: true,
 						role: true,
 						organization: {
-							select: { uuid: true, shortName: true, displayName: true, bin: true },
+							select: {
+								uuid: true,
+								name: true,
+								displayName: true,
+								bin: true,
+							},
 						},
 					},
 				},
@@ -256,16 +281,10 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 				.json({ success: false, message: "Пользователь не найден" });
 		}
 
-		// Подгружаем accessRights
-		let accessRights = [];
-		try {
-			accessRights = await prisma.accessRight.findMany({
-				where: { userUuid: user.uuid },
-				orderBy: { modelName: "asc" },
-			});
-		} catch (_) {}
+		// Подгружаем accessRights (только для активной орг + глобальные)
+		const accessRights = await loadAccessRights(user.uuid, user.organizationUuid);
 
-		// Определяем права доступа
+		// Определяем Разрешения пользователей
 		const isDev = process.env.NODE_ENV !== "production";
 		const isSuperOrDevAdmin =
 			user.isSuperAdmin || (isDev && user.username?.toLowerCase() === "admin");
@@ -371,25 +390,44 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 // ============================================
 router.post("/auth/register", async (req, res) => {
 	try {
-		const { bin, shortName, displayName, username, password } = req.body;
+		const { bin, name, displayName, username, password } = req.body;
 
 		// Валидация
 		if (!bin || typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
-			return res.status(400).json({ success: false, message: "БИН должен состоять ровно из 12 цифр" });
+			return res
+				.status(400)
+				.json({
+					success: false,
+					message: "БИН должен состоять ровно из 12 цифр",
+				});
 		}
 		const trimmedBin = bin.trim();
 		const trimmedUsername = (username || "").trim();
 		if (!trimmedUsername) {
-			return res.status(400).json({ success: false, message: "Имя пользователя обязательно" });
+			return res
+				.status(400)
+				.json({ success: false, message: "Имя пользователя обязательно" });
 		}
 		if (!password || typeof password !== "string" || password.length < 6) {
-			return res.status(400).json({ success: false, message: "Пароль должен быть не менее 6 символов" });
+			return res
+				.status(400)
+				.json({
+					success: false,
+					message: "Пароль должен быть не менее 6 символов",
+				});
 		}
 
 		// Проверяем, что БИН не занят
-		const existingOrg = await prisma.organization.findUnique({ where: { bin: trimmedBin } });
+		const existingOrg = await prisma.organization.findUnique({
+			where: { bin: trimmedBin },
+		});
 		if (existingOrg) {
-			return res.status(409).json({ success: false, message: "Организация с таким БИН уже зарегистрирована" });
+			return res
+				.status(409)
+				.json({
+					success: false,
+					message: "Организация с таким БИН уже зарегистрирована",
+				});
 		}
 
 		// Проверяем, что username не занят
@@ -397,7 +435,9 @@ router.post("/auth/register", async (req, res) => {
 			where: { username: trimmedUsername },
 		});
 		if (existingUser) {
-			return res.status(409).json({ success: false, message: "Имя пользователя уже занято" });
+			return res
+				.status(409)
+				.json({ success: false, message: "Имя пользователя уже занято" });
 		}
 
 		// Генерируем invite-код (8 символов hex)
@@ -410,7 +450,7 @@ router.post("/auth/register", async (req, res) => {
 			const org = await tx.organization.create({
 				data: {
 					bin: trimmedBin,
-					shortName: (shortName || "").trim() || null,
+					name: (name || "").trim() || null,
 					displayName: (displayName || "").trim() || null,
 					inviteCode,
 				},
@@ -469,21 +509,37 @@ router.post("/auth/join", async (req, res) => {
 		const { inviteCode, username, password } = req.body;
 
 		if (!inviteCode || typeof inviteCode !== "string") {
-			return res.status(400).json({ success: false, message: "Код приглашения обязателен" });
+			return res
+				.status(400)
+				.json({ success: false, message: "Код приглашения обязателен" });
 		}
 		const trimmedCode = inviteCode.trim().toUpperCase();
 		const trimmedUsername = (username || "").trim();
 		if (!trimmedUsername) {
-			return res.status(400).json({ success: false, message: "Имя пользователя обязательно" });
+			return res
+				.status(400)
+				.json({ success: false, message: "Имя пользователя обязательно" });
 		}
 		if (!password || typeof password !== "string" || password.length < 6) {
-			return res.status(400).json({ success: false, message: "Пароль должен быть не менее 6 символов" });
+			return res
+				.status(400)
+				.json({
+					success: false,
+					message: "Пароль должен быть не менее 6 символов",
+				});
 		}
 
 		// Находим организацию по invite-коду
-		const org = await prisma.organization.findUnique({ where: { inviteCode: trimmedCode } });
+		const org = await prisma.organization.findUnique({
+			where: { inviteCode: trimmedCode },
+		});
 		if (!org) {
-			return res.status(404).json({ success: false, message: "Организация с таким кодом приглашения не найдена" });
+			return res
+				.status(404)
+				.json({
+					success: false,
+					message: "Организация с таким кодом приглашения не найдена",
+				});
 		}
 
 		// Проверяем, что username не занят
@@ -491,7 +547,9 @@ router.post("/auth/join", async (req, res) => {
 			where: { username: trimmedUsername },
 		});
 		if (existingUser) {
-			return res.status(409).json({ success: false, message: "Имя пользователя уже занято" });
+			return res
+				.status(409)
+				.json({ success: false, message: "Имя пользователя уже занято" });
 		}
 
 		const hashedPassword = await bcrypt.hash(password, 12);
@@ -547,7 +605,9 @@ router.post("/auth/join", async (req, res) => {
 router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 	try {
 		if (!req.user?.uuid) {
-			return res.status(401).json({ success: false, message: "Не авторизован" });
+			return res
+				.status(401)
+				.json({ success: false, message: "Не авторизован" });
 		}
 
 		const { organizationUuid } = req.body;
@@ -565,7 +625,12 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 						organizationUuid: true,
 						role: true,
 						organization: {
-							select: { uuid: true, shortName: true, displayName: true, bin: true },
+							select: {
+								uuid: true,
+								name: true,
+								displayName: true,
+								bin: true,
+							},
 						},
 					},
 				},
@@ -576,7 +641,9 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 		});
 
 		if (!user) {
-			return res.status(404).json({ success: false, message: "Пользователь не найден" });
+			return res
+				.status(404)
+				.json({ success: false, message: "Пользователь не найден" });
 		}
 
 		// Суперадмин может переключаться в любую орг
@@ -587,7 +654,9 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 				console.warn(
 					`[Security] User ${user.username} (${user.uuid}) attempted to switch to unauthorized org ${organizationUuid}`,
 				);
-				return res.status(403).json({ success: false, message: "Нет доступа к этой организации" });
+				return res
+					.status(403)
+					.json({ success: false, message: "Нет доступа к этой организации" });
 			}
 		}
 
@@ -597,21 +666,19 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 			data: { organizationUuid: organizationUuid ?? null },
 		});
 
-		// Подгружаем права для новой орг
-		let accessRights = [];
-		try {
-			accessRights = await prisma.accessRight.findMany({
-				where: { userUuid: user.uuid },
-				orderBy: { modelName: "asc" },
-			});
-		} catch (_) {}
+		// Подгружаем права для новой орг (только для активной орг + глобальные)
+		const accessRights = await loadAccessRights(user.uuid, organizationUuid ?? null);
 
 		const isDev = process.env.NODE_ENV !== "production";
 		const isSuperOrDevAdmin =
 			user.isSuperAdmin || (isDev && user.username?.toLowerCase() === "admin");
-		const rights = isSuperOrDevAdmin ? generateFullAccessRights() : accessRights;
+		const rights = isSuperOrDevAdmin
+			? generateFullAccessRights()
+			: accessRights;
 
-		const allowedOrgUuids = user.userPermissions.map((uo) => uo.organizationUuid);
+		const allowedOrgUuids = user.userPermissions.map(
+			(uo) => uo.organizationUuid,
+		);
 
 		// Формируем обновлённый объект пользователя
 		const updatedUser = {
@@ -641,12 +708,21 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 router.post("/auth/regenerate-invite", authMiddleware, async (req, res) => {
 	try {
 		if (!req.user || !req.user.uuid) {
-			return res.status(401).json({ success: false, message: "Не авторизован" });
+			return res
+				.status(401)
+				.json({ success: false, message: "Не авторизован" });
 		}
 
-		const user = await prisma.user.findUnique({ where: { uuid: req.user.uuid } });
+		const user = await prisma.user.findUnique({
+			where: { uuid: req.user.uuid },
+		});
 		if (!user || !user.organizationUuid) {
-			return res.status(400).json({ success: false, message: "Пользователь не привязан к организации" });
+			return res
+				.status(400)
+				.json({
+					success: false,
+					message: "Пользователь не привязан к организации",
+				});
 		}
 
 		const newCode = crypto.randomBytes(4).toString("hex").toUpperCase();

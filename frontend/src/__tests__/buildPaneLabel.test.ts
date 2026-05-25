@@ -4,7 +4,8 @@ vi.mock("src/i18", () => ({
 	translate: (key: string) => {
 		const dict: Record<string, string> = {
 			SaleItemsList: "Товары реализации",
-			SalesList: "Реализация",
+			SalesList: "Реализация товара и услуг",
+			CashboxesList: "Кассы",
 			new: "Новый",
 		};
 		return dict[key] ?? "";
@@ -34,9 +35,9 @@ describe("makePaneLabel", () => {
 		).toBe("Товары реализации: №7 · Товар A · 1 × 100");
 	});
 
-	it("если displayValue не задан — берёт saved.shortName", () => {
+	it("если displayValue не задан — берёт saved.name", () => {
 		expect(
-			makePaneLabel("SaleItemsList", "fallback", { id: 5, shortName: "X" }),
+			makePaneLabel("SaleItemsList", "fallback", { id: 5, name: "X" }),
 		).toBe("Товары реализации: №5 · X");
 	});
 
@@ -61,12 +62,12 @@ describe("makeDocLabel", () => {
 	it("формирует метку документа с датой", () => {
 		expect(
 			makeDocLabel("SalesList", "fallback", { id: 42, date: "2026-04-21" }),
-		).toBe("Реализация: №42 · 21.04.2026");
+		).toBe("Реализация товара и услуг: №42 · 21.04.2026");
 	});
 
 	it("если даты нет — только №id", () => {
 		expect(makeDocLabel("SalesList", "fallback", { id: 12 })).toBe(
-			"Реализация: №12",
+			"Реализация товара и услуг: №12",
 		);
 	});
 
@@ -78,7 +79,7 @@ describe("makeDocLabel", () => {
 				{ id: 8, postedAt: "2026-01-10" },
 				"postedAt",
 			),
-		).toBe("Реализация: №8 · 10.01.2026");
+		).toBe("Реализация товара и услуг: №8 · 10.01.2026");
 	});
 });
 
@@ -101,17 +102,17 @@ describe("makePaneLabelFromData", () => {
 				"SaleItemsList",
 				"fallback",
 				{ id: 9, uuid: "u" },
-				"Реализация: №7 · 21.04.2026 · Товар",
+				"Реализация товара и услуг: №7 · 21.04.2026 · Товар",
 			),
 		).toBe("Товары реализации: №9 · Реализация: №7 · 21.04.2026 · Товар");
 	});
 
-	it("без displayValue — берёт shortName", () => {
+	it("без displayValue — берёт name", () => {
 		expect(
 			makePaneLabelFromData("SaleItemsList", "fallback", {
 				id: 1,
 				uuid: "u",
-				shortName: "Альфа",
+				name: "Альфа",
 			}),
 		).toBe("Товары реализации: №1 · Альфа");
 	});

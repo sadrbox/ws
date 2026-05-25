@@ -72,7 +72,7 @@ describe("usePrimaryChild", () => {
   it("clearPrimary шлёт PUT с isPrimary=false для текущего primary", async () => {
     mockGet.mockResolvedValue({
       success: true,
-      items: [{ uuid: "x", shortName: "Договор", isPrimary: true }],
+      items: [{ uuid: "x", name: "Договор", isPrimary: true }],
     });
     mockPut.mockResolvedValue({ success: true });
     const { result } = renderHook(

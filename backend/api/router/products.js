@@ -1,13 +1,13 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
 
 const MODEL = "product";
 const ROUTE = "products";
-const TEXT_FIELDS = ["shortName", "sku"];
+const TEXT_FIELDS = ["name", "sku"];
 
 // ── GET list ────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -122,7 +122,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			where: w,
 			include: { brand: true, unitOfMeasure: true },
 		});
-		if (!item)
+		if (!item || !checkOwnership(item, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -134,15 +134,16 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { shortName, sku, brandUuid, unitOfMeasureUuid } = req.body;
-		if (!shortName?.trim())
+		const { name, sku, brandUuid, unitOfMeasureUuid, isService } = req.body;
+		if (!name?.trim())
 			return res
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
 		const item = await prisma[MODEL].create({
 			data: {
-				shortName: shortName.trim(),
+				name: name.trim(),
 				sku: sku?.trim() || null,
+				isService: isService === true,
 				brandUuid: brandUuid || null,
 				unitOfMeasureUuid: unitOfMeasureUuid || null,
 				organizationUuid: req.user?.organizationUuid ?? null,
@@ -164,11 +165,15 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
-		const strFields = ["shortName", "sku", "brandUuid", "unitOfMeasureUuid"];
+		const strFields = ["name", "sku", "brandUuid", "unitOfMeasureUuid"];
 		for (const f of strFields) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
+		if (req.body.isService !== undefined) data.isService = req.body.isService === true;
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true } });
+		if (!existing || !checkOwnership(existing, req))
+			return res.status(404).json({ success: false, message: "Не найдено" });
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,

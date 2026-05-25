@@ -49,9 +49,9 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;
-    if (!data || data.uuid) return undefined;
+    if (data?.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
-    if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; }
+    if (data?.organizationUuid) { init.organizationUuid = data?.organizationUuid as string; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
     return init;
   })();
@@ -61,7 +61,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       description: d.description ?? "", status: d.status ?? "new",
-      organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.shortName ?? "",
+      organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.name ?? "",
       curatorUuid: d.curatorUuid ?? "", curatorName: d.curator?.employee?.fullName || d.curator?.username || "",
       executorUuid: d.executorUuid ?? "", executorName: d.executor?.employee?.fullName || d.executor?.username || "",
       createdAt: d.createdAt?.slice(0, 10) ?? "",
@@ -94,22 +94,22 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <FieldSelect label="Статус" name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} style={{ minWidth: 200 }} />
-                <LookupField label="Организация" name={`${form.formUid}_organization`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
+                <FieldSelect label={translate("status")} name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} style={{ minWidth: 200 }} />
+                <LookupField label={translate("organization")} name={`${form.formUid}_organization`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
                   onSelect={(uuid, display) => form.setFields({ organizationUuid: uuid, organizationName: display } as Partial<TFields>)}
                   onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-                <LookupField label="Куратор" name={`${form.formUid}_curator`} value={form.fields.curatorUuid} displayValue={form.fields.curatorName} endpoint="users" displayField="username" secondaryFields={["employee.fullName"]}
+                <LookupField label={translate("curator")} name={`${form.formUid}_curator`} value={form.fields.curatorUuid} displayValue={form.fields.curatorName} endpoint="users" displayField="username" secondaryFields={["employee.fullName"]}
                   onSelect={(uuid, display, item) => form.setFields({ curatorUuid: uuid, curatorName: item?.employee?.fullName || display } as Partial<TFields>)}
                   onClear={() => form.setFields({ curatorUuid: "", curatorName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-                <LookupField label="Исполнитель" name={`${form.formUid}_executor`} value={form.fields.executorUuid} displayValue={form.fields.executorName} endpoint="users" displayField="username" secondaryFields={["employee.fullName"]}
+                <LookupField label={translate("executor")} name={`${form.formUid}_executor`} value={form.fields.executorUuid} displayValue={form.fields.executorName} endpoint="users" displayField="username" secondaryFields={["employee.fullName"]}
                   onSelect={(uuid, display, item) => form.setFields({ executorUuid: uuid, executorName: item?.employee?.fullName || display } as Partial<TFields>)}
                   onClear={() => form.setFields({ executorUuid: "", executorName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
                 <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                  <FieldDate label="Дата создания" name={`${form.formUid}_createdAt`} width="200px" value={form.fields.createdAt} disabled />
-                  <Field label="Дней" name={`${form.formUid}_deadlineDays`} width="100px" value={form.fields.deadlineDays} onChange={e => handleDeadlineDaysChange(e.target.value)} disabled={form.isLoading} />
-                  <FieldDate label="Дедлайн" name={`${form.formUid}_deadline`} width="200px" value={form.fields.deadline} onChange={e => form.setField("deadline", e.target.value)} disabled={form.isLoading} />
+                  <FieldDate label={translate("createdAt")} name={`${form.formUid}_createdAt`} width="200px" value={form.fields.createdAt} disabled />
+                  <Field label={translate("days")} name={`${form.formUid}_deadlineDays`} width="100px" value={form.fields.deadlineDays} onChange={e => handleDeadlineDaysChange(e.target.value)} disabled={form.isLoading} />
+                  <FieldDate label={translate("deadline")} name={`${form.formUid}_deadline`} width="200px" value={form.fields.deadline} onChange={e => form.setField("deadline", e.target.value)} disabled={form.isLoading} />
                 </div>
-                <FieldTextarea label="Описание задачи" name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="120px" rows={6} />
+                <FieldTextarea label={translate("taskDescription")} name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="120px" rows={6} />
               </GroupCol>
             </div>
 

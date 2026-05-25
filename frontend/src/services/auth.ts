@@ -6,7 +6,7 @@ export interface OrgEntry {
 	role: string;
 	organization?: {
 		uuid: string;
-		shortName: string | null;
+		name: string | null;
 		displayName?: string | null;
 		bin?: string | null;
 	} | null;
@@ -19,7 +19,7 @@ export interface AuthUser {
 	organizationUuid?: string | null;
 	isSuperAdmin?: boolean;
 	allowedOrgUuids?: string[];
-	userOrganizations?: OrgEntry[];
+	userPermissions?: OrgEntry[];
 	accessRights?: {
 		modelName: string;
 		accessLevel: string;
@@ -33,7 +33,7 @@ export interface AuthUser {
 		iin: string | null;
 		avatarPath: string | null;
 		organizationUuid: string | null;
-		organization?: { uuid: string; shortName: string; bin?: string } | null;
+		organization?: { uuid: string; name: string; bin?: string } | null;
 		accessRights?: {
 			modelName: string;
 			accessLevel: string;
@@ -194,7 +194,7 @@ export function isAuthenticated(): boolean {
  */
 export async function registerOrganization(data: {
 	bin: string;
-	shortName?: string;
+	name?: string;
 	displayName?: string;
 	username: string;
 	password: string;

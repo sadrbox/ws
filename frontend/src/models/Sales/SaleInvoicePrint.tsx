@@ -9,17 +9,18 @@
  *   гр. 8 — Цена за единицу без НДС (без налогов, если есть акциз)
  *   гр. 11 — Размер скидки от цены, %
  *   гр. 12 — Сумма скидки
- *   гр. 13 — Стоимость без налогов (показывается только при наличии акциза)
+ *   гр. 13 — Стоимость (показывается только при наличии акциза)
  *   гр. 14 — Сумма акциза (НК РК ст. 463)
  *   гр. 15 — Ставка НДС, %
  *   гр. 16 — Сумма НДС
- *   гр. 17 — Стоимость с НДС
+ *   гр. 17 — Сумма
  *
- * Видимость опциональных колонок (скидка, акциз, НДС) задаётся пользователем
+ * Видимость опциональных колонок (Сумма скидки, акциз, НДС) задаётся пользователем
  * в модалке «Колонки таблицы» через чекбокс «В печать» (см. SaleItemsTable).
  */
 import type { CSSProperties, FC } from "react";
 import { A4Page, A4DocTitle, A4Field, A4Row, A4Signature } from "src/components/PrintLayout/A4Page";
+import { getFormatDateOnly } from "src/utils/main.module";
 
 export interface SaleItemPrintRow {
   number: number;
@@ -27,7 +28,9 @@ export interface SaleItemPrintRow {
   unit?: string;
   quantity: number;
   price: number;
-  /** Скидка по строке. */
+  /** true — услуга/работа; false/undefined — товар (запас). */
+  isService?: boolean;
+  /** Сумма скидки по строке. */
   discountPercent?: number;
   discountAmount?: number;
   /** Акциз (НК РК ст. 463). */
@@ -80,7 +83,7 @@ export interface SaleInvoicePrintData {
   receiverName?: string;
   /**
    * Является ли организация плательщиком НДС.
-   * По НК РК ст. 412 колонка «Ставка НДС» обязательна в накладной:
+   * По НК РК ст. 412 колонка «Ставка НДС, %» обязательна в накладной:
    *   true  → печатается числовая ставка (12 %, 0 % и т.д.)
    *   false → печатается «Без НДС»; колонка суммы НДС скрывается.
    */
@@ -96,12 +99,7 @@ const fmt = (v: number | undefined | null): string => {
 
 const fmtDate = (d?: string): string => {
   if (!d) return "";
-  try {
-    const dt = new Date(d);
-    return dt.toLocaleDateString("ru-RU");
-  } catch {
-    return d;
-  }
+  return getFormatDateOnly(d) || d;
 };
 
 const cellStyle: CSSProperties = {
@@ -146,18 +144,18 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   const hasIndirectTaxes = hasVat || hasExcise;
 
   // Заголовки колонок «цена» и «итог» зависят от состава налогов:
-  //  • есть только НДС            → «Цена без НДС» / «Стоимость с НДС»
-  //  • есть акциз (с НДС или без) → «Цена без налогов» / «Стоимость с НДС»
+  //  • есть только НДС            → «Цена без НДС» / «Сумма»
+  //  • есть акциз (с НДС или без) → «Цена» / «Сумма»
   //  • нет ни НДС, ни акциза      → «Цена» / «Сумма»
   const priceHeader = hasExcise
-    ? "Цена без налогов"
+    ? "Цена"
     : hasVat
-      ? "Цена без НДС"
+      ? "Цена"
       : "Цена";
-  const totalHeader = hasIndirectTaxes ? "Стоимость с НДС" : "Сумма";
-  // «Стоимость без НДС» — база для НДС (включает акциз, если он есть).
+  const totalHeader = hasIndirectTaxes ? "Сумма" : "Сумма";
+  // «Облагаемый оборот по НДС» — база для НДС (включает акциз, если он есть).
   // Имеет смысл при любом наличии НДС или акциза — без них дублирует итог.
-  const amountWithoutTaxesHeader = "Стоимость без НДС";
+  const amountWithoutTaxesHeader = "Облагаемый оборот по НДС";
 
   const showDiscPct = cols.discountPercent !== false && (cols.discountPercent === true || has((r) => r.discountPercent) || has((r) => r.discountAmount));
   const showDiscAmt = cols.discountAmount !== false && (cols.discountAmount === true || has((r) => r.discountAmount) || Number(data.totalDiscountAmount ?? 0) > 0);
@@ -169,7 +167,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   const showExciseRate = hasExcise && cols.exciseRate !== false && (cols.exciseRate === true || has((r) => r.exciseRate) || has((r) => r.exciseAmount));
   const showExciseAmt = hasExcise && cols.exciseAmount !== false && (cols.exciseAmount === true || has((r) => r.exciseAmount) || Number(data.totalExciseAmount ?? 0) > 0);
 
-  // По НК РК ст. 412 колонка «Ставка НДС» обязательна в накладной:
+  // По НК РК ст. 412 колонка «Ставка НДС, %» обязательна в накладной:
   //   • плательщик НДС    → показываем числовую ставку (12 %, 0 % …)
   //   • неплательщик НДС  → показываем «Без НДС» (isVatPayer=false)
   // Колонка суммы НДС отображается только у плательщиков НДС с реальным налогом.
@@ -177,8 +175,8 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   const showVatAmt = data.isVatPayer !== false && hasVat && cols.vatAmount !== false && (cols.vatAmount === true || has((r) => r.vatAmount) || Number(data.totalVatAmount ?? 0) > 0);
 
   // «Итого:» занимает все нечисловые левые колонки до первой суммовой.
-  // Порядок колонок: №, Наим., Ед.изм., Кол-во, Цена [, Скидка%] [, Сумма скидки] [, Стоимость] …
-  // itogoColSpan охватывает только: №, Наим., Ед.изм., Кол-во, Цена, Скидка% (не суммовые).
+  // Порядок колонок: №, Наим., Ед.изм., Кол-во, Цена [, Процент скидки, %] [, Сумма скидки] [, Стоимость] …
+  // itogoColSpan охватывает только: №, Наим., Ед.изм., Кол-во, Цена, Процент скидки, % (не суммовые).
   const itogoColSpan = 5 + (showDiscPct ? 1 : 0);
   const totalCols = itogoColSpan
     + (showDiscAmt ? 1 : 0)
@@ -188,7 +186,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
     + (showExciseAmt ? 1 : 0)
     + (showVatRate ? 1 : 0)
     + (showVatAmt ? 1 : 0)
-    + 1; /* Стоимость с НДС */
+    + 1; /* Сумма */
 
   return (
     <A4Page>
@@ -235,7 +233,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
             <th style={{ ...headCellStyle, width: "16mm" }}>Кол-во</th>
             <th style={{ ...headCellStyle, width: "20mm" }}>{priceHeader}</th>
             {showDiscPct && (
-              <th style={{ ...headCellStyle, width: "12mm" }}>Скидка, %</th>
+              <th style={{ ...headCellStyle, width: "12mm" }}>Процент скидки, %</th>
             )}
             {showDiscAmt && (
               <th style={{ ...headCellStyle, width: "20mm" }}>Сумма скидки</th>

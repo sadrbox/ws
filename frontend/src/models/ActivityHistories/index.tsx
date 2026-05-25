@@ -57,7 +57,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
       ...DEFAULT_FIELDS,
       actionType: d.actionType ?? "",
       organizationUuid: d.organizationUuid ?? "",
-      organizationShortName: d.organizationShortName ?? d.organization?.shortName ?? "",
+      organizationShortName: d.organizationShortName ?? d.organization?.name ?? "",
       bin: d.bin ?? "",
       userName: d.userName ?? "",
       host: d.host ?? "",
@@ -85,23 +85,23 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow>
-                <Field label="Тип действия" name={`${form.formUid}_actionType`} minWidth="200px" value={form.fields.actionType} disabled />
-                <Field label="Дата действия" name={`${form.formUid}_actionDate`} minWidth="200px" value={getFormatDate(form.fields.actionDate)} disabled />
+                <Field label={translate("actionType")} name={`${form.formUid}_actionType`} minWidth="200px" value={form.fields.actionType} disabled />
+                <Field label={translate("actionDate")} name={`${form.formUid}_actionDate`} minWidth="200px" value={getFormatDate(form.fields.actionDate)} disabled />
               </GroupRow>
               <GroupRow>
-                <Field label="Тип объекта" name={`${form.formUid}_objectType`} minWidth="200px" value={form.fields.objectType} disabled />
-                <Field label="Название объекта" name={`${form.formUid}_objectName`} minWidth="200px" value={form.fields.objectName} disabled />
-                <Field label="ID объекта" name={`${form.formUid}_objectId`} minWidth="120px" value={form.fields.objectId} disabled />
+                <Field label={translate("objectType")} name={`${form.formUid}_objectType`} minWidth="200px" value={form.fields.objectType} disabled />
+                <Field label={translate("objectName")} name={`${form.formUid}_objectName`} minWidth="200px" value={form.fields.objectName} disabled />
+                <Field label={translate("objectId")} name={`${form.formUid}_objectId`} minWidth="120px" value={form.fields.objectId} disabled />
               </GroupRow>
               <GroupRow>
-                <Field label="Организация" name={`${form.formUid}_organizationShortName`} minWidth="200px" value={form.fields.organizationShortName} disabled />
-                <Field label="БИН" name={`${form.formUid}_bin`} minWidth="150px" value={form.fields.bin} disabled />
+                <Field label={translate("organization")} name={`${form.formUid}_organizationShortName`} minWidth="200px" value={form.fields.organizationShortName} disabled />
+                <Field label={translate("bin")} name={`${form.formUid}_bin`} minWidth="150px" value={form.fields.bin} disabled />
               </GroupRow>
               <GroupRow>
-                <Field label="Пользователь" name={`${form.formUid}_userName`} minWidth="200px" value={form.fields.userName} disabled />
-                <Field label="Хост" name={`${form.formUid}_host`} minWidth="200px" value={form.fields.host} disabled />
-                <Field label="IP" name={`${form.formUid}_ip`} minWidth="120px" value={form.fields.ip || ""} disabled />
-                <Field label="Город" name={`${form.formUid}_city`} minWidth="120px" value={form.fields.city || ""} disabled />
+                <Field label={translate("user")} name={`${form.formUid}_userName`} minWidth="200px" value={form.fields.userName} disabled />
+                <Field label={translate("host")} name={`${form.formUid}_host`} minWidth="200px" value={form.fields.host} disabled />
+                <Field label={translate("ip")} name={`${form.formUid}_ip`} minWidth="120px" value={form.fields.ip || ""} disabled />
+                <Field label={translate("city")} name={`${form.formUid}_city`} minWidth="120px" value={form.fields.city || ""} disabled />
               </GroupRow>
             </GroupCol>
 

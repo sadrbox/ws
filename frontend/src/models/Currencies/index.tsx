@@ -11,12 +11,12 @@ const { Form: CurrenciesForm, List: CurrenciesList } = createSimpleModel({
   accessRight: "Currency",
   fields: [
     { key: "code", label: "Код валюты (ISO) *", required: true, requiredMessage: "Код валюты обязателен", minWidth: "150px" },
-    { key: "shortName", label: "Наименование *", required: true, requiredMessage: "Наименование обязательно" },
+    { key: "name", label: "Наименование *", required: true, requiredMessage: "Наименование обязательно" },
     { key: "symbol", label: "Символ", minWidth: "100px" },
   ],
   buildPaneLabel: (saved) =>
-    makePaneLabel("CurrenciesList", "Валюты", saved, [saved.code, saved.shortName].filter(Boolean).join(" ") || undefined),
-  getLabel: (d) => `${(d?.code as string | undefined) || "?"} — ${(d?.shortName as string | undefined) || "?"}`,
+    makePaneLabel("CurrenciesList", "Валюты", saved, [saved.code, saved.name].filter(Boolean).join(" ") || undefined),
+  getLabel: (d) => `${(d?.code as string | undefined) || "?"} — ${(d?.name as string | undefined) || "?"}`,
 });
 
 export { CurrenciesList, CurrenciesForm };

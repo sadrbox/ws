@@ -1,10 +1,8 @@
 [
 	{
 		"identifier": "id",
-		"name": "ID",
 		"hint": "Внутренний номер",
 		"type": "number",
-		"position": 1,
 		"visible": true,
 		"inlist": true,
 		"width": "70px",
@@ -13,10 +11,8 @@
 	},
 	{
 		"identifier": "uuid",
-		"name": "UUID",
 		"hint": "UUID",
 		"type": "string",
-		"position": 2,
 		"visible": false,
 		"inlist": false,
 		"width": "0px",
@@ -24,11 +20,9 @@
 		"alignment": "left"
 	},
 	{
-		"identifier": "shortName",
-		"name": "Наименование",
+		"identifier": "name",
 		"hint": "Наименование единицы измерения",
 		"type": "string",
-		"position": 3,
 		"visible": true,
 		"inlist": true,
 		"width": "250px",
@@ -37,10 +31,8 @@
 	},
 	{
 		"identifier": "code",
-		"name": "Код",
 		"hint": "Код единицы измерения",
 		"type": "string",
-		"position": 4,
 		"visible": true,
 		"inlist": true,
 		"width": "100px",

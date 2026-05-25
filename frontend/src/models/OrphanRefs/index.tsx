@@ -12,6 +12,7 @@ import { useAppContext } from "src/app";
 import apiClient from "src/services/api/client";
 import mainStyles from "src/styles/main.module.scss";
 import type { TPane } from "src/app/types";
+import { getFormatDateOnly } from "src/utils/main.module";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -62,9 +63,7 @@ const TABLE_FORM_MAP: Record<string, FormLoader> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
-  } catch { return iso; }
+  return getFormatDateOnly(iso) || iso;
 }
 
 // ── OrphanGroup component ─────────────────────────────────────────────────────

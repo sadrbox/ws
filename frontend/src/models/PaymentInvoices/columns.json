@@ -2,21 +2,17 @@
 	{
 		"identifier": "id",
 		"type": "number",
-		"name": "ID",
 		"width": "80px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Внутренний номер",
 		"visible": true,
-		"inlist": true,
-		"position": 1
+		"inlist": true
 	},
 	{
 		"identifier": "uuid",
-		"name": "UUID",
 		"hint": "Уникальный идентификатор",
 		"type": "string",
-		"position": 2,
 		"visible": false,
 		"inlist": true,
 		"width": "300px",
@@ -26,61 +22,51 @@
 	{
 		"identifier": "date",
 		"type": "datetime",
-		"name": "Дата",
 		"width": "150px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Дата документа",
 		"visible": true,
-		"inlist": true,
-		"position": 3
+		"inlist": true
 	},
 	{
 		"identifier": "comment",
 		"type": "string",
-		"name": "Описание",
 		"width": "200px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Описание",
 		"visible": true,
-		"inlist": true,
-		"position": 4
+		"inlist": true
 	},
 	{
 		"identifier": "amount",
 		"type": "number",
-		"name": "Сумма",
 		"width": "120px",
 		"minWidth": "80px",
 		"alignment": "right",
 		"hint": "Сумма",
 		"visible": true,
-		"inlist": true,
-		"position": 5
+		"inlist": true
 	},
 	{
-		"identifier": "organization.shortName",
+		"identifier": "organization.name",
 		"type": "string",
-		"name": "Организация",
 		"width": "200px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Организация",
 		"visible": true,
-		"inlist": true,
-		"position": 7
+		"inlist": true
 	},
 	{
-		"identifier": "counterparty.shortName",
+		"identifier": "counterparty.name",
 		"type": "string",
-		"name": "Контрагент",
 		"width": "200px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Контрагент",
 		"visible": true,
-		"inlist": true,
-		"position": 8
+		"inlist": true
 	}
 ]

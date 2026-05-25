@@ -8,7 +8,7 @@ import columnsJson from "./columns.json";
 import { Field, FieldDateTime, Divider } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
-import { SaleItemsTable } from "./SaleItemsTable";
+import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { Group, GroupRow, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -24,18 +24,18 @@ import { validateDocumentFields, formatValidationErrors } from "src/utils/valida
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { Toolbar } from "src/components/Toolbar";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
-import { usePrintDocument } from "src/components/PrintLayout/usePrintDocument";
 import SaleInvoicePrint, { type SaleInvoicePrintData, type SaleInvoicePrintColumns, type SaleItemPrintRow } from "./SaleInvoicePrint";
+import ActPrint from "./ActPrint";
 import { buildSaleInvoiceWorkbook } from "./saleInvoiceWorkbook";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
-import { renderToStaticMarkup } from "react-dom/server";
+import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
-const FORM_LABEL = "Реализация";
+const FORM_LABEL = "Реализация товара и услуг";
 
 
 interface TFields {
@@ -64,13 +64,12 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;
-    if (!data || data.uuid) return undefined;
+    if (data?.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
-    // «Автор» для нового документа всегда пустой:
-    // заполняется сервером при первом сохранении (req.user.uuid).
-    if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; }
+    init.date = new Date().toISOString().slice(0, 10);
+    if (data?.organizationUuid) { init.organizationUuid = data?.organizationUuid as string; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
-    if (data.counterpartyUuid) { init.counterpartyUuid = data.counterpartyUuid as string; }
+    if (data?.counterpartyUuid) { init.counterpartyUuid = data?.counterpartyUuid as string; }
     return init;
   })();
 
@@ -96,6 +95,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       saleItems: {
         endpoint: "saleitems", parentField: "saleUuid",
         label: translate("SaleItemsList"),
+        requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
+        requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
         createPayload: (r: any) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
@@ -104,6 +105,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           vatRate: r.vatRate ?? 0,
           exciseRate: r.exciseRate ?? 0,
           discountPercent: r.discountPercent ?? 0,
+          datetime: r.datetime ?? null,
+          posted: r.posted === true,
+          organizationUuid: r.organization?.uuid ?? r.organizationUuid ?? null,
+          counterpartyUuid: r.counterparty?.uuid ?? r.counterpartyUuid ?? null,
+          warehouseUuid: r.warehouse?.uuid ?? r.warehouseUuid ?? null,
         }),
         updatePayload: (r: any) => ({
           productUuid: r.productUuid ?? null,
@@ -113,6 +119,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           vatRate: r.vatRate ?? 0,
           exciseRate: r.exciseRate ?? 0,
           discountPercent: r.discountPercent ?? 0,
+          datetime: r.datetime ?? null,
+          posted: r.posted === true,
+          organizationUuid: r.organization?.uuid ?? r.organizationUuid ?? null,
+          counterpartyUuid: r.counterparty?.uuid ?? r.counterpartyUuid ?? null,
+          warehouseUuid: r.warehouse?.uuid ?? r.warehouseUuid ?? null,
         }),
         extraSkipFields: ["saleUuid"],
       },
@@ -123,13 +134,13 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       comment: d.comment ?? "", amount: d.amount != null ? Number(d.amount) : 0,
       posted: d.posted === true,
       organizationUuid: d.organizationUuid ?? "",
-      organizationName: d.organization?.shortName ?? "",
+      organizationName: d.organization?.name ?? "",
       counterpartyUuid: d.counterpartyUuid ?? "",
-      counterpartyName: d.counterparty?.shortName ?? "",
+      counterpartyName: d.counterparty?.name ?? "",
       contractUuid: d.contractUuid ?? "",
-      contractName: d.contract?.shortName ?? "",
+      contractName: d.contract?.name ?? "",
       warehouseUuid: d.warehouseUuid ?? "",
-      warehouseName: d.warehouse?.shortName ?? "",
+      warehouseName: d.warehouse?.name ?? "",
       vatAmount: d.vatAmount != null ? Number(d.vatAmount) : 0,
       discountAmount: d.discountAmount != null ? Number(d.discountAmount) : 0,
       amountWithoutVat: d.amountWithoutVat != null ? Number(d.amountWithoutVat) : 0,
@@ -175,13 +186,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   // договор, отмеченный как "основной" (isPrimary=true) для этой пары.
   // Если пользователь вручную выбрал другой договор — не перезаписываем.
   const contractScope = useMemo<Record<string, string> | null>(() => {
-    const hasOrg = !!form.fields.organizationUuid;
-    const hasCpty = !!form.fields.counterpartyUuid;
-    // Авто-подбор договора имеет смысл только когда есть хотя бы один из владельцев.
-    if (!hasOrg && !hasCpty) return null;
-    const s: Record<string, string> = {};
-    if (hasOrg) s.organizationUuid = form.fields.organizationUuid;
-    if (hasCpty) s.counterpartyUuid = form.fields.counterpartyUuid;
+    if (!form.fields.organizationUuid) return null;
+    const s: Record<string, string> = { organizationUuid: form.fields.organizationUuid };
+    if (form.fields.counterpartyUuid) s.counterpartyUuid = form.fields.counterpartyUuid;
     return s;
   }, [form.fields.organizationUuid, form.fields.counterpartyUuid]);
 
@@ -192,7 +199,22 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     isEditMode: form.isEditMode,
     isLoading: form.isLoading,
     apply: (uuid, name) =>
-      form.setFields({ contractUuid: uuid, contractName: name } as Partial<TFields>),
+      form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
+  });
+
+  const warehouseScope = useMemo<Record<string, string> | null>(
+    () => form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : null,
+    [form.fields.organizationUuid],
+  );
+
+  useAutoFillPrimary({
+    endpoint: "warehouses",
+    scope: warehouseScope,
+    currentUuid: form.fields.warehouseUuid,
+    isEditMode: form.isEditMode,
+    isLoading: form.isLoading,
+    apply: (uuid, name) =>
+      form.setFieldsInitial({ warehouseUuid: uuid, warehouseName: name } as Partial<TFields>),
   });
 
   const handleTotalChange = useCallback((total: number, items?: any[]) => {
@@ -242,69 +264,61 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     };
     if (item.organizationUuid) {
       updates.organizationUuid = item.organizationUuid;
-      updates.organizationName = item.organization?.shortName ?? "";
+      updates.organizationName = item.organization?.name ?? "";
     }
     if (item.counterpartyUuid) {
       updates.counterpartyUuid = item.counterpartyUuid;
-      updates.counterpartyName = item.counterparty?.shortName ?? "";
+      updates.counterpartyName = item.counterparty?.name ?? "";
     }
     form.setFields(updates);
   }, [form.setFields]);
 
-  // ── Печать накладной (форма З-2 РК) ────────────────────────────────
-  // Печать осуществляется в формате A4 HTML (регламентированная типовая
-  // форма З-2 РК, приказ Минфина РК № 562 от 20.12.2012). Реализация:
-  //   • SaleInvoicePrint рендерит документ в скрытом iframe;
-  //   • usePrintDocument.print() вызывает window.print() в этом iframe;
-  //   • пользователь в нативном диалоге может «Сохранить как PDF» или печатать.
-  // xlsx-предпросмотр (buildSaleInvoiceWorkbook + GeneratedXlsxPreviewPane)
-  // также используется как альтернативный путь — открывается во вкладке для
-  // экспорта в .xlsx (через ctrl+клик / shift+клик ниже).
-  const { print: printHtml } = usePrintDocument();
+  // ── Печать: накладная З-2 и акт выполненных работ ──────────────────
   const { windows: { addPane } } = useAppContext();
-  const handlePrint = useCallback(async () => {
+
+  const handlePrint = useCallback(async (layoutId: "invoice" | "act") => {
     if (!form.fields.uuid) return;
     try {
-      // Получаем актуальные данные документа + позиции с сервера
       const [saleResp, itemsResp] = await Promise.all([
         api.get<{ success?: boolean; item?: any } | any>(`sales/${form.fields.uuid}`),
         api.get<{ success?: boolean; items?: any[] } | any>(`saleitems`, { params: { saleUuid: form.fields.uuid } }),
       ]);
       const sale = (saleResp as any)?.item ?? saleResp;
-      const items: any[] = (itemsResp as any)?.items ?? (Array.isArray(itemsResp) ? itemsResp : []);
+      const allItems: any[] = (itemsResp as any)?.items ?? (Array.isArray(itemsResp) ? itemsResp : []);
 
-      const rows: SaleItemPrintRow[] = items.map((it, idx) => ({
+      // Фильтрация по типу позиции: накладная — только товары, акт — только услуги/работы
+      const filtered = allItems.filter((it) =>
+        layoutId === "invoice"
+          ? !it.product?.isService
+          : !!it.product?.isService,
+      );
+
+      const rows: SaleItemPrintRow[] = filtered.map((it, idx) => ({
         number: idx + 1,
-        name: it.product?.shortName ?? it.productName ?? it.name ?? "",
-        unit: it.unitOfMeasure?.shortName ?? it.unitOfMeasureName ?? "",
+        name: it.product?.name ?? it.productName ?? it.name ?? "",
+        unit: it.unitOfMeasure?.name ?? it.unitOfMeasureName ?? "",
         quantity: Number(it.quantity ?? 0),
         price: Number(it.price ?? 0),
+        isService: !!it.product?.isService,
         discountPercent: it.discountPercent != null ? Number(it.discountPercent) : undefined,
         discountAmount: it.discountAmount != null ? Number(it.discountAmount) : undefined,
         exciseRate: it.exciseRate != null ? Number(it.exciseRate) : undefined,
         exciseAmount: it.exciseAmount != null ? Number(it.exciseAmount) : undefined,
-        amountWithoutVat: it.amountWithoutVat != null ? Number(it.amountWithoutVat) : undefined, amountNetOfIndirectTaxes:
+        amountWithoutVat: it.amountWithoutVat != null ? Number(it.amountWithoutVat) : undefined,
+        amountNetOfIndirectTaxes:
           it.amountNetOfIndirectTaxes != null
             ? Number(it.amountNetOfIndirectTaxes)
-            : Number(it.amountWithoutVat ?? 0) - Number(it.exciseAmount ?? 0), vatRate: it.vatRate != null ? Number(it.vatRate) : undefined,
+            : Number(it.amountWithoutVat ?? 0) - Number(it.exciseAmount ?? 0),
+        vatRate: it.vatRate != null ? Number(it.vatRate) : undefined,
         vatAmount: it.vatAmount != null ? Number(it.vatAmount) : undefined,
         amount: Number(it.amount ?? 0),
       }));
 
-      // Сумма акциза по документу = сумма по строкам (на уровне Sale поля нет).
       const totalExciseAmount = rows.reduce((s, r) => s + Number(r.exciseAmount ?? 0), 0);
 
-      // Читаем выбор пользователя «В печать» из настроек таблицы строк.
-      // Ключ совпадает с componentName SubTable (см. SaleItemsTable).
       const PRINT_KEYS = [
-        "discountPercent",
-        "discountAmount",
-        "amountNetOfIndirectTaxes",
-        "amountWithoutVat",
-        "exciseRate",
-        "exciseAmount",
-        "vatRate",
-        "vatAmount",
+        "discountPercent", "discountAmount", "amountNetOfIndirectTaxes",
+        "amountWithoutVat", "exciseRate", "exciseAmount", "vatRate", "vatAmount",
       ] as const;
       const printColumns: SaleInvoicePrintColumns = {};
       try {
@@ -317,39 +331,38 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             }
           }
         }
-      } catch {
-        // если кэш повреждён — используем поведение по умолчанию (auto-detect)
-      }
+      } catch { /* используем поведение по умолчанию */ }
 
       const data: SaleInvoicePrintData = {
         documentId: sale?.id ?? form.fields.id,
         documentDate: sale?.date ?? form.fields.date,
-        organizationName: sale?.organization?.shortName ?? form.fields.organizationName,
+        organizationName: sale?.organization?.name ?? form.fields.organizationName,
         organizationBin: sale?.organization?.bin ?? sale?.organization?.iin ?? undefined,
         organizationAddress: sale?.organization?.address ?? undefined,
-        counterpartyName: sale?.counterparty?.shortName ?? form.fields.counterpartyName,
+        counterpartyName: sale?.counterparty?.name ?? form.fields.counterpartyName,
         counterpartyBin: sale?.counterparty?.bin ?? sale?.counterparty?.iin ?? undefined,
         counterpartyAddress: sale?.counterparty?.address ?? undefined,
-        contractName: sale?.contract?.shortName ?? form.fields.contractName,
-        warehouseName: sale?.warehouse?.shortName ?? form.fields.warehouseName,
+        contractName: sale?.contract?.name ?? form.fields.contractName,
+        warehouseName: sale?.warehouse?.name ?? form.fields.warehouseName,
         items: rows,
-        totalAmount: Number(sale?.amount ?? form.fields.amount ?? 0),
-        totalAmountWithoutVat: Number(sale?.amountWithoutVat ?? form.fields.amountWithoutVat ?? 0),
-        totalVatAmount: Number(sale?.vatAmount ?? form.fields.vatAmount ?? 0),
-        totalDiscountAmount: Number(sale?.discountAmount ?? form.fields.discountAmount ?? 0),
+        totalAmount: rows.reduce((s, r) => s + r.amount, 0),
+        totalAmountWithoutVat: rows.reduce((s, r) => s + Number(r.amountWithoutVat ?? 0), 0),
+        totalVatAmount: rows.reduce((s, r) => s + Number(r.vatAmount ?? 0), 0),
+        totalDiscountAmount: rows.reduce((s, r) => s + Number(r.discountAmount ?? 0), 0),
         totalExciseAmount: Math.round(totalExciseAmount * 100) / 100,
         isVatPayer: isVatEnabled,
         columns: printColumns,
       };
 
-      // Открываем макет в отдельной MDI-вкладке (PrintDocumentPane).
-      // Внутри pane — iframe с A4-HTML + тулбар сохранения в xlsx/xls/pdf/doc.
-      // Печать происходит из самой вкладки (Печать / .pdf), а не через
-      // нативный диалог из формы — пользователь видит макет, может править
-      // выбор колонок и сохранить в любом из 4 форматов.
-      const titleStr = `Накладная № ${data.documentId ?? ""}`;
-      const fileBase = `Накладная_${data.documentId ?? "draft"}`.replace(/\s+/g, "_");
-      const bodyHtml = renderToStaticMarkup(<SaleInvoicePrint data={data} />);
+      const isAct = layoutId === "act";
+      const titleStr = isAct
+        ? `Акт вып. работ № ${data.documentId ?? ""}`
+        : `Накладная № ${data.documentId ?? ""}`;
+      const fileBase = (isAct
+        ? `Акт_${data.documentId ?? "draft"}`
+        : `Накладная_${data.documentId ?? "draft"}`
+      ).replace(/\s+/g, "_");
+
       const workbook = buildSaleInvoiceWorkbook(data);
       addPane({
         component: PrintDocumentPane,
@@ -358,31 +371,21 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         data: {
           id: Number(data.documentId ?? form.fields.id ?? 0),
           uuid: String(form.fields.uuid ?? ""),
-          bodyHtml,
+          layout: isAct ? <ActPrint data={data} /> : <SaleInvoicePrint data={data} />,
           fileBaseName: fileBase,
           title: titleStr,
           workbook,
         },
       });
     } catch (e) {
-      console.error("[print] sale invoice failed", e);
+      console.error("[print] failed", e);
       alert("Не удалось подготовить документ к печати");
     }
   }, [
-    form.fields.uuid,
-    form.fields.id,
-    form.fields.date,
-    form.fields.amount,
-    form.fields.amountWithoutVat,
-    form.fields.vatAmount,
-    form.fields.discountAmount,
-    form.fields.organizationName,
-    form.fields.counterpartyName,
-    form.fields.contractName,
-    form.fields.warehouseName,
-    isVatEnabled,
-    addPane,
-    printHtml,
+    form.fields.uuid, form.fields.id, form.fields.date,
+    form.fields.organizationName, form.fields.counterpartyName,
+    form.fields.contractName, form.fields.warehouseName,
+    isVatEnabled, addPane,
   ]);
 
   // Регистрируем кнопку «Печать» в шапке панели (рядом с Reload/Close).
@@ -397,7 +400,15 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
     form.isEditMode && form.fields.uuid ? (
-      <Toolbar.PrintButton onClick={handlePrint} disabled={printDisabled} title={printTitle} />
+      <PrintDropdownButton
+        disabled={printDisabled}
+        title={printTitle ?? "Печать"}
+        options={[
+          { id: "invoice", label: "Накладная З-2 (товары)" },
+          { id: "act",     label: "Акт выполненных работ (услуги/работы)" },
+        ]}
+        onSelect={(id) => handlePrint(id as "invoice" | "act")}
+      />
     ) : null,
   );
 
@@ -426,16 +437,16 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
               <Group>
                 {/* Организация — во всю ширину */}
-                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
 
-                <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="shortName" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
 
               <Group>
                 {/* Контрагент — во всю ширину */}
-                <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="shortName" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
 
-                <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="shortName" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
+                <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
               </Group>
 
             </GroupCol>
@@ -476,10 +487,21 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     },
     {
       id: "tab-items", label: translate("SaleItemsList"), component: form.isEditMode && form.fields.uuid ? (
-        <SaleItemsTable saleUuid={form.fields.uuid} organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null} disabled={form.isLoading} deferRemoteChanges
+        <TradeDocumentItemsTable
+          parentUuid={form.fields.uuid}
+          parentField="saleUuid"
+          endpoint="saleitems"
+          componentName="SaleItemsList_part"
+          organizationUuid={form.fields.organizationUuid}
+          documentDate={form.fields.date || null}
+          disabled={form.isLoading}
+          deferRemoteChanges
           parentLabel={`${translate("SalesList")}: ID${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
-          initialPendingRows={saleItems.pending} onTotalChange={handleTotalChange}
-          onItemsChange={saleItems.onItemsChange} />
+          initialPendingRows={saleItems.pending}
+          onTotalChange={handleTotalChange}
+          onItemsChange={saleItems.onItemsChange}
+          showRequiredHighlight={form.meta.tablesValidationFailed}
+        />
       ) : (
         <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
           {translate("saveDocumentFirst")}
@@ -489,7 +511,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount]);
 
   return (
-    <FormRequiredScope docType="sale">
+    <FormRequiredScope docType="sale" active={form.meta.headerValidationFailed}>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
         <ModelForm paneId={form.paneId} tabs={tabs}
           onSave={form.handleSave}
@@ -516,5 +538,5 @@ const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
 );
 SalesList.displayName = "SalesList";
 
-export { SalesList, SalesForm, SaleItemsTable };
+export { SalesList, SalesForm };
 

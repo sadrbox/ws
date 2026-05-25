@@ -59,9 +59,10 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;
-    if (!data || data.uuid) return undefined;
+    if (data?.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
-    if (data.organizationUuid) { init.organizationUuid = data.organizationUuid as string; }
+    init.date = new Date().toISOString().slice(0, 10);
+    if (data?.organizationUuid) { init.organizationUuid = data?.organizationUuid as string; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
     return init;
   })();
@@ -78,6 +79,8 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       items: {
         endpoint: "inventorytransferitems", parentField: "inventoryTransferUuid",
         label: "Товары перемещения",
+        requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
+        requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
         createPayload: (r: any) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
@@ -100,11 +103,11 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       amount: d.amount != null ? Number(d.amount) : 0,
       posted: d.posted === true,
       fromWarehouseUuid: d.fromWarehouseUuid ?? "",
-      fromWarehouseName: d.fromWarehouse?.shortName ?? "",
+      fromWarehouseName: d.fromWarehouse?.name ?? "",
       toWarehouseUuid: d.toWarehouseUuid ?? "",
-      toWarehouseName: d.toWarehouse?.shortName ?? "",
+      toWarehouseName: d.toWarehouse?.name ?? "",
       organizationUuid: d.organizationUuid ?? "",
-      organizationName: d.organization?.shortName ?? "",
+      organizationName: d.organization?.name ?? "",
       authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
       authorName: d.author?.username ?? d.author?.email ?? "",
     }),
@@ -143,18 +146,18 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
                 <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
               </GroupRow>
               <Group>
-                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="shortName"
+                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
                   onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                   disabled={form.isLoading} />
               </Group>
               <Group>
-                <LookupField label={translate("fromWarehouse")} name={`${form.formUid}_fromWarehouseUuid`} value={form.fields.fromWarehouseUuid} displayValue={form.fields.fromWarehouseName} endpoint="warehouses" displayField="shortName"
+                <LookupField label={translate("fromWarehouse")} name={`${form.formUid}_fromWarehouseUuid`} value={form.fields.fromWarehouseUuid} displayValue={form.fields.fromWarehouseName} endpoint="warehouses" displayField="name"
                   onSelect={(u, d) => form.setFields({ fromWarehouseUuid: u, fromWarehouseName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ fromWarehouseUuid: "", fromWarehouseName: "" } as Partial<TFields>)}
                   disabled={form.isLoading}
                   extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-                <LookupField label={translate("toWarehouse")} name={`${form.formUid}_toWarehouseUuid`} value={form.fields.toWarehouseUuid} displayValue={form.fields.toWarehouseName} endpoint="warehouses" displayField="shortName"
+                <LookupField label={translate("toWarehouse")} name={`${form.formUid}_toWarehouseUuid`} value={form.fields.toWarehouseUuid} displayValue={form.fields.toWarehouseName} endpoint="warehouses" displayField="name"
                   onSelect={(u, d) => form.setFields({ toWarehouseUuid: u, toWarehouseName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ toWarehouseUuid: "", toWarehouseName: "" } as Partial<TFields>)}
                   disabled={form.isLoading}
@@ -192,6 +195,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           initialPendingRows={items.pending}
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}
+          showRequiredHighlight={form.meta.tablesValidationFailed}
         />
       ) : (
         <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
@@ -202,7 +206,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, canWrite, items]);
 
   return (
-    <FormRequiredScope docType="inventory_transfer">
+    <FormRequiredScope docType="inventory_transfer" active={form.meta.headerValidationFailed}>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
         <ModelForm paneId={form.paneId} tabs={tabs}
           onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}

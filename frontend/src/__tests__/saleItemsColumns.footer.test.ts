@@ -18,7 +18,7 @@ describe("saleItemsColumns: footer aggregates", () => {
 	);
 
 	it("колонки product/price/discountPercent/quantity не имеют footer", () => {
-		expect(byId("product.shortName")?.footer).toBeUndefined();
+		expect(byId("product.name")?.footer).toBeUndefined();
 		expect(byId("price")?.footer).toBeUndefined();
 		expect(byId("discountPercent")?.footer).toBeUndefined();
 		expect(byId("quantity")?.footer).toBeUndefined();

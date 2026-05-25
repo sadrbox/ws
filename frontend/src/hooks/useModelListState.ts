@@ -7,7 +7,10 @@ import {
 } from "src/hooks/useInfiniteModelList";
 import useQueryParams from "src/hooks/useQueryParams";
 import { useModelDelete } from "src/hooks/useModelDelete";
-import { getModelColumns, matchRowBySearch } from "src/components/Table/services";
+import {
+	getModelColumns,
+	matchRowBySearch,
+} from "src/components/Table/services";
 import type {
 	TColumn,
 	TDataItem,
@@ -65,7 +68,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
 
 	const queryClient = useQueryClient();
 
-	// ── Права доступа ─────────────────────────────────────────────────────
+	// ── Разрешения пользователей ─────────────────────────────────────────────────────
 	const modelName = ENDPOINT_TO_MODEL[model] ?? "";
 	const { canRead, canWrite } = useAccessRight(modelName);
 
@@ -140,9 +143,15 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		}
 
 		if (search) {
-			const visibleCols = columns.filter(c => c.visible);
-			const words = search.toLowerCase().split(/\s+/).filter(Boolean).map(w => w.replace(",", "."));
-			result = result.filter((row: TDataItem) => matchRowBySearch(row, visibleCols, words));
+			const visibleCols = columns.filter((c) => c.visible);
+			const words = search
+				.toLowerCase()
+				.split(/\s+/)
+				.filter(Boolean)
+				.map((w) => w.replace(",", "."));
+			result = result.filter((row: TDataItem) =>
+				matchRowBySearch(row, visibleCols, words),
+			);
 		}
 
 		return result;

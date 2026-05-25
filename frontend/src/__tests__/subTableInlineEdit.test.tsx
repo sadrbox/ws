@@ -8,7 +8,7 @@
  * 5. ModelRightsTable: filterRows работает правильно
  */
 import { describe, it, expect } from "vitest";
-import { ACCESS_LEVEL_OPTIONS } from "../models/AccessRights/index";
+import { ACCESS_LEVEL_OPTIONS } from "../models/UserPermissions/index";
 
 // ─── Паттерн 1: оптимистичный апдейт handleInlineChange ──────────────────────
 
@@ -80,7 +80,7 @@ describe("SubTable: оптимистичный апдейт handleLookupChange",
   ];
 
   it("обновляет FK + relation-объект", () => {
-    const org = { uuid: "org-99", shortName: "ТестОрг" };
+    const org = { uuid: "org-99", name: "ТестОрг" };
     const updated = applyLookupOptimisticUpdate(
       cache,
       "row-1",

@@ -130,7 +130,7 @@ describe("FieldNumber safeValue", () => {
 // ─── 3. validationRules — воспроизводим логику валидаторов ───────────────────
 
 /**
- * Воспроизводит validationRules из SaleItemsTable (количество, цена, скидка).
+ * Воспроизводит validationRules из SaleItemsTable (количество, цена, Сумма скидки).
  */
 const makeQuantityValidator =
 	() =>

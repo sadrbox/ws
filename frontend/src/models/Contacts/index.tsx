@@ -61,13 +61,13 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
   const data = paneProps.data;
 
   const initialFields: TContactFields | undefined = (() => {
-    if (!data || data.uuid) return undefined;
-    if (data.ownerType) {
+    if (data?.uuid) return undefined;
+    if (data?.ownerType) {
       return {
         ...DEFAULT_FIELDS,
-        ownerType: data.ownerType as OwnerType,
-        ownerUuid: (data.ownerUuid as string) || "",
-        ownerName: (data.ownerName as string) || "",
+        ownerType: data?.ownerType as OwnerType,
+        ownerUuid: (data?.ownerUuid as string) || "",
+        ownerName: (data?.ownerName as string) || "",
       };
     }
     return undefined;

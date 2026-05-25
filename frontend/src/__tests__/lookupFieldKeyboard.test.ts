@@ -180,8 +180,8 @@ describe("LookupField: клавиатурная навигация", () => {
 	it("Enter при activeIndex≥0 → выбирает элемент из dropdown", () => {
 		const handleSelectItem = vi.fn();
 		const suggestions = [
-			{ uuid: "x", shortName: "Alpha" },
-			{ uuid: "y", shortName: "Beta" },
+			{ uuid: "x", name: "Alpha" },
+			{ uuid: "y", name: "Beta" },
 		];
 		simulateKeyDown(
 			"Enter",
@@ -195,7 +195,7 @@ describe("LookupField: клавиатурная навигация", () => {
 		);
 		expect(handleSelectItem).toHaveBeenCalledWith({
 			uuid: "y",
-			shortName: "Beta",
+			name: "Beta",
 		});
 	});
 

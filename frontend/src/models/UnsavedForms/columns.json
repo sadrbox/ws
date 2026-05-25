@@ -2,53 +2,41 @@
 	{
 		"identifier": "formLabel",
 		"type": "string",
-		"name": "Тип объекта",
 		"width": "200px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Модель / тип формы",
 		"visible": true,
-		"position": 1,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "entityId",
 		"type": "string",
-		"name": "ID записи",
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "UUID или 'new'",
 		"visible": true,
-		"position": 2,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "description",
 		"type": "string",
-		"name": "Описание",
 		"width": "250px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Краткое описание данных формы",
 		"visible": true,
-		"position": 3,
-		"filter": false,
 		"inlist": true
 	},
 	{
 		"identifier": "pendingSummary",
 		"type": "string",
-		"name": "Вложенные таблицы",
 		"width": "350px",
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Несохранённые строки вложенных таблиц (SubTable)",
 		"visible": true,
-		"position": 4,
-		"filter": false,
 		"inlist": true
 	}
 ]

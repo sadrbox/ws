@@ -1,10 +1,8 @@
 [
 	{
 		"identifier": "id",
-		"name": "ID",
 		"hint": "Внутренний номер",
 		"type": "number",
-		"position": 1,
 		"visible": true,
 		"inlist": true,
 		"width": "70px",
@@ -13,10 +11,8 @@
 	},
 	{
 		"identifier": "uuid",
-		"name": "UUID",
 		"hint": "UUID",
 		"type": "string",
-		"position": 2,
 		"visible": false,
 		"inlist": false,
 		"width": "0px",
@@ -25,10 +21,8 @@
 	},
 	{
 		"identifier": "date",
-		"name": "Дата",
 		"hint": "Дата документа",
 		"type": "datetime",
-		"position": 3,
 		"visible": true,
 		"inlist": true,
 		"width": "120px",
@@ -37,10 +31,8 @@
 	},
 	{
 		"identifier": "period",
-		"name": "Период",
 		"hint": "Период начисления (ГГГГ-ММ)",
 		"type": "string",
-		"position": 4,
 		"visible": true,
 		"inlist": true,
 		"width": "100px",
@@ -49,10 +41,8 @@
 	},
 	{
 		"identifier": "employee.fullName",
-		"name": "Сотрудник",
 		"hint": "ФИО сотрудника",
 		"type": "string",
-		"position": 5,
 		"visible": true,
 		"inlist": true,
 		"width": "200px",
@@ -60,11 +50,9 @@
 		"alignment": "left"
 	},
 	{
-		"identifier": "position.shortName",
-		"name": "Должность",
+		"identifier": "position.name",
 		"hint": "Должность",
 		"type": "string",
-		"position": 6,
 		"visible": true,
 		"inlist": true,
 		"width": "150px",
@@ -73,10 +61,8 @@
 	},
 	{
 		"identifier": "baseSalary",
-		"name": "Оклад",
 		"hint": "Оклад",
 		"type": "number",
-		"position": 7,
 		"visible": true,
 		"inlist": true,
 		"width": "120px",
@@ -85,10 +71,8 @@
 	},
 	{
 		"identifier": "netSalary",
-		"name": "К выдаче",
 		"hint": "Сумма к выдаче",
 		"type": "number",
-		"position": 8,
 		"visible": true,
 		"inlist": true,
 		"width": "120px",
@@ -96,11 +80,9 @@
 		"alignment": "right"
 	},
 	{
-		"identifier": "organization.shortName",
-		"name": "Организация",
+		"identifier": "organization.name",
 		"hint": "Организация",
 		"type": "string",
-		"position": 10,
 		"visible": true,
 		"inlist": true,
 		"width": "180px",

@@ -5,7 +5,7 @@ import { handleDelete } from "../../utils/checkReferences.js";
 const router = express.Router();
 const MODEL = "scheduledTask";
 const ROUTE = "scheduled-tasks";
-const TEXT_FIELDS = ["shortName", "description", "cronExpr"];
+const TEXT_FIELDS = ["name", "description", "cronExpr"];
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -133,15 +133,15 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				message: "Автор документа обязателен: требуется авторизация",
 			});
 		}
-		const { shortName, description, cronExpr, status, organizationUuid } =
+		const { name, description, cronExpr, status, organizationUuid } =
 			req.body;
-		if (!shortName?.trim())
+		if (!name?.trim())
 			return res
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
 		const item = await prisma[MODEL].create({
 			data: {
-				shortName: shortName.trim(),
+				name: name.trim(),
 				description: description?.trim() ?? null,
 				cronExpr: cronExpr?.trim() ?? null,
 				status: status || "active",
@@ -167,7 +167,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
 		for (const f of [
-			"shortName",
+			"name",
 			"description",
 			"cronExpr",
 			"status",

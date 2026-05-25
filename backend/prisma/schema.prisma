@@ -32,6 +32,8 @@ model User {
   // Авторство документов — заполняется при создании, не редактируется.
   authoredSales               Sale[]               @relation("SaleAuthor")
   authoredPurchases           Purchase[]           @relation("PurchaseAuthor")
+  authoredSaleReturns         SaleReturn[]         @relation("SaleReturnAuthor")
+  authoredPurchaseReturns     PurchaseReturn[]     @relation("PurchaseReturnAuthor")
   authoredOutgoingInvoices    OutgoingInvoice[]    @relation("OutgoingInvoiceAuthor")
   authoredIncomingInvoices    IncomingInvoice[]    @relation("IncomingInvoiceAuthor")
   authoredPaymentInvoices     PaymentInvoice[]     @relation("PaymentInvoiceAuthor")
@@ -75,7 +77,7 @@ model Organization {
   id                  Int                             @id @default(autoincrement())
   uuid                String                          @unique @default(uuid())
   bin                 String                          @unique @db.VarChar(12)
-  shortName           String?
+  name                String?
   displayName         String?
   inviteCode          String?                         @unique
   createdAt           DateTime                        @default(now())
@@ -93,7 +95,9 @@ model Organization {
   payrollCalculations PayrollCalculation[]            @relation("OrgPayrollCalc")
   payrollPayments     PayrollPayment[]                @relation("OrgPayrollPay")
   purchases           Purchase[]
+  purchaseReturns     PurchaseReturn[]
   sales               Sale[]
+  saleReturns         SaleReturn[]
   scheduledTasks      ScheduledTask[]
   todos               Todo[]
   users               User[]                          @relation("UserOrganization")
@@ -108,6 +112,7 @@ model Organization {
   contacts            Contact[]                       @relation("OrgContacts")
   contactPersons      ContactPerson[]                 @relation("OrgContactPersons")
   bankAccounts        BankAccount[]                   @relation("OrgBankAccounts")
+  cashboxes           Cashbox[]                       @relation("OrgCashboxes")
   accountingSettings  OrganizationAccountingSetting[] @relation("OrgAccountingSettings")
 
   @@index([updatedAt])
@@ -118,7 +123,7 @@ model Counterparty {
   id                Int                @id @default(autoincrement())
   uuid              String             @unique @default(uuid())
   bin               String             @unique @db.VarChar(12)
-  shortName         String?
+  name              String?
   displayName       String?
   organizationUuid  String?
   createdAt         DateTime           @default(now())
@@ -132,7 +137,9 @@ model Counterparty {
   outgoingInvoices  OutgoingInvoice[]  @relation("CpOutgoingInvoices")
   paymentInvoices   PaymentInvoice[]
   purchases         Purchase[]
+  purchaseReturns   PurchaseReturn[]
   sales             Sale[]
+  saleReturns       SaleReturn[]
   todos             Todo[]
 
   @@index([organizationUuid])
@@ -143,7 +150,7 @@ model Counterparty {
 model Contract {
   id                Int                @id @default(autoincrement())
   uuid              String             @unique @default(uuid())
-  shortName         String
+  name              String
   contractNumber    String?
   contractText      String?
   startDate         DateTime?
@@ -162,7 +169,9 @@ model Contract {
   outgoingInvoices  OutgoingInvoice[]
   paymentInvoices   PaymentInvoice[]
   purchases         Purchase[]
+  purchaseReturns   PurchaseReturn[]
   sales             Sale[]
+  saleReturns       SaleReturn[]
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -253,7 +262,7 @@ model BankAccount {
   iban             String
   bik              String?
   bankName         String?
-  shortName        String?
+  name             String?
   currencyUuid     String?
   organizationUuid String?
   isPrimary        Boolean       @default(false)
@@ -298,7 +307,7 @@ model ActivityHistory {
 model Todo {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  shortName        String?
+  name             String?
   description      String?
   organizationUuid String?
   counterpartyUuid String?
@@ -327,21 +336,43 @@ model Todo {
 model Warehouse {
   id                     Int                 @id @default(autoincrement())
   uuid                   String              @unique @default(uuid())
-  shortName              String
+  name                   String
   address                String?
   comment                String?
   organizationUuid       String?
+  isPrimary              Boolean             @default(false)
   updatedAt              DateTime            @default(now()) @updatedAt
   deletedAt              DateTime?
   inventoryTransfersFrom InventoryTransfer[] @relation("TransferFrom")
   inventoryTransfersTo   InventoryTransfer[] @relation("TransferTo")
   sales                  Sale[]
+  saleReturns            SaleReturn[]        @relation("WhSaleReturns")
   purchases              Purchase[]          @relation("WhPurchases")
+  purchaseReturns        PurchaseReturn[]    @relation("WhPurchaseReturns")
   organization           Organization?       @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
+  @@index([organizationUuid, isPrimary])
   @@index([updatedAt])
   @@map("warehouses")
+}
+
+model Cashbox {
+  id                Int                @id @default(autoincrement())
+  uuid              String             @unique @default(uuid())
+  name              String
+  organizationUuid  String?
+  isPrimary         Boolean            @default(false)
+  updatedAt         DateTime           @default(now()) @updatedAt
+  deletedAt         DateTime?
+  organization      Organization?      @relation("OrgCashboxes", fields: [organizationUuid], references: [uuid])
+  cashReceiptOrders CashReceiptOrder[]
+  cashExpenseOrders CashExpenseOrder[]
+
+  @@index([organizationUuid])
+  @@index([organizationUuid, isPrimary])
+  @@index([updatedAt])
+  @@map("cashboxes")
 }
 
 model Sale {
@@ -508,7 +539,7 @@ model PaymentInvoice {
 model ScheduledTask {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  shortName        String
+  name             String
   description      String?
   cronExpr         String?
   status           String        @default("active")
@@ -567,9 +598,11 @@ model CashReceiptOrder {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  cashboxUuid      String?
   authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
+  cashbox          Cashbox?      @relation(fields: [cashboxUuid], references: [uuid])
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpCashReceipts", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashReceipts", fields: [organizationUuid], references: [uuid])
@@ -578,6 +611,7 @@ model CashReceiptOrder {
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
+  @@index([cashboxUuid])
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
@@ -593,9 +627,11 @@ model CashExpenseOrder {
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
+  cashboxUuid      String?
   authorUuid       String
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
+  cashbox          Cashbox?      @relation(fields: [cashboxUuid], references: [uuid])
   contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpCashExpenses", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashExpenses", fields: [organizationUuid], references: [uuid])
@@ -604,6 +640,7 @@ model CashExpenseOrder {
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
+  @@index([cashboxUuid])
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
@@ -613,7 +650,7 @@ model CashExpenseOrder {
 model Brand {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  shortName        String
+  name             String
   organizationUuid String?
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
@@ -628,8 +665,9 @@ model Brand {
 model Product {
   id                     Int                     @id @default(autoincrement())
   uuid                   String                  @unique @default(uuid())
-  shortName              String
+  name                   String
   sku                    String?
+  isService              Boolean                 @default(false)
   brandUuid              String?
   unitOfMeasureUuid      String?
   organizationUuid       String?
@@ -639,7 +677,9 @@ model Product {
   unitOfMeasure          UnitOfMeasure?          @relation(fields: [unitOfMeasureUuid], references: [uuid])
   organization           Organization?           @relation("OrgProducts", fields: [organizationUuid], references: [uuid])
   saleItems              SaleItem[]
+  saleReturnItems        SaleReturnItem[]
   purchaseItems          PurchaseItem[]
+  purchaseReturnItems    PurchaseReturnItem[]
   outgoingInvoiceItems   OutgoingInvoiceItem[]
   incomingInvoiceItems   IncomingInvoiceItem[]
   paymentInvoiceItems    PaymentInvoiceItem[]
@@ -658,7 +698,7 @@ model SaleItem {
   quantity          Decimal        @default(0) @db.Decimal(18, 4)
   price             Decimal        @default(0) @db.Decimal(18, 2)
   amount            Decimal        @default(0) @db.Decimal(18, 2)
-  /// Стоимость без НДС (графа 13 ЭСФ РК): amount − vatAmount.
+  /// Облагаемый оборот по НДС (графа 13 ЭСФ РК): amount − vatAmount.
   amountWithoutVat  Decimal        @default(0) @db.Decimal(18, 2)
   unitOfMeasureUuid String?
   /// Ставка НДС, % — фиксируется по каждой строке для исторической
@@ -670,11 +710,15 @@ model SaleItem {
   exciseRate        Decimal        @default(0) @db.Decimal(8, 4)
   /// Сумма акциза по строке (afterDiscount × exciseRate / 100).
   exciseAmount      Decimal        @default(0) @db.Decimal(18, 2)
-  discountPercent   Decimal        @default(0) @db.Decimal(5, 2)
+  discountPercent   Decimal        @default(0) @db.Decimal(7, 4)
   discountAmount    Decimal        @default(0) @db.Decimal(18, 2)
   productUuid       String?
   saleUuid          String
   taxes             Json?
+  date              DateTime?
+  posted            Boolean        @default(false)
+  organizationUuid  String?
+  counterpartyUuid  String?
   updatedAt         DateTime       @default(now()) @updatedAt
   deletedAt         DateTime?
   product           Product?       @relation(fields: [productUuid], references: [uuid])
@@ -684,13 +728,17 @@ model SaleItem {
   @@index([saleUuid])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
+  @@index([date])
+  @@index([posted])
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
   @@index([updatedAt])
   @@map("sale_items")
 }
 
 // ─── Позиции документов торговли (НК РК ст. 412 ─ ЭСФ) ────────────────────────
 // Все *Item модели зеркалят SaleItem по структуре: количество/цена/НДС/акциз/
-// скидка + ссылка на родительский документ. Расчёт сумм по строкам
+// Сумма скидки + ссылка на родительский документ. Расчёт сумм по строкам
 // идентичен (см. backend/api/router/_documentItemsFactory.js).
 
 model PurchaseItem {
@@ -705,11 +753,15 @@ model PurchaseItem {
   vatAmount         Decimal        @default(0) @db.Decimal(18, 2)
   exciseRate        Decimal        @default(0) @db.Decimal(8, 4)
   exciseAmount      Decimal        @default(0) @db.Decimal(18, 2)
-  discountPercent   Decimal        @default(0) @db.Decimal(5, 2)
+  discountPercent   Decimal        @default(0) @db.Decimal(7, 4)
   discountAmount    Decimal        @default(0) @db.Decimal(18, 2)
   productUuid       String?
   purchaseUuid      String
   taxes             Json?
+  date              DateTime?
+  posted            Boolean        @default(false)
+  organizationUuid  String?
+  counterpartyUuid  String?
   updatedAt         DateTime       @default(now()) @updatedAt
   deletedAt         DateTime?
   product           Product?       @relation(fields: [productUuid], references: [uuid])
@@ -719,6 +771,10 @@ model PurchaseItem {
   @@index([purchaseUuid])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
+  @@index([date])
+  @@index([posted])
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
   @@index([updatedAt])
   @@map("purchase_items")
 }
@@ -735,7 +791,7 @@ model OutgoingInvoiceItem {
   vatAmount           Decimal         @default(0) @db.Decimal(18, 2)
   exciseRate          Decimal         @default(0) @db.Decimal(8, 4)
   exciseAmount        Decimal         @default(0) @db.Decimal(18, 2)
-  discountPercent     Decimal         @default(0) @db.Decimal(5, 2)
+  discountPercent     Decimal         @default(0) @db.Decimal(7, 4)
   discountAmount      Decimal         @default(0) @db.Decimal(18, 2)
   productUuid         String?
   outgoingInvoiceUuid String
@@ -765,7 +821,7 @@ model IncomingInvoiceItem {
   vatAmount           Decimal         @default(0) @db.Decimal(18, 2)
   exciseRate          Decimal         @default(0) @db.Decimal(8, 4)
   exciseAmount        Decimal         @default(0) @db.Decimal(18, 2)
-  discountPercent     Decimal         @default(0) @db.Decimal(5, 2)
+  discountPercent     Decimal         @default(0) @db.Decimal(7, 4)
   discountAmount      Decimal         @default(0) @db.Decimal(18, 2)
   productUuid         String?
   incomingInvoiceUuid String
@@ -795,7 +851,7 @@ model PaymentInvoiceItem {
   vatAmount          Decimal        @default(0) @db.Decimal(18, 2)
   exciseRate         Decimal        @default(0) @db.Decimal(8, 4)
   exciseAmount       Decimal        @default(0) @db.Decimal(18, 2)
-  discountPercent    Decimal        @default(0) @db.Decimal(5, 2)
+  discountPercent    Decimal        @default(0) @db.Decimal(7, 4)
   discountAmount     Decimal        @default(0) @db.Decimal(18, 2)
   productUuid        String?
   paymentInvoiceUuid String
@@ -864,7 +920,7 @@ model Employee {
 model Position {
   id                  Int                  @id @default(autoincrement())
   uuid                String               @unique @default(uuid())
-  shortName           String
+  name                String
   comment             String?
   organizationUuid    String?
   updatedAt           DateTime             @default(now()) @updatedAt
@@ -925,7 +981,7 @@ model Currency {
   id           Int           @id @default(autoincrement())
   uuid         String        @unique @default(uuid())
   code         String        @unique
-  shortName    String
+  name         String
   symbol       String?
   updatedAt    DateTime      @default(now()) @updatedAt
   deletedAt    DateTime?
@@ -1000,13 +1056,15 @@ model PayrollPayment {
 model UnitOfMeasure {
   id                     Int                     @id @default(autoincrement())
   uuid                   String                  @unique @default(uuid())
-  shortName              String
+  name                   String
   code                   String?
   updatedAt              DateTime                @default(now()) @updatedAt
   deletedAt              DateTime?
   products               Product[]
   saleItems              SaleItem[]
+  saleReturnItems        SaleReturnItem[]
   purchaseItems          PurchaseItem[]
+  purchaseReturnItems    PurchaseReturnItem[]
   outgoingInvoiceItems   OutgoingInvoiceItem[]
   incomingInvoiceItems   IncomingInvoiceItem[]
   paymentInvoiceItems    PaymentInvoiceItem[]
@@ -1019,7 +1077,7 @@ model UnitOfMeasure {
 model Tax {
   id                Int       @id @default(autoincrement())
   uuid              String    @unique @default(uuid())
-  shortName         String
+  name              String
   code              String?   @unique
   rate              Decimal?  @db.Decimal(5, 2)
   /// Способ расчёта налога:
@@ -1054,7 +1112,7 @@ model OrganizationAccountingSetting {
   /// Использовать скидки в строках документов продажи.
   useDiscount          Boolean       @default(false)
   /// Использовать акциз (НК РК ст. 463). При true в SaleItemsTable
-  /// отображается колонка «Ставка акциза» и «Сумма акциза».
+  /// отображается колонка «Ставка акциза, %» и «Сумма акциза».
   useExcise            Boolean       @default(false)
   /// Ставка акциза по умолчанию, % (используется как значение по умолчанию
   /// для новых строк документов продажи при useExcise=true).
@@ -1067,4 +1125,148 @@ model OrganizationAccountingSetting {
   @@index([startDate])
   @@index([updatedAt])
   @@map("organization_accounting_settings")
+}
+
+model SaleReturn {
+  id               Int              @id @default(autoincrement())
+  uuid             String           @unique @default(uuid())
+  date             DateTime         @default(now())
+  comment          String?
+  amount           Decimal?         @db.Decimal(18, 2)
+  amountWithoutVat Decimal?         @db.Decimal(18, 2)
+  vatAmount        Decimal?         @db.Decimal(18, 2)
+  discountAmount   Decimal?         @db.Decimal(18, 2)
+  organizationUuid String?
+  counterpartyUuid String?
+  contractUuid     String?
+  warehouseUuid    String?
+  authorUuid       String
+  posted           Boolean          @default(false)
+  updatedAt        DateTime         @default(now()) @updatedAt
+  deletedAt        DateTime?
+  saleReturnItems  SaleReturnItem[]
+  contract         Contract?        @relation(fields: [contractUuid], references: [uuid])
+  counterparty     Counterparty?    @relation(fields: [counterpartyUuid], references: [uuid])
+  organization     Organization?    @relation(fields: [organizationUuid], references: [uuid])
+  warehouse        Warehouse?       @relation("WhSaleReturns", fields: [warehouseUuid], references: [uuid])
+  author           User             @relation("SaleReturnAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@index([contractUuid])
+  @@index([warehouseUuid])
+  @@index([authorUuid])
+  @@index([date])
+  @@index([updatedAt])
+  @@map("sale_returns")
+}
+
+model SaleReturnItem {
+  id                Int            @id @default(autoincrement())
+  uuid              String         @unique @default(uuid())
+  quantity          Decimal        @default(0) @db.Decimal(18, 4)
+  price             Decimal        @default(0) @db.Decimal(18, 2)
+  amount            Decimal        @default(0) @db.Decimal(18, 2)
+  amountWithoutVat  Decimal        @default(0) @db.Decimal(18, 2)
+  unitOfMeasureUuid String?
+  vatRate           Decimal        @default(12) @db.Decimal(5, 2)
+  vatAmount         Decimal        @default(0) @db.Decimal(18, 2)
+  exciseRate        Decimal        @default(0) @db.Decimal(8, 4)
+  exciseAmount      Decimal        @default(0) @db.Decimal(18, 2)
+  discountPercent   Decimal        @default(0) @db.Decimal(7, 4)
+  discountAmount    Decimal        @default(0) @db.Decimal(18, 2)
+  productUuid       String?
+  saleReturnUuid    String
+  taxes             Json?
+  date              DateTime?
+  posted            Boolean        @default(false)
+  organizationUuid  String?
+  counterpartyUuid  String?
+  updatedAt         DateTime       @default(now()) @updatedAt
+  deletedAt         DateTime?
+  product           Product?       @relation(fields: [productUuid], references: [uuid])
+  saleReturn        SaleReturn     @relation(fields: [saleReturnUuid], references: [uuid], onDelete: Cascade)
+  unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
+
+  @@index([saleReturnUuid])
+  @@index([productUuid])
+  @@index([unitOfMeasureUuid])
+  @@index([date])
+  @@index([posted])
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@index([updatedAt])
+  @@map("sale_return_items")
+}
+
+model PurchaseReturn {
+  id                  Int                  @id @default(autoincrement())
+  uuid                String               @unique @default(uuid())
+  date                DateTime             @default(now())
+  comment             String?
+  amount              Decimal?             @db.Decimal(18, 2)
+  amountWithoutVat    Decimal?             @db.Decimal(18, 2)
+  vatAmount           Decimal?             @db.Decimal(18, 2)
+  discountAmount      Decimal?             @db.Decimal(18, 2)
+  organizationUuid    String?
+  counterpartyUuid    String?
+  contractUuid        String?
+  warehouseUuid       String?
+  authorUuid          String
+  posted              Boolean              @default(false)
+  updatedAt           DateTime             @default(now()) @updatedAt
+  deletedAt           DateTime?
+  purchaseReturnItems PurchaseReturnItem[]
+  contract            Contract?            @relation(fields: [contractUuid], references: [uuid])
+  counterparty        Counterparty?        @relation(fields: [counterpartyUuid], references: [uuid])
+  organization        Organization?        @relation(fields: [organizationUuid], references: [uuid])
+  warehouse           Warehouse?           @relation("WhPurchaseReturns", fields: [warehouseUuid], references: [uuid])
+  author              User                 @relation("PurchaseReturnAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@index([contractUuid])
+  @@index([warehouseUuid])
+  @@index([authorUuid])
+  @@index([date])
+  @@index([updatedAt])
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id                 Int            @id @default(autoincrement())
+  uuid               String         @unique @default(uuid())
+  quantity           Decimal        @default(0) @db.Decimal(18, 4)
+  price              Decimal        @default(0) @db.Decimal(18, 2)
+  amount             Decimal        @default(0) @db.Decimal(18, 2)
+  amountWithoutVat   Decimal        @default(0) @db.Decimal(18, 2)
+  unitOfMeasureUuid  String?
+  vatRate            Decimal        @default(12) @db.Decimal(5, 2)
+  vatAmount          Decimal        @default(0) @db.Decimal(18, 2)
+  exciseRate         Decimal        @default(0) @db.Decimal(8, 4)
+  exciseAmount       Decimal        @default(0) @db.Decimal(18, 2)
+  discountPercent    Decimal        @default(0) @db.Decimal(7, 4)
+  discountAmount     Decimal        @default(0) @db.Decimal(18, 2)
+  productUuid        String?
+  purchaseReturnUuid String
+  taxes              Json?
+  date               DateTime?
+  posted             Boolean        @default(false)
+  organizationUuid   String?
+  counterpartyUuid   String?
+  updatedAt          DateTime       @default(now()) @updatedAt
+  deletedAt          DateTime?
+  product            Product?       @relation(fields: [productUuid], references: [uuid])
+  purchaseReturn     PurchaseReturn @relation(fields: [purchaseReturnUuid], references: [uuid], onDelete: Cascade)
+  unitOfMeasure      UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
+
+  @@index([purchaseReturnUuid])
+  @@index([productUuid])
+  @@index([unitOfMeasureUuid])
+  @@index([date])
+  @@index([posted])
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@index([updatedAt])
+  @@map("purchase_return_items")
 }

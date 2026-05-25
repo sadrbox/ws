@@ -27,7 +27,7 @@ const OrgSwitcher: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const orgs: OrgEntry[] = user?.userOrganizations ?? [];
+  const orgs: OrgEntry[] = user?.userPermissions ?? [];
 
   // Закрытие по клику вне компонента
   useEffect(() => {
@@ -69,7 +69,7 @@ const OrgSwitcher: FC = () => {
 
   const activeOrg = orgs.find((o) => o.organizationUuid === user.organizationUuid);
   const activeLabel =
-    activeOrg?.organization?.shortName ||
+    activeOrg?.organization?.name ||
     activeOrg?.organization?.displayName ||
     (user.organizationUuid ? translate("organization") : translate("noOrganization"));
 
@@ -94,7 +94,7 @@ const OrgSwitcher: FC = () => {
           {orgs.map((o) => {
             const isActive = o.organizationUuid === user.organizationUuid;
             const name =
-              o.organization?.shortName ||
+              o.organization?.name ||
               o.organization?.displayName ||
               o.organizationUuid;
             return (
