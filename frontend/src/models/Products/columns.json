@@ -40,6 +40,16 @@
 		"alignment": "left"
 	},
 	{
+		"identifier": "barcode",
+		"hint": "Штрих-код",
+		"type": "string",
+		"visible": true,
+		"inlist": true,
+		"width": "140px",
+		"minWidth": "80px",
+		"alignment": "left"
+	},
+	{
 		"identifier": "brand.name",
 		"hint": "Бренд",
 		"type": "string",

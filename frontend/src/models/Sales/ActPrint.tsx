@@ -64,7 +64,9 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
     has((r) => r.exciseAmount) ||
     Number(data.totalExciseAmount ?? 0) > 0;
 
-  // Скидка: учитываем настройку «В печать» из cols
+  const hasIndirectTaxes = hasVat || hasExcise;
+
+  // Скидка
   const showDiscPct =
     cols.discountPercent !== false &&
     (cols.discountPercent === true || has((r) => r.discountPercent) || has((r) => r.discountAmount));
@@ -72,9 +74,19 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
     cols.discountAmount !== false &&
     (cols.discountAmount === true || has((r) => r.discountAmount) || Number(data.totalDiscountAmount ?? 0) > 0);
 
+  // Стоимость без косвенных налогов (гр. 13) — только при наличии акциза/НДС
+  const showNetOfIndirectTaxes =
+    hasIndirectTaxes && cols.amountNetOfIndirectTaxes !== false &&
+    (cols.amountNetOfIndirectTaxes === true || has((r) => r.amountNetOfIndirectTaxes));
+
   // Облагаемый оборот (amountWithoutVat) — только при наличии НДС/акциза
-  const showAmtNoVat =
-    (hasVat || hasExcise) && cols.amountWithoutVat !== false;
+  const showAmtNoVat = hasIndirectTaxes && cols.amountWithoutVat !== false;
+
+  // Акциз
+  const showExciseRate = hasExcise && cols.exciseRate !== false &&
+    (cols.exciseRate === true || has((r) => r.exciseRate) || has((r) => r.exciseAmount));
+  const showExciseAmt = hasExcise && cols.exciseAmount !== false &&
+    (cols.exciseAmount === true || has((r) => r.exciseAmount) || Number(data.totalExciseAmount ?? 0) > 0);
 
   // НДС
   const showVatRate = hasVat && cols.vatRate !== false;
@@ -86,6 +98,7 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   // Сводные итоги только по строкам акта
   const totalAmountWithoutVat = items.reduce((s, r) => s + Number(r.amountWithoutVat ?? 0), 0);
   const totalVatAmount = items.reduce((s, r) => s + Number(r.vatAmount ?? 0), 0);
+  const totalExciseAmount = items.reduce((s, r) => s + Number(r.exciseAmount ?? 0), 0);
   const totalAmount = items.reduce((s, r) => s + Number(r.amount ?? 0), 0);
   const totalDiscountAmount = items.reduce((s, r) => s + Number(r.discountAmount ?? 0), 0);
 
@@ -93,7 +106,10 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   const itogoSpan = 5 + (showDiscPct ? 1 : 0);
   const totalCols = itogoSpan
     + (showDiscAmt ? 1 : 0)
+    + (showNetOfIndirectTaxes ? 1 : 0)
     + (showAmtNoVat ? 1 : 0)
+    + (showExciseRate ? 1 : 0)
+    + (showExciseAmt ? 1 : 0)
     + (showVatRate ? 1 : 0)
     + (showVatAmt ? 1 : 0)
     + 1; // Сумма
@@ -150,8 +166,17 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
             {showDiscAmt && (
               <th style={{ ...headCellStyle, width: "20mm" }}>Сумма скидки</th>
             )}
+            {showNetOfIndirectTaxes && (
+              <th style={{ ...headCellStyle, width: "22mm" }}>Стоимость</th>
+            )}
             {showAmtNoVat && (
               <th style={{ ...headCellStyle, width: "22mm" }}>Облагаемый оборот</th>
+            )}
+            {showExciseRate && (
+              <th style={{ ...headCellStyle, width: "14mm" }}>Ставка акциза</th>
+            )}
+            {showExciseAmt && (
+              <th style={{ ...headCellStyle, width: "20mm" }}>Сумма акциза</th>
             )}
             {showVatRate && (
               <th style={{ ...headCellStyle, width: "12mm" }}>Ставка НДС, %</th>
@@ -188,8 +213,19 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
               {showDiscAmt && (
                 <td style={{ ...cellStyle, textAlign: "right" }}>{fmt(it.discountAmount)}</td>
               )}
+              {showNetOfIndirectTaxes && (
+                <td style={{ ...cellStyle, textAlign: "right" }}>{fmt(it.amountNetOfIndirectTaxes)}</td>
+              )}
               {showAmtNoVat && (
                 <td style={{ ...cellStyle, textAlign: "right" }}>{fmt(it.amountWithoutVat)}</td>
+              )}
+              {showExciseRate && (
+                <td style={{ ...cellStyle, textAlign: "center" }}>
+                  {it.exciseRate != null && it.exciseRate !== 0 ? `${it.exciseRate}%` : "—"}
+                </td>
+              )}
+              {showExciseAmt && (
+                <td style={{ ...cellStyle, textAlign: "right" }}>{fmt(it.exciseAmount)}</td>
               )}
               {showVatRate && (
                 <td style={{ ...cellStyle, textAlign: "center" }}>
@@ -210,8 +246,13 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
             {showDiscAmt && (
               <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700 }}>{fmt(totalDiscountAmount)}</td>
             )}
+            {showNetOfIndirectTaxes && <td style={cellStyle} />}
             {showAmtNoVat && (
               <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700 }}>{fmt(totalAmountWithoutVat)}</td>
+            )}
+            {showExciseRate && <td style={cellStyle} />}
+            {showExciseAmt && (
+              <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700 }}>{fmt(totalExciseAmount)}</td>
             )}
             {showVatRate && <td style={cellStyle} />}
             {showVatAmt && (

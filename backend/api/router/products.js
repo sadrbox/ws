@@ -7,7 +7,7 @@ const router = express.Router();
 
 const MODEL = "product";
 const ROUTE = "products";
-const TEXT_FIELDS = ["name", "sku"];
+const TEXT_FIELDS = ["name", "sku", "barcode"];
 
 // ── GET list ────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -134,7 +134,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { name, sku, brandUuid, unitOfMeasureUuid, isService } = req.body;
+		const { name, sku, barcode, brandUuid, unitOfMeasureUuid, isService } = req.body;
 		if (!name?.trim())
 			return res
 				.status(400)
@@ -143,6 +143,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			data: {
 				name: name.trim(),
 				sku: sku?.trim() || null,
+				barcode: barcode?.trim() || null,
 				isService: isService === true,
 				brandUuid: brandUuid || null,
 				unitOfMeasureUuid: unitOfMeasureUuid || null,
@@ -165,7 +166,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
-		const strFields = ["name", "sku", "brandUuid", "unitOfMeasureUuid"];
+		const strFields = ["name", "sku", "barcode", "brandUuid", "unitOfMeasureUuid"];
 		for (const f of strFields) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;

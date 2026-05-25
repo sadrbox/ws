@@ -667,6 +667,7 @@ model Product {
   uuid                   String                  @unique @default(uuid())
   name                   String
   sku                    String?
+  barcode                String?
   isService              Boolean                 @default(false)
   brandUuid              String?
   unitOfMeasureUuid      String?
@@ -688,6 +689,7 @@ model Product {
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
   @@index([organizationUuid])
+  @@index([barcode])
   @@index([updatedAt])
   @@map("products")
 }

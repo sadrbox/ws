@@ -786,6 +786,8 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [dropStyle, setDropStyle] = useState<React.CSSProperties>({});
 
   const [selYear, selMonth] = useMemo(() => parsePeriod(value), [value]);
   // dropYear: год, отображаемый в picker-е (независим от выбранного)
@@ -804,8 +806,38 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
       const now = new Date();
       emit(now.getFullYear(), now.getMonth() + 1);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const computePeriodDropStyle = useCallback((): React.CSSProperties => {
+    const DROP_H = 210;
+    const DROP_W = 168;
+    const rect = triggerRef.current!.getBoundingClientRect();
+    const style: React.CSSProperties = { position: 'fixed', zIndex: 9999, minWidth: Math.max(rect.width, DROP_W) };
+    if (window.innerHeight - rect.bottom >= DROP_H || rect.top < DROP_H) {
+      style.top = rect.bottom + 1;
+    } else {
+      style.bottom = window.innerHeight - rect.top + 1;
+    }
+    if (rect.left + DROP_W <= window.innerWidth) {
+      style.left = rect.left;
+    } else {
+      style.left = Math.max(4, window.innerWidth - DROP_W - 4);
+    }
+    return style;
+  }, []);
+
+  // Пересчёт при скролле / ресайзе пока дропдаун открыт
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => setDropStyle(computePeriodDropStyle());
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open, computePeriodDropStyle]);
 
   // Закрытие по клику вне компонента
   useEffect(() => {
@@ -840,9 +872,15 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
     if (disabled) return;
     if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); shiftPeriod(-1); }
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); shiftPeriod(1); }
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setOpen(o => {
+        if (!o && triggerRef.current) setDropStyle(computePeriodDropStyle());
+        return !o;
+      });
+    }
     if (e.key === 'Escape') setOpen(false);
-  }, [disabled, shiftPeriod]);
+  }, [disabled, shiftPeriod, computePeriodDropStyle]);
 
   const selectMonth = useCallback((m: number) => {
     emit(dropYear, m);
@@ -870,58 +908,39 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
         aria-expanded={open}
         aria-haspopup="listbox"
         tabIndex={disabled ? -1 : 0}
-        className={styles.FieldSelectWrapper}
-        style={{
-          cursor: disabled ? 'default' : 'pointer',
-          userSelect: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingLeft: 6,
-          paddingRight: 6,
-          gap: 4,
-          opacity: disabled ? 0.6 : 1,
+        ref={triggerRef}
+        className={styles.FieldPeriodWrapper}
+        style={{ width: '100px' }}
+        data-disabled={disabled ? "true" : undefined}
+        onClick={() => {
+          if (disabled) return;
+          setOpen(o => {
+            if (!o && triggerRef.current) setDropStyle(computePeriodDropStyle());
+            return !o;
+          });
         }}
-        onClick={() => { if (!disabled) setOpen(o => !o); }}
         onWheel={handleWheel}
         onKeyDown={handleKeyDown}
       >
-        <span style={{ fontSize: 'var(--fontsize, 13px)', whiteSpace: 'nowrap' }}>{displayText}</span>
-        <span style={{ fontSize: 9, color: '#888', lineHeight: 1 }}>▾</span>
+        <div className={styles.FieldPeriod} >
+          <span>{MONTHS_RU[selMonth - 1]}</span>
+          <span>{selYear}</span>
+          {/* <span className={styles.FieldPeriodCaret}>▾</span> */}
+        </div>
       </div>
 
       {/* Dropdown picker */}
       {open && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          zIndex: 9999,
-          background: '#fff',
-          border: '1px solid #d0d0d0',
-          borderRadius: 6,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.13)',
-          padding: '8px',
-          minWidth: 190,
-          marginTop: 2,
-        }}>
+        <div className={styles.FieldPeriodDropdown} style={dropStyle}>
           {/* Year nav */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <button
-              type="button"
-              onClick={() => setDropYear(y => y - 1)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '0 6px', color: '#444' }}
-            >◄</button>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>{dropYear}</span>
-            <button
-              type="button"
-              onClick={() => setDropYear(y => y + 1)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '0 6px', color: '#444' }}
-            >►</button>
+          <div className={styles.FieldPeriodYearNav}>
+            <button type="button" className={styles.FieldPeriodYearBtn} onClick={() => setDropYear(y => y - 1)}>◄</button>
+            <span className={styles.FieldPeriodYearLabel}>{dropYear}</span>
+            <button type="button" className={styles.FieldPeriodYearBtn} onClick={() => setDropYear(y => y + 1)}>►</button>
           </div>
 
           {/* Month grid 3×4 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+          <div className={styles.FieldPeriodMonthGrid}>
             {MONTHS_SHORT.map((mon, i) => {
               const mNum = i + 1;
               const isSelected = dropYear === selYear && mNum === selMonth;
@@ -929,18 +948,8 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
                 <button
                   key={mNum}
                   type="button"
+                  className={`${styles.FieldPeriodMonthBtn}${isSelected ? ` ${styles.FieldPeriodMonthBtnSelected}` : ''}`}
                   onClick={() => selectMonth(mNum)}
-                  style={{
-                    padding: '5px 2px',
-                    fontSize: 12,
-                    borderRadius: 4,
-                    border: isSelected ? '1.5px solid #1976d2' : '1px solid transparent',
-                    background: isSelected ? '#e3f0fb' : 'transparent',
-                    color: isSelected ? '#1565c0' : '#333',
-                    fontWeight: isSelected ? 600 : 400,
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                  }}
                 >
                   {mon}
                 </button>

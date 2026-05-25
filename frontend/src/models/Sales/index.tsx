@@ -27,7 +27,7 @@ import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import SaleInvoicePrint, { type SaleInvoicePrintData, type SaleInvoicePrintColumns, type SaleItemPrintRow } from "./SaleInvoicePrint";
 import ActPrint from "./ActPrint";
 import { buildSaleInvoiceWorkbook } from "./saleInvoiceWorkbook";
-import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
+import PrintDocumentPane, { type PrintColumnDef } from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
@@ -316,24 +316,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
       const totalExciseAmount = rows.reduce((s, r) => s + Number(r.exciseAmount ?? 0), 0);
 
-      const PRINT_KEYS = [
-        "discountPercent", "discountAmount", "amountNetOfIndirectTaxes",
-        "amountWithoutVat", "exciseRate", "exciseAmount", "vatRate", "vatAmount",
-      ] as const;
-      const printColumns: SaleInvoicePrintColumns = {};
-      try {
-        const raw = localStorage.getItem("table_columns_SaleItemsList_part");
-        if (raw) {
-          const parsed: Array<{ identifier: string; printable?: boolean; togglePrintable?: boolean }> = JSON.parse(raw);
-          for (const c of parsed) {
-            if (c?.togglePrintable && (PRINT_KEYS as readonly string[]).includes(c.identifier)) {
-              (printColumns as Record<string, boolean>)[c.identifier] = c.printable !== false;
-            }
-          }
-        }
-      } catch { /* используем поведение по умолчанию */ }
-
-      const data: SaleInvoicePrintData = {
+      const baseData: SaleInvoicePrintData = {
         documentId: sale?.id ?? form.fields.id,
         documentDate: sale?.date ?? form.fields.date,
         organizationName: sale?.organization?.name ?? form.fields.organizationName,
@@ -351,27 +334,42 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         totalDiscountAmount: rows.reduce((s, r) => s + Number(r.discountAmount ?? 0), 0),
         totalExciseAmount: Math.round(totalExciseAmount * 100) / 100,
         isVatPayer: isVatEnabled,
-        columns: printColumns,
       };
 
       const isAct = layoutId === "act";
       const titleStr = isAct
-        ? `Акт вып. работ № ${data.documentId ?? ""}`
-        : `Накладная № ${data.documentId ?? ""}`;
+        ? `Акт вып. работ № ${baseData.documentId ?? ""}`
+        : `Накладная № ${baseData.documentId ?? ""}`;
       const fileBase = (isAct
-        ? `Акт_${data.documentId ?? "draft"}`
-        : `Накладная_${data.documentId ?? "draft"}`
+        ? `Акт_${baseData.documentId ?? "draft"}`
+        : `Накладная_${baseData.documentId ?? "draft"}`
       ).replace(/\s+/g, "_");
 
-      const workbook = buildSaleInvoiceWorkbook(data);
+      const columnDefs: PrintColumnDef[] = [
+        { key: "discountPercent",          label: "Скидка, %",                defaultVisible: false },
+        { key: "discountAmount",           label: "Сумма скидки",             defaultVisible: false },
+        { key: "amountNetOfIndirectTaxes", label: "Стоимость (без косв.нал.)", defaultVisible: false },
+        { key: "amountWithoutVat",         label: "Облагаемый оборот",        defaultVisible: true  },
+        { key: "exciseRate",               label: "Ставка акциза, %",         defaultVisible: false },
+        { key: "exciseAmount",             label: "Сумма акциза",             defaultVisible: false },
+        { key: "vatRate",                  label: "Ставка НДС, %",            defaultVisible: true  },
+        { key: "vatAmount",                label: "Сумма НДС",                defaultVisible: true  },
+      ];
+
+      const workbook = buildSaleInvoiceWorkbook(baseData);
       addPane({
         component: PrintDocumentPane,
         isSelector: true,
         label: titleStr,
         data: {
-          id: Number(data.documentId ?? form.fields.id ?? 0),
+          id: Number(baseData.documentId ?? form.fields.id ?? 0),
           uuid: String(form.fields.uuid ?? ""),
-          layout: isAct ? <ActPrint data={data} /> : <SaleInvoicePrint data={data} />,
+          columnsKey: isAct ? "sale_act" : "sale_invoice",
+          columnDefs,
+          buildLayout: (cols) => {
+            const printData: SaleInvoicePrintData = { ...baseData, columns: cols as SaleInvoicePrintColumns };
+            return isAct ? <ActPrint data={printData} /> : <SaleInvoicePrint data={printData} />;
+          },
           fileBaseName: fileBase,
           title: titleStr,
           workbook,

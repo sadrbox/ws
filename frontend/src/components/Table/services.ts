@@ -106,18 +106,11 @@ export function getModelColumns(
 				.sort()
 				.join(",");
 			if (initSig === cachedSig) {
-				// Берём кэш (ширины, видимость, printable), но sortable и
-				// togglePrintable всегда из JSON-определения, чтобы изменения
-				// в исходных схемах колонок применялись без сброса кэша.
+				// Берём кэш (ширины, видимость), но sortable всегда из JSON-определения,
+				// чтобы изменения в исходных схемах колонок применялись без сброса кэша.
 				columns = cached.map((c) => {
 					const def = defaults.find((d) => d.identifier === c.identifier);
-					return def
-						? {
-								...c,
-								sortable: def.sortable,
-								togglePrintable: def.togglePrintable,
-							}
-						: c;
+					return def ? { ...c, sortable: def.sortable } : c;
 				});
 			} else {
 				// Столбцы изменились — сбрасываем устаревший кэш

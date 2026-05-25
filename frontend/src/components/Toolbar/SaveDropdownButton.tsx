@@ -5,7 +5,7 @@
  * Используется в шапке `PrintDocumentPane` для экспорта в xlsx / xls / doc.
  */
 
-import { FC, useEffect, useRef, useState, type ReactNode } from "react";
+import { FC, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import styles from "./Toolbar.module.scss";
@@ -29,6 +29,25 @@ interface SaveDropdownButtonProps {
   title?: string;
 }
 
+const DROP_W = 200;
+const DROP_H = 200;
+
+function computeDropStyle(anchor: HTMLElement): CSSProperties {
+  const rect = anchor.getBoundingClientRect();
+  const s: CSSProperties = { position: "fixed", zIndex: 9999, minWidth: Math.max(rect.width, DROP_W) };
+  if (window.innerHeight - rect.bottom >= DROP_H || rect.top < DROP_H) {
+    s.top = rect.bottom + 4;
+  } else {
+    s.bottom = window.innerHeight - rect.top + 4;
+  }
+  if (rect.left + DROP_W <= window.innerWidth) {
+    s.left = rect.left;
+  } else {
+    s.left = Math.max(4, window.innerWidth - DROP_W - 4);
+  }
+  return s;
+}
+
 const SaveDropdownButton: FC<SaveDropdownButtonProps> = ({
   options,
   onSelect,
@@ -36,7 +55,21 @@ const SaveDropdownButton: FC<SaveDropdownButtonProps> = ({
   title = "Сохранить",
 }) => {
   const [open, setOpen] = useState(false);
+  const [dropStyle, setDropStyle] = useState<CSSProperties>({});
   const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  // Пересчёт позиции при скролле / ресайзе пока меню открыто
+  useEffect(() => {
+    if (!open || !wrapRef.current) return;
+    const el = wrapRef.current;
+    const update = () => setDropStyle(computeDropStyle(el));
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -55,6 +88,12 @@ const SaveDropdownButton: FC<SaveDropdownButtonProps> = ({
     };
   }, [open]);
 
+  // Синхронно вычисляем позицию при открытии — до первого рендера меню
+  const toggle = () => {
+    if (!open && wrapRef.current) setDropStyle(computeDropStyle(wrapRef.current));
+    setOpen((v) => !v);
+  };
+
   return (
     <div ref={wrapRef} className={styles.DropdownWrap}>
       <IconButton
@@ -65,19 +104,19 @@ const SaveDropdownButton: FC<SaveDropdownButtonProps> = ({
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
       />
       <button
         type="button"
         className={styles.DropdownCaret}
         aria-label="Выбрать формат сохранения"
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
       >
         <Icon name="caretDown" />
       </button>
       {open && (
-        <div role="menu" className={styles.DropdownMenu}>
+        <div role="menu" className={styles.DropdownMenu} style={dropStyle}>
           {options.map((o) => (
             <button
               key={o.id}

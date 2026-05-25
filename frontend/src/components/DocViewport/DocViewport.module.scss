@@ -99,6 +99,19 @@
   width: 210mm;
   min-height: 297mm;
 
+
+
+  // border-radius: 2px;
+  padding: 12mm;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  font-family: "Times New Roman",
+    Times,
+    serif;
+  font-size: 10pt;
+  color: #000;
+
   // Landscape: 297 × 210 mm
   &[data-orientation="landscape"] {
     width: 297mm;
@@ -111,17 +124,6 @@
     min-width: 210mm;
     overflow: visible;
   }
-
-  // border-radius: 2px;
-  padding: 6mm;
-  box-sizing: border-box;
-  overflow: hidden;
-
-  font-family: "Times New Roman",
-  Times,
-  serif;
-  font-size: 10pt;
-  color: #000;
 }
 
 // ── Белый iframe A4 для HTML-строк (PrintDocumentPane) ─────────────────────

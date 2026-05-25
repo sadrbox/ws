@@ -1678,12 +1678,6 @@ const TableConfigColumns: FC<TypeTableConfigColumnsProps> = ({ columns, setColum
     ));
   }, [setColumns]);
 
-  const updateColumnPrintable = useCallback((identifier: string, printable: boolean) => {
-    setColumns(prev => prev.map(col =>
-      col.identifier === identifier ? { ...col, printable } : col
-    ));
-  }, [setColumns]);
-
   const onDragStart = useCallback((event: any) => setDraggingId(String(event.active.id)), []);
 
   const onDragEnd = useCallback((event: any) => {
@@ -1714,7 +1708,6 @@ const TableConfigColumns: FC<TypeTableConfigColumnsProps> = ({ columns, setColum
                 column={column}
                 isDragging={column.identifier === draggingId}
                 toggleVisibility={updateColumnVisibility}
-                togglePrintable={updateColumnPrintable}
               />
             ))}
           </ul>
@@ -1732,21 +1725,14 @@ type TypeTableConfigColumnsItemProps = {
   column: TColumn;
   isDragging: boolean;
   toggleVisibility: (identifier: string, visible: boolean) => void;
-  togglePrintable: (identifier: string, printable: boolean) => void;
 };
 
-const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ column, isDragging, toggleVisibility, togglePrintable }) => {
+const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ column, isDragging, toggleVisibility }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: column.identifier });
 
   const handleVisibilityChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     toggleVisibility(column.identifier, e.target.checked);
   }, [column.identifier, toggleVisibility]);
-
-  const handlePrintableChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    togglePrintable(column.identifier, e.target.checked);
-  }, [column.identifier, togglePrintable]);
-
-  const printableChecked = column.printable !== false; // default true
 
   return (
     <li
@@ -1766,17 +1752,6 @@ const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ colu
         />
         <label htmlFor={`column-visibility-${column.identifier}`}>{getTranslateColumn(column)}</label>
       </div>
-      {column.togglePrintable && (
-        <div className={styles.PrintableWrapper} title="Показывать в печатной форме">
-          <input
-            type="checkbox"
-            id={`column-printable-${column.identifier}`}
-            checked={printableChecked}
-            onChange={handlePrintableChange}
-          />
-          <label htmlFor={`column-printable-${column.identifier}`}>В печать</label>
-        </div>
-      )}
     </li>
   );
 });
