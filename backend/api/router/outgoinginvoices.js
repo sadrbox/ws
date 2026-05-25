@@ -147,6 +147,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			counterpartyUuid,
 			contractUuid,
 			posted,
+			basisDocumentType,
+			basisDocumentUuid,
+			basisDocumentLabel,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
@@ -157,6 +160,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
+				basisDocumentType: basisDocumentType || null,
+				basisDocumentUuid: basisDocumentUuid || null,
+				basisDocumentLabel: basisDocumentLabel || null,
 				authorUuid: req.user.uuid,
 			},
 			include: {
@@ -194,6 +200,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
 		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
+		for (const f of ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"]) {
+			if (req.body[f] !== undefined) data[f] = req.body[f] || null;
+		}
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,

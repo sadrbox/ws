@@ -83,6 +83,10 @@ export interface TradeDocumentItemsTableProps {
   emptyMessage?: string;
   /** Показывать подсветку обязательных полей (только после неудачной попытки сохранения). */
   showRequiredHighlight?: boolean;
+  /** Колбэк при любом обновлении кэша строк (включая загрузку с сервера). Используется для печати. */
+  onAllItemsChange?: (rows: TDataItem[]) => void;
+  /** Колонки, скрытые по умолчанию для данного типа документа (пользователь может включить через настройки). */
+  defaultHiddenColumns?: string[];
 }
 
 const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
@@ -100,16 +104,18 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   hasTaxes = true,
   emptyMessage = "Сохраните документ для добавления позиций.",
   showRequiredHighlight = false,
+  onAllItemsChange,
+  defaultHiddenColumns,
 }) => {
   const queryClient = useQueryClient();
   const settings = useOrgAccountingSettings(organizationUuid ?? null, documentDate ?? null);
   // Если hasTaxes=false — принудительно отключаем все косвенные налоги.
+  const useDiscount = settings.useDiscount;
   const isVatEnabled = hasTaxes && settings.isVatEnabled;
-  const useDiscount = hasTaxes && settings.useDiscount;
   const useExcise = hasTaxes && settings.useExcise;
-  const orgExciseRate = settings.exciseRate;
-  const orgVatRate = settings.vatRate;
-  const vatCalculationMethod = settings.vatCalculationMethod;
+  const orgExciseRate = hasTaxes && settings.exciseRate;
+  const orgVatRate = hasTaxes && settings.vatRate;
+  const vatCalculationMethod = hasTaxes && settings.vatCalculationMethod;
 
   const dynamicColumns = useMemo(() => {
     let base = (columnsJson as Array<Record<string, unknown>>).filter((c) => {
@@ -130,13 +136,13 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       if (isVatEnabled && useExcise) baseNote = "Итого Сумма скидки вычитается из базы для НДС и акциза";
       else if (isVatEnabled) baseNote = "Итого Сумма скидки вычитается из базы для НДС";
       else if (useExcise) baseNote = "Итого Сумма скидки вычитается из базы для акциза";
-      else baseNote = "Уменьшает итоговую стоимость строки";
+      else baseNote = "Уменьшает итоговую Сумма без налогов строки";
       dynHints["discountAmount"] = {
         hint: "Сумма скидки (надбавки).\nСумма скидки = Количество × Цена × Процент скидки, % ÷ 100\n(" + baseNote + ")",
       };
     }
     if (isVatEnabled) {
-      const formula = useDiscount ? "Стоимость = Количество × Цена − Сумма скидки" : "Стоимость = Количество × Цена";
+      const formula = useDiscount ? "Сумма без налогов = Количество × Цена − Сумма скидки" : "Сумма без налогов = Количество × Цена";
       const baseFor = useExcise ? "= база до начисления акциза и НДС" : "= база до начисления НДС";
       const afterDiscount = useDiscount ? ", после скидки" : "";
       dynHints["amountNetOfIndirectTaxes"] = {
@@ -145,7 +151,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     }
     if (isVatEnabled) {
       const lines: string[] = ["Облагаемый оборот по НДС (НК РК ст. 381 п. 1 пп. 4)."];
-      if (useExcise) lines.push("Облагаемый оборот НДС = Стоимость + Сумма акциза");
+      if (useExcise) lines.push("Облагаемый оборот НДС = Сумма без налогов + Сумма акциза");
       else if (useDiscount) lines.push("Облагаемый оборот НДС = Количество × Цена − Сумма скидки");
       else lines.push("Облагаемый оборот НДС = Количество × Цена");
       lines.push("= база для расчёта НДС");
@@ -153,7 +159,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       dynHints["amountWithoutVat"] = { hint: lines.join("\n") };
     }
     if (useExcise) {
-      const baseLabel = isVatEnabled ? "Стоимость" : (useDiscount ? "(Количество × Цена − Сумма скидки)" : "(Количество × Цена)");
+      const baseLabel = isVatEnabled ? "Сумма без налогов" : (useDiscount ? "(Количество × Цена − Сумма скидки)" : "(Количество × Цена)");
       dynHints["exciseAmount"] = {
         hint: `Сумма акциза — графа 14 ЭСФ РК.\nСумма акциза = ${baseLabel} × Ставка акциза, % ÷ 100\n(НК РК ст. 463; начисляется сверху — ADDED)`,
       };
@@ -162,18 +168,18 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       const lines: string[] = [];
       let name: string | undefined;
       if (isVatEnabled) {
-        lines.push("Стоимость товаров (работ, услуг) с косвенными налогами — графа 17 ЭСФ РК.");
+        lines.push("Сумма без налогов товаров (работ, услуг) с косвенными налогами — графа 17 ЭСФ РК.");
         lines.push("Сумма = Облагаемый оборот + Сумма НДС");
       } else {
-        name = "Стоимость";
+        name = "Сумма без налогов";
         if (useExcise) {
-          lines.push("Стоимость товаров (работ, услуг) с акцизом.");
-          if (useDiscount) lines.push("Стоимость = Количество × Цена − Сумма скидки + Сумма акциза");
-          else lines.push("Стоимость = Количество × Цена + Сумма акциза");
+          lines.push("Сумма без налогов товаров (работ, услуг) с акцизом.");
+          if (useDiscount) lines.push("Сумма без налогов = Количество × Цена − Сумма скидки + Сумма акциза");
+          else lines.push("Сумма без налогов = Количество × Цена + Сумма акциза");
         } else {
-          lines.push("Стоимость товаров (работ, услуг).");
-          if (useDiscount) lines.push("Стоимость = Количество × Цена − Сумма скидки");
-          else lines.push("Стоимость = Количество × Цена");
+          lines.push("Сумма без налогов товаров (работ, услуг).");
+          if (useDiscount) lines.push("Сумма без налогов = Количество × Цена − Сумма скидки");
+          else lines.push("Сумма без налогов = Количество × Цена");
         }
       }
       lines.push("= итоговая сумма к оплате по строке");
@@ -197,8 +203,12 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
         return c;
       });
     }
+    if (defaultHiddenColumns && defaultHiddenColumns.length > 0) {
+      const hidden = new Set(defaultHiddenColumns);
+      base = base.map((c) => hidden.has(c.identifier as string) ? { ...c, visible: false } : c);
+    }
     return base;
-  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod]);
+  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns]);
 
   const taxSig = useMemo(
     () => "vat:" + (isVatEnabled ? "1" : "0") + "|disc:" + (useDiscount ? "1" : "0") + "|exc:" + (useExcise ? "1" : "0") + "|m:" + vatCalculationMethod + "|r:" + String(orgVatRate ?? ""),
@@ -290,18 +300,18 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     if (id === "lineNumber") {
       const idx = ctx.rows.indexOf(row);
       const value = idx >= 0 ? idx + 1 : (row.lineNumber as string | number | null | undefined) ?? "";
-      return <ReadOnlyCell value={String(value)} inlineEditing={ctx.inlineEditing} />;
+      return <ReadOnlyCell value={String(value)} />;
     }
-    if (id === "vatAmount") return <ReadOnlyCell value={row.vatAmount ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
-    if (id === "amount") return <ReadOnlyCell value={row.amount ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
-    if (id === "amountWithoutVat") return <ReadOnlyCell value={row.amountWithoutVat ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
+    if (id === "vatAmount") return <ReadOnlyCell value={row.vatAmount ?? 0} column={col} />;
+    if (id === "amount") return <ReadOnlyCell value={row.amount ?? 0} column={col} />;
+    if (id === "amountWithoutVat") return <ReadOnlyCell value={row.amountWithoutVat ?? 0} column={col} />;
     if (id === "amountNetOfIndirectTaxes") {
       const netVal = Number(row.amountWithoutVat ?? 0) - Number(row.exciseAmount ?? 0);
-      return <ReadOnlyCell value={netVal} column={col} inlineEditing={ctx.inlineEditing} />;
+      return <ReadOnlyCell value={netVal} column={col} />;
     }
-    if (id === "exciseAmount") return <ReadOnlyCell value={row.exciseAmount ?? 0} column={col} inlineEditing={ctx.inlineEditing} />;
+    if (id === "exciseAmount") return <ReadOnlyCell value={row.exciseAmount ?? 0} column={col} />;
     if (id === "discountAmount") {
-      if (!ctx.inlineEditing) return <ReadOnlyCell value={row.discountAmount ?? 0} column={col} inlineEditing={false} />;
+      if (!ctx.inlineEditing) return <ReadOnlyCell value={row.discountAmount ?? 0} column={col} />;
       return (
         <FieldNumber
           name={`docitem_discamt_${row.id}`}
@@ -507,6 +517,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       renderCell={renderCell}
       defaultNewRow={defaultNewRow}
       onItemsChange={handleItemsChange}
+      onAllItemsChange={onAllItemsChange}
       customInlineChange={customInlineChange}
       validationRules={validationRules}
       requiredFields={requiredFields}

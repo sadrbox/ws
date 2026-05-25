@@ -74,7 +74,7 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
     cols.discountAmount !== false &&
     (cols.discountAmount === true || has((r) => r.discountAmount) || Number(data.totalDiscountAmount ?? 0) > 0);
 
-  // Стоимость без косвенных налогов (гр. 13) — только при наличии акциза/НДС
+  // Сумма без налогов Сумма без налогов (гр. 13) — только при наличии акциза/НДС
   const showNetOfIndirectTaxes =
     hasIndirectTaxes && cols.amountNetOfIndirectTaxes !== false &&
     (cols.amountNetOfIndirectTaxes === true || has((r) => r.amountNetOfIndirectTaxes));
@@ -167,7 +167,7 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
               <th style={{ ...headCellStyle, width: "20mm" }}>Сумма скидки</th>
             )}
             {showNetOfIndirectTaxes && (
-              <th style={{ ...headCellStyle, width: "22mm" }}>Стоимость</th>
+              <th style={{ ...headCellStyle, width: "22mm" }}>Сумма без налогов</th>
             )}
             {showAmtNoVat && (
               <th style={{ ...headCellStyle, width: "22mm" }}>Облагаемый оборот</th>

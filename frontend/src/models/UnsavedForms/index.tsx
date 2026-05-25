@@ -26,6 +26,7 @@ const TABLE_LABELS: Record<string, string> = {
   contacts: "Контакты",
   bankAccounts: "Банковские счета",
   contracts: "Договора",
+  items: "Товары, услуги",
   saleItems: "Товары, услуги реализации",
   history: "Кадровая история",
   purchaseItems: "Товары, услуги поступления",

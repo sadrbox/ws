@@ -8,41 +8,42 @@ datasource db {
 }
 
 model User {
-  id                          Int                  @id @default(autoincrement())
-  uuid                        String               @unique @default(uuid())
-  username                    String?
-  email                       String?
-  password                    String?
-  employeeUuid                String?
-  isSuperAdmin                Boolean              @default(false)
-  avatarPath                  String?
+  id                           Int                   @id @default(autoincrement())
+  uuid                         String                @unique @default(uuid())
+  username                     String?
+  email                        String?
+  password                     String?
+  employeeUuid                 String?
+  isSuperAdmin                 Boolean               @default(false)
+  avatarPath                   String?
   /// UUID активной (текущей) организации пользователя.
   /// Должен совпадать с одной из записей в userPermissions.
-  organizationUuid            String?
-  createdAt                   DateTime             @default(now())
-  updatedAt                   DateTime             @default(now()) @updatedAt
-  deletedAt                   DateTime?
-  accessRights                AccessRight[]
-  curatorTodos                Todo[]               @relation("TodoCurator")
-  executorTodos               Todo[]               @relation("TodoExecutor")
-  employee                    Employee?            @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
-  organization                Organization?        @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
+  organizationUuid             String?
+  createdAt                    DateTime              @default(now())
+  updatedAt                    DateTime              @default(now()) @updatedAt
+  deletedAt                    DateTime?
+  accessRights                 AccessRight[]
+  curatorTodos                 Todo[]                @relation("TodoCurator")
+  executorTodos                Todo[]                @relation("TodoExecutor")
+  employee                     Employee?             @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
+  organization                 Organization?         @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   /// Список организаций, к которым у пользователя есть доступ
-  userPermissions             UserPermission[]
+  userPermissions              UserPermission[]
   // Авторство документов — заполняется при создании, не редактируется.
-  authoredSales               Sale[]               @relation("SaleAuthor")
-  authoredPurchases           Purchase[]           @relation("PurchaseAuthor")
-  authoredSaleReturns         SaleReturn[]         @relation("SaleReturnAuthor")
-  authoredPurchaseReturns     PurchaseReturn[]     @relation("PurchaseReturnAuthor")
-  authoredOutgoingInvoices    OutgoingInvoice[]    @relation("OutgoingInvoiceAuthor")
-  authoredIncomingInvoices    IncomingInvoice[]    @relation("IncomingInvoiceAuthor")
-  authoredPaymentInvoices     PaymentInvoice[]     @relation("PaymentInvoiceAuthor")
-  authoredInventoryTransfers  InventoryTransfer[]  @relation("InventoryTransferAuthor")
-  authoredCashReceiptOrders   CashReceiptOrder[]   @relation("CashReceiptOrderAuthor")
-  authoredCashExpenseOrders   CashExpenseOrder[]   @relation("CashExpenseOrderAuthor")
-  authoredPayrollCalculations PayrollCalculation[] @relation("PayrollCalculationAuthor")
-  authoredPayrollPayments     PayrollPayment[]     @relation("PayrollPaymentAuthor")
-  authoredScheduledTasks      ScheduledTask[]      @relation("ScheduledTaskAuthor")
+  authoredSales                Sale[]                @relation("SaleAuthor")
+  authoredPurchases            Purchase[]            @relation("PurchaseAuthor")
+  authoredSaleReturns          SaleReturn[]          @relation("SaleReturnAuthor")
+  authoredPurchaseReturns      PurchaseReturn[]      @relation("PurchaseReturnAuthor")
+  authoredOutgoingInvoices     OutgoingInvoice[]     @relation("OutgoingInvoiceAuthor")
+  authoredIncomingInvoices     IncomingInvoice[]     @relation("IncomingInvoiceAuthor")
+  authoredPaymentInvoices      PaymentInvoice[]      @relation("PaymentInvoiceAuthor")
+  authoredInventoryTransfers   InventoryTransfer[]   @relation("InventoryTransferAuthor")
+  authoredCashReceiptOrders    CashReceiptOrder[]    @relation("CashReceiptOrderAuthor")
+  authoredCashExpenseOrders    CashExpenseOrder[]    @relation("CashExpenseOrderAuthor")
+  authoredPayrollCalculations  PayrollCalculation[]  @relation("PayrollCalculationAuthor")
+  authoredPayrollPayments      PayrollPayment[]      @relation("PayrollPaymentAuthor")
+  authoredScheduledTasks       ScheduledTask[]       @relation("ScheduledTaskAuthor")
+  authoredPurchaseRequisitions PurchaseRequisition[] @relation("PurchaseRequisitionAuthor")
 
   @@index([employeeUuid])
   @@index([organizationUuid])
@@ -74,73 +75,75 @@ model UserPermission {
 }
 
 model Organization {
-  id                  Int                             @id @default(autoincrement())
-  uuid                String                          @unique @default(uuid())
-  bin                 String                          @unique @db.VarChar(12)
-  name                String?
-  displayName         String?
-  inviteCode          String?                         @unique
-  createdAt           DateTime                        @default(now())
-  updatedAt           DateTime                        @default(now()) @updatedAt
-  deletedAt           DateTime?
-  activityHistories   ActivityHistory[]
-  cashExpenseOrders   CashExpenseOrder[]              @relation("OrgCashExpenses")
-  cashReceiptOrders   CashReceiptOrder[]              @relation("OrgCashReceipts")
-  contracts           Contract[]                      @relation("OrgContracts")
-  employees           Employee[]                      @relation("EmployeeOrganization")
-  incomingInvoices    IncomingInvoice[]               @relation("OrgIncomingInvoices")
-  inventoryTransfers  InventoryTransfer[]
-  outgoingInvoices    OutgoingInvoice[]               @relation("OrgOutgoingInvoices")
-  paymentInvoices     PaymentInvoice[]
-  payrollCalculations PayrollCalculation[]            @relation("OrgPayrollCalc")
-  payrollPayments     PayrollPayment[]                @relation("OrgPayrollPay")
-  purchases           Purchase[]
-  purchaseReturns     PurchaseReturn[]
-  sales               Sale[]
-  saleReturns         SaleReturn[]
-  scheduledTasks      ScheduledTask[]
-  todos               Todo[]
-  users               User[]                          @relation("UserOrganization")
-  userPermissions     UserPermission[]
-  accessRights        AccessRight[]
-  warehouses          Warehouse[]
-  employeeHistories   EmployeeHistory[]
-  counterparties      Counterparty[]                  @relation("OrgCounterparties")
-  products            Product[]                       @relation("OrgProducts")
-  brands              Brand[]                         @relation("OrgBrands")
-  positions           Position[]                      @relation("OrgPositions")
-  contacts            Contact[]                       @relation("OrgContacts")
-  contactPersons      ContactPerson[]                 @relation("OrgContactPersons")
-  bankAccounts        BankAccount[]                   @relation("OrgBankAccounts")
-  cashboxes           Cashbox[]                       @relation("OrgCashboxes")
-  accountingSettings  OrganizationAccountingSetting[] @relation("OrgAccountingSettings")
+  id                   Int                             @id @default(autoincrement())
+  uuid                 String                          @unique @default(uuid())
+  bin                  String                          @unique @db.VarChar(12)
+  name                 String?
+  displayName          String?
+  inviteCode           String?                         @unique
+  createdAt            DateTime                        @default(now())
+  updatedAt            DateTime                        @default(now()) @updatedAt
+  deletedAt            DateTime?
+  activityHistories    ActivityHistory[]
+  cashExpenseOrders    CashExpenseOrder[]              @relation("OrgCashExpenses")
+  cashReceiptOrders    CashReceiptOrder[]              @relation("OrgCashReceipts")
+  contracts            Contract[]                      @relation("OrgContracts")
+  employees            Employee[]                      @relation("EmployeeOrganization")
+  incomingInvoices     IncomingInvoice[]               @relation("OrgIncomingInvoices")
+  inventoryTransfers   InventoryTransfer[]
+  outgoingInvoices     OutgoingInvoice[]               @relation("OrgOutgoingInvoices")
+  paymentInvoices      PaymentInvoice[]
+  payrollCalculations  PayrollCalculation[]            @relation("OrgPayrollCalc")
+  payrollPayments      PayrollPayment[]                @relation("OrgPayrollPay")
+  purchases            Purchase[]
+  purchaseReturns      PurchaseReturn[]
+  sales                Sale[]
+  saleReturns          SaleReturn[]
+  scheduledTasks       ScheduledTask[]
+  todos                Todo[]
+  users                User[]                          @relation("UserOrganization")
+  userPermissions      UserPermission[]
+  accessRights         AccessRight[]
+  warehouses           Warehouse[]
+  employeeHistories    EmployeeHistory[]
+  counterparties       Counterparty[]                  @relation("OrgCounterparties")
+  products             Product[]                       @relation("OrgProducts")
+  brands               Brand[]                         @relation("OrgBrands")
+  positions            Position[]                      @relation("OrgPositions")
+  contacts             Contact[]                       @relation("OrgContacts")
+  contactPersons       ContactPerson[]                 @relation("OrgContactPersons")
+  bankAccounts         BankAccount[]                   @relation("OrgBankAccounts")
+  cashboxes            Cashbox[]                       @relation("OrgCashboxes")
+  accountingSettings   OrganizationAccountingSetting[] @relation("OrgAccountingSettings")
+  purchaseRequisitions PurchaseRequisition[]
 
   @@index([updatedAt])
   @@map("organizations")
 }
 
 model Counterparty {
-  id                Int                @id @default(autoincrement())
-  uuid              String             @unique @default(uuid())
-  bin               String             @unique @db.VarChar(12)
-  name              String?
-  displayName       String?
-  organizationUuid  String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @default(now()) @updatedAt
-  deletedAt         DateTime?
-  organization      Organization?      @relation("OrgCounterparties", fields: [organizationUuid], references: [uuid])
-  cashExpenseOrders CashExpenseOrder[] @relation("CpCashExpenses")
-  cashReceiptOrders CashReceiptOrder[] @relation("CpCashReceipts")
-  contracts         Contract[]         @relation("CpContracts")
-  incomingInvoices  IncomingInvoice[]  @relation("CpIncomingInvoices")
-  outgoingInvoices  OutgoingInvoice[]  @relation("CpOutgoingInvoices")
-  paymentInvoices   PaymentInvoice[]
-  purchases         Purchase[]
-  purchaseReturns   PurchaseReturn[]
-  sales             Sale[]
-  saleReturns       SaleReturn[]
-  todos             Todo[]
+  id                   Int                   @id @default(autoincrement())
+  uuid                 String                @unique @default(uuid())
+  bin                  String                @unique @db.VarChar(12)
+  name                 String?
+  displayName          String?
+  organizationUuid     String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @default(now()) @updatedAt
+  deletedAt            DateTime?
+  organization         Organization?         @relation("OrgCounterparties", fields: [organizationUuid], references: [uuid])
+  cashExpenseOrders    CashExpenseOrder[]    @relation("CpCashExpenses")
+  cashReceiptOrders    CashReceiptOrder[]    @relation("CpCashReceipts")
+  contracts            Contract[]            @relation("CpContracts")
+  incomingInvoices     IncomingInvoice[]     @relation("CpIncomingInvoices")
+  outgoingInvoices     OutgoingInvoice[]     @relation("CpOutgoingInvoices")
+  paymentInvoices      PaymentInvoice[]
+  purchases            Purchase[]
+  purchaseReturns      PurchaseReturn[]
+  purchaseRequisitions PurchaseRequisition[]
+  sales                Sale[]
+  saleReturns          SaleReturn[]
+  todos                Todo[]
 
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -148,30 +151,31 @@ model Counterparty {
 }
 
 model Contract {
-  id                Int                @id @default(autoincrement())
-  uuid              String             @unique @default(uuid())
-  name              String
-  contractNumber    String?
-  contractText      String?
-  startDate         DateTime?
-  endDate           DateTime?
-  organizationUuid  String?
-  counterpartyUuid  String?
-  isPrimary         Boolean            @default(false)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @default(now()) @updatedAt
-  deletedAt         DateTime?
-  organization      Organization?      @relation("OrgContracts", fields: [organizationUuid], references: [uuid])
-  counterparty      Counterparty?      @relation("CpContracts", fields: [counterpartyUuid], references: [uuid])
-  cashExpenseOrders CashExpenseOrder[]
-  cashReceiptOrders CashReceiptOrder[]
-  incomingInvoices  IncomingInvoice[]
-  outgoingInvoices  OutgoingInvoice[]
-  paymentInvoices   PaymentInvoice[]
-  purchases         Purchase[]
-  purchaseReturns   PurchaseReturn[]
-  sales             Sale[]
-  saleReturns       SaleReturn[]
+  id                   Int                   @id @default(autoincrement())
+  uuid                 String                @unique @default(uuid())
+  name                 String
+  contractNumber       String?
+  contractText         String?
+  startDate            DateTime?
+  endDate              DateTime?
+  organizationUuid     String?
+  counterpartyUuid     String?
+  isPrimary            Boolean               @default(false)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @default(now()) @updatedAt
+  deletedAt            DateTime?
+  organization         Organization?         @relation("OrgContracts", fields: [organizationUuid], references: [uuid])
+  counterparty         Counterparty?         @relation("CpContracts", fields: [counterpartyUuid], references: [uuid])
+  cashExpenseOrders    CashExpenseOrder[]
+  cashReceiptOrders    CashReceiptOrder[]
+  incomingInvoices     IncomingInvoice[]
+  outgoingInvoices     OutgoingInvoice[]
+  paymentInvoices      PaymentInvoice[]
+  purchases            Purchase[]
+  purchaseReturns      PurchaseReturn[]
+  purchaseRequisitions PurchaseRequisition[]
+  sales                Sale[]
+  saleReturns          SaleReturn[]
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -399,6 +403,10 @@ model Sale {
   warehouse        Warehouse?    @relation(fields: [warehouseUuid], references: [uuid])
   author           User          @relation("SaleAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
+  basisDocumentType  String?
+  basisDocumentUuid  String?
+  basisDocumentLabel String?
+
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
@@ -406,6 +414,7 @@ model Sale {
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
+  @@index([basisDocumentUuid])
   @@map("sales")
 }
 
@@ -433,6 +442,10 @@ model Purchase {
   warehouse        Warehouse?     @relation("WhPurchases", fields: [warehouseUuid], references: [uuid])
   author           User           @relation("PurchaseAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
+  basisDocumentType  String?
+  basisDocumentUuid  String?
+  basisDocumentLabel String?
+
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
@@ -440,6 +453,7 @@ model Purchase {
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
+  @@index([basisDocumentUuid])
   @@map("purchases")
 }
 
@@ -465,12 +479,17 @@ model OutgoingInvoice {
   organization         Organization?         @relation("OrgOutgoingInvoices", fields: [organizationUuid], references: [uuid])
   author               User                  @relation("OutgoingInvoiceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
+  basisDocumentType  String?
+  basisDocumentUuid  String?
+  basisDocumentLabel String?
+
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
+  @@index([basisDocumentUuid])
   @@map("outgoing_invoices")
 }
 
@@ -663,28 +682,29 @@ model Brand {
 }
 
 model Product {
-  id                     Int                     @id @default(autoincrement())
-  uuid                   String                  @unique @default(uuid())
-  name                   String
-  sku                    String?
-  barcode                String?
-  isService              Boolean                 @default(false)
-  brandUuid              String?
-  unitOfMeasureUuid      String?
-  organizationUuid       String?
-  updatedAt              DateTime                @default(now()) @updatedAt
-  deletedAt              DateTime?
-  brand                  Brand?                  @relation(fields: [brandUuid], references: [uuid])
-  unitOfMeasure          UnitOfMeasure?          @relation(fields: [unitOfMeasureUuid], references: [uuid])
-  organization           Organization?           @relation("OrgProducts", fields: [organizationUuid], references: [uuid])
-  saleItems              SaleItem[]
-  saleReturnItems        SaleReturnItem[]
-  purchaseItems          PurchaseItem[]
-  purchaseReturnItems    PurchaseReturnItem[]
-  outgoingInvoiceItems   OutgoingInvoiceItem[]
-  incomingInvoiceItems   IncomingInvoiceItem[]
-  paymentInvoiceItems    PaymentInvoiceItem[]
-  inventoryTransferItems InventoryTransferItem[]
+  id                       Int                       @id @default(autoincrement())
+  uuid                     String                    @unique @default(uuid())
+  name                     String
+  sku                      String?
+  barcode                  String?
+  isService                Boolean                   @default(false)
+  brandUuid                String?
+  unitOfMeasureUuid        String?
+  organizationUuid         String?
+  updatedAt                DateTime                  @default(now()) @updatedAt
+  deletedAt                DateTime?
+  brand                    Brand?                    @relation(fields: [brandUuid], references: [uuid])
+  unitOfMeasure            UnitOfMeasure?            @relation(fields: [unitOfMeasureUuid], references: [uuid])
+  organization             Organization?             @relation("OrgProducts", fields: [organizationUuid], references: [uuid])
+  saleItems                SaleItem[]
+  saleReturnItems          SaleReturnItem[]
+  purchaseItems            PurchaseItem[]
+  purchaseReturnItems      PurchaseReturnItem[]
+  outgoingInvoiceItems     OutgoingInvoiceItem[]
+  incomingInvoiceItems     IncomingInvoiceItem[]
+  paymentInvoiceItems      PaymentInvoiceItem[]
+  purchaseRequisitionItems PurchaseRequisitionItem[]
+  inventoryTransferItems   InventoryTransferItem[]
 
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
@@ -798,6 +818,10 @@ model OutgoingInvoiceItem {
   productUuid         String?
   outgoingInvoiceUuid String
   taxes               Json?
+  date                DateTime?
+  posted              Boolean         @default(false)
+  organizationUuid    String?
+  counterpartyUuid    String?
   updatedAt           DateTime        @default(now()) @updatedAt
   deletedAt           DateTime?
   product             Product?        @relation(fields: [productUuid], references: [uuid])
@@ -807,6 +831,10 @@ model OutgoingInvoiceItem {
   @@index([outgoingInvoiceUuid])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
+  @@index([date])
+  @@index([posted])
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
   @@index([updatedAt])
   @@map("outgoing_invoice_items")
 }
@@ -828,6 +856,10 @@ model IncomingInvoiceItem {
   productUuid         String?
   incomingInvoiceUuid String
   taxes               Json?
+  date                DateTime?
+  posted              Boolean         @default(false)
+  organizationUuid    String?
+  counterpartyUuid    String?
   updatedAt           DateTime        @default(now()) @updatedAt
   deletedAt           DateTime?
   product             Product?        @relation(fields: [productUuid], references: [uuid])
@@ -837,6 +869,10 @@ model IncomingInvoiceItem {
   @@index([incomingInvoiceUuid])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
+  @@index([date])
+  @@index([posted])
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
   @@index([updatedAt])
   @@map("incoming_invoice_items")
 }
@@ -858,6 +894,10 @@ model PaymentInvoiceItem {
   productUuid        String?
   paymentInvoiceUuid String
   taxes              Json?
+  date               DateTime?
+  posted             Boolean        @default(false)
+  organizationUuid   String?
+  counterpartyUuid   String?
   updatedAt          DateTime       @default(now()) @updatedAt
   deletedAt          DateTime?
   product            Product?       @relation(fields: [productUuid], references: [uuid])
@@ -867,6 +907,10 @@ model PaymentInvoiceItem {
   @@index([paymentInvoiceUuid])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
+  @@index([date])
+  @@index([posted])
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
   @@index([updatedAt])
   @@map("payment_invoice_items")
 }
@@ -1056,21 +1100,22 @@ model PayrollPayment {
 }
 
 model UnitOfMeasure {
-  id                     Int                     @id @default(autoincrement())
-  uuid                   String                  @unique @default(uuid())
-  name                   String
-  code                   String?
-  updatedAt              DateTime                @default(now()) @updatedAt
-  deletedAt              DateTime?
-  products               Product[]
-  saleItems              SaleItem[]
-  saleReturnItems        SaleReturnItem[]
-  purchaseItems          PurchaseItem[]
-  purchaseReturnItems    PurchaseReturnItem[]
-  outgoingInvoiceItems   OutgoingInvoiceItem[]
-  incomingInvoiceItems   IncomingInvoiceItem[]
-  paymentInvoiceItems    PaymentInvoiceItem[]
-  inventoryTransferItems InventoryTransferItem[]
+  id                       Int                       @id @default(autoincrement())
+  uuid                     String                    @unique @default(uuid())
+  name                     String
+  code                     String?
+  updatedAt                DateTime                  @default(now()) @updatedAt
+  deletedAt                DateTime?
+  products                 Product[]
+  saleItems                SaleItem[]
+  saleReturnItems          SaleReturnItem[]
+  purchaseItems            PurchaseItem[]
+  purchaseReturnItems      PurchaseReturnItem[]
+  outgoingInvoiceItems     OutgoingInvoiceItem[]
+  incomingInvoiceItems     IncomingInvoiceItem[]
+  paymentInvoiceItems      PaymentInvoiceItem[]
+  purchaseRequisitionItems PurchaseRequisitionItem[]
+  inventoryTransferItems   InventoryTransferItem[]
 
   @@index([updatedAt])
   @@map("units_of_measure")
@@ -1083,8 +1128,8 @@ model Tax {
   code              String?   @unique
   rate              Decimal?  @db.Decimal(5, 2)
   /// Способ расчёта налога:
-  ///   "INCLUDED" — налог включён в цену (НДС в Стоимость);
-  ///   "ADDED"    — налог начисляется сверху (Стоимость + Налог).
+  ///   "INCLUDED" — налог включён в цену (НДС в Сумма без налогов);
+  ///   "ADDED"    — налог начисляется сверху (Сумма без налогов + Налог).
   calculationMethod String    @default("INCLUDED")
   updatedAt         DateTime  @default(now()) @updatedAt
   deletedAt         DateTime?
@@ -1153,6 +1198,10 @@ model SaleReturn {
   warehouse        Warehouse?       @relation("WhSaleReturns", fields: [warehouseUuid], references: [uuid])
   author           User             @relation("SaleReturnAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
+  basisDocumentType  String?
+  basisDocumentUuid  String?
+  basisDocumentLabel String?
+
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
@@ -1160,6 +1209,7 @@ model SaleReturn {
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
+  @@index([basisDocumentUuid])
   @@map("sale_returns")
 }
 
@@ -1225,6 +1275,10 @@ model PurchaseReturn {
   warehouse           Warehouse?           @relation("WhPurchaseReturns", fields: [warehouseUuid], references: [uuid])
   author              User                 @relation("PurchaseReturnAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
+  basisDocumentType  String?
+  basisDocumentUuid  String?
+  basisDocumentLabel String?
+
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
@@ -1232,6 +1286,7 @@ model PurchaseReturn {
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
+  @@index([basisDocumentUuid])
   @@map("purchase_returns")
 }
 
@@ -1271,4 +1326,73 @@ model PurchaseReturnItem {
   @@index([counterpartyUuid])
   @@index([updatedAt])
   @@map("purchase_return_items")
+}
+
+model PurchaseRequisition {
+  id                       Int                       @id @default(autoincrement())
+  uuid                     String                    @unique @default(uuid())
+  date                     DateTime                  @default(now())
+  comment                  String?
+  amount                   Decimal?                  @db.Decimal(18, 2)
+  amountWithoutVat         Decimal?                  @db.Decimal(18, 2)
+  vatAmount                Decimal?                  @db.Decimal(18, 2)
+  discountAmount           Decimal?                  @db.Decimal(18, 2)
+  organizationUuid         String?
+  counterpartyUuid         String?
+  contractUuid             String?
+  authorUuid               String
+  posted                   Boolean                   @default(false)
+  updatedAt                DateTime                  @default(now()) @updatedAt
+  deletedAt                DateTime?
+  purchaseRequisitionItems PurchaseRequisitionItem[]
+  contract                 Contract?                 @relation(fields: [contractUuid], references: [uuid])
+  counterparty             Counterparty?             @relation(fields: [counterpartyUuid], references: [uuid])
+  organization             Organization?             @relation(fields: [organizationUuid], references: [uuid])
+  author                   User                      @relation("PurchaseRequisitionAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@index([contractUuid])
+  @@index([authorUuid])
+  @@index([date])
+  @@index([updatedAt])
+  @@map("purchase_requisitions")
+}
+
+model PurchaseRequisitionItem {
+  id                      Int                 @id @default(autoincrement())
+  uuid                    String              @unique @default(uuid())
+  quantity                Decimal             @default(0) @db.Decimal(18, 4)
+  price                   Decimal             @default(0) @db.Decimal(18, 2)
+  amount                  Decimal             @default(0) @db.Decimal(18, 2)
+  amountWithoutVat        Decimal             @default(0) @db.Decimal(18, 2)
+  unitOfMeasureUuid       String?
+  vatRate                 Decimal             @default(12) @db.Decimal(5, 2)
+  vatAmount               Decimal             @default(0) @db.Decimal(18, 2)
+  exciseRate              Decimal             @default(0) @db.Decimal(8, 4)
+  exciseAmount            Decimal             @default(0) @db.Decimal(18, 2)
+  discountPercent         Decimal             @default(0) @db.Decimal(5, 2)
+  discountAmount          Decimal             @default(0) @db.Decimal(18, 2)
+  productUuid             String?
+  purchaseRequisitionUuid String
+  taxes                   Json?
+  date                    DateTime?
+  posted                  Boolean             @default(false)
+  organizationUuid        String?
+  counterpartyUuid        String?
+  updatedAt               DateTime            @default(now()) @updatedAt
+  deletedAt               DateTime?
+  product                 Product?            @relation(fields: [productUuid], references: [uuid])
+  purchaseRequisition     PurchaseRequisition @relation(fields: [purchaseRequisitionUuid], references: [uuid], onDelete: Cascade)
+  unitOfMeasure           UnitOfMeasure?      @relation(fields: [unitOfMeasureUuid], references: [uuid])
+
+  @@index([purchaseRequisitionUuid])
+  @@index([productUuid])
+  @@index([unitOfMeasureUuid])
+  @@index([date])
+  @@index([posted])
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@index([updatedAt])
+  @@map("purchase_requisition_items")
 }

@@ -587,10 +587,6 @@ body {
 	margin-left: auto;
 }
 
-.PaneHeaderToolbarSlot {
-	display: contents; // дочерние элементы портала участвуют в flex-раскладке родителя
-}
-
 // Слот для дополнительных кнопок формы в шапке (например «Печать»).
 // Если кнопок нет — div пустой и не занимает места (display: contents).
 .PaneItemHeaderActionsSlot {
@@ -616,26 +612,6 @@ body {
 	justify-content: flex-end;
 }
 
-.PaneHeaderControl {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border: none;
-	background: transparent;
-	cursor: pointer;
-	margin: 0;
-	color: $color51;
-	width: $heightFieldInput - 2px;
-	height: $heightFieldInput - 2px;
-	flex-shrink: 0;
-	border-radius: $radius2;
-	font-size: $fontsize;
-
-	&:hover {
-		background: rgba($color51, 0.12);
-		color: $color6;
-	}
-}
 
 // ── PaneItem Notifications ──
 .PaneNoteBellWrap {
@@ -837,26 +813,6 @@ body {
 	}
 }
 
-.PaneHeaderClose {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border: none;
-	background: transparent;
-	cursor: pointer;
-	margin: 0px;
-	color: $color51;
-	// font-size: 11px;
-	width: $heightFieldInput - 4px;
-	height: $heightFieldInput - 4px;
-	flex-shrink: 0;
-	border-radius: $radius2;
-
-	&:hover {
-		background: rgba(#c00, 0.1);
-		color: #c00;
-	}
-}
 
 .PanesTabs {
 	overflow-x: auto;
@@ -947,41 +903,6 @@ body {
 		min-width: 0;
 		flex-shrink: 0;
 
-		.PaneTabClose {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			border: none;
-			background: transparent;
-			cursor: pointer;
-			color: $color51;
-			font-size: $fontsize;
-			width: 18px;
-			height: 18px;
-			flex-shrink: 0;
-			border-radius: $radius2;
-			margin-right: 3px;
-
-			&:hover {
-				background: rgba(#c00, 0.1);
-				color: #c00;
-			}
-		}
-
-		.PaneTabCloseBtn {
-			width: 18px !important;
-			height: 18px !important;
-			flex-shrink: 0;
-			margin-right: 3px;
-		}
-
-		.PanesTabsLabel {
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
-			min-width: 0;
-		}
-
 		&:hover {
 			// background-color: $color2;
 			// border-color: $color3;
@@ -1050,65 +971,6 @@ body {
 
 
 
-
-.FormHeader {
-	// line-height: 27px;
-	// margin: 12px 0;
-	// padding: 0 6px;
-	// display: flex;
-	// flex-direction: row;
-	// align-items: center;
-	// justify-content: space-between;
-	// gap: 12px;
-	font-size: $fontsize;
-	// font-weight: bold;
-	// background: rgba($color3, 0.3);
-	// border-radius: $radius2;
-	display: flex;
-	flex-direction: row;
-	// align-items: center;
-	// align-items: center;
-	gap: 9px;
-	justify-content: space-between;
-	margin: 0px 0;
-	padding: 0px;
-	color: $color6;
-}
-
-.FormHeaderLabel {
-	margin: 0px 0 0px 0px;
-	padding: 0px 0px;
-	font-weight: bold;
-	// font-family: Arial, Helvetica, sans-serif;
-	font-size: $fontsize + 2px;
-	color: $color6;
-	display: flex;
-	flex: 1;
-	line-height: 27px;
-	// border-top: 1px dotted $color5;
-	// border-bottom: 1px dotted $color5;
-	// border-radius: 3px;
-	// text-decoration: underline;
-	// user-select: default;
-	// color: #fff;
-	// background-color: #073989;
-}
-
-.FormIdentifier {
-	font-size: $fontsize + 2px;
-	// color: #fff;
-	// border-radius: 3px;
-
-	padding: 0px 0px;
-
-	font-weight: bold;
-	/* text-shadow: 0 0 black; */
-	display: flex;
-	flex: 0 0 auto;
-	line-height: 27px;
-	// flex: 1;
-	// font-family: sans-serif;
-}
 
 .FormBody {
 	// gap: 12px;
@@ -1198,24 +1060,6 @@ body {
 	.Group {
 		flex-direction: row;
 	}
-}
-
-.FormPanel {
-	margin: 0px 0 0 0;
-	width: auto;
-	flex-direction: column;
-	display: flex;
-}
-
-.FormTable {
-	// margin: 6px;
-	width: auto;
-	// margin-top: 20px;
-	container-type: size;
-	flex-direction: column;
-	flex: 1;
-	display: flex; // border: 1px solid red;
-	// height: 50cqi;
 }
 
 .HorizontalLine {

@@ -155,6 +155,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			contractUuid,
 			warehouseUuid,
 			posted,
+			basisDocumentType,
+			basisDocumentUuid,
+			basisDocumentLabel,
 		} = req.body;
 		const fkError = await checkFkOwnership(req, prisma, [
 			{ model: "warehouse", uuid: warehouseUuid },
@@ -170,6 +173,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				contractUuid: contractUuid || null,
 				warehouseUuid: warehouseUuid || null,
 				posted: typeof posted === "boolean" ? posted : false,
+				basisDocumentType: basisDocumentType || null,
+				basisDocumentUuid: basisDocumentUuid || null,
+				basisDocumentLabel: basisDocumentLabel || null,
 				authorUuid: req.user.uuid,
 			},
 			include: {
@@ -210,6 +216,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.amount !== undefined)
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
+		for (const f of ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"]) {
+			if (req.body[f] !== undefined) data[f] = req.body[f] || null;
+		}
 		if (data.warehouseUuid) {
 			const fkError = await checkFkOwnership(req, prisma, [{ model: "warehouse", uuid: data.warehouseUuid }]);
 			if (fkError) return res.status(403).json({ success: false, message: fkError });

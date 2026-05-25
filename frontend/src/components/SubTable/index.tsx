@@ -160,6 +160,8 @@ export interface SubTableProps {
   renderExpandedRow?: (row: TDataItem, ctx: SubTableContext) => ReactNode;
   /** Если true — кнопка «Добавить» отображается как disabled */
   disableAdd?: boolean;
+  /** Колбэк при любом обновлении кэша строк (включая загрузку с сервера). Используется для печати. */
+  onAllItemsChange?: (rows: TDataItem[]) => void;
   /**
    * Вычисляет дополнительные (динамические) поля строки, которые
    * отсутствуют в БД, но нужны для клиентской сортировки/фильтрации.
@@ -395,6 +397,7 @@ const SubTable: FC<SubTableProps> = ({
   renderExpandedRow: renderExpandedRowProp,
   computeRow,
   disableAdd = false,
+  onAllItemsChange,
 }) => {
   const queryClient = useQueryClient();
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
@@ -404,6 +407,8 @@ const SubTable: FC<SubTableProps> = ({
   // ── Стабильный ref для onItemsChange (избегаем бесконечного цикла) ────
   const onItemsChangeRef = useRef(onItemsChange);
   onItemsChangeRef.current = onItemsChange;
+  const onAllItemsChangeRef = useRef(onAllItemsChange);
+  onAllItemsChangeRef.current = onAllItemsChange;
 
   // ── Ошибки валидации ячеек ─────────────────────────────────────────────
   const [cellErrors, setCellErrors] = useState<TCellErrors>({});
@@ -601,6 +606,7 @@ const SubTable: FC<SubTableProps> = ({
 
       cachedRowsRef.current = merged;
       setCacheVersion(v => v + 1);
+      onAllItemsChangeRef.current?.(merged);
       notifyParent(merged);
       return;
     }
@@ -627,6 +633,7 @@ const SubTable: FC<SubTableProps> = ({
 
       cachedRowsRef.current = merged;
       setCacheVersion(v => v + 1);
+      onAllItemsChangeRef.current?.(merged);
       // Оповещаем родителя — данные могли обновиться на сервере
       notifyParent(merged);
       return;
@@ -655,6 +662,7 @@ const SubTable: FC<SubTableProps> = ({
 
     cachedRowsRef.current = clean;
     setCacheVersion(v => v + 1);
+    onAllItemsChangeRef.current?.(clean);
 
     // Оповещаем родителя:
     // - ВСЕГДА если были dirty-строки (чтобы родитель узнал что pending очищен)
@@ -1474,7 +1482,7 @@ const SubTable: FC<SubTableProps> = ({
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────
-  if (!parentUuid) {
+  if (!parentUuid && !deferRemoteChanges) {
     return <div className={styles.EmptyParent}>{emptyMessage}</div>;
   }
 

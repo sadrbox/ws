@@ -11,7 +11,7 @@ const ROUTE = "saleitems";
  *   INCLUDED ("в т.ч."):  taxAmount = base * rate / (100 + rate)
  *   ADDED   ("сверху"):   taxAmount = base * rate / 100
  * Возвращает массив записей `{ taxUuid, code, name, rate, method, amount }`.
- * Базовая стоимость строки (amountAfterDiscount) при INCLUDED не меняется,
+ * Базовая Сумма без налогов строки (amountAfterDiscount) при INCLUDED не меняется,
  * при ADDED итоговый `amount` строки = afterDiscount + Σ ADDED-сумм.
  */
 function recalcTaxes(amountAfterDiscount, taxes) {

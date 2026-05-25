@@ -29,6 +29,7 @@ import { SalesList } from 'src/models/Sales';
 import { SalesReturnsList } from 'src/models/SalesReturns';
 import { PurchasesList } from 'src/models/Purchases';
 import { PurchaseReturnsList } from 'src/models/PurchaseReturns';
+import { PurchaseRequisitionsList } from 'src/models/PurchaseRequisitions';
 import { OutgoingInvoicesList } from 'src/models/OutgoingInvoices';
 import { IncomingInvoicesList } from 'src/models/IncomingInvoices';
 import { PaymentInvoicesList } from 'src/models/PaymentInvoices';
@@ -660,6 +661,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList, label: translate("purchaseReceipt") })}>{translate("purchaseReceipt")}</li>}
               {can("PurchaseReturn") && <li onClick={() => addPane({ component: PurchaseReturnsList, label: translate("PurchaseReturnsList") })}>{translate("PurchaseReturnsList")}</li>}
+              {can("PurchaseRequisition") && <li onClick={() => addPane({ component: PurchaseRequisitionsList, label: translate("PurchaseRequisitionsList") })}>{translate("PurchaseRequisitionsList")}</li>}
               {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList, label: translate("incomingInvoice") })}>{translate("incomingInvoice")}</li>}
             </ul>
           </div>

@@ -274,15 +274,6 @@
 
 
 
-.FieldGroup {
-	// display: flex;
-	// flex-direction: row;
-	// width: 100%;
-	gap: 6px;
-	// padding-right: 6px;
-	// background-color: $color60;
-}
-
 .FieldActions {
 	box-sizing: content-box;
 	// height: ($heightFieldInput - 7px); // ≈21px
@@ -295,35 +286,6 @@
 	// кнопки внутри — общий компонент IconButton (size="sm");
 	// все стили (hover/focus/active/disabled) определены в
 	// src/components/icons/IconButton.module.scss
-}
-
-// ── Flash-анимация для read-only ячеек в таблице ─────────────────────────
-@keyframes flashReadOnly {
-	0% {
-		background-color: transparent;
-		outline-color: transparent;
-	}
-
-	20% {
-		background-color: rgba(255, 60, 60, 0.18);
-		outline-color: rgba(220, 50, 50, 0.6);
-	}
-
-	60% {
-		background-color: rgba(255, 60, 60, 0.18);
-		outline-color: rgba(220, 50, 50, 0.6);
-	}
-
-	100% {
-		background-color: transparent;
-		outline-color: transparent;
-	}
-}
-
-.flashReadOnly {
-	animation: flashReadOnly 0.55s ease-in-out;
-	// outline: 1px solid transparent;
-	// border-radius: 2px;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

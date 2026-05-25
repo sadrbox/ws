@@ -19,17 +19,6 @@
 	}
 }
 
-/* Animations */
-.animationLoop {
-	animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-
 /* Индикация «нельзя редактировать» для activeCell.
  * Используется при нажатии Enter на ячейку без редактируемого поля
  * (см. SubTable.handleContainerKeyDown + td[data-pulse="true"]).
@@ -110,19 +99,6 @@
 	display: flex;
 	gap: 6px;
 	margin: 3px 0;
-}
-
-.TablePanel {
-	display: flex;
-	gap: 6px;
-	margin: 0;
-	justify-content: space-between;
-	transition: all 0.4s ease;
-
-	@container (max-width: 800px) {
-		flex-wrap: wrap;
-		align-items: stretch;
-	}
 }
 
 .TablePanelLeft,
@@ -632,17 +608,6 @@ input[type="checkbox"] {
 }
 
 /* Headers & wrappers */
-.HeaderName {
-	font-size: $fontsize + 1px;
-	user-select: none;
-	background: #fff;
-	border: 1px solid $color10;
-	border-bottom: none;
-	border-radius: $radius2 $radius2 0 0;
-	padding: 6px 12px;
-	margin: 6px 6px -1px 18px;
-}
-
 .FormWrapper,
 .ScrollWrapper {
 	flex: 1;
@@ -1044,21 +1009,6 @@ input[type="checkbox"] {
 	padding: 0;
 	background: var(--bg-secondary, #f8f9fa);
 	border-bottom: 2px solid var(--border-color, #e0e0e0);
-}
-
-/* Строка таблицы с GPU-оптимизацией + состояния */
-.TableRow {
-	transform: translate3d(0, 0, 0);
-	will-change: auto;
-
-	&.active {
-		will-change: background-color, box-shadow;
-	}
-
-	&.loading {
-		opacity: 0.3;
-		pointer-events: none;
-	}
 }
 
 /* Обязательная ячейка без значения (read-only): такой же inset-бордер как FieldRequired.tableVariant */

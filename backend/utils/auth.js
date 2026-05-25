@@ -212,6 +212,8 @@ const ROUTE_TO_MODEL = {
 	"outgoing-invoices": "OutgoingInvoice",
 	"incoming-invoices": "IncomingInvoice",
 	"payment-invoices": "PaymentInvoice",
+	"purchase-requisitions": "PurchaseRequisition",
+	"purchase-requisition-items": "PurchaseRequisitionItem",
 	"scheduled-tasks": "ScheduledTask",
 	"inventory-transfers": "InventoryTransfer",
 	"cash-receipt-orders": "CashReceiptOrder",

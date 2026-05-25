@@ -223,7 +223,7 @@ export function createDocumentItemsRouter({
 					},
 				});
 			} else {
-				// ТМЗ: только сумма quantity × price (без косвенных налогов)
+				// ТМЗ: только сумма quantity × price (Сумма без налогов)
 				const result = await prisma[MODEL].aggregate({
 					where: { [PARENT_FIELD]: parentUuid },
 					_sum: { amount: true },

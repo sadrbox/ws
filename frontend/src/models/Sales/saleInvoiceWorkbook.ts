@@ -99,7 +99,7 @@ export function buildSaleInvoiceWorkbook(
 	];
 	if (showDiscPct) headers.push("Процент скидки, %");
 	if (showDiscAmt) headers.push("Сумма скидки");
-	if (showNetOfIndirectTaxes) headers.push("Стоимость");
+	if (showNetOfIndirectTaxes) headers.push("Сумма без налогов");
 	if (showAmtNoVat) headers.push("Облагаемый оборот по НДС");
 	if (showExciseRate) headers.push("Ставка акциза, %");
 	if (showExciseAmt) headers.push("Сумма акциза");

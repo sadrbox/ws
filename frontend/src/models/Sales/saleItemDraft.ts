@@ -43,7 +43,7 @@ function normalizeMethod(v: unknown): "INCLUDED" | "ADDED" {
  * т.е. «Облагаемый оборот по НДС, но С АКЦИЗОМ». По НК РК ст.381 акциз входит в
  * облагаемый оборот по НДС, поэтому такая база — корректна.
  *
- * Графа 13 ЭСФ РК (НК РК ст.412) — «Стоимость без КОСВЕННЫХ налогов»
+ * Графа 13 ЭСФ РК (НК РК ст.412) — «Сумма без налогов Сумма без налогов»
  * (без акциза и без НДС) = afterDiscount = amountWithoutVat − exciseAmount.
  *
  * Параметр `method` опционален (по умолчанию INCLUDED).
@@ -106,7 +106,7 @@ export interface SaleItemTaxEntry {
 	amount: number;
 	/**
 	 * Способ расчёта налога:
-	 *   "INCLUDED" — налог включён в Стоимость (НДС типа RK);
+	 *   "INCLUDED" — налог включён в Сумма без налогов (НДС типа RK);
 	 *   "ADDED"    — налог начисляется сверху Стоимости.
 	 */
 	method: "INCLUDED" | "ADDED";
@@ -117,8 +117,8 @@ export interface SaleItemTaxEntry {
  *   INCLUDED:  amount = base * rate / (100 + rate)
  *   ADDED:     amount = base * rate / 100
  *
- * Стоимость строки (amount) при INCLUDED не меняется (налог уже в цене).
- * При ADDED — общая стоимость увеличивается на сумму налога; пересчёт
+ * Сумма без налогов строки (amount) при INCLUDED не меняется (налог уже в цене).
+ * При ADDED — общая Сумма без налогов увеличивается на сумму налога; пересчёт
  * `amount` строки выполняется отдельно (см. {@link sumAddedTaxes}).
  *
  * @param amountAfterDiscount базовая сумма строки после скидки.

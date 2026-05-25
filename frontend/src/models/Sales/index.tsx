@@ -1,6 +1,7 @@
-import { FC, useMemo, useCallback } from "react";
+import { FC, useMemo, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -29,9 +30,13 @@ import ActPrint from "./ActPrint";
 import { buildSaleInvoiceWorkbook } from "./saleInvoiceWorkbook";
 import PrintDocumentPane, { type PrintColumnDef } from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
+import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
+import { openDocumentFromBasis, mapCommonTradeFields } from "src/utils/createFromBasis";
+import { OutgoingInvoicesForm } from "src/models/OutgoingInvoices";
+import { SalesReturnsForm } from "src/models/SalesReturns";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
@@ -47,6 +52,7 @@ interface TFields {
   warehouseUuid: string; warehouseName: string;
   vatAmount: number; discountAmount: number; amountWithoutVat: number;
   authorUuid: string; authorName: string;
+  basisDocumentType: string; basisDocumentUuid: string; basisDocumentLabel: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
@@ -55,6 +61,7 @@ const DEFAULT_FIELDS: TFields = {
   warehouseUuid: "", warehouseName: "",
   vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
   authorUuid: "", authorName: "",
+  basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "",
 };
 
 const SalesForm: FC<Partial<TPane>> = (paneProps) => {
@@ -63,15 +70,24 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Sale");
 
   const initialFields: TFields | undefined = (() => {
-    const data = paneProps.data;
+    const data = paneProps.data as any;
     if (data?.uuid) return undefined;
+    if (data?.fromBasisFields) return { ...DEFAULT_FIELDS, ...data.fromBasisFields } as TFields;
     const init = { ...DEFAULT_FIELDS };
-    init.date = new Date().toISOString().slice(0, 10);
+    init.date = isoToLocalInput(new Date().toISOString());
     if (data?.organizationUuid) { init.organizationUuid = data?.organizationUuid as string; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
     if (data?.counterpartyUuid) { init.counterpartyUuid = data?.counterpartyUuid as string; }
     return init;
   })();
+
+  const fromBasisItemsRef = useRef<any[] | null>(
+    (() => {
+      const data = paneProps.data as any;
+      return Array.isArray(data?.fromBasisItems) && data.fromBasisItems.length > 0
+        ? data.fromBasisItems : null;
+    })(),
+  );
 
   const invalidateSubTables = useCallback(async () => {
     // refetchType: "active" — invalidateQueries вернёт Promise, который
@@ -84,6 +100,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       refetchType: "active",
     });
   }, [queryClient]);
+
+  const afterSave = useCallback(async () => {
+    fromBasisItemsRef.current = null;
+    await invalidateSubTables();
+  }, [invalidateSubTables]);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "sales-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
@@ -146,6 +167,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       amountWithoutVat: d.amountWithoutVat != null ? Number(d.amountWithoutVat) : 0,
       authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
       authorName: d.author?.username ?? d.author?.email ?? "",
+      basisDocumentType: d.basisDocumentType ?? "",
+      basisDocumentUuid: d.basisDocumentUuid ?? "",
+      basisDocumentLabel: d.basisDocumentLabel ?? "",
     }),
     buildPayload: (fd) => {
       const validation = validateDocumentFields("sale", fd as unknown as Record<string, unknown>);
@@ -162,14 +186,19 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         vatAmount: fd.vatAmount ? fd.vatAmount : 0,
         discountAmount: fd.discountAmount ? fd.discountAmount : 0,
         amountWithoutVat: fd.amountWithoutVat ? fd.amountWithoutVat : 0,
+        basisDocumentType: fd.basisDocumentType || null,
+        basisDocumentUuid: fd.basisDocumentUuid || null,
+        basisDocumentLabel: fd.basisDocumentLabel || null,
       };
     },
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
     afterLoad: invalidateSubTables,
-    afterSave: invalidateSubTables,
+    afterSave,
   });
 
   const saleItems = form.useTable("saleItems");
+
+  const hasBasis = !!form.fields.basisDocumentUuid;
 
   // ── Историчные настройки учёта организации ─────────────────────────────
   // Передаём дату документа в хук — так колонки/блоки НДС/скидок отображаются
@@ -346,14 +375,14 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       ).replace(/\s+/g, "_");
 
       const columnDefs: PrintColumnDef[] = [
-        { key: "discountPercent",          label: "Скидка, %",                defaultVisible: false },
-        { key: "discountAmount",           label: "Сумма скидки",             defaultVisible: false },
-        { key: "amountNetOfIndirectTaxes", label: "Стоимость (без косв.нал.)", defaultVisible: false },
-        { key: "amountWithoutVat",         label: "Облагаемый оборот",        defaultVisible: true  },
-        { key: "exciseRate",               label: "Ставка акциза, %",         defaultVisible: false },
-        { key: "exciseAmount",             label: "Сумма акциза",             defaultVisible: false },
-        { key: "vatRate",                  label: "Ставка НДС, %",            defaultVisible: true  },
-        { key: "vatAmount",                label: "Сумма НДС",                defaultVisible: true  },
+        { key: "discountPercent", label: "Скидка, %", defaultVisible: false },
+        { key: "discountAmount", label: "Сумма скидки", defaultVisible: false },
+        { key: "amountNetOfIndirectTaxes", label: "Сумма без налогов", defaultVisible: false },
+        { key: "amountWithoutVat", label: "Облагаемый оборот", defaultVisible: true },
+        { key: "exciseRate", label: "Ставка акциза, %", defaultVisible: false },
+        { key: "exciseAmount", label: "Сумма акциза", defaultVisible: false },
+        { key: "vatRate", label: "Ставка НДС, %", defaultVisible: true },
+        { key: "vatAmount", label: "Сумма НДС", defaultVisible: true },
       ];
 
       const workbook = buildSaleInvoiceWorkbook(baseData);
@@ -366,7 +395,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           uuid: String(form.fields.uuid ?? ""),
           columnsKey: isAct ? "sale_act" : "sale_invoice",
           columnDefs,
-          buildLayout: (cols) => {
+          buildLayout: (cols: Record<string, boolean>) => {
             const printData: SaleInvoicePrintData = { ...baseData, columns: cols as SaleInvoicePrintColumns };
             return isAct ? <ActPrint data={printData} /> : <SaleInvoicePrint data={printData} />;
           },
@@ -391,22 +420,57 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   // ВАЖНО: возвращаемый ReactNode (портал) надо отрендерить в JSX,
   // иначе React не выполнит createPortal и кнопка не появится.
   const hasDirtyItems = (saleItems.pending?.length ?? 0) > 0;
+  const handleCreateFromBasis = useCallback(async (
+    FormComponent: typeof OutgoingInvoicesForm | typeof SalesReturnsForm,
+    docLabel: string,
+    basisType: string,
+    itemsEndpoint: string,
+  ) => {
+    await openDocumentFromBasis(
+      form.fields as any,
+      translate("saleRealization"),
+      {
+        docLabel,
+        FormComponent,
+        basisType,
+        sourceItemsEndpoint: itemsEndpoint,
+        sourceItemsParentField: "saleUuid",
+        mapFields: mapCommonTradeFields,
+      },
+      addPane,
+    );
+  }, [form.fields, addPane]);
+
   const printDisabled = form.isLoading || form.isDirty || hasDirtyItems;
   const printTitle = (form.isDirty || hasDirtyItems)
     ? "Сохраните изменения перед печатью"
     : undefined;
+  const showHeaderActions = form.isEditMode && !!form.fields.uuid;
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
-    form.isEditMode && form.fields.uuid ? (
-      <PrintDropdownButton
-        disabled={printDisabled}
-        title={printTitle ?? "Печать"}
-        options={[
-          { id: "invoice", label: "Накладная З-2 (товары)" },
-          { id: "act",     label: "Акт выполненных работ (услуги/работы)" },
-        ]}
-        onSelect={(id) => handlePrint(id as "invoice" | "act")}
-      />
+    showHeaderActions ? (
+      <>
+        <ActionsDropdownButton
+          label="На основании"
+          options={[
+            { id: "outgoing", label: `Создать ${translate("outgoingInvoice")}` },
+            { id: "saleReturn", label: `Создать ${translate("SalesReturnsList")}` },
+          ]}
+          onSelect={(id) => {
+            if (id === "outgoing") void handleCreateFromBasis(OutgoingInvoicesForm, translate("outgoingInvoice"), "sale", "saleitems");
+            if (id === "saleReturn") void handleCreateFromBasis(SalesReturnsForm, translate("SalesReturnsList"), "sale", "saleitems");
+          }}
+        />
+        <PrintDropdownButton
+          disabled={printDisabled}
+          title={printTitle ?? "Печать"}
+          options={[
+            { id: "invoice", label: "Накладная З-2 (товары)" },
+            { id: "act", label: "Акт выполненных работ (услуги/работы)" },
+          ]}
+          onSelect={(id) => handlePrint(id as "invoice" | "act")}
+        />
+      </>
     ) : null,
   );
 
@@ -420,7 +484,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               {/* ── Левая колонка: поля ── */}
               {/* Строка 1: Дата · Проведён · Статус */}
               <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
+                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading || hasBasis} width="180px" />
 
 
                 <FieldToggle
@@ -428,23 +492,23 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                   label={translate("posted")}
                   value={form.fields.posted === true}
                   onChange={(v) => form.setField("posted", v)}
-                  disabled={form.isLoading || !canWrite}
+                  disabled={form.isLoading || hasBasis || !canWrite}
                   variant="success"
                 />
               </GroupRow>
 
               <Group>
                 {/* Организация — во всю ширину */}
-                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading || hasBasis} />
 
-                <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading || hasBasis} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
 
               <Group>
                 {/* Контрагент — во всю ширину */}
-                <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading || hasBasis} />
 
-                <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
+                <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading || hasBasis} extraParams={contractExtraParams} />
               </Group>
 
             </GroupCol>
@@ -477,6 +541,16 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
           </div>
           {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+            <BasisDocumentField
+              allowedTypes={[{ type: "payment_invoice", endpoint: "payment-invoices", label: translate("paymentInvoice") }]}
+              basisDocumentType={form.fields.basisDocumentType}
+              basisDocumentUuid={form.fields.basisDocumentUuid}
+              basisDocumentLabel={form.fields.basisDocumentLabel}
+              formUid={form.formUid}
+              disabled={form.isLoading}
+              onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
+              onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+            />
             <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
             <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
           </Group>}
@@ -484,9 +558,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       )
     },
     {
-      id: "tab-items", label: translate("SaleItemsList"), component: form.isEditMode && form.fields.uuid ? (
+      id: "tab-items", label: translate("SaleItemsList"), component: (
         <TradeDocumentItemsTable
-          parentUuid={form.fields.uuid}
+          parentUuid={form.fields.uuid ?? ""}
           parentField="saleUuid"
           endpoint="saleitems"
           componentName="SaleItemsList_part"
@@ -495,15 +569,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           disabled={form.isLoading}
           deferRemoteChanges
           parentLabel={`${translate("SalesList")}: ID${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
-          initialPendingRows={saleItems.pending}
+          initialPendingRows={saleItems.pending.length > 0 ? saleItems.pending : (fromBasisItemsRef.current ?? [])}
           onTotalChange={handleTotalChange}
           onItemsChange={saleItems.onItemsChange}
           showRequiredHighlight={form.meta.tablesValidationFailed}
         />
-      ) : (
-        <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
-          {translate("saveDocumentFirst")}
-        </div>
       )
     },
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount]);

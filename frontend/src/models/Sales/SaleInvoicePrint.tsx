@@ -9,7 +9,7 @@
  *   гр. 8 — Цена за единицу без НДС (без налогов, если есть акциз)
  *   гр. 11 — Размер скидки от цены, %
  *   гр. 12 — Сумма скидки
- *   гр. 13 — Стоимость (показывается только при наличии акциза)
+ *   гр. 13 — Сумма без налогов (показывается только при наличии акциза)
  *   гр. 14 — Сумма акциза (НК РК ст. 463)
  *   гр. 15 — Ставка НДС, %
  *   гр. 16 — Сумма НДС
@@ -160,7 +160,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   const showDiscPct = cols.discountPercent !== false && (cols.discountPercent === true || has((r) => r.discountPercent) || has((r) => r.discountAmount));
   const showDiscAmt = cols.discountAmount !== false && (cols.discountAmount === true || has((r) => r.discountAmount) || Number(data.totalDiscountAmount ?? 0) > 0);
   const showNetOfIndirectTaxes = hasIndirectTaxes && cols.amountNetOfIndirectTaxes !== false && (cols.amountNetOfIndirectTaxes === true || has((r) => r.amountNetOfIndirectTaxes));
-  // Колонка «Стоимость» имеет смысл только когда есть
+  // Колонка «Сумма без налогов» имеет смысл только когда есть
   // косвенные налоги — иначе она совпадает с итоговой суммой и дублирует её.
   const showAmtNoVat = hasIndirectTaxes && cols.amountWithoutVat !== false;
   // Колонки акциза — только если в документе есть акциз.
@@ -175,7 +175,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   const showVatAmt = data.isVatPayer !== false && hasVat && cols.vatAmount !== false && (cols.vatAmount === true || has((r) => r.vatAmount) || Number(data.totalVatAmount ?? 0) > 0);
 
   // «Итого:» занимает все нечисловые левые колонки до первой суммовой.
-  // Порядок колонок: №, Наим., Ед.изм., Кол-во, Цена [, Процент скидки, %] [, Сумма скидки] [, Стоимость] …
+  // Порядок колонок: №, Наим., Ед.изм., Кол-во, Цена [, Процент скидки, %] [, Сумма скидки] [, Сумма без налогов] …
   // itogoColSpan охватывает только: №, Наим., Ед.изм., Кол-во, Цена, Процент скидки, % (не суммовые).
   const itogoColSpan = 5 + (showDiscPct ? 1 : 0);
   const totalCols = itogoColSpan
@@ -239,7 +239,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
               <th style={{ ...headCellStyle, width: "20mm" }}>Сумма скидки</th>
             )}
             {showNetOfIndirectTaxes && (
-              <th style={{ ...headCellStyle, width: "22mm" }}>Стоимость</th>
+              <th style={{ ...headCellStyle, width: "22mm" }}>Сумма без налогов</th>
             )}
             {showAmtNoVat && (
               <th style={{ ...headCellStyle, width: "22mm" }}>{amountWithoutTaxesHeader}</th>
@@ -309,7 +309,7 @@ const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
           ))}
           {/* Итоги */}
           <tr>
-            <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700 }} colSpan={itogoColSpan}>Итого:</td>
+            <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700 }} colSpan={itogoColSpan}>Сумма:</td>
             {showDiscAmt && (
               <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700 }}>{fmt(data.totalDiscountAmount)}</td>
             )}

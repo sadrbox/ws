@@ -1285,9 +1285,9 @@ const TableBody = memo(() => {
   if (!isLoading && rows.length === 0) {
     return (
       <tbody>
-        <tr>
+        {/* <tr>
           <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
-        </tr>
+        </tr> */}
         <tr className={styles.TableFillerRow} aria-hidden="true">
           <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
         </tr>

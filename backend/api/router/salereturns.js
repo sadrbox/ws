@@ -174,6 +174,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			counterpartyUuid,
 			contractUuid,
 			warehouseUuid,
+			basisDocumentType,
+			basisDocumentUuid,
+			basisDocumentLabel,
 		} = req.body;
 		const item = await prisma[MODEL].create({
 			data: {
@@ -190,6 +193,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
 				warehouseUuid: warehouseUuid || null,
+				basisDocumentType: basisDocumentType || null,
+				basisDocumentUuid: basisDocumentUuid || null,
+				basisDocumentLabel: basisDocumentLabel || null,
 				authorUuid: req.user.uuid,
 			},
 			include: {
@@ -245,6 +251,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 					? parseFloat(req.body.discountAmount)
 					: null;
 
+		for (const f of ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"]) {
+			if (req.body[f] !== undefined) data[f] = req.body[f] || null;
+		}
 		const existing = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true } });
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });

@@ -18,6 +18,7 @@ export type DocumentType =
 	| "outgoing_invoice"
 	| "incoming_invoice"
 	| "payment_invoice"
+	| "purchase_requisition"
 	| "inventory_transfer"
 	| "cash_receipt_order"
 	| "cash_expense_order"
@@ -72,25 +73,29 @@ export const REQUIRED_FIELDS_MAP: Record<DocumentType, readonly string[]> = {
 	],
 
 	// ── Счета-фактуры ────────────────────────────────────────────────────────
+	// НК РК ст. 412: счёт-фактура — налоговый документ, склад не требуется
 	outgoing_invoice: [
 		"date",
 		"organizationUuid",
 		"counterpartyUuid",
-		"warehouseUuid",
 		"contractUuid",
 	],
 	incoming_invoice: [
 		"date",
 		"organizationUuid",
 		"counterpartyUuid",
-		"warehouseUuid",
 		"contractUuid",
 	],
 	payment_invoice: [
 		"date",
 		"organizationUuid",
 		"counterpartyUuid",
-		"warehouseUuid",
+		"contractUuid",
+	],
+	purchase_requisition: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
 		"contractUuid",
 	],
 
