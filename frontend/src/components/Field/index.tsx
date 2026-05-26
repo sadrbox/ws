@@ -1,4 +1,4 @@
-import React, { CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import React, { CSSProperties, FC, useCallback, useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { getTranslation } from "src/i18"
 
 import styles from "./Field.module.scss"
@@ -116,6 +116,7 @@ interface TypeFieldStringProps {
   name: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   width?: string;
   maxWidth?: string;
   minWidth?: string;
@@ -136,6 +137,7 @@ interface TypeFieldGroupProps {
   label?: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
   actions?: TypeFieldActions;
   style?: CSSProperties;
@@ -181,6 +183,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   name,
   value = '',
   onChange,
+  onBlur,
   width,
   maxWidth,
   minWidth,
@@ -223,6 +226,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       label={label}
       value={value}
       onChange={onChange}
+      onBlur={onBlur}
       inputRef={inputRef}
       style={{
         width: width ?? '100%',
@@ -247,6 +251,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean }> = ({
   label,
   value = '',
   onChange,
+  onBlur,
   inputRef,
   actions,
   style,
@@ -258,19 +263,21 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean }> = ({
   autoFocus,
   isDirty,
 }) => {
+  const uid = useId();
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value, isDirty });
 
   return (
     <div className={wrapperClass} style={style}>
-      <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
+      <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldInputWrapper}>
         <input
           ref={inputRef}
           type="text"
-          id={name}
+          id={uid}
           name={name}
           value={value}
           onChange={onChange}
+          onBlur={onBlur}
           className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
           autoComplete='off'
           disabled={disabled}
@@ -328,15 +335,16 @@ export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
     return '';
   })();
 
+  const uid = useId();
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
     <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
-      <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
+      <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldInputWrapper}>
         <input
           type="datetime-local"
-          id={name}
+          id={uid}
           name={name}
           value={safeValue}
           onChange={onChange}
@@ -370,15 +378,16 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
     return '';
   })();
 
+  const uid = useId();
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
     <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
-      <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
+      <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldInputWrapper}>
         <input
           type="date"
-          id={name}
+          id={uid}
           name={name}
           value={safeValue}
           onChange={onChange}
@@ -404,13 +413,14 @@ type TypeFieldSelectProps = {
 };
 
 export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value = '', onChange, disabled = false, required = false, error = false, style, variant = 'default' }) => {
+  const uid = useId();
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
     <div className={wrapperClass} style={style}>
-      <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
+      <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldSelectWrapper}>
-        <select name={name} id={name} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled}>
+        <select name={name} id={uid} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled}>
           {options.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
@@ -607,18 +617,19 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
       if (action.type === 'clear' && !value) return false;
       return true;
     });
+  const uid = useId();
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
     <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
-      <FieldLabelNode htmlFor={name} label={label} required={effectiveRequired} isTable={isTable} />
+      <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
 
       <div className={styles.FieldInputWrapper}>
         <input
           ref={inputRef}
           type="text"
           inputMode="decimal"
-          id={name}
+          id={uid}
           name={name}
           value={displayText}
           onChange={handleChange}
@@ -706,17 +717,18 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
     effectiveError ? styles.FieldError : '',
   ].filter(Boolean).join(' ');
 
+  const uid = useId();
   return (
     <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
       {label && (
-        <label htmlFor={name} className={styles.FieldLabel}>
+        <label htmlFor={uid} className={styles.FieldLabel}>
           {typeof label === 'string' ? getTranslation(label) : label}
           {effectiveRequired && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
         </label>
       )}
       <div className={styles.FieldTextareaInputWrapper}>
         <textarea
-          id={name}
+          id={uid}
           name={name}
           value={value}
           onChange={onChange}
@@ -895,7 +907,7 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
     name, variant, required, error, value,
   });
 
-  const triggerId = `${name}_trigger`;
+  const triggerId = useId();
 
   return (
     <div ref={rootRef} className={wrapperClass} style={{ width: width ?? 'auto', position: 'relative' }}>

@@ -78,7 +78,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			},
 			include: {
 				organization: {
-					select: { uuid: true, bin: true, name: true, displayName: true },
+					select: { uuid: true, bin: true, name: true, legalName: true },
 				},
 				user: {
 					select: { uuid: true, username: true },
@@ -111,7 +111,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			where: w,
 			include: {
 				organization: {
-					select: { uuid: true, bin: true, name: true, displayName: true },
+					select: { uuid: true, bin: true, name: true, legalName: true },
 				},
 				user: {
 					select: { uuid: true, username: true },
@@ -168,7 +168,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			create: { userUuid, organizationUuid, role },
 			include: {
 				organization: {
-					select: { uuid: true, bin: true, name: true, displayName: true },
+					select: { uuid: true, bin: true, name: true, legalName: true },
 				},
 				user: {
 					select: { uuid: true, username: true },
@@ -236,7 +236,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 
 		const include = {
 			organization: {
-				select: { uuid: true, bin: true, name: true, displayName: true },
+				select: { uuid: true, bin: true, name: true, legalName: true },
 			},
 			user: { select: { uuid: true, username: true } },
 		};
@@ -354,6 +354,35 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 				.status(404)
 				.json({ success: false, message: "Запись не найдена" });
 		console.error(`DELETE /${ROUTE}/:id error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ── POST /user-permissions/batch ──────────────────────────────────────────
+router.post(`/${ROUTE}/batch`, async (req, res) => {
+	try {
+		const { operations } = req.body;
+		if (!Array.isArray(operations) || operations.length === 0)
+			return res.status(400).json({ success: false, message: "operations обязателен" });
+		await prisma.$transaction(async (tx) => {
+			for (const { action, uuid, data } of operations) {
+				if (action === "create" && data) {
+					await tx.userPermission.upsert({
+						where: { userUuid_organizationUuid: { userUuid: data.userUuid, organizationUuid: data.organizationUuid } },
+						update: { role: data.role ?? "member" },
+						create: { userUuid: data.userUuid, organizationUuid: data.organizationUuid, role: data.role ?? "member" },
+					});
+				} else if (action === "update" && uuid && data) {
+					if (data.role !== undefined)
+						await tx.userPermission.update({ where: { uuid }, data: { role: data.role } });
+				} else if (action === "delete" && uuid) {
+					try { await tx.userPermission.delete({ where: { uuid } }); } catch {}
+				}
+			}
+		});
+		return res.status(200).json({ success: true });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/batch error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

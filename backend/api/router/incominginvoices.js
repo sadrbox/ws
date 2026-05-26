@@ -1,7 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
-import { handleDelete } from "../../utils/checkReferences.js";
+import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 const router = express.Router();
 const MODEL = "incomingInvoice";
 const ROUTE = "incoming-invoices";
@@ -215,4 +215,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 router.delete(`/${ROUTE}/:id`, (req, res) =>
 	handleDelete({ req, res, prisma, modelName: MODEL }),
 );
+router.post(`/${ROUTE}/batch-delete`, (req, res) =>
+	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
+);
+
 export default router;

@@ -1,5 +1,6 @@
 import { FC, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { translate } from "src/i18";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -38,11 +39,8 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
   // refetchType: "active" — ждём завершение refetch смонтированной SubTable,
   // чтобы useFormStore.submit() очистил pending-строки только после
   // появления свежих серверных данных (см. useFormStore.ts → submit).
-  const invalidateSubTables = useCallback(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: ["user-permissions"],
-      refetchType: "active",
-    });
+  const invalidateSubTables = useCallback(async (savedData: any) => {
+    await invalidateSubTableFor(queryClient, "user-permissions", "userUuid", savedData?.uuid ?? "");
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
@@ -52,6 +50,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
         endpoint: "user-permissions",
         parentField: "userUuid",
         label: translate("userPermissions"),
+        batchEndpoint: "user-permissions/batch",
       },
     },
     mapServerToForm: (d, prev) => ({
@@ -72,7 +71,6 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
       return payload;
     },
     buildPaneLabel: (saved) => makePaneLabel("UsersList", "Пользователи", saved),
-    afterLoad: invalidateSubTables,
     afterSave: invalidateSubTables,
   });
 

@@ -213,7 +213,7 @@ const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
     return MODEL_NAME_OPTIONS.every(o => usedModels.has(o.value));
   }, [currentRows]);
 
-  const prevAllModelsUsedRef = useRef(false);
+  const prevAllModelsUsedRef = useRef(allModelsUsed);
   useEffect(() => {
     if (allModelsUsed && !prevAllModelsUsedRef.current) {
       window.dispatchEvent(new CustomEvent("ui_toast", {

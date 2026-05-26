@@ -596,9 +596,8 @@ const Table: FC<TableProps> = memo((props) => {
       handleDeleteClick();
       return;
     }
-    // ── Пробел: переключить выделение активной строки (только в SubTable,
-    // когда activeCell находится на колонке чекбокса) ──────────────────────
-    if (e.key === ' ' && variant === 'embedded' && activeCell === CHECKBOX_COL_ID && activeRow !== null) {
+    // ── Пробел: переключить выделение активной строки ───────────────────────
+    if (e.key === ' ' && variant !== 'select' && activeCell === CHECKBOX_COL_ID && activeRow !== null) {
       e.preventDefault();
       e.stopPropagation();
       const id = activeRow;
@@ -658,12 +657,9 @@ const Table: FC<TableProps> = memo((props) => {
       return;
     }
     // ── Колоночная (cell-level) навигация: ArrowLeft/ArrowRight ───────────
-    // ВНИМАНИЕ: activeCell-навигация работает только во встроенных таблицах
-    // (variant === 'embedded', т.е. внутри SubTable). В обычных списках (*List)
-    // активная ячейка не используется — стрелки Left/Right/Home/End там
-    // игнорируются на уровне Table, а row-навигация работает через
-    // ArrowUp/ArrowDown/PgUp/PgDn ниже.
-    const cellDir = variant === 'embedded' ? getCellNavDirection(e.key) : null;
+    // Работает во всех вариантах кроме 'select' (там горизонтальная навигация
+    // не нужна — пользователь выбирает строку, не ячейку).
+    const cellDir = variant !== 'select' ? getCellNavDirection(e.key) : null;
     if (cellDir) {
       // Если строк нет — просто блокируем (чтобы не ездила каретка в input,
       // но мы уже отсекли isEditable выше).
@@ -1362,7 +1358,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   } = useTableContext();
 
   const isActive = activeRow === row.id;
-  const isCheckboxCellActive = variant === 'embedded' && isActive && activeCell === CHECKBOX_COL_ID;
+  const isCheckboxCellActive = variant !== 'select' && isActive && activeCell === CHECKBOX_COL_ID;
 
   // Строка выбрана если:
   // 1. Режим "все" И строка НЕ в исключениях
@@ -1419,15 +1415,11 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
 
   const handleRowClick = useCallback((e: React.MouseEvent) => {
     setActiveRow?.(row.id);
-    // Если клик пришёлся на конкретную ячейку — синхронизируем activeCell
-    // с колонкой этой ячейки. Только во встроенных таблицах (SubTable):
-    // в обычных *List (variant === 'default') механика activeCell отключена.
-    if (variant === 'embedded') {
-      const targetEl = e.target as HTMLElement | null;
-      const td = targetEl?.closest('td[data-col-id]') as HTMLElement | null;
-      const colId = td?.getAttribute('data-col-id') ?? null;
-      if (colId) setActiveCell?.(colId);
-    }
+    // Если клик пришёлся на конкретную ячейку — синхронизируем activeCell с ней.
+    const targetEl = e.target as HTMLElement | null;
+    const td = targetEl?.closest('td[data-col-id]') as HTMLElement | null;
+    const colId = td?.getAttribute('data-col-id') ?? null;
+    if (colId) setActiveCell?.(colId);
     if (clickedFocusedInputRef.current) {
       // Клик по уже сфокусированному полю — не сбрасываем фокус, даём стандартное поведение
       clickedFocusedInputRef.current = false;
@@ -1552,10 +1544,8 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
             data-col-id={CHECKBOX_COL_ID}
             onClick={e => {
               e.stopPropagation();
-              if (variant === 'embedded') {
-                setActiveRow?.(row.id);
-                setActiveCell?.(CHECKBOX_COL_ID);
-              }
+              setActiveRow?.(row.id);
+              setActiveCell?.(CHECKBOX_COL_ID);
             }}
           >
             <div
@@ -1568,10 +1558,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         {columns.map(col => {
           // Кастомный рендер ячейки (переводы, спецзначения) — работает в любом режиме
           const currentRenderCell = renderCellRef?.current;
-          // Активная ячейка подсвечивается только в активной строке.
-          // Механика activeCell используется только во встроенных таблицах
-          // (SubTable); в *List (variant !== 'embedded') ячеечного выделения нет.
-          const isCellActive = variant === 'embedded' && isActive && activeCell === col.identifier;
+          const isCellActive = isActive && activeCell === col.identifier;
 
           const cellMeta = getCellMetaRef?.current?.(row, col) ?? null;
 

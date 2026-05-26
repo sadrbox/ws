@@ -5,6 +5,7 @@ import {
 	useEffect,
 	useMemo,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app";
 import { isNetworkError } from "src/services/networkUtils";
 import { getIsOnline } from "src/services/networkStatus";
@@ -1426,6 +1427,7 @@ export function useFormStore<F extends object>(
 		actions: { confirm },
 	} = useAppContext();
 	const formUid = useUID();
+	const queryClient = useQueryClient();
 
 	// ── Создание / получение store из кэша ──
 	// Ключ формы привязан к пользователю, имени формы и идентификатору сущности:
@@ -1731,6 +1733,11 @@ export function useFormStore<F extends object>(
 			}
 
 			store.setMeta({ tablesValidationFailed: false, headerValidationFailed: false });
+
+			// Инвалидируем список модели — обновляем все открытые {Model}List
+			// независимо от того, откуда была открыта форма (fire-and-forget).
+			void queryClient.invalidateQueries({ queryKey: [endpoint], refetchType: "active" });
+
 			void onSaveRef.current?.();
 			store.markClean();
 
@@ -1779,7 +1786,7 @@ export function useFormStore<F extends object>(
 
 			return true;
 		},
-		[store, tableDefs, updatePaneLabel, uniqId, storageKey],
+		[store, tableDefs, updatePaneLabel, uniqId, storageKey, queryClient, endpoint],
 	);
 
 	// ── Actions ──

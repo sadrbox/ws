@@ -1,6 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { handleDelete } from "../../utils/checkReferences.js";
+import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
@@ -67,7 +67,7 @@ router.get("/organizations", async (req, res) => {
 		}
 
 		// ── Поиск ─────────────────────────────────────────────────────────────
-		const TEXT_FIELDS = ["bin", "name", "displayName"];
+		const TEXT_FIELDS = ["bin", "name", "legalName"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 
@@ -204,7 +204,7 @@ router.get("/organizations/:id", async (req, res) => {
 // ============================================
 router.post("/organizations", async (req, res) => {
 	try {
-		const { bin, name, displayName } = req.body;
+		const { bin, name, legalName } = req.body;
 
 		if (!bin || typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
 			return res.status(400).json({
@@ -217,7 +217,7 @@ router.post("/organizations", async (req, res) => {
 			data: {
 				bin: bin.trim(),
 				name: name?.trim() ?? null,
-				displayName: displayName?.trim() ?? null,
+				legalName: legalName?.trim() ?? null,
 			},
 		});
 
@@ -244,13 +244,13 @@ router.put("/organizations/:id", async (req, res) => {
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 
-		const { bin, name, displayName } = req.body;
+		const { bin, name, legalName } = req.body;
 		const data = {};
 
 		if (bin !== undefined) data.bin = bin.trim();
 		if (name !== undefined) data.name = name?.trim() ?? null;
-		if (displayName !== undefined)
-			data.displayName = displayName?.trim() ?? null;
+		if (legalName !== undefined)
+			data.legalName = legalName?.trim() ?? null;
 
 		const item = await prisma.organization.update({
 			where: whereClause,
@@ -280,6 +280,10 @@ router.delete("/organizations/:id", (req, res) =>
 		modelName: "organization",
 		notFoundMessage: "Организация не найдена",
 	}),
+);
+
+router.post("/organizations/batch-delete", (req, res) =>
+	handleBatchDelete({ req, res, prisma, modelName: "organization" }),
 );
 
 export default router;

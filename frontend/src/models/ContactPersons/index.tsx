@@ -1,5 +1,6 @@
-import { FC, useMemo, useCallback } from "react";
+import { FC, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -44,20 +45,10 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
     return init;
   })();
 
-  // refetchType: "active" — ждём завершение refetch смонтированных
-  // SubTable, чтобы useFormStore.submit() очистил pending-строки
-  // только после появления свежих серверных данных.
-  const invalidateSubTables = useCallback(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: ["contacts"],
-      refetchType: "active",
-    });
-  }, [queryClient]);
-
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "contact-persons-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
     tables: {
-      contacts: { endpoint: "contacts", parentField: "ownerUuid", label: translate("ContactsList"), extraFields: { ownerType: "contactperson" } },
+      contacts: { endpoint: "contacts", parentField: "ownerUuid", label: translate("ContactsList"), batchEndpoint: "contacts/batch", extraFields: { ownerType: "contactperson" } },
     },
     mapServerToForm: async (d, prev) => {
       const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
@@ -76,11 +67,8 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
       ownerType: fd.ownerType || null, ownerUuid: fd.ownerUuid || null,
     }),
     buildPaneLabel: (saved) => makePaneLabel("ContactPersonsList", "Контактные лица", saved),
-    afterLoad: invalidateSubTables,
-    afterSave: async () => {
-      await invalidateSubTables();
-      // Неявный invalidate родительского списка — не критичен для
-      // порядка очистки pending, но тоже ждём.
+    afterSave: async (savedData: any) => {
+      await invalidateSubTableFor(queryClient, "contacts", "ownerUuid", savedData?.uuid ?? "");
       await queryClient.invalidateQueries({ queryKey: ["contactpersons"] });
     },
   });

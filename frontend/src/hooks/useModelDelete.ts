@@ -19,6 +19,9 @@ import { upsertRecords, getRecordByUuid } from "src/services/offlineDb";
  *   3. Обработка 409 (FK / связанные записи) с показом понятного toast вместо
  *      браузерного alert. Бэкенд возвращает { success:false, message, references? }.
  *
+ * При удалении нескольких строк использует POST /{model}/batch-delete вместо
+ * отдельных DELETE-запросов на каждую запись.
+ *
  * @param model — endpoint модели (например "organizations")
  * @param refetch — функция обновления списка после удаления
  */
@@ -38,8 +41,8 @@ export function useModelDelete(
 
 			const message =
 				items.length === 1
-					? `Удалить запись #${items[0].id}?`
-					: `Удалить записи (${items.length} шт.)?`;
+					? `Удалить запись ${items[0].id}?`
+					: `Удалить записи (${items.length})?`;
 
 			const confirmed = await confirm(message);
 			if (!confirmed) return;
@@ -48,7 +51,33 @@ export function useModelDelete(
 			const deletedUuids = new Set<string>();
 			const deletedIds = new Set<number>();
 
-			for (const item of items) {
+			if (items.length > 1) {
+				// ── Batch-удаление через POST /{model}/batch-delete ───────────────
+				const uuids = items.map((i) => i.uuid).filter(Boolean) as string[];
+				try {
+					const resp: any = await apiClient.post(`/${model}/batch-delete`, {
+						uuids,
+					});
+					const failed: Array<{ uuid: string; message: string }> =
+						resp?.failed ?? [];
+					const failedUuids = new Set(failed.map((f) => f.uuid));
+					for (const item of items) {
+						if (item.uuid && !failedUuids.has(String(item.uuid))) {
+							deletedUuids.add(String(item.uuid));
+							if (item.id != null) deletedIds.add(Number(item.id));
+						}
+					}
+					for (const f of failed) {
+						errors.push(f.message);
+					}
+				} catch (err: any) {
+					const msg =
+						err?.response?.data?.message || "Ошибка пакетного удаления";
+					errors.push(msg);
+				}
+			} else {
+				// ── Одиночное удаление ────────────────────────────────────────────
+				const item = items[0];
 				const key = item.uuid || item.id;
 				try {
 					await apiClient.delete(`/${model}/${key}`);
@@ -57,15 +86,14 @@ export function useModelDelete(
 				} catch (err: any) {
 					const status = err?.response?.status;
 					const data = err?.response?.data;
-					// 409 — конфликт (FK / связанные записи). Показываем подробности.
 					if (status === 409) {
 						const refsMsg =
 							typeof data?.message === "string"
 								? data.message
-								: `Запись #${item.id} используется и не может быть удалена`;
+								: `Запись ${item.id} используется и не может быть удалена`;
 						errors.push(refsMsg);
 					} else {
-						const msg = data?.message || `Ошибка удаления #${item.id}`;
+						const msg = data?.message || `Ошибка удаления ${item.id}`;
 						errors.push(msg);
 					}
 				}

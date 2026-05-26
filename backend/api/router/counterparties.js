@@ -2,7 +2,7 @@
 import express from "express";
 // import { querySchema } from "../utils/module.js";
 import { prisma } from "../../prisma/prisma-client.js";
-import { handleDelete } from "../../utils/checkReferences.js";
+import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { tenantFilter } from "../../utils/auth.js";
 const router = express.Router();
 
@@ -36,12 +36,12 @@ const validateCounterpartyData = (data) => {
 		}
 	}
 
-	// Валидация displayName
-	if (data.displayName !== undefined && data.displayName !== null) {
-		if (typeof data.displayName !== "string") {
-			errors.push("displayName должен быть строкой");
-		} else if (data.displayName.trim().length > 500) {
-			errors.push("displayName не должен превышать 500 символов");
+	// Валидация legalName
+	if (data.legalName !== undefined && data.legalName !== null) {
+		if (typeof data.legalName !== "string") {
+			errors.push("legalName должен быть строкой");
+		} else if (data.legalName.trim().length > 500) {
+			errors.push("legalName не должен превышать 500 символов");
 		}
 	}
 
@@ -53,7 +53,7 @@ const validateCounterpartyData = (data) => {
 // ============================================
 router.post("/counterparties", async (req, res) => {
 	try {
-		const { bin, name, displayName } = req.body;
+		const { bin, name, legalName } = req.body;
 
 		// 1. Ранняя проверка наличия
 		if (!bin || typeof bin !== "string") {
@@ -69,7 +69,7 @@ router.post("/counterparties", async (req, res) => {
 		const errors = validateCounterpartyData({
 			bin: normalizedBin,
 			name: name?.trim() ?? null,
-			displayName: displayName?.trim() ?? null,
+			legalName: legalName?.trim() ?? null,
 		});
 
 		if (errors.length > 0) {
@@ -90,7 +90,7 @@ router.post("/counterparties", async (req, res) => {
 				data: {
 					bin: normalizedBin,
 					name: name?.trim() ?? null,
-					displayName: displayName?.trim() ?? null,
+					legalName: legalName?.trim() ?? null,
 					organizationUuid: req.user?.organizationUuid ?? null,
 				},
 			});
@@ -176,7 +176,7 @@ router.get("/counterparties", async (req, res) => {
 		}
 
 		// ── Поиск ─────────────────────────────────────────────────────────────
-		const TEXT_FIELDS = ["bin", "name", "displayName"];
+		const TEXT_FIELDS = ["bin", "name", "legalName"];
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
 
@@ -349,7 +349,7 @@ router.get("/counterparties/uuid/:uuid", async (req, res) => {
 router.put("/counterparties/:uuid", async (req, res) => {
 	try {
 		const { uuid } = req.params;
-		const { bin, name, displayName } = req.body;
+		const { bin, name, legalName } = req.body;
 
 		if (
 			typeof uuid !== "string" ||
@@ -388,11 +388,11 @@ router.put("/counterparties/:uuid", async (req, res) => {
 			}
 		}
 
-		if (displayName !== undefined && displayName !== null) {
-			if (typeof displayName !== "string") {
-				errors.push("displayName должен быть строкой");
-			} else if (displayName.trim().length > 500) {
-				errors.push("displayName не должен превышать 500 символов");
+		if (legalName !== undefined && legalName !== null) {
+			if (typeof legalName !== "string") {
+				errors.push("legalName должен быть строкой");
+			} else if (legalName.trim().length > 500) {
+				errors.push("legalName не должен превышать 500 символов");
 			}
 		}
 
@@ -408,8 +408,8 @@ router.put("/counterparties/:uuid", async (req, res) => {
 		if (name !== undefined) {
 			updateData.name = name?.trim() || null;
 		}
-		if (displayName !== undefined) {
-			updateData.displayName = displayName?.trim() || null;
+		if (legalName !== undefined) {
+			updateData.legalName = legalName?.trim() || null;
 		}
 		if (bin !== undefined) {
 			updateData.bin = bin?.trim() || null;
@@ -466,7 +466,7 @@ router.patch("/counterparties/:uuid", async (req, res) => {
 		}
 
 		// Фильтруем только допустимые поля для обновления
-		const allowedFields = ["name", "displayName"];
+		const allowedFields = ["name", "legalName"];
 		const updateData = {};
 
 		for (const field of allowedFields) {
@@ -616,12 +616,12 @@ router.get("/counterparties/export/list", async (req, res) => {
 		const format = req.query.format || "json"; // json, csv
 
 		const counterparties = await prisma.counterparty.findMany({
-			orderBy: { displayName: "asc" },
+			orderBy: { legalName: "asc" },
 			select: {
 				id: true,
 				bin: true,
 				name: true,
-				displayName: true,
+				legalName: true,
 			},
 		});
 
@@ -631,7 +631,7 @@ router.get("/counterparties/export/list", async (req, res) => {
 			const csvRows = [headers.join(",")];
 
 			counterparties.forEach((cp) => {
-				const row = [cp.id, cp.bin, cp.name || "", cp.displayName || ""];
+				const row = [cp.id, cp.bin, cp.name || "", cp.legalName || ""];
 				csvRows.push(row.map((val) => `"${val}"`).join(","));
 			});
 
@@ -659,5 +659,9 @@ router.get("/counterparties/export/list", async (req, res) => {
 		});
 	}
 });
+
+router.post("/counterparties/batch-delete", (req, res) =>
+	handleBatchDelete({ req, res, prisma, modelName: "counterparty" }),
+);
 
 export default router;

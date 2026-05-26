@@ -52,7 +52,7 @@ const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   },
   createFromBasisTargets: [
     {
-      docLabel: "Реализацию товаров",
+      docLabel: "Реализация товара и услуг",
       FormComponent: SalesForm,
       basisType: "payment_invoice",
       sourceItemsEndpoint: "paymentinvoiceitems",
@@ -60,6 +60,7 @@ const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       mapFields: mapCommonTradeFields,
     },
   ],
+  hidePosted: true,
   // Счёт на оплату — не ЭСФ: скрыть графы акциза и промежуточных оборотов
   defaultHiddenItemColumns: ["amountNetOfIndirectTaxes", "amountWithoutVat", "discountPercent", "discountAmount"],
 });

@@ -107,7 +107,7 @@ router.post("/auth/login", async (req, res) => {
 							select: {
 								uuid: true,
 								name: true,
-								displayName: true,
+								legalName: true,
 								bin: true,
 							},
 						},
@@ -263,7 +263,7 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 							select: {
 								uuid: true,
 								name: true,
-								displayName: true,
+								legalName: true,
 								bin: true,
 							},
 						},
@@ -390,7 +390,7 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 // ============================================
 router.post("/auth/register", async (req, res) => {
 	try {
-		const { bin, name, displayName, username, password } = req.body;
+		const { bin, name, legalName, username, password } = req.body;
 
 		// Валидация
 		if (!bin || typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
@@ -451,7 +451,7 @@ router.post("/auth/register", async (req, res) => {
 				data: {
 					bin: trimmedBin,
 					name: (name || "").trim() || null,
-					displayName: (displayName || "").trim() || null,
+					legalName: (legalName || "").trim() || null,
 					inviteCode,
 				},
 			});
@@ -628,7 +628,7 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 							select: {
 								uuid: true,
 								name: true,
-								displayName: true,
+								legalName: true,
 								bin: true,
 							},
 						},

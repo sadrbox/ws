@@ -232,6 +232,32 @@ export const CaretDownIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+/** На основании — исходный документ + стрелка + целевой документ (создать на базе другого). */
+export const FromBasisIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <rect x="1.5" y="1.5" width="6.5" height="8.5" rx="1" />
+    <path d="M3 4.5h3.5" />
+    <path d="M3 6.5h2.5" />
+    <path d="M3 8.5h1.5" />
+    <path d="M8.5 6h2" />
+    <path d="M9.5 5l1.5 1-1.5 1" />
+    <rect x="11" y="4" width="3.5" height="5.5" rx="1" />
+  </svg>
+);
+
+/** Перезаполнить по основанию — стрелки синхронизации + мини-документ в центре. */
+export const SyncFromBasisIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M13.5 8A5.5 5.5 0 0 0 8 2.5" />
+    <path d="M13.5 5v3h-3" />
+    <path d="M2.5 8A5.5 5.5 0 0 0 8 13.5" />
+    <path d="M2.5 11v-3h3" />
+    <rect x="5.5" y="5.5" width="5" height="5" rx="0.7" />
+    <path d="M7 7.5h2" />
+    <path d="M7 9h1.5" />
+  </svg>
+);
+
 // ── Реестр + универсальный <Icon name="…" /> ─────────────────────────────
 
 export const ICONS = {
@@ -254,6 +280,8 @@ export const ICONS = {
   restore: RestoreIcon,
   save: SaveIcon,
   caretDown: CaretDownIcon,
+  fromBasis: FromBasisIcon,
+  syncFromBasis: SyncFromBasisIcon,
 } as const;
 
 export type IconName = keyof typeof ICONS;

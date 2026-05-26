@@ -1,7 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
-import { handleDelete } from "../../utils/checkReferences.js";
+import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
 
@@ -204,6 +204,44 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 // ============================================
 router.delete(`/${ROUTE}/:id`, (req, res) =>
 	handleDelete({ req, res, prisma, modelName: MODEL }),
+);
+
+// ── POST /cashboxes/batch ─────────────────────────────────────────────────
+router.post(`/${ROUTE}/batch`, async (req, res) => {
+	try {
+		const { operations } = req.body;
+		if (!Array.isArray(operations) || operations.length === 0)
+			return res.status(400).json({ success: false, message: "operations обязателен" });
+		await prisma.$transaction(async (tx) => {
+			for (const { action, uuid, data } of operations) {
+				if (action === "create" && data) {
+					await tx[MODEL].create({
+						data: {
+							name: (data.name ?? "").trim(),
+							organizationUuid: data.organizationUuid || null,
+							isPrimary: data.isPrimary === true,
+						},
+					});
+				} else if (action === "update" && uuid && data) {
+					const updateData = {};
+					if (data.name !== undefined) updateData.name = (data.name ?? "").trim();
+					if (data.isPrimary !== undefined) updateData.isPrimary = data.isPrimary === true;
+					if (Object.keys(updateData).length > 0)
+						await tx[MODEL].update({ where: { uuid }, data: updateData });
+				} else if (action === "delete" && uuid) {
+					try { await tx[MODEL].delete({ where: { uuid } }); } catch {}
+				}
+			}
+		});
+		return res.status(200).json({ success: true });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/batch error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+router.post(`/${ROUTE}/batch-delete`, (req, res) =>
+	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
 );
 
 export default router;

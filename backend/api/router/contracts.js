@@ -1,6 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { handleDelete } from "../../utils/checkReferences.js";
+import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { checkOwnership } from "../../utils/auth.js";
 
 const router = express.Router();
@@ -339,6 +339,55 @@ router.delete("/contracts/:id", (req, res) =>
 		modelName: "contract",
 		notFoundMessage: "Not found",
 	}),
+);
+
+// ── POST /contracts/batch ─────────────────────────────────────────────────
+router.post("/contracts/batch", async (req, res) => {
+	try {
+		const { operations } = req.body;
+		if (!Array.isArray(operations) || operations.length === 0)
+			return res.status(400).json({ success: false, message: "operations обязателен" });
+		await prisma.$transaction(async (tx) => {
+			for (const { action, uuid, data } of operations) {
+				if (action === "create" && data) {
+					await tx.contract.create({
+						data: {
+							name: (data.name ?? "").trim(),
+							contractNumber: data.contractNumber?.trim() ?? null,
+							contractText: data.contractText ?? null,
+							startDate: data.startDate ? new Date(data.startDate) : null,
+							endDate: data.endDate ? new Date(data.endDate) : null,
+							organizationUuid: data.organizationUuid || null,
+							counterpartyUuid: data.counterpartyUuid || null,
+							isPrimary: data.isPrimary === true,
+						},
+					});
+				} else if (action === "update" && uuid && data) {
+					const updateData = {};
+					if (data.name !== undefined) updateData.name = (data.name ?? "").trim();
+					if (data.contractNumber !== undefined) updateData.contractNumber = data.contractNumber?.trim() ?? null;
+					if (data.contractText !== undefined) updateData.contractText = data.contractText ?? null;
+					if (data.startDate !== undefined) updateData.startDate = data.startDate ? new Date(data.startDate) : null;
+					if (data.endDate !== undefined) updateData.endDate = data.endDate ? new Date(data.endDate) : null;
+					if (data.organizationUuid !== undefined) updateData.organizationUuid = data.organizationUuid || null;
+					if (data.counterpartyUuid !== undefined) updateData.counterpartyUuid = data.counterpartyUuid || null;
+					if (data.isPrimary !== undefined) updateData.isPrimary = data.isPrimary === true;
+					if (Object.keys(updateData).length > 0)
+						await tx.contract.update({ where: { uuid }, data: updateData });
+				} else if (action === "delete" && uuid) {
+					try { await tx.contract.delete({ where: { uuid } }); } catch {}
+				}
+			}
+		});
+		return res.status(200).json({ success: true });
+	} catch (error) {
+		console.error("POST /contracts/batch error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+router.post("/contracts/batch-delete", (req, res) =>
+	handleBatchDelete({ req, res, prisma, modelName: "contract" }),
 );
 
 export default router;

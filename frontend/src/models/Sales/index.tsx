@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback, useRef } from "react";
+import { FC, useMemo, useCallback, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
@@ -24,6 +24,7 @@ import ModelList from "src/components/ModelList";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { Toolbar } from "src/components/Toolbar";
+import IconButton from "src/components/IconButton/IconButton";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import SaleInvoicePrint, { type SaleInvoicePrintData, type SaleInvoicePrintColumns, type SaleItemPrintRow } from "./SaleInvoicePrint";
 import ActPrint from "./ActPrint";
@@ -34,9 +35,11 @@ import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton"
 import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
-import { openDocumentFromBasis, mapCommonTradeFields } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource } from "src/utils/createFromBasis";
 import { OutgoingInvoicesForm } from "src/models/OutgoingInvoices";
 import { SalesReturnsForm } from "src/models/SalesReturns";
+import { useUserPermissionDefaults } from "src/hooks/useUserPermissionDefaults";
+import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
@@ -68,6 +71,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
   const { canWrite } = useAccessRight("Sale");
+  const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data as any;
@@ -81,20 +85,15 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     return init;
   })();
 
-  const fromBasisItemsRef = useRef<any[] | null>(
-    (() => {
-      const data = paneProps.data as any;
-      return Array.isArray(data?.fromBasisItems) && data.fromBasisItems.length > 0
-        ? data.fromBasisItems : null;
-    })(),
-  );
+  const [basisItems, setBasisItems] = useState<any[]>(() => {
+    const data = paneProps.data as any;
+    return Array.isArray(data?.fromBasisItems) && data.fromBasisItems.length > 0
+      ? data.fromBasisItems : [];
+  });
+  const [itemsTableKey, setItemsTableKey] = useState(0);
+  const [isRefilling, setIsRefilling] = useState(false);
 
   const invalidateSubTables = useCallback(async () => {
-    // refetchType: "active" — invalidateQueries вернёт Promise, который
-    // резолвится только после того, как АКТИВНЫЕ (mounted) запросы
-    // саб-таблиц завершат refetch. Это критично для submit-flow:
-    // useFormStore очищает pending-строки SubTable ТОЛЬКО после того,
-    // как afterSave дождётся свежих данных с сервера.
     await queryClient.invalidateQueries({
       queryKey: ["saleitems"],
       refetchType: "active",
@@ -102,7 +101,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [queryClient]);
 
   const afterSave = useCallback(async () => {
-    fromBasisItemsRef.current = null;
+    setBasisItems([]);
     await invalidateSubTables();
   }, [invalidateSubTables]);
 
@@ -116,6 +115,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       saleItems: {
         endpoint: "saleitems", parentField: "saleUuid",
         label: translate("SaleItemsList"),
+        batchEndpoint: "saleitems/batch",
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
         createPayload: (r: any) => ({
@@ -192,13 +192,52 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       };
     },
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
-    afterLoad: invalidateSubTables,
     afterSave,
   });
 
   const saleItems = form.useTable("saleItems");
+  const allItemsRef = useRef<any[]>([]);
 
   const hasBasis = !!form.fields.basisDocumentUuid;
+
+  const handleRefillFromBasis = useCallback(async () => {
+    if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
+    setIsRefilling(true);
+    try {
+      const result = await refillFromBasisSource(
+        form.fields.basisDocumentType,
+        form.fields.basisDocumentUuid,
+        mapCommonTradeFields,
+      );
+      if (!result) return;
+      form.setFields(result.fields as Partial<TFields>);
+      // Delete-маркеры для уже сохранённых серверных строк — чтобы SubTable
+      // удалил их при сохранении, а не смержил с новыми строками из основания.
+      const queries = queryClient.getQueriesData<any>({ queryKey: ["saleitems", "infinite"] });
+      const serverItems: any[] = queries
+        .flatMap(([, data]) => data?.pages?.flatMap((p: any) => p.items ?? []) ?? [])
+        .filter((r: any) => r.saleUuid === form.fields.uuid);
+      const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
+      const itemsAreSame = serverItems.length === result.items.length &&
+        serverItems.every((si, idx) => {
+          const ni = result.items[idx];
+          return si.productUuid === ni.productUuid &&
+            Number(si.quantity) === Number(ni.quantity) &&
+            Number(si.price) === Number(ni.price) &&
+            Number(si.vatRate) === Number(ni.vatRate) &&
+            Number(si.discountPercent) === Number(ni.discountPercent) &&
+            Number(si.exciseRate) === Number(ni.exciseRate);
+        });
+      if (!itemsAreSame) {
+        setBasisItems([...deleteMarkers, ...result.items]);
+        setItemsTableKey(k => k + 1);
+      }
+    } catch (e) {
+      console.error("[refill] failed", e);
+    } finally {
+      setIsRefilling(false);
+    }
+  }, [form.fields.basisDocumentType, form.fields.basisDocumentUuid, form.fields.uuid, form.setFields, queryClient]);
 
   // ── Историчные настройки учёта организации ─────────────────────────────
   // Передаём дату документа в хук — так колонки/блоки НДС/скидок отображаются
@@ -244,6 +283,23 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     isLoading: form.isLoading,
     apply: (uuid, name) =>
       form.setFieldsInitial({ warehouseUuid: uuid, warehouseName: name } as Partial<TFields>),
+  });
+
+  const permDefaults = useUserPermissionDefaults(
+    currentUser?.uuid ?? "",
+    form.fields.organizationUuid,
+  );
+  useApplyPermissionDefaults({
+    defaults: permDefaults,
+    organizationUuid: form.fields.organizationUuid,
+    isEditMode: form.isEditMode,
+    isLoading: form.isLoading,
+    fieldMappings: [
+      { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+      { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+    ],
+    currentValues: { contractUuid: form.fields.contractUuid, warehouseUuid: form.fields.warehouseUuid },
+    apply: (fields) => form.setFieldsInitial(fields as Partial<TFields>),
   });
 
   const handleTotalChange = useCallback((total: number, items?: any[]) => {
@@ -303,7 +359,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.setFields]);
 
   // ── Печать: накладная З-2 и акт выполненных работ ──────────────────
-  const { windows: { addPane } } = useAppContext();
 
   const handlePrint = useCallback(async (layoutId: "invoice" | "act") => {
     if (!form.fields.uuid) return;
@@ -425,6 +480,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     docLabel: string,
     basisType: string,
     itemsEndpoint: string,
+    existingCheckEndpoint?: string,
   ) => {
     await openDocumentFromBasis(
       form.fields as any,
@@ -436,6 +492,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         sourceItemsEndpoint: itemsEndpoint,
         sourceItemsParentField: "saleUuid",
         mapFields: mapCommonTradeFields,
+        existingCheckEndpoint,
       },
       addPane,
     );
@@ -445,31 +502,45 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const printTitle = (form.isDirty || hasDirtyItems)
     ? "Сохраните изменения перед печатью"
     : undefined;
-  const showHeaderActions = form.isEditMode && !!form.fields.uuid;
+  const isSavedDoc = form.isEditMode && !!form.fields.uuid;
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
-    showHeaderActions ? (
+    (isSavedDoc || hasBasis) ? (
       <>
-        <ActionsDropdownButton
-          label="На основании"
-          options={[
-            { id: "outgoing", label: `Создать ${translate("outgoingInvoice")}` },
-            { id: "saleReturn", label: `Создать ${translate("SalesReturnsList")}` },
-          ]}
-          onSelect={(id) => {
-            if (id === "outgoing") void handleCreateFromBasis(OutgoingInvoicesForm, translate("outgoingInvoice"), "sale", "saleitems");
-            if (id === "saleReturn") void handleCreateFromBasis(SalesReturnsForm, translate("SalesReturnsList"), "sale", "saleitems");
-          }}
-        />
-        <PrintDropdownButton
-          disabled={printDisabled}
-          title={printTitle ?? "Печать"}
-          options={[
-            { id: "invoice", label: "Накладная З-2 (товары)" },
-            { id: "act", label: "Акт выполненных работ (услуги/работы)" },
-          ]}
-          onSelect={(id) => handlePrint(id as "invoice" | "act")}
-        />
+        {hasBasis && (
+          <IconButton
+            icon="syncFromBasis"
+            title="Перезаполнить по основанию"
+            disabled={form.isLoading || isRefilling}
+            loading={isRefilling}
+            onClick={() => void handleRefillFromBasis()}
+          />
+        )}
+        {isSavedDoc && (
+          <ActionsDropdownButton
+            icon="fromBasis"
+            label="На основании"
+            options={[
+              { id: "outgoing", label: `Создать ${translate("outgoingInvoice")}` },
+              { id: "saleReturn", label: `Создать ${translate("SalesReturnsList")}` },
+            ]}
+            onSelect={(id) => {
+              if (id === "outgoing") void handleCreateFromBasis(OutgoingInvoicesForm, translate("outgoingInvoice"), "sale", "saleitems", "outgoing-invoices");
+              if (id === "saleReturn") void handleCreateFromBasis(SalesReturnsForm, translate("SalesReturnsList"), "sale", "saleitems", "sale-returns");
+            }}
+          />
+        )}
+        {isSavedDoc && (
+          <PrintDropdownButton
+            disabled={printDisabled}
+            title={printTitle ?? "Печать"}
+            options={[
+              { id: "invoice", label: "Накладная З-2 (товары)" },
+              { id: "act", label: "Акт выполненных работ (услуги/работы)" },
+            ]}
+            onSelect={(id) => handlePrint(id as "invoice" | "act")}
+          />
+        )}
       </>
     ) : null,
   );
@@ -484,7 +555,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               {/* ── Левая колонка: поля ── */}
               {/* Строка 1: Дата · Проведён · Статус */}
               <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading || hasBasis} width="180px" />
+                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
 
 
                 <FieldToggle
@@ -492,7 +563,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                   label={translate("posted")}
                   value={form.fields.posted === true}
                   onChange={(v) => form.setField("posted", v)}
-                  disabled={form.isLoading || hasBasis || !canWrite}
+                  disabled={form.isLoading || !canWrite}
                   variant="success"
                 />
               </GroupRow>
@@ -501,7 +572,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 {/* Организация — во всю ширину */}
                 <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading || hasBasis} />
 
-                <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading || hasBasis} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
 
               <Group>
@@ -566,17 +637,20 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           componentName="SaleItemsList_part"
           organizationUuid={form.fields.organizationUuid}
           documentDate={form.fields.date || null}
-          disabled={form.isLoading}
+          disabled={form.isLoading || hasBasis}
           deferRemoteChanges
+          onRefresh={hasBasis ? handleRefillFromBasis : undefined}
           parentLabel={`${translate("SalesList")}: ID${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
-          initialPendingRows={saleItems.pending.length > 0 ? saleItems.pending : (fromBasisItemsRef.current ?? [])}
+          key={itemsTableKey}
+          initialPendingRows={itemsTableKey > 0 ? basisItems : (saleItems.pending.length > 0 ? saleItems.pending : basisItems)}
           onTotalChange={handleTotalChange}
           onItemsChange={saleItems.onItemsChange}
+          onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
           showRequiredHighlight={form.meta.tablesValidationFailed}
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey]);
 
   return (
     <FormRequiredScope docType="sale" active={form.meta.headerValidationFailed}>

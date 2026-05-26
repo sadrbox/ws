@@ -1,4 +1,4 @@
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FC, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styles from "./Field.module.scss";
 import { fetchList } from "src/services/offlineDataService";
@@ -147,6 +147,7 @@ const LookupField: FC<LookupFieldProps> = ({
   const cellState = useCellFieldState();
   const formRequired = useFormRequiredScope();
   const isTable = variant === 'table';
+  const uid = useId();
   const tail = name.includes('_') ? name.slice(name.lastIndexOf('_') + 1) : name;
   const isEmpty = !value;
   const isFormRequired = !isTable && formRequired.requiredKeys.has(tail);
@@ -486,7 +487,7 @@ const LookupField: FC<LookupFieldProps> = ({
         ref={wrapperRef}
       >
         {!isTable && label && (
-          <label htmlFor={name} className={styles.FieldLabel}>
+          <label htmlFor={uid} className={styles.FieldLabel}>
             {typeof label === 'string' ? translate(label) : label}
             {effectiveRequired && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
           </label>
@@ -496,7 +497,7 @@ const LookupField: FC<LookupFieldProps> = ({
           <input
             ref={inputRef}
             type="text"
-            id={name}
+            id={uid}
             name={name}
             value={inputText}
             onChange={handleInputChange}

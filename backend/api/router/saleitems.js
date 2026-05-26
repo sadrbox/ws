@@ -494,4 +494,99 @@ async function recalcSaleAmount(saleUuid) {
 	}
 }
 
+// ── POST /saleitems/batch ─────────────────────────────────────────────────
+router.post(`/${ROUTE}/batch`, async (req, res) => {
+	try {
+		const { operations } = req.body;
+		if (!Array.isArray(operations) || operations.length === 0)
+			return res.status(400).json({ success: false, message: "operations обязателен" });
+
+		let saleUuid = null;
+		for (const op of operations) {
+			if (op.data?.saleUuid) { saleUuid = op.data.saleUuid; break; }
+		}
+		if (!saleUuid) {
+			const uuidOp = operations.find(op => op.uuid);
+			if (uuidOp?.uuid) {
+				const ex = await prisma[MODEL].findFirst({ where: { uuid: uuidOp.uuid }, select: { saleUuid: true } });
+				saleUuid = ex?.saleUuid ?? null;
+			}
+		}
+
+		const vatMethod = saleUuid ? await loadVatMethodForSale(saleUuid) : "INCLUDED";
+
+		const parseNum = (v) => {
+			if (v === undefined || v === null || v === "") return undefined;
+			const n = parseFloat(v);
+			return Number.isFinite(n) ? n : undefined;
+		};
+
+		await prisma.$transaction(async (tx) => {
+			for (const op of operations) {
+				const { action, uuid, data } = op;
+				if (!action) continue;
+
+				if (action === "create" && data) {
+					if (!data.saleUuid) continue;
+					const qty = parseFloat(data.quantity) || 0;
+					const prc = parseFloat(data.price) || 0;
+					const discPct = parseFloat(data.discountPercent) || 0;
+					const vRate = data.vatRate != null ? parseFloat(data.vatRate) : 12;
+					const exRate = parseFloat(data.exciseRate) || 0;
+					const calc = recalcLineAmounts({ quantity: qty, price: prc, discountPercent: discPct, vatRate: vRate, exciseRate: exRate, vatMethod, taxes: data.taxes });
+					await tx[MODEL].create({
+						data: {
+							saleUuid: data.saleUuid,
+							productUuid: data.productUuid || null,
+							quantity: qty, price: prc,
+							amount: calc.amount, amountWithoutVat: calc.amountWithoutVat,
+							unitOfMeasureUuid: data.unitOfMeasureUuid || null,
+							vatRate: vRate, vatAmount: calc.vatAmount,
+							exciseRate: exRate, exciseAmount: calc.exciseAmount,
+							discountPercent: discPct, discountAmount: calc.discountAmount,
+							taxes: calc.taxes ?? undefined,
+						},
+					});
+				} else if (action === "update" && uuid && data) {
+					const w = { uuid };
+					const updateData = {};
+					if (data.productUuid !== undefined)
+						updateData.product = data.productUuid ? { connect: { uuid: data.productUuid } } : { disconnect: true };
+					if (data.unitOfMeasureUuid !== undefined)
+						updateData.unitOfMeasure = data.unitOfMeasureUuid ? { connect: { uuid: data.unitOfMeasureUuid } } : { disconnect: true };
+					const qty = parseNum(data.quantity), prc = parseNum(data.price);
+					const discPct = parseNum(data.discountPercent), vRate = parseNum(data.vatRate), exRate = parseNum(data.exciseRate);
+					if (qty !== undefined) updateData.quantity = qty;
+					if (prc !== undefined) updateData.price = prc;
+					if (discPct !== undefined) updateData.discountPercent = discPct;
+					if (vRate !== undefined) updateData.vatRate = vRate;
+					if (exRate !== undefined) updateData.exciseRate = exRate;
+					const recalcNeeded = qty !== undefined || prc !== undefined || discPct !== undefined || vRate !== undefined || exRate !== undefined || data.taxes !== undefined;
+					if (recalcNeeded) {
+						const existing = await tx[MODEL].findUnique({ where: w });
+						if (existing) {
+							const fQty = qty ?? Number(existing.quantity), fPrc = prc ?? Number(existing.price);
+							const fDisc = discPct ?? Number(existing.discountPercent), fVat = vRate ?? Number(existing.vatRate), fEx = exRate ?? Number(existing.exciseRate);
+							const srcTaxes = data.taxes === undefined ? (Array.isArray(existing.taxes) ? existing.taxes : null) : (Array.isArray(data.taxes) ? data.taxes : null);
+							const calc = recalcLineAmounts({ quantity: fQty, price: fPrc, discountPercent: fDisc, vatRate: fVat, exciseRate: fEx, vatMethod, taxes: srcTaxes });
+							Object.assign(updateData, { discountAmount: calc.discountAmount, exciseAmount: calc.exciseAmount, vatAmount: calc.vatAmount, amount: calc.amount, amountWithoutVat: calc.amountWithoutVat });
+							if (data.taxes === null) updateData.taxes = null;
+							else if (calc.taxes != null) updateData.taxes = calc.taxes;
+						}
+					}
+					if (Object.keys(updateData).length > 0) await tx[MODEL].update({ where: w, data: updateData });
+				} else if (action === "delete" && uuid) {
+					try { await tx[MODEL].delete({ where: { uuid } }); } catch {}
+				}
+			}
+		});
+
+		if (saleUuid) await recalcSaleAmount(saleUuid);
+		return res.status(200).json({ success: true });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/batch error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 export default router;

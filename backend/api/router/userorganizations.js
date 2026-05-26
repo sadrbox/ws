@@ -73,7 +73,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			},
 			include: {
 				organization: {
-					select: { uuid: true, bin: true, name: true, displayName: true },
+					select: { uuid: true, bin: true, name: true, legalName: true },
 				},
 				user: {
 					select: { uuid: true, username: true },
@@ -105,7 +105,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			where: w,
 			include: {
 				organization: {
-					select: { uuid: true, bin: true, name: true, displayName: true },
+					select: { uuid: true, bin: true, name: true, legalName: true },
 				},
 				user: {
 					select: { uuid: true, username: true },
@@ -148,7 +148,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			create: { userUuid, organizationUuid, role },
 			include: {
 				organization: {
-					select: { uuid: true, bin: true, name: true, displayName: true },
+					select: { uuid: true, bin: true, name: true, legalName: true },
 				},
 				user: {
 					select: { uuid: true, username: true },
@@ -200,7 +200,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		}
 
 		const include = {
-			organization: { select: { uuid: true, bin: true, name: true, displayName: true } },
+			organization: { select: { uuid: true, bin: true, name: true, legalName: true } },
 			user: { select: { uuid: true, username: true } },
 		};
 

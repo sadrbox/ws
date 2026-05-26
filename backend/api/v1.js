@@ -302,7 +302,7 @@ router.use(cors());
 
 router.post("/counterparties", async (req, res) => {
 	try {
-		const { bin, name, displayName } = req.body;
+		const { bin, name, legalName } = req.body;
 
 		// Валидация
 		const errors = [];
@@ -317,8 +317,8 @@ router.post("/counterparties", async (req, res) => {
 			errors.push("name должен быть строкой");
 		}
 
-		if (displayName && typeof displayName !== "string") {
-			errors.push("displayName должен быть строкой");
+		if (legalName && typeof legalName !== "string") {
+			errors.push("legalName должен быть строкой");
 		}
 
 		if (errors.length > 0) {
@@ -332,7 +332,7 @@ router.post("/counterparties", async (req, res) => {
 			data: {
 				bin: bin.trim(),
 				name: name?.trim() || null,
-				displayName: displayName?.trim() || null,
+				legalName: legalName?.trim() || null,
 			},
 		});
 

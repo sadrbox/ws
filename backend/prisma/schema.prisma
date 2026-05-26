@@ -29,6 +29,7 @@ model User {
   organization                 Organization?         @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   /// Список организаций, к которым у пользователя есть доступ
   userPermissions              UserPermission[]
+  userPermissionDefaults       UserPermissionDefault[]
   // Авторство документов — заполняется при создании, не редактируется.
   authoredSales                Sale[]                @relation("SaleAuthor")
   authoredPurchases            Purchase[]            @relation("PurchaseAuthor")
@@ -74,12 +75,36 @@ model UserPermission {
   @@map("user_permissions")
 }
 
+/// Предопределённые значения реквизитов для пользователя в рамках организации.
+/// Используются для автозаполнения новых документов (склад, касса, договор, банковский счёт, контакт).
+model UserPermissionDefault {
+  id               Int      @id @default(autoincrement())
+  uuid             String   @unique @default(uuid())
+  userUuid         String
+  organizationUuid String
+  /// "bankAccount" | "contract" | "warehouse" | "cashbox" | "contact"
+  valueType        String
+  valueUuid        String
+  valueName        String   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  user         User         @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+
+  @@unique([userUuid, organizationUuid, valueType])
+  @@index([userUuid])
+  @@index([organizationUuid])
+  @@index([updatedAt])
+  @@map("user_permission_defaults")
+}
+
 model Organization {
   id                   Int                             @id @default(autoincrement())
   uuid                 String                          @unique @default(uuid())
   bin                  String                          @unique @db.VarChar(12)
   name                 String?
-  displayName          String?
+  legalName            String?
   inviteCode           String?                         @unique
   createdAt            DateTime                        @default(now())
   updatedAt            DateTime                        @default(now()) @updatedAt
@@ -102,8 +127,9 @@ model Organization {
   scheduledTasks       ScheduledTask[]
   todos                Todo[]
   users                User[]                          @relation("UserOrganization")
-  userPermissions      UserPermission[]
-  accessRights         AccessRight[]
+  userPermissions        UserPermission[]
+  userPermissionDefaults UserPermissionDefault[]
+  accessRights           AccessRight[]
   warehouses           Warehouse[]
   employeeHistories    EmployeeHistory[]
   counterparties       Counterparty[]                  @relation("OrgCounterparties")
@@ -126,7 +152,7 @@ model Counterparty {
   uuid                 String                @unique @default(uuid())
   bin                  String                @unique @db.VarChar(12)
   name                 String?
-  displayName          String?
+  legalName            String?
   organizationUuid     String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @default(now()) @updatedAt

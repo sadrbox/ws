@@ -20,6 +20,17 @@
   display: contents;
 }
 
+/* В disabled-режиме (зависимый документ) — снимаем pointer-events с элементов форм,
+   чтобы клики проходили до <td>/<tr> и срабатывал handleRowClick (activeRow/activeCell). */
+.DisabledMode {
+  input[disabled],
+  select[disabled],
+  textarea[disabled],
+  button[disabled] {
+    pointer-events: none;
+  }
+}
+
 /* Заглушка когда parentUuid ещё не задан */
 .EmptyParent {
   padding: 24px;

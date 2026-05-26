@@ -6,6 +6,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import historyColumnsJson from "./historyColumns.json";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { Field, FieldNumber, FieldSelect, FieldDate } from "src/components/Field";
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -45,10 +46,11 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   // refetchType: "active" — ждём завершение refetch смонтированных
   // SubTable, чтобы useFormStore.submit() очистил pending-строки
   // только после появления свежих серверных данных.
-  const invalidateSubTables = useCallback(async () => {
+  const invalidateSubTables = useCallback(async (savedData: any) => {
+    const uuid = savedData?.uuid ?? "";
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["contacts"], refetchType: "active" }),
-      queryClient.invalidateQueries({ queryKey: ["employee-histories"], refetchType: "active" }),
+      invalidateSubTableFor(queryClient, "contacts", "ownerUuid", uuid),
+      invalidateSubTableFor(queryClient, "employee-histories", "employeeUuid", uuid),
     ]);
   }, [queryClient]);
 
@@ -58,6 +60,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
       contacts: {
         endpoint: "contacts", parentField: "ownerUuid",
         label: translate("ContactsList"),
+        batchEndpoint: "contacts/batch",
         createPayload: (r: any) => ({ value: r.value ?? "", contactType: r.contactType ?? null }),
         updatePayload: (r: any) => ({ value: r.value ?? "", contactType: r.contactType ?? null }),
         extraFields: { ownerType: "employee" },
@@ -65,6 +68,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
       history: {
         endpoint: "employee-histories", parentField: "employeeUuid",
         label: translate("EmployeeHistoriesList"),
+        batchEndpoint: "employee-histories/batch",
         createPayload: (r: any) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
         updatePayload: (r: any) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
       },
@@ -84,7 +88,6 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
       };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Сотрудники", saved),
-    afterLoad: invalidateSubTables,
     afterSave: invalidateSubTables,
   });
 

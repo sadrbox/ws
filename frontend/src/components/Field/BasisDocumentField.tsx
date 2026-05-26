@@ -42,7 +42,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
 
   const handleSelect = (_uuid: string, _display: string, item: Record<string, any>) => {
     if (!activeType) return;
-    const label = `${activeType.label} #${item.id} · ${getFormatDateOnly(item.date) ?? ""}`;
+    const label = `${activeType.label} _#_#${item.id} · ${getFormatDateOnly(item.date) ?? ""}`;
     onSelect(activeType.type, item.uuid, label);
   };
 

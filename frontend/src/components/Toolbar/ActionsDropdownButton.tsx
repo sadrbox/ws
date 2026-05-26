@@ -1,5 +1,5 @@
 import { FC, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Icon } from "src/components/IconButton/icons";
+import { Icon, type IconName } from "src/components/IconButton/icons";
 import styles from "./Toolbar.module.scss";
 
 export interface ActionDropdownOption {
@@ -14,6 +14,7 @@ interface ActionsDropdownButtonProps {
   options: ActionDropdownOption[];
   onSelect: (id: string) => void;
   disabled?: boolean;
+  icon?: IconName;
 }
 
 const DROP_W = 260;
@@ -35,7 +36,7 @@ function computeDropStyle(anchor: HTMLElement): CSSProperties {
   return s;
 }
 
-const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options, onSelect, disabled }) => {
+const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options, onSelect, disabled, icon }) => {
   const [open, setOpen] = useState(false);
   const [dropStyle, setDropStyle] = useState<CSSProperties>({});
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -81,6 +82,7 @@ const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options,
         aria-haspopup="menu"
         aria-expanded={open}
       >
+        {icon && <Icon name={icon} />}
         {label}
         <Icon name="caretDown" />
       </button>

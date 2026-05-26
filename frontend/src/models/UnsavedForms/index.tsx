@@ -65,7 +65,7 @@ function getDescription(data: Record<string, unknown>): string {
 
   // Пробуем стандартные поля
   const candidates = [
-    "name", "displayName", "username", "fullName", "bin",
+    "name", "legalName", "fullName", "username", "bin",
     "modelName", "name", "title",
   ];
   const parts: string[] = [];

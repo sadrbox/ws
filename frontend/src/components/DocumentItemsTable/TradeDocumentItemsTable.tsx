@@ -21,7 +21,7 @@ import LookupField from "src/components/Field/LookupField";
 import apiClient from "src/services/api/client";
 import columnsJson from "./documentItemsColumns.json";
 import SubTable, { ReadOnlyCell, type SubTableContext, type TCellValidator, useSubTableContext } from "src/components/SubTable";
-import { withSaleItemRecalc, withSaleItemRecalcFromDiscountAmount } from "src/models/Sales/saleItemDraft";
+import { withSaleItemRecalc, withSaleItemRecalcFromDiscountAmount, recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
 import { parseNumericInput } from "src/components/Table/services";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { Toolbar } from "src/components/Toolbar";
@@ -87,6 +87,8 @@ export interface TradeDocumentItemsTableProps {
   onAllItemsChange?: (rows: TDataItem[]) => void;
   /** Колонки, скрытые по умолчанию для данного типа документа (пользователь может включить через настройки). */
   defaultHiddenColumns?: string[];
+  /** Переопределяет кнопку «Обновить» в тулбаре SubTable (вместо handleCleanRefresh). */
+  onRefresh?: () => void;
 }
 
 const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
@@ -106,6 +108,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   showRequiredHighlight = false,
   onAllItemsChange,
   defaultHiddenColumns,
+  onRefresh,
 }) => {
   const queryClient = useQueryClient();
   const settings = useOrgAccountingSettings(organizationUuid ?? null, documentDate ?? null);
@@ -116,6 +119,17 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   const orgExciseRate = hasTaxes && settings.exciseRate;
   const orgVatRate = hasTaxes && settings.vatRate;
   const vatCalculationMethod = hasTaxes && settings.vatCalculationMethod;
+
+  const recalcedInitialPendingRows = useMemo(() => {
+    if (!initialPendingRows || initialPendingRows.length === 0) return initialPendingRows;
+    const method = (vatCalculationMethod || "INCLUDED") as string;
+    return initialPendingRows.map((row) => {
+      const calc = recalcSaleItemAmounts(
+        row.quantity, row.price, row.vatRate, row.discountPercent, method, row.exciseRate,
+      );
+      return { ...row, ...calc };
+    });
+  }, [initialPendingRows, vatCalculationMethod]);
 
   const dynamicColumns = useMemo(() => {
     let base = (columnsJson as Array<Record<string, unknown>>).filter((c) => {
@@ -512,7 +526,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       defaultSort={{ id: "asc" }}
       disabled={disabled}
       deferRemoteChanges={deferRemoteChanges}
-      initialPendingRows={initialPendingRows}
+      initialPendingRows={recalcedInitialPendingRows}
       emptyMessage={emptyMessage}
       renderCell={renderCell}
       defaultNewRow={defaultNewRow}
@@ -524,10 +538,10 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       computeRow={(row) => ({
         amountNetOfIndirectTaxes: Number(row.amountWithoutVat ?? 0) - Number(row.exciseAmount ?? 0),
       })}
-      extraButtons={
+      onRefresh={onRefresh}
+      extraButtons={!disabled ? (
         <RecalcAllButton
           endpoint={endpoint}
-          disabled={disabled}
           recalcRow={(row) => {
             const refDefaults: Record<string, unknown> = {};
             const product = row.product as { unitOfMeasureUuid?: string | null; unitOfMeasure?: { uuid?: string; name?: string } | null } | null | undefined;
@@ -541,7 +555,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
             return recalcWithFlags(row as any, refDefaults);
           }}
         />
-      }
+      ) : undefined}
     />
   );
 };

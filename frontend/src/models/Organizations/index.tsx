@@ -5,6 +5,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { Field } from "src/components/Field";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -32,10 +33,10 @@ interface TFields {
   uuid?: string;
   bin: string;
   name: string;
-  displayName: string;
+  legalName: string;
 }
 
-const DEFAULT_FIELDS: TFields = { bin: "", name: "", displayName: "" };
+const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "" };
 
 const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Organization");
@@ -49,13 +50,14 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   // refetchType: "active" — ждём завершение refetch смонтированных
   // SubTable, чтобы useFormStore.submit() очистил pending-строки
   // только после появления свежих серверных данных.
-  const invalidateSubTables = useCallback(async () => {
+  const invalidateSubTables = useCallback(async (savedData: any) => {
+    const uuid = savedData?.uuid ?? "";
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["contacts"], refetchType: "active" }),
-      queryClient.invalidateQueries({ queryKey: ["bankaccounts"], refetchType: "active" }),
-      queryClient.invalidateQueries({ queryKey: ["contracts"], refetchType: "active" }),
-      queryClient.invalidateQueries({ queryKey: ["warehouses"], refetchType: "active" }),
-      queryClient.invalidateQueries({ queryKey: ["cashboxes"], refetchType: "active" }),
+      invalidateSubTableFor(queryClient, "contacts", "ownerUuid", uuid),
+      invalidateSubTableFor(queryClient, "bankaccounts", "ownerUuid", uuid),
+      invalidateSubTableFor(queryClient, "contracts", "organizationUuid", uuid),
+      invalidateSubTableFor(queryClient, "warehouses", "organizationUuid", uuid),
+      invalidateSubTableFor(queryClient, "cashboxes", "organizationUuid", uuid),
     ]);
   }, [queryClient]);
 
@@ -69,28 +71,33 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
         endpoint: "contacts",
         parentField: "ownerUuid",
         label: translate("ContactsList"),
+        batchEndpoint: "contacts/batch",
         extraFields: { ownerType: "organization" },
       },
       bankAccounts: {
         endpoint: "bankaccounts",
         parentField: "ownerUuid",
         label: translate("BankAccountsList"),
+        batchEndpoint: "bankaccounts/batch",
         extraFields: { ownerType: "organization" },
       },
       contracts: {
         endpoint: "contracts",
         parentField: "organizationUuid",
         label: translate("ContractsList"),
+        batchEndpoint: "contracts/batch",
       },
       warehouses: {
         endpoint: "warehouses",
         parentField: "organizationUuid",
         label: translate("WarehousesList"),
+        batchEndpoint: "warehouses/batch",
       },
       cashboxes: {
         endpoint: "cashboxes",
         parentField: "organizationUuid",
         label: translate("CashboxesList"),
+        batchEndpoint: "cashboxes/batch",
       },
     },
     mapServerToForm: (d, prev) => ({
@@ -98,16 +105,15 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       ...d,
       bin: d.bin ?? "",
       name: d.name ?? "",
-      displayName: d.displayName ?? "",
+      legalName: d.legalName ?? "",
     }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
       if (!bin || !/^\d{12}$/.test(bin)) return "БИН должен состоять ровно из 12 цифр";
-      return { bin, name: fd.name?.trim() || null, displayName: fd.displayName?.trim() || null };
+      return { bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null };
     },
     buildPaneLabel: (saved) =>
       makePaneLabel(LIST_NAME, "Организации", saved, saved.name || saved.bin),
-    afterLoad: invalidateSubTables,
     afterSave: invalidateSubTables,
   });
 
@@ -127,8 +133,8 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
-                <Field label={translate("displayName")} name={`${form.formUid}_displayName`} value={form.fields.displayName} onChange={e => form.setField("displayName", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} onBlur={e => { if (!form.isEditMode && !form.fields.legalName && e.target.value) form.setField("legalName", e.target.value); }} disabled={form.isLoading} />
+                <Field label={translate("legalName")} name={`${form.formUid}_legalName`} value={form.fields.legalName} onChange={e => form.setField("legalName", e.target.value)} disabled={form.isLoading} />
                 <Field label={translate("binIin")} name={`${form.formUid}_bin`} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} required={!form.isEditMode} />
               </GroupCol>
             </div>
@@ -145,7 +151,6 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           parentName={form.fields.name}
           initialPendingRows={bankAccounts.pending}
           onItemsChange={bankAccounts.onItemsChange}
-          showPrimaryButton={form.isEditMode && canWrite}
         />
       ),
     });
@@ -158,7 +163,6 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           parentName={form.fields.name}
           initialPendingRows={contracts.pending}
           onItemsChange={contracts.onItemsChange}
-          showPrimaryButton={form.isEditMode && canWrite}
         />
       ),
     });
@@ -171,7 +175,6 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           parentName={form.fields.name}
           initialPendingRows={warehouses.pending}
           onItemsChange={warehouses.onItemsChange}
-          showPrimaryButton={form.isEditMode && canWrite}
         />
       ),
     });
@@ -183,7 +186,6 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           parentName={form.fields.name}
           initialPendingRows={cashboxes.pending}
           onItemsChange={cashboxes.onItemsChange}
-          showPrimaryButton={form.isEditMode && canWrite}
         />
       ),
     });

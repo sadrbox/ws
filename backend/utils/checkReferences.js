@@ -303,9 +303,65 @@ export async function handleDelete({
 	}
 }
 
+/**
+ * Batch-удаление нескольких записей по массиву uuid.
+ *
+ * POST /{route}/batch-delete
+ * Body: { uuids: string[] }
+ *
+ * Каждая запись проверяется на ссылки (FK), удаляются только те, на которых нет ссылок.
+ * Возвращает: { success: true, deleted: number, failed: [{uuid, message}] }
+ */
+export async function handleBatchDelete({
+	req,
+	res,
+	prisma,
+	modelName,
+	softDelete = false,
+}) {
+	const { uuids } = req.body;
+	if (!Array.isArray(uuids) || uuids.length === 0) {
+		return res.status(400).json({ success: false, message: "uuids обязателен" });
+	}
+
+	const failed = [];
+	let deleted = 0;
+
+	for (const uuid of uuids) {
+		try {
+			const existing = await prisma[modelName].findUnique({ where: { uuid } });
+			if (!existing || !checkOwnership(existing, req)) {
+				failed.push({ uuid, message: "Не найдено" });
+				continue;
+			}
+
+			const refs = await findReferences(resolveTableName(modelName), { uuid: existing.uuid, id: existing.id });
+			if (refs.length > 0) {
+				failed.push({ uuid, message: formatReferencesMessage(refs) || "Запись используется и не может быть удалена" });
+				continue;
+			}
+
+			if (softDelete) {
+				await prisma[modelName].update({ where: { uuid }, data: { deletedAt: new Date() } });
+			} else {
+				await prisma[modelName].delete({ where: { uuid } });
+			}
+			deleted++;
+		} catch (err) {
+			const msg = err.code === "P2003"
+				? "Невозможно удалить — запись используется в других документах"
+				: "Ошибка удаления";
+			failed.push({ uuid, message: msg });
+		}
+	}
+
+	return res.status(200).json({ success: true, deleted, failed });
+}
+
 export default {
 	findReferences,
 	formatReferencesMessage,
 	guardReferences,
 	handleDelete,
+	handleBatchDelete,
 };

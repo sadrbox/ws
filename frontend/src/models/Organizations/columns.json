@@ -40,7 +40,7 @@
 		"inlist": true
 	},
 	{
-		"identifier": "displayName",
+		"identifier": "legalName",
 		"type": "string",
 		"width": "400px",
 		"minWidth": "80px",

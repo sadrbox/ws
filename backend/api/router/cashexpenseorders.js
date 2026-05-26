@@ -1,7 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
-import { handleDelete } from "../../utils/checkReferences.js";
+import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 const router = express.Router();
 const MODEL = "cashExpenseOrder";
 const ROUTE = "cash-expense-orders";
@@ -222,4 +222,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 router.delete(`/${ROUTE}/:id`, (req, res) =>
 	handleDelete({ req, res, prisma, modelName: MODEL }),
 );
+router.post(`/${ROUTE}/batch-delete`, (req, res) =>
+	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
+);
+
 export default router;

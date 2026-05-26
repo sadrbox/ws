@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { FC, useMemo, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -67,8 +68,8 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     return init;
   })();
 
-  const invalidateSubTables = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ["inventorytransferitems"], refetchType: "active" });
+  const invalidateSubTables = useCallback(async (savedData: any) => {
+    await invalidateSubTableFor(queryClient, "inventorytransferitems", "inventoryTransferUuid", savedData?.uuid ?? "");
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
@@ -79,6 +80,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       items: {
         endpoint: "inventorytransferitems", parentField: "inventoryTransferUuid",
         label: "Товары перемещения",
+        batchEndpoint: "inventorytransferitems/batch",
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
         createPayload: (r: any) => ({
@@ -125,7 +127,6 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       };
     },
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
-    afterLoad: invalidateSubTables,
     afterSave: invalidateSubTables,
   });
 

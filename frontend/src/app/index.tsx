@@ -58,10 +58,14 @@ export const getComponentName = (node: TComponentNode): string => {
 
 export const getUniqId = (component: TComponentNode, data?: TDataItem): string => {
   const name = getComponentName(component);
-  // Синглтоны: *List и любые формы без конкретной записи (обработки, создание)
-  if (name.endsWith("List") || (!data?.uuid && !data?.id)) return name;
+  // Синглтоны: *List
+  if (name.endsWith("List")) return name;
   // Формы с конкретной записью: один pane на uuid/id
-  return `${name}-${data.uuid ?? data.id}`;
+  if (data?.uuid || data?.id) return `${name}-${data.uuid ?? data.id}`;
+  // Формы с явным токеном (например, открытые из основания) — уникальный pane
+  if ((data as any)?._paneToken) return `${name}-${(data as any)._paneToken}`;
+  // Прочие новые формы: синглтон
+  return name;
 };
 
 

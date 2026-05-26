@@ -4,7 +4,7 @@ import path from "path";
 import fs from "fs";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
-import { handleDelete } from "../../utils/checkReferences.js";
+import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
 
@@ -353,5 +353,9 @@ router.delete(`/${ROUTE}/:id/avatar`, async (req, res) => {
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
+
+router.post(`/${ROUTE}/batch-delete`, (req, res) =>
+	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
+);
 
 export default router;

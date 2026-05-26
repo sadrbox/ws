@@ -1,6 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { handleDelete } from "../../utils/checkReferences.js";
+import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { enrichWithOwnerName } from "../../utils/resolveOwnerName.js";
 import { tenantFilter } from "../../utils/auth.js";
 
@@ -385,6 +385,54 @@ router.delete("/bankaccounts/:id", (req, res) =>
 		modelName: "bankAccount",
 		notFoundMessage: "Банковский счёт не найден",
 	}),
+);
+
+// ── POST /bankaccounts/batch ──────────────────────────────────────────────
+router.post("/bankaccounts/batch", async (req, res) => {
+	try {
+		const { operations } = req.body;
+		if (!Array.isArray(operations) || operations.length === 0)
+			return res.status(400).json({ success: false, message: "operations обязателен" });
+		await prisma.$transaction(async (tx) => {
+			for (const { action, uuid, data } of operations) {
+				if (action === "create" && data) {
+					await tx.bankAccount.create({
+						data: {
+							name: data.name?.trim() ?? null,
+							iban: (data.iban ?? "").trim(),
+							bik: data.bik?.trim() ?? null,
+							bankName: data.bankName?.trim() ?? null,
+							currencyUuid: data.currencyUuid ?? null,
+							ownerType: data.ownerType?.trim() || null,
+							ownerUuid: data.ownerUuid?.trim() || null,
+							organizationUuid: data.organizationUuid ?? null,
+							isPrimary: data.isPrimary === true,
+						},
+					});
+				} else if (action === "update" && uuid && data) {
+					const updateData = {};
+					if (data.name !== undefined) updateData.name = data.name?.trim() ?? null;
+					if (data.iban !== undefined) updateData.iban = (data.iban ?? "").trim();
+					if (data.bik !== undefined) updateData.bik = data.bik?.trim() ?? null;
+					if (data.bankName !== undefined) updateData.bankName = data.bankName?.trim() ?? null;
+					if (data.currencyUuid !== undefined) updateData.currencyUuid = data.currencyUuid ?? null;
+					if (data.isPrimary !== undefined) updateData.isPrimary = data.isPrimary === true;
+					if (Object.keys(updateData).length > 0)
+						await tx.bankAccount.update({ where: { uuid }, data: updateData });
+				} else if (action === "delete" && uuid) {
+					try { await tx.bankAccount.delete({ where: { uuid } }); } catch {}
+				}
+			}
+		});
+		return res.status(200).json({ success: true });
+	} catch (error) {
+		console.error("POST /bankaccounts/batch error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+router.post("/bankaccounts/batch-delete", (req, res) =>
+	handleBatchDelete({ req, res, prisma, modelName: "bankAccount" }),
 );
 
 export default router;

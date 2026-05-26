@@ -2,7 +2,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // createInvoiceLikeForm — фабрика для счёт-фактур, счёт на оплату, заявок.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FC, useMemo, useCallback, useRef } from "react";
+import { FC, useMemo, useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import type { TPane } from "src/app/types";
@@ -16,6 +16,8 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
+import { useUserPermissionDefaults } from "src/hooks/useUserPermissionDefaults";
+import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
@@ -27,8 +29,9 @@ import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import PrintDocumentPane, { type PrintColumnDef } from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
+import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app";
-import { type BasisFromTarget, openDocumentFromBasis } from "src/utils/createFromBasis";
+import { type BasisFromTarget, openDocumentFromBasis, refillFromBasisSource, mapCommonTradeFields } from "src/utils/createFromBasis";
 
 export type { BasisTypeConfig };
 
@@ -58,6 +61,8 @@ export interface InvoiceLikeFormConfig {
   createFromBasisTargets?: BasisFromTarget[];
   /** Колонки позиций, скрытые по умолчанию для данного типа документа. */
   defaultHiddenItemColumns?: string[];
+  /** Скрыть переключатель "Проведение" (напр. Счёт на оплату — не проводится). */
+  hidePosted?: boolean;
 }
 
 interface TFields {
@@ -90,7 +95,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     const defaultOrg = useDefaultOrganization();
     const queryClient = useQueryClient();
     const { canWrite } = useAccessRight(cfg.accessRightModel);
-    const { windows: { addPane } } = useAppContext();
+    const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
     const initialFields: TFields | undefined = (() => {
       const data = paneProps.data as any;
@@ -112,21 +117,20 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       return init;
     })();
 
-    const fromBasisItemsRef = useRef<any[] | null>(
-      (() => {
-        const data = paneProps.data as any;
-        return Array.isArray(data?.fromBasisItems) && data.fromBasisItems.length > 0
-          ? data.fromBasisItems
-          : null;
-      })(),
-    );
+    const [basisItems, setBasisItems] = useState<any[]>(() => {
+      const data = paneProps.data as any;
+      return Array.isArray(data?.fromBasisItems) && data.fromBasisItems.length > 0
+        ? data.fromBasisItems : [];
+    });
+    const [itemsTableKey, setItemsTableKey] = useState(0);
+    const [isRefilling, setIsRefilling] = useState(false);
 
     const invalidateSubTables = useCallback(async () => {
       await queryClient.invalidateQueries({ queryKey: [cfg.itemsEndpoint], refetchType: "active" });
     }, [queryClient]);
 
     const afterSave = useCallback(async () => {
-      fromBasisItemsRef.current = null;
+      setBasisItems([]);
       await invalidateSubTables();
     }, [invalidateSubTables]);
 
@@ -141,6 +145,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
         items: {
           endpoint: cfg.itemsEndpoint, parentField: cfg.itemsParentField,
           label: cfg.itemsTabLabel,
+          batchEndpoint: `${cfg.itemsEndpoint}/batch`,
           createPayload: (r: any) => ({
             productUuid: r.productUuid ?? null,
             quantity: r.quantity ?? 0,
@@ -204,7 +209,6 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
         };
       },
       buildPaneLabel: (saved) => makeDocLabel(cfg.listName, cfg.formLabel, saved, "date"),
-      afterLoad: invalidateSubTables,
       afterSave,
     });
 
@@ -213,6 +217,43 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
 
     const hasBasis = !!form.fields.basisDocumentUuid;
     const effectiveReadonly = !canWrite;
+
+    const handleRefillFromBasis = useCallback(async () => {
+      if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
+      setIsRefilling(true);
+      try {
+        const result = await refillFromBasisSource(
+          form.fields.basisDocumentType,
+          form.fields.basisDocumentUuid,
+          mapCommonTradeFields,
+        );
+        if (!result) return;
+        form.setFields(result.fields as Partial<TFields>);
+        const queries = queryClient.getQueriesData<any>({ queryKey: [cfg.itemsEndpoint, "infinite"] });
+        const serverItems: any[] = queries
+          .flatMap(([, data]) => data?.pages?.flatMap((p: any) => p.items ?? []) ?? [])
+          .filter((r: any) => r[cfg.itemsParentField] === form.fields.uuid);
+        const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
+        const itemsAreSame = serverItems.length === result.items.length &&
+          serverItems.every((si, idx) => {
+            const ni = result.items[idx];
+            return si.productUuid === ni.productUuid &&
+              Number(si.quantity) === Number(ni.quantity) &&
+              Number(si.price) === Number(ni.price) &&
+              Number(si.vatRate) === Number(ni.vatRate) &&
+              Number(si.discountPercent) === Number(ni.discountPercent) &&
+              Number(si.exciseRate) === Number(ni.exciseRate);
+          });
+        if (!itemsAreSame) {
+          setBasisItems([...deleteMarkers, ...result.items]);
+          setItemsTableKey(k => k + 1);
+        }
+      } catch (e) {
+        console.error("[refill] failed", e);
+      } finally {
+        setIsRefilling(false);
+      }
+    }, [form.fields.basisDocumentType, form.fields.basisDocumentUuid, form.fields.uuid, form.setFields, queryClient, cfg.itemsEndpoint, cfg.itemsParentField]);
 
     const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
       form.fields.organizationUuid || null,
@@ -264,13 +305,24 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
 
     const hasDirtyItems = (items.pending?.length ?? 0) > 0;
     const printDisabled = form.isLoading || form.isDirty || hasDirtyItems;
-    const showHeaderActions = form.isEditMode && !!form.fields.uuid;
+    const isSavedDoc = form.isEditMode && !!form.fields.uuid;
+    const showHeaderActions = isSavedDoc || hasBasis;
     const headerActionsPortal = usePaneHeaderActions(
       form.paneId,
       showHeaderActions ? (
         <>
-          {cfg.createFromBasisTargets && cfg.createFromBasisTargets.length > 0 && (
+          {hasBasis && (
+            <IconButton
+              icon="syncFromBasis"
+              title="Перезаполнить по основанию"
+              disabled={form.isLoading || isRefilling}
+              loading={isRefilling}
+              onClick={() => void handleRefillFromBasis()}
+            />
+          )}
+          {isSavedDoc && cfg.createFromBasisTargets && cfg.createFromBasisTargets.length > 0 && (
             <ActionsDropdownButton
+              icon="fromBasis"
               label="На основании"
               options={cfg.createFromBasisTargets.map((t) => ({ id: t.basisType, label: `Создать ${t.docLabel}` }))}
               onSelect={(id) => {
@@ -279,7 +331,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
               }}
             />
           )}
-          {cfg.printConfig && (
+          {isSavedDoc && cfg.printConfig && (
             <PrintDropdownButton
               disabled={printDisabled}
               title={printDisabled ? "Сохраните изменения перед печатью" : "Печать"}
@@ -310,6 +362,20 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       apply: (uuid, name) => form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
     });
 
+    const permDefaults = useUserPermissionDefaults(
+      currentUser?.uuid ?? "",
+      form.fields.organizationUuid,
+    );
+    useApplyPermissionDefaults({
+      defaults: permDefaults,
+      organizationUuid: form.fields.organizationUuid,
+      isEditMode: form.isEditMode,
+      isLoading: form.isLoading,
+      fieldMappings: [{ type: "contract", uuidKey: "contractUuid", nameKey: "contractName" }],
+      currentValues: { contractUuid: form.fields.contractUuid },
+      apply: (fields) => form.setFieldsInitial(fields as Partial<TFields>),
+    });
+
     const handleTotalChange = useCallback((total: number, rows?: any[]) => {
       form.setField("amount", Number(total));
       if (rows) {
@@ -331,8 +397,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             <div className={styles.Form}>
               <GroupCol>
                 <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                  <FieldDate label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading || hasBasis} width="160px" />
-                  <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || hasBasis || !canWrite} variant="success" />
+                  <FieldDate label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="160px" />
+                  {!cfg.hidePosted && <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />}
                 </GroupRow>
                 <Group>
                   <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
@@ -402,9 +468,11 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             parentUuid={form.fields.uuid ?? ""} parentField={cfg.itemsParentField}
             endpoint={cfg.itemsEndpoint} componentName={cfg.itemsComponentName}
             organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
-            disabled={form.isLoading} deferRemoteChanges
+            disabled={form.isLoading || hasBasis} deferRemoteChanges
+            onRefresh={hasBasis ? handleRefillFromBasis : undefined}
             parentLabel={`${cfg.formLabel}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
-            initialPendingRows={items.pending.length > 0 ? items.pending : (fromBasisItemsRef.current ?? [])}
+            key={itemsTableKey}
+            initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
             onTotalChange={handleTotalChange}
             onItemsChange={items.onItemsChange}
             onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
@@ -413,7 +481,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           />
         )
       },
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, hasBasis]);
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey]);
 
     return (
       <FormRequiredScope docType={cfg.docType} active={form.meta.headerValidationFailed}>

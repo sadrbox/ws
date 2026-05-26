@@ -1,0 +1,32 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"width": "60px",
+		"minWidth": "60px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": false,
+		"inlist": true
+	},
+	{
+		"identifier": "valueType",
+		"type": "string",
+		"width": "220px",
+		"minWidth": "160px",
+		"alignment": "left",
+		"hint": "Вид значения",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "valueName",
+		"type": "string",
+		"width": "1fr",
+		"minWidth": "180px",
+		"alignment": "left",
+		"hint": "Значение",
+		"visible": true,
+		"inlist": true
+	}
+]

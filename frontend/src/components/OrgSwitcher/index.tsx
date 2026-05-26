@@ -70,7 +70,7 @@ const OrgSwitcher: FC = () => {
   const activeOrg = orgs.find((o) => o.organizationUuid === user.organizationUuid);
   const activeLabel =
     activeOrg?.organization?.name ||
-    activeOrg?.organization?.displayName ||
+    activeOrg?.organization?.legalName ||
     (user.organizationUuid ? translate("organization") : translate("noOrganization"));
 
   return (
@@ -95,7 +95,7 @@ const OrgSwitcher: FC = () => {
             const isActive = o.organizationUuid === user.organizationUuid;
             const name =
               o.organization?.name ||
-              o.organization?.displayName ||
+              o.organization?.legalName ||
               o.organizationUuid;
             return (
               <button

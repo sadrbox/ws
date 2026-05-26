@@ -162,6 +162,8 @@ export interface SubTableProps {
   disableAdd?: boolean;
   /** Колбэк при любом обновлении кэша строк (включая загрузку с сервера). Используется для печати. */
   onAllItemsChange?: (rows: TDataItem[]) => void;
+  /** Переопределяет кнопку «Обновить» в тулбаре (вместо handleCleanRefresh). */
+  onRefresh?: () => void;
   /**
    * Вычисляет дополнительные (динамические) поля строки, которые
    * отсутствуют в БД, но нужны для клиентской сортировки/фильтрации.
@@ -398,6 +400,7 @@ const SubTable: FC<SubTableProps> = ({
   computeRow,
   disableAdd = false,
   onAllItemsChange,
+  onRefresh,
 }) => {
   const queryClient = useQueryClient();
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
@@ -523,17 +526,13 @@ const SubTable: FC<SubTableProps> = ({
         return r;
       });
       setCacheVersion(v => v + 1);
-
-      // Принудительно запрашиваем свежие данные с сервера.
-      // Не полагаемся на setTimeout(invalidateQueries) в родителе — SubTable
-      // сам гарантирует обновление кэша после коммита.
-      void queryClient.invalidateQueries({ queryKey: [model] });
+      // Refetch is handled by the parent form's afterSave → invalidateSubTables.
     } else if (deferRemoteChanges && curLen > 0 && prevLen === 0) {
       // stash применён — сбрасываем флаг мержа и запускаем основной эффект заново
       pendingAppliedRef.current = false;
       setMergeTrigger(v => v + 1);
     }
-  }, [deferRemoteChanges, initialPendingRows, queryClient, model]);
+  }, [deferRemoteChanges, initialPendingRows]);
 
   // Обёртка для delete — показывает спиннер во время удаления
   const handleDelete = useCallback(async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
@@ -599,8 +598,14 @@ const SubTable: FC<SubTableProps> = ({
   const [cacheVersion, setCacheVersion] = useState(0);
 
   useEffect(() => {
-    // ── Ветка A: мерж pending-строк из sessionStorage (один раз при восстановлении) ──
+    // ── Ветка A: мерж pending-строк из initialPendingRows (один раз при восстановлении) ──
     if (deferRemoteChanges && initialPendingRows?.length && !pendingAppliedRef.current) {
+      // Для сохранённых документов ждём, пока придут серверные данные.
+      // Если сработать на пустом allItems — delete-маркеры в initialPendingRows
+      // не совпадут ни с одной серверной строкой и будут отброшены, после чего
+      // Branch B смержит старые серверные строки с новыми pending-creates → дубликаты.
+      if (parentUuid && allItems.length === 0 && isAnythingLoading) return;
+
       pendingAppliedRef.current = true;
       const merged = mergeServerWithPending([...allItems], initialPendingRows);
 
@@ -1426,7 +1431,7 @@ const SubTable: FC<SubTableProps> = ({
   // ── Кнопки ─────────────────────────────────────────────────────────────
   const extraButtons = useMemo(() => (
     <>
-      {!readonly && showEditModeToggle && (
+      {!readonly && !disabled && showEditModeToggle && (
         <>
           <Toolbar.Divider />
           <Toolbar.InlineEditButton
@@ -1459,8 +1464,8 @@ const SubTable: FC<SubTableProps> = ({
     sorting: { sort, onSortChange: handleSortChange },
     filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
     search: { value: search, onChange: handleSearch },
-    actions: { openModelForm: readonly ? undefined : openModelForm, refetch: handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
-    onDelete: handleDelete,
+    actions: { openModelForm: readonly ? undefined : openModelForm, refetch: onRefresh ?? handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
+    onDelete: disabled ? undefined : handleDelete,
     extraButtons,
     inlineEditing,
     renderCell,
@@ -1477,7 +1482,7 @@ const SubTable: FC<SubTableProps> = ({
     componentName, displayRows, columns, adaptiveLimit, combinedLoading, error,
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
     openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
-    handleCleanRefresh, handleDelete, extraButtons, inlineEditing, renderCell, getCellMeta, handleInlineAdd, onInlineAddProp, defaultNewRow,
+    handleCleanRefresh, onRefresh, handleDelete, disabled, extraButtons, inlineEditing, renderCell, getCellMeta, handleInlineAdd, onInlineAddProp, defaultNewRow,
     renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd,
   ]);
 
@@ -1496,7 +1501,7 @@ const SubTable: FC<SubTableProps> = ({
     );
   }
 
-  return <div ref={containerRef} className={styles.SubTableHost} onKeyDownCapture={handleContainerKeyDown}><SubTableInternalContext.Provider value={ctx}><Table {...tableProps} /></SubTableInternalContext.Provider></div>;
+  return <div ref={containerRef} className={`${styles.SubTableHost}${disabled ? ` ${styles.DisabledMode}` : ""}`} onKeyDownCapture={handleContainerKeyDown}><SubTableInternalContext.Provider value={ctx}><Table {...tableProps} /></SubTableInternalContext.Provider></div>;
 };
 
 SubTable.displayName = "SubTable";

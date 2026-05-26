@@ -7,7 +7,7 @@ export interface OrgEntry {
 	organization?: {
 		uuid: string;
 		name: string | null;
-		displayName?: string | null;
+		legalName?: string | null;
 		bin?: string | null;
 	} | null;
 }
@@ -195,7 +195,7 @@ export function isAuthenticated(): boolean {
 export async function registerOrganization(data: {
 	bin: string;
 	name?: string;
-	displayName?: string;
+	legalName?: string;
 	username: string;
 	password: string;
 	email?: string;

@@ -142,7 +142,7 @@
 	"bin": "БИН",
 	"binIin": "БИН / ИНН",
 	"binMustBe12Digits": "БИН должен состоять ровно из 12 цифр",
-	"displayName": "Полное наименование",
+	"legalName": "Полное наименование",
 
 	"warrantyInformation": "Информация о гарантии",
 	"shippingInformation": "Информация о доставке",
@@ -621,5 +621,7 @@
 	"allModelsAssigned": "Все разделы уже добавлены",
 	"yes": "Да",
 	"no": "Нет",
-	"columnSettings": "Настройки колонок"
+	"columnSettings": "Настройки колонок",
+	"refresh": "Обновить",
+	"permissionDefaults": "Предопределённые значения"
 }

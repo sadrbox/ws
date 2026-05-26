@@ -1,6 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { handleDelete } from "../../utils/checkReferences.js";
+import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
 
@@ -150,6 +150,50 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 // ── DELETE ──────────────────────────────────────────────────────────────
 router.delete(`/${ROUTE}/:id`, (req, res) =>
 	handleDelete({ req, res, prisma, modelName: MODEL }),
+);
+
+// ── POST /employee-histories/batch ────────────────────────────────────────
+router.post(`/${ROUTE}/batch`, async (req, res) => {
+	try {
+		const { operations } = req.body;
+		if (!Array.isArray(operations) || operations.length === 0)
+			return res.status(400).json({ success: false, message: "operations обязателен" });
+		await prisma.$transaction(async (tx) => {
+			for (const { action, uuid, data } of operations) {
+				if (action === "create" && data) {
+					await tx[MODEL].create({
+						data: {
+							eventDate: data.eventDate ? new Date(data.eventDate) : new Date(),
+							eventType: (data.eventType ?? "hire").trim(),
+							salary: data.salary != null ? parseFloat(data.salary) : null,
+							employeeUuid: data.employeeUuid,
+							positionUuid: data.positionUuid || null,
+							organizationUuid: data.organizationUuid || null,
+						},
+					});
+				} else if (action === "update" && uuid && data) {
+					const updateData = {};
+					if (data.eventDate !== undefined) updateData.eventDate = data.eventDate ? new Date(data.eventDate) : null;
+					if (data.eventType !== undefined) updateData.eventType = data.eventType.trim();
+					if (data.salary !== undefined) updateData.salary = data.salary != null ? parseFloat(data.salary) : null;
+					if (data.positionUuid !== undefined) updateData.positionUuid = data.positionUuid || null;
+					if (data.organizationUuid !== undefined) updateData.organizationUuid = data.organizationUuid || null;
+					if (Object.keys(updateData).length > 0)
+						await tx[MODEL].update({ where: { uuid }, data: updateData });
+				} else if (action === "delete" && uuid) {
+					try { await tx[MODEL].delete({ where: { uuid } }); } catch {}
+				}
+			}
+		});
+		return res.status(200).json({ success: true });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/batch error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+router.post(`/${ROUTE}/batch-delete`, (req, res) =>
+	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
 );
 
 export default router;
