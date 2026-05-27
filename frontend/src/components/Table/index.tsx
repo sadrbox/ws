@@ -832,19 +832,19 @@ const TableArea = memo(() => {
       <table>
         <colgroup>
           {!isSelect && <col className={styles.CheckboxCol} />}
-          {visibleColumns.slice(0, -1).map(col => {
-            // console.log(col.identifier);
+          {visibleColumns.map((col, i) => {
+            const isLast = i === visibleColumns.length - 1;
+            const explicitWidth = col.width && col.width !== 'auto' ? col.width : undefined;
             return (
-              <col key={col.identifier}
-                style={{ width: col.width && col.width !== 'auto' ? col.width : (col.minWidth ?? '150px'), minWidth: col.minWidth ?? '150px' }} />
+              <col
+                key={col.identifier + (isLast ? '-last' : '')}
+                style={{
+                  width: explicitWidth ?? (isLast ? 'auto' : (col.minWidth ?? '150px')),
+                  minWidth: col.minWidth ?? '150px',
+                }}
+              />
             );
           })}
-          {  /* {visibleColumns.length > 30 && ( */}
-          <col
-            key={lastVisibleColumn.identifier + '-last'}
-            style={{ minWidth: lastVisibleColumn.minWidth ?? '150px', width: 'auto' }}
-          />
-          {/* )} */}
         </colgroup>
         <TableHeader />
         <TableBody />
@@ -979,37 +979,41 @@ const TableHeader = memo(() => {
     colIndex: number;
     startX: number;
     startWidth: number;
+    minW: number;
+    isLastCol: boolean;
+    colId: string;
+    th: HTMLElement;
+    colEl: HTMLElement | null;
   } | null>(null);
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent, colIndex: number) => {
     e.preventDefault();
     e.stopPropagation();
 
-    const th = (e.target as HTMLElement).closest('th');
+    const th = (e.target as HTMLElement).closest('th') as HTMLElement | null;
     if (!th) return;
-    const startWidth = th.getBoundingClientRect().width;
 
-    resizingRef.current = { colIndex, startX: e.clientX, startWidth };
+    // Кэшируем все нужные ссылки один раз — onMouseMove не делает никаких DOM-запросов
+    const colOffset = isSelect ? 0 : 1;
+    const colEl = (th.closest('table')?.querySelector('colgroup')?.children[colIndex + colOffset] as HTMLElement) ?? null;
+    const col = visibleColumns[colIndex];
+    const minW = parseInt(col.minWidth ?? '50', 10);
+    const isLastCol = colIndex === visibleColumns.length - 1;
+
+    resizingRef.current = {
+      colIndex, startX: e.clientX, startWidth: th.getBoundingClientRect().width,
+      minW, isLastCol, colId: col.identifier, th, colEl,
+    };
     isResizingRef.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
 
     const onMouseMove = (ev: MouseEvent) => {
-      if (!resizingRef.current) return;
-      const delta = ev.clientX - resizingRef.current.startX;
-      const col = visibleColumns[resizingRef.current.colIndex];
-      const minW = parseInt(col.minWidth ?? '50', 10);
-      const newWidth = Math.max(minW, resizingRef.current.startWidth + delta);
-      // Прямо обновляем DOM для плавности
-      if (th) th.style.width = newWidth + 'px';
-      // Также обновляем colgroup через соседний col элемент
-      const table = th.closest('table');
-      if (table) {
-        // +1 только если есть чекбокс-колонка (не select-вариант)
-        const colOffset = isSelect ? 0 : 1;
-        const colEl = table.querySelector(`colgroup`)?.children[resizingRef.current.colIndex + colOffset] as HTMLElement;
-        if (colEl) colEl.style.width = newWidth + 'px';
-      }
+      const r = resizingRef.current;
+      if (!r) return;
+      const newWidth = Math.max(r.minW, r.startWidth + (ev.clientX - r.startX));
+      r.th.style.width = newWidth + 'px';
+      if (r.colEl) r.colEl.style.width = newWidth + 'px';
     };
 
     const onMouseUp = (ev: MouseEvent) => {
@@ -1017,20 +1021,15 @@ const TableHeader = memo(() => {
       document.removeEventListener('mouseup', onMouseUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      if (!resizingRef.current) return;
-      const delta = ev.clientX - resizingRef.current.startX;
-      const col = visibleColumns[resizingRef.current.colIndex];
-      const minW = parseInt(col.minWidth ?? '50', 10);
-      const newWidth = Math.max(minW, resizingRef.current.startWidth + delta);
-      // Коммитим новую ширину в стейт
-      const updatedColumns = normalizeLastColumnWidth(columns.map(c =>
-        c.identifier === col.identifier ? { ...c, width: newWidth + 'px' } : c
-      ));
+      const r = resizingRef.current;
+      if (!r) return;
+      const newWidth = Math.max(r.minW, r.startWidth + (ev.clientX - r.startX));
+      // Последняя колонка: сохраняем явную ширину, не сбрасываем в auto
+      const mapped = columns.map(c => c.identifier === r.colId ? { ...c, width: newWidth + 'px' } : c);
+      const updatedColumns = r.isLastCol ? mapped : normalizeLastColumnWidth(mapped);
       actions.setColumns(updatedColumns);
-      // Сохраняем ширины колонок в localStorage
       localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(updatedColumns));
       resizingRef.current = null;
-      // Сбрасываем флаг через setTimeout, чтобы click (который идёт после mouseup) был заблокирован
       setTimeout(() => { isResizingRef.current = false; }, 0);
     };
 
@@ -1078,12 +1077,10 @@ const TableHeader = memo(() => {
                   </svg>
                 )}
               </div>
-              {!isLast && (
-                <div
-                  className={styles.ResizeHandle}
-                  onMouseDown={(e) => handleResizeMouseDown(e, idx)}
-                />
-              )}
+              <div
+                className={styles.ResizeHandle}
+                onMouseDown={(e) => handleResizeMouseDown(e, idx)}
+              />
             </th>
           );
         })}

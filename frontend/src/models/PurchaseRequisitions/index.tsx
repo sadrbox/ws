@@ -56,6 +56,7 @@ const PurchaseRequisitionsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsEndpoint: "purchase-requisition-items",
       sourceItemsParentField: "purchaseRequisitionUuid",
       mapFields: mapCommonTradeFields,
+      existingCheckEndpoint: "purchases",
     },
   ],
   // Заявка на закупку — внутренний документ: скрыть графы налоговых оборотов и скидок

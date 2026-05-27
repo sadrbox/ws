@@ -1756,6 +1756,13 @@ export function useFormStore<F extends object>(
 			// независимо от того, откуда была открыта форма (fire-and-forget).
 			void queryClient.invalidateQueries({ queryKey: [endpoint], refetchType: "active" });
 
+			// Если документ имеет основание — инвалидируем кэш зависимых документов
+			// в форме основания, чтобы dropdown "На основании" обновил метку.
+			const basisUuid = savedData?.basisDocumentUuid ?? (store.getSnapshot().fields as any)?.basisDocumentUuid;
+			if (basisUuid) {
+				void queryClient.invalidateQueries({ queryKey: ["existingDependent", basisUuid, endpoint], refetchType: "active" });
+			}
+
 			void onSaveRef.current?.();
 			store.markClean();
 

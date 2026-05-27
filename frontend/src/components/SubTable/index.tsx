@@ -162,6 +162,8 @@ export interface SubTableProps {
   renderExpandedRow?: (row: TDataItem, ctx: SubTableContext) => ReactNode;
   /** Если true — кнопка «Добавить» отображается как disabled */
   disableAdd?: boolean;
+  /** Если true — удаление строк недоступно (onDelete не вызывается), но редактирование разрешено */
+  disableDelete?: boolean;
   /** Колбэк при любом обновлении кэша строк (включая загрузку с сервера). Используется для печати. */
   onAllItemsChange?: (rows: TDataItem[]) => void;
   /** Переопределяет кнопку «Обновить» в тулбаре (вместо handleCleanRefresh). */
@@ -401,6 +403,7 @@ const SubTable: FC<SubTableProps> = ({
   renderExpandedRow: renderExpandedRowProp,
   computeRow,
   disableAdd = false,
+  disableDelete = false,
   onAllItemsChange,
   onRefresh,
   disablePrimaryRowHighlight = false,
@@ -1476,7 +1479,7 @@ const SubTable: FC<SubTableProps> = ({
     filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
     search: { value: search, onChange: handleSearch },
     actions: { openModelForm: readonly ? undefined : openModelForm, refetch: onRefresh ?? handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
-    onDelete: disabled ? undefined : handleDelete,
+    onDelete: (disabled || disableDelete) ? undefined : handleDelete,
     extraButtons,
     inlineEditing,
     renderCell,
@@ -1494,7 +1497,7 @@ const SubTable: FC<SubTableProps> = ({
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
     openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
     handleCleanRefresh, onRefresh, handleDelete, disabled, extraButtons, inlineEditing, renderCell, getCellMeta, handleInlineAdd, onInlineAddProp, defaultNewRow,
-    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd, disablePrimaryRowHighlight,
+    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd, disableDelete, disablePrimaryRowHighlight,
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────

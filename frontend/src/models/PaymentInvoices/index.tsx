@@ -58,6 +58,7 @@ const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsEndpoint: "paymentinvoiceitems",
       sourceItemsParentField: "paymentInvoiceUuid",
       mapFields: mapCommonTradeFields,
+      existingCheckEndpoint: "sales",
     },
   ],
   hidePosted: true,

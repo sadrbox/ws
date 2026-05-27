@@ -1,6 +1,23 @@
 import { useEffect, useRef } from "react";
 import type { PermissionDefaultsMap } from "./useUserPermissionDefaults";
 
+/** Заполняет пустые поля из permDefaults. Не перезаписывает поля, уже заполненные из основания. */
+export function mergePermissionDefaultsIntoFields(
+	fields: Record<string, any>,
+	defaults: PermissionDefaultsMap,
+	fieldMappings: Array<{ type: keyof PermissionDefaultsMap; uuidKey: string; nameKey: string }>,
+): Record<string, any> {
+	const result = { ...fields };
+	for (const mapping of fieldMappings) {
+		const def = defaults[mapping.type];
+		if (def && !result[mapping.uuidKey]) {
+			result[mapping.uuidKey] = def.uuid;
+			result[mapping.nameKey] = def.name;
+		}
+	}
+	return result;
+}
+
 export interface PermissionDefaultFieldMapping {
 	type: keyof PermissionDefaultsMap;
 	uuidKey: string;

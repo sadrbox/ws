@@ -89,6 +89,10 @@ export interface TradeDocumentItemsTableProps {
   defaultHiddenColumns?: string[];
   /** Переопределяет кнопку «Обновить» в тулбаре SubTable (вместо handleCleanRefresh). */
   onRefresh?: () => void;
+  /** Запретить добавление строк (независимо от disabled). */
+  disableAddRows?: boolean;
+  /** Запретить удаление строк (независимо от disabled), но редактирование разрешено. */
+  disableDeleteRows?: boolean;
 }
 
 const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
@@ -109,6 +113,8 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   onAllItemsChange,
   defaultHiddenColumns,
   onRefresh,
+  disableAddRows = false,
+  disableDeleteRows = false,
 }) => {
   const queryClient = useQueryClient();
   const settings = useOrgAccountingSettings(organizationUuid ?? null, documentDate ?? null);
@@ -525,7 +531,8 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       parentUuid={parentUuid}
       defaultSort={{ id: "asc" }}
       disabled={disabled}
-      disableAdd={disabled}
+      disableAdd={disabled || disableAddRows}
+      disableDelete={disableDeleteRows}
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={recalcedInitialPendingRows}
       emptyMessage={emptyMessage}

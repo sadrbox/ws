@@ -1,5 +1,6 @@
-import { FC, useEffect, useRef, useState, type CSSProperties } from "react";
+import { FC, useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "src/components/IconButton/icons";
+import { useDropdownPosition } from "./useDropdownPosition";
 import styles from "./Toolbar.module.scss";
 
 export interface ActionDropdownOption {
@@ -17,41 +18,10 @@ interface ActionsDropdownButtonProps {
   icon?: IconName;
 }
 
-const DROP_W = 260;
-const DROP_H = 200;
-
-function computeDropStyle(anchor: HTMLElement): CSSProperties {
-  const rect = anchor.getBoundingClientRect();
-  const s: CSSProperties = { position: "fixed", zIndex: 9999, minWidth: Math.max(rect.width, DROP_W) };
-  if (window.innerHeight - rect.bottom >= DROP_H || rect.top < DROP_H) {
-    s.top = rect.bottom + 4;
-  } else {
-    s.bottom = window.innerHeight - rect.top + 4;
-  }
-  if (rect.left + DROP_W <= window.innerWidth) {
-    s.left = rect.left;
-  } else {
-    s.left = Math.max(4, window.innerWidth - DROP_W - 4);
-  }
-  return s;
-}
-
 const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options, onSelect, disabled, icon }) => {
   const [open, setOpen] = useState(false);
-  const [dropStyle, setDropStyle] = useState<CSSProperties>({});
   const wrapRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open || !wrapRef.current) return;
-    const el = wrapRef.current;
-    const update = () => setDropStyle(computeDropStyle(el));
-    window.addEventListener("scroll", update, true);
-    window.addEventListener("resize", update);
-    return () => {
-      window.removeEventListener("scroll", update, true);
-      window.removeEventListener("resize", update);
-    };
-  }, [open]);
+  const [dropRef, dropStyle] = useDropdownPosition(open, wrapRef);
 
   useEffect(() => {
     if (!open) return;
@@ -67,18 +37,13 @@ const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options,
     };
   }, [open]);
 
-  const toggle = () => {
-    if (!open && wrapRef.current) setDropStyle(computeDropStyle(wrapRef.current));
-    setOpen((v) => !v);
-  };
-
   return (
     <div ref={wrapRef} className={styles.DropdownWrap}>
       <button
         type="button"
         className={styles.ActionsButton}
         disabled={disabled}
-        onClick={toggle}
+        onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -87,7 +52,7 @@ const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options,
         <Icon name="caretDown" />
       </button>
       {open && (
-        <div role="menu" className={styles.DropdownMenu} style={dropStyle}>
+        <div ref={dropRef} role="menu" className={styles.DropdownMenu} style={dropStyle}>
           {options.map((o) => (
             <button
               key={o.id}

@@ -35,7 +35,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				const s = JSON.parse(req.query.sort);
 				if (s)
 					for (const [f, d] of Object.entries(s)) {
-						if (d === "asc" || d === "desc") orderBy.push({ [f]: d });
+						if (d === "asc" || d === "desc") { const parts = f.split("."); orderBy.push(parts.length === 2 ? { [parts[0]]: { [parts[1]]: d } } : { [f]: d }); }
 					}
 			} catch {}
 		}

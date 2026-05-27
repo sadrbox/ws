@@ -21,6 +21,16 @@ export interface BasisDocumentFieldProps {
   formUid: string;
 }
 
+/** Извлекает числовой ID из строки вида "Тип: ID 5 · 25.05.2026", иначе возвращает исходный текст. */
+const extractBasisSearch = (input: string): string => {
+  // "Тип: ID 5 · дата" → "5" → бэкенд search=5
+  const idMatch = input.match(/ID\s+(\d+)/i);
+  if (idMatch) return idMatch[1];
+  // Всё остальное (частичный лейбл, дата, произвольный текст) →
+  // "" → LookupField загрузит все записи и отфильтрует по getSuggestionLabel
+  return "";
+};
+
 const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   allowedTypes,
   basisDocumentType,
@@ -66,7 +76,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   if (hasValue) {
     return (
       <LookupField
-        label={translate("basisDocument")}
+        label={`${translate("basisDocument")} (${activeType?.label ?? ""})`}
         name={`${formUid}_basisDocument`}
         value={basisDocumentUuid}
         displayValue={basisDocumentLabel}
@@ -84,50 +94,34 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
         onClear={onClear}
         disabled={disabled || !activeType}
         variant="default"
+        searchTransform={extractBasisSearch}
       />
     );
   }
 
   // Когда значения ещё нет — показываем селектор типа + LookupField
   return (
-    <div className={styles.FieldWrapper}>
-      <label className={styles.FieldLabel}>{translate("basisDocument")}</label>
-      <div className={styles.FieldInputWrapper}>
-        {showTypeSelect && (
-          <select
-            className={`${styles.FieldSelect} ${styles.BasisTypeSelect}`}
-            value={selectedType}
-            onChange={handleTypeChange}
-            disabled={disabled}
-          >
-            {allowedTypes.map((t) => (
-              <option key={t.type} value={t.type}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        )}
-        <LookupField
-          name={`${formUid}_basisDocument`}
-          value={undefined}
-          displayValue={undefined}
-          endpoint={activeType?.endpoint ?? ""}
-          displayField="id"
-          getSuggestionLabel={(item) =>
-            `${activeType?.label ?? ""}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`
-          }
-          columns={[
-            { key: "id", label: "ID" },
-            { key: "name", label: "Документ" },
-            { key: "date", label: translate("date") },
-          ]}
-          secondaryFields={["name", "counterparty.name", "documentNumber"]}
-          onSelect={handleSelect}
-          disabled={disabled || !activeType}
-          visibleActions={[]}
-        />
-      </div>
-    </div>
+    <LookupField
+      label={activeType?.label ? `${translate("basisDocument")} (${activeType.label})` : translate("basisDocument")}
+      name={`${formUid}_basisDocument`}
+      value={undefined}
+      displayValue={undefined}
+      endpoint={activeType?.endpoint ?? ""}
+      displayField="id"
+      getSuggestionLabel={(item) =>
+        `${activeType?.label ?? ""}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`
+      }
+      columns={[
+        { key: "id", label: "ID" },
+        { key: "name", label: "Документ" },
+        { key: "date", label: translate("date") },
+      ]}
+      secondaryFields={["name", "counterparty.name", "documentNumber"]}
+      onSelect={handleSelect}
+      disabled={disabled || !activeType}
+      // visibleActions={[]}
+      searchTransform={extractBasisSearch}
+    />
   );
 };
 

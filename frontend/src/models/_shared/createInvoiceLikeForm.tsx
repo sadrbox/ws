@@ -16,8 +16,8 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
-import { useUserPermissionDefaults } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
+import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
@@ -33,6 +33,8 @@ import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app";
 import { type BasisFromTarget, openDocumentFromBasis, refillFromBasisSource, mapCommonTradeFields } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
+import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
+import DocumentTotals from "src/components/DocumentTotals";
 
 export type { BasisTypeConfig };
 
@@ -97,6 +99,10 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TPane>> {
+  const dependentEndpoints = (cfg.createFromBasisTargets ?? [])
+    .map((t) => t.existingCheckEndpoint)
+    .filter((e): e is string => !!e);
+
   const Form: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
     const queryClient = useQueryClient();
@@ -220,10 +226,11 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
 
     const items = form.useTable("items");
     const allItemsRef = useRef<any[]>([]);
+    const permDefaultsRef = useRef<PermissionDefaultsMap>({});
 
     const hasBasis = !!form.fields.basisDocumentUuid;
     const basisLock = hasBasis && (cfg.lockFieldsOnBasis ?? false);
-    const effectiveReadonly = !canWrite || basisLock;
+    const effectiveReadonly = !canWrite;
 
     const handleRefillFromBasis = useCallback(async () => {
       if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
@@ -235,7 +242,9 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           mapCommonTradeFields,
         );
         if (!result) return;
-        const patch = result.fields as Partial<TFields>;
+        const patch = mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
+          { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+        ]) as Partial<TFields>;
         const currentFields = form.store.getSnapshot().fields;
         const hasFieldChanges = Object.keys(patch).some(
           k => !isEquivalent((currentFields as any)[k], (patch as any)[k]),
@@ -320,6 +329,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     const hasDirtyItems = (items.pending?.length ?? 0) > 0;
     const printDisabled = form.isLoading || form.isDirty || hasDirtyItems;
     const isSavedDoc = form.isEditMode && !!form.fields.uuid;
+    const existingDeps = useExistingDependents(isSavedDoc ? form.fields.uuid : undefined, dependentEndpoints);
     const showHeaderActions = isSavedDoc || hasBasis;
     const headerActionsPortal = usePaneHeaderActions(
       form.paneId,
@@ -338,7 +348,10 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             <ActionsDropdownButton
               icon="fromBasis"
               label="На основании"
-              options={cfg.createFromBasisTargets.map((t) => ({ id: t.basisType, label: `Создать ${t.docLabel}` }))}
+              options={cfg.createFromBasisTargets.map((t) => ({
+                  id: t.basisType,
+                  label: formatDependentOption(t.docLabel, t.existingCheckEndpoint ? existingDeps[t.existingCheckEndpoint] : null),
+                }))}
               onSelect={(id) => {
                 const target = cfg.createFromBasisTargets!.find((t) => t.basisType === id);
                 if (target) void handleCreateFromBasis(target);
@@ -380,6 +393,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       currentUser?.uuid ?? "",
       form.fields.organizationUuid,
     );
+    permDefaultsRef.current = permDefaults;
     useApplyPermissionDefaults({
       defaults: permDefaults,
       organizationUuid: form.fields.organizationUuid,
@@ -435,41 +449,33 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                     }} />
                 </Group>
               </GroupCol>
+              {cfg.basisConfig && (
+                <GroupCol>
+                  <BasisDocumentField
+                    allowedTypes={cfg.basisConfig.allowedTypes}
+                    basisDocumentType={form.fields.basisDocumentType}
+                    basisDocumentUuid={form.fields.basisDocumentUuid}
+                    basisDocumentLabel={form.fields.basisDocumentLabel}
+                    formUid={form.formUid}
+                    disabled={form.isLoading}
+                    onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
+                    onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+                  />
+                </GroupCol>
+              )}
               <Group>
-                <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
-                  {([
-                    ...(isVatEnabled ? ([
-                      { label: translate("amountWithoutVatLabel"), value: form.fields.amountWithoutVat },
-                      { label: translate("vatLabel"), value: form.fields.vatAmount },
-                    ] as const) : ([] as const)),
-                    ...(useDiscount ? ([{ label: translate("discount"), value: form.fields.discountAmount }] as const) : ([] as const)),
-                  ] as ReadonlyArray<{ label: string; value: number | string }>).map(({ label, value }) => (
-                    <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
-                      <span>{label}</span>
-                      <span style={{ fontVariantNumeric: "tabular-nums" }}>{value || "0"}</span>
-                    </div>
-                  ))}
-                  <div style={{ borderTop: "1px solid #e5e7eb", margin: "2px 0 0" }} />
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
-                    <span>{translate("total")}</span>
-                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
-                  </div>
-                </div>
+                <DocumentTotals
+                  amount={form.fields.amount}
+                  vatAmount={form.fields.vatAmount}
+                  discountAmount={form.fields.discountAmount}
+                  amountWithoutVat={form.fields.amountWithoutVat}
+                  isVatEnabled={isVatEnabled}
+                  useDiscount={useDiscount}
+                  basisItems={basisItems}
+                />
               </Group>
             </div>
             {form.isEditMode && <GroupCol style={{ flex: 1, alignItems: "start", justifyContent: "end", gap: 6 }}>
-              {cfg.basisConfig && (
-                <BasisDocumentField
-                  allowedTypes={cfg.basisConfig.allowedTypes}
-                  basisDocumentType={form.fields.basisDocumentType}
-                  basisDocumentUuid={form.fields.basisDocumentUuid}
-                  basisDocumentLabel={form.fields.basisDocumentLabel}
-                  formUid={form.formUid}
-                  disabled={form.isLoading}
-                  onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
-                  onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
-                />
-              )}
               <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
                 <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
                 <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
@@ -484,7 +490,10 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             parentUuid={form.fields.uuid ?? ""} parentField={cfg.itemsParentField}
             endpoint={cfg.itemsEndpoint} componentName={cfg.itemsComponentName}
             organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
-            disabled={form.isLoading || basisLock} deferRemoteChanges
+            disabled={form.isLoading}
+            disableAddRows={basisLock}
+            disableDeleteRows={basisLock}
+            deferRemoteChanges
             onRefresh={hasBasis ? handleRefillFromBasis : undefined}
             parentLabel={`${cfg.formLabel}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
             key={itemsTableKey}

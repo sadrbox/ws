@@ -51,6 +51,10 @@ export interface LookupFieldProps {
   columns?: { key: string; label: string }[];
   /** Кастомная функция для формирования текста подсказки в LookupDropdown */
   getSuggestionLabel?: (item: Record<string, any>) => string;
+  /** Преобразует введённый пользователем текст перед отправкой на бэкенд (search-параметр).
+   *  Полезно когда displayValue имеет составной формат (напр. "Тип: ID 5 · дата"),
+   *  а бэкенд ожидает только числовой id или другой простой ключ. */
+  searchTransform?: (input: string) => string;
   /** Ширина поля */
   width?: string;
   minWidth?: string;
@@ -144,6 +148,7 @@ const LookupField: FC<LookupFieldProps> = ({
   onAfterSelect,
   required = false,
   error = false,
+  searchTransform,
 }) => {
   // Подавляем неиспользуемые переменные совместимости
   void _columns;
@@ -217,26 +222,48 @@ const LookupField: FC<LookupFieldProps> = ({
       setIsLoading(false);
       return;
     }
+    const searchText = searchTransform ? searchTransform(debouncedText) : debouncedText;
     let cancelled = false;
     setIsLoading(true);
-    fetchList(endpoint, undefined, { search: debouncedText, limit: 10, ...extraParams })
-      .then((result) => {
-        if (cancelled) return;
-        const items = result.items as any[];
-        setSuggestions(items);
-        setIsDropdownOpen(true);
-        // Сразу выделяем первый элемент, чтобы Up/Down/Enter работали
-        // без предварительного нажатия Down.
-        setActiveIndex(items.length > 0 ? 0 : -1);
-      })
-      .catch(() => {
-        if (!cancelled) setSuggestions([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
+
+    if (!searchText && searchTransform) {
+      // Transform вернул "" — загружаем все записи и фильтруем на клиенте
+      // по getSuggestionLabel (или displayField), чтобы поиск по лейблу работал.
+      const lc = debouncedText.toLowerCase();
+      fetchList(endpoint, undefined, { limit: 200, ...extraParams })
+        .then((result) => {
+          if (cancelled) return;
+          const all = result.items as any[];
+          const filtered = all.filter((item) => {
+            const label = getSuggestionLabel
+              ? getSuggestionLabel(item)
+              : String(item[displayField] ?? "");
+            return label.toLowerCase().includes(lc);
+          });
+          setSuggestions(filtered);
+          setIsDropdownOpen(true);
+          setActiveIndex(filtered.length > 0 ? 0 : -1);
+        })
+        .catch(() => { if (!cancelled) setSuggestions([]); })
+        .finally(() => { if (!cancelled) setIsLoading(false); });
+    } else if (searchText) {
+      fetchList(endpoint, undefined, { search: searchText, limit: 10, ...extraParams })
+        .then((result) => {
+          if (cancelled) return;
+          const items = result.items as any[];
+          setSuggestions(items);
+          setIsDropdownOpen(true);
+          setActiveIndex(items.length > 0 ? 0 : -1);
+        })
+        .catch(() => { if (!cancelled) setSuggestions([]); })
+        .finally(() => { if (!cancelled) setIsLoading(false); });
+    } else {
+      setSuggestions([]);
+      setIsLoading(false);
+    }
+
     return () => { cancelled = true; };
-  }, [debouncedText, endpoint, displayValue]);
+  }, [debouncedText, endpoint, displayValue, searchTransform, getSuggestionLabel, displayField]);
 
   // Click-outside: закрытие dropdown
   useEffect(() => {
@@ -266,7 +293,9 @@ const LookupField: FC<LookupFieldProps> = ({
       data: { endpoint, listComponent, extraParams } as any,
       onSelectResult: (item: Record<string, any>) => {
         const uuid = item.uuid as string;
-        const display = String(item[displayField] ?? item.value ?? item.name ?? uuid);
+        const display = getSuggestionLabel
+          ? getSuggestionLabel(item)
+          : String(item[displayField] ?? item.value ?? item.name ?? uuid);
         onSelect(uuid, display, item);
         setIsDropdownOpen(false);
         setInputText(display);
@@ -282,7 +311,7 @@ const LookupField: FC<LookupFieldProps> = ({
         }
       },
     });
-  }, [disabled, addPane, label, endpoint, listComponent, displayField, onSelect, extraParams, onAfterSelect]);
+  }, [disabled, addPane, label, endpoint, listComponent, displayField, getSuggestionLabel, onSelect, extraParams, onAfterSelect]);
 
   // ── Быстрый выбор — загружает все записи и открывает inline dropdown ──
   const handleQuickSelect = useCallback(() => {
@@ -308,7 +337,9 @@ const LookupField: FC<LookupFieldProps> = ({
 
   const handleSelectItem = useCallback((item: Record<string, any>) => {
     const uuid = item.uuid as string;
-    const display = String(item[displayField] ?? item.value ?? item.name ?? uuid);
+    const display = getSuggestionLabel
+      ? getSuggestionLabel(item)
+      : String(item[displayField] ?? item.value ?? item.name ?? uuid);
     onSelect(uuid, display, item);
     setIsDropdownOpen(false);
     setInputText(display);
@@ -321,7 +352,7 @@ const LookupField: FC<LookupFieldProps> = ({
         onAfterSelect();
       }, 0);
     }
-  }, [onSelect, displayField, onAfterSelect]);
+  }, [onSelect, displayField, getSuggestionLabel, onAfterSelect]);
 
   const handleClear = useCallback(() => {
     onSelect("", "", {});

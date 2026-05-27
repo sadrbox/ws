@@ -1,0 +1,42 @@
+.container {
+  background: #f8f9fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  max-width: 200px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #6b7280;
+}
+
+.value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.divider {
+  border-top: 1px solid #e5e7eb;
+  margin: 2px 0 0;
+}
+
+.total {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  padding-top: 2px;
+}
+
+.totalValue {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

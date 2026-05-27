@@ -67,6 +67,7 @@ const IncomingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsEndpoint: "incominginvoiceitems",
       sourceItemsParentField: "incomingInvoiceUuid",
       mapFields: mapCommonTradeFields,
+      existingCheckEndpoint: "purchases",
     },
   ],
 });

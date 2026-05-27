@@ -35,12 +35,15 @@ import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app";
 import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource } from "src/utils/createFromBasis";
 import { PurchaseReturnsForm } from "src/models/PurchaseReturns";
-import { useUserPermissionDefaults } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
+import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
+import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
+import DocumentTotals from "src/components/DocumentTotals";
 
 const MODEL_ENDPOINT = "purchases";
 const LIST_NAME = "PurchasesList";
-const FORM_LABEL = "Поступление товара и услуг";
+const FORM_LABEL = "Поступление товара и услуг и услуг";
+const PURCHASES_DEPENDENT_ENDPOINTS = ["purchase-returns"];
 
 interface TFields {
   id?: number; uuid?: string;
@@ -195,6 +198,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const items = form.useTable("items");
   const allItemsRef = useRef<any[]>([]);
+  const permDefaultsRef = useRef<PermissionDefaultsMap>({});
 
   const hasBasis = !!form.fields.basisDocumentUuid;
 
@@ -208,7 +212,10 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
         mapCommonTradeFields,
       );
       if (!result) return;
-      form.setFields(result.fields as Partial<TFields>);
+      form.setFields(mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
+        { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+        { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      ]) as Partial<TFields>);
       const renderedItems = allItemsRef.current.filter((r: any) => !r._pendingAction);
       const queries = queryClient.getQueriesData<any>({ queryKey: ["purchaseitems", "infinite"] });
       const cachedItems: any[] = queries
@@ -265,6 +272,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     currentUser?.uuid ?? "",
     form.fields.organizationUuid,
   );
+  permDefaultsRef.current = permDefaults;
   useApplyPermissionDefaults({
     defaults: permDefaults,
     organizationUuid: form.fields.organizationUuid,
@@ -328,42 +336,34 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
                   }} />
               </Group>
             </GroupCol>
+            <GroupCol>
+              <BasisDocumentField
+                allowedTypes={[
+                  { type: "purchase_requisition", endpoint: "purchase-requisitions", label: translate("purchaseRequisition") },
+                  { type: "incoming_invoice", endpoint: "incoming-invoices", label: translate("IncomingInvoicesForm") },
+                ]}
+                basisDocumentType={form.fields.basisDocumentType}
+                basisDocumentUuid={form.fields.basisDocumentUuid}
+                basisDocumentLabel={form.fields.basisDocumentLabel}
+                formUid={form.formUid}
+                disabled={form.isLoading}
+                onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
+                onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+              />
+            </GroupCol>
             <Group>
-              <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
-                {([
-                  ...(isVatEnabled ? ([
-                    { label: translate("amountWithoutVatLabel"), value: form.fields.amountWithoutVat },
-                    { label: translate("vatLabel"), value: form.fields.vatAmount },
-                  ] as const) : ([] as const)),
-                  ...(useDiscount ? ([{ label: translate("discount"), value: form.fields.discountAmount }] as const) : ([] as const)),
-                ] as ReadonlyArray<{ label: string; value: number | string }>).map(({ label, value }) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
-                    <span>{label}</span>
-                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{value || "0"}</span>
-                  </div>
-                ))}
-                <div style={{ borderTop: "1px solid #e5e7eb", margin: "2px 0 0" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
-                  <span>{translate("total")}</span>
-                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
-                </div>
-              </div>
+              <DocumentTotals
+                amount={form.fields.amount}
+                vatAmount={form.fields.vatAmount}
+                discountAmount={form.fields.discountAmount}
+                amountWithoutVat={form.fields.amountWithoutVat}
+                isVatEnabled={isVatEnabled}
+                useDiscount={useDiscount}
+                basisItems={basisItems}
+              />
             </Group>
           </div>
           {form.isEditMode && <GroupCol style={{ flex: 1, alignItems: "start", justifyContent: "end", gap: 6 }}>
-            <BasisDocumentField
-              allowedTypes={[
-                { type: "purchase_requisition", endpoint: "purchase-requisitions", label: translate("purchaseRequisition") },
-                { type: "incoming_invoice", endpoint: "incoming-invoices", label: translate("IncomingInvoicesForm") },
-              ]}
-              basisDocumentType={form.fields.basisDocumentType}
-              basisDocumentUuid={form.fields.basisDocumentUuid}
-              basisDocumentLabel={form.fields.basisDocumentLabel}
-              formUid={form.formUid}
-              disabled={form.isLoading}
-              onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
-              onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
-            />
             <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
               <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
               <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
@@ -410,6 +410,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields, addPane]);
 
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
+  const existingDeps = useExistingDependents(isSavedDoc ? form.fields.uuid : undefined, PURCHASES_DEPENDENT_ENDPOINTS);
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
     (isSavedDoc || hasBasis) ? (
@@ -427,7 +428,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
           <ActionsDropdownButton
             icon="fromBasis"
             label="На основании"
-            options={[{ id: "purchaseReturn", label: `Создать ${translate("PurchaseReturnsList")}` }]}
+            options={[{ id: "purchaseReturn", label: formatDependentOption(translate("PurchaseReturnsList"), existingDeps["purchase-returns"]) }]}
             onSelect={() => void handleCreatePurchaseReturn()}
           />
         )}

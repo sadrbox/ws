@@ -1364,6 +1364,9 @@ model PurchaseRequisition {
   contractUuid             String?
   authorUuid               String
   posted                   Boolean                   @default(false)
+  basisDocumentType        String?
+  basisDocumentUuid        String?
+  basisDocumentLabel       String?
   updatedAt                DateTime                  @default(now()) @updatedAt
   deletedAt                DateTime?
   purchaseRequisitionItems PurchaseRequisitionItem[]
@@ -1377,6 +1380,7 @@ model PurchaseRequisition {
   @@index([contractUuid])
   @@index([authorUuid])
   @@index([date])
+  @@index([basisDocumentUuid])
   @@index([updatedAt])
   @@map("purchase_requisitions")
 }

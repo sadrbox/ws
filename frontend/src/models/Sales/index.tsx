@@ -38,12 +38,15 @@ import { api } from "src/services/api/client";
 import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource } from "src/utils/createFromBasis";
 import { OutgoingInvoicesForm } from "src/models/OutgoingInvoices";
 import { SalesReturnsForm } from "src/models/SalesReturns";
-import { useUserPermissionDefaults } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
+import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
+import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
+import DocumentTotals from "src/components/DocumentTotals";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
 const FORM_LABEL = "Реализация товара и услуг";
+const SALES_DEPENDENT_ENDPOINTS = ["outgoing-invoices", "sale-returns"];
 
 
 interface TFields {
@@ -197,6 +200,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const saleItems = form.useTable("saleItems");
   const allItemsRef = useRef<any[]>([]);
+  const permDefaultsRef = useRef<PermissionDefaultsMap>({});
 
   const hasBasis = !!form.fields.basisDocumentUuid;
 
@@ -210,7 +214,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         mapCommonTradeFields,
       );
       if (!result) return;
-      form.setFields(result.fields as Partial<TFields>);
+      form.setFields(mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
+        { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+        { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      ]) as Partial<TFields>);
       // Delete-маркеры для уже сохранённых серверных строк — чтобы SubTable
       // удалил их при сохранении, а не смержил с новыми строками из основания.
       // Используем allItemsRef как первичный источник (актуальные строки из рендера),
@@ -279,6 +286,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     currentUser?.uuid ?? "",
     form.fields.organizationUuid,
   );
+  permDefaultsRef.current = permDefaults;
   useApplyPermissionDefaults({
     defaults: permDefaults,
     organizationUuid: form.fields.organizationUuid,
@@ -493,6 +501,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     ? "Сохраните изменения перед печатью"
     : undefined;
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
+  const existingDeps = useExistingDependents(isSavedDoc ? form.fields.uuid : undefined, SALES_DEPENDENT_ENDPOINTS);
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
     (isSavedDoc || hasBasis) ? (
@@ -511,8 +520,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             icon="fromBasis"
             label="На основании"
             options={[
-              { id: "outgoing", label: `Создать ${translate("outgoingInvoice")}` },
-              { id: "saleReturn", label: `Создать ${translate("SalesReturnsList")}` },
+              { id: "outgoing", label: formatDependentOption(translate("outgoingInvoice"), existingDeps["outgoing-invoices"]) },
+              { id: "saleReturn", label: formatDependentOption(translate("SalesReturnsList"), existingDeps["sale-returns"]) },
             ]}
             onSelect={(id) => {
               if (id === "outgoing") void handleCreateFromBasis(OutgoingInvoicesForm, translate("outgoingInvoice"), "sale", "saleitems", "outgoing-invoices");
@@ -546,8 +555,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               {/* Строка 1: Дата · Проведён · Статус */}
               <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
-
-
                 <FieldToggle
                   name={`${form.formUid}_posted`}
                   label={translate("posted")}
@@ -586,29 +593,15 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               />
             </GroupCol>
             <Group>
-              <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
-                {([
-                  ...(isVatEnabled
-                    ? ([
-                      { label: translate("amountWithoutVatLabel"), value: form.fields.amountWithoutVat },
-                      { label: translate("vatLabel"), value: form.fields.vatAmount },
-                    ] as const)
-                    : ([] as const)),
-                  ...(useDiscount
-                    ? ([{ label: translate("discount"), value: form.fields.discountAmount }] as const)
-                    : ([] as const)),
-                ] as ReadonlyArray<{ label: string; value: number | string }>).map(({ label, value }) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#6b7280" }}>
-                    <span>{label}</span>
-                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{value || "0"}</span>
-                  </div>
-                ))}
-                <div style={{ borderTop: "1px solid #e5e7eb", margin: "2px 0 0" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
-                  <span>{translate("total")}</span>
-                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
-                </div>
-              </div>
+              <DocumentTotals
+                amount={form.fields.amount}
+                vatAmount={form.fields.vatAmount}
+                discountAmount={form.fields.discountAmount}
+                amountWithoutVat={form.fields.amountWithoutVat}
+                isVatEnabled={isVatEnabled}
+                useDiscount={useDiscount}
+                basisItems={basisItems}
+              />
             </Group>
           </div>
           {form.isEditMode && <GroupCol style={{ flex: 1, alignItems: "start", justifyContent: "end", gap: 6 }}>

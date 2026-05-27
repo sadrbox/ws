@@ -159,8 +159,8 @@
 		"type": "number",
 		"decimals": 2,
 		"visible": true,
-		"width": "130px",
-		"minWidth": "80px",
+		"width": "150px",
+		"minWidth": "120px",
 		"alignment": "right",
 		"footer": "sum"
 	}

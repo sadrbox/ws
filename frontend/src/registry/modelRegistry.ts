@@ -180,6 +180,22 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Поступления",
 	},
 	{
+		endpoint: "sale-returns",
+		module: () => import("src/models/SalesReturns"),
+		formName: "SalesReturnsForm",
+		listName: "SalesReturnsList",
+		storageKey: "sale-returns-form",
+		label: "Возврат от покупателя",
+	},
+	{
+		endpoint: "purchase-returns",
+		module: () => import("src/models/PurchaseReturns"),
+		formName: "PurchaseReturnsForm",
+		listName: "PurchaseReturnsList",
+		storageKey: "purchase-returns-form",
+		label: "Возврат поставщику",
+	},
+	{
 		endpoint: "incoming-invoices",
 		module: () => import("src/models/IncomingInvoices"),
 		formName: "IncomingInvoicesForm",
@@ -202,6 +218,14 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		listName: "PaymentInvoicesList",
 		storageKey: "payment-invoices-form",
 		label: "Счета на оплату",
+	},
+	{
+		endpoint: "purchase-requisitions",
+		module: () => import("src/models/PurchaseRequisitions"),
+		formName: "PurchaseRequisitionsForm",
+		listName: "PurchaseRequisitionsList",
+		storageKey: "purchase-requisitions-form",
+		label: "Заявки на закупку",
 	},
 	{
 		endpoint: "cash-receipt-orders",
