@@ -7,13 +7,13 @@ import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
+import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
-import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
@@ -175,9 +175,10 @@ interface BankAccountsListProps {
   onSelectItem?: (item: TDataItem) => void;
   ownerUuid?: string;
   ownerField?: string;
+  extraQueryParams?: Record<string, string>;
 }
 
-const BankAccountsList: FC<BankAccountsListProps> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const BankAccountsList: FC<BankAccountsListProps> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList
     endpoint={MODEL_ENDPOINT}
     listName="BankAccountsList"
@@ -188,6 +189,7 @@ const BankAccountsList: FC<BankAccountsListProps> = ({ variant, onSelectItem, ow
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}
     ownerField={ownerField}
+    extraQueryParams={extraQueryParams}
   />
 );
 
@@ -214,7 +216,7 @@ export interface BankAccountsTableProps {
   onItemsChange?: (items: TDataItem[]) => void;
   /** Начальные pending-строки */
   initialPendingRows?: TDataItem[];
-  /** Показать кнопку "Сделать основным" в тулбаре */
+  /** Показывать кнопку «Сделать основным» и жирное выделение основного счёта */
   showPrimaryButton?: boolean;
 }
 
@@ -265,12 +267,17 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
     name: "", iban: "", bik: "", bankName: "", currencyUuid: null,
   }), []);
 
-  // Скрываем колонку ownerName в SubTable (владелец известен из контекста)
   const adjustedColumns = useMemo(
-    () => (columnsJson as any[]).map((col: any) =>
-      col.identifier === "ownerName" ? { ...col, visible: false, inlist: false } : col,
-    ),
+    () => (columnsJson as any[]).map((col: any) => {
+      if (col.identifier === "ownerName") return { ...col, visible: false, inlist: false };
+      return col;
+    }),
     [],
+  );
+
+  const primaryButton = useMemo(
+    () => showPrimaryButton ? <PrimaryToolbarButton endpoint={BA_TABLE_ENDPOINT} disabled={disabled} /> : undefined,
+    [showPrimaryButton, disabled],
   );
 
   return (
@@ -290,7 +297,8 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
-      extraButtons={showPrimaryButton ? <PrimaryToolbarButton endpoint={BA_TABLE_ENDPOINT} disabled={disabled} /> : undefined}
+      extraButtons={primaryButton}
+      disablePrimaryRowHighlight={!showPrimaryButton}
     />
   );
 };

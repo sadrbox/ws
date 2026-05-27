@@ -75,7 +75,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
       actionType: fd.actionType, objectId: fd.objectId,
       objectType: fd.objectType, objectName: fd.objectName,
     }),
-    buildPaneLabel: (saved) => makePaneLabel("ActivityHistoriesList", "Журнал", saved),
+    buildPaneLabel: (saved) => makePaneLabel("ActivityHistoriesList", "Журнал", saved, saved.userName || undefined),
   });
 
   const tabs = useMemo(() => [

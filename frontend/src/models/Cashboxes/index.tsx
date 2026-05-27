@@ -17,7 +17,7 @@ import ModelList from "src/components/ModelList";
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
-import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
+
 
 const MODEL_ENDPOINT = "cashboxes";
 const LIST_NAME = "CashboxesList";
@@ -105,13 +105,11 @@ export interface CashboxesTableProps {
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
   initialPendingRows?: TDataItem[];
-  showPrimaryButton?: boolean;
 }
 
 const CashboxesTable: FC<CashboxesTableProps> = ({
   parentUuid, parentName = "", disabled = false,
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
-  showPrimaryButton = false,
 }) => {
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
@@ -142,9 +140,10 @@ const CashboxesTable: FC<CashboxesTableProps> = ({
   const defaultNewRow = useMemo(() => ({ name: "" }), []);
 
   const adjustedColumns = useMemo(
-    () => (columnsJson as any[]).map((col: any) =>
-      col.identifier === "organization.name" ? { ...col, visible: false, inlist: false } : col,
-    ),
+    () => (columnsJson as any[]).map((col: any) => {
+      if (col.identifier === "organization.name") return { ...col, visible: false, inlist: false };
+      return col;
+    }),
     [],
   );
 
@@ -164,7 +163,6 @@ const CashboxesTable: FC<CashboxesTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
-      extraButtons={showPrimaryButton ? <PrimaryToolbarButton endpoint={CB_TABLE_ENDPOINT} disabled={disabled} /> : undefined}
     />
   );
 };

@@ -361,6 +361,35 @@
 	text-align: center;
 }
 
+// ── BasisDocumentField (основание документа) ───────────────────────────────
+.BasisWrapper {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	width: 100%;
+}
+
+.BasisLabelRow {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.BasisValue {
+	flex: 1;
+	font-size: $fontsize;
+	padding: 0 8px;
+	color: $color6;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.BasisTypeSelect {
+	width: 140px;
+	flex-shrink: 0;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TEXTAREA
 // ═══════════════════════════════════════════════════════════════════════════

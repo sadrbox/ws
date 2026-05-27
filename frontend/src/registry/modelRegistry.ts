@@ -156,6 +156,14 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Склады",
 	},
 	{
+		endpoint: "cashboxes",
+		module: () => import("src/models/Cashboxes"),
+		formName: "CashboxesForm",
+		listName: "CashboxesList",
+		storageKey: "cashboxes-form",
+		label: "Кассы",
+	},
+	{
 		endpoint: "sales",
 		module: () => import("src/models/Sales"),
 		formName: "SalesForm",

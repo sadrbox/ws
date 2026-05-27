@@ -27,8 +27,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				.json({ success: false, message: "Некорректный параметр cursor" });
 		}
 
-		// Сортировка — основная касса всегда первой
-		const orderBy = [{ isPrimary: "desc" }, { id: "asc" }];
+		const orderBy = [{ id: "asc" }];
 
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};
@@ -122,29 +121,19 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ============================================
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { name, organizationUuid, isPrimary } = req.body;
+		const { name, organizationUuid } = req.body;
 		if (!name?.trim()) {
 			return res.status(400).json({ success: false, message: "Наименование обязательно" });
 		}
 
-		const makePrimary = isPrimary === true;
 		const orgUuid = organizationUuid || req.user?.organizationUuid || null;
 
-		const item = await prisma.$transaction(async (tx) => {
-			if (makePrimary && orgUuid) {
-				await tx.cashbox.updateMany({
-					where: { organizationUuid: orgUuid, isPrimary: true },
-					data: { isPrimary: false },
-				});
-			}
-			return tx.cashbox.create({
-				data: {
-					name: name.trim(),
-					organizationUuid: orgUuid,
-					isPrimary: makePrimary,
-				},
-				include: { organization: true },
-			});
+		const item = await prisma[MODEL].create({
+			data: {
+				name: name.trim(),
+				organizationUuid: orgUuid,
+			},
+			include: { organization: true },
 		});
 
 		return res.status(201).json({ success: true, item });
@@ -168,28 +157,12 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const data = {};
 		if (req.body.name !== undefined) data.name = req.body.name?.trim() ?? null;
 		if (req.body.organizationUuid !== undefined) data.organizationUuid = req.body.organizationUuid || null;
-		if (req.body.isPrimary !== undefined) data.isPrimary = !!req.body.isPrimary;
 
 		const preCheck = await prisma.cashbox.findUnique({ where, select: { organizationUuid: true } });
 		if (!preCheck || !checkOwnership(preCheck, req))
 			return res.status(404).json({ success: false, message: "Касса не найдена" });
-		const item = await prisma.$transaction(async (tx) => {
-			if (data.isPrimary === true) {
-				const current = await tx.cashbox.findUnique({ where });
-				if (current?.organizationUuid) {
-					await tx.cashbox.updateMany({
-						where: {
-							organizationUuid: current.organizationUuid,
-							isPrimary: true,
-							NOT: { uuid: current.uuid },
-						},
-						data: { isPrimary: false },
-					});
-				}
-			}
-			return tx.cashbox.update({ where, data, include: { organization: true } });
-		});
 
+		const item = await prisma[MODEL].update({ where, data, include: { organization: true } });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2025")
@@ -219,13 +192,11 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 						data: {
 							name: (data.name ?? "").trim(),
 							organizationUuid: data.organizationUuid || null,
-							isPrimary: data.isPrimary === true,
 						},
 					});
 				} else if (action === "update" && uuid && data) {
 					const updateData = {};
 					if (data.name !== undefined) updateData.name = (data.name ?? "").trim();
-					if (data.isPrimary !== undefined) updateData.isPrimary = data.isPrimary === true;
 					if (Object.keys(updateData).length > 0)
 						await tx[MODEL].update({ where: { uuid }, data: updateData });
 				} else if (action === "delete" && uuid) {

@@ -4,6 +4,7 @@ import {
 	useSyncExternalStore,
 	useEffect,
 	useMemo,
+	useState,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app";
@@ -1338,8 +1339,12 @@ export interface UseFormStoreReturn<F extends object> {
 	/** Подписка на pending-строки одной таблицы. */
 	useTable: (tableKey: string) => {
 		pending: TDataItem[];
+		/** Все текущие строки таблицы (сервер + pending, включая _pendingAction-маркеры). Обновляется через onAllItemsChange. */
+		allRows: TDataItem[];
 		setPending: (rows: TDataItem[]) => void;
 		onItemsChange: (items: TDataItem[] | undefined) => void;
+		/** Передайте в SubTable.onAllItemsChange — обновляет allRows при каждом изменении кэша. */
+		onAllItemsChange: (items: TDataItem[]) => void;
 	};
 
 	// ── Действия ──
@@ -1631,10 +1636,23 @@ export function useFormStore<F extends object>(
 				[tableKey],
 			);
 
+			// Все текущие строки таблицы (сервер + pending) — не персистируются,
+			// обновляются при каждом изменении через SubTable.onAllItemsChange.
+			// eslint-disable-next-line react-hooks/rules-of-hooks
+			const [allRows, setAllRows] = useState<TDataItem[]>([]);
+
+			// eslint-disable-next-line react-hooks/rules-of-hooks
+			const onAllItemsChange = useCallback(
+				(items: TDataItem[]) => { setAllRows(items); },
+				[],
+			);
+
 			return {
 				pending: tableState?.pending ?? [],
+				allRows,
 				setPending,
 				onItemsChange,
+				onAllItemsChange,
 			};
 		},
 		[store],

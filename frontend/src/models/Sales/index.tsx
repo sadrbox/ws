@@ -213,10 +213,15 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       form.setFields(result.fields as Partial<TFields>);
       // Delete-маркеры для уже сохранённых серверных строк — чтобы SubTable
       // удалил их при сохранении, а не смержил с новыми строками из основания.
+      // Используем allItemsRef как первичный источник (актуальные строки из рендера),
+      // с фолбэком на react-query кэш. Кэш может быть пустым если вкладка
+      // "Позиции" ещё не открывалась, что приводило к ложному dirty.
+      const renderedItems = allItemsRef.current.filter((r: any) => !r._pendingAction);
       const queries = queryClient.getQueriesData<any>({ queryKey: ["saleitems", "infinite"] });
-      const serverItems: any[] = queries
+      const cachedItems: any[] = queries
         .flatMap(([, data]) => data?.pages?.flatMap((p: any) => p.items ?? []) ?? [])
         .filter((r: any) => r.saleUuid === form.fields.uuid);
+      const serverItems: any[] = renderedItems.length > 0 ? renderedItems : cachedItems;
       const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
       const itemsAreSame = serverItems.length === result.items.length &&
         serverItems.every((si, idx) => {
@@ -268,21 +273,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     isLoading: form.isLoading,
     apply: (uuid, name) =>
       form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
-  });
-
-  const warehouseScope = useMemo<Record<string, string> | null>(
-    () => form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : null,
-    [form.fields.organizationUuid],
-  );
-
-  useAutoFillPrimary({
-    endpoint: "warehouses",
-    scope: warehouseScope,
-    currentUuid: form.fields.warehouseUuid,
-    isEditMode: form.isEditMode,
-    isLoading: form.isLoading,
-    apply: (uuid, name) =>
-      form.setFieldsInitial({ warehouseUuid: uuid, warehouseName: name } as Partial<TFields>),
   });
 
   const permDefaults = useUserPermissionDefaults(
@@ -570,16 +560,16 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
               <Group>
                 {/* Организация — во всю ширину */}
-                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading || hasBasis} />
+                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
 
                 <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
 
               <Group>
                 {/* Контрагент — во всю ширину */}
-                <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading || hasBasis} />
+                <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
 
-                <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading || hasBasis} extraParams={contractExtraParams} />
+                <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
               </Group>
 
             </GroupCol>
@@ -611,7 +601,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
 
           </div>
-          {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+          {form.isEditMode && <GroupCol style={{ flex: 1, alignItems: "start", justifyContent: "end", gap: 6 }}>
+
             <BasisDocumentField
               allowedTypes={[{ type: "payment_invoice", endpoint: "payment-invoices", label: translate("paymentInvoice") }]}
               basisDocumentType={form.fields.basisDocumentType}
@@ -622,9 +613,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
               onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
             />
-            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-          </Group>}
+            <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
+              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+            </GroupRow>
+          </GroupCol>}
         </div>
       )
     },
@@ -637,7 +630,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           componentName="SaleItemsList_part"
           organizationUuid={form.fields.organizationUuid}
           documentDate={form.fields.date || null}
-          disabled={form.isLoading || hasBasis}
+          disabled={form.isLoading}
           deferRemoteChanges
           onRefresh={hasBasis ? handleRefillFromBasis : undefined}
           parentLabel={`${translate("SalesList")}: ID${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}

@@ -525,6 +525,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       parentUuid={parentUuid}
       defaultSort={{ id: "asc" }}
       disabled={disabled}
+      disableAdd={disabled}
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={recalcedInitialPendingRows}
       emptyMessage={emptyMessage}

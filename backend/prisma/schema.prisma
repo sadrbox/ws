@@ -294,8 +294,8 @@ model BankAccount {
   bankName         String?
   name             String?
   currencyUuid     String?
-  organizationUuid String?
   isPrimary        Boolean       @default(false)
+  organizationUuid String?
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   currency         Currency?     @relation(fields: [currencyUuid], references: [uuid])
@@ -370,7 +370,6 @@ model Warehouse {
   address                String?
   comment                String?
   organizationUuid       String?
-  isPrimary              Boolean             @default(false)
   updatedAt              DateTime            @default(now()) @updatedAt
   deletedAt              DateTime?
   inventoryTransfersFrom InventoryTransfer[] @relation("TransferFrom")
@@ -382,7 +381,6 @@ model Warehouse {
   organization           Organization?       @relation(fields: [organizationUuid], references: [uuid])
 
   @@index([organizationUuid])
-  @@index([organizationUuid, isPrimary])
   @@index([updatedAt])
   @@map("warehouses")
 }
@@ -392,7 +390,6 @@ model Cashbox {
   uuid              String             @unique @default(uuid())
   name              String
   organizationUuid  String?
-  isPrimary         Boolean            @default(false)
   updatedAt         DateTime           @default(now()) @updatedAt
   deletedAt         DateTime?
   organization      Organization?      @relation("OrgCashboxes", fields: [organizationUuid], references: [uuid])
@@ -400,7 +397,6 @@ model Cashbox {
   cashExpenseOrders CashExpenseOrder[]
 
   @@index([organizationUuid])
-  @@index([organizationUuid, isPrimary])
   @@index([updatedAt])
   @@map("cashboxes")
 }

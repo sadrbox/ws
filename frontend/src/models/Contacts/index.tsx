@@ -103,7 +103,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
         ownerUuid: fd.ownerUuid || null,
       };
     },
-    buildPaneLabel: (saved) => makePaneLabel("ContactsList", translate("ContactsList"), saved),
+    buildPaneLabel: (saved) => makePaneLabel("ContactsList", translate("ContactsList"), saved, saved.value),
   });
 
   const tabs = useMemo(() => [
@@ -160,6 +160,7 @@ interface ContactsListProps {
   onSelectItem?: (item: TDataItem) => void;
   ownerUuid?: string;
   ownerField?: string;
+  extraParams?: Record<string, string>;
 }
 
 const contactsListRenderCell = (row: TDataItem, col: TColumn) => {
@@ -169,7 +170,7 @@ const contactsListRenderCell = (row: TDataItem, col: TColumn) => {
   return undefined;
 };
 
-const ContactsList: FC<ContactsListProps> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const ContactsList: FC<ContactsListProps> = ({ variant, onSelectItem, ownerUuid, ownerField, extraParams }) => (
   <ModelList
     endpoint={MODEL_ENDPOINT}
     listName="ContactsList"
@@ -179,6 +180,7 @@ const ContactsList: FC<ContactsListProps> = ({ variant, onSelectItem, ownerUuid,
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}
     ownerField={ownerField}
+    extraQueryParams={extraParams}
     renderCell={contactsListRenderCell}
   />
 );

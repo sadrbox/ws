@@ -84,7 +84,16 @@ const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId })
     return <div style={{ padding: "24px", textAlign: "center", color: "#888" }}>Загрузка...</div>;
   }
 
-  return <ResolvedList variant="default" onSelectItem={handleSelectItem} extraParams={extraParams} />;
+  // Передаём extraParams как extraQueryParams — ModelList / Table понимают именно это имя
+  // (нужно для ownerType/ownerUuid при выборе "Выбрать из списка" в BasisDocumentField и др.)
+  return (
+    <ResolvedList
+      variant="default"
+      onSelectItem={handleSelectItem}
+      extraParams={extraParams}
+      extraQueryParams={extraParams}
+    />
+  );
 };
 
 SelectPaneWrapper.displayName = "SelectPaneWrapper";

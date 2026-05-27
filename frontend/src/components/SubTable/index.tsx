@@ -110,6 +110,8 @@ export interface SubTableProps {
   showEditModeToggle?: boolean;
   /** Дополнительные кнопки в панель (кроме toggle inline edit) */
   extraButtons?: ReactNode;
+  /** Если false — убирает жирное выделение строки с isPrimary=true (data-primary) */
+  disablePrimaryRowHighlight?: boolean;
   /** Колбэк при изменении allItems (например для пересчёта суммы) */
   onItemsChange?: (items: TDataItem[]) => void;
   /**
@@ -145,7 +147,7 @@ export interface SubTableProps {
    * Можно передать функцию `(rows) => {...}` для динамического вычисления дефолтов
    * на основе текущих строк таблицы (например, чтобы исключить уже выбранные значения).
    */
-  defaultNewRow?: Record<string, unknown> | ((rows: TDataItem[]) => Record<string, unknown>);
+  defaultNewRow?: Record<string, unknown> | ((rows: TDataItem[]) => Record<string, unknown> | null);
   /**
    * Дополнительные query-параметры, которые отправляются при каждом GET-запросе
    * и добавляются к новым строкам (как дополнение к parentKey / parentUuid).
@@ -401,6 +403,7 @@ const SubTable: FC<SubTableProps> = ({
   disableAdd = false,
   onAllItemsChange,
   onRefresh,
+  disablePrimaryRowHighlight = false,
 }) => {
   const queryClient = useQueryClient();
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
@@ -579,6 +582,11 @@ const SubTable: FC<SubTableProps> = ({
    * не должны попадать в pending (sessionStorage) и не должны коммититься.
    */
   const notifyParent = useCallback((items: PendingRow[]) => {
+    // Always notify onAllItemsChange with the full row set so consumers that track
+    // unique-option usage (useUniqueOptionRows) stay in sync on every user action,
+    // not just on server-data refetch.
+    onAllItemsChangeRef.current?.(items);
+
     if (!onItemsChangeRef.current) return;
     // Нумеруем только видимые (не удалённые) строки — чтобы _lineNumber совпадал
     // с номером строки в displayRows (ctx.rows тоже фильтрует _pendingAction==="delete").
@@ -855,7 +863,7 @@ const SubTable: FC<SubTableProps> = ({
 
   // Ref на видимые строки — присваивается ниже, после useMemo для displayRows.
   // Используется в ctx.rows (нужен для renderCell вычисляемых колонок) и
-  // в обработчике клавиатуры (навигация Home/End/PgUp/PgDn).
+  // в обработчике клавиатурной навигации.
   const displayRowsRef = useRef<TDataItem[]>([]);
 
   // ── handleLookupChange — универсальный хелпер для lookup-полей ─────────
@@ -1056,6 +1064,9 @@ const SubTable: FC<SubTableProps> = ({
       : defaultNewRow;
 
     if (deferRemoteChanges) {
+      // Если defaultNewRow — функция и вернула null, значит добавление невозможно прямо сейчас.
+      // isAddDisabled (derived) уже отключил кнопку; возврат здесь — защита от гонки.
+      if (typeof defaultNewRow === "function" && resolvedDefaultNewRow === null) return;
       // создаём локальную временную строку и не отправляем на сервер
       const tmpId = tempIdRef.current--;
       const tmpUuid = `tmp-${Date.now()}-${Math.abs(tmpId)}`;
@@ -1451,7 +1462,7 @@ const SubTable: FC<SubTableProps> = ({
     variant: "embedded" as TTableVariant,
     enableDateRange: false,
     componentName,
-    rows: displayRows,
+    rows: disablePrimaryRowHighlight ? displayRows.map(r => ({ ...r, isPrimary: false })) : displayRows,
     columns,
     total: displayRows.length,
     totalPages: Math.ceil(displayRows.length / adaptiveLimit),
@@ -1483,7 +1494,7 @@ const SubTable: FC<SubTableProps> = ({
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
     openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
     handleCleanRefresh, onRefresh, handleDelete, disabled, extraButtons, inlineEditing, renderCell, getCellMeta, handleInlineAdd, onInlineAddProp, defaultNewRow,
-    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd,
+    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd, disablePrimaryRowHighlight,
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────

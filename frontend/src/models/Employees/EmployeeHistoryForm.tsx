@@ -85,7 +85,11 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
         employeeUuid: fd.employeeUuid,
       };
     },
-    buildPaneLabel: (saved) => makePaneLabel("EmployeeHistoriesList", "Кадровая история", saved),
+    buildPaneLabel: (saved) => {
+      const typeLabel = EVENT_TYPE_OPTIONS.find(o => o.value === saved.eventType)?.label;
+      const detail = [typeLabel, saved.eventDate].filter(Boolean).join(" · ");
+      return makePaneLabel("EmployeeHistoriesList", "Кадровая история", saved, detail || undefined);
+    },
   });
 
   const tabs = useMemo(() => [

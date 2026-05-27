@@ -201,10 +201,13 @@
 	"bik": "БИК",
 	"currencyUID": "UID валюты",
 	"currency": "Валюта",
+	"currency.name": "Валюта",
 	"accountType": "Тип счёта",
 
 	"contractText": "Текст договора",
 	"value": "Значение",
+	"valueType": "Вид значения",
+	"valueName": "Значение",
 	"valueRequired": "Значение обязательно",
 	"contactType": "Тип контакта",
 	"contactTypeRequired": "Тип контакта обязателен",
@@ -623,5 +626,7 @@
 	"no": "Нет",
 	"columnSettings": "Настройки колонок",
 	"refresh": "Обновить",
-	"permissionDefaults": "Предопределённые значения"
+	"permissionDefaults": "Предопределённые значения",
+	"permDefaultValueType": "Вид значения",
+	"permDefaultValue": "Значение"
 }

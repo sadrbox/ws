@@ -26,6 +26,7 @@ const OutgoingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   accessRightModel: "OutgoingInvoice",
   formDisplayName: "OutgoingInvoicesForm",
   docType: "outgoing_invoice",
+  lockFieldsOnBasis: true,
   basisConfig: {
     allowedTypes: [{ type: "sale", endpoint: "sales", label: translate("saleRealization") }],
   },

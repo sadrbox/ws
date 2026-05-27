@@ -87,7 +87,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
         middleName: fd.middleName.trim(), fullName: fd.fullName.trim(), iin: fd.iin.trim(),
       };
     },
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Сотрудники", saved),
+    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Сотрудники", saved, saved.fullName),
     afterSave: invalidateSubTables,
   });
 

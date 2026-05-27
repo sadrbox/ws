@@ -32,6 +32,7 @@ import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton"
 import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app";
 import { type BasisFromTarget, openDocumentFromBasis, refillFromBasisSource, mapCommonTradeFields } from "src/utils/createFromBasis";
+import { isEquivalent } from "src/utils/normalize";
 
 export type { BasisTypeConfig };
 
@@ -63,6 +64,11 @@ export interface InvoiceLikeFormConfig {
   defaultHiddenItemColumns?: string[];
   /** Скрыть переключатель "Проведение" (напр. Счёт на оплату — не проводится). */
   hidePosted?: boolean;
+  /**
+   * Блокировать поля шапки и таблицу позиций, если у документа есть основание.
+   * true — только для Счёт-фактуры исходящей; остальные документы не блокируются.
+   */
+  lockFieldsOnBasis?: boolean;
 }
 
 interface TFields {
@@ -216,7 +222,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     const allItemsRef = useRef<any[]>([]);
 
     const hasBasis = !!form.fields.basisDocumentUuid;
-    const effectiveReadonly = !canWrite;
+    const basisLock = hasBasis && (cfg.lockFieldsOnBasis ?? false);
+    const effectiveReadonly = !canWrite || basisLock;
 
     const handleRefillFromBasis = useCallback(async () => {
       if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
@@ -228,7 +235,14 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           mapCommonTradeFields,
         );
         if (!result) return;
-        form.setFields(result.fields as Partial<TFields>);
+        const patch = result.fields as Partial<TFields>;
+        const currentFields = form.store.getSnapshot().fields;
+        const hasFieldChanges = Object.keys(patch).some(
+          k => !isEquivalent((currentFields as any)[k], (patch as any)[k]),
+        );
+        if (hasFieldChanges) {
+          form.setFields(patch);
+        }
         const queries = queryClient.getQueriesData<any>({ queryKey: [cfg.itemsEndpoint, "infinite"] });
         const serverItems: any[] = queries
           .flatMap(([, data]) => data?.pages?.flatMap((p: any) => p.items ?? []) ?? [])
@@ -404,17 +418,17 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                   <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
                     onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
                     onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
-                    disabled={form.isLoading || hasBasis} />
+                    disabled={form.isLoading || basisLock} />
                 </Group>
                 <Group>
                   <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name"
                     onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
                     onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
-                    disabled={form.isLoading || hasBasis} />
+                    disabled={form.isLoading || basisLock} />
                   <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name"
                     onSelect={handleContractSelect}
                     onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
-                    disabled={form.isLoading || hasBasis}
+                    disabled={form.isLoading || basisLock}
                     extraParams={{
                       ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
                       ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
@@ -468,7 +482,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             parentUuid={form.fields.uuid ?? ""} parentField={cfg.itemsParentField}
             endpoint={cfg.itemsEndpoint} componentName={cfg.itemsComponentName}
             organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
-            disabled={form.isLoading || hasBasis} deferRemoteChanges
+            disabled={form.isLoading || basisLock} deferRemoteChanges
             onRefresh={hasBasis ? handleRefillFromBasis : undefined}
             parentLabel={`${cfg.formLabel}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
             key={itemsTableKey}

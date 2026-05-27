@@ -70,7 +70,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
       if (fd.password?.trim()) payload.password = fd.password.trim();
       return payload;
     },
-    buildPaneLabel: (saved) => makePaneLabel("UsersList", "Пользователи", saved),
+    buildPaneLabel: (saved) => makePaneLabel("UsersList", "Пользователи", saved, saved.username),
     afterSave: invalidateSubTables,
   });
 

@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback, useState, useEffect, useRef } from "react";
+import { FC, useMemo, useCallback } from "react";
 import { useAppContext } from "src/app";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -14,6 +14,7 @@ import ModelList from "src/components/ModelList";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUniqueOptionRows } from "src/hooks/useUniqueOptionRows";
 import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 
@@ -114,7 +115,8 @@ const UserPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
         organizationUuid: fd.organizationUuid ?? null,
       };
     },
-    buildPaneLabel: (saved) => makePaneLabel("UserPermissionsList", "Право доступа к разделу", saved),
+    buildPaneLabel: (saved) =>
+      makePaneLabel("UserPermissionsList", "Право доступа к разделу", saved, MODEL_NAME_OPTIONS.find(o => o.value === saved.modelName)?.label),
   });
 
   const tabs = useMemo(() => [
@@ -190,6 +192,10 @@ export interface UserPermissionsTableProps {
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
   initialPendingRows?: TDataItem[];
+  /** Передайте из родительской формы — computed из form.useTable("...").allRows */
+  disableAdd?: boolean;
+  /** Передайте form.useTable("...").onAllItemsChange — обновляет allRows формы */
+  onAllItemsChange?: (rows: TDataItem[]) => void;
 }
 
 const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
@@ -198,30 +204,21 @@ const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
   deferRemoteChanges = true,
   onItemsChange,
   initialPendingRows,
+  disableAdd: disableAddProp,
+  onAllItemsChange: onAllItemsChangeProp,
 }) => {
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
 
-  const [currentRows, setCurrentRows] = useState<TDataItem[]>(initialPendingRows ?? []);
-  const handleItemsChange = useCallback((items: TDataItem[]) => {
-    setCurrentRows(items);
-    onItemsChange?.(items);
-  }, [onItemsChange]);
+  const { getFirstUnused, getAvailableOptions, handleRowsChange } =
+    useUniqueOptionRows(MODEL_NAME_OPTIONS, "modelName", initialPendingRows);
 
-  const allModelsUsed = useMemo(() => {
-    const usedModels = new Set(currentRows.map(r => r.modelName as string).filter(Boolean));
-    return MODEL_NAME_OPTIONS.every(o => usedModels.has(o.value));
-  }, [currentRows]);
-
-  const prevAllModelsUsedRef = useRef(allModelsUsed);
-  useEffect(() => {
-    if (allModelsUsed && !prevAllModelsUsedRef.current) {
-      window.dispatchEvent(new CustomEvent("ui_toast", {
-        detail: { message: translate("allModelsAssigned"), type: "info" },
-      }));
-    }
-    prevAllModelsUsedRef.current = allModelsUsed;
-  }, [allModelsUsed]);
+  // Компонуем внутренний handleRowsChange (для getAvailableOptions/getFirstUnused)
+  // с внешним onAllItemsChangeProp (для allRows в форме).
+  const handleAllItemsChange = useCallback((rows: TDataItem[]) => {
+    handleRowsChange(rows);
+    onAllItemsChangeProp?.(rows);
+  }, [handleRowsChange, onAllItemsChangeProp]);
 
   const modelNameMap = useMemo(
     () => Object.fromEntries(MODEL_NAME_OPTIONS.filter(o => o.value).map(o => [o.value, o.label])),
@@ -251,10 +248,7 @@ const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     if (col.identifier === "modelName") {
       if (ctx.inlineEditing) {
-        const usedByOthers = new Set(
-          ctx.rows.filter(r => r !== row).map(r => r.modelName as string).filter(Boolean),
-        );
-        const availableOptions = MODEL_NAME_OPTIONS.filter(o => !usedByOthers.has(o.value));
+        const availableOptions = getAvailableOptions(ctx.rows, row.modelName as string);
         return (
           <FieldSelect
             name={`inline_model_${row.id}`}
@@ -282,14 +276,11 @@ const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
       return <span>{accessLevelMap[row.accessLevel as string] ?? row.accessLevel}</span>;
     }
     return undefined;
-  }, [modelNameMap, accessLevelMap, addPane]);
+  }, [modelNameMap, accessLevelMap, getAvailableOptions]);
 
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
     const isEdit = !!data?.uuid;
-    if (!isEdit) {
-      const usedModels = new Set(currentRows.map(r => r.modelName as string).filter(Boolean));
-      if (!MODEL_NAME_OPTIONS.some(o => !usedModels.has(o.value))) return;
-    }
+    if (!isEdit && (disableAddProp ?? false)) return;
     const newData = !isEdit && userUuid
       ? { userUuid, ...(organizationUuid ? { organizationUuid } : {}) } as unknown as TDataItem
       : data;
@@ -304,21 +295,21 @@ const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
       onSave: refresh,
       onClose: refresh,
     });
-  }, [addPane, userUuid, organizationUuid, queryClient, currentRows]);
+  }, [addPane, userUuid, organizationUuid, queryClient, disableAddProp]);
 
   const defaultNewRow = useMemo(() => {
-    if (!userUuid || allModelsUsed) return undefined;
+    if (!userUuid) return undefined;
     return (rows: TDataItem[]) => {
-      const used = new Set(rows.map(r => r.modelName as string).filter(Boolean));
-      const firstUnused = MODEL_NAME_OPTIONS.find(o => !used.has(o.value))?.value ?? "";
+      const modelName = getFirstUnused(rows);
+      if (!modelName) return null; // all models present — abort (null-veto in SubTable)
       return {
-        modelName: firstUnused,
+        modelName,
         accessLevel: "none" as const,
         userUuid,
         ...(organizationUuid ? { organizationUuid } : {}),
       };
     };
-  }, [userUuid, organizationUuid, allModelsUsed]);
+  }, [userUuid, organizationUuid, getFirstUnused]);
 
   return (
     <SubTable
@@ -329,16 +320,17 @@ const UserPermissionsTable: FC<UserPermissionsTableProps> = ({
       parentUuid={userUuid ?? ""}
       defaultSort={{ id: "asc" }}
       defaultInlineEditing={true}
-      showEditModeToggle={true}
+      showEditModeToggle={false}
       disabled={!userUuid}
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
-      onItemsChange={handleItemsChange}
+      onItemsChange={onItemsChange}
+      onAllItemsChange={handleAllItemsChange}
       emptyMessage={userUuid ? translate("noAccessRights") : translate("saveUserFirst")}
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
-      disableAdd={allModelsUsed}
+      disableAdd={disableAddProp ?? false}
       extraQueryParams={organizationUuid ? { organizationUuid } : undefined}
       filterRows={filterRows}
     />

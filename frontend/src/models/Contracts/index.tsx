@@ -8,13 +8,13 @@ import FilesPanel from "src/components/FilesPanel";
 import PrintPreview from "src/components/PrintPreview";
 import { Field, FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
+import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
-import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { getFormatDateOnly } from "src/utils/main.module";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
@@ -202,7 +202,7 @@ export interface ContractsTableProps {
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
   initialPendingRows?: TDataItem[];
-  /** Показать кнопку "Сделать основным" в тулбаре */
+  /** Показывать кнопку «Сделать основным» и жирное выделение основного договора */
   showPrimaryButton?: boolean;
 }
 
@@ -285,6 +285,11 @@ const ContractsTable: FC<ContractsTableProps> = ({
     });
   }, [parentKey]);
 
+  const primaryButton = useMemo(
+    () => showPrimaryButton ? <PrimaryToolbarButton endpoint={CR_TABLE_ENDPOINT} disabled={disabled} /> : undefined,
+    [showPrimaryButton, disabled],
+  );
+
   return (
     <SubTable
       model={CR_TABLE_ENDPOINT}
@@ -301,7 +306,8 @@ const ContractsTable: FC<ContractsTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
-      extraButtons={showPrimaryButton ? <PrimaryToolbarButton endpoint={CR_TABLE_ENDPOINT} disabled={disabled} /> : undefined}
+      extraButtons={primaryButton}
+      disablePrimaryRowHighlight={!showPrimaryButton}
     />
   );
 };

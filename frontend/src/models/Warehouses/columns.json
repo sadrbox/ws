@@ -30,16 +30,6 @@
 		"inlist": true
 	},
 	{
-		"identifier": "isPrimary",
-		"type": "boolean",
-		"width": "100px",
-		"minWidth": "70px",
-		"alignment": "center",
-		"hint": "Основной склад",
-		"visible": true,
-		"inlist": true
-	},
-	{
 		"identifier": "organization.name",
 		"type": "string",
 		"width": "250px",

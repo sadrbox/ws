@@ -72,6 +72,8 @@ interface ModelListProps {
    * Используется, например, для LookupField extraParams в ContractsList.
    */
   extraFilter?: Record<string, string>;
+  /** Дополнительные query-параметры, отправляемые напрямую (не через filter[...]). Для эндпоинтов, читающих params напрямую (например contacts: ownerType, ownerUuid). */
+  extraQueryParams?: Record<string, string>;
   /** Включить фильтр по дате */
   enableDateRange?: boolean;
   /** Кастомный рендер ячеек */
@@ -121,6 +123,7 @@ const ModelList: FC<ModelListProps> = ({
   ownerUuid,
   ownerField,
   extraFilter,
+  extraQueryParams,
   enableDateRange = false,
   renderCell,
 }) => {
@@ -152,6 +155,7 @@ const ModelList: FC<ModelListProps> = ({
     defaultSort,
     columnsVariant: isPartOf ? "part" : undefined,
     ownerFilter,
+    extraQueryParams,
   });
 
   const openModelForm = useCallback(

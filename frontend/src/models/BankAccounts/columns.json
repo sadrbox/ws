@@ -70,16 +70,6 @@
 		"inlist": true
 	},
 	{
-		"identifier": "isPrimary",
-		"type": "boolean",
-		"width": "100px",
-		"minWidth": "70px",
-		"alignment": "center",
-		"hint": "Основной счёт",
-		"visible": true,
-		"inlist": true
-	},
-	{
 		"identifier": "ownerName",
 		"type": "string",
 		"width": "250px",
@@ -88,5 +78,15 @@
 		"hint": "Владелец банковского счёта",
 		"visible": true,
 		"inlist": true
+	},
+	{
+		"identifier": "isPrimary",
+		"type": "boolean",
+		"width": "80px",
+		"minWidth": "60px",
+		"alignment": "center",
+		"hint": "Основной счёт",
+		"visible": false,
+		"inlist": false
 	}
 ]

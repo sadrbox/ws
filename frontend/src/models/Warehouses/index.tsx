@@ -17,7 +17,7 @@ import ModelList from "src/components/ModelList";
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
-import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
+
 
 const MODEL_ENDPOINT = "warehouses";
 const LIST_NAME = "WarehousesList";
@@ -88,13 +88,11 @@ export interface WarehousesTableProps {
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
   initialPendingRows?: TDataItem[];
-  showPrimaryButton?: boolean;
 }
 
 const WarehousesTable: FC<WarehousesTableProps> = ({
   parentUuid, parentName = "", disabled = false,
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
-  showPrimaryButton = false,
 }) => {
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
@@ -129,9 +127,10 @@ const WarehousesTable: FC<WarehousesTableProps> = ({
   const defaultNewRow = useMemo(() => ({ name: "", address: "" }), []);
 
   const adjustedColumns = useMemo(
-    () => (columnsJson as any[]).map((col: any) =>
-      col.identifier === "organization.name" ? { ...col, visible: false, inlist: false } : col,
-    ),
+    () => (columnsJson as any[]).map((col: any) => {
+      if (col.identifier === "organization.name") return { ...col, visible: false, inlist: false };
+      return col;
+    }),
     [],
   );
 
@@ -151,7 +150,6 @@ const WarehousesTable: FC<WarehousesTableProps> = ({
       renderCell={renderCell}
       openFormFor={openFormFor}
       defaultNewRow={defaultNewRow}
-      extraButtons={showPrimaryButton ? <PrimaryToolbarButton endpoint={WH_TABLE_ENDPOINT} disabled={disabled} /> : undefined}
     />
   );
 };

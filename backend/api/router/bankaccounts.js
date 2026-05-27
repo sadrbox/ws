@@ -70,9 +70,10 @@ router.get("/bankaccounts", async (req, res) => {
 			if (!hasId) orderBy.push({ id: "asc" });
 		}
 
-		// «Основной» счёт всегда первым в списке независимо от
-		// пользовательской сортировки колонок.
-		orderBy.unshift({ isPrimary: "desc" });
+		// Primary items first when fetching for an owner
+		if (typeof req.query.ownerUuid === "string" && req.query.ownerUuid.trim()) {
+			orderBy.unshift({ isPrimary: "desc" });
+		}
 
 		// ── Поиск ─────────────────────────────────────────────────────────────
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
@@ -223,75 +224,27 @@ router.get("/bankaccounts/:id", async (req, res) => {
 // ============================================
 // POST /bankaccounts
 // ============================================
-// Build owner-scope WHERE for isPrimary uniqueness on BankAccount.
-// Банковский счёт может быть привязан к organization или к owner (ownerType+ownerUuid).
-// SubTable фильтрует по ownerType+ownerUuid. Чтобы в этом списке был ровно один
-// primary, сбрасываем флаг у всех счетов, разделяющих общий owner либо общую
-// организацию (через OR).
-function buildBankAccountOwnerScope({
-	ownerType,
-	ownerUuid,
-	organizationUuid,
-}) {
-	const or = [];
-	if (ownerType && ownerUuid) or.push({ ownerType, ownerUuid });
-	if (organizationUuid) or.push({ organizationUuid });
-	if (or.length === 0) return null;
-	return or.length === 1 ? or[0] : { OR: or };
-}
-
 router.post("/bankaccounts", async (req, res) => {
 	try {
-		const {
-			name,
-			iban,
-			bik,
-			bankName,
-			currencyUuid,
-			ownerType,
-			ownerUuid,
-			isPrimary,
-		} = req.body;
+		const { name, iban, bik, bankName, currencyUuid, ownerType, ownerUuid } = req.body;
 
 		if (!iban || typeof iban !== "string") {
-			return res.status(400).json({
-				success: false,
-				message: "IBAN обязателен",
-			});
+			return res.status(400).json({ success: false, message: "IBAN обязателен" });
 		}
 
-		const makePrimary = isPrimary === true;
 		const orgUuid = req.user?.organizationUuid ?? null;
-		const createData = {
-			name: name?.trim() ?? null,
-			iban: iban.trim(),
-			bik: bik?.trim() ?? null,
-			bankName: bankName?.trim() ?? null,
-			currencyUuid: currencyUuid ?? null,
-			ownerType: ownerType?.trim() || null,
-			ownerUuid: ownerUuid?.trim() || null,
-			organizationUuid: orgUuid,
-			isPrimary: makePrimary,
-		};
-
-		const item = await prisma.$transaction(async (tx) => {
-			if (makePrimary) {
-				const scope = buildBankAccountOwnerScope({
-					ownerType: createData.ownerType,
-					ownerUuid: createData.ownerUuid,
-					organizationUuid: createData.organizationUuid,
-				});
-				if (scope) {
-					await tx.bankAccount.updateMany({
-						where: { ...scope, isPrimary: true },
-						data: { isPrimary: false },
-					});
-				}
-			}
-			return tx.bankAccount.create({
-				data: createData,
-				include: { currency: true },
-			});
+		const item = await prisma.bankAccount.create({
+			data: {
+				name: name?.trim() ?? null,
+				iban: iban.trim(),
+				bik: bik?.trim() ?? null,
+				bankName: bankName?.trim() ?? null,
+				currencyUuid: currencyUuid ?? null,
+				ownerType: ownerType?.trim() || null,
+				ownerUuid: ownerUuid?.trim() || null,
+				organizationUuid: orgUuid,
+			},
+			include: { currency: true },
 		});
 
 		return res.status(201).json({ success: true, item });
@@ -317,16 +270,7 @@ router.put("/bankaccounts/:id", async (req, res) => {
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 
-		const {
-			name,
-			iban,
-			bik,
-			bankName,
-			currencyUuid,
-			ownerType,
-			ownerUuid,
-			isPrimary,
-		} = req.body;
+		const { name, iban, bik, bankName, currencyUuid, ownerType, ownerUuid, isPrimary } = req.body;
 		const data = {};
 
 		if (name !== undefined) data.name = name?.trim() ?? null;
@@ -336,30 +280,23 @@ router.put("/bankaccounts/:id", async (req, res) => {
 		if (currencyUuid !== undefined) data.currencyUuid = currencyUuid ?? null;
 		if (ownerType !== undefined) data.ownerType = ownerType?.trim() || null;
 		if (ownerUuid !== undefined) data.ownerUuid = ownerUuid?.trim() || null;
-		if (isPrimary !== undefined) data.isPrimary = !!isPrimary;
+		if (isPrimary !== undefined) data.isPrimary = isPrimary === true;
 
-		const item = await prisma.$transaction(async (tx) => {
-			if (data.isPrimary === true) {
-				const current = await tx.bankAccount.findUnique({ where: whereClause });
-				if (current) {
-					const scope = buildBankAccountOwnerScope({
-						ownerType: data.ownerType ?? current.ownerType,
-						ownerUuid: data.ownerUuid ?? current.ownerUuid,
-						organizationUuid: current.organizationUuid,
-					});
-					if (scope) {
-						await tx.bankAccount.updateMany({
-							where: { ...scope, isPrimary: true, NOT: { uuid: current.uuid } },
-							data: { isPrimary: false },
-						});
-					}
-				}
+		// When setting as primary, clear the flag on all other accounts of the same owner
+		if (isPrimary === true) {
+			const current = await prisma.bankAccount.findUnique({ where: whereClause, select: { ownerType: true, ownerUuid: true, uuid: true } });
+			if (current?.ownerUuid) {
+				await prisma.bankAccount.updateMany({
+					where: { ownerType: current.ownerType, ownerUuid: current.ownerUuid, NOT: { uuid: current.uuid } },
+					data: { isPrimary: false },
+				});
 			}
-			return tx.bankAccount.update({
-				where: whereClause,
-				data,
-				include: { currency: true },
-			});
+		}
+
+		const item = await prisma.bankAccount.update({
+			where: whereClause,
+			data,
+			include: { currency: true },
 		});
 
 		return res.status(200).json({ success: true, item });
@@ -406,7 +343,6 @@ router.post("/bankaccounts/batch", async (req, res) => {
 							ownerType: data.ownerType?.trim() || null,
 							ownerUuid: data.ownerUuid?.trim() || null,
 							organizationUuid: data.organizationUuid ?? null,
-							isPrimary: data.isPrimary === true,
 						},
 					});
 				} else if (action === "update" && uuid && data) {
@@ -416,7 +352,6 @@ router.post("/bankaccounts/batch", async (req, res) => {
 					if (data.bik !== undefined) updateData.bik = data.bik?.trim() ?? null;
 					if (data.bankName !== undefined) updateData.bankName = data.bankName?.trim() ?? null;
 					if (data.currencyUuid !== undefined) updateData.currencyUuid = data.currencyUuid ?? null;
-					if (data.isPrimary !== undefined) updateData.isPrimary = data.isPrimary === true;
 					if (Object.keys(updateData).length > 0)
 						await tx.bankAccount.update({ where: { uuid }, data: updateData });
 				} else if (action === "delete" && uuid) {

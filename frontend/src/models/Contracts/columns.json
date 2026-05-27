@@ -92,11 +92,11 @@
 	{
 		"identifier": "isPrimary",
 		"type": "boolean",
-		"width": "100px",
-		"minWidth": "70px",
+		"width": "80px",
+		"minWidth": "60px",
 		"alignment": "center",
 		"hint": "Основной договор",
-		"visible": true,
-		"inlist": true
+		"visible": false,
+		"inlist": false
 	}
 ]

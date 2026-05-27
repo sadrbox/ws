@@ -33,8 +33,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				? req.query.filter
 				: {};
 
-		// Сортировка — основной склад всегда первым
-		const orderBy = [{ isPrimary: "desc" }];
+		const orderBy = [];
 		const sortParam =
 			typeof req.query.sort === "string" ? req.query.sort : null;
 		if (sortParam) {
@@ -153,34 +152,23 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ============================================
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { name, address, comment, organizationUuid, isPrimary } =
-			req.body;
+		const { name, address, comment, organizationUuid } = req.body;
 		if (!name?.trim()) {
 			return res
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
 		}
 
-		const makePrimary = isPrimary === true;
 		const orgUuid = organizationUuid || req.user?.organizationUuid || null;
 
-		const item = await prisma.$transaction(async (tx) => {
-			if (makePrimary && orgUuid) {
-				await tx.warehouse.updateMany({
-					where: { organizationUuid: orgUuid, isPrimary: true },
-					data: { isPrimary: false },
-				});
-			}
-			return tx.warehouse.create({
-				data: {
-					name: name.trim(),
-					address: address?.trim() ?? null,
-					comment: comment?.trim() ?? null,
-					organizationUuid: orgUuid,
-					isPrimary: makePrimary,
-				},
-				include: { organization: true },
-			});
+		const item = await prisma[MODEL].create({
+			data: {
+				name: name.trim(),
+				address: address?.trim() ?? null,
+				comment: comment?.trim() ?? null,
+				organizationUuid: orgUuid,
+			},
+			include: { organization: true },
 		});
 
 		return res.status(201).json({ success: true, item });
@@ -206,30 +194,15 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
-		if (req.body.isPrimary !== undefined) data.isPrimary = !!req.body.isPrimary;
 
 		const preCheck = await prisma.warehouse.findUnique({ where, select: { organizationUuid: true } });
 		if (!preCheck || !checkOwnership(preCheck, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
-		const item = await prisma.$transaction(async (tx) => {
-			if (data.isPrimary === true) {
-				const current = await tx.warehouse.findUnique({ where });
-				if (current?.organizationUuid) {
-					await tx.warehouse.updateMany({
-						where: {
-							organizationUuid: current.organizationUuid,
-							isPrimary: true,
-							NOT: { uuid: current.uuid },
-						},
-						data: { isPrimary: false },
-					});
-				}
-			}
-			return tx.warehouse.update({
-				where,
-				data,
-				include: { organization: true },
-			});
+
+		const item = await prisma[MODEL].update({
+			where,
+			data,
+			include: { organization: true },
 		});
 
 		return res.status(200).json({ success: true, item });
@@ -263,7 +236,6 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 							address: data.address?.trim() ?? null,
 							comment: data.comment?.trim() ?? null,
 							organizationUuid: data.organizationUuid || null,
-							isPrimary: data.isPrimary === true,
 						},
 					});
 				} else if (action === "update" && uuid && data) {
@@ -271,7 +243,6 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 					if (data.name !== undefined) updateData.name = (data.name ?? "").trim();
 					if (data.address !== undefined) updateData.address = data.address?.trim() ?? null;
 					if (data.comment !== undefined) updateData.comment = data.comment?.trim() ?? null;
-					if (data.isPrimary !== undefined) updateData.isPrimary = data.isPrimary === true;
 					if (Object.keys(updateData).length > 0)
 						await tx[MODEL].update({ where: { uuid }, data: updateData });
 				} else if (action === "delete" && uuid) {

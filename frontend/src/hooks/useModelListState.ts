@@ -43,6 +43,8 @@ export interface UseModelListStateOptions {
 	columnsVariant?: TypeTableTypes;
 	/** Фильтр владельца для вложенных списков */
 	ownerFilter?: Record<string, { value: unknown; operator: string }>;
+	/** Дополнительные query-параметры, отправляемые напрямую (не через filter[...]) */
+	extraQueryParams?: Record<string, string>;
 }
 
 /**
@@ -64,6 +66,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		defaultSort = { id: "asc" },
 		columnsVariant,
 		ownerFilter,
+		extraQueryParams,
 	} = opts;
 
 	const queryClient = useQueryClient();
@@ -100,8 +103,9 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		() => ({
 			sort,
 			filter: ownerFilter ? { ...ownerFilter, ...filter } : filter,
+			extra: extraQueryParams,
 		}),
-		[sort, filter, ownerFilter],
+		[sort, filter, ownerFilter, extraQueryParams],
 	);
 
 	const {

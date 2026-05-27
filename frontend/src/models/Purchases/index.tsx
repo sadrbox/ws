@@ -209,10 +209,12 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
       );
       if (!result) return;
       form.setFields(result.fields as Partial<TFields>);
+      const renderedItems = allItemsRef.current.filter((r: any) => !r._pendingAction);
       const queries = queryClient.getQueriesData<any>({ queryKey: ["purchaseitems", "infinite"] });
-      const serverItems: any[] = queries
+      const cachedItems: any[] = queries
         .flatMap(([, data]) => data?.pages?.flatMap((p: any) => p.items ?? []) ?? [])
         .filter((r: any) => r.purchaseUuid === form.fields.uuid);
+      const serverItems: any[] = renderedItems.length > 0 ? renderedItems : cachedItems;
       const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
       const itemsAreSame = serverItems.length === result.items.length &&
         serverItems.every((si, idx) => {
@@ -257,21 +259,6 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     endpoint: "contracts", scope: contractScope, currentUuid: form.fields.contractUuid,
     isEditMode: form.isEditMode, isLoading: form.isLoading,
     apply: (uuid, name) => form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
-  });
-
-  const warehouseScope = useMemo<Record<string, string> | null>(
-    () => form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : null,
-    [form.fields.organizationUuid],
-  );
-
-  useAutoFillPrimary({
-    endpoint: "warehouses",
-    scope: warehouseScope,
-    currentUuid: form.fields.warehouseUuid,
-    isEditMode: form.isEditMode,
-    isLoading: form.isLoading,
-    apply: (uuid, name) =>
-      form.setFieldsInitial({ warehouseUuid: uuid, warehouseName: name } as Partial<TFields>),
   });
 
   const permDefaults = useUserPermissionDefaults(
@@ -319,7 +306,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
                 <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
                   onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading || hasBasis} />
+                  disabled={form.isLoading} />
                 <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name"
                   onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)}
@@ -330,11 +317,11 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
                 <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name"
                   onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
                   onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading || hasBasis} />
+                  disabled={form.isLoading} />
                 <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name"
                   onSelect={handleContractSelect}
                   onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading || hasBasis}
+                  disabled={form.isLoading}
                   extraParams={{
                     ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
                     ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
@@ -389,7 +376,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
           parentUuid={form.fields.uuid ?? ""} parentField="purchaseUuid"
           endpoint="purchaseitems" componentName="PurchaseItemsList_part"
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
-          disabled={form.isLoading || hasBasis} deferRemoteChanges
+          disabled={form.isLoading} deferRemoteChanges
           onRefresh={hasBasis ? handleRefillFromBasis : undefined}
           parentLabel={`${translate("PurchasesList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           key={itemsTableKey}

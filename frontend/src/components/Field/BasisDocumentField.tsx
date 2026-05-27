@@ -1,7 +1,9 @@
-import { FC, useEffect, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import LookupField from "./LookupField";
+import FieldActionButton from "./FieldActionButton";
 import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/main.module";
+import styles from "./Field.module.scss";
 
 export interface BasisTypeConfig {
   type: string;
@@ -35,66 +37,81 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   );
 
   useEffect(() => {
-    if (basisDocumentType) setSelectedType(basisDocumentType);
+    if (basisDocumentType && basisDocumentType !== selectedType) {
+      setSelectedType(basisDocumentType);
+    }
   }, [basisDocumentType]);
 
-  const activeType = allowedTypes.find((t) => t.type === selectedType) ?? allowedTypes[0];
+  const activeType = useMemo(
+    () => allowedTypes.find((t) => t.type === selectedType) ?? allowedTypes[0],
+    [allowedTypes, selectedType],
+  );
 
-  const handleSelect = (_uuid: string, _display: string, item: Record<string, any>) => {
-    if (!activeType) return;
-    const label = `${activeType.label} _#_#${item.id} · ${getFormatDateOnly(item.date) ?? ""}`;
-    onSelect(activeType.type, item.uuid, label);
-  };
+  const handleTypeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedType(e.target.value);
+  }, []);
+
+  const handleSelect = useCallback(
+    (_uuid: string, _display: string, item: Record<string, any>) => {
+      if (!activeType) return;
+      const label = `${activeType.label} _#_#${item.id} · ${getFormatDateOnly(item.date) ?? ""}`;
+      onSelect(activeType.type, item.uuid, label);
+    },
+    [activeType, onSelect],
+  );
+
+  const hasValue = !!basisDocumentUuid;
+  const showTypeSelect = allowedTypes.length > 1 && !hasValue;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ fontSize: "var(--fontsize, 13px)", whiteSpace: "nowrap", color: "var(--color6)" }}>
-          {translate("basisDocument")}
-        </span>
-        {basisDocumentUuid && (
-          <button
-            type="button"
-            onClick={onClear}
-            disabled={disabled}
-            style={{ fontSize: 11, lineHeight: 1, padding: "1px 6px", cursor: "pointer", border: "1px solid #ccc", borderRadius: 3, background: "#fff" }}
-            title="Очистить основание"
-          >
-            ×
-          </button>
+    <div className={styles.BasisWrapper}>
+      <label className={styles.FieldLabel}>{translate("basisDocument")}</label>
+
+      <div className={styles.FieldInputWrapper}>
+        {hasValue ? (
+          <>
+            <span className={styles.BasisValue}>{basisDocumentLabel || basisDocumentUuid}</span>
+            <FieldActionButton
+              icon="clear"
+              label={translate("clear") || "Очистить"}
+              onClick={onClear}
+              disabled={disabled}
+            />
+          </>
+        ) : (
+          <>
+            {showTypeSelect && (
+              <select
+                className={`${styles.FieldSelect} ${styles.BasisTypeSelect}`}
+                value={selectedType}
+                onChange={handleTypeChange}
+                disabled={disabled}
+              >
+                {allowedTypes.map((t) => (
+                  <option key={t.type} value={t.type}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            )}
+            <LookupField
+              name={`${formUid}_basisDocument`}
+              value={undefined}
+              displayValue={undefined}
+              endpoint={activeType?.endpoint ?? ""}
+              displayField="id"
+              columns={[
+                { key: "id", label: "№" },
+                { key: "date", label: translate("date") },
+              ]}
+              onSelect={handleSelect}
+              disabled={disabled || !activeType}
+              visibleActions={[]}
+              variant="table"
+            />
+          </>
         )}
       </div>
-
-      {allowedTypes.length > 1 && !basisDocumentUuid && (
-        <select
-          value={selectedType}
-          onChange={(e) => setSelectedType(e.target.value)}
-          disabled={disabled}
-          style={{ fontSize: "var(--fontsize, 13px)", border: "1px solid var(--color5)", borderRadius: "var(--radius2)", padding: "0 4px", height: 26 }}
-        >
-          {allowedTypes.map((t) => (
-            <option key={t.type} value={t.type}>{t.label}</option>
-          ))}
-        </select>
-      )}
-
-      {basisDocumentUuid ? (
-        <div style={{ fontSize: "var(--fontsize, 13px)", padding: "2px 6px", border: "1px solid var(--color5)", borderRadius: "var(--radius2)", background: "var(--color31)", minHeight: 26, display: "flex", alignItems: "center" }}>
-          {basisDocumentLabel || basisDocumentUuid}
-        </div>
-      ) : (
-        <LookupField
-          name={`${formUid}_basisDocument`}
-          value={undefined}
-          displayValue={undefined}
-          endpoint={activeType?.endpoint ?? ""}
-          displayField="id"
-          columns={[{ key: "id", label: "№" }, { key: "date", label: translate("date") }]}
-          onSelect={handleSelect}
-          disabled={disabled || !activeType}
-          visibleActions={[]}
-        />
-      )}
     </div>
   );
 };

@@ -74,7 +74,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
       curatorUuid: fd.curatorUuid || null, executorUuid: fd.executorUuid || null,
       deadline: fd.deadline || null, deadlineDays: fd.deadlineDays || null,
     }),
-    buildPaneLabel: (saved) => makePaneLabel("TodosList", "Задачи", saved),
+    buildPaneLabel: (saved) => makePaneLabel("TodosList", "Задачи", saved, saved.description ? String(saved.description).slice(0, 60) : undefined),
   });
 
   const handleDeadlineDaysChange = useCallback((value: string) => {

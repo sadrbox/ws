@@ -54,6 +54,8 @@
 	"journal": "Журнал",
 	"panelNotifications": "Панель хабарламалары",
 	"switchToKazakh": "ҚАЗ",
+	"valueType": "Мән түрі",
+	"valueName": "Мән",
 	"valueRequired": "Мән міндетті",
 	"contactType": "Байланыс типі",
 	"contactTypeRequired": "Байланыс типі міндетті",
@@ -124,6 +126,7 @@
 	"address": "Мекенжай",
 	"phone": "Телефон",
 	"currency": "Валюта",
+	"currency.name": "Валюта",
 	"documentDate": "Құжат күні",
 
 	"employee": "Қызметкер",

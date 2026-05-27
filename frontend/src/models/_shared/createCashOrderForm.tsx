@@ -17,6 +17,9 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
+import { useUserPermissionDefaults } from "src/hooks/useUserPermissionDefaults";
+import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { useAppContext } from "src/app";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
@@ -65,6 +68,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
   const Form: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
     const { canWrite } = useAccessRight(cfg.accessRightModel);
+    const { auth: { user: currentUser } } = useAppContext();
 
     const initialFields: TFields | undefined = (() => {
       const data = paneProps.data;
@@ -145,18 +149,21 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
       apply: (uuid, name) => form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
     });
 
-    const cashboxScope = useMemo<Record<string, string> | null>(
-      () => form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : null,
-      [form.fields.organizationUuid],
+    const permDefaults = useUserPermissionDefaults(
+      currentUser?.uuid ?? "",
+      form.fields.organizationUuid,
     );
-
-    useAutoFillPrimary({
-      endpoint: "cashboxes",
-      scope: cashboxScope,
-      currentUuid: form.fields.cashboxUuid,
+    useApplyPermissionDefaults({
+      defaults: permDefaults,
+      organizationUuid: form.fields.organizationUuid,
       isEditMode: form.isEditMode,
       isLoading: form.isLoading,
-      apply: (uuid, name) => form.setFieldsInitial({ cashboxUuid: uuid, cashboxName: name } as Partial<TFields>),
+      fieldMappings: [
+        { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+        { type: "cashbox", uuidKey: "cashboxUuid", nameKey: "cashboxName" },
+      ],
+      currentValues: { contractUuid: form.fields.contractUuid, cashboxUuid: form.fields.cashboxUuid },
+      apply: (fields) => form.setFieldsInitial(fields as Partial<TFields>),
     });
 
     const tabs = useMemo(() => [

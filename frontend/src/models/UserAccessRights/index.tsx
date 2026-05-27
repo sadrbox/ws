@@ -6,7 +6,6 @@ import type { TTableVariant } from "src/components/Table";
 import type { TPane } from "src/app/types";
 import listColumnsJson from "./listColumns.json";
 import subColumnsJson from "./subColumns.json";
-import defaultsSubColumnsJson from "./defaultsSubColumns.json";
 import { FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol } from "src/components/UI/Group";
@@ -17,9 +16,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUniqueOptionRows } from "src/hooks/useUniqueOptionRows";
 import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
-import { UserPermissionsTable } from "src/models/UserPermissions";
+import { UserPermissionsTable, MODEL_NAME_OPTIONS } from "src/models/UserPermissions";
 
 const ENDPOINT = "user-permissions";
 
@@ -37,7 +37,7 @@ export const PERMISSION_DEFAULT_TYPE_OPTIONS = [
 ];
 
 const PERMISSION_DEFAULT_TYPE_ENDPOINT: Record<string, string> = {
-  bankAccount: "bank-accounts",
+  bankAccount: "bankaccounts",
   contract: "contracts",
   warehouse: "warehouses",
   cashbox: "cashboxes",
@@ -51,11 +51,20 @@ interface PermissionDefaultsTableProps {
   deferRemoteChanges?: boolean;
   initialPendingRows?: TDataItem[];
   onItemsChange?: (items: TDataItem[]) => void;
+  /** Передайте из родительской формы — computed из form.useTable("...").allRows */
+  disableAdd?: boolean;
+  /** Передайте form.useTable("...").onAllItemsChange — обновляет allRows формы */
+  onAllItemsChange?: (rows: TDataItem[]) => void;
 }
 
 const typeOptMap = Object.fromEntries(
   PERMISSION_DEFAULT_TYPE_OPTIONS.map(o => [o.value, o.label]),
 );
+
+const DEFAULTS_COLUMNS = [
+  { identifier: "valueType", type: "string", width: "220px", minWidth: "160px", alignment: "left" as const, hint: translate("permDefaultValueType"), visible: true, inlist: true },
+  { identifier: "valueName", type: "string", width: "1fr", minWidth: "180px", alignment: "left" as const, hint: translate("permDefaultValue"), visible: true, inlist: true },
+];
 
 const PermissionDefaultsTable: FC<PermissionDefaultsTableProps> = ({
   userUuid,
@@ -64,14 +73,27 @@ const PermissionDefaultsTable: FC<PermissionDefaultsTableProps> = ({
   deferRemoteChanges = true,
   initialPendingRows,
   onItemsChange,
+  disableAdd: disableAddProp,
+  onAllItemsChange: onAllItemsChangeProp,
 }) => {
+  const { getFirstUnused, getAvailableOptions, handleRowsChange } =
+    useUniqueOptionRows(PERMISSION_DEFAULT_TYPE_OPTIONS, "valueType", initialPendingRows);
+
+  // Компонуем внутренний handleRowsChange (для getAvailableOptions/getFirstUnused)
+  // с внешним onAllItemsChangeProp (для allRows в форме).
+  const handleAllItemsChange = useCallback((rows: TDataItem[]) => {
+    handleRowsChange(rows);
+    onAllItemsChangeProp?.(rows);
+  }, [handleRowsChange, onAllItemsChangeProp]);
+
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     if (col.identifier === "valueType") {
       if (ctx.inlineEditing) {
+        const availableOptions = getAvailableOptions(ctx.rows, row.valueType as string);
         return (
           <FieldSelect
             name={`upd_type_${row.id}`}
-            options={PERMISSION_DEFAULT_TYPE_OPTIONS}
+            options={availableOptions}
             value={(row.valueType as string) ?? ""}
             onChange={e => {
               ctx.handleInlineChange(row, "valueType", e.target.value);
@@ -88,6 +110,16 @@ const PermissionDefaultsTable: FC<PermissionDefaultsTableProps> = ({
 
     if (col.identifier === "valueName") {
       const endpoint = PERMISSION_DEFAULT_TYPE_ENDPOINT[row.valueType as string] ?? "";
+      let lookupParams: Record<string, string> | undefined;
+      if (organizationUuid) {
+        // bankAccount, cashbox, warehouse, contact используют ownerType/ownerUuid
+        // (иначе фильтр по организации не применяется в Lookup)
+        if (["bankAccount", "cashbox", "warehouse", "contact"].includes(row.valueType as string)) {
+          lookupParams = { ownerType: "organization", ownerUuid: organizationUuid };
+        } else {
+          lookupParams = { organizationUuid };
+        }
+      }
       if (ctx.inlineEditing && endpoint) {
         return (
           <LookupField
@@ -97,7 +129,7 @@ const PermissionDefaultsTable: FC<PermissionDefaultsTableProps> = ({
             displayField="name"
             value={(row.valueUuid as string) ?? ""}
             displayValue={(row.valueName as string) ?? ""}
-            extraParams={organizationUuid ? { organizationUuid } : undefined}
+            extraParams={lookupParams}
             onSelect={(uuid, dv) => {
               void ctx.handleLookupChange(row, "valueUuid", uuid, { valueName: dv });
             }}
@@ -114,32 +146,35 @@ const PermissionDefaultsTable: FC<PermissionDefaultsTableProps> = ({
     }
 
     return undefined;
-  }, [organizationUuid]);
+  }, [organizationUuid, getAvailableOptions]);
 
-  const defaultNewRow = useMemo(() => ({
-    userUuid,
-    organizationUuid,
-    valueType: "",
-    valueUuid: "",
-    valueName: "",
-  }), [userUuid, organizationUuid]);
+  const defaultNewRow = useMemo(() => {
+    return (rows: TDataItem[]) => {
+      const valueType = getFirstUnused(rows);
+      if (!valueType) return null; // all types present — abort (null-veto in SubTable)
+      return { userUuid, organizationUuid, valueType, valueUuid: "", valueName: "" };
+    };
+  }, [userUuid, organizationUuid, getFirstUnused]);
 
   return (
     <SubTable
       model="user-permission-defaults"
       componentName="PermissionDefaultsTable"
-      columnsJson={defaultsSubColumnsJson}
+      columnsJson={DEFAULTS_COLUMNS}
       parentKey="userUuid"
       parentUuid={userUuid}
-      extraParams={{ organizationUuid }}
+      extraQueryParams={{ organizationUuid }}
       defaultSort={{ id: "asc" }}
       disabled={disabled}
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
       onItemsChange={onItemsChange}
+      onAllItemsChange={handleAllItemsChange}
       renderCell={renderCell}
       defaultNewRow={defaultNewRow}
+      disableAdd={disableAddProp ?? false}
       defaultInlineEditing={true}
+      showEditModeToggle={false}
     />
   );
 };
@@ -164,7 +199,11 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
   const queryClient = useQueryClient();
 
   const invalidateSubTables = useCallback(async (savedData: any) => {
-    await invalidateSubTableFor(queryClient, "access-rights", "userUuid", savedData?.userUuid ?? "");
+    const userUuid = savedData?.userUuid ?? "";
+    await Promise.all([
+      invalidateSubTableFor(queryClient, "access-rights", "userUuid", userUuid),
+      invalidateSubTableFor(queryClient, "user-permission-defaults", "userUuid", userUuid),
+    ]);
   }, [queryClient]);
 
   const initialFields: TFormFields | undefined = (() => {
@@ -207,6 +246,8 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
       permissionDefaults: {
         endpoint: "user-permission-defaults",
         parentField: "userUuid",
+        label: translate("permissionDefaults"),
+        skipParentField: true,
         batchEndpoint: "user-permission-defaults/batch",
         createPayload: (r: any) => ({
           userUuid: r.userUuid ?? null,
@@ -237,13 +278,33 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
       if (!fd.organizationUuid) return "Организация обязательна";
       return { userUuid: fd.userUuid, organizationUuid: fd.organizationUuid, role: fd.role };
     },
-    buildPaneLabel: (saved) =>
-      makePaneLabel("UserAccessRightsList", translate("userAccessRight"), saved),
+    buildPaneLabel: (saved) => {
+      const userName = saved.userDisplayName || (saved as any).user?.username || "";
+      const orgName = saved.orgShortName || (saved as any).organization?.name || "";
+      const detail = [userName, orgName].filter(Boolean).join(" / ");
+      return makePaneLabel("UserAccessRightsList", translate("userAccessRight"), saved, detail || undefined);
+    },
     afterSave: invalidateSubTables,
   });
 
   const accessRights = form.useTable("accessRights");
   const permissionDefaults = form.useTable("permissionDefaults");
+
+  // Вычисляем доступность кнопки "Добавить" на основе allRows формы:
+  // allRows содержит все строки SubTable (сервер + pending), обновляется через onAllItemsChange.
+  const allModelsUsed = useMemo(
+    () => MODEL_NAME_OPTIONS.length > 0 && MODEL_NAME_OPTIONS.every(o =>
+      accessRights.allRows.some(r => (r as any).modelName === o.value && (r as any)._pendingAction !== "delete")
+    ),
+    [accessRights.allRows],
+  );
+  const allTypesUsed = useMemo(
+    () => PERMISSION_DEFAULT_TYPE_OPTIONS.length > 0 && PERMISSION_DEFAULT_TYPE_OPTIONS.every(o =>
+      permissionDefaults.allRows.some(r => (r as any).valueType === o.value && (r as any)._pendingAction !== "delete")
+    ),
+    [permissionDefaults.allRows],
+  );
+
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
       {
@@ -301,6 +362,8 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
             deferRemoteChanges={true}
             initialPendingRows={accessRights.pending}
             onItemsChange={accessRights.onItemsChange}
+            onAllItemsChange={accessRights.onAllItemsChange}
+            disableAdd={allModelsUsed}
           />
         ),
       });
@@ -316,13 +379,15 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
             deferRemoteChanges={true}
             initialPendingRows={permissionDefaults.pending}
             onItemsChange={permissionDefaults.onItemsChange}
+            onAllItemsChange={permissionDefaults.onAllItemsChange}
+            disableAdd={allTypesUsed}
           />
         ),
       });
     }
 
     return result;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, accessRights, permissionDefaults, canWrite]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, accessRights, permissionDefaults, canWrite, allModelsUsed, allTypesUsed]);
 
   return (
     <ModelForm
