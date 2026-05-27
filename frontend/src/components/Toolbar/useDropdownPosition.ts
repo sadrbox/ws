@@ -78,3 +78,34 @@ export function useDropdownPosition(
 
   return [dropRef, style];
 }
+
+export interface UseDropdownMenuResult {
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  toggle: () => void;
+  wrapRef: { current: HTMLDivElement | null };
+  dropRef: { current: HTMLDivElement | null };
+  dropStyle: CSSProperties;
+}
+
+export function useDropdownMenu(): UseDropdownMenuResult {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [dropRef, dropStyle] = useDropdownPosition(open, wrapRef);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return { open, setOpen, toggle: () => setOpen((v) => !v), wrapRef, dropRef, dropStyle };
+}

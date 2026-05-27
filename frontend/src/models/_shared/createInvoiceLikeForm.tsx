@@ -471,7 +471,6 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                   amountWithoutVat={form.fields.amountWithoutVat}
                   isVatEnabled={isVatEnabled}
                   useDiscount={useDiscount}
-                  basisItems={basisItems}
                 />
               </Group>
             </div>

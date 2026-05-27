@@ -751,7 +751,6 @@ const SubTable: FC<SubTableProps> = ({
 
   // ── Inline-редактирование ──────────────────────────────────────────────
   const handleInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
-    // console.log(" validateCell");
     // Запускаем валидацию
     const error = validateCell(row, field, value);
     const rowId = getRowId(row);
@@ -855,10 +854,6 @@ const SubTable: FC<SubTableProps> = ({
   // (избегаем stale closure после delete → refetch)
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
-
-  // const definedModels = new Set(rowsRef.current.map(r => r.modelName).filter(Boolean));
-  // const toAddModels = 
-  // console.log(rowsRef.current.filter(r => r.modelName && r.modelName !== model).map(r => r.modelName));
 
   // Ref для cellErrors — чтобы ctx.cellErrors не вызывал пересоздание useMemo
   const cellErrorsRef = useRef(cellErrors);
@@ -986,7 +981,6 @@ const SubTable: FC<SubTableProps> = ({
   // и в клавиатурном обработчике для навигации).
   displayRowsRef.current = displayRows;
 
-  // console.log(displayRows)
   // ── openModelForm ─────────────────────────────────────────────────────
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     if (openFormFor) {

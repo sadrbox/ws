@@ -66,8 +66,6 @@ const Tabs: React.FC<TypeTabs> = ({
     });
   }, []);
 
-  // const activeTabContent = tabs.find(tab => tab.id === activeTab)?.component || null;
-
   return (
     <div
       className={styles.TabsWrapper}

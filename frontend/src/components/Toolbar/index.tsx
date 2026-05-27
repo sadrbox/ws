@@ -15,7 +15,6 @@
 import {
   FC,
   forwardRef,
-  type ButtonHTMLAttributes,
   type ReactNode,
 } from "react";
 import IconButton, {
@@ -109,21 +108,6 @@ const CloseButton: FC<Omit<ToolbarIconButtonProps, "icon" | "children">> = ({
 );
 CloseButton.displayName = "Toolbar.CloseButton";
 
-// ─── Backwards-compat: ImageButton (для редких внешних потребителей) ────
-
-interface LegacyImageButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement> {
-  src: string;
-  alt: string;
-}
-
-const ImageButton: FC<LegacyImageButtonProps> = ({ src, alt, ...rest }) => (
-  <ToolbarIconButton {...rest}>
-    <img src={src} alt={alt} width={16} height={16} />
-  </ToolbarIconButton>
-);
-ImageButton.displayName = "Toolbar.ImageButton";
-
 // ─── Compound export ────────────────────────────────────────────────────
 
 type ToolbarComponent = typeof ToolbarRoot & {
@@ -131,7 +115,6 @@ type ToolbarComponent = typeof ToolbarRoot & {
   Divider: typeof ToolbarDivider;
   IconButton: typeof ToolbarIconButton;
   Icon: typeof Icon;
-  ImageButton: typeof ImageButton;
   ReloadButton: typeof ReloadButton;
   SettingsButton: typeof SettingsButton;
   PeriodButton: typeof PeriodButton;
@@ -149,7 +132,6 @@ Toolbar.Slot = ToolbarSlot;
 Toolbar.Divider = ToolbarDivider;
 Toolbar.IconButton = ToolbarIconButton;
 Toolbar.Icon = Icon;
-Toolbar.ImageButton = ImageButton;
 Toolbar.ReloadButton = ReloadButton;
 Toolbar.SettingsButton = SettingsButton;
 Toolbar.PeriodButton = PeriodButton;
@@ -166,7 +148,6 @@ export {
   ToolbarSlot,
   ToolbarDivider,
   ToolbarIconButton as IconButton,
-  ImageButton,
   ReloadButton,
   SettingsButton,
   PeriodButton,

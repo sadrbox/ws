@@ -301,7 +301,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const handleTotalChange = useCallback((total: number, items?: any[]) => {
-    // console.log(Number(total), total);
     form.setField("amount", Number(total));
     if (items) {
       const vatSum = items.reduce((s, r) => s + (Number(r.vatAmount) || 0), 0);
@@ -600,7 +599,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 amountWithoutVat={form.fields.amountWithoutVat}
                 isVatEnabled={isVatEnabled}
                 useDiscount={useDiscount}
-                basisItems={basisItems}
               />
             </Group>
           </div>

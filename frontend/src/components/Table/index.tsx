@@ -824,9 +824,7 @@ const TableArea = memo(() => {
   const { variant, columns } = useTableContext();
   const isSelect = variant === 'select';
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
-  // console.log({ visibleColumns: visibleColumns.slice(0, -1), visibleColumnsLast: visibleColumns[visibleColumns.length - 1] });
   const lastVisibleColumn = visibleColumns[visibleColumns.length - 1];
-  // console.log(lastVisibleColumn.identifier);
   return (
     <>
       <table>

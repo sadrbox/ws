@@ -438,7 +438,6 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
                 amountWithoutVat={form.fields.amountWithoutVat}
                 isVatEnabled={isVatEnabled}
                 useDiscount={useDiscount}
-                basisItems={basisItems}
               />
             </Group>
           </div>

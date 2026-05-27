@@ -1,6 +1,6 @@
-import { FC, useEffect, useRef, useState } from "react";
+import { FC } from "react";
 import { Icon, type IconName } from "src/components/IconButton/icons";
-import { useDropdownPosition } from "./useDropdownPosition";
+import { useDropdownMenu } from "./useDropdownPosition";
 import styles from "./Toolbar.module.scss";
 
 export interface ActionDropdownOption {
@@ -19,23 +19,7 @@ interface ActionsDropdownButtonProps {
 }
 
 const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options, onSelect, disabled, icon }) => {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const [dropRef, dropStyle] = useDropdownPosition(open, wrapRef);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  const { open, toggle, setOpen, wrapRef, dropRef, dropStyle } = useDropdownMenu();
 
   return (
     <div ref={wrapRef} className={styles.DropdownWrap}>
@@ -43,7 +27,7 @@ const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options,
         type="button"
         className={styles.ActionsButton}
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
       >

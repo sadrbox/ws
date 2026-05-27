@@ -47,7 +47,7 @@ const BASIS_SOURCE_CONFIGS: Record<string, BasisSourceConfig> = {
 	},
 	purchase_requisition: {
 		docEndpoint: (uuid) => `purchase-requisitions/${uuid}`,
-		itemsEndpoint: "purchaserequisitionitems",
+		itemsEndpoint: "purchase-requisition-items",
 		itemsParentField: "purchaseRequisitionUuid",
 	},
 	incoming_invoice: {

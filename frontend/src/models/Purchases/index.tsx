@@ -42,7 +42,7 @@ import DocumentTotals from "src/components/DocumentTotals";
 
 const MODEL_ENDPOINT = "purchases";
 const LIST_NAME = "PurchasesList";
-const FORM_LABEL = "Поступление товара и услуг и услуг";
+const FORM_LABEL = "Поступление товара и услуг";
 const PURCHASES_DEPENDENT_ENDPOINTS = ["purchase-returns"];
 
 interface TFields {
@@ -359,7 +359,6 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
                 amountWithoutVat={form.fields.amountWithoutVat}
                 isVatEnabled={isVatEnabled}
                 useDiscount={useDiscount}
-                basisItems={basisItems}
               />
             </Group>
           </div>
