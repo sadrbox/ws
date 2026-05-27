@@ -457,7 +457,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                 </div>
               </Group>
             </div>
-            {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+            {form.isEditMode && <GroupCol style={{ flex: 1, alignItems: "start", justifyContent: "end", gap: 6 }}>
               {cfg.basisConfig && (
                 <BasisDocumentField
                   allowedTypes={cfg.basisConfig.allowedTypes}
@@ -470,9 +470,11 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                   onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
                 />
               )}
-              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-            </Group>}
+              <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
+                <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+              </GroupRow>
+            </GroupCol>}
           </div>
         )
       },

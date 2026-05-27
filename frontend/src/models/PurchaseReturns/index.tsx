@@ -435,7 +435,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
               </div>
             </Group>
           </div>
-          {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+          {form.isEditMode && <GroupCol style={{ flex: 1, alignItems: "start", justifyContent: "end", gap: 6 }}>
             <BasisDocumentField
               allowedTypes={[{ type: "purchase", endpoint: "purchases", label: translate("purchaseReceipt") }]}
               basisDocumentType={form.fields.basisDocumentType}
@@ -446,9 +446,11 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
               disabled={form.isLoading}
               formUid={form.formUid}
             />
-            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-          </Group>}
+            <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
+              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+            </GroupRow>
+          </GroupCol>}
         </div>
       )
     },

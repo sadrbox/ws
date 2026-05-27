@@ -33,6 +33,8 @@ export interface LookupFieldProps {
   label?: React.ReactNode;
   /** Имя поля для id/name */
   name: string;
+  /** Явный id для input (для ассоциации с внешним label) */
+  id?: string;
   /** Текущий UUID (значение для хранения) */
   value?: string;
   /** Отображаемое значение (name, value и т.д.) */
@@ -47,6 +49,8 @@ export interface LookupFieldProps {
   displayField?: string;
   /** Дополнительные колонки (совместимость, не используется в новой версии) */
   columns?: { key: string; label: string }[];
+  /** Кастомная функция для формирования текста подсказки в LookupDropdown */
+  getSuggestionLabel?: (item: Record<string, any>) => string;
   /** Ширина поля */
   width?: string;
   minWidth?: string;
@@ -117,6 +121,7 @@ import { getByEndpoint } from "src/registry/modelRegistry";
 const LookupField: FC<LookupFieldProps> = ({
   label,
   name,
+  id,
   value = "",
   displayValue = "",
   onSelect,
@@ -124,6 +129,7 @@ const LookupField: FC<LookupFieldProps> = ({
   endpoint,
   displayField = "name",
   columns: _columns,
+  getSuggestionLabel,
   width,
   minWidth,
   maxWidth,
@@ -147,7 +153,8 @@ const LookupField: FC<LookupFieldProps> = ({
   const cellState = useCellFieldState();
   const formRequired = useFormRequiredScope();
   const isTable = variant === 'table';
-  const uid = useId();
+  const generatedId = useId();
+  const uid = id ?? generatedId;
   const tail = name.includes('_') ? name.slice(name.lastIndexOf('_') + 1) : name;
   const isEmpty = !value;
   const isFormRequired = !isTable && formRequired.requiredKeys.has(tail);
@@ -425,25 +432,28 @@ const LookupField: FC<LookupFieldProps> = ({
     // В table-варианте кнопка «Очистить» избыточна: ячейка таблицы и так
     // редактируется поверх существующего значения, отдельная кнопка только
     // загромождает узкую колонку. Открытие/Быстрый выбор/Список оставляем.
-    if (show("clear") && !isTable && (value || inputText)) {
-      acts.push({ type: "clear", onClick: handleClear });
+    if (show("quickselect")) {
+      acts.push({ type: "quickselect", onClick: handleQuickSelect });
     }
     if (show("open") && value && getByEndpoint(endpoint)) {
       acts.push({ type: "open", onClick: handleOpenItemForm });
     }
-    if (show("quickselect")) {
-      acts.push({ type: "quickselect", onClick: handleQuickSelect });
-    }
     if (show("list")) {
       acts.push({ type: "list", onClick: handleOpenModal });
+    }
+    if (show("clear") && !isTable && (value || inputText)) {
+      acts.push({ type: "clear", onClick: handleClear });
     }
     return acts;
   }, [disabled, visibleActions, isTable, value, inputText, endpoint, handleClear, handleOpenItemForm, handleQuickSelect, handleOpenModal]);
 
   // Получить отображаемое поле элемента
   const getItemDisplay = useCallback((item: Record<string, any>) => {
+    if (getSuggestionLabel) {
+      return getSuggestionLabel(item);
+    }
     return String(item[displayField] ?? item.value ?? item.name ?? item.uuid ?? "");
-  }, [displayField]);
+  }, [displayField, getSuggestionLabel]);
 
   // Вспомогательная: получить значение по ключу с поддержкой вложенности ("brand.name")
   const getNestedValue = useCallback((item: Record<string, any>, key: string): string => {

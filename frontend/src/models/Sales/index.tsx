@@ -573,6 +573,18 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               </Group>
 
             </GroupCol>
+            <GroupCol>
+              <BasisDocumentField
+                allowedTypes={[{ type: "payment_invoice", endpoint: "payment-invoices", label: translate("paymentInvoice") }]}
+                basisDocumentType={form.fields.basisDocumentType}
+                basisDocumentUuid={form.fields.basisDocumentUuid}
+                basisDocumentLabel={form.fields.basisDocumentLabel}
+                formUid={form.formUid}
+                disabled={form.isLoading}
+                onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
+                onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+              />
+            </GroupCol>
             <Group>
               <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
                 {([
@@ -598,21 +610,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 </div>
               </div>
             </Group>
-
-
           </div>
           {form.isEditMode && <GroupCol style={{ flex: 1, alignItems: "start", justifyContent: "end", gap: 6 }}>
-
-            <BasisDocumentField
-              allowedTypes={[{ type: "payment_invoice", endpoint: "payment-invoices", label: translate("paymentInvoice") }]}
-              basisDocumentType={form.fields.basisDocumentType}
-              basisDocumentUuid={form.fields.basisDocumentUuid}
-              basisDocumentLabel={form.fields.basisDocumentLabel}
-              formUid={form.formUid}
-              disabled={form.isLoading}
-              onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
-              onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
-            />
             <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
               <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
               <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
