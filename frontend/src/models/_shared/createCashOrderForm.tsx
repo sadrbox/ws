@@ -8,7 +8,7 @@ import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
-import { Field, FieldDate } from "src/components/Field";
+import { Field, FieldDateTime } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
@@ -21,7 +21,7 @@ import { useUserPermissionDefaults } from "src/hooks/useUserPermissionDefaults";
 import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
 import { useAppContext } from "src/app";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import type { DocumentType } from "src/utils/validatePostedDocument";
@@ -74,7 +74,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
       const data = paneProps.data;
       if (data?.uuid) return undefined;
       const init = { ...DEFAULT_FIELDS };
-      init.date = new Date().toISOString().slice(0, 10);
+      init.date = isoToLocalInput(new Date().toISOString());
       if (data?.organizationUuid) {
         init.organizationUuid = data?.organizationUuid as string;
         init.organizationName = (data?.organizationName as string) || "";
@@ -97,7 +97,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
       paneProps,
       mapServerToForm: (d, prev) => ({
         ...(prev ?? DEFAULT_FIELDS), ...d,
-        date: d.date?.slice(0, 10) ?? "",
+        date: isoToLocalInput(d.date),
         comment: d.comment ?? "",
         amount: d.amount != null ? String(d.amount) : "",
         posted: d.posted === true,
@@ -116,7 +116,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
         const validation = validateDocumentFields(cfg.docType, fd as unknown as Record<string, unknown>);
         if (!validation.isValid) return formatValidationErrors(validation.errors);
         return {
-          date: fd.date || null,
+          date: localInputToIso(fd.date),
           comment: fd.comment?.trim() || null,
           amount: fd.amount ? parseFloat(fd.amount) : null,
           posted: fd.posted === true,
@@ -175,7 +175,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
             <div className={styles.Form}>
               <GroupCol>
                 <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                  <FieldDate label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="160px" />
+                  <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
                   <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
                 </GroupRow>
                 <Group>

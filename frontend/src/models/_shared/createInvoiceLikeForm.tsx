@@ -6,7 +6,7 @@ import { FC, useMemo, useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import type { TPane } from "src/app/types";
-import { Field, FieldDate } from "src/components/Field";
+import { Field, FieldDateTime } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
@@ -19,7 +19,7 @@ import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
 import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
@@ -31,7 +31,7 @@ import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app";
-import { type BasisFromTarget, openDocumentFromBasis, refillFromBasisSource, mapCommonTradeFields } from "src/utils/createFromBasis";
+import { type BasisFromTarget, openDocumentFromBasis, refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
@@ -114,7 +114,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       if (data?.uuid) return undefined;
       if (data?.fromBasisFields) return { ...DEFAULT_FIELDS, ...data.fromBasisFields } as TFields;
       const init = { ...DEFAULT_FIELDS };
-      init.date = new Date().toISOString().slice(0, 10);
+      init.date = isoToLocalInput(new Date().toISOString());
       if (data?.organizationUuid) {
         init.organizationUuid = data?.organizationUuid as string;
         init.organizationName = (data?.organizationName as string) || "";
@@ -145,6 +145,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       setBasisItems([]);
       await invalidateSubTables();
     }, [invalidateSubTables]);
+
+    const afterReload = useCallback(() => { setBasisItems([]); }, []);
 
     const form = useFormStore<TFields>({
       endpoint: cfg.endpoint,
@@ -181,7 +183,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       },
       mapServerToForm: (d, prev) => ({
         ...(prev ?? DEFAULT_FIELDS), ...d,
-        date: d.date?.slice(0, 10) ?? "",
+        date: isoToLocalInput(d.date),
         comment: d.comment ?? "",
         amount: d.amount != null ? Number(d.amount) : 0,
         vatAmount: d.vatAmount != null ? Number(d.vatAmount) : 0,
@@ -205,7 +207,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
         if (!validation.isValid) return formatValidationErrors(validation.errors);
 
         return {
-          date: fd.date || null,
+          date: localInputToIso(fd.date),
           comment: fd.comment?.trim() || null,
           amount: fd.amount ? fd.amount : null,
           vatAmount: fd.vatAmount ? fd.vatAmount : 0,
@@ -222,6 +224,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       },
       buildPaneLabel: (saved) => makeDocLabel(cfg.listName, cfg.formLabel, saved, "date"),
       afterSave,
+      afterReload,
     });
 
     const items = form.useTable("items");
@@ -232,7 +235,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     const basisLock = hasBasis && (cfg.lockFieldsOnBasis ?? false);
     const effectiveReadonly = !canWrite;
 
-    const handleRefillFromBasis = useCallback(async () => {
+    const handleRefillFromBasis = useCallback(async (skipFields = false) => {
       if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
       setIsRefilling(true);
       try {
@@ -242,23 +245,37 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           mapCommonTradeFields,
         );
         if (!result) return;
-        const patch = mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
-          { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-        ]) as Partial<TFields>;
-        const currentFields = form.store.getSnapshot().fields;
-        const hasFieldChanges = Object.keys(patch).some(
-          k => !isEquivalent((currentFields as any)[k], (patch as any)[k]),
-        );
-        if (hasFieldChanges) {
-          form.setFields(patch);
+        if (!skipFields) {
+          const rawPatch = mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
+            { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+          ]);
+          // Оставляем в patch только поля, которые реально есть в форме.
+          // mapCommonTradeFields возвращает warehouseUuid/warehouseName (для торговых
+          // документов), но у счёт-фактуры нет полей склада — без фильтра setFields
+          // добавил бы их в state.fields → ложный Dirty.
+          const cur = form.store.getSnapshot().fields as any;
+          const patch = Object.fromEntries(
+            Object.keys(rawPatch).filter(k => k in cur).map(k => [k, rawPatch[k]]),
+          ) as Partial<TFields>;
+          // Применяем только если поля реально изменились — иначе ложный Dirty.
+          if (Object.keys(patch).some(k => !isEquivalent(cur[k], (patch as any)[k]))) {
+            form.setFields(patch);
+          }
         }
-        const queries = queryClient.getQueriesData<any>({ queryKey: [cfg.itemsEndpoint, "infinite"] });
-        const serverItems: any[] = queries
-          .flatMap(([, data]) => data?.pages?.flatMap((p: any) => p.items ?? []) ?? [])
-          .filter((r: any) => r[cfg.itemsParentField] === form.fields.uuid);
-        const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
-        const itemsAreSame = serverItems.length === result.items.length &&
-          serverItems.every((si, idx) => {
+        // Текущее отображаемое состояние таблицы (сервер + pending create, без delete).
+        // Если вкладка ещё не открывалась (allItemsRef пуст) — дозагружаем строки
+        // с сервера, иначе первое сравнение даст «0 ≠ N» и поставит ложный Dirty.
+        let displayed = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+        if (displayed.length === 0 && form.fields.uuid) {
+          displayed = await fetchDocumentItems(cfg.itemsEndpoint, cfg.itemsParentField, form.fields.uuid);
+        }
+        const serverItems = displayed.filter((r: any) =>
+          !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")) && !(typeof r.id === "number" && r.id < 0),
+        );
+        // Если строки основания совпадают с отображаемыми — не трогаем pending
+        // (иначе ложный Dirty при идентичных данных).
+        const itemsAreSame = displayed.length === result.items.length &&
+          displayed.every((si: any, idx: number) => {
             const ni = result.items[idx];
             return si.productUuid === ni.productUuid &&
               Number(si.quantity) === Number(ni.quantity) &&
@@ -268,6 +285,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
               Number(si.exciseRate) === Number(ni.exciseRate);
           });
         if (!itemsAreSame) {
+          const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
           setBasisItems([...deleteMarkers, ...result.items]);
           setItemsTableKey(k => k + 1);
         }
@@ -425,7 +443,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             <div className={styles.Form}>
               <GroupCol>
                 <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                  <FieldDate label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="160px" />
+                  <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
                   {!cfg.hidePosted && <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />}
                 </GroupRow>
                 <Group>
@@ -492,8 +510,9 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             disabled={form.isLoading}
             disableAddRows={basisLock}
             disableDeleteRows={basisLock}
+            fieldsReadOnly={basisLock}
             deferRemoteChanges
-            onRefresh={hasBasis ? handleRefillFromBasis : undefined}
+            onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
             parentLabel={`${cfg.formLabel}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
             key={itemsTableKey}
             initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}

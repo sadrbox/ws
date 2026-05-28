@@ -259,6 +259,7 @@ export async function handleDelete({
 	modelName,
 	notFoundMessage = "Не найдено",
 	softDelete = false,
+	onDeleted = null,
 }) {
 	const param = req.params.id ?? req.params.uuid;
 	const numId = Number(param);
@@ -286,6 +287,14 @@ export async function handleDelete({
 			});
 		} else {
 			await prisma[modelName].delete({ where });
+		}
+		// Хук после успешного удаления (например, удаление движений регистра).
+		if (typeof onDeleted === "function") {
+			try {
+				await onDeleted(existing);
+			} catch (hookErr) {
+				console.error(`handleDelete onDeleted(${modelName}) error:`, hookErr);
+			}
 		}
 		return res.status(200).json({ success: true, message: "Удалено" });
 	} catch (error) {
@@ -318,6 +327,7 @@ export async function handleBatchDelete({
 	prisma,
 	modelName,
 	softDelete = false,
+	onDeleted = null,
 }) {
 	const { uuids } = req.body;
 	if (!Array.isArray(uuids) || uuids.length === 0) {
@@ -345,6 +355,13 @@ export async function handleBatchDelete({
 				await prisma[modelName].update({ where: { uuid }, data: { deletedAt: new Date() } });
 			} else {
 				await prisma[modelName].delete({ where: { uuid } });
+			}
+			if (typeof onDeleted === "function") {
+				try {
+					await onDeleted(existing);
+				} catch (hookErr) {
+					console.error(`handleBatchDelete onDeleted(${modelName}) error:`, hookErr);
+				}
 			}
 			deleted++;
 		} catch (err) {

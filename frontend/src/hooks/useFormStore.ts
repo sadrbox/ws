@@ -1029,6 +1029,45 @@ export function usePaneIsDirty(uniqId: string): boolean {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// EDIT MODE PANE STORE — реактивный Set<uniqId> для определения,
+// есть ли у панели запись на сервере (форма в режиме редактирования).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const editModeSet = new Set<string>();
+const editModeListeners = new Set<() => void>();
+
+function notifyEditModeListeners(): void {
+	for (const l of editModeListeners) l();
+}
+
+export function setPaneIsEditMode(uniqId: string, isEditMode: boolean): void {
+	const was = editModeSet.has(uniqId);
+	if (isEditMode && !was) {
+		editModeSet.add(uniqId);
+		notifyEditModeListeners();
+	} else if (!isEditMode && was) {
+		editModeSet.delete(uniqId);
+		notifyEditModeListeners();
+	}
+}
+
+function subscribeEditMode(listener: () => void): () => void {
+	editModeListeners.add(listener);
+	return () => {
+		editModeListeners.delete(listener);
+	};
+}
+
+/** Хук: находится ли форма в режиме редактирования (есть запись на сервере). */
+export function usePaneIsEditMode(uniqId: string): boolean {
+	return useSyncExternalStore(
+		subscribeEditMode,
+		() => editModeSet.has(uniqId),
+		() => false,
+	);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // PANE NOTIFICATIONS — уведомления привязанные к конкретной панели.
 // Используется для информирования пользователя о состоянии формы
 // (например: «данные восстановлены из предыдущей сессии»).
@@ -1308,6 +1347,10 @@ export interface UseFormStoreOptions<F extends object> {
 	afterLoad?: () => void | Promise<void>;
 	/** Доп. логика после save (кроме commitTables — он вызывается автоматически) */
 	afterSave?: (savedData: any) => Promise<void> | void;
+	/** Доп. логика после ручного reload (кнопка «Обновить» в шапке панели).
+	 * Вызывается ТОЛЬКО при ручном reload, не при первоначальной загрузке.
+	 * Используется для сброса локального состояния формы (например basisItems). */
+	afterReload?: () => void | Promise<void>;
 	/**
 	 * Имена полей, которые вычисляются автоматически (производные/derived):
 	 * например, `amount`, `vatAmount`, `amountWithoutVat` — суммы по
@@ -1422,6 +1465,7 @@ export function useFormStore<F extends object>(
 		buildPaneLabel,
 		afterLoad,
 		afterSave,
+		afterReload,
 		derivedFields,
 	} = options;
 
@@ -1498,6 +1542,19 @@ export function useFormStore<F extends object>(
 		};
 	}, [store, uniqId]);
 
+	// ── Edit mode indicator: обновляем editModeSet при изменении isEditMode ──
+	useEffect(() => {
+		if (!uniqId) return;
+		setPaneIsEditMode(uniqId, store.getSnapshot().meta.isEditMode);
+		const unsub = store.subscribe(() => {
+			setPaneIsEditMode(uniqId, store.getSnapshot().meta.isEditMode);
+		});
+		return () => {
+			unsub();
+			setPaneIsEditMode(uniqId, false);
+		};
+	}, [store, uniqId]);
+
 	// ── Стабильные ref-ы для колбэков (не пересоздаются) ──
 	const mapRef = useRef(mapServerToForm);
 	mapRef.current = mapServerToForm;
@@ -1509,6 +1566,8 @@ export function useFormStore<F extends object>(
 	afterLoadRef.current = afterLoad;
 	const afterSaveRef = useRef(afterSave);
 	afterSaveRef.current = afterSave;
+	const afterReloadRef = useRef(afterReload);
+	afterReloadRef.current = afterReload;
 	const onSaveRef = useRef(onSave);
 	onSaveRef.current = onSave;
 	const onCloseRef = useRef(onClose);
@@ -1866,6 +1925,20 @@ export function useFormStore<F extends object>(
 		const currentUuid = store.getSnapshot().meta.uuid;
 		if (currentUuid) {
 			await loadFromServer(currentUuid, { noCache: true });
+			// Сбрасываем локальное состояние формы (например basisItems) до инвалидации,
+			// чтобы SubTable не мержил старые pending-строки с новыми серверными данными.
+			await Promise.resolve(afterReloadRef.current?.());
+			// Обновляем строки SubTable с сервера (invalidate active queries).
+			const endpoints = (Object.values(tableDefs) as Array<{ endpoint?: string }>)
+				.map(t => t.endpoint)
+				.filter((ep): ep is string => !!ep);
+			if (endpoints.length > 0) {
+				await Promise.all(
+					endpoints.map(ep =>
+						queryClient.invalidateQueries({ queryKey: [ep], refetchType: "active" })
+					)
+				);
+			}
 		} else {
 			// Новая запись (uuid ещё нет): «Обновить» = сброс полей и таблиц к
 			// исходным defaults, чтобы Dirty гарантированно очищался.
@@ -1873,7 +1946,7 @@ export function useFormStore<F extends object>(
 			store.clearAllTablesPending();
 			store.markClean();
 		}
-	}, [store, confirm, loadFromServer, effectiveDefaults]);
+	}, [store, confirm, loadFromServer, effectiveDefaults, tableDefs, queryClient]);
 
 	// ── Регистрация в глобальном API ──
 	useEffect(() => {

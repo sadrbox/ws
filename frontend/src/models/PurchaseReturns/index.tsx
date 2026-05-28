@@ -7,7 +7,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDate } from "src/components/Field";
+import { Field, FieldDateTime } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
@@ -18,7 +18,7 @@ import { useAccessRight } from "src/hooks/useAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
@@ -34,7 +34,8 @@ import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "s
 import IconButton from "src/components/IconButton/IconButton";
 import PurchaseReturnPrint from "./PurchaseReturnPrint";
 import DocumentTotals from "src/components/DocumentTotals";
-import { refillFromBasisSource, mapCommonTradeFields } from "src/utils/createFromBasis";
+import { refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems } from "src/utils/createFromBasis";
+import { isEquivalent } from "src/utils/normalize";
 
 const MODEL_ENDPOINT = "purchase-returns";
 const LIST_NAME = "PurchaseReturnsList";
@@ -86,7 +87,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     if (data?.uuid) return undefined;
     if (data?.fromBasisFields) return { ...DEFAULT_FIELDS, ...data.fromBasisFields } as TFields;
     const init = { ...DEFAULT_FIELDS };
-    init.date = new Date().toISOString().slice(0, 10);
+    init.date = isoToLocalInput(new Date().toISOString());
     if (data?.organizationUuid) {
       init.organizationUuid = data?.organizationUuid as string;
       init.organizationName = (data?.organizationName as string) || "";
@@ -120,6 +121,8 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     setBasisItems([]);
     await invalidateSubTables();
   }, [invalidateSubTables]);
+
+  const afterReload = useCallback(() => { setBasisItems([]); }, []);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT,
@@ -158,7 +161,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      date: d.date?.slice(0, 10) ?? "",
+      date: isoToLocalInput(d.date),
       comment: d.comment ?? "",
       amount: d.amount != null ? Number(d.amount) : 0,
       vatAmount: d.vatAmount != null ? Number(d.vatAmount) : 0,
@@ -183,7 +186,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
       const validation = validateDocumentFields("purchase_return", fd as unknown as Record<string, unknown>);
       if (!validation.isValid) return formatValidationErrors(validation.errors);
       return {
-        date: fd.date || null,
+        date: localInputToIso(fd.date),
         comment: fd.comment?.trim() || null,
         amount: fd.amount ? fd.amount : null,
         vatAmount: fd.vatAmount ? fd.vatAmount : 0,
@@ -201,12 +204,13 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     },
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
     afterSave,
+    afterReload,
   });
 
   const items = form.useTable("items");
   const hasBasis = !!form.fields.basisDocumentUuid;
 
-  const handleRefillFromBasis = useCallback(async () => {
+  const handleRefillFromBasis = useCallback(async (skipFields = false) => {
     if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
     setIsRefilling(true);
     try {
@@ -216,19 +220,28 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
         mapCommonTradeFields,
       );
       if (!result) return;
-      form.setFields(mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
-        { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-        { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-      ]) as Partial<TFields>);
-      const renderedItems = allItemsRef.current.filter((r: any) => !r._pendingAction);
-      const queries = queryClient.getQueriesData<any>({ queryKey: ["purchase-return-items", "infinite"] });
-      const cachedItems: any[] = queries
-        .flatMap(([, data]) => data?.pages?.flatMap((p: any) => p.items ?? []) ?? [])
-        .filter((r: any) => r.purchaseReturnUuid === form.fields.uuid);
-      const serverItems: any[] = renderedItems.length > 0 ? renderedItems : cachedItems;
-      const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
-      const itemsAreSame = serverItems.length === result.items.length &&
-        serverItems.every((si, idx) => {
+      if (!skipFields) {
+        const rawPatch = mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
+          { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+          { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+        ]);
+        const cur = form.store.getSnapshot().fields as any;
+        const patch = Object.fromEntries(
+          Object.keys(rawPatch).filter(k => k in cur).map(k => [k, rawPatch[k]]),
+        ) as Partial<TFields>;
+        if (Object.keys(patch).some(k => !isEquivalent(cur[k], (patch as any)[k]))) {
+          form.setFields(patch);
+        }
+      }
+      let displayed = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+      if (displayed.length === 0 && form.fields.uuid) {
+        displayed = await fetchDocumentItems("purchase-return-items", "purchaseReturnUuid", form.fields.uuid);
+      }
+      const serverItems = displayed.filter((r: any) =>
+        !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")) && !(typeof r.id === "number" && r.id < 0),
+      );
+      const itemsAreSame = displayed.length === result.items.length &&
+        displayed.every((si: any, idx: number) => {
           const ni = result.items[idx];
           return si.productUuid === ni.productUuid &&
             Number(si.quantity) === Number(ni.quantity) &&
@@ -238,6 +251,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
             Number(si.exciseRate) === Number(ni.exciseRate);
         });
       if (!itemsAreSame) {
+        const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
         setBasisItems([...deleteMarkers, ...result.items]);
         setItemsTableKey(k => k + 1);
       }
@@ -390,7 +404,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                <FieldDate label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="160px" />
+                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
                 <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
               </GroupRow>
               <Group>
@@ -458,7 +472,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
           endpoint="purchase-return-items" componentName="PurchaseReturnItemsList_part"
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
-          onRefresh={hasBasis ? handleRefillFromBasis : undefined}
+          onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
           parentLabel={`${translate("PurchaseReturnsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           key={itemsTableKey}
           initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
@@ -466,6 +480,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
           onItemsChange={items.onItemsChange}
           onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
           showRequiredHighlight={form.meta.tablesValidationFailed}
+          defaultHiddenColumns={["amountNetOfIndirectTaxes", "amountWithoutVat"]}
         />
       )
     },

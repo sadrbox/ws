@@ -93,6 +93,13 @@ export interface TradeDocumentItemsTableProps {
   disableAddRows?: boolean;
   /** Запретить удаление строк (независимо от disabled), но редактирование разрешено. */
   disableDeleteRows?: boolean;
+  /**
+   * Сделать поля строк нередактируемыми (только чтение). При этом inline-режим
+   * остаётся активным, поэтому навигация activeRow/activeCell работает, а попытка
+   * редактирования (Enter / двойной клик) вызывает анимацию-пульс «нельзя
+   * редактировать» (data-pulse). Используется когда у документа есть основание.
+   */
+  fieldsReadOnly?: boolean;
 }
 
 const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
@@ -115,6 +122,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   onRefresh,
   disableAddRows = false,
   disableDeleteRows = false,
+  fieldsReadOnly = false,
 }) => {
   const queryClient = useQueryClient();
   const settings = useOrgAccountingSettings(organizationUuid ?? null, documentDate ?? null);
@@ -260,9 +268,16 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
 
   const handleItemsChange = useCallback((items: TDataItem[]) => {
     if (onTotalChange) {
-      const sum = items.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-      onTotalChange(Math.round(sum * 100) / 100, items);
+      // Итоги считаем ТОЛЬКО по видимым строкам — строки, помеченные на удаление
+      // (_pendingAction === "delete"), сохраняют свой старый amount, но из суммы
+      // должны исключаться. Иначе при «Перезаполнить по основанию» / «Обновить»
+      // (старые строки → delete, новые → create) итог удваивается.
+      const visible = items.filter(r => (r as { _pendingAction?: string })._pendingAction !== "delete");
+      const sum = visible.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      onTotalChange(Math.round(sum * 100) / 100, visible);
     }
+    // onItemsChange получает ВСЕ строки (включая delete-маркеры) — они нужны
+    // форме для удаления записей на сервере при сохранении.
     onItemsChange?.(items);
   }, [onTotalChange, onItemsChange]);
 
@@ -317,6 +332,11 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
 
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     const id = col.identifier;
+    // Поля редактируемы только если включён inline-режим И не задан fieldsReadOnly.
+    // При fieldsReadOnly все ячейки рендерятся как read-only, но inline-режим
+    // SubTable остаётся активным — поэтому попытка редактирования (Enter / двойной
+    // клик) запускает анимацию-пульс «нельзя редактировать» (data-pulse).
+    const cellEditable = ctx.inlineEditing && !fieldsReadOnly;
     if (id === "lineNumber") {
       const idx = ctx.rows.indexOf(row);
       const value = idx >= 0 ? idx + 1 : (row.lineNumber as string | number | null | undefined) ?? "";
@@ -331,7 +351,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     }
     if (id === "exciseAmount") return <ReadOnlyCell value={row.exciseAmount ?? 0} column={col} />;
     if (id === "discountAmount") {
-      if (!ctx.inlineEditing) return <ReadOnlyCell value={row.discountAmount ?? 0} column={col} />;
+      if (!cellEditable) return <ReadOnlyCell value={row.discountAmount ?? 0} column={col} />;
       return (
         <FieldNumber
           name={`docitem_discamt_${row.id}`}
@@ -355,7 +375,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
         />
       );
     }
-    if (!ctx.inlineEditing) return undefined;
+    if (!cellEditable) return undefined;
 
     if (id === "product.name") {
       return (
@@ -504,7 +524,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       );
     }
     return undefined;
-  }, [recalcWithFlags, vatCalculationMethod]);
+  }, [recalcWithFlags, vatCalculationMethod, fieldsReadOnly]);
 
   const defaultNewRow = useMemo(() => ({
     productUuid: null,
@@ -547,9 +567,11 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
         amountNetOfIndirectTaxes: Number(row.amountWithoutVat ?? 0) - Number(row.exciseAmount ?? 0),
       })}
       onRefresh={onRefresh}
-      extraButtons={!disabled ? (
+      showEditModeToggle={false}
+      extraButtons={
         <RecalcAllButton
           endpoint={endpoint}
+          disabled={disabled}
           recalcRow={(row) => {
             const refDefaults: Record<string, unknown> = {};
             const product = row.product as { unitOfMeasureUuid?: string | null; unitOfMeasure?: { uuid?: string; name?: string } | null } | null | undefined;
@@ -563,7 +585,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
             return recalcWithFlags(row as any, refDefaults);
           }}
         />
-      ) : undefined}
+      }
     />
   );
 };

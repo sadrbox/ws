@@ -24,6 +24,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { reconcileByParentModel } from "../../services/productRegister.js";
 
 function recalcTaxes(amountAfterDiscount, taxes) {
 	if (!Array.isArray(taxes)) return null;
@@ -234,6 +235,9 @@ export function createDocumentItemsRouter({
 					data: { amount: totalAmount },
 				});
 			}
+			// Строки документа изменились — пересобираем движения регистра товаров
+			// (актуально только если документ проведён; сервис проверит posted сам).
+			await reconcileByParentModel(PARENT_MODEL, parentUuid);
 		} catch (err) {
 			console.error(`recalcParentAmount(${PARENT_MODEL}) error:`, err);
 		}

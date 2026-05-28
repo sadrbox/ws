@@ -2,6 +2,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
 const router = express.Router();
 const MODEL = "inventoryTransfer";
 const ROUTE = "inventory-transfers";
@@ -204,6 +205,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
+		await reconcileDocumentRegister("inventory_transfer", item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2025")
@@ -213,10 +215,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 router.delete(`/${ROUTE}/:id`, (req, res) =>
-	handleDelete({ req, res, prisma, modelName: MODEL }),
+	handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentRegister("inventory_transfer", doc.uuid) }),
 );
 router.post(`/${ROUTE}/batch-delete`, (req, res) =>
-	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
+	handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentRegister("inventory_transfer", doc.uuid) }),
 );
 
 export default router;

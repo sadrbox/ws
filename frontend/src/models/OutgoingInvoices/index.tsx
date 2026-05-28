@@ -27,6 +27,7 @@ const OutgoingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formDisplayName: "OutgoingInvoicesForm",
   docType: "outgoing_invoice",
   lockFieldsOnBasis: true,
+  defaultHiddenItemColumns: ["amountNetOfIndirectTaxes"],
   basisConfig: {
     allowedTypes: [{ type: "sale", endpoint: "sales", label: translate("saleRealization") }],
   },

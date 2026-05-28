@@ -142,6 +142,7 @@ model Organization {
   cashboxes            Cashbox[]                       @relation("OrgCashboxes")
   accountingSettings   OrganizationAccountingSetting[] @relation("OrgAccountingSettings")
   purchaseRequisitions PurchaseRequisition[]
+  productRegister      ProductRegister[]
 
   @@index([updatedAt])
   @@map("organizations")
@@ -379,6 +380,7 @@ model Warehouse {
   purchases              Purchase[]          @relation("WhPurchases")
   purchaseReturns        PurchaseReturn[]    @relation("WhPurchaseReturns")
   organization           Organization?       @relation(fields: [organizationUuid], references: [uuid])
+  productRegister        ProductRegister[]
 
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -727,6 +729,7 @@ model Product {
   paymentInvoiceItems      PaymentInvoiceItem[]
   purchaseRequisitionItems PurchaseRequisitionItem[]
   inventoryTransferItems   InventoryTransferItem[]
+  productRegister          ProductRegister[]
 
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
@@ -1138,6 +1141,7 @@ model UnitOfMeasure {
   paymentInvoiceItems      PaymentInvoiceItem[]
   purchaseRequisitionItems PurchaseRequisitionItem[]
   inventoryTransferItems   InventoryTransferItem[]
+  productRegister          ProductRegister[]
 
   @@index([updatedAt])
   @@map("units_of_measure")
@@ -1421,4 +1425,52 @@ model PurchaseRequisitionItem {
   @@index([counterpartyUuid])
   @@index([updatedAt])
   @@map("purchase_requisition_items")
+}
+
+// ─── Регистр накопления «Товары» ─────────────────────────────────────────────
+// Регистр движений товаров (приход/расход). Записи создаются ТОЛЬКО при
+// проведении документа (posted=true) и удаляются при снятии проведения,
+// удалении документа или изменении его строк (полный пересбор по документу).
+// Источники движений:
+//   purchase          → приход  (+) на warehouseUuid
+//   sale              → расход  (−) с warehouseUuid
+//   inventory_transfer→ расход (−) с fromWarehouseUuid + приход (+) на toWarehouseUuid
+//   sale_return       → приход  (+) на warehouseUuid
+//   purchase_return   → расход  (−) с warehouseUuid
+// Остатки вычисляются суммированием: Σприход − Σрасход (по товар+склад+орг).
+model ProductRegister {
+  id                Int            @id @default(autoincrement())
+  uuid              String         @unique @default(uuid())
+  /// Дата движения = дата документа.
+  date              DateTime
+  /// Тип движения: "in" (приход) | "out" (расход).
+  movementType      String
+  /// Количество (всегда положительное; знак задаётся movementType).
+  quantity          Decimal        @default(0) @db.Decimal(18, 4)
+  /// Сумма движения (всегда положительная).
+  amount            Decimal        @default(0) @db.Decimal(18, 2)
+  productUuid       String?
+  warehouseUuid     String?
+  organizationUuid  String?
+  unitOfMeasureUuid String?
+  /// Тип документа-регистратора: purchase | sale | inventory_transfer | sale_return | purchase_return
+  documentType      String
+  /// UUID документа-регистратора (для пересбора/удаления движений).
+  documentUuid      String
+  /// Числовой ID документа (для отображения).
+  documentId        Int?
+  /// UUID строки документа-источника движения.
+  documentItemUuid  String?
+  createdAt         DateTime       @default(now())
+  product           Product?       @relation(fields: [productUuid], references: [uuid])
+  warehouse         Warehouse?     @relation(fields: [warehouseUuid], references: [uuid])
+  organization      Organization?  @relation(fields: [organizationUuid], references: [uuid])
+  unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
+
+  @@index([productUuid])
+  @@index([warehouseUuid])
+  @@index([organizationUuid])
+  @@index([documentType, documentUuid])
+  @@index([date])
+  @@map("product_register")
 }

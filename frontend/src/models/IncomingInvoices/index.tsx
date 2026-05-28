@@ -27,6 +27,7 @@ const IncomingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   accessRightModel: "IncomingInvoice",
   formDisplayName: "IncomingInvoicesForm",
   docType: "incoming_invoice",
+  defaultHiddenItemColumns: ["amountNetOfIndirectTaxes"],
   printConfig: {
     buildLayout: (fields, items, cols) => (
       <OutgoingInvoicePrint data={{

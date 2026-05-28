@@ -3,6 +3,7 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, checkOwnership, checkFkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
+import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
 
 const router = express.Router();
 
@@ -277,6 +278,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			},
 		});
 		await syncItemsFromParent("saleItem", "saleUuid", item.uuid, item);
+		// Проведение/распроведение или смена даты/склада/организации — пересобираем
+		// движения регистра товаров (записываются только для проведённых документов).
+		await reconcileDocumentRegister("sale", item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2025")
@@ -287,11 +291,11 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 });
 
 router.delete(`/${ROUTE}/:id`, (req, res) =>
-	handleDelete({ req, res, prisma, modelName: MODEL }),
+	handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentRegister("sale", doc.uuid) }),
 );
 
 router.post(`/${ROUTE}/batch-delete`, (req, res) =>
-	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
+	handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentRegister("sale", doc.uuid) }),
 );
 
 export default router;

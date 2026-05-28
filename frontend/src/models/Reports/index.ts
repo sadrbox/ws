@@ -2,6 +2,7 @@ export { SalesReport } from "./SalesReport";
 export { ProductDetailReport } from "./ProductDetailReport";
 export { MaterialStatement } from "./MaterialStatement";
 export { CashReport } from "./CashReport";
+export { ProductRegisterReport } from "./ProductRegisterReport";
 export { default as ReportPane } from "src/components/ReportPane";
 export type { ReportPaneProps, ReportPageOrientation } from "src/components/ReportPane";
 export { default as XlsxReportPane } from "src/components/ReportPane/XlsxReportPane";

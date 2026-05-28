@@ -519,18 +519,19 @@ const SubTable: FC<SubTableProps> = ({
       // pending очищен после коммита — сбрасываем флаг мержа
       pendingAppliedRef.current = false;
 
-      // Убираем _pendingAction-маркеры, но tmp-строки оставляем в кэше.
-      // Они останутся видимы до прихода ответа refetch — без мерцания.
-      // Ветка B основного эффекта заменит их реальными данными сервера
-      // когда allItems обновится. dirtyRows не подберёт эти строки (нет
-      // _pendingAction) и дубликатов не будет.
-      cachedRowsRef.current = cachedRowsRef.current.map(r => {
-        if (r._pendingAction) {
-          const { _pendingAction: _a, _untouched: _u, ...rest } = r;
-          return rest as PendingRow;
-        }
-        return r;
-      });
+      // Строки с delete-маркером удаляем из кэша — они уже удалены на сервере.
+      // Строки с create/update-маркером оставляем без маркера, чтобы они
+      // оставались видимы до прихода ответа refetch (без мерцания / без дублей).
+      // Ветка B основного эффекта заменит их реальными данными сервера.
+      cachedRowsRef.current = cachedRowsRef.current
+        .filter(r => r._pendingAction !== "delete")
+        .map(r => {
+          if (r._pendingAction) {
+            const { _pendingAction: _a, _untouched: _u, ...rest } = r;
+            return rest as PendingRow;
+          }
+          return r;
+        });
       setCacheVersion(v => v + 1);
       // Refetch is handled by the parent form's afterSave → invalidateSubTables.
     } else if (deferRemoteChanges && curLen > 0 && prevLen === 0) {

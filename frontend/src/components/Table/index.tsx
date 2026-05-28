@@ -132,6 +132,8 @@ export interface TableContextProps {
   onInlineAdd?: () => void;
   /** Если true — кнопка «Добавить» disabled */
   disableAdd?: boolean;
+  /** Если false — скрыть кнопку «Удалить» и чекбоксы выбора строк */
+  canDelete?: boolean;
 
   // ── Refs для inline-editing (не триггерят ререндер contextValue) ───────
   renderCellRef?: React.RefObject<((row: TDataItem, col: TColumn) => React.ReactNode | undefined) | undefined>;
@@ -268,6 +270,8 @@ interface TableControlPanelProps {
   readonly?: boolean;
   /** Если true — кнопка «Добавить» отображается как disabled */
   disableAdd?: boolean;
+  /** Если true — скрыть кнопку «Удалить» (удаление недоступно) */
+  canDelete?: boolean;
 }
 
 const TableControlPanel = memo(({
@@ -287,6 +291,7 @@ const TableControlPanel = memo(({
   extraButtons,
   readonly: isReadonly = false,
   disableAdd = false,
+  canDelete = true,
 }: TableControlPanelProps) => {
   const isSelect = variant === 'select';
   const hideWrite = isSelect || isReadonly;
@@ -295,7 +300,7 @@ const TableControlPanel = memo(({
       right={visibleFastSearch ? <FieldFastSearchInternal value={search.value} onChange={search.onChange} /> : undefined}
     >
       {!hideWrite && <Button onClick={onAddClick} disabled={isLoading || disableAdd} title={disableAdd ? translate("allModelsAssigned") : undefined}><span>Добавить</span></Button>}
-      {!hideWrite && <Button onClick={onDeleteClick} disabled={isLoading || !hasSelection} title={!hasSelection ? "Выделите одну или несколько строк" : undefined}><span>Удалить</span></Button>}
+      {!hideWrite && <Button onClick={canDelete ? onDeleteClick : undefined} disabled={isLoading || !hasSelection || !canDelete} title={!hasSelection ? "Выделите одну или несколько строк" : undefined}><span>Удалить</span></Button>}
       {!isSelect && extraButtons}
       {!isSelect && <Toolbar.Divider />}
       <Toolbar.ReloadButton onClick={onRefresh} disabled={isLoading} />
@@ -321,7 +326,8 @@ const TableControlPanel = memo(({
     prevProps.onAddClick === nextProps.onAddClick &&
     prevProps.hasSelection === nextProps.hasSelection &&
     prevProps.readonly === nextProps.readonly &&
-    prevProps.disableAdd === nextProps.disableAdd
+    prevProps.disableAdd === nextProps.disableAdd &&
+    prevProps.canDelete === nextProps.canDelete
   );
 });
 
@@ -479,6 +485,7 @@ const Table: FC<TableProps> = memo((props) => {
       actions: extendedActions,
       hasNextPage, isFetchingNextPage,
       inlineEditing, renderCell, onInlineAdd,
+      canDelete: !!onDelete,
       renderCellRef, inlineEditingRef, getCellMetaRef,
       scrollRef,
       expandedRowIds,
@@ -497,7 +504,7 @@ const Table: FC<TableProps> = memo((props) => {
       isLoading, error,
       pagination, sorting, filtering, search, extendedActions,
       hasNextPage, isFetchingNextPage,
-      onInlineAdd,
+      onInlineAdd, onDelete,
       selectedRows, isAllSelectedMode, excludedRows, activeRow, activeCell,
     ]
   );
@@ -785,6 +792,7 @@ const Table: FC<TableProps> = memo((props) => {
           extraButtons={extraButtons}
           readonly={isReadonly}
           disableAdd={disableAdd}
+          canDelete={!!onDelete}
         />
 
         {showDateRangeButton && hasDateRange && (
@@ -832,12 +840,13 @@ const TableArea = memo(() => {
           {!isSelect && <col className={styles.CheckboxCol} />}
           {visibleColumns.map((col, i) => {
             const isLast = i === visibleColumns.length - 1;
-            const explicitWidth = col.width && col.width !== 'auto' ? col.width : undefined;
+            // const explicitWidth = col.width && col.width !== 'auto' ? col.width : undefined;
             return (
               <col
                 key={col.identifier + (isLast ? '-last' : '')}
                 style={{
-                  width: explicitWidth ?? (isLast ? 'auto' : (col.minWidth ?? '150px')),
+                  // width: explicitWidth ?? (isLast ? 'auto' : (col.minWidth ?? '150px')),
+                  width: (isLast ? 'auto' : col.width),
                   minWidth: col.minWidth ?? '150px',
                 }}
               />
@@ -922,7 +931,7 @@ const TableHeader = memo(() => {
       isAllSelectedMode, setIsAllSelectedMode,
       excludedRows, setExcludedRows,
     },
-    isLoading,
+    isLoading, canDelete,
   } = useTableContext();
 
   const isSelect = variant === 'select';
@@ -1046,7 +1055,7 @@ const TableHeader = memo(() => {
                 type="checkbox"
                 checked={isAllSelected}
                 onChange={toggleAll}
-                disabled={isLoading || rows.length === 0}
+                disabled={isLoading || rows.length === 0 || !canDelete}
               />
             </div>
           </th>
@@ -1062,7 +1071,7 @@ const TableHeader = memo(() => {
               title={col.hint || undefined}
               style={{
                 cursor: `${(isLoading || !isSortable) ? 'default' : 'pointer'}`,
-                width: isLast ? 'auto' : (col.width && col.width !== 'auto' ? col.width : undefined),
+                // width: isLast ? 'auto' : (col.width && col.width !== 'auto' ? col.width : undefined),
               }}
               onClick={(!isLoading && isSortable) ? () => handleSort(col.identifier) : undefined}
             >
@@ -1075,10 +1084,12 @@ const TableHeader = memo(() => {
                   </svg>
                 )}
               </div>
-              <div
-                className={styles.ResizeHandle}
-                onMouseDown={(e) => handleResizeMouseDown(e, idx)}
-              />
+              {!isLast && (
+                <div
+                  className={styles.ResizeHandle}
+                  onMouseDown={(e) => handleResizeMouseDown(e, idx)}
+                />
+              )}
             </th>
           );
         })}
@@ -1340,6 +1351,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     getCellMetaRef,
     expandedRowIds,
     renderExpandedRow,
+    canDelete,
     states: {
       activeRow, setActiveRow,
       activeCell, setActiveCell,
@@ -1546,7 +1558,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
             <div
               className={[styles.TableBodyCell, styles.CellJustifyCenter, isCheckboxCellActive ? styles.activeCell : undefined].filter(Boolean).join(' ')}
             >
-              <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading} />
+              <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading || !canDelete} />
             </div>
           </td>
         )}

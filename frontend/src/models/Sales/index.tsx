@@ -35,7 +35,8 @@ import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton"
 import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
-import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems } from "src/utils/createFromBasis";
+import { isEquivalent } from "src/utils/normalize";
 import { OutgoingInvoicesForm } from "src/models/OutgoingInvoices";
 import { SalesReturnsForm } from "src/models/SalesReturns";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
@@ -107,6 +108,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     setBasisItems([]);
     await invalidateSubTables();
   }, [invalidateSubTables]);
+
+  const afterReload = useCallback(() => { setBasisItems([]); }, []);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "sales-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
@@ -196,6 +199,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     },
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
     afterSave,
+    afterReload,
   });
 
   const saleItems = form.useTable("saleItems");
@@ -204,7 +208,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const hasBasis = !!form.fields.basisDocumentUuid;
 
-  const handleRefillFromBasis = useCallback(async () => {
+  const handleRefillFromBasis = useCallback(async (skipFields = false) => {
     if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
     setIsRefilling(true);
     try {
@@ -214,24 +218,36 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         mapCommonTradeFields,
       );
       if (!result) return;
-      form.setFields(mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
-        { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-        { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-      ]) as Partial<TFields>);
-      // Delete-маркеры для уже сохранённых серверных строк — чтобы SubTable
-      // удалил их при сохранении, а не смержил с новыми строками из основания.
-      // Используем allItemsRef как первичный источник (актуальные строки из рендера),
-      // с фолбэком на react-query кэш. Кэш может быть пустым если вкладка
-      // "Позиции" ещё не открывалась, что приводило к ложному dirty.
-      const renderedItems = allItemsRef.current.filter((r: any) => !r._pendingAction);
-      const queries = queryClient.getQueriesData<any>({ queryKey: ["saleitems", "infinite"] });
-      const cachedItems: any[] = queries
-        .flatMap(([, data]) => data?.pages?.flatMap((p: any) => p.items ?? []) ?? [])
-        .filter((r: any) => r.saleUuid === form.fields.uuid);
-      const serverItems: any[] = renderedItems.length > 0 ? renderedItems : cachedItems;
-      const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
-      const itemsAreSame = serverItems.length === result.items.length &&
-        serverItems.every((si, idx) => {
+      if (!skipFields) {
+        const rawPatch = mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
+          { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+          { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+        ]);
+        // Оставляем только поля, существующие в форме (иначе лишние поля → ложный Dirty).
+        const cur = form.store.getSnapshot().fields as any;
+        const patch = Object.fromEntries(
+          Object.keys(rawPatch).filter(k => k in cur).map(k => [k, rawPatch[k]]),
+        ) as Partial<TFields>;
+        // Применяем только если поля реально изменились — иначе ложный Dirty.
+        if (Object.keys(patch).some(k => !isEquivalent(cur[k], (patch as any)[k]))) {
+          form.setFields(patch);
+        }
+      }
+      // Текущее отображаемое состояние таблицы (сервер + pending create, без delete).
+      // Если вкладка ещё не открывалась (allItemsRef пуст) — дозагружаем строки
+      // с сервера, иначе первое сравнение даст «0 ≠ N» и поставит ложный Dirty.
+      let displayed = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+      if (displayed.length === 0 && form.fields.uuid) {
+        displayed = await fetchDocumentItems("saleitems", "saleUuid", form.fields.uuid);
+      }
+      // Серверные строки (реальный uuid, не tmp) — их помечаем на удаление при заполнении.
+      const serverItems = displayed.filter((r: any) =>
+        !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")) && !(typeof r.id === "number" && r.id < 0),
+      );
+      // Сравниваем новые строки основания с отображаемыми — если совпадают,
+      // не трогаем pending (иначе ложный Dirty при идентичных данных).
+      const itemsAreSame = displayed.length === result.items.length &&
+        displayed.every((si: any, idx: number) => {
           const ni = result.items[idx];
           return si.productUuid === ni.productUuid &&
             Number(si.quantity) === Number(ni.quantity) &&
@@ -241,6 +257,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             Number(si.exciseRate) === Number(ni.exciseRate);
         });
       if (!itemsAreSame) {
+        const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
         setBasisItems([...deleteMarkers, ...result.items]);
         setItemsTableKey(k => k + 1);
       }
@@ -622,7 +639,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           documentDate={form.fields.date || null}
           disabled={form.isLoading}
           deferRemoteChanges
-          onRefresh={hasBasis ? handleRefillFromBasis : undefined}
+          onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
           parentLabel={`${translate("SalesList")}: ID${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           key={itemsTableKey}
           initialPendingRows={itemsTableKey > 0 ? basisItems : (saleItems.pending.length > 0 ? saleItems.pending : basisItems)}
@@ -630,6 +647,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           onItemsChange={saleItems.onItemsChange}
           onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
           showRequiredHighlight={form.meta.tablesValidationFailed}
+          defaultHiddenColumns={["amountNetOfIndirectTaxes", "amountWithoutVat"]}
         />
       )
     },

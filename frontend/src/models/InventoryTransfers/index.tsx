@@ -13,7 +13,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDate } from "src/components/Field";
+import { Field, FieldDateTime } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
@@ -22,7 +22,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/main.module";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
@@ -62,7 +62,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     const data = paneProps.data;
     if (data?.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
-    init.date = new Date().toISOString().slice(0, 10);
+    init.date = isoToLocalInput(new Date().toISOString());
     if (data?.organizationUuid) { init.organizationUuid = data?.organizationUuid as string; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
     return init;
@@ -100,7 +100,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
-      date: d.date?.slice(0, 10) ?? "",
+      date: isoToLocalInput(d.date),
       comment: d.comment ?? "",
       amount: d.amount != null ? Number(d.amount) : 0,
       posted: d.posted === true,
@@ -117,7 +117,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       const validation = validateDocumentFields("inventory_transfer", fd as unknown as Record<string, unknown>);
       if (!validation.isValid) return formatValidationErrors(validation.errors);
       return {
-        date: fd.date || null,
+        date: localInputToIso(fd.date),
         comment: fd.comment?.trim() || null,
         amount: fd.amount ? fd.amount : null,
         posted: fd.posted === true,
@@ -143,7 +143,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                <FieldDate label={translate("date")} name={`${form.formUid}_date`} width="160px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
+                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} width="180px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
                 <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
               </GroupRow>
               <Group>

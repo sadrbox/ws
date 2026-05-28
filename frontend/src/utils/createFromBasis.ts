@@ -112,6 +112,26 @@ export async function refillFromBasisSource(
 }
 
 /**
+ * Загружает текущие позиции документа с сервера.
+ * Используется для сравнения «текущие строки vs строки основания» при
+ * «Перезаполнить по основанию», когда вкладка с таблицей ещё не открыта
+ * (строки не отрендерены) — чтобы не ставить ложный Dirty при идентичных данных.
+ */
+export async function fetchDocumentItems(
+	itemsEndpoint: string,
+	parentField: string,
+	parentUuid: string,
+): Promise<any[]> {
+	if (!parentUuid) return [];
+	const resp = await api.get(`/${itemsEndpoint}`, {
+		params: { [parentField]: parentUuid, limit: 1000 },
+	});
+	return Array.isArray(resp)
+		? resp
+		: ((resp as any)?.data ?? (resp as any)?.items ?? []);
+}
+
+/**
  * Загружает позиции исходного документа, формирует initialFields + initialItems
  * и открывает новую панель с целевой формой, предзаполненной данными основания.
  * Если задан existingCheckEndpoint и зависимый документ уже существует —

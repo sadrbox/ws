@@ -74,6 +74,7 @@ import organizationAccountingSettingsRouter from "./api/router/organizationaccou
 import syncRouter from "./api/router/sync.js";
 import refReplacementRouter from "./api/router/refreplacement.js";
 import reportsRouter from "./api/router/reports.js";
+import productRegisterRouter from "./api/router/productregister.js";
 
 const app = express();
 
@@ -286,6 +287,7 @@ app.use("/api/v1", organizationAccountingSettingsRouter);
 app.use("/api/v1", syncRouter);
 app.use("/api/v1", refReplacementRouter);
 app.use("/api/v1", reportsRouter);
+app.use("/api/v1", productRegisterRouter);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. ОБРАБОТКА 404

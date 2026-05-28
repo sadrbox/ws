@@ -15,7 +15,7 @@ import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src
 import { ToolbarSlot } from 'src/components/Toolbar';
 import { OrganizationsList } from 'src/models/Organizations';
 import { BankAccountsList } from 'src/models/BankAccounts';
-import { useAllPaneNotifications, dismissPaneNotification, usePaneIsDirty } from 'src/hooks/useFormStore';
+import { useAllPaneNotifications, dismissPaneNotification, usePaneIsDirty, usePaneIsEditMode } from 'src/hooks/useFormStore';
 import { openFormByRef, canOpenByRef } from 'src/utils/openFormByRef';
 import { CounterpartiesList } from 'src/models/Counterparties';
 import { ContactsList } from 'src/models/Contacts';
@@ -49,7 +49,7 @@ import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
 import { PayrollCalculationsList } from 'src/models/PayrollCalculations';
 import { PayrollPaymentsList } from 'src/models/PayrollPayments';
-import { SalesReport, MaterialStatement, CashReport } from 'src/models/Reports';
+import { SalesReport, MaterialStatement, CashReport, ProductRegisterReport } from 'src/models/Reports';
 import { UnsavedFormsList } from 'src/models/UnsavedForms';
 import { SyncDashboard } from 'src/models/SyncDashboard';
 import { SearchReplaceRefsForm } from 'src/models/SearchReplaceRefs';
@@ -186,6 +186,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
   const { refCallback: headerSlot } = usePaneHeaderActionsSlot(p.uniqId);
   const hasToolbar = useHasToolbar(p.uniqId);
   const isDirty = usePaneIsDirty(p.uniqId);
+  const isEditMode = usePaneIsEditMode(p.uniqId);
   const onReload = usePaneReload(p.uniqId);
   const Component = p.component as FC<any>;
 
@@ -263,7 +264,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
           {/* Слот для дополнительных кнопок от конкретной формы (напр. «Печать»).
               Регистрируются через usePaneHeaderActions(paneId, <…/>). */}
           <div ref={headerSlot} className={styles.PaneItemHeaderActionsSlot} />
-          {hasToolbar && <ReloadButton onClick={onReload} />}
+          {hasToolbar && <ReloadButton onClick={onReload} disabled={!isEditMode} />}
           <CloseButton onClick={onClose} />
         </div>
       </div>
@@ -684,6 +685,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               {can("Sale") && <li onClick={() => addPane({ component: SalesReport, label: translate("SalesReportList") })}>{translate("SalesReportList")}</li>}
               {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: MaterialStatement, label: translate("MaterialStatementList") })}>{translate("MaterialStatementList")}</li>}
+              {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: ProductRegisterReport, label: translate("ProductRegisterList") })}>{translate("ProductRegisterList")}</li>}
               {(can("CashReceiptOrder") || can("CashExpenseOrder")) && <li onClick={() => addPane({ component: CashReport, label: translate("CashReportList") })}>{translate("CashReportList")}</li>}
             </ul>
           </div>
