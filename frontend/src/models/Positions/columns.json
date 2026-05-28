@@ -17,7 +17,7 @@
 		"alignment": "left",
 		"hint": "Уникальный идентификатор",
 		"visible": false,
-		"inlist": true
+		"inlist": false
 	},
 	{
 		"identifier": "name",

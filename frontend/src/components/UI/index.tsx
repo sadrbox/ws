@@ -9,7 +9,7 @@ import { translate, getLanguage, setLanguage } from 'src/i18';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app/context';
-import { ReloadButton, CloseButton, IconButton } from 'src/components/Toolbar';
+import { ReloadButton, ClearButton, IconButton } from 'src/components/Toolbar';
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
@@ -265,7 +265,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
               Регистрируются через usePaneHeaderActions(paneId, <…/>). */}
           <div ref={headerSlot} className={styles.PaneItemHeaderActionsSlot} />
           {hasToolbar && <ReloadButton onClick={onReload} disabled={!isEditMode} />}
-          <CloseButton onClick={onClose} />
+          <ClearButton onClick={onClose} />
         </div>
       </div>
       <Component {...p} />

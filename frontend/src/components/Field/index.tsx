@@ -93,14 +93,17 @@ function useFieldBase(params: {
 
 // ── Подпись поля (label + asterisk для required) ────────────────────────────
 const FieldLabelNode: FC<{
-  htmlFor: string;
+  /** id формируемого labelable-элемента (input/select/textarea). */
+  htmlFor?: string;
+  /** id самого <label> — для связи с нестандартными контролами через aria-labelledby. */
+  id?: string;
   label?: React.ReactNode;
   required: boolean;
   isTable: boolean;
-}> = ({ htmlFor, label, required, isTable }) => {
+}> = ({ htmlFor, id, label, required, isTable }) => {
   if (isTable || !label) return null;
   return (
-    <label htmlFor={htmlFor} className={styles.FieldLabel}>
+    <label htmlFor={htmlFor} id={id} className={styles.FieldLabel}>
       {typeof label === 'string' ? getTranslation(label) : label}
       {required && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
     </label>
@@ -907,16 +910,17 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
     name, variant, required, error, value,
   });
 
-  const triggerId = useId();
+  const labelId = useId();
+  const hasLabel = !isTable && !!label;
 
   return (
     <div ref={rootRef} className={wrapperClass} style={{ width: width ?? 'auto', position: 'relative' }}>
-      <FieldLabelNode htmlFor={triggerId} label={label} required={effectiveRequired} isTable={isTable} />
+      <FieldLabelNode id={labelId} label={label} required={effectiveRequired} isTable={isTable} />
 
       {/* Trigger */}
       <div
-        id={triggerId}
         role="combobox"
+        aria-labelledby={hasLabel ? labelId : undefined}
         aria-expanded={open}
         aria-haspopup="listbox"
         tabIndex={disabled ? -1 : 0}

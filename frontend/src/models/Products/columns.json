@@ -13,7 +13,7 @@
 		"identifier": "uuid",
 		"hint": "UUID",
 		"type": "string",
-		"visible": true,
+		"visible": false,
 		"inlist": false,
 		"width": "0px",
 		"minWidth": "0px",

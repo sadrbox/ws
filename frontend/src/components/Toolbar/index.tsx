@@ -20,7 +20,7 @@ import {
 import IconButton, {
   type IconButtonProps,
 } from "src/components/IconButton/IconButton";
-import { Icon, type IconName, CloseIcon } from "src/components/IconButton/icons";
+import { Icon, type IconName, CloseIcon, ClearIcon } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
 import styles from "./Toolbar.module.scss";
 
@@ -90,23 +90,23 @@ const RecalcButton = makeButton("recalc", translate("recalc"));
 const RefillButton = makeButton("restore", translate("restore"));
 const PrintButton = makeButton("print", translate("print"));
 
-// ─── Toolbar.CloseButton ────────────────────────────────────────────────
+// ─── Toolbar.ClearButton ────────────────────────────────────────────────
 
-const CloseButton: FC<Omit<ToolbarIconButtonProps, "icon" | "children">> = ({
+const ClearButton: FC<Omit<ToolbarIconButtonProps, "icon" | "children">> = ({
   className,
   title,
   ...props
 }) => (
   <ToolbarIconButton
-    className={[styles.CloseButton, className].filter(Boolean).join(" ")}
-    title={title ?? translate("close")}
-    aria-label={translate("close")}
+    className={[styles.ClearButton, className].filter(Boolean).join(" ")}
+    title={title ?? translate("clear")}
+    aria-label={translate("clear")}
     {...props}
   >
-    <CloseIcon />
+    <ClearIcon />
   </ToolbarIconButton>
 );
-CloseButton.displayName = "Toolbar.CloseButton";
+ClearButton.displayName = "Toolbar.ClearButton";
 
 // ─── Compound export ────────────────────────────────────────────────────
 
@@ -124,7 +124,7 @@ type ToolbarComponent = typeof ToolbarRoot & {
   RecalcButton: typeof RecalcButton;
   RefillButton: typeof RefillButton;
   PrintButton: typeof PrintButton;
-  CloseButton: typeof CloseButton;
+  ClearButton: typeof ClearButton;
 };
 
 const Toolbar = ToolbarRoot as ToolbarComponent;
@@ -141,7 +141,7 @@ Toolbar.MakePrimaryButton = MakePrimaryButton;
 Toolbar.RecalcButton = RecalcButton;
 Toolbar.RefillButton = RefillButton;
 Toolbar.PrintButton = PrintButton;
-Toolbar.CloseButton = CloseButton;
+Toolbar.ClearButton = ClearButton;
 
 export {
   Toolbar,
@@ -157,6 +157,6 @@ export {
   RecalcButton,
   RefillButton,
   PrintButton,
-  CloseButton,
+  ClearButton,
 };
 export default Toolbar;

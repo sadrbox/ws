@@ -240,7 +240,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
       endpoint={cfg.endpoint} listName={cfg.listName} columnsJson={cfg.columnsJson} FormComponent={Form}
       getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
       variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
-      defaultSort={{ id: "desc" }}
+      defaultSort={{ id: "desc" }} enableDateRange
       renderCell={renderPostedCell}
     />
   );

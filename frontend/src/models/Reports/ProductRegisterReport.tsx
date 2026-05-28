@@ -177,7 +177,8 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
           <th className={styles.ColName}>{translate("reportProduct")}</th>
           <th className={styles.ColName}>{translate("warehouse")}</th>
           <th className={styles.ColUom}>{translate("reportUom")}</th>
-          <th className={styles.ColNum}>{translate("quantity")}</th>
+          <th className={styles.ColNum}>{translate("registerReceipt")}</th>
+          <th className={styles.ColNum}>{translate("registerExpense")}</th>
           <th className={styles.ColNum}>{translate("amount")}</th>
         </tr>
       </thead>
@@ -198,7 +199,8 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
               <td className={styles.ColName}>{r.product?.name ?? ""}</td>
               <td className={styles.ColName}>{r.warehouse?.name ?? ""}</td>
               <td className={styles.ColUom}>{r.unitOfMeasure?.name ?? ""}</td>
-              <td className={styles.ColNum}>{fmtQty(Number(r.quantity) || 0)}</td>
+              <td className={styles.ColNum}>{isIn ? fmtQty(Number(r.quantity) || 0) : "—"}</td>
+              <td className={styles.ColNum}>{!isIn ? fmtQty(Number(r.quantity) || 0) : "—"}</td>
               <td className={styles.ColNum}>{fmtAmt(Number(r.amount) || 0)}</td>
             </tr>
           );
@@ -206,8 +208,9 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
       </tbody>
       <tfoot>
         <tr className={styles.TotalRow}>
-          <td colSpan={7}>{translate("registerReceipt")} / {translate("registerExpense")} ({translate("total")})</td>
-          <td className={styles.ColNum}>{fmtQtyZ(movTotals.qtyIn)} / {fmtQtyZ(movTotals.qtyOut)}</td>
+          <td colSpan={7}>{translate("total")}</td>
+          <td className={styles.ColNum}>{fmtQtyZ(movTotals.qtyIn)}</td>
+          <td className={styles.ColNum}>{fmtQtyZ(movTotals.qtyOut)}</td>
           <td className={styles.ColNum}>{fmtAmtZ(movTotals.amountIn)} / {fmtAmtZ(movTotals.amountOut)}</td>
         </tr>
       </tfoot>

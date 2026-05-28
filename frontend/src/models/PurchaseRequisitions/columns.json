@@ -14,7 +14,7 @@
 		"hint": "Уникальный идентификатор",
 		"type": "string",
 		"visible": false,
-		"inlist": true,
+		"inlist": false,
 		"width": "300px",
 		"minWidth": "80px",
 		"alignment": "left"

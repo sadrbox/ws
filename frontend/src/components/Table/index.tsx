@@ -24,7 +24,8 @@ import Modal from '../Modal';
 import { Button } from '../Button';
 import { LoadingSpinner } from '../UI';
 import Toolbar from 'src/components/Toolbar';
-import { Field } from 'src/components/Field';
+import { Field, FieldDateTime } from 'src/components/Field';
+import { Group } from 'src/components/UI';
 
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -301,14 +302,21 @@ const TableControlPanel = memo(({
     >
       {!hideWrite && <Button onClick={onAddClick} disabled={isLoading || disableAdd} title={disableAdd ? translate("allModelsAssigned") : undefined}><span>Добавить</span></Button>}
       {!hideWrite && <Button onClick={canDelete ? onDeleteClick : undefined} disabled={isLoading || !hasSelection || !canDelete} title={!hasSelection ? "Выделите одну или несколько строк" : undefined}><span>Удалить</span></Button>}
-      {!isSelect && extraButtons}
+      {extraButtons && (
+        <>
+          <Toolbar.Divider />
+          {extraButtons}
+        </>
+      )}
+      {showDateRangeButton && (
+        <>
+          <Toolbar.Divider />
+          <Toolbar.PeriodButton onClick={onDateRangeToggle} active={visibleDateRange} />
+        </>
+      )}
       {!isSelect && <Toolbar.Divider />}
       <Toolbar.ReloadButton onClick={onRefresh} disabled={isLoading} />
       <Toolbar.SettingsButton onClick={onConfigOpen} />
-      {/* <Toolbar.Divider /> */}
-      {showDateRangeButton && (
-        <Toolbar.PeriodButton onClick={onDateRangeToggle} active={visibleDateRange} />
-      )}
       <Toolbar.SearchButton onClick={onSearchToggle} active={visibleFastSearch} />
       {/* <Toolbar.Divider /> */}
     </Toolbar>
@@ -1783,7 +1791,7 @@ const DateRangeBar = memo(({ startDate, endDate, onClick, onClear }: {
     <div className={styles.DateRangeBar}>
       <span className={styles.DateRangeBarLabel}>Период:</span>
       <a className={styles.DateRangeLink} onClick={onClick} title="Изменить период">{label}</a>
-      <Toolbar.CloseButton onClick={onClear} title="Сбросить период" />
+      <Toolbar.ClearButton size='sm' onClick={onClear} title="Сбросить период" />
     </div>
   );
 });
@@ -1852,22 +1860,20 @@ const FieldDateRangeModal = memo(({ method, startDate, endDate, onApply }: {
       title="Период"
       className={styles.DateRangeModal}
     >
-      <div className={`${styles.FilterGroup} ${styles.DateRangeFilterGroup}`}>
-        <div className={styles.SearchContainer}>
-          <input
-            type="datetime-local"
-            value={localStart}
-            onChange={handleStartChange}
-            className={styles.SearchInput}
-          />
-          <input
-            type="datetime-local"
-            value={localEnd}
-            onChange={handleEndChange}
-            className={styles.SearchInput}
-          />
-        </div>
-      </div>
+      <Group>
+        <FieldDateTime
+          label="С"
+          name="dateRangeStart"
+          value={localStart}
+          onChange={handleStartChange}
+        />
+        <FieldDateTime
+          label="По"
+          name="dateRangeEnd"
+          value={localEnd}
+          onChange={handleEndChange}
+        />
+      </Group>
     </Modal>
   );
 });

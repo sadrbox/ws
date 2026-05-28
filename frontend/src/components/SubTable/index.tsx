@@ -1441,16 +1441,13 @@ const SubTable: FC<SubTableProps> = ({
   const extraButtons = useMemo(() => (
     <>
       {!readonly && !disabled && showEditModeToggle && (
-        <>
-          <Toolbar.Divider />
-          <Toolbar.InlineEditButton
-            onClick={toggleInlineEditing}
-            active={inlineEditing}
-            title={inlineEditing ? "Редактирование через форму" : "Редактирование в таблице"}
-          />
-        </>
+        <Toolbar.InlineEditButton
+          onClick={toggleInlineEditing}
+          active={inlineEditing}
+          title={inlineEditing ? "Редактирование через форму" : "Редактирование в таблице"}
+        />
       )}
-      {extraButtonsProp}
+      {extraButtonsProp && extraButtonsProp}
     </>
   ), [toggleInlineEditing, inlineEditing, extraButtonsProp, readonly, showEditModeToggle]);
 

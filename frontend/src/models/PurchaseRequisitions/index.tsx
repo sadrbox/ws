@@ -70,7 +70,7 @@ const PurchaseRequisitionsList: FC<{ variant?: TTableVariant; onSelectItem?: (it
     endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={PurchaseRequisitionsForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
     variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
-    defaultSort={{ id: "desc" }}
+    defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />
 );

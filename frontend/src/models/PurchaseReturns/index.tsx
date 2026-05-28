@@ -508,7 +508,7 @@ const PurchaseReturnsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: T
     endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={PurchaseReturnsForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
     variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
-    defaultSort={{ id: "desc" }}
+    defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />
 );
