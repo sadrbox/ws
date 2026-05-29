@@ -58,7 +58,7 @@ export const getComponentName = (node: TComponentNode): string => {
   return "NonComponent";
 };
 
-export const getUniqId = (component: TComponentNode, data?: TDataItem): string => {
+export const getUniqId = (component: TComponentNode, data?: Partial<TDataItem>): string => {
   const name = getComponentName(component);
   // Синглтоны: *List
   if (name.endsWith("List")) return name;
