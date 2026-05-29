@@ -184,6 +184,9 @@ export const REFERENCE_LABELS = {
 	incoming_invoices: "Счет-фактуры входящие",
 	payment_invoices: "Счета на оплату",
 	inventory_transfers: "Перемещения ТМЗ",
+	sale_returns: "Возвраты от покупателя",
+	purchase_returns: "Возвраты поставщику",
+	purchase_requisitions: "Заявки на закупку",
 	cash_receipt_orders: "Приходные кассовые ордера",
 	cash_expense_orders: "Расходные кассовые ордера",
 	payroll_calculations: "Начисления ЗП",
@@ -235,6 +238,112 @@ export async function guardReferences(res, targetTable, keyValues) {
 	return true;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Контроль связей «по основанию» (basisDocumentUuid).
+//
+// Документ может быть создан НА ОСНОВАНИИ другого («ввод на основании»): в этом
+// случае дочерний документ хранит в basisDocumentUuid uuid документа-основания.
+// Это НЕ внешний ключ (обычная строковая колонка), поэтому findReferences (FK
+// из information_schema) такую связь не видит — нужен отдельный контроль.
+//
+// Правило: документ-основание нельзя удалить, пока существует хотя бы один
+// активный документ, ссылающийся на него через basisDocumentUuid. Сначала нужно
+// отключить связь основания (или удалить дочерний документ).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Таблицы, чьи строки могут ссылаться на документ-основание (имеют basisDocumentUuid). */
+const BASIS_CHILD_TABLES = [
+	"sales",
+	"purchases",
+	"outgoing_invoices",
+	"sale_returns",
+	"purchase_returns",
+	"purchase_requisitions",
+];
+
+/**
+ * Prisma-модели (camelCase) документов, которые могут выступать ОСНОВАНИЕМ.
+ * Только для них имеет смысл искать зависимые документы (для справочников —
+ * basisDocumentUuid никогда не совпадёт, поэтому проверку пропускаем).
+ */
+const BASIS_SOURCE_MODELS = new Set([
+	"sale",
+	"purchase",
+	"outgoingInvoice",
+	"incomingInvoice",
+	"paymentInvoice",
+	"saleReturn",
+	"purchaseReturn",
+	"purchaseRequisition",
+	"inventoryTransfer",
+]);
+
+/**
+ * Ищет активные документы, созданные на основании документа с данным uuid.
+ * @param {string} uuid — uuid документа-основания
+ * @returns {Promise<Array<{ table: string, count: number, ids: number[], label: string }>>}
+ */
+export async function findBasisDependents(uuid) {
+	if (!uuid) return [];
+	const found = [];
+	for (const table of BASIS_CHILD_TABLES) {
+		try {
+			const { rows } = await pool.query(
+				`SELECT id FROM "${table}"
+				   WHERE "basisDocumentUuid" = $1
+				     AND "deletedAt" IS NULL
+				 ORDER BY id`,
+				[uuid],
+			);
+			if (rows.length > 0) {
+				found.push({
+					table,
+					count: rows.length,
+					ids: rows.map((r) => r.id).filter((id) => id != null),
+					label: REFERENCE_LABELS[table] ?? table,
+				});
+			}
+		} catch {
+			// Таблица без колонки basisDocumentUuid — пропускаем.
+		}
+	}
+	return found;
+}
+
+/** Сообщение пользователю о блокировке удаления по основанию. */
+export function formatBasisDependentsMessage(deps) {
+	if (!deps.length) return "";
+	const lines = deps.map((d) => {
+		const nums = d.ids.length ? ` (№ ${d.ids.join(", ")})` : "";
+		return `• ${d.label}: ${d.count} шт.${nums}`;
+	});
+	return (
+		"Невозможно удалить — документ является основанием для других документов.\n" +
+		"Сначала отключите связь основания в этих документах:\n" +
+		lines.join("\n")
+	);
+}
+
+/**
+ * Express-helper: блокирует удаление документа-основания при наличии зависимых
+ * документов. Возвращает true если ответ (409) уже отправлен.
+ *
+ * @param {object} res        — Express response
+ * @param {string} modelName  — camelCase Prisma-модель удаляемого документа
+ * @param {string} uuid       — uuid удаляемого документа
+ */
+export async function guardBasisDependents(res, modelName, uuid) {
+	if (!BASIS_SOURCE_MODELS.has(modelName)) return false;
+	const deps = await findBasisDependents(uuid);
+	if (deps.length === 0) return false;
+	res.status(409).json({
+		success: false,
+		message: formatBasisDependentsMessage(deps),
+		basisDependents: deps,
+	});
+	return true;
+}
+
 /**
  * Универсальный обработчик DELETE по `:id` (id или uuid в одном параметре).
  *
@@ -279,6 +388,10 @@ export async function handleDelete({
 			})
 		)
 			return;
+
+		// Контроль связи «по основанию»: документ-основание нельзя удалить,
+		// пока на него ссылаются другие документы (basisDocumentUuid).
+		if (await guardBasisDependents(res, modelName, existing.uuid)) return;
 
 		if (softDelete) {
 			await prisma[modelName].update({
@@ -351,6 +464,15 @@ export async function handleBatchDelete({
 				continue;
 			}
 
+			// Контроль связи «по основанию» (см. guardBasisDependents).
+			if (BASIS_SOURCE_MODELS.has(modelName)) {
+				const basisDeps = await findBasisDependents(existing.uuid);
+				if (basisDeps.length > 0) {
+					failed.push({ uuid, message: formatBasisDependentsMessage(basisDeps) });
+					continue;
+				}
+			}
+
 			if (softDelete) {
 				await prisma[modelName].update({ where: { uuid }, data: { deletedAt: new Date() } });
 			} else {
@@ -379,6 +501,9 @@ export default {
 	findReferences,
 	formatReferencesMessage,
 	guardReferences,
+	findBasisDependents,
+	formatBasisDependentsMessage,
+	guardBasisDependents,
 	handleDelete,
 	handleBatchDelete,
 };

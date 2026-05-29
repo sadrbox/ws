@@ -10,7 +10,7 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { FieldDate, FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { Group, GroupRow } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import { getFormatDateOnly } from "src/utils/main.module";
@@ -89,38 +89,51 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
   const [productUuid, setProductUuid] = useState("");
   const [productName, setProductName] = useState("");
 
-  const buildParams = useCallback(() => {
-    const p: Record<string, string> = {};
-    if (dateFrom) p.dateFrom = dateFrom;
-    if (dateTo) p.dateTo = dateTo;
-    if (orgUuid) p.organizationUuid = orgUuid;
-    if (warehouseUuid) p.warehouseUuid = warehouseUuid;
-    if (productUuid) p.productUuid = productUuid;
-    return p;
+  // Отчёт формируется только по кнопке «Сформировать» (snapshot параметров).
+  // view (Движения/Остатки) переключается независимо — на применённых параметрах.
+  const [applied, setApplied] = useState<null | {
+    dateFrom: string; dateTo: string; orgUuid: string; warehouseUuid: string; productUuid: string;
+  }>(null);
+
+  // Даты и фильтры необязательны: пустая дата → период не ограничивается
+  // с этой стороны; пустой фильтр (Организация/Склад/Номенклатура) → без учёта фильтра.
+  const handleGenerate = useCallback(() => {
+    setApplied({ dateFrom, dateTo, orgUuid, warehouseUuid, productUuid });
   }, [dateFrom, dateTo, orgUuid, warehouseUuid, productUuid]);
 
+  const buildAppliedParams = useCallback(() => {
+    const p: Record<string, string> = {};
+    if (!applied) return p;
+    if (applied.dateFrom) p.dateFrom = applied.dateFrom;
+    if (applied.dateTo) p.dateTo = applied.dateTo;
+    if (applied.orgUuid) p.organizationUuid = applied.orgUuid;
+    if (applied.warehouseUuid) p.warehouseUuid = applied.warehouseUuid;
+    if (applied.productUuid) p.productUuid = applied.productUuid;
+    return p;
+  }, [applied]);
+
   const { data: movements = [], isLoading: loadingMov } = useQuery<MovementRow[]>({
-    queryKey: ["product-register", "movements", dateFrom, dateTo, orgUuid, warehouseUuid, productUuid],
+    queryKey: ["product-register", "movements", applied],
     queryFn: async () => {
-      const resp = await api.get<any>("product-register", { params: buildParams() });
+      const resp = await api.get<any>("product-register", { params: buildAppliedParams() });
       return resp?.items ?? [];
     },
-    enabled: view === "movements" && !!dateFrom && !!dateTo,
+    enabled: view === "movements" && !!applied,
   });
 
   const { data: balances = [], isLoading: loadingBal } = useQuery<BalanceRow[]>({
-    queryKey: ["product-register", "balances", dateFrom, dateTo, orgUuid, warehouseUuid, productUuid],
+    queryKey: ["product-register", "balances", applied],
     queryFn: async () => {
-      const resp = await api.get<any>("product-register/balances", { params: buildParams() });
+      const resp = await api.get<any>("product-register/balances", { params: buildAppliedParams() });
       return resp?.items ?? [];
     },
-    enabled: view === "balances" && !!dateFrom && !!dateTo,
+    enabled: view === "balances" && !!applied,
   });
 
   const isLoading = view === "movements" ? loadingMov : loadingBal;
   const isEmpty = view === "movements"
-    ? !loadingMov && movements.length === 0
-    : !loadingBal && balances.length === 0;
+    ? !loadingMov && (!applied || movements.length === 0)
+    : !loadingBal && (!applied || balances.length === 0);
   const period = formatPeriod(dateFrom, dateTo);
 
   // Итоги движений (приход/расход).
@@ -142,13 +155,15 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
   const form = (
     <>
       <GroupRow>
-        <FieldSelect label={translate("registerMovements") + " / " + translate("registerBalances")}
-          name="pr_view" value={view} options={VIEW_OPTIONS}
-          onChange={e => setView(e.target.value as "movements" | "balances")} width="160px" />
         <FieldDate label={translate("reportPeriodFrom")} name="pr_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
         <FieldDate label={translate("reportPeriodTo")} name="pr_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
       </GroupRow>
-      <Group>
+      <GroupRow>
+        <FieldSelect label={translate("registerMovements") + " / " + translate("registerBalances")}
+          name="pr_view" value={view} options={VIEW_OPTIONS}
+          onChange={e => setView(e.target.value as "movements" | "balances")} />
+      </GroupRow>
+      <GroupCol>
         <LookupField label={translate("organization")} name="pr_org" value={orgUuid} displayValue={orgName}
           endpoint="organizations" displayField="name"
           onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
@@ -162,7 +177,7 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
           endpoint="products" displayField="name"
           onSelect={(u, d) => { setProductUuid(u); setProductName(d); }}
           onClear={() => { setProductUuid(""); setProductName(""); }} />
-      </Group>
+      </GroupCol>
     </>
   );
 
@@ -272,6 +287,8 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
       layout={layout}
       isLoading={isLoading}
       isEmpty={isEmpty}
+      emptyMessage={!applied ? translate("reportPressGenerate") : undefined}
+      onGenerate={handleGenerate}
       fileBaseName={translate("ProductRegisterList")}
       title={translate("ProductRegisterList")}
       orientation="landscape"

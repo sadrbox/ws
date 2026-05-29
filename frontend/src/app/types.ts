@@ -71,7 +71,9 @@ export type TPane = {
 	component: TComponentNode;
 	uniqId: string;
 	label: string;
-	data?: TDataItem;
+	/** Сид данных панели/формы. Может быть неполным (например только { uuid }
+	 *  при открытии формы по ссылке), поэтому Partial, а не полный TDataItem. */
+	data?: Partial<TDataItem>;
 	onSave?: () => void | Promise<void>;
 	onClose?: () => void | Promise<void>;
 	/** Панель является формой выбора (selector) — приоритетная, требует результат */

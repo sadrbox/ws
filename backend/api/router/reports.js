@@ -90,77 +90,139 @@ router.get("/reports/sales-by-product", async (req, res) => {
 });
 
 // ─── GET /reports/material-statement ─────────────────────────────────────────
-// Материальная ведомость (только проведённые документы).
+// Материальная ведомость по средневзвешенной (скользящей) себестоимости.
+// Источник — регистр накопления product_register (только проведённые документы).
+//
+// Метод: перпетуальная средневзвешенная. По каждому товару движения
+// обрабатываются хронологически; средняя себестоимость единицы пересчитывается
+// при каждом ПОСТУПЛЕНИИ (purchase), а любой расход списывается по текущей
+// средней и НЕ меняет её. Возвраты и перемещения тоже двигают остаток
+// (по текущей средней), но не формируют выручку/прибыль.
+//
+//   Себестоимость(ед.)  = Сумма закупок ÷ Кол-во закупок (нарастающим итогом)
+//   Себестоимость расхода = Кол-во расхода × Себестоимость(на момент)
+//   Сумма продажи        = Σ amount строк реализаций (выручка)
+//   Прибыль              = Сумма продажи − Себестоимость проданного
+//
 // Params: dateFrom, dateTo, organizationUuid, warehouseUuid
+const INVENTORY_ACCOUNT_CODE = "1330"; // ТМЗ (товары) — типовой счёт учёта РК
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
+
 router.get("/reports/material-statement", async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid, warehouseUuid } = req.query;
 
-		const docWhere = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
-		if (warehouseUuid) docWhere.warehouseUuid = warehouseUuid;
+		// Фильтр регистра: tenant + явная орг/склад. Дата — до конца dateTo
+		// включительно (движения после периода не загружаем; начальный остаток
+		// формируется движениями ДО dateFrom).
+		const where = { ...tenantFilter(req) };
+		if (organizationUuid) where.organizationUuid = organizationUuid;
+		if (warehouseUuid) where.warehouseUuid = warehouseUuid;
+		if (dateTo) where.date = { lte: new Date(dateTo + "T23:59:59.999Z") };
 
-		const [purchases, sales] = await Promise.all([
-			prisma.purchase.findMany({ where: docWhere, select: { uuid: true } }),
-			prisma.sale.findMany({ where: docWhere, select: { uuid: true } }),
-		]);
+		const movements = await prisma.productRegister.findMany({
+			where,
+			include: {
+				product: { select: { uuid: true, name: true, sku: true } },
+				unitOfMeasure: { select: { name: true } },
+			},
+			orderBy: [{ date: "asc" }, { id: "asc" }],
+		});
 
-		const purchaseUuids = purchases.map((p) => p.uuid);
-		const saleUuids = sales.map((s) => s.uuid);
+		const from = dateFrom ? new Date(dateFrom) : null;
 
-		const includeProduct = {
-			product: { select: { uuid: true, name: true } },
-			unitOfMeasure: { select: { name: true } },
-		};
+		// Группируем движения по товару (порядок внутри группы сохраняется).
+		const byProduct = new Map();
+		for (const mv of movements) {
+			const key = mv.productUuid ?? "__no_product__";
+			if (!byProduct.has(key)) byProduct.set(key, []);
+			byProduct.get(key).push(mv);
+		}
 
-		const [purchaseItems, saleItems] = await Promise.all([
-			purchaseUuids.length > 0
-				? prisma.purchaseItem.findMany({
-						where: { purchaseUuid: { in: purchaseUuids }, deletedAt: null },
-						include: includeProduct,
-					})
-				: [],
-			saleUuids.length > 0
-				? prisma.saleItem.findMany({
-						where: { saleUuid: { in: saleUuids }, deletedAt: null },
-						include: includeProduct,
-					})
-				: [],
-		]);
+		const items = [];
+		for (const mvs of byProduct.values()) {
+			let qty = 0;      // текущий остаток, кол-во
+			let value = 0;    // текущий остаток, сумма по себестоимости
+			let avg = 0;      // текущая средневзвешенная себестоимость единицы
+			let openQty = 0, openAmount = 0, openCaptured = !from;
 
-		const map = new Map();
-		const ensure = (item) => {
-			const key = item.productUuid ?? "__no_product__";
-			if (!map.has(key)) {
-				map.set(key, {
-					productUuid: item.productUuid,
-					productName: item.product?.name ?? "—",
-					uom: item.unitOfMeasure?.name ?? "",
-					qtyIn: 0, amountIn: 0, qtyOut: 0, amountOut: 0,
-				});
+			const p = {
+				inQty: 0, inAmount: 0,           // приход (все поступающие движения, по себестоимости)
+				outQty: 0, cogsOut: 0,           // расход (все исходящие движения, по себестоимости)
+				salesQty: 0, salesRevenue: 0, salesCogs: 0, // только реализации
+			};
+
+			let product = null, uom = "";
+			for (const mv of mvs) {
+				if (!product && mv.product) product = mv.product;
+				if (!uom && mv.unitOfMeasure?.name) uom = mv.unitOfMeasure.name;
+
+				// Начальный остаток = состояние перед первым движением периода.
+				if (!openCaptured && from && mv.date >= from) {
+					openQty = qty; openAmount = value; openCaptured = true;
+				}
+				const inPeriod = !from || mv.date >= from;
+				const q = Number(mv.quantity) || 0;
+				const amt = Number(mv.amount) || 0;
+
+				if (mv.movementType === "in") {
+					// Поступление задаёт себестоимость; прочий приход (возврат от
+					// покупателя, перемещение «в») приходуется по текущей средней.
+					const addCost = mv.documentType === "purchase" ? amt : (avg > 0 ? q * avg : amt);
+					qty += q;
+					value += addCost;
+					if (qty > 0) avg = value / qty;
+					if (inPeriod) { p.inQty += q; p.inAmount += addCost; }
+				} else {
+					// Расход списывается по текущей средней и не меняет её.
+					const outCost = avg > 0 ? q * avg : 0;
+					qty -= q;
+					value -= outCost;
+					if (qty > 0) avg = value / qty;
+					else value = Math.max(value, 0);
+					if (inPeriod) {
+						p.outQty += q;
+						p.cogsOut += outCost;
+						if (mv.documentType === "sale") {
+							p.salesQty += q;
+							p.salesRevenue += amt;
+							p.salesCogs += outCost;
+						}
+					}
+				}
 			}
-			return map.get(key);
-		};
+			if (!openCaptured) { openQty = qty; openAmount = value; }
 
-		for (const item of purchaseItems) {
-			const row = ensure(item);
-			row.qtyIn += Number(item.quantity);
-			row.amountIn += Number(item.amount);
-		}
-		for (const item of saleItems) {
-			const row = ensure(item);
-			row.qtyOut += Number(item.quantity);
-			row.amountOut += Number(item.amount);
+			const closeQty = qty;
+			const closeAmount = Math.max(value, 0);
+			const hasActivity =
+				openQty || openAmount || closeQty || closeAmount ||
+				p.inQty || p.outQty || p.salesRevenue;
+			if (!hasActivity) continue;
+
+			items.push({
+				productUuid: product?.uuid ?? null,
+				productName: product?.name ?? "—",
+				sku: product?.sku ?? "",
+				accountCode: INVENTORY_ACCOUNT_CODE,
+				uom,
+				unitCost: r2(avg),
+				openQty: r3(openQty),
+				openAmount: r2(openAmount),
+				inQty: r3(p.inQty),
+				inAmount: r2(p.inAmount),
+				outQty: r3(p.outQty),
+				cogsOut: r2(p.cogsOut),
+				salePrice: r2(p.salesQty > 0 ? p.salesRevenue / p.salesQty : 0),
+				saleAmount: r2(p.salesRevenue),
+				profit: r2(p.salesRevenue - p.salesCogs),
+				closeQty: r3(closeQty),
+				closeAmount: r2(closeAmount),
+			});
 		}
 
-		const items = Array.from(map.values())
-			.map((r) => ({
-				...r,
-				qtyIn: Math.round(r.qtyIn * 1000) / 1000,
-				amountIn: Math.round(r.amountIn * 100) / 100,
-				qtyOut: Math.round(r.qtyOut * 1000) / 1000,
-				amountOut: Math.round(r.amountOut * 100) / 100,
-			}))
-			.sort((a, b) => a.productName.localeCompare(b.productName, "ru"));
+		items.sort((a, b) => a.productName.localeCompare(b.productName, "ru"));
 
 		return res.json({ success: true, items });
 	} catch (err) {

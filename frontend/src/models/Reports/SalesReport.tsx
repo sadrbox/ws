@@ -4,7 +4,7 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { GroupRow } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app";
 import ReportPane from "src/components/ReportPane";
@@ -80,22 +80,29 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
   const [cptyUuid, setCptyUuid] = useState("");
   const [cptyName, setCptyName] = useState("");
 
-  const buildParams = useCallback(() => {
-    const p: Record<string, string> = {};
-    if (dateFrom) p.dateFrom = dateFrom;
-    if (dateTo) p.dateTo = dateTo;
-    if (orgUuid) p.organizationUuid = orgUuid;
-    if (cptyUuid) p.counterpartyUuid = cptyUuid;
-    return p;
+  // Отчёт формируется только по кнопке «Сформировать» (snapshot параметров).
+  const [applied, setApplied] = useState<null | {
+    dateFrom: string; dateTo: string; orgUuid: string; cptyUuid: string;
+  }>(null);
+
+  // Даты и фильтры необязательны: пустая дата → период не ограничивается
+  // с этой стороны; пустой фильтр (Организация/Контрагент) → без учёта фильтра.
+  const handleGenerate = useCallback(() => {
+    setApplied({ dateFrom, dateTo, orgUuid, cptyUuid });
   }, [dateFrom, dateTo, orgUuid, cptyUuid]);
 
   const { data, isLoading, isError } = useQuery<{ items: ProductRow[]; orgName: string }>({
-    queryKey: ["report-sales-by-product", dateFrom, dateTo, orgUuid, cptyUuid],
+    queryKey: ["report-sales-by-product", applied],
     queryFn: async () => {
-      const resp = await api.get<any>("reports/sales-by-product", { params: buildParams() });
+      const p: Record<string, string> = {};
+      if (applied!.dateFrom) p.dateFrom = applied!.dateFrom;
+      if (applied!.dateTo) p.dateTo = applied!.dateTo;
+      if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
+      if (applied!.cptyUuid) p.counterpartyUuid = applied!.cptyUuid;
+      const resp = await api.get<any>("reports/sales-by-product", { params: p });
       return { items: resp?.items ?? [], orgName: resp?.orgName ?? "" };
     },
-    enabled: !!dateFrom && !!dateTo,
+    enabled: !!applied,
     retry: 1,
   });
 
@@ -152,7 +159,7 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
         <FieldDate label={translate("reportPeriodFrom")} name="sf_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
         <FieldDate label={translate("reportPeriodTo")} name="sf_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
       </GroupRow>
-      <GroupRow>
+      <GroupCol>
         <LookupField label={translate("organization")} name="sf_org" value={orgUuid} displayValue={orgName}
           endpoint="organizations" displayField="name"
           onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
@@ -161,7 +168,7 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
           endpoint="counterparties" displayField="name"
           onSelect={(u, d) => { setCptyUuid(u); setCptyName(d); }}
           onClear={() => { setCptyUuid(""); setCptyName(""); }} />
-      </GroupRow>
+      </GroupCol>
     </>
   );
 
@@ -241,8 +248,9 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
       form={form}
       layout={layout}
       isLoading={isLoading}
-      isEmpty={!isLoading && (isError || rows.length === 0)}
-      emptyMessage={isError ? translate("serverError") : undefined}
+      isEmpty={!isLoading && (!applied || isError || rows.length === 0)}
+      emptyMessage={isError ? translate("serverError") : (!applied ? translate("reportPressGenerate") : undefined)}
+      onGenerate={handleGenerate}
       fileBaseName={translate("SalesReportList")}
       title={translate("SalesReportList")}
       orientation="landscape"

@@ -4,6 +4,8 @@ import mammoth from "mammoth";
 import * as XLSX from "xlsx";
 import apiClient from "src/services/api/client";
 import { Button } from "src/components/Button";
+import { FieldSelect } from "src/components/Field";
+import { Group, GroupCol, GroupRow, LoadingSpinner } from "src/components/UI";
 import styles from "./PrintPreview.module.scss";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -197,42 +199,39 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
   return (
     <div className={styles.PrintPreview}>
       {/* Тулбар */}
-      <div className={styles.PrintToolbar}>
-        <select
-          className={styles.PrintSelect}
-          value={selected}
-          onChange={e => setSelected(e.target.value)}
-          disabled={busy || !files.length}
-        >
-          {!files.length && <option value="">{loading ? translate("loadingEllipsis") : translate("noFiles")}</option>}
-          {files.map(f => <option key={f.uuid} value={f.uuid}>{f.fileName}</option>)}
-        </select>
-
-        <div className={styles.PrintToolbarActions}>
-          <Button onClick={() => selected && convert(selected)} disabled={!selected || converting}>
-            {translate("refresh")}
-          </Button>
-          <Button variant="primary" onClick={print} disabled={!src || converting}>
-            🖨️ {translate("print")}
-          </Button>
-        </div>
+      <div className={styles.PrintParamForm}>
+        <GroupRow>
+          <FieldSelect
+            label={translate("file")}
+            name="print_preview_file"
+            value={selected}
+            options={
+              files.length
+                ? files.map(f => ({ value: f.uuid, label: f.fileName }))
+                : [{ value: "", label: loading ? translate("loadingEllipsis") : translate("noFiles") }]
+            }
+            onChange={e => setSelected(e.target.value)}
+            disabled={busy || !files.length}
+            style={{ width: "306px" }}
+          />
+        </GroupRow>
       </div>
 
       {/* Статус */}
-      {error && <div className={styles.PrintError}>{error}</div>}
-      {converting && <div className={styles.PrintLoading}>{translate("loadingFile")}</div>}
+      <div className={styles.PrintPreviewArea}>
+        {error && <div className={styles.Error}>{error}</div>}
+        {converting && <div className={styles.Loading}>{translate("loadingFile")}</div>}
 
-      {/* Область просмотра — тёмный фон */}
-      <div className={styles.PrintViewport}>
+        {/* Область просмотра — тёмный фон */}
         {src && !converting ? (
           <iframe
             ref={iframeRef}
-            className={isPdf ? styles.PrintIframePdf : styles.PrintIframeDoc}
+            className={styles.PrintIframe}
             src={src}
             title="Preview"
           />
         ) : !converting && !error && (
-          <div className={styles.PrintPlaceholder}>
+          <div className={styles.PrintPreviewPlaceholder}>
             {files.length ? "Выберите файл для предпросмотра" : "Прикрепите файлы на вкладке «Файлы»"}
           </div>
         )}

@@ -1573,6 +1573,16 @@ export function useFormStore<F extends object>(
 	const onCloseRef = useRef(onClose);
 	onCloseRef.current = onClose;
 
+	// Обновляет заголовок панели из текущих полей формы. Вызывается после загрузки
+	// записи (а не только после сохранения), чтобы метка формировалась единообразно
+	// независимо от точки входа (ModelList, openFormByRef, уведомления и т.д.).
+	const refreshPaneLabel = useCallback(() => {
+		if (!uniqId) return;
+		const label = buildLabelRef.current(store.getSnapshot().fields);
+		store.setPaneLabel(label);
+		updatePaneLabel(uniqId, label);
+	}, [uniqId, store, updatePaneLabel]);
+
 	// Refs для deferred-доступа из эффектов, создаваемых раньше определения функций
 	const submitRef = useRef<
 		(options?: { keepLoadingOnSuccess?: boolean }) => Promise<boolean>
@@ -1601,9 +1611,9 @@ export function useFormStore<F extends object>(
 				mapRef.current,
 				afterLoadRef.current,
 				store.hadStoredData,
-			);
+			).then(refreshPaneLabel);
 		}
-	}, [uuid, store]);
+	}, [uuid, store, refreshPaneLabel]);
 
 	// ── Регистрация beforeClose guard ──
 	useEffect(() => {
@@ -1611,10 +1621,11 @@ export function useFormStore<F extends object>(
 
 		const unregister = registerBeforeClose(uniqId, async () => {
 			if (!store.isDirty()) {
-				// Чистая форма — разрешаем закрытие, но чистим ресурсы
+				// Чистая форма (ни поля, ни pending-строки SubTable не менялись) —
+				// на сервере ничего не изменилось, поэтому родительский список
+				// обновлять не нужно: onClose (refetch) НЕ вызываем, только чистим ресурсы.
 				store.clearStorage();
 				storeCache.delete(store.getStorageKey());
-				void onCloseRef.current?.();
 				return true;
 			}
 			const answer = await confirm(`Закрыть без сохранения ? `);
@@ -1727,8 +1738,9 @@ export function useFormStore<F extends object>(
 				false,
 				Boolean(opts?.noCache),
 			);
+			refreshPaneLabel();
 		},
-		[store],
+		[store, refreshPaneLabel],
 	);
 
 	// ── Submit (fields + tables) ──
@@ -1901,13 +1913,16 @@ export function useFormStore<F extends object>(
 			await requestClose(uniqId);
 		} else {
 			// Нет uniqId — прямое закрытие с проверкой
-			if (store.isDirty()) {
+			const wasDirty = store.isDirty();
+			if (wasDirty) {
 				const answer = await confirm(`Закрыть без сохранения?`);
 				if (!answer) return;
 			}
 			store.clearStorage();
 			storeCache.delete(store.getStorageKey());
-			void onCloseRef.current?.();
+			// Список обновляем только если были несохранённые изменения; при чистом
+			// закрытии refetch родительского списка не нужен.
+			if (wasDirty) void onCloseRef.current?.();
 		}
 	}, [store, uniqId, requestClose, confirm]);
 

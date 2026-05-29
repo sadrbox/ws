@@ -8,7 +8,7 @@ import listColumnsJson from "./listColumns.json";
 import subColumnsJson from "./subColumns.json";
 import { FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { GroupCol } from "src/components/UI/Group";
+import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext } from "src/components/SubTable";

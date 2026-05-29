@@ -4,7 +4,7 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { GroupRow } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
 import styles from "./report.module.scss";
 
@@ -67,22 +67,30 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
   const [productUuid, setProductUuid] = useState(initProductUuid);
   const [productName, setProductName] = useState(initProductName);
 
-  const buildParams = useCallback(() => {
-    const p: Record<string, string> = {};
-    if (productUuid) p.productUuid = productUuid;
-    if (dateFrom) p.dateFrom = dateFrom;
-    if (dateTo) p.dateTo = dateTo;
-    if (orgUuid) p.organizationUuid = orgUuid;
-    return p;
+  // Отчёт формируется только по кнопке «Сформировать» (snapshot параметров).
+  const [applied, setApplied] = useState<null | {
+    productUuid: string; dateFrom: string; dateTo: string; orgUuid: string;
+  }>(null);
+
+  // Товар обязателен (отчёт по конкретной номенклатуре). Даты и Организация —
+  // необязательны: пустая дата → период не ограничивается с этой стороны.
+  const handleGenerate = useCallback(() => {
+    if (!productUuid) return;
+    setApplied({ productUuid, dateFrom, dateTo, orgUuid });
   }, [productUuid, dateFrom, dateTo, orgUuid]);
 
   const { data, isLoading, isError } = useQuery<{ items: MovementRow[]; productName: string }>({
-    queryKey: ["report-product-movements", productUuid, dateFrom, dateTo, orgUuid],
+    queryKey: ["report-product-movements", applied],
     queryFn: async () => {
-      const resp = await api.get<any>("reports/product-movements", { params: buildParams() });
+      const p: Record<string, string> = {};
+      if (applied!.productUuid) p.productUuid = applied!.productUuid;
+      if (applied!.dateFrom) p.dateFrom = applied!.dateFrom;
+      if (applied!.dateTo) p.dateTo = applied!.dateTo;
+      if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
+      const resp = await api.get<any>("reports/product-movements", { params: p });
       return { items: resp?.items ?? [], productName: resp?.productName ?? productName };
     },
-    enabled: !!productUuid && !!dateFrom && !!dateTo,
+    enabled: !!applied,
   });
 
   const rows: MovementRow[] = data?.items ?? [];
@@ -101,7 +109,7 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
         <FieldDate label={translate("reportPeriodFrom")} name="pd_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
         <FieldDate label={translate("reportPeriodTo")} name="pd_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
       </GroupRow>
-      <GroupRow>
+      <GroupCol>
         <LookupField label={translate("organization")} name="pd_org" value={orgUuid} displayValue={orgName}
           endpoint="organizations" displayField="name"
           onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
@@ -110,7 +118,7 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
           endpoint="products" displayField="name"
           onSelect={(u, d) => { setProductUuid(u); setProductName(d); }}
           onClear={() => { setProductUuid(""); setProductName(""); }} />
-      </GroupRow>
+      </GroupCol>
     </>
   );
 
@@ -174,8 +182,18 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
       form={form}
       layout={layout}
       isLoading={isLoading}
-      isEmpty={!isLoading && !productUuid}
-      emptyMessage={!productUuid ? translate("selectProduct") : isError ? translate("serverError") : undefined}
+      isEmpty={!isLoading && (!productUuid || !applied || isError || rows.length === 0)}
+      emptyMessage={
+        !productUuid
+          ? translate("selectProduct")
+          : !applied
+            ? translate("reportPressGenerate")
+            : isError
+              ? translate("serverError")
+              : undefined
+      }
+      onGenerate={handleGenerate}
+      generateDisabled={!productUuid}
       fileBaseName={resolvedProductName || translate("reportProductMovements")}
       title={translate("reportProductMovements")}
       orientation="portrait"

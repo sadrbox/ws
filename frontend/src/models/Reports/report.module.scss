@@ -162,6 +162,23 @@
   color: #dc2626 !important;
 }
 
+// ── Цветовые акценты «Материальной ведомости» ────────────────────────────────
+.Cost {
+  color: #6b7280 !important; // себестоимость — серый
+}
+
+.SalePrice {
+  color: #2563eb !important; // цена/сумма реализации — синий
+}
+
+.Profit {
+  color: #16a34a !important; // прибыль — зелёный
+}
+
+.Loss {
+  color: #dc2626 !important; // убыток — красный
+}
+
 .TagReceipt {
   display: inline-block;
   padding: 0 4pt;

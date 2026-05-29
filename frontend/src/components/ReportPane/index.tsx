@@ -29,6 +29,7 @@ import { usePrintDocument } from "src/components/PrintLayout/usePrintDocument";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import SaveDropdownButton, { type SaveDropdownOption } from "src/components/Toolbar/SaveDropdownButton";
 import { Toolbar } from "src/components/Toolbar";
+import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
 import { DocViewport, DocSheet, DocStatus } from "src/components/DocViewport";
@@ -79,6 +80,14 @@ export interface ReportPaneProps {
    *   "content" — ширина по содержимому (для XLSX-таблиц с произвольным числом колонок).
    */
   sheetFit?: "a4" | "content";
+  /**
+   * Колбэк кнопки «Сформировать». Если передан — под фильтрами отображается
+   * кнопка, по нажатию которой отчёт формируется (загружает данные). Сам отчёт
+   * при этом не загружается автоматически при изменении фильтров.
+   */
+  onGenerate?: () => void;
+  /** Кнопка «Сформировать» заблокирована (например, не заданы обязательные параметры). */
+  generateDisabled?: boolean;
 }
 
 // ── Утилиты ─────────────────────────────────────────────────────────────────
@@ -119,6 +128,8 @@ const ReportPane: FC<ReportPaneProps> = ({
   orientation = "portrait",
   title,
   sheetFit = "a4",
+  onGenerate,
+  generateDisabled = false,
 }) => {
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const { print: printNode } = usePrintDocument();
@@ -155,9 +166,11 @@ const ReportPane: FC<ReportPaneProps> = ({
   // ── Кнопки в шапке панели ────────────────────────────────────────────────
   const saveOptions: SaveDropdownOption[] = [
     { id: "xlsx", label: translate("excelXlsx"), icon: <Icon name="save" />, disabled: !canExport },
-    { id: "xls",  label: translate("excelXls"),  icon: <Icon name="save" />, disabled: !canExport },
-    { id: "pdf",  label: translate("pdf"),        icon: <Icon name="print" />,
-      hint: translate("printSaveHint"), disabled: !canExport },
+    { id: "xls", label: translate("excelXls"), icon: <Icon name="save" />, disabled: !canExport },
+    {
+      id: "pdf", label: translate("pdf"), icon: <Icon name="print" />,
+      hint: translate("printSaveHint"), disabled: !canExport
+    },
   ];
 
   const onSelectFormat = (id: string) => {
@@ -188,9 +201,17 @@ const ReportPane: FC<ReportPaneProps> = ({
     <div className={styles.ReportPane}>
       {headerPortal}
 
-      {form && (
+
+      {(form || onGenerate) && (
         <div className={styles.ReportForm}>
           {form}
+          {onGenerate && (
+            <div className={styles.ReportFormActions}>
+              <Button variant="primary" onClick={onGenerate} disabled={generateDisabled}>
+                {translate("reportGenerate")}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

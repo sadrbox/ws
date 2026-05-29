@@ -78,6 +78,26 @@ $heightFieldInput: 28px;
 
 $fontsize: 13px;
 
+.Error {
+	padding: 8px 12px;
+	margin: 0 0 4px;
+	background: #fef2f2;
+	// border: 1px solid #fca5a5;
+	border-radius: $radius3;
+	color: #b91c1c;
+	font-size: $fontsize;
+}
+
+.Loading {
+	padding: 8px 12px;
+	margin: 0 0 4px;
+	background: #eff6ff;
+	// border: 1px solid #93c5fd;
+	border-radius: $radius3;
+	color: $color3;
+	font-size: $fontsize;
+}
+
 .mr10 {
 	padding-right: 10px;
 }

@@ -27,7 +27,7 @@ import Toolbar from 'src/components/Toolbar';
 import { Field, FieldDateTime } from 'src/components/Field';
 import { Group } from 'src/components/UI';
 
-import { DndContext, closestCenter } from '@dnd-kit/core';
+import { DndContext, closestCenter, type DragStartEvent, type DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { PiDotsThreeVerticalDuotone } from 'react-icons/pi';
@@ -304,7 +304,7 @@ const TableControlPanel = memo(({
       {!hideWrite && <Button onClick={canDelete ? onDeleteClick : undefined} disabled={isLoading || !hasSelection || !canDelete} title={!hasSelection ? "Выделите одну или несколько строк" : undefined}><span>Удалить</span></Button>}
       {extraButtons && (
         <>
-          <Toolbar.Divider />
+          {/* <Toolbar.Divider /> */}
           {extraButtons}
         </>
       )}
@@ -402,10 +402,10 @@ const Table: FC<TableProps> = memo((props) => {
   // Автоматически активировать первую строку когда есть onSelectItem и загрузились данные
   useEffect(() => {
     if (!onSelectItem || rows.length === 0) return;
-    setActiveRow(prev => {
+    setActiveRow((prev: number | null): number | null => {
       // Остаёмся на текущей строке если она ещё видна; иначе переходим на первую
       const stillVisible = prev !== null && rows.some(r => r.id === prev);
-      return stillVisible ? prev : rows[0].id;
+      return stillVisible ? prev : (rows[0].id as number);
     });
   }, [onSelectItem, rows]);
 
@@ -453,7 +453,7 @@ const Table: FC<TableProps> = memo((props) => {
 
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
-        setActiveRow(prev => {
+        setActiveRow((prev: number | null): number | null => {
           const idx = prev !== null ? currentRows.findIndex(r => r.id === prev) : -1;
           if (e.key === 'ArrowDown') {
             return currentRows[Math.min(Math.max(idx + 1, 0), currentRows.length - 1)].id;
@@ -468,8 +468,9 @@ const Table: FC<TableProps> = memo((props) => {
   }, [onSelectItem]);
 
   // Текущие значения dateRange из фильтров
-  const currentStartDate = (filtering.filters?.dateRange as any)?.startDate as string || '';
-  const currentEndDate = (filtering.filters?.dateRange as any)?.endDate as string || '';
+  const dateRangeFilter = filtering.filters?.dateRange as { startDate?: string; endDate?: string } | undefined;
+  const currentStartDate = dateRangeFilter?.startDate || '';
+  const currentEndDate = dateRangeFilter?.endDate || '';
   const hasDateRange = !!(currentStartDate || currentEndDate);
   const showDateRangeButton = useMemo(
     () => enableDateRange && columns.some((column) => column.visible && (column.type === 'date' || column.type === 'datetime')),
@@ -535,7 +536,7 @@ const Table: FC<TableProps> = memo((props) => {
     let effectiveIds: Set<number>;
     if (isAllSelectedMode) {
       // Все строки выбраны, кроме excludedRows
-      effectiveIds = new Set(
+      effectiveIds = new Set<number>(
         rows.map(r => r.id).filter(id => !excludedRows.has(id)),
       );
     } else if (selectedRows.size > 0) {
@@ -840,7 +841,6 @@ const TableArea = memo(() => {
   const { variant, columns } = useTableContext();
   const isSelect = variant === 'select';
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
-  const lastVisibleColumn = visibleColumns[visibleColumns.length - 1];
   return (
     <>
       <table>
@@ -1499,7 +1499,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         }
       } else {
         // Двойной клик по нередактируемой ячейке — пульс-индикация
-        const td = (target as HTMLElement).closest('td');
+        const td = target.closest('td');
         if (td) {
           td.removeAttribute('data-pulse');
           void (td as HTMLElement).offsetWidth;
@@ -1516,7 +1516,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     }
   }, [inlineEditingRef, onSelectItem, openModelForm, row, refetch]);
 
-  const rowUuid = (row as any).uuid || String((row as any).id);
+  const rowUuid = row.uuid || String(row.id);
   const isExpanded = expandedRowIds?.has(rowUuid) ?? false;
   const visibleColCount = columns.filter(c => c.visible).length + (variant !== 'select' ? 1 : 0);
 
@@ -1680,9 +1680,9 @@ const TableConfigColumns: FC<TypeTableConfigColumnsProps> = ({ columns, setColum
     ));
   }, [setColumns]);
 
-  const onDragStart = useCallback((event: any) => setDraggingId(String(event.active.id)), []);
+  const onDragStart = useCallback((event: DragStartEvent) => setDraggingId(String(event.active.id)), []);
 
-  const onDragEnd = useCallback((event: any) => {
+  const onDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     setDraggingId(null);
     if (active.id !== over?.id) {

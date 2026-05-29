@@ -13,6 +13,8 @@ import { Toolbar } from "src/components/Toolbar";
 import SaveDropdownButton, { type SaveDropdownOption } from "src/components/Toolbar/SaveDropdownButton";
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
+import { FieldSelect } from "src/components/Field";
+import { GroupRow } from "src/components/UI";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import { usePrintDocument } from "src/components/PrintLayout/usePrintDocument";
 import { DocViewport, DocSheet } from "src/components/DocViewport";
@@ -293,16 +295,6 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
           title={translate("saveAs")}
           disabled={!data}
         />
-        <select
-          className={styles.PrintOrientationSelect}
-          value={orientation}
-          onChange={(e) => handleOrientationChange(e.target.value as PageOrientation)}
-          title={translate("pageOrientation")}
-          aria-label={translate("pageOrientation")}
-        >
-          <option value="portrait">{translate("portrait")}</option>
-          <option value="landscape">{translate("landscape")}</option>
-        </select>
         <Toolbar.PrintButton onClick={handlePrint} title={translate("print")} />
       </>
     ) : null,
@@ -313,6 +305,21 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
   return (
     <div className={styles.PrintPreview}>
       {headerActionsPortal}
+      <div className={styles.PrintParamForm}>
+        <GroupRow>
+          <FieldSelect
+            label={translate("pageOrientation")}
+            name="print_orientation"
+            value={orientation}
+            options={[
+              { value: "portrait", label: translate("portrait") },
+              { value: "landscape", label: translate("landscape") },
+            ]}
+            onChange={(e) => handleOrientationChange(e.target.value as PageOrientation)}
+            style={{ width: "180px" }}
+          />
+        </GroupRow>
+      </div>
       <DocViewport>
         <DocSheet ref={layoutRef} orientation={orientation}>
           {activeLayout}

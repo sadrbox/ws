@@ -32,6 +32,8 @@ import { clearAllEntries as clearOfflineQueue } from "src/services/offlineQueue"
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { useAppContext, AppContextProvider } from "src/app/context";
 import { SalesList } from "src/models/Sales";
+import { ContractsList, ContractsForm } from "src/models/Contracts";
+import { openFormByRef } from "src/utils/openFormByRef";
 export { useAppContext, AppContextProvider };
 
 export const getComponentName = (node: TComponentNode): string => {
@@ -371,11 +373,9 @@ const App: React.FC = () => {
   // ────────────────────────────────────────────────
 
   useEffect(() => {
-    // Открываем ActivityHistoriesList при монтировании приложения
-    addPane({
-      component: SalesList,
-      // label: getTranslation("ActivityHistoriesList") || "ActivityHistoriesList",
-    });
+    // Открываем конкретную форму ContractsForm по ID при монтировании приложения
+    const uuid = "2"; // Замените на реальный UUID
+    openFormByRef({ endpoint: "contracts", uuid }, addPane, "Договор");
   }, []);
 
   // ────────────────────────────────────────────────

@@ -985,7 +985,7 @@ const SubTable: FC<SubTableProps> = ({
   // ── openModelForm ─────────────────────────────────────────────────────
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     if (openFormFor) {
-      openFormFor(formProps.data ?? undefined, ctx);
+      openFormFor((formProps.data as TDataItem | undefined) ?? undefined, ctx);
     }
   }, [openFormFor, ctx]);
 
@@ -1441,11 +1441,13 @@ const SubTable: FC<SubTableProps> = ({
   const extraButtons = useMemo(() => (
     <>
       {!readonly && !disabled && showEditModeToggle && (
-        <Toolbar.InlineEditButton
-          onClick={toggleInlineEditing}
-          active={inlineEditing}
-          title={inlineEditing ? "Редактирование через форму" : "Редактирование в таблице"}
-        />
+        <>
+          <Toolbar.Divider />
+          <Toolbar.InlineEditButton
+            onClick={toggleInlineEditing}
+            active={inlineEditing}
+            title={inlineEditing ? "Редактирование через форму" : "Редактирование в таблице"} />
+        </>
       )}
       {extraButtonsProp && extraButtonsProp}
     </>

@@ -9,7 +9,7 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { GroupRow } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import { getFormatDateOnly } from "src/utils/main.module";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
@@ -50,18 +50,24 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
   const [orgUuid, setOrgUuid] = useState(defaultOrgUuid || "");
   const [orgName, setOrgName] = useState(defaultOrgName || "");
 
-  const buildParams = useCallback((orgFilter: string) => {
-    const p: Record<string, string> = { limit: "5000", sort: JSON.stringify({ date: "asc", id: "asc" }) };
-    if (dateFrom) p["filter[dateRange][startDate]"] = dateFrom;
-    if (dateTo) p["filter[dateRange][endDate]"] = dateTo;
-    if (orgFilter) p["filter[organizationUuid][equals]"] = orgFilter;
-    return p;
-  }, [dateFrom, dateTo]);
+  // Отчёт формируется только по кнопке «Сформировать» (snapshot параметров).
+  const [applied, setApplied] = useState<null | {
+    dateFrom: string; dateTo: string; orgUuid: string;
+  }>(null);
+
+  // Даты и фильтры необязательны: пустая дата → период не ограничивается
+  // с этой стороны; пустой фильтр (Организация) → без учёта фильтра.
+  const handleGenerate = useCallback(() => {
+    setApplied({ dateFrom, dateTo, orgUuid });
+  }, [dateFrom, dateTo, orgUuid]);
 
   const { data: rows = [], isLoading } = useQuery<CashRow[]>({
-    queryKey: ["report-cash", dateFrom, dateTo, orgUuid],
+    queryKey: ["report-cash", applied],
     queryFn: async () => {
-      const params = buildParams(orgUuid);
+      const params: Record<string, string> = { limit: "5000", sort: JSON.stringify({ date: "asc", id: "asc" }) };
+      if (applied!.dateFrom) params["filter[dateRange][startDate]"] = applied!.dateFrom;
+      if (applied!.dateTo) params["filter[dateRange][endDate]"] = applied!.dateTo;
+      if (applied!.orgUuid) params["filter[organizationUuid][equals]"] = applied!.orgUuid;
       const [pkResp, rkResp] = await Promise.all([
         api.get<any>("cash-receipt-orders", { params }),
         api.get<any>("cash-expense-orders", { params }),
@@ -84,7 +90,7 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
       all.sort((a, b) => a.date.localeCompare(b.date));
       return all;
     },
-    enabled: !!dateFrom && !!dateTo,
+    enabled: !!applied,
   });
 
   const totalReceipts = rows.filter(r => r.type === "receipt").reduce((s, r) => s + r.amount, 0);
@@ -99,10 +105,12 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
         <FieldDate label={translate("reportPeriodFrom")} name="cr_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
         <FieldDate label={translate("reportPeriodTo")} name="cr_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
       </GroupRow>
-      <LookupField label={translate("organization")} name="cr_org" value={orgUuid} displayValue={orgName}
-        endpoint="organizations" displayField="name"
-        onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
-        onClear={() => { setOrgUuid(""); setOrgName(""); }} />
+      <GroupCol>
+        <LookupField label={translate("organization")} name="cr_org" value={orgUuid} displayValue={orgName}
+          endpoint="organizations" displayField="name"
+          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
+          onClear={() => { setOrgUuid(""); setOrgName(""); }} />
+      </GroupCol>
     </>
   );
 
@@ -181,7 +189,9 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
       form={form}
       layout={layout}
       isLoading={isLoading}
-      isEmpty={!isLoading && rows.length === 0}
+      isEmpty={!isLoading && (!applied || rows.length === 0)}
+      emptyMessage={!applied ? translate("reportPressGenerate") : undefined}
+      onGenerate={handleGenerate}
       fileBaseName={translate("CashReportList")}
       title={translate("CashReportList")}
       orientation="landscape"

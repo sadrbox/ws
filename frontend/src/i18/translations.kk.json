@@ -240,6 +240,8 @@
 	"reportBalance": "Қалдық",
 	"generate": "Жасау",
 	"noData": "Деректер жоқ",
+	"reportGenerate": "Қалыптастыру",
+	"reportPressGenerate": "Параметрлерді көрсетіп, «Қалыптастыру» түймесін басыңыз",
 	"reportDate": "Күні",
 	"reportDocNum": "Нөмірі",
 	"reportAmount": "Сомасы",
@@ -254,6 +256,16 @@
 	"reportAmountOut": "Шығыс сомасы",
 	"reportQtyIn": "Кіріс саны",
 	"reportQtyOut": "Шығыс саны",
+	"reportAccount": "Есеп шоты",
+	"reportCode": "Коды",
+	"reportCost": "Өзіндік құны",
+	"reportOpeningQty": "Бастапқы қалдық саны",
+	"reportOpeningAmount": "Бастапқы қалдық сомасы",
+	"reportCogsOut": "Шығыс өзіндік құны",
+	"reportSalePrice": "Сату бағасы",
+	"reportSaleAmount": "Сату сомасы",
+	"reportClosingQty": "Соңғы қалдық саны",
+	"reportClosingAmount": "Соңғы қалдық сомасы",
 	"reportOrderType": "Түрі",
 	"reportTotalReceipts": "Барлық кіріс",
 	"reportTotalExpenses": "Барлық шығыс",
@@ -356,5 +368,6 @@
 	"allModelsAssigned": "Барлық бөлімдер әлдеқашан қосылған",
 	"yes": "Иә",
 	"no": "Жоқ",
-	"columnSettings": "Баған параметрлері"
+	"columnSettings": "Баған параметрлері",
+	"loadingFile": "Файл жүктелуде..."
 }

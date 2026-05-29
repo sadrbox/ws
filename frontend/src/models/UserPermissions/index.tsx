@@ -7,7 +7,7 @@ import type { TPane } from "src/app/types";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
 import { FieldSelect } from "src/components/Field";
-import { GroupCol } from "src/components/UI/Group";
+import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import ModelList from "src/components/ModelList";
