@@ -2,7 +2,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
-import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
+import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 const router = express.Router();
 const MODEL = "inventoryTransfer";
 const ROUTE = "inventory-transfers";
@@ -195,6 +195,23 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.amount !== undefined)
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
+		// Контроль остатка ПЕРЕД фиксацией проведения (расход с fromWarehouse).
+		const existing = await prisma[MODEL].findUnique({
+			where: w,
+			select: { uuid: true, posted: true, fromWarehouseUuid: true },
+		});
+		if (!existing)
+			return res.status(404).json({ success: false, message: "Не найдено" });
+		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
+		if (willBePosted) {
+			const fromWarehouseUuid =
+				data.fromWarehouseUuid !== undefined
+					? data.fromWarehouseUuid
+					: existing.fromWarehouseUuid;
+			await assertStockForPosting("inventory_transfer", existing.uuid, {
+				fromWarehouseUuid,
+			});
+		}
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -208,6 +225,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await reconcileDocumentRegister("inventory_transfer", item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondStockError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);

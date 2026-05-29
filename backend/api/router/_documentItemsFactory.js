@@ -24,7 +24,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { reconcileByParentModel } from "../../services/productRegister.js";
+import {
+	reconcileByParentModel,
+	assertStockAvailable,
+	documentTypeForParentModel,
+	respondStockError,
+} from "../../services/productRegister.js";
 
 function recalcTaxes(amountAfterDiscount, taxes) {
 	if (!Array.isArray(taxes)) return null;
@@ -235,11 +240,24 @@ export function createDocumentItemsRouter({
 					data: { amount: totalAmount },
 				});
 			}
-			// Строки документа изменились — пересобираем движения регистра товаров
-			// (актуально только если документ проведён; сервис проверит posted сам).
+		} catch (err) {
+			// Сбой пересчёта суммы не должен блокировать сохранение строки.
+			console.error(`recalcParentAmount(${PARENT_MODEL}) error:`, err);
+		}
+
+		// Контроль остатка проведённого расходного документа ПЕРЕД пересбором
+		// движений: если новые строки уводят остаток в минус — бросаем
+		// StockShortageError (роут вернёт 409) и НЕ перезаписываем регистр,
+		// сохраняя инвариант «движения проведённого расхода не дают минус».
+		const docType = documentTypeForParentModel(PARENT_MODEL);
+		if (docType) await assertStockAvailable(docType, parentUuid);
+
+		// Строки документа изменились — пересобираем движения регистра товаров
+		// (актуально только если документ проведён; сервис проверит posted сам).
+		try {
 			await reconcileByParentModel(PARENT_MODEL, parentUuid);
 		} catch (err) {
-			console.error(`recalcParentAmount(${PARENT_MODEL}) error:`, err);
+			console.error(`reconcile(${PARENT_MODEL}) error:`, err);
 		}
 	}
 
@@ -413,6 +431,7 @@ export function createDocumentItemsRouter({
 			await recalcParentAmount(parentUuid);
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
+			if (respondStockError(error, res)) return;
 			console.error(`POST /${ROUTE} error:`, error);
 			return res
 				.status(500)
@@ -540,6 +559,7 @@ export function createDocumentItemsRouter({
 			await recalcParentAmount(item[PARENT_FIELD]);
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
+			if (respondStockError(error, res)) return;
 			if (error.code === "P2025")
 				return res.status(404).json({ success: false, message: "Не найдено" });
 			console.error(`PUT /${ROUTE}/:id error:`, error);
@@ -701,6 +721,7 @@ export function createDocumentItemsRouter({
 			if (parentUuid) await recalcParentAmount(parentUuid);
 			return res.status(200).json({ success: true });
 		} catch (error) {
+			if (respondStockError(error, res)) return;
 			console.error(`POST /${ROUTE}/batch error:`, error);
 			return res.status(500).json({ success: false, message: "Ошибка сервера" });
 		}

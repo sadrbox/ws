@@ -1347,6 +1347,13 @@ export interface UseFormStoreOptions<F extends object> {
 	afterLoad?: () => void | Promise<void>;
 	/** Доп. логика после save (кроме commitTables — он вызывается автоматически) */
 	afterSave?: (savedData: any) => Promise<void> | void;
+	/**
+	 * Async-гард ПЕРЕД сохранением (до любого HTTP-запроса). Если возвращает
+	 * строку — сохранение прерывается, строка показывается как ошибка панели.
+	 * Используется, например, для контроля остатка перед проведением документа
+	 * (см. utils/stockControl.ts). Возврат null/undefined — продолжить сохранение.
+	 */
+	onBeforeSave?: (fields: F) => Promise<string | null | undefined>;
 	/** Доп. логика после ручного reload (кнопка «Обновить» в шапке панели).
 	 * Вызывается ТОЛЬКО при ручном reload, не при первоначальной загрузке.
 	 * Используется для сброса локального состояния формы (например basisItems). */
@@ -1467,6 +1474,7 @@ export function useFormStore<F extends object>(
 		afterSave,
 		afterReload,
 		derivedFields,
+		onBeforeSave,
 	} = options;
 
 	const { onSave, onClose, data, uniqId } = paneProps;
@@ -1568,6 +1576,8 @@ export function useFormStore<F extends object>(
 	afterSaveRef.current = afterSave;
 	const afterReloadRef = useRef(afterReload);
 	afterReloadRef.current = afterReload;
+	const onBeforeSaveRef = useRef(onBeforeSave);
+	onBeforeSaveRef.current = onBeforeSave;
 	const onSaveRef = useRef(onSave);
 	onSaveRef.current = onSave;
 	const onCloseRef = useRef(onClose);
@@ -1776,6 +1786,22 @@ export function useFormStore<F extends object>(
 				if (parts.length > 0) {
 					store.setError(`«${def.label}»: не заполнено\n   - ${parts.join(";\n   - ")}`);
 					store.setMeta({ tablesValidationFailed: true });
+					return false;
+				}
+			}
+
+			// Async-гард перед сохранением (например контроль остатка перед
+			// проведением). Прерывает сохранение ДО любого HTTP-запроса.
+			if (onBeforeSaveRef.current) {
+				let guardMsg: string | null | undefined;
+				try {
+					guardMsg = await onBeforeSaveRef.current(store.getSnapshot().fields as F);
+				} catch {
+					guardMsg = null; // сбой гарда не должен блокировать сохранение
+				}
+				if (guardMsg) {
+					store.setError(guardMsg);
+					if (!keepLoading) store.setMeta({ isLoading: false });
 					return false;
 				}
 			}

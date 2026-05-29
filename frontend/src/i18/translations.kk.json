@@ -35,6 +35,8 @@
 	"paymentInvoice": "Төлем шоты",
 	"purchaseReceipt": "Тауарлар мен қызметтерді алу",
 	"incomingInvoice": "Кіріс шот-фактура",
+	"basisMismatch": "Құжат негізге сәйкес келмейді",
+	"basisMismatchItems": "жолдар негізден ерекшеленеді",
 	"notificationsCenter": "Хабарландыру орталығы",
 	"unsavedRecords": "Сақталмаған жазбалар",
 	"deletedReferenceControl": "Өшірілген сілтемелерді бақылау",

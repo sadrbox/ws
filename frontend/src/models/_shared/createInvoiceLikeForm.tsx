@@ -35,6 +35,7 @@ import { type BasisFromTarget, openDocumentFromBasis, refillFromBasisSource, map
 import { isEquivalent } from "src/utils/normalize";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
+import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 
 export type { BasisTypeConfig };
 
@@ -230,6 +231,15 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     const items = form.useTable("items");
     const allItemsRef = useRef<any[]>([]);
     const permDefaultsRef = useRef<PermissionDefaultsMap>({});
+
+    // Подсказка о несоответствии документу-основанию (шапка + строки).
+    const basisMismatch = useBasisMismatch({
+      basisType: form.fields.basisDocumentType,
+      basisUuid: form.fields.basisDocumentUuid,
+      currentFields: form.fields,
+      currentItems: allItemsRef.current,
+      mapFields: mapCommonTradeFields,
+    });
 
     const hasBasis = !!form.fields.basisDocumentUuid;
     const basisLock = hasBasis && (cfg.lockFieldsOnBasis ?? false);
@@ -478,6 +488,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                     disabled={form.isLoading}
                     onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
                     onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+                    mismatch={basisMismatch.mismatch}
+                    mismatchDetails={basisMismatch.differences}
                   />
                 </GroupCol>
               )}
@@ -524,7 +536,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           />
         )
       },
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey]);
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
 
     return (
       <FormRequiredScope docType={cfg.docType} active={form.meta.headerValidationFailed}>

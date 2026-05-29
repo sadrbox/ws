@@ -168,10 +168,214 @@ export async function removeDocumentRegister(
 	}
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Контроль остатков перед проведением расходных документов.
+//
+// Расход не может превышать доступный остаток (Σприход − Σрасход) по паре
+// товар+склад. Доступный остаток считается из product_register БЕЗ движений
+// самого проверяемого документа (иначе повторное проведение/правка вычитали бы
+// свой же расход). Проверяются только расходные движения (type==="out");
+// приходные документы (purchase, sale_return) ограничений не имеют.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Ошибка нехватки остатка. shortages — массив дефицитов по товар+склад. */
+export class StockShortageError extends Error {
+	constructor(shortages) {
+		super(formatShortageMessage(shortages));
+		this.name = "StockShortageError";
+		this.shortages = Array.isArray(shortages) ? shortages : [];
+	}
+}
+
+/** Человекочитаемое RU-сообщение о нехватке остатка. */
+export function formatShortageMessage(shortages) {
+	if (!shortages?.length) return "Недостаточно остатка для проведения";
+	const lines = shortages.map(
+		(s) =>
+			`• ${s.productName || s.productUuid}` +
+			`${s.warehouseName ? ` (${s.warehouseName})` : ""}: ` +
+			`нужно ${s.requested}, доступно ${s.available} (не хватает ${s.deficit})`,
+	);
+	return `Недостаточно остатка для проведения:\n${lines.join("\n")}`;
+}
+
+/** Текущий остаток по товар+склад из регистра, исключая движения excludeDocumentUuid. */
+async function balanceFor(productUuid, warehouseUuid, excludeDocumentUuid, client) {
+	const rows = await client.productRegister.findMany({
+		where: {
+			productUuid,
+			warehouseUuid,
+			...(excludeDocumentUuid
+				? { NOT: { documentUuid: excludeDocumentUuid } }
+				: {}),
+		},
+		select: { movementType: true, quantity: true },
+	});
+	let bal = 0;
+	for (const r of rows)
+		bal += (r.movementType === "out" ? -1 : 1) * (Number(r.quantity) || 0);
+	return Math.round(bal * 10000) / 10000;
+}
+
+/** Суммирует требуемый расход по паре товар+склад из строк документа. */
+function aggregateRequested(items, outMovements, doc) {
+	const map = new Map();
+	for (const it of items) {
+		if (!it.productUuid) continue; // движения только по товарам (не услугам)
+		const qty = Number(it.quantity) || 0;
+		if (qty <= 0) continue;
+		for (const mv of outMovements) {
+			const wh = doc?.[mv.warehouseField] ?? null;
+			const key = `${it.productUuid}|${wh ?? ""}`;
+			const acc = map.get(key) ?? {
+				productUuid: it.productUuid,
+				warehouseUuid: wh,
+				requested: 0,
+			};
+			acc.requested += qty;
+			map.set(key, acc);
+		}
+	}
+	return map;
+}
+
+/**
+ * Считает дефициты остатка для расходного документа.
+ *
+ * @param {object} args
+ * @param {string} args.documentType — тип документа-регистратора
+ * @param {string} [args.documentUuid] — uuid документа (исключается из остатка)
+ * @param {object} [args.doc] — объект со складскими полями (warehouseUuid / fromWarehouseUuid)
+ * @param {Array}  args.items — строки документа [{ productUuid, quantity }]
+ * @returns {Promise<Array>} массив дефицитов (пустой — если всё в порядке)
+ */
+export async function computeShortages(
+	{ documentType, documentUuid, doc, items },
+	client = prisma,
+) {
+	const cfg = DOC_CONFIG[documentType];
+	if (!cfg) return [];
+	const outMovements = cfg.movements.filter((m) => m.type === "out");
+	if (!outMovements.length) return []; // приходный документ — без проверки
+
+	const requestedMap = aggregateRequested(items ?? [], outMovements, doc ?? {});
+	if (!requestedMap.size) return [];
+
+	const shortages = [];
+	for (const acc of requestedMap.values()) {
+		const available = await balanceFor(
+			acc.productUuid,
+			acc.warehouseUuid,
+			documentUuid,
+			client,
+		);
+		const requested = Math.round(acc.requested * 10000) / 10000;
+		if (requested > available + 1e-9) {
+			const [product, warehouse] = await Promise.all([
+				client.product.findUnique({
+					where: { uuid: acc.productUuid },
+					select: { name: true, sku: true },
+				}),
+				acc.warehouseUuid
+					? client.warehouse.findUnique({
+							where: { uuid: acc.warehouseUuid },
+							select: { name: true },
+						})
+					: null,
+			]);
+			shortages.push({
+				productUuid: acc.productUuid,
+				productName: product?.name ?? "",
+				sku: product?.sku ?? "",
+				warehouseUuid: acc.warehouseUuid,
+				warehouseName: warehouse?.name ?? "",
+				requested,
+				available,
+				deficit: Math.round((requested - available) * 10000) / 10000,
+			});
+		}
+	}
+	return shortages;
+}
+
+/**
+ * Бэкенд-гард: бросает StockShortageError, если проведённый расходный документ
+ * уводит остаток в минус. Грузит документ и его строки из БД (финальное
+ * состояние). Безопасно вызывать только перед/вместе с reconcile.
+ */
+export async function assertStockAvailable(
+	documentType,
+	documentUuid,
+	client = prisma,
+) {
+	const cfg = DOC_CONFIG[documentType];
+	if (!cfg || !documentUuid) return;
+	if (!cfg.movements.some((m) => m.type === "out")) return; // приходный — пропуск
+
+	const doc = await client[cfg.parentModel].findUnique({
+		where: { uuid: documentUuid },
+	});
+	if (!doc || doc.posted !== true || doc.deletedAt) return; // контроль только при проведении
+
+	const items = await client[cfg.itemModel].findMany({
+		where: { [cfg.parentField]: documentUuid },
+	});
+	const shortages = await computeShortages(
+		{ documentType, documentUuid, doc, items },
+		client,
+	);
+	if (shortages.length) throw new StockShortageError(shortages);
+}
+
+/**
+ * Бэкенд-гард для парент-роутера ПЕРЕД записью проведения. В отличие от
+ * assertStockAvailable не читает posted из БД (вызывающий уже решил, что
+ * документ будет проведён) и принимает «прогнозируемый» документ с актуальными
+ * складскими полями из payload. Строки берутся из БД (на момент PUT они ещё не
+ * перезаписаны). Бросает StockShortageError при дефиците — до самого update,
+ * поэтому проведение не фиксируется в БД.
+ */
+export async function assertStockForPosting(
+	documentType,
+	documentUuid,
+	prospectiveDoc,
+	client = prisma,
+) {
+	const cfg = DOC_CONFIG[documentType];
+	if (!cfg || !documentUuid) return;
+	if (!cfg.movements.some((m) => m.type === "out")) return; // приходный — пропуск
+
+	const items = await client[cfg.itemModel].findMany({
+		where: { [cfg.parentField]: documentUuid },
+	});
+	const shortages = await computeShortages(
+		{ documentType, documentUuid, doc: prospectiveDoc, items },
+		client,
+	);
+	if (shortages.length) throw new StockShortageError(shortages);
+}
+
+/** Маппинг StockShortageError → HTTP 409. Возвращает true, если ответ отправлен. */
+export function respondStockError(err, res) {
+	if (err instanceof StockShortageError) {
+		res
+			.status(409)
+			.json({ success: false, message: err.message, shortages: err.shortages });
+		return true;
+	}
+	return false;
+}
+
 export default {
 	REGISTER_DOC_TYPES,
 	documentTypeForParentModel,
 	reconcileDocumentRegister,
 	reconcileByParentModel,
 	removeDocumentRegister,
+	StockShortageError,
+	formatShortageMessage,
+	computeShortages,
+	assertStockAvailable,
+	assertStockForPosting,
+	respondStockError,
 };

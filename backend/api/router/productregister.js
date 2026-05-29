@@ -11,6 +11,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
+import { computeShortages } from "../../services/productRegister.js";
 
 const router = express.Router();
 const MODEL = "productRegister";
@@ -114,6 +115,41 @@ router.get(`/${ROUTE}/balances`, async (req, res) => {
 		return res.status(200).json({ success: true, items, total: items.length });
 	} catch (error) {
 		console.error(`GET /${ROUTE}/balances error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ── POST проверка доступности остатка (pre-check перед проведением) ──────────
+// Body: { documentType, documentUuid?, warehouseUuid?, fromWarehouseUuid?,
+//         items: [{ productUuid, quantity }] }
+// Считает дефициты по ПЕРЕДАННЫМ (ещё не сохранённым) строкам — для UX-проверки
+// в форме до сохранения. Источник истины — бэкенд-гард при проведении.
+router.post(`/${ROUTE}/check-availability`, async (req, res) => {
+	try {
+		const {
+			documentType,
+			documentUuid,
+			warehouseUuid,
+			fromWarehouseUuid,
+			items,
+		} = req.body ?? {};
+		if (!documentType || !Array.isArray(items)) {
+			return res.status(400).json({
+				success: false,
+				message: "Требуются documentType и items[]",
+			});
+		}
+		const shortages = await computeShortages({
+			documentType,
+			documentUuid: documentUuid || undefined,
+			doc: { warehouseUuid, fromWarehouseUuid },
+			items,
+		});
+		return res
+			.status(200)
+			.json({ success: true, ok: shortages.length === 0, shortages });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/check-availability error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

@@ -34,6 +34,7 @@ import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton"
 import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app";
 import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems } from "src/utils/createFromBasis";
+import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { isEquivalent } from "src/utils/normalize";
 import { PurchaseReturnsForm } from "src/models/PurchaseReturns";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
@@ -206,6 +207,15 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const hasBasis = !!form.fields.basisDocumentUuid;
 
+  // Подсказка о несоответствии документу-основанию (шапка + строки).
+  const basisMismatch = useBasisMismatch({
+    basisType: form.fields.basisDocumentType,
+    basisUuid: form.fields.basisDocumentUuid,
+    currentFields: form.fields,
+    currentItems: allItemsRef.current,
+    mapFields: mapCommonTradeFields,
+  });
+
   const handleRefillFromBasis = useCallback(async (skipFields = false) => {
     if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
     setIsRefilling(true);
@@ -363,6 +373,8 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading}
                 onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
                 onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+                mismatch={basisMismatch.mismatch}
+                mismatchDetails={basisMismatch.differences}
               />
             </GroupCol>
             <Group>
@@ -404,7 +416,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
 
   const handleCreatePurchaseReturn = useCallback(async () => {
     await openDocumentFromBasis(

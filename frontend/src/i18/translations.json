@@ -50,6 +50,8 @@
 	"incomingInvoice": "Счет-фактура (входящие)",
 	"purchaseRequisition": "Заявка на закупку",
 	"basisDocument": "Основание",
+	"basisMismatch": "Документ не соответствует основанию",
+	"basisMismatchItems": "строки отличаются от основания",
 	"notificationsCenter": "Центр уведомлений",
 	"unsavedRecords": "Несохранённые записи",
 	"deletedReferenceControl": "Контроль удалённых ссылок",

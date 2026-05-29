@@ -5,7 +5,7 @@
 // организации НЕ является облагаемым оборотом, поэтому в строках нет НДС/
 // акциза/скидки — таблица использует TradeDocumentItemsTable hasTaxes=false.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FC, useMemo, useCallback } from "react";
+import { FC, useMemo, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { translate } from "src/i18";
@@ -29,6 +29,8 @@ import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocu
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
+import { fetchDocumentItems } from "src/utils/createFromBasis";
+import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 
 const MODEL_ENDPOINT = "inventory-transfers";
 const LIST_NAME = "InventoryTransfersList";
@@ -71,6 +73,9 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   const invalidateSubTables = useCallback(async (savedData: any) => {
     await invalidateSubTableFor(queryClient, "inventorytransferitems", "inventoryTransferUuid", savedData?.uuid ?? "");
   }, [queryClient]);
+
+  // Текущие строки таблицы (server + pending) — для контроля остатка в onBeforeSave.
+  const allItemsRef = useRef<any[]>([]);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "inventory-transfers-form",
@@ -128,6 +133,21 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     },
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
     afterSave: invalidateSubTables,
+    // Контроль остатка перед проведением (расход со склада-источника fromWarehouse).
+    onBeforeSave: async (fd) => {
+      if (fd.posted !== true) return null;
+      let rows = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+      if (rows.length === 0 && fd.uuid) {
+        rows = await fetchDocumentItems("inventorytransferitems", "inventoryTransferUuid", fd.uuid);
+      }
+      const shortages = await checkStockAvailability({
+        documentType: "inventory_transfer",
+        documentUuid: fd.uuid || undefined,
+        fromWarehouseUuid: fd.fromWarehouseUuid || null,
+        items: rows.map((r: any) => ({ productUuid: r.productUuid, quantity: r.quantity })),
+      });
+      return shortages.length ? formatStockShortages(shortages) : null;
+    },
   });
 
   const items = form.useTable("items");
@@ -196,6 +216,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           initialPendingRows={items.pending}
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}
+          onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
           showRequiredHighlight={form.meta.tablesValidationFailed}
         />
       ) : (

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems } from "src/utils/createFromBasis";
+import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { isEquivalent } from "src/utils/normalize";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -210,6 +211,15 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
   const items = form.useTable("items");
 
   const hasBasis = !!form.fields.basisDocumentUuid;
+
+  // Подсказка о несоответствии документу-основанию (шапка + строки).
+  const basisMismatch = useBasisMismatch({
+    basisType: form.fields.basisDocumentType,
+    basisUuid: form.fields.basisDocumentUuid,
+    currentFields: form.fields,
+    currentItems: allItemsRef.current,
+    mapFields: mapCommonTradeFields,
+  });
 
   const handleRefillFromBasis = useCallback(async (skipFields = false) => {
     if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
@@ -442,6 +452,8 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading}
                 onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
                 onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+                mismatch={basisMismatch.mismatch}
+                mismatchDetails={basisMismatch.differences}
               />
             </GroupCol>
             <Group>
@@ -483,7 +495,7 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
 
   return (
     <FormRequiredScope docType="sale_return" active={form.meta.headerValidationFailed}>

@@ -3,7 +3,7 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
-import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
+import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 
 const router = express.Router();
 
@@ -255,9 +255,19 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		for (const f of ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"]) {
 			if (req.body[f] !== undefined) data[f] = req.body[f] || null;
 		}
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true } });
+		const existing = await prisma[MODEL].findUnique({
+			where: w,
+			select: { uuid: true, organizationUuid: true, posted: true, warehouseUuid: true },
+		});
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Контроль остатка ПЕРЕД фиксацией проведения (расход со склада).
+		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
+		if (willBePosted) {
+			const warehouseUuid =
+				data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid;
+			await assertStockForPosting("purchase_return", existing.uuid, { warehouseUuid });
+		}
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -273,6 +283,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await reconcileDocumentRegister("purchase_return", item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondStockError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);

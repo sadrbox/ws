@@ -36,6 +36,8 @@ import PurchaseReturnPrint from "./PurchaseReturnPrint";
 import DocumentTotals from "src/components/DocumentTotals";
 import { refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
+import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
+import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 
 const MODEL_ENDPOINT = "purchase-returns";
 const LIST_NAME = "PurchaseReturnsList";
@@ -205,10 +207,34 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
     afterSave,
     afterReload,
+    // Контроль остатка перед проведением (расход со склада возврата поставщику).
+    onBeforeSave: async (fd) => {
+      if (fd.posted !== true) return null;
+      let rows = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+      if (rows.length === 0 && fd.uuid) {
+        rows = await fetchDocumentItems("purchase-return-items", "purchaseReturnUuid", fd.uuid);
+      }
+      const shortages = await checkStockAvailability({
+        documentType: "purchase_return",
+        documentUuid: fd.uuid || undefined,
+        warehouseUuid: fd.warehouseUuid || null,
+        items: rows.map((r: any) => ({ productUuid: r.productUuid, quantity: r.quantity })),
+      });
+      return shortages.length ? formatStockShortages(shortages) : null;
+    },
   });
 
   const items = form.useTable("items");
   const hasBasis = !!form.fields.basisDocumentUuid;
+
+  // Подсказка о несоответствии документу-основанию (шапка + строки).
+  const basisMismatch = useBasisMismatch({
+    basisType: form.fields.basisDocumentType,
+    basisUuid: form.fields.basisDocumentUuid,
+    currentFields: form.fields,
+    currentItems: allItemsRef.current,
+    mapFields: mapCommonTradeFields,
+  });
 
   const handleRefillFromBasis = useCallback(async (skipFields = false) => {
     if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
@@ -443,6 +469,8 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
                 onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
                 disabled={form.isLoading}
                 formUid={form.formUid}
+                mismatch={basisMismatch.mismatch}
+                mismatchDetails={basisMismatch.differences}
               />
             </GroupCol>
             <Group>
@@ -484,7 +512,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
 
   return (
     <FormRequiredScope docType="purchase_return" active={form.meta.headerValidationFailed}>

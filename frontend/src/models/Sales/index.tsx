@@ -37,6 +37,8 @@ import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
 import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
+import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
+import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { OutgoingInvoicesForm } from "src/models/OutgoingInvoices";
 import { SalesReturnsForm } from "src/models/SalesReturns";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
@@ -110,6 +112,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [invalidateSubTables]);
 
   const afterReload = useCallback(() => { setBasisItems([]); }, []);
+
+  // Текущие строки таблицы (server + pending) — заполняется onAllItemsChange.
+  // Объявлено до useFormStore, т.к. используется в onBeforeSave (контроль остатка).
+  const allItemsRef = useRef<any[]>([]);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "sales-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
@@ -200,13 +206,37 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
     afterSave,
     afterReload,
+    // Контроль остатка перед проведением: при posted=true проверяем, что склад
+    // покрывает списываемые количества. Прерывает сохранение до любого HTTP.
+    onBeforeSave: async (fd) => {
+      if (fd.posted !== true) return null;
+      let rows = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+      if (rows.length === 0 && fd.uuid) {
+        rows = await fetchDocumentItems("saleitems", "saleUuid", fd.uuid);
+      }
+      const shortages = await checkStockAvailability({
+        documentType: "sale",
+        documentUuid: fd.uuid || undefined,
+        warehouseUuid: fd.warehouseUuid || null,
+        items: rows.map((r: any) => ({ productUuid: r.productUuid, quantity: r.quantity })),
+      });
+      return shortages.length ? formatStockShortages(shortages) : null;
+    },
   });
 
   const saleItems = form.useTable("saleItems");
-  const allItemsRef = useRef<any[]>([]);
   const permDefaultsRef = useRef<PermissionDefaultsMap>({});
 
   const hasBasis = !!form.fields.basisDocumentUuid;
+
+  // Подсказка о несоответствии документу-основанию (шапка + строки).
+  const basisMismatch = useBasisMismatch({
+    basisType: form.fields.basisDocumentType,
+    basisUuid: form.fields.basisDocumentUuid,
+    currentFields: form.fields,
+    currentItems: allItemsRef.current,
+    mapFields: mapCommonTradeFields,
+  });
 
   const handleRefillFromBasis = useCallback(async (skipFields = false) => {
     if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
@@ -606,6 +636,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading}
                 onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
                 onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+                mismatch={basisMismatch.mismatch}
+                mismatchDetails={basisMismatch.differences}
               />
             </GroupCol>
             <Group>
@@ -651,7 +683,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
 
   return (
     <FormRequiredScope docType="sale" active={form.meta.headerValidationFailed}>
