@@ -1,23 +1,14 @@
-import apiClient from "src/services/api/client";
+import { api } from "src/services/api/client";
+import { unwrapItem } from "src/utils/apiUnwrap";
 
 /**
- * Маппинг ownerType → endpoint API
+ * Конфигурация владельца: endpoint API и поле отображаемого имени.
  */
-const OWNER_ENDPOINT_MAP: Record<string, string> = {
-  organization: "organizations",
-  counterparty: "counterparties",
-  contactperson: "contactpersons",
-  employee: "employees",
-};
-
-/**
- * Определяет какое поле использовать для отображаемого имени
- */
-const OWNER_DISPLAY_FIELD_MAP: Record<string, string> = {
-  organization: "name",
-  counterparty: "name",
-  contactperson: "fullName",
-  employee: "fullName",
+const OWNER_CONFIG: Record<string, { endpoint: string; displayField: string }> = {
+  organization: { endpoint: "organizations", displayField: "name" },
+  counterparty: { endpoint: "counterparties", displayField: "name" },
+  contactperson: { endpoint: "contactpersons", displayField: "fullName" },
+  employee: { endpoint: "employees", displayField: "fullName" },
 };
 
 /**
@@ -30,14 +21,16 @@ export async function resolveOwnerName(
 ): Promise<string> {
   if (!ownerType || !ownerUuid) return "";
 
-  const endpoint = OWNER_ENDPOINT_MAP[ownerType];
-  if (!endpoint) return "";
+  const config = OWNER_CONFIG[ownerType];
+  if (!config) return "";
 
   try {
-    const res = await apiClient.get(`/${endpoint}/${ownerUuid}`);
-    const item = res.data?.item ?? res.data;
-    const displayField = OWNER_DISPLAY_FIELD_MAP[ownerType] || "name";
-    return item?.[displayField] ?? item?.name ?? item?.fullName ?? "";
+    const item = unwrapItem<Record<string, unknown> | null>(
+      await api.get(`/${config.endpoint}/${ownerUuid}`),
+    );
+    return String(
+      item?.[config.displayField] ?? item?.name ?? item?.fullName ?? "",
+    );
   } catch {
     return "";
   }

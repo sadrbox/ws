@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { api } from "src/services/api/client";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
 
 export interface ExistingDependent {
   uuid: string;

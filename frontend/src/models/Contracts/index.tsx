@@ -15,7 +15,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";

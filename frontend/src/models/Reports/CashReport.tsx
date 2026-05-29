@@ -10,7 +10,7 @@ import { api } from "src/services/api/client";
 import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import styles from "./report.module.scss";

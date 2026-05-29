@@ -19,7 +19,7 @@ import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
 import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
-import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/main.module";
+import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";

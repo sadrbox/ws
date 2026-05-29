@@ -12,7 +12,7 @@ import { useAppContext } from "src/app";
 import apiClient from "src/services/api/client";
 import mainStyles from "src/styles/main.module.scss";
 import type { TPane } from "src/app/types";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

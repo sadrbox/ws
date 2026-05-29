@@ -12,7 +12,7 @@ import type {
 	SaleInvoicePrintData,
 	SaleItemPrintRow,
 } from "./SaleInvoicePrint";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
 
 const fmtNum = (v: number | null | undefined): number | string => {
 	if (v == null || v === 0) return "";

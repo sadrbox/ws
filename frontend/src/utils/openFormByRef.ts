@@ -5,17 +5,12 @@
  * Каждый endpoint соответствует форме модели. Компоненты загружаются лениво
  * (динамический import), чтобы не тянуть весь граф зависимостей при старте.
  */
-import type { FC } from "react";
 import type { TPane } from "src/app/types";
+import { loadLazyComponent, type LazyComponentEntry } from "src/utils/lazyComponent";
 
 type AddPane = (pane: Partial<TPane>) => void;
 
-interface FormEntry {
-	loader: () => Promise<Record<string, unknown>>;
-	key: string;
-}
-
-const FORM_REGISTRY: Record<string, FormEntry> = {
+const FORM_REGISTRY: Record<string, LazyComponentEntry> = {
 	sales: { loader: () => import("src/models/Sales"), key: "SalesForm" },
 	purchases: {
 		loader: () => import("src/models/Purchases"),
@@ -70,20 +65,13 @@ export async function openFormByRef(
 ): Promise<void> {
 	const entry = FORM_REGISTRY[ref.endpoint.toLowerCase()];
 	if (!entry) return;
-	try {
-		const mod = await entry.loader();
-		const Component = mod[entry.key] as FC<any> | undefined;
-		if (!Component) return;
-		addPane({
-			component: Component,
-			data: {
-				uuid: ref.uuid,
-			},
-			label: paneLabel ?? ref.endpoint,
-		});
-	} catch {
-		// Если модуль не загрузился — игнорируем
-	}
+	const Component = await loadLazyComponent(entry);
+	if (!Component) return;
+	addPane({
+		component: Component,
+		data: { uuid: ref.uuid },
+		label: paneLabel ?? ref.endpoint,
+	});
 }
 
 /** true если для endpoint зарегистрирована форма */

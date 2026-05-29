@@ -24,7 +24,7 @@ import { Group } from "src/components/UI";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import Tabs from "src/components/Tabs";
-import { getFormatDate } from "src/utils/main.module";
+import { getFormatDate } from "src/utils/datetime";
 import styles from "./SyncDashboard.module.scss";
 // Общие form-классы (FormWrapper/FormBody/Form) живут в главном модуле стилей
 // и используются также другими формами. Импортируем отдельно — `composes:`

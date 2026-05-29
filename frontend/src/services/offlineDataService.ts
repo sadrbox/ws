@@ -18,7 +18,7 @@
 import apiClient from "src/services/api/client";
 import { isNetworkError as isNetworkLike } from "./networkUtils";
 import { getIsOnline } from "./networkStatus";
-import { crypto } from "src/utils/main.module";
+import { randomUUID } from "src/utils/uuid";
 import {
 	offlineDb,
 	SYNCABLE_TABLES,
@@ -264,7 +264,7 @@ export async function createRecord<T = SyncRecord>(
 	const now = new Date().toISOString();
 
 	// Генерируем временный uuid если не передан
-	const uuid = (data.uuid as string) || crypto.randomUUID();
+	const uuid = (data.uuid as string) || randomUUID();
 
 	// ── Online ──
 	if (getIsOnline()) {

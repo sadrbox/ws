@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { setAppUtcOffset } from "src/utils/main.module";
+import { setAppUtcOffset } from "src/utils/datetime";
 
 const STORAGE_KEY = "app_general_settings";
 

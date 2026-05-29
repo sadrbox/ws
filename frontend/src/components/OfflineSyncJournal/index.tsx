@@ -3,7 +3,7 @@
  */
 
 import { FC, useCallback, useState } from "react";
-import { getFormatDate } from "src/utils/main.module";
+import { getFormatDate } from "src/utils/datetime";
 import { translate } from "src/i18";
 import { useOfflineSync } from "src/hooks/useOfflineSync";
 import { updateEntry, type QueueEntry } from "src/services/offlineQueue";

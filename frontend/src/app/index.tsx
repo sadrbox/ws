@@ -34,6 +34,8 @@ import { useAppContext, AppContextProvider } from "src/app/context";
 import { SalesList } from "src/models/Sales";
 import { ContractsList, ContractsForm } from "src/models/Contracts";
 import { openFormByRef } from "src/utils/openFormByRef";
+import { MaterialStatement } from "src/models/Reports/MaterialStatement";
+import { openReport } from "src/utils/openReport";
 export { useAppContext, AppContextProvider };
 
 export const getComponentName = (node: TComponentNode): string => {
@@ -373,9 +375,13 @@ const App: React.FC = () => {
   // ────────────────────────────────────────────────
 
   useEffect(() => {
+
     // Открываем конкретную форму ContractsForm по ID при монтировании приложения
-    const uuid = "2"; // Замените на реальный UUID
-    openFormByRef({ endpoint: "contracts", uuid }, addPane, "Договор");
+    // const uuid = "2"; // Замените на реальный UUID
+    // openFormByRef({ endpoint: "contracts", uuid }, addPane, "Договор");
+
+    // Открыть материальную ведомость  при монтировании приложения
+    openReport("material-statement", addPane);
   }, []);
 
   // ────────────────────────────────────────────────

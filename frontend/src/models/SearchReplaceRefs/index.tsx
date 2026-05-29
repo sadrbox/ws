@@ -2,7 +2,7 @@ import { FC, useState, useCallback, useEffect, useMemo } from "react";
 import { FieldSelect } from "src/components/Field";
 import { GroupRow, GroupCol } from "src/components/UI";
 import { Button } from "src/components/Button";
-import { getFormatDate } from "src/utils/main.module";
+import { getFormatDate } from "src/utils/datetime";
 import Table from "src/components/Table";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import apiClient from "src/services/api/client";

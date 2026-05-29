@@ -1,7 +1,7 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import LookupField from "./LookupField";
 import { translate } from "src/i18";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
 import styles from "./Field.module.scss";
 
 export interface BasisTypeConfig {

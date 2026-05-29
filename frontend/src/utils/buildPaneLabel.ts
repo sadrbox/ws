@@ -1,5 +1,5 @@
 import { translate } from "src/i18";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
 
 /**
  * Префикс заголовка панели формы.

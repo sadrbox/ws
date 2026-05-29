@@ -6,7 +6,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
 import { GroupCol, GroupRow } from "src/components/UI";
-import { getFormatDate } from "src/utils/main.module";
+import { getFormatDate } from "src/utils/datetime";
 import styles from "src/styles/main.module.scss";
 
 import { useFormStore } from "src/hooks/useFormStore";

@@ -1,8 +1,8 @@
 import { useRef } from "react";
-import { crypto } from "src/utils/main.module";
+import { randomUUID } from "src/utils/uuid";
 
 const useUID = () => {
-	const uidRef = useRef<string>(crypto.randomUUID());
+	const uidRef = useRef<string>(randomUUID());
 	return uidRef.current;
 };
 

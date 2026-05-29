@@ -1,5 +1,5 @@
-import { getFormatDateOnly } from "src/utils/main.module";
-import { getFormatDate } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
+import { getFormatDate } from "src/utils/datetime";
 import { TColumn, TDataItem, TypeTableTypes } from "./types";
 
 const getNestedValue = <T>(obj: T, path: string): any => {

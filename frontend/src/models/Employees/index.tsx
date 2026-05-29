@@ -11,7 +11,7 @@ import { Field, FieldNumber, FieldSelect, FieldDate } from "src/components/Field
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useAppContext } from "src/app";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
 import LookupField from "src/components/Field/LookupField";
 import { ContactsTable } from "../Contacts";
 import EmployeeHistoryForm from "./EmployeeHistoryForm";

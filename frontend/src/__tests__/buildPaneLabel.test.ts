@@ -12,7 +12,7 @@ vi.mock("src/i18", () => ({
 	},
 }));
 
-vi.mock("src/utils/main.module", () => ({
+vi.mock("src/utils/datetime", () => ({
 	getFormatDateOnly: (s: string) =>
 		s.slice(0, 10).split("-").reverse().join("."),
 }));

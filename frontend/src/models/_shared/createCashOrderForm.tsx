@@ -21,7 +21,7 @@ import { useUserPermissionDefaults } from "src/hooks/useUserPermissionDefaults";
 import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
 import { useAppContext } from "src/app";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
-import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/main.module";
+import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import type { DocumentType } from "src/utils/validatePostedDocument";

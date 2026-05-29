@@ -3,7 +3,8 @@ import type { FC } from "react";
 import type { TPane } from "src/app/types";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
+import { unwrapItem, unwrapList } from "src/utils/apiUnwrap";
 
 export interface BasisFromTarget {
 	/** Название создаваемого документа, напр. "Счёт-фактуру исходящую" */
@@ -100,14 +101,9 @@ export async function refillFromBasisSource(
 		}),
 	]);
 
-	const docData = (docResp as any)?.item ?? docResp;
-	const sourceItems: any[] = Array.isArray(itemsResp)
-		? itemsResp
-		: ((itemsResp as any)?.data ?? (itemsResp as any)?.items ?? []);
-
 	return {
-		fields: mapFields(docData),
-		items: mapItemsForBasis(sourceItems),
+		fields: mapFields(unwrapItem(docResp)),
+		items: mapItemsForBasis(unwrapList(itemsResp)),
 	};
 }
 
@@ -126,9 +122,7 @@ export async function fetchDocumentItems(
 	const resp = await api.get(`/${itemsEndpoint}`, {
 		params: { [parentField]: parentUuid, limit: 1000 },
 	});
-	return Array.isArray(resp)
-		? resp
-		: ((resp as any)?.data ?? (resp as any)?.items ?? []);
+	return unwrapList(resp);
 }
 
 /**
@@ -152,13 +146,11 @@ export async function openDocumentFromBasis(
 					limit: 1,
 				},
 			});
-			const existing: any[] = Array.isArray(resp)
-				? resp
-				: (resp?.data ?? resp?.items ?? []);
+			const existing = unwrapList(resp);
 			if (existing.length > 0) {
 				const existingDoc = existing[0];
 				const existingDate = existingDoc.date
-					? " · " + (getFormatDateOnly(String(existingDoc.date)) ?? "")
+					? " · " + getFormatDateOnly(String(existingDoc.date))
 					: "";
 				addPane({
 					component: target.FormComponent,
@@ -181,17 +173,13 @@ export async function openDocumentFromBasis(
 					limit: 1000,
 				},
 			});
-			sourceItems = Array.isArray(resp)
-				? resp
-				: Array.isArray(resp?.items) ? resp.items : Array.isArray(resp?.data) ? resp.data : [];
+			sourceItems = unwrapList(resp);
 		} catch (e) {
 			console.error("[createFromBasis] не удалось загрузить позиции", e);
 		}
 	}
 
-	const dateStr = sourceFields.date
-		? (getFormatDateOnly(sourceFields.date) ?? "")
-		: "";
+	const dateStr = sourceFields.date ? getFormatDateOnly(sourceFields.date) : "";
 	const basisLabel = dateStr
 		? `${sourceTypeLabel}: ID ${sourceFields.id ?? "?"} · ${dateStr}`
 		: `${sourceTypeLabel}: ID ${sourceFields.id ?? "?"}`;

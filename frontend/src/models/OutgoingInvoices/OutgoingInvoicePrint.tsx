@@ -8,7 +8,7 @@
  */
 import type { CSSProperties, FC } from "react";
 import { A4Page, A4DocTitle, A4Field, A4Row, A4Signature } from "src/components/PrintLayout/A4Page";
-import { getFormatDateOnly } from "src/utils/main.module";
+import { getFormatDateOnly } from "src/utils/datetime";
 import type { SaleItemPrintRow, SaleInvoicePrintColumns } from "src/models/Sales/SaleInvoicePrint";
 
 export interface OutgoingInvoicePrintData {
