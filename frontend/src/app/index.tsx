@@ -239,6 +239,7 @@ const App: React.FC = () => {
   const initialNavbar: TypeNavbarProps[] =
     [
       { id: useUID(), isActive: false, title: translate("trade"), component: <NavList label="Trade" /> },
+      { id: useUID(), isActive: false, title: translate("accounting"), component: <NavList label="Accounting" /> },
       { id: useUID(), isActive: false, title: translate("hr"), component: <NavList label="HR" /> },
       { id: useUID(), isActive: false, title: translate("crm"), component: <NavList label="CRM" /> },
       { id: useUID(), isActive: false, title: translate("settings"), component: <NavList label="Settings" /> },

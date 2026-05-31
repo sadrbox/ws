@@ -307,6 +307,22 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		storageKey: "organization-accounting-settings-form",
 		label: "Настройки учёта организации",
 	},
+	{
+		endpoint: "chart-of-accounts",
+		module: () => import("src/models/ChartOfAccounts"),
+		formName: "ChartOfAccountsForm",
+		listName: "ChartOfAccountsList",
+		storageKey: "chart-of-accounts-form",
+		label: "План счетов",
+	},
+	{
+		endpoint: "subkonto-types",
+		module: () => import("src/models/SubkontoTypes"),
+		formName: "SubkontoTypesForm",
+		listName: "SubkontoTypesList",
+		storageKey: "subkonto-types-form",
+		label: "Виды субконто",
+	},
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════

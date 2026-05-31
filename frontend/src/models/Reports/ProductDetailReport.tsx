@@ -1,4 +1,4 @@
-import { FC, useState, useCallback } from "react";
+import { FC, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -6,6 +6,8 @@ import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
+import { useAppContext } from "src/app";
+import { openDocumentByType } from "src/utils/accountingDocTypes";
 import styles from "./report.module.scss";
 import reportCss from "./report.module.scss?inline";
 
@@ -75,10 +77,18 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
 
   // Товар обязателен (отчёт по конкретной номенклатуре). Даты и Организация —
   // необязательны: пустая дата → период не ограничивается с этой стороны.
+  const { windows: { addPane } } = useAppContext();
+
   const handleGenerate = useCallback(() => {
     if (!productUuid) return;
     setApplied({ productUuid, dateFrom, dateTo, orgUuid });
   }, [productUuid, dateFrom, dateTo, orgUuid]);
+
+  // Автоформирование при открытии из «Материальной ведомости» (товар уже передан).
+  useEffect(() => {
+    if (initProductUuid && !applied) setApplied({ productUuid: initProductUuid, dateFrom, dateTo, orgUuid });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data, isLoading, isError } = useQuery<{ items: MovementRow[]; productName: string }>({
     queryKey: ["report-product-movements", applied],
@@ -132,7 +142,12 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
         <tr key={`${row.docUuid}-${idx}`}>
           <td className={styles.ColN}>{idx + 1}</td>
           <td className={styles.ColDate}>{row.date}</td>
-          <td className={styles.ColName}>{DOC_TYPE_LABELS[row.docType] ?? row.docType} №{row.docId}</td>
+          <td className={styles.ColName}>
+            <span className={styles.ClickableRow} style={{ cursor: "pointer", textDecoration: "underline" }}
+              onClick={() => openDocumentByType(row.docType, row.docUuid, addPane)}>
+              {DOC_TYPE_LABELS[row.docType] ?? row.docType} №{row.docId}
+            </span>
+          </td>
           <td className={styles.ColName}>{row.counterpartyName}</td>
           <td className={styles.ColNum}>{fmtQty(row.quantity)}</td>
           <td className={styles.ColNum}>{fmtAmt(row.amount)}</td>

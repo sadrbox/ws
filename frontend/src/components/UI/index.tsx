@@ -49,7 +49,9 @@ import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
 import { PayrollCalculationsList } from 'src/models/PayrollCalculations';
 import { PayrollPaymentsList } from 'src/models/PayrollPayments';
-import { SalesReport, MaterialStatement, CashReport, ProductRegisterReport } from 'src/models/Reports';
+import { SalesReport, MaterialStatement, CashReport, ProductRegisterReport, AccountingJournal, TurnoverBalanceSheet, AccountCard } from 'src/models/Reports';
+import { ChartOfAccountsList } from 'src/models/ChartOfAccounts';
+import { SubkontoTypesList } from 'src/models/SubkontoTypes';
 import { UnsavedFormsList } from 'src/models/UnsavedForms';
 import { SyncDashboard } from 'src/models/SyncDashboard';
 import { SearchReplaceRefsForm } from 'src/models/SearchReplaceRefs';
@@ -699,6 +701,29 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               {can("Product") && <li onClick={() => addPane({ component: ProductsList, label: translate("ProductsList") })}>{translate("ProductsList")}</li>}
               {can("Brand") && <li onClick={() => addPane({ component: BrandsList, label: translate("BrandsList") })}>{translate("BrandsList")}</li>}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )
+  } else if (label.toLocaleLowerCase() === "Accounting".toLocaleLowerCase()) {
+    return (
+      <div className={styles.NavListWrapper}>
+        <h1>{translate("accounting")}</h1>
+        <div className={styles.NavSection}>
+          <div className={styles.NavGroup}>
+            <h3>{translate("reports")}</h3>
+            <ul className={styles.NavList}>
+              {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountingJournal, label: translate("accountingJournalTitle") })}>{translate("accountingJournalTitle")}</li>}
+              {can("AccountingEntry") && <li onClick={() => addPane({ component: TurnoverBalanceSheet, label: translate("osvTitle") })}>{translate("osvTitle")}</li>}
+              {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountCard, label: translate("accountCardTitle") })}>{translate("accountCardTitle")}</li>}
+            </ul>
+          </div>
+          <div className={styles.NavGroup}>
+            <h3>{translate("directories")}</h3>
+            <ul className={styles.NavList}>
+              {can("ChartOfAccount") && <li onClick={() => addPane({ component: ChartOfAccountsList, label: translate("chartOfAccountsTitle") })}>{translate("chartOfAccountsTitle")}</li>}
+              {can("SubkontoType") && <li onClick={() => addPane({ component: SubkontoTypesList, label: translate("subkontoTypesTitle") })}>{translate("subkontoTypesTitle")}</li>}
             </ul>
           </div>
         </div>

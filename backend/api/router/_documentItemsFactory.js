@@ -30,6 +30,7 @@ import {
 	documentTypeForParentModel,
 	respondStockError,
 } from "../../services/productRegister.js";
+import { reconcileByParentModel as reconcileEntriesByParentModel } from "../../services/accountingPosting.js";
 
 function recalcTaxes(amountAfterDiscount, taxes) {
 	if (!Array.isArray(taxes)) return null;
@@ -258,6 +259,13 @@ export function createDocumentItemsRouter({
 			await reconcileByParentModel(PARENT_MODEL, parentUuid);
 		} catch (err) {
 			console.error(`reconcile(${PARENT_MODEL}) error:`, err);
+		}
+
+		// Пересобираем бухгалтерские проводки документа (только для проведённых).
+		try {
+			await reconcileEntriesByParentModel(PARENT_MODEL, parentUuid);
+		} catch (err) {
+			console.error(`reconcileEntries(${PARENT_MODEL}) error:`, err);
 		}
 	}
 

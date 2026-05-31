@@ -25,6 +25,7 @@ import { validateDocumentFields, formatValidationErrors } from "src/utils/valida
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { Toolbar } from "src/components/Toolbar";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
+import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import SaleInvoicePrint, { type SaleInvoicePrintData, type SaleInvoicePrintColumns, type SaleItemPrintRow } from "./SaleInvoicePrint";
 import ActPrint from "./ActPrint";
 import { buildSaleInvoiceWorkbook } from "./saleInvoiceWorkbook";
@@ -552,6 +553,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (isSavedDoc || hasBasis) ? (
       <>
+        {isSavedDoc && <DocumentEntriesButton documentType="sale" documentUuid={form.fields.uuid} />}
         {hasBasis && (
           <RefillFromBasisButton
             mismatch={basisMismatch.mismatch}

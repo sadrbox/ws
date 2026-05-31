@@ -4,6 +4,7 @@ import { tenantFilter, checkOwnership, checkFkOwnership } from "../../utils/auth
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
+import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 
 const router = express.Router();
 
@@ -275,6 +276,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			const warehouseUuid =
 				data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid;
 			await assertStockForPosting("sale", existing.uuid, { warehouseUuid });
+			// Бух. проверки проведения (организация, дата, счета, субконто, Дт=Кт).
+			await assertPostable("sale", existing.uuid, { ...data, posted: true });
 		}
 		const item = await prisma[MODEL].update({
 			where: w,
@@ -291,9 +294,12 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		// Проведение/распроведение или смена даты/склада/организации — пересобираем
 		// движения регистра товаров (записываются только для проведённых документов).
 		await reconcileDocumentRegister("sale", item.uuid);
+		// Пересобираем бухгалтерские проводки документа.
+		await reconcileDocumentEntries("sale", item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (respondStockError(error, res)) return;
+		if (respondPostingError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);
@@ -301,12 +307,17 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
+const onSaleDeleted = async (doc) => {
+	await removeDocumentRegister("sale", doc.uuid);
+	await removeDocumentEntries("sale", doc.uuid);
+};
+
 router.delete(`/${ROUTE}/:id`, (req, res) =>
-	handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentRegister("sale", doc.uuid) }),
+	handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: onSaleDeleted }),
 );
 
 router.post(`/${ROUTE}/batch-delete`, (req, res) =>
-	handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentRegister("sale", doc.uuid) }),
+	handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: onSaleDeleted }),
 );
 
 export default router;

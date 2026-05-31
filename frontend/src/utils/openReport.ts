@@ -48,6 +48,21 @@ const REPORT_REGISTRY: Record<string, ReportEntry> = {
 		key: "ProductDetailReport",
 		labelKey: "reportProductMovements",
 	},
+	"accounting-journal": {
+		loader: () => import("src/models/Reports/AccountingJournal"),
+		key: "AccountingJournal",
+		labelKey: "accountingJournalTitle",
+	},
+	"accounting-osv": {
+		loader: () => import("src/models/Reports/TurnoverBalanceSheet"),
+		key: "TurnoverBalanceSheet",
+		labelKey: "osvTitle",
+	},
+	"account-card": {
+		loader: () => import("src/models/Reports/AccountCard"),
+		key: "AccountCard",
+		labelKey: "accountCardTitle",
+	},
 };
 
 /**

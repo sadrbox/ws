@@ -27,6 +27,7 @@ import { validateDocumentFields, formatValidationErrors } from "src/utils/valida
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { useAppContext } from "src/app";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
+import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
@@ -348,6 +349,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (isSavedDoc || hasBasis) ? (
       <>
+        {isSavedDoc && <DocumentEntriesButton documentType="purchase_return" documentUuid={form.fields.uuid} />}
         {hasBasis && (
           <RefillFromBasisButton
             mismatch={basisMismatch.mismatch}

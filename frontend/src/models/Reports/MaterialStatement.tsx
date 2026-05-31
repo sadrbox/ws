@@ -13,6 +13,9 @@ import { Group, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import { getFormatDateOnly } from "src/utils/datetime";
+import { useAppContext } from "src/app";
+import { openReport } from "src/utils/openReport";
+import { openFormByEndpoint } from "src/registry/formRegistry";
 import styles from "./report.module.scss";
 import reportCss from "./report.module.scss?inline";
 import { GroupCol } from "src/components/UI";
@@ -71,6 +74,7 @@ interface MaterialStatementProps {
 
 const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
   const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } = useDefaultOrganization();
+  const { windows: { addPane } } = useAppContext();
 
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
@@ -124,6 +128,29 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
   );
 
   const period = formatPeriod(dateFrom, dateTo);
+
+  // Ссылка на карточку номенклатуры.
+  const openProductCard = (row: ProductMovement) => {
+    if (row.productUuid) void openFormByEndpoint("products", row.productUuid, addPane);
+  };
+
+  // Ссылка на «Движение товара» с передачей параметров отчёта и строки.
+  const openMovements = (row: ProductMovement) => {
+    if (!row.productUuid) return;
+    void openReport("product-detail", addPane, undefined, {
+      productUuid: row.productUuid,
+      productName: row.productName,
+      initialDateFrom: applied?.dateFrom,
+      initialDateTo: applied?.dateTo,
+      initialOrgUuid: applied?.orgUuid,
+      initialOrgName: orgName,
+    } as any);
+  };
+
+  const linkSum = (row: ProductMovement, value: number) => (
+    <span className={styles.ClickableRow} style={{ cursor: "pointer", textDecoration: "underline" }}
+      onClick={() => openMovements(row)}>{fmtAmt(value)}</span>
+  );
 
   const form = (
     <>
@@ -182,22 +209,25 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
           {movements.map((row, idx) => (
             <tr key={row.productUuid}>
               <td className={styles.ColN}>{idx + 1}</td>
-              <td className={styles.ColName}>{row.productName}</td>
+              <td className={styles.ColName}>
+                <span className={styles.ClickableRow} style={{ cursor: "pointer", textDecoration: "underline" }}
+                  onClick={() => openProductCard(row)}>{row.productName}</span>
+              </td>
               <td className={styles.ColUom}>{row.accountCode}</td>
               <td className={styles.ColUom}>{row.sku}</td>
               <td className={styles.ColUom}>{row.uom}</td>
               <td className={`${styles.ColNum} ${styles.Cost}`}>{fmtAmt(row.unitCost)}</td>
               <td className={styles.ColNum}>{fmtQty(row.openQty)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.openAmount)}</td>
+              <td className={styles.ColNum}>{linkSum(row, row.openAmount)}</td>
               <td className={styles.ColNum}>{fmtQty(row.inQty)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.inAmount)}</td>
+              <td className={styles.ColNum}>{linkSum(row, row.inAmount)}</td>
               <td className={styles.ColNum}>{fmtQty(row.outQty)}</td>
-              <td className={`${styles.ColNum} ${styles.Cost}`}>{fmtAmt(row.cogsOut)}</td>
+              <td className={`${styles.ColNum} ${styles.Cost}`}>{linkSum(row, row.cogsOut)}</td>
               <td className={`${styles.ColNum} ${styles.SalePrice}`}>{fmtAmt(row.salePrice)}</td>
               <td className={`${styles.ColNum} ${styles.SalePrice}`}>{fmtAmt(row.saleAmount)}</td>
               <td className={`${styles.ColNum} ${row.profit < 0 ? styles.Loss : styles.Profit}`}>{fmtAmt(row.profit)}</td>
               <td className={styles.ColNum}>{fmtQtyZ(row.closeQty)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.closeAmount)}</td>
+              <td className={styles.ColNum}>{linkSum(row, row.closeAmount)}</td>
             </tr>
           ))}
         </tbody>

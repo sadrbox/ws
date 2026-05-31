@@ -11,6 +11,8 @@ import { GroupRow, Group, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
+import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
+import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import { useAccessRight } from "src/hooks/useAccessRight";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
@@ -129,12 +131,19 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
     },
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, canWrite]);
 
+  const isSavedDoc = form.isEditMode && !!form.fields.uuid;
+  const headerActionsPortal = usePaneHeaderActions(
+    form.paneId,
+    isSavedDoc ? <DocumentEntriesButton documentType="payroll_payment" documentUuid={form.fields.uuid} /> : null,
+  );
+
   return (
     <FormRequiredScope docType="payroll_payment" active={form.meta.headerValidationFailed}>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
         <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
           onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
           readonly={!canWrite} />
+        {headerActionsPortal}
       </FormDirtyScope>
     </FormRequiredScope>
   );

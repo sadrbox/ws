@@ -1,0 +1,10 @@
+[
+	{ "identifier": "id", "type": "number", "width": "70px", "minWidth": "60px", "alignment": "left", "hint": "Номер", "visible": false, "inlist": false },
+	{ "identifier": "uuid", "type": "string", "width": "300px", "minWidth": "80px", "alignment": "left", "hint": "UUID", "visible": false, "inlist": false },
+	{ "identifier": "code", "type": "string", "width": "110px", "minWidth": "70px", "alignment": "left", "hint": "Код счёта", "visible": true, "inlist": true },
+	{ "identifier": "name", "type": "string", "width": "420px", "minWidth": "120px", "alignment": "left", "hint": "Наименование", "visible": true, "inlist": true },
+	{ "identifier": "accountType", "type": "string", "width": "140px", "minWidth": "80px", "alignment": "left", "hint": "Вид (актив/пассив)", "visible": true, "inlist": true },
+	{ "identifier": "subkonto1Type", "type": "string", "width": "150px", "minWidth": "80px", "alignment": "left", "hint": "Субконто 1", "visible": true, "inlist": true },
+	{ "identifier": "subkonto2Type", "type": "string", "width": "150px", "minWidth": "80px", "alignment": "left", "hint": "Субконто 2", "visible": true, "inlist": true },
+	{ "identifier": "subkonto3Type", "type": "string", "width": "150px", "minWidth": "80px", "alignment": "left", "hint": "Субконто 3", "visible": false, "inlist": false }
+]

@@ -24,6 +24,8 @@ import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
+import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import type { DocumentType } from "src/utils/validatePostedDocument";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
@@ -217,6 +219,12 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
       },
     ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, canWrite]);
 
+    const isSavedDoc = form.isEditMode && !!form.fields.uuid;
+    const headerActionsPortal = usePaneHeaderActions(
+      form.paneId,
+      isSavedDoc ? <DocumentEntriesButton documentType={cfg.docType} documentUuid={form.fields.uuid} /> : null,
+    );
+
     return (
       <FormRequiredScope docType={cfg.docType} active={form.meta.headerValidationFailed}>
         <FormDirtyScope dirtyKeys={form.unsavedFields}>
@@ -227,6 +235,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
             isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
             readonly={!canWrite}
           />
+          {headerActionsPortal}
         </FormDirtyScope>
       </FormRequiredScope>
     );

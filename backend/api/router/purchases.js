@@ -4,6 +4,7 @@ import { tenantFilter, checkOwnership, checkFkOwnership } from "../../utils/auth
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
+import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 
 const router = express.Router();
 
@@ -224,9 +225,14 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			const fkError = await checkFkOwnership(req, prisma, [{ model: "warehouse", uuid: data.warehouseUuid }]);
 			if (fkError) return res.status(403).json({ success: false, message: fkError });
 		}
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true } });
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true } });
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
+		if (willBePosted) {
+			// Бух. проверки проведения (организация, дата, счета, субконто, Дт=Кт).
+			await assertPostable("purchase", existing.uuid, { ...data, posted: true });
+		}
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -240,8 +246,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		});
 		await syncItemsFromParent("purchaseItem", "purchaseUuid", item.uuid, item);
 		await reconcileDocumentRegister("purchase", item.uuid);
+		await reconcileDocumentEntries("purchase", item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondPostingError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);
@@ -249,12 +257,17 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
+const onPurchaseDeleted = async (doc) => {
+	await removeDocumentRegister("purchase", doc.uuid);
+	await removeDocumentEntries("purchase", doc.uuid);
+};
+
 router.delete(`/${ROUTE}/:id`, (req, res) =>
-	handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentRegister("purchase", doc.uuid) }),
+	handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: onPurchaseDeleted }),
 );
 
 router.post(`/${ROUTE}/batch-delete`, (req, res) =>
-	handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentRegister("purchase", doc.uuid) }),
+	handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: onPurchaseDeleted }),
 );
 
 export default router;

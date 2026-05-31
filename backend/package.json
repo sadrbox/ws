@@ -1,7 +1,8 @@
 {
 	"type": "module",
 	"scripts": {
-		"dev": "node server.js"
+		"dev": "node server.js",
+		"test": "node --test"
 	},
 	"dependencies": {
 		"@prisma/adapter-pg": "^7.2.0",

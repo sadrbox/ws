@@ -2,6 +2,8 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
+const DOC_TYPE = "payroll_payment";
 
 const router = express.Router();
 const MODEL = "payrollPayment";
@@ -145,22 +147,26 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			organizationUuid,
 			paymentMethod,
 			amount,
+			posted,
 		} = req.body;
-		const item = await prisma[MODEL].create({
-			data: {
-				date: date ? new Date(date) : new Date(),
-				comment: comment?.trim() ?? null,
-				period: period?.trim() ?? null,
-				employeeUuid: employeeUuid || null,
-				organizationUuid: organizationUuid || null,
-				paymentMethod: paymentMethod?.trim() ?? "bank_transfer",
-				amount: amount != null ? parseFloat(amount) : 0,
-				authorUuid: req.user.uuid,
-			},
-			include: INCLUDE,
-		});
+		const willPost = posted === undefined ? true : !!posted;
+		const docData = {
+			date: date ? new Date(date) : new Date(),
+			comment: comment?.trim() ?? null,
+			period: period?.trim() ?? null,
+			employeeUuid: employeeUuid || null,
+			organizationUuid: organizationUuid || null,
+			paymentMethod: paymentMethod?.trim() ?? "bank_transfer",
+			amount: amount != null ? parseFloat(amount) : 0,
+			posted: willPost,
+			authorUuid: req.user.uuid,
+		};
+		if (willPost) await validatePosting(DOC_TYPE, docData, []);
+		const item = await prisma[MODEL].create({ data: docData, include: INCLUDE });
+		if (item.posted) await reconcileDocumentEntries(DOC_TYPE, item.uuid);
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondPostingError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -188,13 +194,20 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			data.date = req.body.date ? new Date(req.body.date) : null;
 		if (req.body.amount !== undefined)
 			data.amount = req.body.amount != null ? parseFloat(req.body.amount) : 0;
+		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, posted: true } });
+		if (!existing) return res.status(404).json({ success: false, message: "Не найдено" });
+		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
+		if (willBePosted) await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
 			include: INCLUDE,
 		});
+		await reconcileDocumentEntries(DOC_TYPE, item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondPostingError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);
@@ -203,11 +216,11 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 });
 
 router.delete(`/${ROUTE}/:id`, (req, res) =>
-	handleDelete({ req, res, prisma, modelName: MODEL }),
+	handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(DOC_TYPE, doc.uuid) }),
 );
 
 router.post(`/${ROUTE}/batch-delete`, (req, res) =>
-	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
+	handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(DOC_TYPE, doc.uuid) }),
 );
 
 export default router;

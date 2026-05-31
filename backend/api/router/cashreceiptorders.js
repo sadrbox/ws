@@ -2,9 +2,11 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
 const router = express.Router();
 const MODEL = "cashReceiptOrder";
 const ROUTE = "cash-receipt-orders";
+const DOC_TYPE = "cash_receipt_order";
 const TEXT_FIELDS = ["comment"];
 
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -149,18 +151,24 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			counterpartyUuid,
 			contractUuid,
 			cashboxUuid,
+			posted,
 		} = req.body;
+		const willPost = posted === undefined ? true : !!posted;
+		const docData = {
+			date: date ? new Date(date) : new Date(),
+			comment: comment?.trim() ?? null,
+			amount: amount != null ? parseFloat(amount) : null,
+			organizationUuid: organizationUuid || null,
+			counterpartyUuid: counterpartyUuid || null,
+			contractUuid: contractUuid || null,
+			cashboxUuid: cashboxUuid || null,
+			posted: willPost,
+			authorUuid: req.user.uuid,
+		};
+		// Проверки проведения ДО создания документа.
+		if (willPost) await validatePosting(DOC_TYPE, docData, []);
 		const item = await prisma[MODEL].create({
-			data: {
-				date: date ? new Date(date) : new Date(),
-				comment: comment?.trim() ?? null,
-				amount: amount != null ? parseFloat(amount) : null,
-				organizationUuid: organizationUuid || null,
-				counterpartyUuid: counterpartyUuid || null,
-				contractUuid: contractUuid || null,
-				cashboxUuid: cashboxUuid || null,
-				authorUuid: req.user.uuid,
-			},
+			data: docData,
 			include: {
 				organization: true,
 				counterparty: true,
@@ -169,8 +177,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
+		if (item.posted) await reconcileDocumentEntries(DOC_TYPE, item.uuid);
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondPostingError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -198,9 +208,11 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
 		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true } });
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true } });
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
+		if (willBePosted) await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -212,8 +224,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
+		await reconcileDocumentEntries(DOC_TYPE, item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondPostingError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);
@@ -221,10 +235,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 router.delete(`/${ROUTE}/:id`, (req, res) =>
-	handleDelete({ req, res, prisma, modelName: MODEL }),
+	handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(DOC_TYPE, doc.uuid) }),
 );
 router.post(`/${ROUTE}/batch-delete`, (req, res) =>
-	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
+	handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(DOC_TYPE, doc.uuid) }),
 );
 
 export default router;

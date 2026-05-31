@@ -57,6 +57,9 @@ const ALL_MODEL_NAMES = [
 	"VatRate",
 	"PayrollCalculation",
 	"PayrollPayment",
+	"ChartOfAccount",
+	"SubkontoType",
+	"AccountingEntry",
 	"User",
 ];
 

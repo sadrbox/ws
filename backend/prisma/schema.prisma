@@ -643,6 +643,7 @@ model CashReceiptOrder {
   contractUuid     String?
   cashboxUuid      String?
   authorUuid       String
+  posted           Boolean       @default(true)
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   cashbox          Cashbox?      @relation(fields: [cashboxUuid], references: [uuid])
@@ -672,6 +673,7 @@ model CashExpenseOrder {
   contractUuid     String?
   cashboxUuid      String?
   authorUuid       String
+  posted           Boolean       @default(true)
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   cashbox          Cashbox?      @relation(fields: [cashboxUuid], references: [uuid])
@@ -1081,6 +1083,7 @@ model PayrollCalculation {
   netSalary        Decimal       @default(0) @db.Decimal(18, 2)
   totalExpense     Decimal       @default(0) @db.Decimal(18, 2)
   authorUuid       String
+  posted           Boolean       @default(true)
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   employee         Employee?     @relation("PayrollCalcEmployee", fields: [employeeUuid], references: [uuid])
@@ -1109,6 +1112,7 @@ model PayrollPayment {
   paymentMethod    String?       @default("bank_transfer")
   amount           Decimal       @default(0) @db.Decimal(18, 2)
   authorUuid       String
+  posted           Boolean       @default(true)
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   employee         Employee?     @relation("PayrollPayEmployee", fields: [employeeUuid], references: [uuid])
@@ -1473,4 +1477,118 @@ model ProductRegister {
   @@index([documentType, documentUuid])
   @@index([date])
   @@map("product_register")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ПОДСИСТЕМА БУХГАЛТЕРСКОГО УЧЁТА (РК)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Справочник «Виды субконто» (типы аналитики проводок).
+/// code — латинский код (Nomenclature, Warehouse, Counterparty, ...), хранится
+/// в ChartOfAccount.subkontoNType и AccountingEntryAnalytic.subkontoType.
+/// referenceEndpoint — API-endpoint справочника, по которому резолвится objectUuid
+/// в наименование (products, warehouses, ...). NULL — «свободная» аналитика без
+/// привязанного справочника (Подразделение, СтатьяЗатрат, Проект, ОС). Новые
+/// виды добавляются как записи — структура таблиц не меняется.
+model SubkontoType {
+  id                Int       @id @default(autoincrement())
+  uuid              String    @unique @default(uuid())
+  code              String    @unique
+  name              String
+  referenceEndpoint String?
+  referenceModel    String?
+  isActive          Boolean   @default(true)
+  sortOrder         Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
+  deletedAt         DateTime?
+
+  @@index([updatedAt])
+  @@map("subkonto_types")
+}
+
+/// План счетов. organizationUuid = NULL — типовой счёт РК (доступен всем
+/// организациям); заполненный — собственный счёт организации. Иерархия — через
+/// parentUuid (self-relation) и/или префикс code. До трёх аналитик (субконто) на
+/// счёт: subkonto1Type..subkonto3Type ссылаются на SubkontoType.code.
+model ChartOfAccount {
+  id               Int              @id @default(autoincrement())
+  uuid             String           @unique @default(uuid())
+  code             String
+  name             String
+  /// active | passive | active-passive
+  accountType      String           @default("active")
+  parentUuid       String?
+  isActive         Boolean          @default(true)
+  isCurrency       Boolean          @default(false)
+  isQuantitative   Boolean          @default(false)
+  isOffBalance     Boolean          @default(false)
+  description      String?
+  subkonto1Type    String?
+  subkonto2Type    String?
+  subkonto3Type    String?
+  organizationUuid String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @default(now()) @updatedAt
+  deletedAt        DateTime?
+  parent           ChartOfAccount?  @relation("AccountTree", fields: [parentUuid], references: [uuid])
+  children         ChartOfAccount[] @relation("AccountTree")
+
+  @@unique([organizationUuid, code])
+  @@index([code])
+  @@index([parentUuid])
+  @@index([organizationUuid])
+  @@index([updatedAt])
+  @@map("chart_of_accounts")
+}
+
+/// Бухгалтерская проводка (двойная запись Дт/Кт на одну сумму). Полиморфно
+/// привязана к документу-регистратору (documentType + documentUuid), без FK на
+/// документ — как product_register. Коды счетов денормализованы для отчётов.
+model AccountingEntry {
+  id                Int                       @id @default(autoincrement())
+  uuid              String                    @unique @default(uuid())
+  organizationUuid  String?
+  /// Тип документа-регистратора: purchase | sale | sale_return | purchase_return |
+  /// cash_receipt_order | cash_expense_order | payroll_calculation | payroll_payment
+  documentType      String
+  documentUuid      String
+  documentId        Int?
+  date              DateTime
+  debitAccountUuid  String?
+  debitAccountCode  String
+  creditAccountUuid String?
+  creditAccountCode String
+  amount            Decimal                   @default(0) @db.Decimal(18, 2)
+  description       String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @default(now()) @updatedAt
+  analytics         AccountingEntryAnalytic[]
+
+  @@index([organizationUuid])
+  @@index([documentType, documentUuid])
+  @@index([date])
+  @@index([debitAccountCode])
+  @@index([creditAccountCode])
+  @@map("accounting_entries")
+}
+
+/// Аналитика проводки (субконто). Универсальная схема: side (debit/credit) +
+/// subkontoType (код вида субконто) + objectUuid (ссылка на объект аналитики).
+/// objectName денормализовано для отчётов.
+model AccountingEntryAnalytic {
+  id                  Int             @id @default(autoincrement())
+  uuid                String          @unique @default(uuid())
+  accountingEntryUuid String
+  /// debit | credit
+  side                String
+  subkontoType        String
+  objectUuid          String?
+  objectName          String?
+  createdAt           DateTime        @default(now())
+  entry               AccountingEntry @relation(fields: [accountingEntryUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([accountingEntryUuid])
+  @@index([subkontoType, objectUuid])
+  @@map("accounting_entry_analytics")
 }

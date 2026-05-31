@@ -52,6 +52,17 @@ export const RecalcIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+/** Бухгалтерские проводки — книга-журнал с записями (Дт/Кт). */
+export const LedgerIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M3 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9.5H4.5A1.5 1.5 0 0 1 3 12V2.5z" />
+    <path d="M3 2.5v11" />
+    <path d="M5.5 5.5h5" />
+    <path d="M5.5 8h5" />
+    <path d="M5.5 10.5h3" />
+  </svg>
+);
+
 /** Настройки колонок — слайдеры (горизонтальные ползунки с ручками). */
 export const SettingsIcon: FC<SvgProps> = (props) => (
   <svg {...baseProps} {...props}>
@@ -262,6 +273,7 @@ export const SyncFromBasisIcon: FC<SvgProps> = (props) => (
 
 export const ICONS = {
   recalc: RecalcIcon,
+  ledger: LedgerIcon,
   settings: SettingsIcon,
   reload: ReloadIcon,
   search: SearchIcon,

@@ -1,0 +1,8 @@
+[
+	{ "identifier": "id", "type": "number", "width": "70px", "minWidth": "60px", "alignment": "left", "hint": "Номер", "visible": true, "inlist": true },
+	{ "identifier": "uuid", "type": "string", "width": "300px", "minWidth": "80px", "alignment": "left", "hint": "UUID", "visible": false, "inlist": false },
+	{ "identifier": "code", "type": "string", "width": "180px", "minWidth": "80px", "alignment": "left", "hint": "Код", "visible": true, "inlist": true },
+	{ "identifier": "name", "type": "string", "width": "260px", "minWidth": "80px", "alignment": "left", "hint": "Наименование", "visible": true, "inlist": true },
+	{ "identifier": "referenceEndpoint", "type": "string", "width": "200px", "minWidth": "80px", "alignment": "left", "hint": "Справочник", "visible": true, "inlist": true },
+	{ "identifier": "sortOrder", "type": "number", "width": "100px", "minWidth": "60px", "alignment": "right", "hint": "Порядок", "visible": true, "inlist": true }
+]

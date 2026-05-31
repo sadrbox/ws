@@ -30,6 +30,7 @@ import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
+import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
@@ -441,6 +442,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (isSavedDoc || hasBasis) ? (
       <>
+        {isSavedDoc && <DocumentEntriesButton documentType="purchase" documentUuid={form.fields.uuid} />}
         {hasBasis && (
           <RefillFromBasisButton
             mismatch={basisMismatch.mismatch}
