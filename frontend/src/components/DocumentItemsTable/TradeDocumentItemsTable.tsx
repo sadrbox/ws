@@ -569,22 +569,23 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       onRefresh={onRefresh}
       showEditModeToggle={false}
       extraButtons={
-        <RecalcAllButton
-          endpoint={endpoint}
-          disabled={disabled}
-          recalcRow={(row) => {
-            const refDefaults: Record<string, unknown> = {};
-            const product = row.product as { unitOfMeasureUuid?: string | null; unitOfMeasure?: { uuid?: string; name?: string } | null } | null | undefined;
-            if (!row.unitOfMeasureUuid && product?.unitOfMeasureUuid) {
-              refDefaults.unitOfMeasureUuid = product.unitOfMeasureUuid;
-              if (product.unitOfMeasure) refDefaults.unitOfMeasure = product.unitOfMeasure;
-            }
-            if (row.discountPercent == null) refDefaults.discountPercent = 0;
-            if (row.exciseRate == null) refDefaults.exciseRate = 0;
-            if (row.vatRate == null) refDefaults.vatRate = 0;
-            return recalcWithFlags(row as any, refDefaults);
-          }}
-        />
+        <>
+          <Toolbar.Divider />
+          <RecalcAllButton
+            endpoint={endpoint}
+            disabled={disabled}
+            recalcRow={(row) => {
+              const refDefaults: Record<string, unknown> = {};
+              const product = row.product as { unitOfMeasureUuid?: string | null; unitOfMeasure?: { uuid?: string; name?: string; } | null; } | null | undefined;
+              if (!row.unitOfMeasureUuid && product?.unitOfMeasureUuid) {
+                refDefaults.unitOfMeasureUuid = product.unitOfMeasureUuid;
+                if (product.unitOfMeasure) refDefaults.unitOfMeasure = product.unitOfMeasure;
+              }
+              if (row.discountPercent == null) refDefaults.discountPercent = 0;
+              if (row.exciseRate == null) refDefaults.exciseRate = 0;
+              if (row.vatRate == null) refDefaults.vatRate = 0;
+              return recalcWithFlags(row as any, refDefaults);
+            }} /></>
       }
     />
   );

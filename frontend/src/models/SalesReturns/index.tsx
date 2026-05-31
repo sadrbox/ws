@@ -34,7 +34,7 @@ import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
 import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
-import IconButton from "src/components/IconButton/IconButton";
+import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import SalesReturnPrint from "./SalesReturnPrint";
 import DocumentTotals from "src/components/DocumentTotals";
 
@@ -334,9 +334,9 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     (isSavedDoc || hasBasis) ? (
       <>
         {hasBasis && (
-          <IconButton
-            icon="syncFromBasis"
-            title="Перезаполнить по основанию"
+          <RefillFromBasisButton
+            mismatch={basisMismatch.mismatch}
+            mismatchDetails={basisMismatch.differences}
             disabled={form.isLoading || isRefilling}
             loading={isRefilling}
             onClick={() => void handleRefillFromBasis()}

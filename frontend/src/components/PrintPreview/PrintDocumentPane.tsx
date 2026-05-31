@@ -14,7 +14,6 @@ import SaveDropdownButton, { type SaveDropdownOption } from "src/components/Tool
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import { FieldSelect } from "src/components/Field";
-import { GroupRow } from "src/components/UI";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import { usePrintDocument } from "src/components/PrintLayout/usePrintDocument";
 import { DocViewport, DocSheet } from "src/components/DocViewport";
@@ -208,9 +207,8 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
     if (!data) return;
     void printNode(activeLayout, {
       title,
-      extraCss: orientation === "landscape"
-        ? "@page { size: A4 landscape; } .a4-sheet { width: 297mm; min-height: 210mm; }"
-        : "",
+      orientation,
+      extraCss: orientation === "landscape" ? "@page { size: A4 landscape; }" : "",
     });
   }, [data, printNode, title, orientation, activeLayout]);
 
@@ -254,6 +252,17 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
     uniqId,
     data ? (
       <>
+        <FieldSelect
+          size="sm"
+          name="print_orientation"
+          value={orientation}
+          options={[
+            { value: "portrait", label: translate("portrait") },
+            { value: "landscape", label: translate("landscape") },
+          ]}
+          onChange={(e) => handleOrientationChange(e.target.value as PageOrientation)}
+          style={{ width: "140px" }}
+        />
         {hasColumnDefs && (
           <>
             <IconButton
@@ -305,21 +314,6 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
   return (
     <div className={styles.PrintPreview}>
       {headerActionsPortal}
-      <div className={styles.PrintParamForm}>
-        <GroupRow>
-          <FieldSelect
-            label={translate("pageOrientation")}
-            name="print_orientation"
-            value={orientation}
-            options={[
-              { value: "portrait", label: translate("portrait") },
-              { value: "landscape", label: translate("landscape") },
-            ]}
-            onChange={(e) => handleOrientationChange(e.target.value as PageOrientation)}
-            style={{ width: "180px" }}
-          />
-        </GroupRow>
-      </div>
       <DocViewport>
         <DocSheet ref={layoutRef} orientation={orientation}>
           {activeLayout}

@@ -14,6 +14,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import { getFormatDateOnly } from "src/utils/datetime";
 import styles from "./report.module.scss";
+import reportCss from "./report.module.scss?inline";
 import { GroupCol } from "src/components/UI";
 
 interface ProductMovement {
@@ -225,6 +226,7 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
       uniqId={uniqId}
       form={form}
       layout={layout}
+      layoutStyles={reportCss}
       isLoading={isLoading}
       isEmpty={!isLoading && (!applied || movements.length === 0)}
       emptyMessage={!applied ? translate("reportPressGenerate") : undefined}

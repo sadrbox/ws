@@ -15,6 +15,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import { getFormatDateOnly } from "src/utils/datetime";
 import styles from "./report.module.scss";
+import reportCss from "./report.module.scss?inline";
 
 // ─── форматтеры ───────────────────────────────────────────────────────────────
 const fmtAmt = (n: number) =>
@@ -285,6 +286,7 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
       uniqId={uniqId}
       form={form}
       layout={layout}
+      layoutStyles={reportCss}
       isLoading={isLoading}
       isEmpty={isEmpty}
       emptyMessage={!applied ? translate("reportPressGenerate") : undefined}

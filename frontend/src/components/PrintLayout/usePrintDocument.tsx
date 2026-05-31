@@ -14,6 +14,10 @@
  */
 import { useCallback, useRef, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { DocSheet, type DocOrientation } from "src/components/DocViewport";
+// ?inline — компилированный CSS того же модуля, что стилизует .DocSheet на
+// экране. Единый источник стилей листа для предпросмотра и печати.
+import docSheetCss from "src/components/DocViewport/DocViewport.module.scss?inline";
 
 const PRINT_CSS = `
   @page {
@@ -33,16 +37,39 @@ const PRINT_CSS = `
   * { box-sizing: border-box; }
   table { border-collapse: collapse; width: 100%; }
   td, th { padding: 3px 4px; vertical-align: top; }
-  .a4-sheet {
-    width: 210mm;
-    min-height: 297mm;
-    padding: 0;
-    margin: 0 auto;
-    background: #fff;
-  }
+  /* Геометрию/типографику листа задаёт ЕДИНЫЙ источник — .DocSheet
+     (DocViewport.module.scss), стили которого переносятся в iframe вместе
+     со стилями приложения. Здесь — только @page и общесистемные базовые
+     правила. Скрытый iframe-предпросмотр (screen) обрамляем серым фоном. */
   @media screen {
     body { padding: 16px; background: #f0f0f0; }
-    .a4-sheet { box-shadow: 0 0 8px rgba(0,0,0,0.15); padding: 12mm 12mm 14mm 16mm; }
+  }
+  /* Нейтрализуем глобальные размеры/отступы из стилей приложения, иначе
+     появляется лишняя пустая страница. Геометрию листа в печати задаёт
+     @media print .DocSheet (padding:0; width:100%; min-height:0). */
+  @media print {
+    html, body {
+      height: auto !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+    }
+    #print-root { height: auto !important; min-height: 0 !important; }
+    /* Лист (DocSheet) — высота строго по контенту, ширина по печатной области.
+       Селектор по id перебивает любые правила .DocSheet (в т.ч. min-height:297mm),
+       поэтому форсированная высота не «вытекает» на лишнюю пустую страницу.
+       Физические поля задаёт @page; собственные отступы листа обнуляем. */
+    #print-root > * {
+      width: auto !important;
+      max-width: 100% !important;
+      height: auto !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-shadow: none !important;
+      overflow: visible !important;
+    }
   }
 `;
 
@@ -53,6 +80,17 @@ export interface PrintOptions {
   extraCss?: string;
   /** Автоматически закрыть iframe после диалога печати (по умолчанию true). */
   autoClose?: boolean;
+  /** Ориентация листа (передаётся в DocSheet — единый источник стилей). */
+  orientation?: DocOrientation;
+  /** Режим ширины листа (a4 | content) — передаётся в DocSheet. */
+  fit?: "a4" | "content";
+  /**
+   * CSS макета для впрыска в iframe — компилированный текст CSS-модуля(ей)
+   * макета, полученный `?inline`-импортом того же .scss, что стилизует экран.
+   * Так печать и предпросмотр используют ОДИН источник стилей без копирования
+   * всего бандла. Стили листа (.DocSheet) добавляются автоматически.
+   */
+  styles?: string | string[];
 }
 
 /** Создать iframe, отрендерить в него node и вызвать print(). */
@@ -62,7 +100,7 @@ function printNode(
   onTriggered?: () => void,
 ): Promise<void> {
   return new Promise((resolve) => {
-    const { title = "Печать", extraCss = "", autoClose = true } = opts;
+    const { title = "Печать", extraCss = "", autoClose = true, orientation = "portrait", fit = "a4", styles = [] } = opts;
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
     iframe.style.position = "fixed";
@@ -74,16 +112,24 @@ function printNode(
     iframe.style.opacity = "0";
     document.body.appendChild(iframe);
 
+    // ЕДИНЫЙ источник стилей: в iframe впрыскиваем только релевантный CSS —
+    // стили листа (.DocSheet, тот же файл что и в предпросмотре) и CSS-модуль(и)
+    // макета, переданные через opts.styles (?inline-импорт того же .scss).
+    // Весь бандл приложения НЕ копируется — нет глобальных правил и лишней
+    // страницы. PRINT_CSS/extraCss идут ПОСЛЕ (приоритет @page и базовых правил).
+    const layoutCss = ([] as string[]).concat(styles).join("\n");
+
     const doc = iframe.contentDocument!;
     doc.open();
-    doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_CSS}\n${extraCss}</style></head><body><div id="print-root"></div></body></html>`);
+    doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style data-sheet-css>${docSheetCss}</style><style data-layout-css>${layoutCss}</style><style data-print-css>${PRINT_CSS}\n${extraCss}</style></head><body><div id="print-root"></div></body></html>`);
     doc.close();
 
     const mountNode = doc.getElementById("print-root")!;
     let root: Root | null = null;
     try {
       root = createRoot(mountNode);
-      root.render(<div className="a4-sheet">{node}</div>);
+      // Единый источник стилей листа: тот же DocSheet, что и в предпросмотре.
+      root.render(<DocSheet orientation={orientation} fit={fit}>{node}</DocSheet>);
     } catch (e) {
       console.error("[print] render error", e);
       iframe.remove();

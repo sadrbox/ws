@@ -413,14 +413,17 @@ type TypeFieldSelectProps = {
   error?: boolean;
   style?: CSSProperties;
   variant?: FieldVariant;
+  /** Компактный размер — высота подогнана под шапку панели (PaneItemHeaderToolbar). */
+  size?: 'sm';
 };
 
-export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value = '', onChange, disabled = false, required = false, error = false, style, variant = 'default' }) => {
+export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value = '', onChange, disabled = false, required = false, error = false, style, variant = 'default', size }) => {
   const uid = useId();
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
+  const className = size === 'sm' ? `${wrapperClass} ${styles.FieldSizeSm}` : wrapperClass;
 
   return (
-    <div className={wrapperClass} style={style}>
+    <div className={className} style={style}>
       <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldSelectWrapper}>
         <select name={name} id={uid} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled}>

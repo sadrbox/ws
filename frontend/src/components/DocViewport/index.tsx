@@ -61,8 +61,10 @@ export const DocViewport = ({ children }: DocViewportProps) => {
 
   return (
     <div className={styles.DocViewport} ref={viewportRef}>
-      <div className={styles.DocContent} style={{ zoom }}>
-        {children}
+      <div className={styles.DocScroll}>
+        <div className={styles.DocContent} style={{ zoom }}>
+          {children}
+        </div>
       </div>
       <div className={styles.ZoomControls}>
         <button

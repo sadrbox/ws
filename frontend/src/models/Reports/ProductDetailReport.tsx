@@ -7,6 +7,7 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
 import styles from "./report.module.scss";
+import reportCss from "./report.module.scss?inline";
 
 const fmtQty = (n: number) =>
   n !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : "—";
@@ -181,6 +182,7 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
       uniqId={uniqId}
       form={form}
       layout={layout}
+      layoutStyles={reportCss}
       isLoading={isLoading}
       isEmpty={!isLoading && (!productUuid || !applied || isError || rows.length === 0)}
       emptyMessage={

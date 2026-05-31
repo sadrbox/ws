@@ -10,6 +10,7 @@ import { useAppContext } from "src/app";
 import ReportPane from "src/components/ReportPane";
 import { ProductDetailReport } from "./ProductDetailReport";
 import styles from "./report.module.scss";
+import reportCss from "./report.module.scss?inline";
 
 // ─── number formatter ────────────────────────────────────────────────────────
 
@@ -247,6 +248,7 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
       uniqId={uniqId}
       form={form}
       layout={layout}
+      layoutStyles={reportCss}
       isLoading={isLoading}
       isEmpty={!isLoading && (!applied || isError || rows.length === 0)}
       emptyMessage={isError ? translate("serverError") : (!applied ? translate("reportPressGenerate") : undefined)}

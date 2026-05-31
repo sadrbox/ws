@@ -271,6 +271,30 @@
 	}
 }
 
+// ── Компактный размер "sm" ─────────────────────────────────────────────────
+// Высота подогнана под шапку панели (PaneItemHeaderToolbar = $heightFieldInput + 6px),
+// поле помещается без выхода за верхнюю/нижнюю границу.
+.FieldSizeSm {
+	display: flex;
+	align-items: center;
+
+	.FieldLabel {
+		display: none;
+	}
+
+	.FieldSelectWrapper,
+	.FieldInputWrapper {
+		height: 24px;
+	}
+
+	.FieldSelect,
+	.FieldString {
+		height: 100%;
+		margin: 0;
+		box-sizing: border-box;
+	}
+}
+
 
 
 

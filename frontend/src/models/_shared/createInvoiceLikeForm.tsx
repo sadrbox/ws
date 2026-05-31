@@ -29,7 +29,7 @@ import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import PrintDocumentPane, { type PrintColumnDef } from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
-import IconButton from "src/components/IconButton/IconButton";
+import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
 import { type BasisFromTarget, openDocumentFromBasis, refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
@@ -364,9 +364,9 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       showHeaderActions ? (
         <>
           {hasBasis && (
-            <IconButton
-              icon="syncFromBasis"
-              title="Перезаполнить по основанию"
+            <RefillFromBasisButton
+              mismatch={basisMismatch.mismatch}
+              mismatchDetails={basisMismatch.differences}
               disabled={form.isLoading || isRefilling}
               loading={isRefilling}
               onClick={() => void handleRefillFromBasis()}

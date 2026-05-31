@@ -10,7 +10,7 @@
  */
 import type { CSSProperties, FC, ReactNode } from "react";
 
-/** Корневой контейнер листа A4 (внутри iframe он уже обёрнут в .a4-sheet). */
+/** Корневой контейнер листа A4 (внутри iframe он уже обёрнут в .DocSheet). */
 export const A4Page: FC<{ children: ReactNode; style?: CSSProperties }> = ({ children, style }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: "4mm", ...style }}>{children}</div>
 );

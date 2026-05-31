@@ -70,6 +70,14 @@ export interface ReportPaneProps {
    * Пейн-система передаёт его автоматически через {...pane}.
    */
   uniqId?: string;
+  /**
+   * CSS макета отчёта — компилированный текст CSS-модуля, полученный
+   * `?inline`-импортом того же .scss, что стилизует отчёт на экране
+   * (напр. `import css from "./report.module.scss?inline"`). Впрыскивается
+   * в print-iframe, чтобы печать и предпросмотр использовали ОДИН источник
+   * стилей. Можно передать массив (несколько модулей).
+   */
+  layoutStyles?: string | string[];
   /** Ориентация листа для печати (по умолчанию portrait). */
   orientation?: ReportPageOrientation;
   /** Заголовок в диалоге печати. */
@@ -125,6 +133,7 @@ const ReportPane: FC<ReportPaneProps> = ({
   isEmpty = false,
   emptyMessage,
   uniqId,
+  layoutStyles,
   orientation = "portrait",
   title,
   sheetFit = "a4",
@@ -141,11 +150,12 @@ const ReportPane: FC<ReportPaneProps> = ({
     if (!canExport) return;
     void printNode(layout, {
       title: title ?? fileBaseName,
-      extraCss: orientation === "landscape"
-        ? "@page { size: A4 landscape; } .a4-sheet { width: 297mm; min-height: 210mm; }"
-        : "",
+      orientation,
+      fit: sheetFit,
+      styles: layoutStyles,
+      extraCss: orientation === "landscape" ? "@page { size: A4 landscape; }" : "",
     });
-  }, [canExport, printNode, layout, title, fileBaseName, orientation]);
+  }, [canExport, printNode, layout, title, fileBaseName, orientation, sheetFit, layoutStyles]);
 
   // ── XLSX / XLS export ────────────────────────────────────────────────────
   const handleExport = useCallback((format: "xlsx" | "xls") => {

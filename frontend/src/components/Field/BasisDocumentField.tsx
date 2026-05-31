@@ -19,10 +19,6 @@ export interface BasisDocumentFieldProps {
   onClear: () => void;
   disabled?: boolean;
   formUid: string;
-  /** Документ не соответствует основанию — показать иконку-предупреждение. */
-  mismatch?: boolean;
-  /** Список расхождений для тултипа иконки. */
-  mismatchDetails?: string[];
 }
 
 /** Извлекает числовой ID из строки вида "Тип: ID 5 · 25.05.2026", иначе возвращает исходный текст. */
@@ -44,8 +40,6 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   onClear,
   disabled,
   formUid,
-  mismatch,
-  mismatchDetails,
 }) => {
   const [selectedType, setSelectedType] = useState<string>(
     basisDocumentType || allowedTypes[0]?.type || "",
@@ -80,29 +74,9 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
 
   // Когда значение уже выбрано — отдаём управление LookupField (он сам рисует FieldWrapper + label)
   if (hasValue) {
-    const baseLabel = `${translate("basisDocument")} (${activeType?.label ?? ""})`;
-    const labelNode = mismatch ? (
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-        {baseLabel}
-        <span
-          role="img"
-          aria-label={translate("basisMismatch")}
-          title={
-            mismatchDetails?.length
-              ? `${translate("basisMismatch")}:\n• ${mismatchDetails.join("\n• ")}`
-              : translate("basisMismatch")
-          }
-          style={{ color: "#d97706", cursor: "help" }}
-        >
-          ⚠
-        </span>
-      </span>
-    ) : (
-      baseLabel
-    );
     return (
       <LookupField
-        label={labelNode}
+        label={`${translate("basisDocument")} (${activeType?.label ?? ""})`}
         name={`${formUid}_basisDocument`}
         value={basisDocumentUuid}
         displayValue={basisDocumentLabel}

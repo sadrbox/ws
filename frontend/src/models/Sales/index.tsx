@@ -24,7 +24,6 @@ import ModelList from "src/components/ModelList";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { Toolbar } from "src/components/Toolbar";
-import IconButton from "src/components/IconButton/IconButton";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import SaleInvoicePrint, { type SaleInvoicePrintData, type SaleInvoicePrintColumns, type SaleItemPrintRow } from "./SaleInvoicePrint";
 import ActPrint from "./ActPrint";
@@ -39,6 +38,7 @@ import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fet
 import { isEquivalent } from "src/utils/normalize";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
+import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { OutgoingInvoicesForm } from "src/models/OutgoingInvoices";
 import { SalesReturnsForm } from "src/models/SalesReturns";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
@@ -553,9 +553,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     (isSavedDoc || hasBasis) ? (
       <>
         {hasBasis && (
-          <IconButton
-            icon="syncFromBasis"
-            title="Перезаполнить по основанию"
+          <RefillFromBasisButton
+            mismatch={basisMismatch.mismatch}
+            mismatchDetails={basisMismatch.differences}
             disabled={form.isLoading || isRefilling}
             loading={isRefilling}
             onClick={() => void handleRefillFromBasis()}
@@ -636,8 +636,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading}
                 onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
                 onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
-                mismatch={basisMismatch.mismatch}
-                mismatchDetails={basisMismatch.differences}
               />
             </GroupCol>
             <Group>

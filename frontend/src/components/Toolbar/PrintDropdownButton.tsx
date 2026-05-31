@@ -30,23 +30,17 @@ const PrintDropdownButton: FC<PrintDropdownButtonProps> = ({
     <div ref={wrapRef} className={styles.DropdownWrap}>
       <IconButton
         size="md"
-        icon="print"
+        className={styles.DropdownToggleButton}
         title={title}
         aria-label={title}
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
         onClick={toggle}
-      />
-      <button
-        type="button"
-        className={styles.DropdownCaret}
-        aria-label="Выбрать макет печатной формы"
-        disabled={disabled}
-        onClick={toggle}
       >
-        <Icon name="caretDown" />
-      </button>
+        <Icon name="print" />
+        {/* <Icon name="caretDown" width={10} height={10} /> */}
+      </IconButton>
       {open && (
         <div ref={dropRef} role="menu" className={styles.DropdownMenu} style={dropStyle}>
           {options.map((o) => (

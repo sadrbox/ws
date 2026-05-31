@@ -9,32 +9,46 @@
 //     .DocStatus          — заглушка загрузки / пустых данных
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Внешний контейнер не скроллит сам — он база для абсолютной панели зума.
 .DocViewport {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   background: #2b2b2b;
   display: flex;
-  flex-direction: row;
-  // align-items: stretch;
+  flex-direction: column;
   position: relative;
 }
 
-// Обёртка контента — на неё применяется CSS zoom
-.DocContent {
-  display: flex;
+// Скроллер: занимает всю высоту DocViewport и прокручивает контент в обе стороны.
+.DocScroll {
   flex: 1;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 20px 16px 8px;
+  min-height: 0;
+  overflow: auto;
 }
 
-// Плавающая панель масштаба — прилипает к нижнему краю при скролле
+// Обёртка контента — на неё применяется CSS zoom.
+// width:max-content + min-width:100% — лист центрируется, когда уже вьюпорта,
+// и расширяет контейнер (давая горизонтальный скролл) без обрезки левого края.
+// min-height:100% — вертикальное центрирование/прижатие к верху для коротких форм.
+.DocContent {
+  box-sizing: border-box;
+  min-width: 100%;
+  width: max-content;
+  min-height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px;
+}
+
+// Плавающая панель масштаба — закреплена в правом нижнем углу видимой области
+// (абсолютно относительно нескроллящегося DocViewport — не уезжает при скролле).
 .ZoomControls {
-  position: sticky;
+  position: absolute;
+  right: 16px;
   bottom: 12px;
-  align-self: flex-end;
-  margin-right: 16px;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -44,7 +58,6 @@
   border-radius: 6px;
   padding: 3px 4px;
   user-select: none;
-  pointer-events: all;
 }
 
 .ZoomBtn {
@@ -163,8 +176,16 @@
     padding: 0;
   }
 
+  .DocScroll {
+    display: block;
+    overflow: visible;
+  }
+
   .DocContent {
     display: block;
+    width: auto;
+    min-width: 0;
+    min-height: 0;
     padding: 0;
     zoom: 1 !important;
   }

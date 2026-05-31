@@ -31,7 +31,7 @@ const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options,
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        {icon && <Icon name={icon} />}
+        {/* {icon && <Icon name={icon} />} */}
         {label}
         <Icon name="caretDown" />
       </button>

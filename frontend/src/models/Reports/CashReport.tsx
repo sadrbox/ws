@@ -14,6 +14,7 @@ import { getFormatDateOnly } from "src/utils/datetime";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import styles from "./report.module.scss";
+import reportCss from "./report.module.scss?inline";
 
 interface CashRow {
   uuid: string;
@@ -188,6 +189,7 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
       uniqId={uniqId}
       form={form}
       layout={layout}
+      layoutStyles={reportCss}
       isLoading={isLoading}
       isEmpty={!isLoading && (!applied || rows.length === 0)}
       emptyMessage={!applied ? translate("reportPressGenerate") : undefined}

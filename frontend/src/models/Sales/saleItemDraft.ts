@@ -221,8 +221,8 @@ export function withSaleItemRecalcFromDiscountAmount<
 	);
 
 	return {
+		...recalc,
 		discountAmount: discAmt,
 		discountPercent: discPct,
-		...recalc,
 	};
 }

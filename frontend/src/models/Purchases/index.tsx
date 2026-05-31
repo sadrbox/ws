@@ -31,7 +31,7 @@ import { validateDocumentFields, formatValidationErrors } from "src/utils/valida
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
-import IconButton from "src/components/IconButton/IconButton";
+import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
 import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems } from "src/utils/createFromBasis";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
@@ -442,9 +442,9 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     (isSavedDoc || hasBasis) ? (
       <>
         {hasBasis && (
-          <IconButton
-            icon="syncFromBasis"
-            title="Перезаполнить по основанию"
+          <RefillFromBasisButton
+            mismatch={basisMismatch.mismatch}
+            mismatchDetails={basisMismatch.differences}
             disabled={form.isLoading || isRefilling}
             loading={isRefilling}
             onClick={() => void handleRefillFromBasis()}
