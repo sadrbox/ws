@@ -365,6 +365,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
               <BasisDocumentField
                 allowedTypes={[
                   { type: "purchase_requisition", endpoint: "purchase-requisitions" },
+                  { type: "purchase_order", endpoint: "purchase-orders" },
                   { type: "incoming_invoice", endpoint: "incoming-invoices" },
                 ]}
                 basisDocumentType={form.fields.basisDocumentType}

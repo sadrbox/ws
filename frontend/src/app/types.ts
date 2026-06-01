@@ -82,6 +82,10 @@ export type TPane = {
 	onSelectResult?: (item: Record<string, any>) => void;
 	/** ID selector-панели, из которой была открыта эта дочерняя панель */
 	selectorPaneId?: string;
+	/** ID панели-открывателя (была активна в момент открытия этой панели).
+	 *  При закрытии этой панели активируется опидатель (если ещё открыт) —
+	 *  напр. возврат к форме, из поля «Основание» которой открыли документ. */
+	openerPaneId?: string;
 };
 
 export type TComponentNode =

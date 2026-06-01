@@ -296,6 +296,13 @@ const App: React.FC = () => {
       }
     }
 
+    // Опидатель: панель, активная в момент открытия. При закрытии этой панели
+    // вернёмся к нему (напр. форма, из поля «Основание» которой открыт документ).
+    if (!options.isSelector) {
+      const opener = options.openerPaneId ?? (activePaneId && activePaneId !== uniqId ? activePaneId : undefined);
+      if (opener) newPane.openerPaneId = opener;
+    }
+
     setPanes((prev) => [...prev, newPane]);
     setActivePaneId(uniqId);
 
@@ -324,6 +331,7 @@ const App: React.FC = () => {
       const index = prev.findIndex((p) => p.uniqId === uniqId);
       if (index === -1) return prev;
 
+      const closed = prev[index];
       const next = prev.filter((_, i) => i !== index);
       const remainingIds = new Set(next.map((p) => p.uniqId));
 
@@ -337,6 +345,12 @@ const App: React.FC = () => {
 
         const selectorPane = next.find((p) => p.isSelector);
         if (selectorPane) return selectorPane.uniqId;
+
+        // Возврат к панели-открывателю (напр. форме с полем «Основание»,
+        // из которого открыли документ), если она ещё открыта.
+        if (closed.openerPaneId && remainingIds.has(closed.openerPaneId)) {
+          return closed.openerPaneId;
+        }
 
         const history = paneHistoryRef.current;
         if (history.length > 0) {

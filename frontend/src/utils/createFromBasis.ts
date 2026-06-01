@@ -61,6 +61,26 @@ const BASIS_SOURCE_CONFIGS: Record<string, BasisSourceConfig> = {
 		itemsEndpoint: "paymentinvoiceitems",
 		itemsParentField: "paymentInvoiceUuid",
 	},
+	commercial_offer: {
+		docEndpoint: (uuid) => `commercial-offers/${uuid}`,
+		itemsEndpoint: "commercial-offer-items",
+		itemsParentField: "commercialOfferUuid",
+	},
+	sales_order: {
+		docEndpoint: (uuid) => `sales-orders/${uuid}`,
+		itemsEndpoint: "sales-order-items",
+		itemsParentField: "salesOrderUuid",
+	},
+	reservation: {
+		docEndpoint: (uuid) => `reservations/${uuid}`,
+		itemsEndpoint: "reservation-items",
+		itemsParentField: "reservationUuid",
+	},
+	purchase_order: {
+		docEndpoint: (uuid) => `purchase-orders/${uuid}`,
+		itemsEndpoint: "purchase-order-items",
+		itemsParentField: "purchaseOrderUuid",
+	},
 };
 
 /** Конвертирует позиции исходного документа в pending-строки для нового. */

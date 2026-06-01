@@ -630,7 +630,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
             <GroupCol>
               <BasisDocumentField
-                allowedTypes={[{ type: "payment_invoice", endpoint: "payment-invoices" }]}
+                allowedTypes={[
+                  { type: "sales_order", endpoint: "sales-orders" },
+                  { type: "reservation", endpoint: "reservations" },
+                  { type: "payment_invoice", endpoint: "payment-invoices" },
+                ]}
                 basisDocumentType={form.fields.basisDocumentType}
                 basisDocumentUuid={form.fields.basisDocumentUuid}
                 basisDocumentLabel={form.fields.basisDocumentLabel}
