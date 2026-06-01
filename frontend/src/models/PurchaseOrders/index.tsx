@@ -27,6 +27,7 @@ const PurchaseOrdersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formDisplayName: "PurchaseOrdersForm",
   docType: "purchase_order",
   hidePosted: true,
+  hasWarehouse: true,
   printConfig: {
     buildLayout: (fields, items, cols) => (
       <TradeDocumentPrint title="ЗАКАЗ ПОСТАВЩИКУ" counterpartyLabel="Поставщик" totalLabel="Итого по заказу" data={{

@@ -67,6 +67,8 @@ export interface InvoiceLikeFormConfig {
   defaultHiddenItemColumns?: string[];
   /** Скрыть переключатель "Проведение" (напр. Счёт на оплату — не проводится). */
   hidePosted?: boolean;
+  /** Показать поле «Склад» в шапке (для заказов покупателя/поставщику, резерва). */
+  hasWarehouse?: boolean;
   /**
    * Блокировать поля шапки и таблицу позиций, если у документа есть основание.
    * true — только для Счёт-фактуры исходящей; остальные документы не блокируются.
@@ -82,6 +84,7 @@ interface TFields {
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
+  warehouseUuid: string; warehouseName: string;
   authorUuid: string; authorName: string;
   basisDocumentType: string;
   basisDocumentUuid: string;
@@ -95,6 +98,7 @@ const DEFAULT_FIELDS: TFields = {
   organizationUuid: "", organizationName: "",
   counterpartyUuid: "", counterpartyName: "",
   contractUuid: "", contractName: "",
+  warehouseUuid: "", warehouseName: "",
   authorUuid: "", authorName: "",
   basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "",
 };
@@ -197,6 +201,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
         counterpartyName: d.counterparty?.name ?? "",
         contractUuid: d.contractUuid ?? "",
         contractName: d.contract?.name ?? "",
+        warehouseUuid: d.warehouseUuid ?? "",
+        warehouseName: d.warehouse?.name ?? "",
         authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
         authorName: d.author?.username ?? d.author?.email ?? "",
         basisDocumentType: d.basisDocumentType ?? "",
@@ -218,6 +224,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           organizationUuid: fd.organizationUuid || null,
           counterpartyUuid: fd.counterpartyUuid || null,
           contractUuid: fd.contractUuid || null,
+          ...(cfg.hasWarehouse ? { warehouseUuid: fd.warehouseUuid || null } : {}),
           basisDocumentType: fd.basisDocumentType || null,
           basisDocumentUuid: fd.basisDocumentUuid || null,
           basisDocumentLabel: fd.basisDocumentLabel || null,
@@ -476,6 +483,15 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                       ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
                     }} />
                 </Group>
+                {cfg.hasWarehouse && (
+                  <Group>
+                    <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name"
+                      onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)}
+                      onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)}
+                      disabled={form.isLoading || basisLock}
+                      extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                  </Group>
+                )}
               </GroupCol>
               {cfg.basisConfig && (
                 <GroupCol>

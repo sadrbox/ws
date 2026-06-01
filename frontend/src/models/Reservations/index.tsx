@@ -27,6 +27,7 @@ const ReservationsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formDisplayName: "ReservationsForm",
   docType: "reservation",
   hidePosted: true,
+  hasWarehouse: true,
   printConfig: {
     buildLayout: (fields, items, cols) => (
       <TradeDocumentPrint title="РЕЗЕРВИРОВАНИЕ ТОВАРА" counterpartyLabel="Покупатель" totalLabel="Итого" data={{
