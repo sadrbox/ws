@@ -58,7 +58,7 @@ export interface InvoiceLikeFormConfig {
   itemsComponentName: string;
   accessRightModel: string;
   formDisplayName: string;
-  docType: "outgoing_invoice" | "incoming_invoice" | "payment_invoice" | "purchase_requisition";
+  docType: "outgoing_invoice" | "incoming_invoice" | "payment_invoice" | "purchase_requisition" | "commercial_offer" | "sales_order" | "reservation" | "purchase_order";
   basisConfig?: { allowedTypes: BasisTypeConfig[] };
   printConfig?: PrintConfig;
   /** Документы, которые можно создать на основании этого. Кнопки появляются в шапке панели. */

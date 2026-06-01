@@ -33,6 +33,11 @@ const DOC_TYPE_TO_ENDPOINT: Record<string, string> = {
 	cash_expense_order: "cash-expense-orders",
 	payroll_calculation: "payroll-calculations",
 	payroll_payment: "payroll-payments",
+	commercial_offer: "commercial-offers",
+	sales_order: "sales-orders",
+	reservation: "reservations",
+	purchase_order: "purchase-orders",
+	bank_statement: "bank-statements",
 };
 
 /** Локализованное название типа документа (i18). Неизвестный тип → как есть. */

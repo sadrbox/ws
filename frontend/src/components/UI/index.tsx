@@ -36,6 +36,11 @@ import { PaymentInvoicesList } from 'src/models/PaymentInvoices';
 import { ScheduledTasksList } from 'src/models/ScheduledTasks';
 import OrgSwitcher from 'src/components/OrgSwitcher';
 import { InventoryTransfersList } from 'src/models/InventoryTransfers';
+import { CommercialOffersList } from 'src/models/CommercialOffers';
+import { SalesOrdersList } from 'src/models/SalesOrders';
+import { ReservationsList } from 'src/models/Reservations';
+import { PurchaseOrdersList } from 'src/models/PurchaseOrders';
+import { BankStatementsList } from 'src/models/BankStatements';
 import { CashReceiptOrdersList } from 'src/models/CashReceiptOrders';
 import { CashExpenseOrdersList } from 'src/models/CashExpenseOrders';
 import { BrandsList } from 'src/models/Brands';
@@ -662,6 +667,9 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("SaleReturn") && <li onClick={() => addPane({ component: SalesReturnsList, label: translate("SalesReturnsList") })}>{translate("SalesReturnsList")}</li>}
               {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("outgoingInvoice") })}>{translate("outgoingInvoice")}</li>}
               {can("PaymentInvoice") && <li onClick={() => addPane({ component: PaymentInvoicesList, label: translate("paymentInvoice") })}>{translate("paymentInvoice")}</li>}
+              {can("CommercialOffer") && <li onClick={() => addPane({ component: CommercialOffersList, label: translate("docType_commercial_offer") })}>{translate("docType_commercial_offer")}</li>}
+              {can("SalesOrder") && <li onClick={() => addPane({ component: SalesOrdersList, label: translate("docType_sales_order") })}>{translate("docType_sales_order")}</li>}
+              {can("Reservation") && <li onClick={() => addPane({ component: ReservationsList, label: translate("docType_reservation") })}>{translate("docType_reservation")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
@@ -671,6 +679,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("PurchaseReturn") && <li onClick={() => addPane({ component: PurchaseReturnsList, label: translate("PurchaseReturnsList") })}>{translate("PurchaseReturnsList")}</li>}
               {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList, label: translate("incomingInvoice") })}>{translate("incomingInvoice")}</li>}
               {can("PurchaseRequisition") && <li onClick={() => addPane({ component: PurchaseRequisitionsList, label: translate("PurchaseRequisitionsList") })}>{translate("PurchaseRequisitionsList")}</li>}
+              {can("PurchaseOrder") && <li onClick={() => addPane({ component: PurchaseOrdersList, label: translate("docType_purchase_order") })}>{translate("docType_purchase_order")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
@@ -685,6 +694,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList, label: translate("CashReceiptOrdersList") })}>{translate("CashReceiptOrdersList")}</li>}
               {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList, label: translate("CashExpenseOrdersList") })}>{translate("CashExpenseOrdersList")}</li>}
+              {can("BankStatement") && <li onClick={() => addPane({ component: BankStatementsList, label: translate("docType_bank_statement") })}>{translate("docType_bank_statement")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>

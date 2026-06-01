@@ -10,6 +10,7 @@ import { createInvoiceLikeForm } from "src/models/_shared/createInvoiceLikeForm"
 import PurchaseRequisitionPrint from "./PurchaseRequisitionPrint";
 import { mapCommonTradeFields } from "src/utils/createFromBasis";
 import { PurchasesForm } from "src/models/Purchases";
+import { PurchaseOrdersForm } from "src/models/PurchaseOrders";
 
 const MODEL_ENDPOINT = "purchase-requisitions";
 const LIST_NAME = "PurchaseRequisitionsList";
@@ -49,6 +50,15 @@ const PurchaseRequisitionsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
     title: (f) => `Заявка на закупку № ${f.id ?? "—"}`,
   },
   createFromBasisTargets: [
+    {
+      docLabel: "Заказ поставщику",
+      FormComponent: PurchaseOrdersForm,
+      basisType: "purchase_requisition",
+      sourceItemsEndpoint: "purchase-requisition-items",
+      sourceItemsParentField: "purchaseRequisitionUuid",
+      mapFields: mapCommonTradeFields,
+      existingCheckEndpoint: "purchase-orders",
+    },
     {
       docLabel: "Поступление товаров",
       FormComponent: PurchasesForm,
