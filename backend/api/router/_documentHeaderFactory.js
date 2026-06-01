@@ -44,6 +44,9 @@ export function createDocumentHeaderRouter({
 	hasBasis = false,
 	posting = null,
 	defaultPosted = false,
+	// Доп. хуки: afterSave(uuid) — после create/update; afterDelete(doc) — после удаления.
+	afterSave = null,
+	afterDelete = null,
 }) {
 	const router = express.Router();
 
@@ -155,6 +158,7 @@ export function createDocumentHeaderRouter({
 			if (posting && data.posted) await validatePosting(posting.docType, data, []);
 			const item = await prisma[MODEL].create({ data, include });
 			if (posting && item.posted) await reconcileDocumentEntries(posting.docType, item.uuid);
+			if (afterSave) await afterSave(item.uuid);
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
 			if (posting && respondPostingError(error, res)) return;
@@ -185,6 +189,7 @@ export function createDocumentHeaderRouter({
 			}
 			const item = await prisma[MODEL].update({ where: w, data, include });
 			if (posting) await reconcileDocumentEntries(posting.docType, item.uuid);
+			if (afterSave) await afterSave(item.uuid);
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
 			if (posting && respondPostingError(error, res)) return;
@@ -195,7 +200,12 @@ export function createDocumentHeaderRouter({
 	});
 
 	// ── DELETE ─────────────────────────────────────────────────────────────────
-	const onDeleted = posting ? (doc) => removeDocumentEntries(posting.docType, doc.uuid) : undefined;
+	const onDeleted = (posting || afterDelete)
+		? async (doc) => {
+			if (posting) await removeDocumentEntries(posting.docType, doc.uuid);
+			if (afterDelete) await afterDelete(doc);
+		}
+		: undefined;
 	router.delete(`/${ROUTE}/:id`, (req, res) => handleDelete({ req, res, prisma, modelName: MODEL, onDeleted }));
 	router.post(`/${ROUTE}/batch-delete`, (req, res) => handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted }));
 

@@ -31,6 +31,7 @@ import {
 	respondStockError,
 } from "../../services/productRegister.js";
 import { reconcileByParentModel as reconcileEntriesByParentModel } from "../../services/accountingPosting.js";
+import { reconcileReservationByParentModel } from "../../services/reservationRegister.js";
 
 function recalcTaxes(amountAfterDiscount, taxes) {
 	if (!Array.isArray(taxes)) return null;
@@ -266,6 +267,13 @@ export function createDocumentItemsRouter({
 			await reconcileEntriesByParentModel(PARENT_MODEL, parentUuid);
 		} catch (err) {
 			console.error(`reconcileEntries(${PARENT_MODEL}) error:`, err);
+		}
+
+		// Пересобираем регистр резервов (актуально только для документа «Резервирование»).
+		try {
+			await reconcileReservationByParentModel(PARENT_MODEL, parentUuid);
+		} catch (err) {
+			console.error(`reconcileReservation(${PARENT_MODEL}) error:`, err);
 		}
 	}
 
