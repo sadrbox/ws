@@ -11,8 +11,8 @@
 export function unwrapList<T = any>(resp: unknown): T[] {
 	if (Array.isArray(resp)) return resp as T[];
 	const r = resp as { data?: unknown; items?: unknown } | null | undefined;
-	if (Array.isArray(r?.data)) return r!.data as T[];
-	if (Array.isArray(r?.items)) return r!.items as T[];
+	if (Array.isArray(r?.data)) return r.data as T[];
+	if (Array.isArray(r?.items)) return r.items as T[];
 	return [];
 }
 

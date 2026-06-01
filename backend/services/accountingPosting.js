@@ -196,7 +196,7 @@ export const POSTING_RULES = {
 	bank_statement: (doc) => {
 		const amount = r2(doc.amount);
 		if (amount <= 0) return [];
-		if (doc.direction === "out") {
+		if (doc.direction === "bankStatementOut") {
 			return [{
 				debit: ACC.AP,
 				credit: ACC.BANK,

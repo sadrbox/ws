@@ -26,6 +26,9 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
+import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
+import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
+import CashOrderPrint from "src/models/_shared/CashOrderPrint";
 import type { DocumentType } from "src/utils/validatePostedDocument";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
@@ -70,7 +73,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
   const Form: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
     const { canWrite } = useAccessRight(cfg.accessRightModel);
-    const { auth: { user: currentUser } } = useAppContext();
+    const { auth: { user: currentUser }, windows: { addPane } } = useAppContext();
 
     const initialFields: TFields | undefined = (() => {
       const data = paneProps.data;
@@ -220,9 +223,48 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
     ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, canWrite]);
 
     const isSavedDoc = form.isEditMode && !!form.fields.uuid;
+
+    const isReceipt = cfg.docType === "cash_receipt_order";
+    const handlePrint = useCallback(() => {
+      if (!form.fields.uuid) return;
+      const title = isReceipt ? "ПРИХОДНЫЙ КАССОВЫЙ ОРДЕР" : "РАСХОДНЫЙ КАССОВЫЙ ОРДЕР";
+      addPane({
+        component: PrintDocumentPane,
+        isSelector: true,
+        label: `${cfg.formLabel} № ${form.fields.id ?? "—"}`,
+        data: {
+          id: Number(form.fields.id ?? 0),
+          uuid: String(form.fields.uuid ?? ""),
+          columnsKey: cfg.docType,
+          columnDefs: [],
+          buildLayout: () => (
+            <CashOrderPrint data={{
+              title,
+              amountLabel: isReceipt ? "Принято" : "Выдано",
+              documentId: form.fields.id,
+              documentDate: form.fields.date,
+              amount: form.fields.amount ? parseFloat(form.fields.amount) : 0,
+              organizationName: form.fields.organizationName,
+              counterpartyName: form.fields.counterpartyName,
+              contractName: form.fields.contractName,
+              cashboxName: form.fields.cashboxName,
+              comment: form.fields.comment,
+            }} />
+          ),
+          fileBaseName: `${isReceipt ? "ПКО" : "РКО"}_${form.fields.id ?? "новый"}`,
+          title: `${cfg.formLabel} № ${form.fields.id ?? "—"}`,
+        },
+      });
+    }, [form.fields, addPane, isReceipt]);
+
     const headerActionsPortal = usePaneHeaderActions(
       form.paneId,
-      isSavedDoc ? <DocumentEntriesButton documentType={cfg.docType} documentUuid={form.fields.uuid} /> : null,
+      isSavedDoc ? (
+        <>
+          <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />
+          <DocumentEntriesButton documentType={cfg.docType} documentUuid={form.fields.uuid} />
+        </>
+      ) : null,
     );
 
     return (

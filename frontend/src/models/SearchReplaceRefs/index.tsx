@@ -331,7 +331,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
             {step4Active ? (
               <GroupRow style={{ alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 12, color: "#145523", flex: 1 }}>
-                  Запись <strong>«{sourceInfo!.label}»</strong> не используется — её можно безопасно удалить.
+                  Запись <strong>«{sourceInfo.label}»</strong> не используется — её можно безопасно удалить.
                 </span>
                 <Button onClick={handleDelete} disabled={isDeleting} variant="danger">
                   {isDeleting ? "Удаление…" : "Удалить запись"}

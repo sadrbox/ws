@@ -148,6 +148,7 @@ model Organization {
   accountingSettings   OrganizationAccountingSetting[] @relation("OrgAccountingSettings")
   purchaseRequisitions PurchaseRequisition[]
   productRegister      ProductRegister[]
+  reservationRegister  ReservationRegister[]
   commercialOffers     CommercialOffer[]
   salesOrders          SalesOrder[]
   reservations         Reservation[]
@@ -404,6 +405,7 @@ model Warehouse {
   purchaseReturns        PurchaseReturn[]    @relation("WhPurchaseReturns")
   organization           Organization?       @relation(fields: [organizationUuid], references: [uuid])
   productRegister        ProductRegister[]
+  reservationRegister    ReservationRegister[]
   salesOrders            SalesOrder[]        @relation("WhSalesOrders")
   reservations           Reservation[]       @relation("WhReservations")
   purchaseOrders         PurchaseOrder[]     @relation("WhPurchaseOrders")
@@ -762,6 +764,7 @@ model Product {
   salesOrderItems          SalesOrderItem[]
   reservationItems         ReservationItem[]
   purchaseOrderItems       PurchaseOrderItem[]
+  reservationRegister      ReservationRegister[]
 
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
@@ -1513,6 +1516,33 @@ model ProductRegister {
   @@map("product_register")
 }
 
+// ─── Регистр накопления «Резервы товаров» ────────────────────────────────────
+// Жёсткий резерв: зарезервированное количество уменьшает доступный для продажи
+// остаток. Строки пересобираются из позиций документа «Резервирование» при его
+// изменении (reconcileReservationRegister) и удаляются при удалении документа.
+// Доступный остаток = Σприход − Σрасход (product_register) − Σактивные резервы,
+// при этом резерв-основание самой реализации исключается (он ею и закрывается).
+model ReservationRegister {
+  id                  Int           @id @default(autoincrement())
+  uuid                String        @unique @default(uuid())
+  date                DateTime
+  quantity            Decimal       @default(0) @db.Decimal(18, 4)
+  productUuid         String?
+  warehouseUuid       String?
+  organizationUuid    String?
+  reservationUuid     String
+  reservationItemUuid String?
+  createdAt           DateTime      @default(now())
+  product             Product?      @relation(fields: [productUuid], references: [uuid])
+  warehouse           Warehouse?    @relation(fields: [warehouseUuid], references: [uuid])
+  organization        Organization? @relation(fields: [organizationUuid], references: [uuid])
+
+  @@index([productUuid, warehouseUuid])
+  @@index([reservationUuid])
+  @@index([organizationUuid])
+  @@map("reservation_register")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ПОДСИСТЕМА БУХГАЛТЕРСКОГО УЧЁТА (РК)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1925,6 +1955,12 @@ model PurchaseOrderItem {
   @@map("purchase_order_items")
 }
 
+/// Направление движения по банковской выписке.
+enum BankStatementDirection {
+  bankStatementIn  // поступление
+  bankStatementOut // списание
+}
+
 /// Банковская выписка (одна операция: in/out). Проводки: in → Дт1030/Кт основание,
 /// out → Дт основание/Кт1030 (см. accountingPosting.js). Движение денег по 1030.
 model BankStatement {
@@ -1932,8 +1968,7 @@ model BankStatement {
   uuid               String        @unique @default(uuid())
   date               DateTime      @default(now())
   comment            String?
-  /// "in" (поступление) | "out" (списание)
-  direction          String        @default("in")
+  direction          BankStatementDirection @default(bankStatementIn)
   amount             Decimal       @default(0) @db.Decimal(18, 2)
   organizationUuid   String?
   counterpartyUuid   String?

@@ -218,12 +218,17 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const handleRefillFromBasis = useCallback(async (skipFields = false) => {
-    if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
+    // Берём ТЕКУЩЕЕ основание из свежего снапшота стора (а не из замыкания):
+    // после смены типа/документа основания refill заполняет именно по нему.
+    const snap = form.store.getSnapshot().fields as any;
+    const basisType = snap.basisDocumentType;
+    const basisUuid = snap.basisDocumentUuid;
+    if (!basisUuid || !basisType) return;
     setIsRefilling(true);
     try {
       const result = await refillFromBasisSource(
-        form.fields.basisDocumentType,
-        form.fields.basisDocumentUuid,
+        basisType,
+        basisUuid,
         mapCommonTradeFields,
       );
       if (!result) return;
@@ -365,6 +370,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
               <BasisDocumentField
                 allowedTypes={[
                   { type: "purchase_requisition", endpoint: "purchase-requisitions" },
+                  { type: "purchase_order", endpoint: "purchase-orders" },
                   { type: "incoming_invoice", endpoint: "incoming-invoices" },
                 ]}
                 basisDocumentType={form.fields.basisDocumentType}

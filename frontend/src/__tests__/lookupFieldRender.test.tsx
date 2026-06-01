@@ -32,7 +32,7 @@ const ITEMS = [
 describe("LookupField — клавиатурная навигация (RTL)", () => {
 	beforeEach(() => {
 		vi.mocked(fetchList).mockReset();
-		vi.mocked(fetchList).mockResolvedValue({ items: ITEMS, total: ITEMS.length });
+		vi.mocked(fetchList).mockResolvedValue({ items: ITEMS, total: ITEMS.length, nextCursor: null, hasMore: false, fromCache: false });
 		// jsdom не реализует scrollIntoView
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(Element.prototype as any).scrollIntoView = vi.fn();
@@ -47,7 +47,7 @@ describe("LookupField — клавиатурная навигация (RTL)", ()
 				onSelect={onSelect}
 			/>,
 		);
-		const input = screen.getByRole("combobox") as HTMLInputElement;
+		const input = screen.getByRole("combobox");
 		input.focus();
 		expect(document.activeElement).toBe(input);
 

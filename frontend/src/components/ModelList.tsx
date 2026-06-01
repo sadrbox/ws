@@ -171,15 +171,15 @@ const ModelList: FC<ModelListProps> = ({
 
       const listTitle = t(componentName) || componentName;
       const label = isEdit
-        ? makePaneLabelFromData(componentName, listTitle, d, getLabel(d))
+        ? makePaneLabelFromData(componentName, listTitle, d, getLabel(d as TDataItem))
         : makePaneLabelFromData(componentName, listTitle);
 
       addPane({
         label,
         component: FormComponent,
         data: newData,
-        onSave: () => refetch(),
-        onClose: () => refetch(),
+        onSave: async () => { await refetch(); },
+        onClose: async () => { await refetch(); },
       });
     },
     [addPane, refetch, componentName, ownerUuid, ownerField, FormComponent, getLabel],

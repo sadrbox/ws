@@ -61,6 +61,26 @@ const BASIS_SOURCE_CONFIGS: Record<string, BasisSourceConfig> = {
 		itemsEndpoint: "paymentinvoiceitems",
 		itemsParentField: "paymentInvoiceUuid",
 	},
+	commercial_offer: {
+		docEndpoint: (uuid) => `commercial-offers/${uuid}`,
+		itemsEndpoint: "commercial-offer-items",
+		itemsParentField: "commercialOfferUuid",
+	},
+	sales_order: {
+		docEndpoint: (uuid) => `sales-orders/${uuid}`,
+		itemsEndpoint: "sales-order-items",
+		itemsParentField: "salesOrderUuid",
+	},
+	reservation: {
+		docEndpoint: (uuid) => `reservations/${uuid}`,
+		itemsEndpoint: "reservation-items",
+		itemsParentField: "reservationUuid",
+	},
+	purchase_order: {
+		docEndpoint: (uuid) => `purchase-orders/${uuid}`,
+		itemsEndpoint: "purchase-order-items",
+		itemsParentField: "purchaseOrderUuid",
+	},
 };
 
 /** Конвертирует позиции исходного документа в pending-строки для нового. */
@@ -92,7 +112,13 @@ export async function refillFromBasisSource(
 	mapFields: (src: any) => Record<string, any>,
 ): Promise<{ fields: Record<string, any>; items: any[] } | null> {
 	const config = BASIS_SOURCE_CONFIGS[basisType];
-	if (!config || !basisUuid) return null;
+	if (!config) {
+		// Тип основания не настроен в BASIS_SOURCE_CONFIGS → refill невозможен.
+		// Логируем, чтобы не было «тихого» отсутствия перезаполнения.
+		console.warn(`[refill] нет конфигурации источника для типа основания "${basisType}"`);
+		return null;
+	}
+	if (!basisUuid) return null;
 
 	const [docResp, itemsResp] = await Promise.all([
 		api.get(`/${config.docEndpoint(basisUuid)}`),
@@ -203,16 +229,31 @@ export async function openDocumentFromBasis(
 	});
 }
 
-/** Стандартный маппинг полей шапки для большинства торговых документов. */
+/**
+ * Стандартный маппинг полей шапки для большинства торговых документов.
+ *
+ * Поле копируется ТОЛЬКО если оно реально есть у документа-основания. Если у
+ * основания поля нет (напр. у счёт-фактуры нет склада), оно ОПУСКАЕТСЯ из
+ * результата — тогда «Перезаполнить по основанию» (merge) не затирает значение
+ * соответствующего поля в зависимом документе.
+ */
 export function mapCommonTradeFields(src: any): Record<string, any> {
-	return {
-		organizationUuid: src.organizationUuid ?? "",
-		organizationName: src.organization?.name ?? src.organizationName ?? "",
-		counterpartyUuid: src.counterpartyUuid ?? "",
-		counterpartyName: src.counterparty?.name ?? src.counterpartyName ?? "",
-		contractUuid: src.contractUuid ?? "",
-		contractName: src.contract?.name ?? src.contractName ?? "",
-		warehouseUuid: src.warehouseUuid ?? "",
-		warehouseName: src.warehouse?.name ?? src.warehouseName ?? "",
-	};
+	const out: Record<string, any> = {};
+	if (src.organizationUuid) {
+		out.organizationUuid = src.organizationUuid;
+		out.organizationName = src.organization?.name ?? src.organizationName ?? "";
+	}
+	if (src.counterpartyUuid) {
+		out.counterpartyUuid = src.counterpartyUuid;
+		out.counterpartyName = src.counterparty?.name ?? src.counterpartyName ?? "";
+	}
+	if (src.contractUuid) {
+		out.contractUuid = src.contractUuid;
+		out.contractName = src.contract?.name ?? src.contractName ?? "";
+	}
+	if (src.warehouseUuid) {
+		out.warehouseUuid = src.warehouseUuid;
+		out.warehouseName = src.warehouse?.name ?? src.warehouseName ?? "";
+	}
+	return out;
 }

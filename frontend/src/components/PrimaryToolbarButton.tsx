@@ -24,7 +24,7 @@ export const PrimaryToolbarButton: FC<PrimaryToolbarButtonProps> = ({
   const activeId = ctx.states.activeRow;
   const rows = subCtx?.rows ?? ctx.rows;
   const activeRow = activeId != null ? rows.find((r) => r.id === activeId) : null;
-  const activeUuid = (activeRow?.uuid as string | undefined) ?? "";
+  const activeUuid = (activeRow?.uuid) ?? "";
   const alreadyPrimary = activeRow?.isPrimary === true;
 
   const handleClick = useCallback(async () => {

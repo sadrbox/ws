@@ -16,6 +16,7 @@ import { getFormatDateOnly } from "src/utils/datetime";
 import { useAppContext } from "src/app";
 import { openReport } from "src/utils/openReport";
 import { openFormByEndpoint } from "src/registry/formRegistry";
+import mainStyles from "src/styles/main.module.scss";
 import styles from "./report.module.scss";
 import reportCss from "./report.module.scss?inline";
 import { GroupCol } from "src/components/UI";

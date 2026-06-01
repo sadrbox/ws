@@ -79,7 +79,7 @@ describe("parseNumericInput", () => {
  */
 function computeSafeValue(value: string | undefined | null): string {
 	if (value === "" || value === undefined || value === null) return "";
-	const n = parseNumericInput(value as string | number | null | undefined);
+	const n = parseNumericInput(value);
 	if (n === null) return "";
 	return String(value)
 		.replace(/[\s\u00A0\u202F]/g, "")
@@ -136,7 +136,7 @@ const makeQuantityValidator =
 	() =>
 	(value: unknown): string | undefined => {
 		if (value === "" || value == null) return undefined;
-		const n = parseNumericInput(value as string | number | null | undefined);
+		const n = parseNumericInput(value as string);
 		if (n === null) return "Должно быть числом";
 		if (n < 0) return "Не может быть отрицательным";
 		return undefined;
@@ -148,7 +148,7 @@ const makeDiscountValidator =
 	() =>
 	(value: unknown): string | undefined => {
 		if (value === "" || value == null) return undefined;
-		const n = parseNumericInput(value as string | number | null | undefined);
+		const n = parseNumericInput(value as string);
 		if (n === null) return "Должно быть числом";
 		if (n < 0 || n > 100) return "От 0 до 100";
 		return undefined;

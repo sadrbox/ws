@@ -24,7 +24,7 @@ import styles from "./Tooltip.module.scss";
 
 export type TooltipPlacement = "top" | "bottom" | "left" | "right";
 
-export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
+export interface TooltipProps extends Omit<HTMLAttributes<HTMLSpanElement>, "content"> {
   /** Содержимое подсказки (string | JSX — поддерживает форматирование). */
   content: ReactNode;
   /** Триггер — обычно <span>ⓘ</span> или <button>. */

@@ -170,12 +170,34 @@ async function createDoc(type, rawHeader, lines) {
 	return parent;
 }
 
+// RU-названия типов документов (для канонической метки основания
+// «{Тип}: ID {n} · {дата}», как формирует UI при выборе основания).
+const DOC_TYPE_RU = {
+	purchase: "Поступление товаров и услуг",
+	sale: "Реализация товаров и услуг",
+	sale_return: "Возврат от покупателя",
+	purchase_return: "Возврат поставщику",
+	purchase_requisition: "Заявка на закупку",
+	purchase_order: "Заказ поставщику",
+	commercial_offer: "Коммерческое предложение",
+	sales_order: "Заказ покупателя",
+	reservation: "Резервирование товара",
+	incoming_invoice: "Счёт-фактура (входящая)",
+	outgoing_invoice: "Счёт-фактура (исходящая, ЭСФ)",
+	payment_invoice: "Счёт на оплату",
+	bank_statement: "Банковская выписка",
+};
+
 // Поля-основания для удобного связывания дочернего документа с родителем.
+// Метка — в каноническом виде «{Тип}: ID {n} · {ДД.ММ.ГГГГ}».
 function basisOf(type, parent) {
+	const d = parent.date instanceof Date ? parent.date : (parent.date ? new Date(parent.date) : null);
+	const dateStr = d ? `${pad(d.getUTCDate(), 2)}.${pad(d.getUTCMonth() + 1, 2)}.${d.getUTCFullYear()}` : "";
+	const name = DOC_TYPE_RU[type] ?? type;
 	return {
 		basisDocumentType: type,
 		basisDocumentUuid: parent.uuid,
-		basisDocumentLabel: `${type} #${parent.id}`,
+		basisDocumentLabel: `${name}: ID ${parent.id}${dateStr ? ` · ${dateStr}` : ""}`,
 	};
 }
 
@@ -472,7 +494,7 @@ async function purchaseChain(org, idx) {
 	const payRatio = idx % 5 === 0 ? 0.6 : 1; // часть закупок оплачена не полностью (открытая задолженность)
 	const payAmount = round2(total * payRatio);
 	if (idx % 2 === 0) {
-		await createBankStatement({ ...baseHeader, bankAccountUuid: pick(org.bankAccounts).uuid, direction: "out", amount: payAmount, date: D(2026, 1, day + 5), comment: "Оплата поставщику (банк)", ...basisOf("incoming_invoice", inv) });
+		await createBankStatement({ ...baseHeader, bankAccountUuid: pick(org.bankAccounts).uuid, direction: "bankStatementOut", amount: payAmount, date: D(2026, 1, day + 5), comment: "Оплата поставщику (банк)", ...basisOf("incoming_invoice", inv) });
 	} else {
 		await createCashExpense({ ...baseHeader, cashboxUuid: pick(org.cashboxes).uuid, amount: payAmount, date: D(2026, 1, day + 5), comment: "Оплата поставщику (касса)", ...basisOf("incoming_invoice", inv) });
 	}
@@ -522,7 +544,7 @@ async function saleChain(org, idx) {
 	if (idx % 2 === 0) {
 		await createCashReceipt({ ...baseHeader, cashboxUuid: pick(org.cashboxes).uuid, amount: payAmount, date: D(2026, 2, day + 6), comment: "Поступление оплаты (ПКО)", ...basisOf("payment_invoice", bill) });
 	} else {
-		await createBankStatement({ ...baseHeader, bankAccountUuid: pick(org.bankAccounts).uuid, direction: "in", amount: payAmount, date: D(2026, 2, day + 6), comment: "Поступление оплаты (банк)", ...basisOf("payment_invoice", bill) });
+		await createBankStatement({ ...baseHeader, bankAccountUuid: pick(org.bankAccounts).uuid, direction: "bankStatementIn", amount: payAmount, date: D(2026, 2, day + 6), comment: "Поступление оплаты (банк)", ...basisOf("payment_invoice", bill) });
 	}
 	stats.chains.sale = (stats.chains.sale || 0) + 1;
 	return { sale, wh, customer, lines };

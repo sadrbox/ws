@@ -23,7 +23,12 @@ export type DocumentType =
 	| "cash_receipt_order"
 	| "cash_expense_order"
 	| "payroll_calculation"
-	| "payroll_payment";
+	| "payroll_payment"
+	| "commercial_offer"
+	| "sales_order"
+	| "reservation"
+	| "purchase_order"
+	| "bank_statement";
 
 export interface ValidationError {
 	field: string;
@@ -124,6 +129,15 @@ export const REQUIRED_FIELDS_MAP: Record<DocumentType, readonly string[]> = {
 	// ── Зарплата ─────────────────────────────────────────────────────────────
 	payroll_calculation: ["date", "organizationUuid", "employeeUuid"],
 	payroll_payment: ["date", "organizationUuid", "employeeUuid"],
+
+	// ── Документы цепочек (заказы, КП, резерв) ───────────────────────────────
+	commercial_offer: ["date", "organizationUuid", "counterpartyUuid"],
+	sales_order: ["date", "organizationUuid", "counterpartyUuid"],
+	reservation: ["date", "organizationUuid", "counterpartyUuid"],
+	purchase_order: ["date", "organizationUuid", "counterpartyUuid"],
+
+	// ── Банковская выписка ───────────────────────────────────────────────────
+	bank_statement: ["date", "organizationUuid", "counterpartyUuid"],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

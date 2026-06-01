@@ -19,7 +19,7 @@ export const TestWrapper: React.FC<PropsWithChildren> = ({ children }) => {
       registerBeforeClose: () => () => { },
     },
     actions: {
-      confirm: () => true,
+      confirm: () => Promise.resolve(true),
     },
     navbar: {
       props: [],

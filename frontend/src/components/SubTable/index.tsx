@@ -1160,8 +1160,8 @@ const SubTable: FC<SubTableProps> = ({
       e.stopPropagation();
       (target as HTMLElement).blur();
       // Синхронизируем activeRow с строкой текущего input (если был).
-      const tr = (target as HTMLElement).closest("tr[data-row-id]") as HTMLTableRowElement | null;
-      const td = (target as HTMLElement).closest("td[data-col-id]") as HTMLTableCellElement | null;
+      const tr = (target as HTMLElement).closest("tr[data-row-id]");
+      const td = (target as HTMLElement).closest("td[data-col-id]");
       const rid = tr ? Number(tr.getAttribute("data-row-id")) : NaN;
       if (Number.isFinite(rid)) tableApi?.setActiveRow(rid);
       const cid = td?.getAttribute("data-col-id");
@@ -1217,7 +1217,7 @@ const SubTable: FC<SubTableProps> = ({
             );
             if (input) {
               input.focus();
-              try { (input as HTMLInputElement).select?.(); } catch { /* ignore */ }
+              try { (input).select?.(); } catch { /* ignore */ }
             }
           });
         });
@@ -1384,7 +1384,7 @@ const SubTable: FC<SubTableProps> = ({
     // Ранее эта логика дублировалась в каждой *Table (SaleItemsTable и т.п.)
     // через `focusNextInRow` на каждом input'е. Теперь единое поведение
     // обеспечивается на уровне SubTable — все SubTable получают его автоматически.
-    const currentTr = (target as HTMLElement).closest("tr") as HTMLTableRowElement | null;
+    const currentTr = (target as HTMLElement).closest("tr");
     if (!currentTr) {
       // Фолбэк — старое поведение для нестандартных DOM (target не в tr).
       const allInputs = collectInputs(
@@ -1394,12 +1394,12 @@ const SubTable: FC<SubTableProps> = ({
       if (target !== allInputs[allInputs.length - 1]) return;
       e.preventDefault();
       e.stopPropagation();
-      (target as HTMLInputElement).blur();
+      (target).blur();
       return;
     }
 
     const rowInputs = collectInputs(currentTr);
-    const idxInRow = rowInputs.indexOf(target as HTMLInputElement);
+    const idxInRow = rowInputs.indexOf(target);
     // Есть следующее поле в этой же строке — перейти на него.
     if (idxInRow >= 0 && idxInRow < rowInputs.length - 1) {
       e.preventDefault();
@@ -1434,7 +1434,7 @@ const SubTable: FC<SubTableProps> = ({
     // Редактируемых полей дальше нет — выходим из режима редактирования.
     e.preventDefault();
     e.stopPropagation();
-    (target as HTMLInputElement).blur();
+    (target).blur();
   }, [readonly, inlineEditing, onInlineAddProp, defaultNewRow, handleInlineAdd, handleDelete, confirm, columns, openModelForm]);
 
   // ── Кнопки ─────────────────────────────────────────────────────────────

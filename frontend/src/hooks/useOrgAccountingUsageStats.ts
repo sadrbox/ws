@@ -56,7 +56,7 @@ export function useOrgAccountingUsageStats(
 	});
 
 	return {
-		stats: (query.data ?? EMPTY) as OrgAccountingUsageStats,
+		stats: (query.data ?? EMPTY),
 		isLoading: query.isLoading,
 	};
 }

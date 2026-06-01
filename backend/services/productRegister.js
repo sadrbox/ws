@@ -15,6 +15,7 @@
 //   purchase_return    → расход (−) с warehouseUuid
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
+import { reservedQuantity } from "./reservationRegister.js";
 
 // Конфигурация документов-регистраторов.
 const DOC_CONFIG = {
@@ -261,14 +262,26 @@ export async function computeShortages(
 	const requestedMap = aggregateRequested(items ?? [], outMovements, doc ?? {});
 	if (!requestedMap.size) return [];
 
+	// Жёсткий резерв: из доступного вычитаются активные резервы. Резерв-основание
+	// самой реализации исключается — он закрывается этой же реализацией.
+	const excludeReservationUuid =
+		doc?.basisDocumentType === "reservation" ? doc?.basisDocumentUuid ?? null : null;
+
 	const shortages = [];
 	for (const acc of requestedMap.values()) {
-		const available = await balanceFor(
+		const stock = await balanceFor(
 			acc.productUuid,
 			acc.warehouseUuid,
 			documentUuid,
 			client,
 		);
+		const reserved = await reservedQuantity(
+			acc.productUuid,
+			acc.warehouseUuid,
+			excludeReservationUuid,
+			client,
+		);
+		const available = Math.round((stock - reserved) * 10000) / 10000;
 		const requested = Math.round(acc.requested * 10000) / 10000;
 		if (requested > available + 1e-9) {
 			const [product, warehouse] = await Promise.all([

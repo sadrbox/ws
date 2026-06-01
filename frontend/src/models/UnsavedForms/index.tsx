@@ -268,7 +268,7 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
     filtering: { filters: undefined, onFilterChange: () => { }, onClearAll: () => { } },
     search: { value: "", onChange: () => { } },
     actions: {
-      openModelForm: ({ data }: { data?: TDataItem }) => {
+      openModelForm: ({ data }: { data?: Partial<TDataItem> }) => {
         if (data) openUnsavedForm(data as UnsavedRow);
       },
       refetch: loadEntries,

@@ -82,12 +82,11 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		"sort",
 		defaultSort,
 		undefined,
-		{ stringify: stringifyJson },
 	);
 	const [search, setSearch] = useQueryParams<string>("search", "");
 	const [filter, setFilter] = useQueryParams<
 		Record<string, { value: unknown; operator: string }> | undefined
-	>("filter", undefined, undefined, { stringify: stringifyJson });
+	>("filter", undefined, undefined);
 
 	const [adaptiveLimit, setAdaptiveLimit] = useState(500);
 	useEffect(() => {

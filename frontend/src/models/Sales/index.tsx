@@ -240,12 +240,17 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const handleRefillFromBasis = useCallback(async (skipFields = false) => {
-    if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
+    // Берём ТЕКУЩЕЕ основание из свежего снапшота стора (а не из замыкания):
+    // после смены типа/документа основания refill заполняет именно по нему.
+    const snap = form.store.getSnapshot().fields as any;
+    const basisType = snap.basisDocumentType;
+    const basisUuid = snap.basisDocumentUuid;
+    if (!basisUuid || !basisType) return;
     setIsRefilling(true);
     try {
       const result = await refillFromBasisSource(
-        form.fields.basisDocumentType,
-        form.fields.basisDocumentUuid,
+        basisType,
+        basisUuid,
         mapCommonTradeFields,
       );
       if (!result) return;
@@ -412,8 +417,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         api.get<{ success?: boolean; item?: any } | any>(`sales/${form.fields.uuid}`),
         api.get<{ success?: boolean; items?: any[] } | any>(`saleitems`, { params: { saleUuid: form.fields.uuid } }),
       ]);
-      const sale = (saleResp as any)?.item ?? saleResp;
-      const allItems: any[] = (itemsResp as any)?.items ?? (Array.isArray(itemsResp) ? itemsResp : []);
+      const sale = (saleResp)?.item ?? saleResp;
+      const allItems: any[] = (itemsResp)?.items ?? (Array.isArray(itemsResp) ? itemsResp : []);
 
       // Фильтрация по типу позиции: накладная — только товары, акт — только услуги/работы
       const filtered = allItems.filter((it) =>
@@ -521,7 +526,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   // иначе React не выполнит createPortal и кнопка не появится.
   const hasDirtyItems = (saleItems.pending?.length ?? 0) > 0;
   const handleCreateFromBasis = useCallback(async (
-    FormComponent: typeof OutgoingInvoicesForm | typeof SalesReturnsForm,
+    FormComponent: typeof OutgoingInvoicesForm  ,
     docLabel: string,
     basisType: string,
     itemsEndpoint: string,
@@ -630,7 +635,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
             <GroupCol>
               <BasisDocumentField
-                allowedTypes={[{ type: "payment_invoice", endpoint: "payment-invoices" }]}
+                allowedTypes={[
+                  { type: "sales_order", endpoint: "sales-orders" },
+                  { type: "reservation", endpoint: "reservations" },
+                  { type: "payment_invoice", endpoint: "payment-invoices" },
+                ]}
                 basisDocumentType={form.fields.basisDocumentType}
                 basisDocumentUuid={form.fields.basisDocumentUuid}
                 basisDocumentLabel={form.fields.basisDocumentLabel}

@@ -234,7 +234,7 @@ function createFormStore<F extends object>(
 	const restored = restoreFromSession<F>(currentStorageKey);
 	if (restored) {
 		const merged = {
-			fields: { ...defaultFields, ...restored.fields } as F,
+			fields: { ...defaultFields, ...restored.fields },
 			tables: (() => {
 				const t: Record<string, TableState> = {};
 				for (const key of Object.keys(tableDefs)) {
@@ -861,7 +861,7 @@ function createFormStore<F extends object>(
 	const EMPTY_KEY_SET = new Set<string>();
 	function getDirtyFieldKeys(): Set<string> {
 		if (!snapshotReady) return EMPTY_KEY_SET;
-		const snap = parsedSnapshot.fields as Record<string, unknown>;
+		const snap = parsedSnapshot.fields;
 		const curr = state.fields as Record<string, unknown>;
 		const dirty = new Set<string>();
 		for (const key of Object.keys(curr)) {
@@ -1712,7 +1712,7 @@ export function useFormStore<F extends object>(
 					}
 				},
 				// tableDefs is stable (from options destructure, same reference across renders)
-				// eslint-disable-next-line react-hooks/exhaustive-deps
+				 
 				[tableKey],
 			);
 
@@ -1795,7 +1795,7 @@ export function useFormStore<F extends object>(
 			if (onBeforeSaveRef.current) {
 				let guardMsg: string | null | undefined;
 				try {
-					guardMsg = await onBeforeSaveRef.current(store.getSnapshot().fields as F);
+					guardMsg = await onBeforeSaveRef.current(store.getSnapshot().fields);
 				} catch {
 					guardMsg = null; // сбой гарда не должен блокировать сохранение
 				}
