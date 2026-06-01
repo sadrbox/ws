@@ -3,6 +3,7 @@ import LookupField from "./LookupField";
 import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { docTypeLabel, docTypeToEndpoint } from "src/utils/accountingDocTypes";
+import { api } from "src/services/api/client";
 import styles from "./Field.module.scss";
 
 export interface BasisTypeConfig {
@@ -76,6 +77,34 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     [],
   );
 
+  // Нормализация отображения основания. Если сохранённая метка не в каноническом
+  // виде «{Тип}: ID {n} · {дата}» (напр. данные генератора «payment_invoice #165»),
+  // подтягиваем документ-основание по uuid и собираем корректную метку.
+  const [resolvedLabel, setResolvedLabel] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const isCanonical = !!basisDocumentLabel && /:\s*ID\s+\d+/i.test(basisDocumentLabel);
+    const type = basisDocumentType || "";
+    const endpoint = allowedTypes.find((t) => t.type === type)?.endpoint ?? docTypeToEndpoint(type);
+    if (!basisDocumentUuid || !type || !endpoint || isCanonical) {
+      setResolvedLabel(undefined);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await api.get<any>(`${endpoint}/${basisDocumentUuid}`);
+        const item = resp?.item ?? resp;
+        if (!cancelled && item) {
+          const name = nameForType(type, allowedTypes.find((t) => t.type === type));
+          setResolvedLabel(`${name}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`);
+        }
+      } catch {
+        /* недоступно — оставляем исходную метку */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [basisDocumentUuid, basisDocumentType, basisDocumentLabel, allowedTypes, nameForType]);
+
   const handleSelect = useCallback(
     (_uuid: string, _display: string, item: Record<string, any>) => {
       if (!activeType) return;
@@ -118,7 +147,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           label={`${translate("basisDocument")} (${typeName})`}
           name={`${formUid}_basisDocument`}
           value={basisDocumentUuid}
-          displayValue={basisDocumentLabel}
+          displayValue={resolvedLabel ?? basisDocumentLabel}
           endpoint={activeType?.endpoint ?? docTypeToEndpoint(valueType) ?? ""}
           displayField="id"
           getSuggestionLabel={(item) =>
