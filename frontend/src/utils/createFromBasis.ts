@@ -112,7 +112,13 @@ export async function refillFromBasisSource(
 	mapFields: (src: any) => Record<string, any>,
 ): Promise<{ fields: Record<string, any>; items: any[] } | null> {
 	const config = BASIS_SOURCE_CONFIGS[basisType];
-	if (!config || !basisUuid) return null;
+	if (!config) {
+		// Тип основания не настроен в BASIS_SOURCE_CONFIGS → refill невозможен.
+		// Логируем, чтобы не было «тихого» отсутствия перезаполнения.
+		console.warn(`[refill] нет конфигурации источника для типа основания "${basisType}"`);
+		return null;
+	}
+	if (!basisUuid) return null;
 
 	const [docResp, itemsResp] = await Promise.all([
 		api.get(`/${config.docEndpoint(basisUuid)}`),

@@ -154,25 +154,23 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
   );
 
   const form = (
-    <div className={mainStyles.FormWrapper}>
-      <div className={mainStyles.Form}>
-        <GroupRow>
-          <FieldDate label={translate("reportPeriodFrom")} name="ms_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
-          <FieldDate label={translate("reportPeriodTo")} name="ms_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
-        </GroupRow>
-        <GroupCol>
-          <LookupField label={translate("organization")} name="ms_org" value={orgUuid} displayValue={orgName}
-            endpoint="organizations" displayField="name"
-            onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
-            onClear={() => { setOrgUuid(""); setOrgName(""); }} />
-          <LookupField label={translate("warehouse")} name="ms_wh" value={warehouseUuid} displayValue={warehouseName}
-            endpoint="warehouses" displayField="name"
-            onSelect={(u, d) => { setWarehouseUuid(u); setWarehouseName(d); }}
-            onClear={() => { setWarehouseUuid(""); setWarehouseName(""); }}
-            extraParams={orgUuid ? { organizationUuid: orgUuid } : undefined} />
-        </GroupCol>
-      </div>
-    </div>
+    <>
+      <GroupRow>
+        <FieldDate label={translate("reportPeriodFrom")} name="ms_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodTo")} name="ms_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
+      </GroupRow>
+      <GroupCol>
+        <LookupField label={translate("organization")} name="ms_org" value={orgUuid} displayValue={orgName}
+          endpoint="organizations" displayField="name"
+          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
+          onClear={() => { setOrgUuid(""); setOrgName(""); }} />
+        <LookupField label={translate("warehouse")} name="ms_wh" value={warehouseUuid} displayValue={warehouseName}
+          endpoint="warehouses" displayField="name"
+          onSelect={(u, d) => { setWarehouseUuid(u); setWarehouseName(d); }}
+          onClear={() => { setWarehouseUuid(""); setWarehouseName(""); }}
+          extraParams={orgUuid ? { organizationUuid: orgUuid } : undefined} />
+      </GroupCol>
+    </>
   );
 
   const layout = (
