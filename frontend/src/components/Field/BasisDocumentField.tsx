@@ -68,7 +68,10 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
 
   const handleTypeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedType(e.target.value);
-  }, []);
+    // Если основание уже выбрано — смена типа сбрасывает значение
+    // (выбранный документ был другого типа).
+    if (basisDocumentUuid) onClear();
+  }, [basisDocumentUuid, onClear]);
 
   // Локализованное название типа документа: пользовательский label из конфига
   // (если задан) либо единое i18-название по коду типа (docTypeLabel).
@@ -116,7 +119,38 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   );
 
   const hasValue = !!basisDocumentUuid;
-  const showTypeSelect = allowedTypes.length > 1 && !hasValue;
+  const hasMultipleTypes = allowedTypes.length > 1;
+
+  // Селектор типа документа-основания (встроен в label поля, как в OwnerLookupField).
+  // Доступен в обеих ветках: при выбранном значении смена типа сбрасывает его
+  // (см. handleTypeChange) и переводит поле в режим выбора нового документа.
+  const typeSelectLabel = (
+    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <span>{translate("basisDocument")}</span>
+      <select
+        id={`${formUid}_basisType`}
+        name={`${formUid}_basisType`}
+        aria-label={translate("basisDocument")}
+        value={selectedType}
+        onChange={handleTypeChange}
+        disabled={disabled}
+        style={{
+          border: "none",
+          background: "transparent",
+          fontSize: "inherit",
+          fontFamily: "inherit",
+          color: "#555",
+          cursor: disabled ? "default" : "pointer",
+          padding: "0 2px",
+          outline: "none",
+        }}
+      >
+        {allowedTypes.map((t) => (
+          <option key={t.type} value={t.type}>{nameForType(t.type, t)}</option>
+        ))}
+      </select>
+    </span>
+  );
 
   const columns = [
     { key: "id", label: "ID" },
@@ -145,7 +179,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     return (
       <>
         <LookupField
-          label={`${translate("basisDocument")} (${typeName})`}
+          label={hasMultipleTypes ? typeSelectLabel : `${translate("basisDocument")} (${typeName})`}
           name={`${formUid}_basisDocument`}
           value={basisDocumentUuid}
           displayValue={resolvedLabel ?? basisDocumentLabel}
@@ -170,35 +204,9 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   // несколько типов документов) + LookupField. Селектор встроен в label поля —
   // аналогично OwnerLookupField.
   const newTypeName = nameForType(activeType?.type ?? selectedType, activeType);
-  const labelNode = showTypeSelect ? (
-    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-      <span>{translate("basisDocument")}</span>
-      <select
-        id={`${formUid}_basisType`}
-        name={`${formUid}_basisType`}
-        aria-label={translate("basisDocument")}
-        value={selectedType}
-        onChange={handleTypeChange}
-        disabled={disabled}
-        style={{
-          border: "none",
-          background: "transparent",
-          fontSize: "inherit",
-          fontFamily: "inherit",
-          color: "#555",
-          cursor: disabled ? "default" : "pointer",
-          padding: "0 2px",
-          outline: "none",
-        }}
-      >
-        {allowedTypes.map((t) => (
-          <option key={t.type} value={t.type}>{nameForType(t.type, t)}</option>
-        ))}
-      </select>
-    </span>
-  ) : (
-    `${translate("basisDocument")}${newTypeName ? ` (${newTypeName})` : ""}`
-  );
+  const labelNode = hasMultipleTypes
+    ? typeSelectLabel
+    : `${translate("basisDocument")}${newTypeName ? ` (${newTypeName})` : ""}`;
   return (
     <LookupField
       label={labelNode}
