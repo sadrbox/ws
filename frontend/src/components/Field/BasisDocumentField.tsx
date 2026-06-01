@@ -166,11 +166,39 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     );
   }
 
-  // Когда значения ещё нет — показываем селектор типа + LookupField
+  // Когда значения ещё нет — показываем селектор типа (если основанием может быть
+  // несколько типов документов) + LookupField. Селектор встроен в label поля —
+  // аналогично OwnerLookupField.
   const newTypeName = nameForType(activeType?.type ?? selectedType, activeType);
+  const labelNode = showTypeSelect ? (
+    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <span>{translate("basisDocument")}</span>
+      <select
+        value={selectedType}
+        onChange={handleTypeChange}
+        disabled={disabled}
+        style={{
+          border: "none",
+          background: "transparent",
+          fontSize: "inherit",
+          fontFamily: "inherit",
+          color: "#555",
+          cursor: disabled ? "default" : "pointer",
+          padding: "0 2px",
+          outline: "none",
+        }}
+      >
+        {allowedTypes.map((t) => (
+          <option key={t.type} value={t.type}>{nameForType(t.type, t)}</option>
+        ))}
+      </select>
+    </span>
+  ) : (
+    `${translate("basisDocument")}${newTypeName ? ` (${newTypeName})` : ""}`
+  );
   return (
     <LookupField
-      label={`${translate("basisDocument")}${newTypeName ? ` (${newTypeName})` : ""}`}
+      label={labelNode}
       name={`${formUid}_basisDocument`}
       value={undefined}
       displayValue={undefined}
