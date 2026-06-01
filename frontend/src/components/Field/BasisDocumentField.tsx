@@ -46,6 +46,8 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   onClear,
   disabled,
   formUid,
+  mismatch,
+  mismatchDetails,
 }) => {
   const [selectedType, setSelectedType] = useState<string>(
     basisDocumentType || allowedTypes[0]?.type || "",
@@ -92,29 +94,45 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     { key: "date", label: translate("date") },
   ];
 
+  // Предупреждение о расхождении документа с основанием (организация/контрагент/
+  // строки изменены после создания «на основании»). Показывается только при значении.
+  const mismatchNote = mismatch ? (
+    <div
+      className={styles.BasisMismatch}
+      title={(mismatchDetails ?? []).join(", ")}
+      style={{ color: "var(--color-danger, #c0392b)", fontSize: 12, marginTop: 2, lineHeight: 1.3 }}
+    >
+      ⚠ {translate("basisMismatch")}
+      {mismatchDetails && mismatchDetails.length > 0 ? `: ${mismatchDetails.join(", ")}` : ""}
+    </div>
+  ) : null;
+
   // Когда значение уже выбрано — отдаём управление LookupField (он сам рисует FieldWrapper + label).
   // Тип документа берём из basisDocumentType (надёжно даже вне allowedTypes).
   if (hasValue) {
     const valueType = basisDocumentType || activeType?.type || "";
     const typeName = nameForType(valueType, activeType);
     return (
-      <LookupField
-        label={`${translate("basisDocument")} (${typeName})`}
-        name={`${formUid}_basisDocument`}
-        value={basisDocumentUuid}
-        displayValue={basisDocumentLabel}
-        endpoint={activeType?.endpoint ?? docTypeToEndpoint(valueType) ?? ""}
-        displayField="id"
-        getSuggestionLabel={(item) =>
-          `${typeName}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`
-        }
-        columns={columns}
-        onSelect={handleSelect}
-        onClear={onClear}
-        disabled={disabled || !activeType}
-        variant="default"
-        searchTransform={extractBasisSearch}
-      />
+      <>
+        <LookupField
+          label={`${translate("basisDocument")} (${typeName})`}
+          name={`${formUid}_basisDocument`}
+          value={basisDocumentUuid}
+          displayValue={basisDocumentLabel}
+          endpoint={activeType?.endpoint ?? docTypeToEndpoint(valueType) ?? ""}
+          displayField="id"
+          getSuggestionLabel={(item) =>
+            `${typeName}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`
+          }
+          columns={columns}
+          onSelect={handleSelect}
+          onClear={onClear}
+          disabled={disabled || !activeType}
+          variant="default"
+          searchTransform={extractBasisSearch}
+        />
+        {mismatchNote}
+      </>
     );
   }
 

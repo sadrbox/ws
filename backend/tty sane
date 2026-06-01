@@ -1,8 +1,0 @@
-               userUuid               | organizationUuid |    modelName    | count 
---------------------------------------+------------------+-----------------+-------
- c9d6dd17-bdaf-41c2-a238-c17f52cb3793 |                  | Brand           |    13
- 43163d01-a644-4977-8bac-0e34ce00a006 |                  | Organization    |     8
- c9d6dd17-bdaf-41c2-a238-c17f52cb3793 |                  | Organization    |     5
- c9d6dd17-bdaf-41c2-a238-c17f52cb3793 |                  | IncomingInvoice |     2
-(4 rows)
-

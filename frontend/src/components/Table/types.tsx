@@ -16,6 +16,10 @@ export type TDataItem = {
 export type TColumnFooter = 'sum' | 'avg' | 'min' | 'max' | 'count' | 'none';
 
 export type TColumn = {
+  /** Явный порядок колонки (используется частью списков, напр. SearchReplaceRefs). */
+  position?: number;
+  /** Доступна ли фильтрация по колонке. */
+  filter?: boolean;
   identifier: string;
   type: string;
   name?: string;

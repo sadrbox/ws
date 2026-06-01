@@ -8,6 +8,7 @@ import ModelList from "src/components/ModelList";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { createInvoiceLikeForm } from "src/models/_shared/createInvoiceLikeForm";
 import { mapCommonTradeFields } from "src/utils/createFromBasis";
+import TradeDocumentPrint from "src/models/_shared/TradeDocumentPrint";
 import { PurchasesForm } from "src/models/Purchases";
 
 const MODEL_ENDPOINT = "purchase-orders";
@@ -26,6 +27,25 @@ const PurchaseOrdersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formDisplayName: "PurchaseOrdersForm",
   docType: "purchase_order",
   hidePosted: true,
+  printConfig: {
+    buildLayout: (fields, items, cols) => (
+      <TradeDocumentPrint title="ЗАКАЗ ПОСТАВЩИКУ" counterpartyLabel="Поставщик" totalLabel="Итого по заказу" data={{
+        documentId: fields.id, documentDate: fields.date,
+        organizationName: fields.organizationName, counterpartyName: fields.counterpartyName, contractName: fields.contractName,
+        items: items.map((r, i) => ({ number: i + 1, name: r.name, unit: r.unit, quantity: r.quantity, price: r.price, vatRate: r.vatRate, vatAmount: r.vatAmount, amount: r.amount })),
+        totalAmount: items.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
+        totalVatAmount: items.reduce((s: number, r: any) => s + Number(r.vatAmount ?? 0), 0),
+        columns: cols,
+      }} />
+    ),
+    columnDefs: [
+      { key: "vatRate", label: "Ставка НДС, %", defaultVisible: true },
+      { key: "vatAmount", label: "Сумма НДС", defaultVisible: true },
+    ],
+    columnsKey: "purchase_order",
+    fileBaseName: (f) => `ЗаказПоставщику_${f.id ?? "новый"}`,
+    title: (f) => `Заказ поставщику № ${f.id ?? "—"}`,
+  },
   basisConfig: {
     allowedTypes: [{ type: "purchase_requisition", endpoint: "purchase-requisitions" }],
   },

@@ -8,6 +8,7 @@ import ModelList from "src/components/ModelList";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { createInvoiceLikeForm } from "src/models/_shared/createInvoiceLikeForm";
 import { mapCommonTradeFields } from "src/utils/createFromBasis";
+import TradeDocumentPrint from "src/models/_shared/TradeDocumentPrint";
 import { SalesForm } from "src/models/Sales";
 
 const MODEL_ENDPOINT = "reservations";
@@ -26,6 +27,25 @@ const ReservationsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formDisplayName: "ReservationsForm",
   docType: "reservation",
   hidePosted: true,
+  printConfig: {
+    buildLayout: (fields, items, cols) => (
+      <TradeDocumentPrint title="РЕЗЕРВИРОВАНИЕ ТОВАРА" counterpartyLabel="Покупатель" totalLabel="Итого" data={{
+        documentId: fields.id, documentDate: fields.date,
+        organizationName: fields.organizationName, counterpartyName: fields.counterpartyName, contractName: fields.contractName,
+        items: items.map((r, i) => ({ number: i + 1, name: r.name, unit: r.unit, quantity: r.quantity, price: r.price, vatRate: r.vatRate, vatAmount: r.vatAmount, amount: r.amount })),
+        totalAmount: items.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
+        totalVatAmount: items.reduce((s: number, r: any) => s + Number(r.vatAmount ?? 0), 0),
+        columns: cols,
+      }} />
+    ),
+    columnDefs: [
+      { key: "vatRate", label: "Ставка НДС, %", defaultVisible: true },
+      { key: "vatAmount", label: "Сумма НДС", defaultVisible: true },
+    ],
+    columnsKey: "reservation",
+    fileBaseName: (f) => `Резерв_${f.id ?? "новый"}`,
+    title: (f) => `Резервирование № ${f.id ?? "—"}`,
+  },
   basisConfig: {
     allowedTypes: [{ type: "sales_order", endpoint: "sales-orders" }],
   },
