@@ -1,0 +1,76 @@
+# Пример GitHub Actions CI. Чтобы включить — перенесите файл в
+# .github/workflows/ci.yml и запушьте токеном со scope 'workflow'
+# (или добавьте через веб-интерфейс GitHub: Actions → New workflow).
+#
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  frontend:
+    name: Frontend (typecheck / lint / test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # Типы: проект приведён к 0 ошибок — шаг блокирующий.
+      - name: TypeScript
+        run: npx tsc --noEmit -p tsconfig.app.json
+      # Линт и тесты — информационно (не блокируют, пока есть исторический долг).
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+      - name: Tests
+        run: npm test -- --run
+        continue-on-error: true
+
+  backend:
+    name: Backend (migrations / drift / tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: prisma_user
+          POSTGRES_PASSWORD: prisma
+          POSTGRES_DB: buhprof
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://prisma_user:prisma@localhost:5432/buhprof
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      # Применяем baseline-миграцию на чистую БД (проверяет, что squash реплеится).
+      - name: Prisma migrate deploy
+        run: npx prisma migrate deploy
+      - name: Prisma generate
+        run: npx prisma generate
+      # Дрейф БД ↔ schema.prisma (кроме ожидаемого partial-индекса).
+      - name: Schema drift check
+        run: npm run check:drift
+      - name: Tests
+        run: npm test

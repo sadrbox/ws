@@ -42,7 +42,7 @@ function makeMockValue(overrides?: Partial<TypeAppContextProps>): TypeAppContext
       updatePaneLabel: () => { },
       registerBeforeClose: () => () => { },
     },
-    actions: { confirm: () => true },
+    actions: { confirm: () => Promise.resolve(true) },
     navbar: { props: [], setProps: () => { } },
     auth: { user: null, logout: () => { } },
     ...overrides,

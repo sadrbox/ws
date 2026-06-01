@@ -26,6 +26,9 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
+import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
+import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
+import BankStatementPrint from "./BankStatementPrint";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 
@@ -59,7 +62,7 @@ const DEFAULT_FIELDS: TFields = {
 const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const { canWrite } = useAccessRight("BankStatement");
-  const { auth: { user: currentUser } } = useAppContext();
+  const { auth: { user: currentUser }, windows: { addPane } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data as any;
@@ -211,9 +214,45 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, canWrite]);
 
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
+
+  const handlePrint = useCallback(() => {
+    if (!form.fields.uuid) return;
+    addPane({
+      component: PrintDocumentPane,
+      isSelector: true,
+      label: `Банковская выписка № ${form.fields.id ?? "—"}`,
+      data: {
+        id: Number(form.fields.id ?? 0),
+        uuid: String(form.fields.uuid ?? ""),
+        columnsKey: "bank_statement",
+        columnDefs: [],
+        buildLayout: () => (
+          <BankStatementPrint data={{
+            documentId: form.fields.id,
+            documentDate: form.fields.date,
+            direction: form.fields.direction,
+            amount: form.fields.amount ? parseFloat(form.fields.amount) : 0,
+            organizationName: form.fields.organizationName,
+            counterpartyName: form.fields.counterpartyName,
+            contractName: form.fields.contractName,
+            bankAccountName: form.fields.bankAccountName,
+            basisLabel: form.fields.basisDocumentLabel,
+          }} />
+        ),
+        fileBaseName: `БанкВыписка_${form.fields.id ?? "новый"}`,
+        title: `Банковская выписка № ${form.fields.id ?? "—"}`,
+      },
+    });
+  }, [form.fields, addPane]);
+
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
-    isSavedDoc ? <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} /> : null,
+    isSavedDoc ? (
+      <>
+        <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />
+        <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />
+      </>
+    ) : null,
   );
 
   return (

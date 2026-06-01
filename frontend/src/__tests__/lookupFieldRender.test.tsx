@@ -32,7 +32,7 @@ const ITEMS = [
 describe("LookupField — клавиатурная навигация (RTL)", () => {
 	beforeEach(() => {
 		vi.mocked(fetchList).mockReset();
-		vi.mocked(fetchList).mockResolvedValue({ items: ITEMS, total: ITEMS.length });
+		vi.mocked(fetchList).mockResolvedValue({ items: ITEMS, total: ITEMS.length, nextCursor: null, hasMore: false, fromCache: false });
 		// jsdom не реализует scrollIntoView
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(Element.prototype as any).scrollIntoView = vi.fn();

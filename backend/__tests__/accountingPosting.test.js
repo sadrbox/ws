@@ -118,6 +118,50 @@ test("Агрегация: одинаковые строки объединяют
 	assert.equal(entries[0].amount, 2000);
 });
 
+// ─── Банковская выписка ──────────────────────────────────────────────────────
+test("Банк-выписка (поступление): Дт 1030 Кт 1210 (Контрагент)", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid) return t.skip("нет фикстур");
+	const doc = { organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, contractUuid: null, direction: "in", amount: 5000, date: new Date(), posted: true };
+	const entries = await buildDocumentEntries("bank_statement", doc, []);
+	assert.equal(entries.length, 1);
+	assert.equal(entries[0].debitAccountCode, ACC.BANK);
+	assert.equal(entries[0].creditAccountCode, ACC.AR);
+	assert.equal(entries[0].amount, 5000);
+	const cTypes = entries[0].creditAnalytics.map((a) => a.subkontoType);
+	assert.ok(cTypes.includes("Counterparty"), "кредит-аналитика содержит Контрагента");
+});
+
+test("Банк-выписка (списание): Дт 3310 (Контрагент) Кт 1030", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid) return t.skip("нет фикстур");
+	const doc = { organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, contractUuid: null, direction: "out", amount: 3000, date: new Date(), posted: true };
+	const entries = await buildDocumentEntries("bank_statement", doc, []);
+	assert.equal(entries.length, 1);
+	assert.equal(entries[0].debitAccountCode, ACC.AP);
+	assert.equal(entries[0].creditAccountCode, ACC.BANK);
+	assert.equal(entries[0].amount, 3000);
+	const dTypes = entries[0].debitAnalytics.map((a) => a.subkontoType);
+	assert.ok(dTypes.includes("Counterparty"), "дебет-аналитика содержит Контрагента");
+});
+
+// ─── Перемещение ТМЗ ─────────────────────────────────────────────────────────
+test("Перемещение: Дт 1330(склад-получатель) Кт 1330(склад-источник)", async (t) => {
+	if (!fx.orgUuid) return t.skip("нет фикстур");
+	// Случайный товар без движений в регистре → avgCost=0 → сумма по цене строки.
+	const fromWh = crypto.randomUUID();
+	const toWh = crypto.randomUUID();
+	const doc = { organizationUuid: fx.orgUuid, fromWarehouseUuid: fromWh, toWarehouseUuid: toWh, date: new Date(), posted: true };
+	const items = [{ productUuid: crypto.randomUUID(), quantity: 4, price: 250, amount: 1000 }];
+	const entries = await buildDocumentEntries("inventory_transfer", doc, items);
+	assert.equal(entries.length, 1);
+	assert.equal(entries[0].debitAccountCode, ACC.GOODS);
+	assert.equal(entries[0].creditAccountCode, ACC.GOODS);
+	assert.equal(entries[0].amount, 1000, "4 ед × цена 250 (avgCost=0 → fallback цена)");
+	const dW = entries[0].debitAnalytics.find((a) => a.subkontoType === "Warehouse");
+	const cW = entries[0].creditAnalytics.find((a) => a.subkontoType === "Warehouse");
+	assert.equal(dW?.objectUuid, toWh, "дебет — склад-получатель");
+	assert.equal(cW?.objectUuid, fromWh, "кредит — склад-источник");
+});
+
 // ─── Проверки проведения ─────────────────────────────────────────────────────
 test("Проверка: проведение без организации запрещено", async () => {
 	const doc = { organizationUuid: null, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid, date: new Date(), posted: true };
