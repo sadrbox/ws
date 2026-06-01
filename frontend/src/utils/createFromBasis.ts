@@ -5,6 +5,7 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { unwrapItem, unwrapList } from "src/utils/apiUnwrap";
+import type { PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
 
 export interface BasisFromTarget {
 	/** Название создаваемого документа, напр. "Счёт-фактуру исходящую" */
@@ -227,6 +228,72 @@ export async function openDocumentFromBasis(
 			fromBasisItems: mapItemsForBasis(sourceItems),
 		},
 	});
+}
+
+/** Загружает основные значения пользователя (permissionDefaults) для организации. */
+async function fetchOrgPermissionDefaults(
+	userUuid: string,
+	organizationUuid: string,
+): Promise<PermissionDefaultsMap> {
+	if (!userUuid || !organizationUuid) return {};
+	try {
+		const resp = await api.get<any>("/user-permission-defaults", {
+			params: { userUuid, organizationUuid, limit: 100 },
+		});
+		const items: any[] = Array.isArray(resp) ? resp : (resp?.items ?? []);
+		const map: PermissionDefaultsMap = {};
+		for (const it of items) {
+			if (it.valueType && it.valueUuid) {
+				(map as any)[it.valueType] = { uuid: it.valueUuid, name: it.valueName ?? "" };
+			}
+		}
+		return map;
+	} catch {
+		return {};
+	}
+}
+
+/**
+ * Дополняет patch перезаполнения по основанию полями, зависящими от организации
+ * (склад/договор), которых НЕТ у документа-основания.
+ *
+ * Если основание сменило организацию:
+ *   • есть основное значение пользователя (permissionDefaults целевой орг) — берём его;
+ *   • иначе — очищаем поле (оно принадлежало прежней организации).
+ * Если организация НЕ менялась — поле не трогаем (сохраняем текущее).
+ *
+ * Дефолты целевой орг догружаются с сервера только при смене организации
+ * (для текущей организации используются уже загруженные currentOrgDefaults).
+ */
+export async function resolveOrgDependentRefill(
+	basisFields: Record<string, any>,
+	currentFields: Record<string, any>,
+	userUuid: string,
+	currentOrgDefaults: PermissionDefaultsMap,
+	orgFields: Array<{ valueType: keyof PermissionDefaultsMap; uuidKey: string; nameKey: string }>,
+): Promise<Record<string, any>> {
+	const targetOrg = basisFields.organizationUuid ?? currentFields.organizationUuid ?? "";
+	const orgChanged = !!basisFields.organizationUuid && basisFields.organizationUuid !== currentFields.organizationUuid;
+
+	// Поля, зависящие от орг, которые основание НЕ предоставило.
+	const missing = orgFields.filter((f) => !basisFields[f.uuidKey]);
+	if (!missing.length) return {};
+
+	const defaults = orgChanged ? await fetchOrgPermissionDefaults(userUuid, targetOrg) : currentOrgDefaults;
+
+	const patch: Record<string, any> = {};
+	for (const f of missing) {
+		const def = defaults[f.valueType];
+		if (def) {
+			patch[f.uuidKey] = def.uuid;
+			patch[f.nameKey] = def.name;
+		} else if (orgChanged) {
+			patch[f.uuidKey] = "";
+			patch[f.nameKey] = "";
+		}
+		// орг не менялась и нет дефолта → поле не трогаем (сохраняем текущее).
+	}
+	return patch;
 }
 
 /**

@@ -34,12 +34,12 @@ import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntr
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
-import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems, resolveOrgDependentRefill } from "src/utils/createFromBasis";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { isEquivalent } from "src/utils/normalize";
 import { PurchaseReturnsForm } from "src/models/PurchaseReturns";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
+import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
 
@@ -233,11 +233,14 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
       );
       if (!result) return;
       if (!skipFields) {
-        const rawPatch = mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
-          { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-          { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-        ]);
         const cur = form.store.getSnapshot().fields as any;
+        // Поля, зависящие от организации (склад/договор), которых нет у основания:
+        // при смене организации — дефолт пользователя для новой орг, иначе очистка.
+        const orgPatch = await resolveOrgDependentRefill(result.fields, cur, currentUser?.uuid ?? "", permDefaultsRef.current, [
+          { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+          { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+        ]);
+        const rawPatch = { ...result.fields, ...orgPatch };
         const patch = Object.fromEntries(
           Object.keys(rawPatch).filter(k => k in cur).map(k => [k, rawPatch[k]]),
         ) as Partial<TFields>;

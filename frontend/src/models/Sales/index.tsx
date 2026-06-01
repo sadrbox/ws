@@ -35,7 +35,7 @@ import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton"
 import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
-import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems, resolveOrgDependentRefill } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
@@ -43,7 +43,7 @@ import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { OutgoingInvoicesForm } from "src/models/OutgoingInvoices";
 import { SalesReturnsForm } from "src/models/SalesReturns";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
+import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
 
@@ -255,12 +255,15 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       );
       if (!result) return;
       if (!skipFields) {
-        const rawPatch = mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
-          { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-          { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-        ]);
-        // Оставляем только поля, существующие в форме (иначе лишние поля → ложный Dirty).
         const cur = form.store.getSnapshot().fields as any;
+        // Поля, зависящие от организации (склад/договор), которых нет у основания:
+        // при смене организации — дефолт пользователя для новой орг, иначе очистка.
+        const orgPatch = await resolveOrgDependentRefill(result.fields, cur, currentUser?.uuid ?? "", permDefaultsRef.current, [
+          { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+          { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+        ]);
+        const rawPatch = { ...result.fields, ...orgPatch };
+        // Оставляем только поля, существующие в форме (иначе лишние поля → ложный Dirty).
         const patch = Object.fromEntries(
           Object.keys(rawPatch).filter(k => k in cur).map(k => [k, rawPatch[k]]),
         ) as Partial<TFields>;

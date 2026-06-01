@@ -17,7 +17,7 @@ import { useAccessRight } from "src/hooks/useAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
+import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
@@ -31,7 +31,7 @@ import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
-import { type BasisFromTarget, openDocumentFromBasis, refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems } from "src/utils/createFromBasis";
+import { type BasisFromTarget, openDocumentFromBasis, refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems, resolveOrgDependentRefill } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
@@ -268,14 +268,18 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
         );
         if (!result) return;
         if (!skipFields) {
-          const rawPatch = mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
-            { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-          ]);
-          // Оставляем в patch только поля, которые реально есть в форме.
-          // mapCommonTradeFields возвращает warehouseUuid/warehouseName (для торговых
-          // документов), но у счёт-фактуры нет полей склада — без фильтра setFields
-          // добавил бы их в state.fields → ложный Dirty.
           const cur = form.store.getSnapshot().fields as any;
+          // Поля, зависящие от организации, которых нет у основания: при смене
+          // организации — дефолт пользователя для новой орг, иначе очистка.
+          // Склад — только для документов со складом (заказы/резерв).
+          const orgFields: Array<{ valueType: "warehouse" | "contract"; uuidKey: string; nameKey: string }> = [
+            { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+          ];
+          if (cfg.hasWarehouse) orgFields.push({ valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" });
+          const orgPatch = await resolveOrgDependentRefill(result.fields, cur, currentUser?.uuid ?? "", permDefaultsRef.current, orgFields);
+          const rawPatch = { ...result.fields, ...orgPatch };
+          // Оставляем в patch только поля, которые реально есть в форме (иначе
+          // лишние поля → ложный Dirty; напр. у счёт-фактуры нет склада).
           const patch = Object.fromEntries(
             Object.keys(rawPatch).filter(k => k in cur).map(k => [k, rawPatch[k]]),
           ) as Partial<TFields>;
