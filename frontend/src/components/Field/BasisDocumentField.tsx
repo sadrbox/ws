@@ -28,15 +28,16 @@ export interface BasisDocumentFieldProps {
   mismatchDetails?: string[];
 }
 
-/** Извлекает числовой ID из строки вида "Тип: ID 5 · 25.05.2026", иначе возвращает исходный текст. */
-const extractBasisSearch = (input: string): string => {
-  // "Тип: ID 5 · дата" → "5" → бэкенд search=5
-  const idMatch = input.match(/ID\s+(\d+)/i);
-  if (idMatch) return idMatch[1];
-  // Всё остальное (частичный лейбл, дата, произвольный текст) →
-  // "" → LookupField загрузит все записи и отфильтрует по getSuggestionLabel
-  return "";
-};
+/**
+ * Поле «Основание» фильтруется по ВИДИМОЙ метке («{Тип}: ID {n} · {дата}»)
+ * на клиенте. Серверный поиск тут не годится:
+ *   • бэкенд не ищет по переведённому названию типа («Коммерческое предложение»);
+ *   • числовой поиск делает `id EQUALS`, поэтому «ID 1» не находит id 113/115/…
+ *     (подстрока по числовому id невозможна).
+ * Возврат "" заставляет LookupField загрузить записи и отфильтровать их по
+ * getSuggestionLabel — тогда «ID 15» находит 150–159, «ID 1» — все с «1» и т.д.
+ */
+const extractBasisSearch = (): string => "";
 
 const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   allowedTypes,
