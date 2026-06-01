@@ -60,4 +60,10 @@ export default tseslint.config(
 			},
 		},
 	},
+	// JS-файлы (конфиги и т.п.) не входят в TS-проект — отключаем type-aware
+	// правила, иначе они падают «requires type information» (await-thenable).
+	{
+		files: ["**/*.{js,mjs,cjs}"],
+		extends: [tseslint.configs.disableTypeChecked],
+	},
 );

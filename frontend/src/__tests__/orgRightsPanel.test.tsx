@@ -19,7 +19,6 @@ vi.mock('src/services/syncManager', () => ({ initialSync: vi.fn(), startPeriodic
 vi.mock('src/services/offlineDb', () => ({ clearOfflineDb: vi.fn() }));
 vi.mock('src/services/registerSW', () => ({ registerServiceWorker: vi.fn() }));
 vi.mock('src/services/networkStatus', () => ({ startHealthCheck: vi.fn(), stopHealthCheck: vi.fn() }));
-vi.mock('src/services/offlineQueue', () => ({ clearAllEntries: vi.fn() }));
 vi.mock('src/services/auth', () => ({
   isAuthenticated: vi.fn(() => false),
   verifyToken: vi.fn(() => null),

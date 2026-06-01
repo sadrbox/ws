@@ -79,7 +79,7 @@ describe("parseNumericInput", () => {
  */
 function computeSafeValue(value: string | undefined | null): string {
 	if (value === "" || value === undefined || value === null) return "";
-	const n = parseNumericInput(value as string);
+	const n = parseNumericInput(value);
 	if (n === null) return "";
 	return String(value)
 		.replace(/[\s\u00A0\u202F]/g, "")

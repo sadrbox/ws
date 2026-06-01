@@ -279,8 +279,8 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
       return { userUuid: fd.userUuid, organizationUuid: fd.organizationUuid, role: fd.role };
     },
     buildPaneLabel: (saved) => {
-      const userName = saved.userDisplayName || (saved as any).user?.username || "";
-      const orgName = saved.orgShortName || (saved as any).organization?.name || "";
+      const userName = saved.userDisplayName || (saved).user?.username || "";
+      const orgName = saved.orgShortName || (saved).organization?.name || "";
       const detail = [userName, orgName].filter(Boolean).join(" / ");
       return makePaneLabel("UserAccessRightsList", translate("userAccessRight"), saved, detail || undefined);
     },

@@ -124,9 +124,7 @@ export function useOrgAccountingSettings(
 			 *  отображаются и при ставке 0% (валидно по НК РК). */
 			isVatEnabled: useVat,
 			/** "INCLUDED" — НДС в сумме; "ADDED" — НДС сверху. */
-			vatCalculationMethod: (calcMethod === "ADDED" ? "ADDED" : "INCLUDED") as
-				| "INCLUDED"
-				| "ADDED",
+			vatCalculationMethod: (calcMethod === "ADDED" ? "ADDED" : "INCLUDED"),
 		};
 	}, [query.data, query.isLoading]);
 }

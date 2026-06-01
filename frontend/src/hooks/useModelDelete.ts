@@ -53,7 +53,7 @@ export function useModelDelete(
 
 			if (items.length > 1) {
 				// ── Batch-удаление через POST /{model}/batch-delete ───────────────
-				const uuids = items.map((i) => i.uuid).filter(Boolean) as string[];
+				const uuids = items.map((i) => i.uuid).filter(Boolean);
 				try {
 					const resp: any = await apiClient.post(`/${model}/batch-delete`, {
 						uuids,

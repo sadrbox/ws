@@ -47,7 +47,7 @@ describe("LookupField — клавиатурная навигация (RTL)", ()
 				onSelect={onSelect}
 			/>,
 		);
-		const input = screen.getByRole("combobox") as HTMLInputElement;
+		const input = screen.getByRole("combobox");
 		input.focus();
 		expect(document.activeElement).toBe(input);
 

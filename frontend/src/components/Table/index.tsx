@@ -405,7 +405,7 @@ const Table: FC<TableProps> = memo((props) => {
     setActiveRow((prev: number | null): number | null => {
       // Остаёмся на текущей строке если она ещё видна; иначе переходим на первую
       const stillVisible = prev !== null && rows.some(r => r.id === prev);
-      return stillVisible ? prev : (rows[0].id as number);
+      return stillVisible ? prev : (rows[0].id);
     });
   }, [onSelectItem, rows]);
 

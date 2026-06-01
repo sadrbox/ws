@@ -412,8 +412,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         api.get<{ success?: boolean; item?: any } | any>(`sales/${form.fields.uuid}`),
         api.get<{ success?: boolean; items?: any[] } | any>(`saleitems`, { params: { saleUuid: form.fields.uuid } }),
       ]);
-      const sale = (saleResp as any)?.item ?? saleResp;
-      const allItems: any[] = (itemsResp as any)?.items ?? (Array.isArray(itemsResp) ? itemsResp : []);
+      const sale = (saleResp)?.item ?? saleResp;
+      const allItems: any[] = (itemsResp)?.items ?? (Array.isArray(itemsResp) ? itemsResp : []);
 
       // Фильтрация по типу позиции: накладная — только товары, акт — только услуги/работы
       const filtered = allItems.filter((it) =>
@@ -521,7 +521,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   // иначе React не выполнит createPortal и кнопка не появится.
   const hasDirtyItems = (saleItems.pending?.length ?? 0) > 0;
   const handleCreateFromBasis = useCallback(async (
-    FormComponent: typeof OutgoingInvoicesForm | typeof SalesReturnsForm,
+    FormComponent: typeof OutgoingInvoicesForm  ,
     docLabel: string,
     basisType: string,
     itemsEndpoint: string,

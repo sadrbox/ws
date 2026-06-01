@@ -284,7 +284,7 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
             />
             {colOpen && (
               <div ref={colPanelRef} className={styles.ColSettingsPanel} style={colPanelStyle}>
-                {columnDefs!.map(def => (
+                {columnDefs.map(def => (
                   <label key={def.key} className={styles.ColSettingsItem}>
                     <input
                       type="checkbox"

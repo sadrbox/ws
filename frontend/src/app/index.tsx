@@ -28,7 +28,6 @@ import { useConfirm } from "src/hooks/useConfirm";
 import ConfirmModal from "src/components/ConfirmModal";
 import { startHealthCheck, stopHealthCheck } from "src/services/networkStatus";
 import { clearAllFormStores } from "src/hooks/useFormSessionStore";
-import { clearAllEntries as clearOfflineQueue } from "src/services/offlineQueue";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { useAppContext, AppContextProvider } from "src/app/context";
 import { SalesList } from "src/models/Sales";
@@ -191,7 +190,6 @@ const App: React.FC = () => {
     // Очистка данных сессии при выходе
     clearAllFormStores();
     clearPersistedCache().catch(() => { });
-    clearOfflineQueue().catch(() => { });
     clearOfflineDb().catch(() => { });
     stopPeriodicSync();
     queryClient.clear();
