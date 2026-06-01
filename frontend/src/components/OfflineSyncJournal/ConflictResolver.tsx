@@ -11,7 +11,7 @@
 import { FC, useCallback, useMemo, useState } from "react";
 import { Button } from "src/components/Button";
 import { translate } from "src/i18";
-import type { QueueEntry } from "src/services/offlineQueue";
+import type { SyncConflict } from "src/services/syncManager";
 import {
   resolveConflictLocal,
   resolveConflictServer,
@@ -19,7 +19,7 @@ import {
 import styles from "./OfflineSyncJournal.module.scss";
 
 interface ConflictResolverProps {
-  entry: QueueEntry;
+  conflict: SyncConflict;
   onClose: () => void;
 }
 
@@ -40,29 +40,28 @@ function allKeys(a: Record<string, unknown> | null | undefined, b: Record<string
 function formatValue(v: unknown): string {
   if (v == null) return "—";
   if (typeof v === "object") {
-    try { return JSON.stringify(v); } catch { return String(v as string | null | undefined); }
+    try { return JSON.stringify(v); } catch { return String(v); }
   }
-  return String(v as string | null | undefined);
+  return String(v);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 
-const ConflictResolver: FC<ConflictResolverProps> = ({ entry, onClose }) => {
+const ConflictResolver: FC<ConflictResolverProps> = ({ conflict, onClose }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
-  const localData = entry.payload;
-  const serverData = entry.serverData;
+  const localData = conflict.clientData;
+  const serverData = conflict.serverData;
 
   const keys = useMemo(() => allKeys(localData, serverData), [localData, serverData]);
 
   const handleAcceptLocal = useCallback(async () => {
-    if (entry.id == null) return;
     setIsProcessing(true);
     setResult(null);
-    const ok = await resolveConflictLocal(entry.id);
+    const ok = await resolveConflictLocal(conflict);
     setIsProcessing(false);
     if (ok) {
       setResult("✅ " + translate("conflictResolverLocalAccepted"));
@@ -70,29 +69,25 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ entry, onClose }) => {
     } else {
       setResult("❌ " + translate("conflictResolverLocalFailed"));
     }
-  }, [entry.id, onClose]);
+  }, [conflict, onClose]);
 
   const handleAcceptServer = useCallback(async () => {
-    if (entry.id == null) return;
     setIsProcessing(true);
-    await resolveConflictServer(entry.id);
+    await resolveConflictServer(conflict);
     setIsProcessing(false);
     setResult("✅ " + translate("conflictResolverServerAccepted"));
     setTimeout(onClose, 800);
-  }, [entry.id, onClose]);
+  }, [conflict, onClose]);
 
   return (
     <div className={styles.ConflictResolver}>
       {/* Header */}
       <div className={styles.ConflictHeader}>
-        ⚠️ {translate("conflictResolverTitle")} {entry.label}
+        ⚠️ {translate("conflictResolverTitle")} {conflict.table} · {conflict.uuid}
       </div>
       <div className={styles.ConflictDescription}>
         {translate("conflictResolverDescriptionLine1")}
         {translate("conflictResolverDescriptionLine2")}
-        {entry.lastError && (
-          <div style={{ color: "#e53935", marginTop: 4, fontSize: 12 }}>{entry.lastError}</div>
-        )}
       </div>
 
       {/* Diff columns */}

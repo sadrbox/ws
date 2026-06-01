@@ -1,23 +1,25 @@
 /**
- * OfflineSyncJournal — журнал отложенных операций.
+ * OfflineSyncJournal — журнал отложенных оффлайн-изменений.
+ *
+ * Использует актуальную модель синхронизации (useOfflineSync): список
+ * PendingChange (table/uuid/action) + конфликты SyncConflict из последней
+ * синхронизации. Ранее компонент был написан под устаревший QueueEntry —
+ * переведён на живую модель.
  */
-
 import { FC, useCallback, useState } from "react";
 import { getFormatDate } from "src/utils/datetime";
 import { translate } from "src/i18";
 import { useOfflineSync } from "src/hooks/useOfflineSync";
-import { updateEntry, type QueueEntry } from "src/services/offlineQueue";
-import { processQueue } from "src/services/networkStatus";
+import type { PendingChange } from "src/services/offlineDb";
+import type { SyncConflict } from "src/services/syncManager";
 import { Button } from "src/components/Button";
 import ConflictResolver from "./ConflictResolver";
 import styles from "./OfflineSyncJournal.module.scss";
 
-const STATUS_CONFIG: Record<string, { icon: string; label: string; css: string }> = {
-  pending: { icon: "⏳", label: translate("statusPending"), css: styles.StatusPending },
-  syncing: { icon: "🔄", label: translate("statusSyncing"), css: styles.StatusSyncing },
-  synced: { icon: "✅", label: translate("statusSynced"), css: styles.StatusSynced },
-  failed: { icon: "❌", label: translate("statusFailed"), css: styles.StatusFailed },
-  conflict: { icon: "⚠️", label: translate("statusConflict"), css: styles.StatusConflict },
+const ACTION_CONFIG: Record<string, { icon: string; css?: string }> = {
+  create: { icon: "➕", css: styles.StatusSynced },
+  update: { icon: "✏️", css: styles.StatusSyncing },
+  delete: { icon: "🗑️", css: styles.StatusFailed },
 };
 
 function formatDate(iso: string): string {
@@ -26,30 +28,19 @@ function formatDate(iso: string): string {
 
 const OfflineSyncJournal: FC = () => {
   const {
-    isOnline, isSyncing, summary, entries,
-    syncNow, removeEntry, clearSynced,
+    isOnline, isSyncing, pendingChanges, pendingCount, conflicts,
+    syncNow, removePending, clearAllPending,
   } = useOfflineSync();
 
-  const [conflictEntry, setConflictEntry] = useState<QueueEntry | null>(null);
+  const [conflict, setConflict] = useState<SyncConflict | null>(null);
 
-  const handleRetry = useCallback(async (entry: QueueEntry) => {
+  const handleDelete = useCallback(async (entry: PendingChange) => {
     if (entry.id == null) return;
-    await updateEntry(entry.id, { status: "pending", lastError: undefined });
-    await processQueue();
-  }, []);
+    await removePending(entry.id);
+  }, [removePending]);
 
-  const handleDelete = useCallback(async (entry: QueueEntry) => {
-    if (entry.id == null) return;
-    await removeEntry(entry.id);
-  }, [removeEntry]);
-
-  if (conflictEntry) {
-    return (
-      <ConflictResolver
-        entry={conflictEntry}
-        onClose={() => setConflictEntry(null)}
-      />
-    );
+  if (conflict) {
+    return <ConflictResolver conflict={conflict} onClose={() => setConflict(null)} />;
   }
 
   return (
@@ -59,22 +50,20 @@ const OfflineSyncJournal: FC = () => {
           {translate("syncJournalTitle")}
         </div>
         <div className={styles.SyncJournalSummary}>
-          {summary.pending > 0 && <span>⏳ {summary.pending}</span>}
-          {summary.conflict > 0 && <span>⚠️ {summary.conflict}</span>}
-          {summary.failed > 0 && <span>❌ {summary.failed}</span>}
-          {summary.synced > 0 && <span>✅ {summary.synced}</span>}
-          <span>{translate("total")}: {summary.total}</span>
+          {pendingCount > 0 && <span>⏳ {pendingCount}</span>}
+          {conflicts.length > 0 && <span>⚠️ {conflicts.length}</span>}
+          <span>{translate("total")}: {pendingCount}</span>
         </div>
         <div className={styles.SyncJournalActions}>
-          {summary.synced > 0 && (
-            <Button onClick={clearSynced} disabled={isSyncing}>
-              <span>{translate("clear")} ✅</span>
+          {pendingCount > 0 && (
+            <Button onClick={clearAllPending} disabled={isSyncing}>
+              <span>{translate("clear")}</span>
             </Button>
           )}
           <Button
             variant="primary"
             onClick={syncNow}
-            disabled={isSyncing || !isOnline || summary.pending === 0}
+            disabled={isSyncing || !isOnline || pendingCount === 0}
           >
             <span>{isSyncing ? translate("statusSyncing") + "…" : translate("syncNow")}</span>
           </Button>
@@ -82,44 +71,45 @@ const OfflineSyncJournal: FC = () => {
       </div>
 
       <div className={styles.SyncJournalBody}>
-        {entries.length === 0 ? (
+        {/* Конфликты последней синхронизации */}
+        {conflicts.map((c) => (
+          <div key={`conflict-${c.table}-${c.uuid}`} className={styles.SyncEntry}>
+            <div className={[styles.SyncEntryIcon, styles.StatusConflict].filter(Boolean).join(" ")}>⚠️</div>
+            <div className={styles.SyncEntryBody}>
+              <div className={styles.SyncEntryLabel}>{translate("statusConflict")}: {c.table}</div>
+              <div className={styles.SyncEntryMeta}>{c.uuid}</div>
+            </div>
+            <div className={styles.SyncEntryActions}>
+              <Button onClick={() => setConflict(c)}>
+                <span>{translate("resolve")}</span>
+              </Button>
+            </div>
+          </div>
+        ))}
+
+        {/* Отложенные изменения */}
+        {pendingChanges.length === 0 && conflicts.length === 0 ? (
           <div className={styles.SyncJournalEmpty}>
             {translate("syncQueueEmpty")}
           </div>
         ) : (
-          entries.map((entry) => {
-            const cfg = STATUS_CONFIG[entry.status] ?? STATUS_CONFIG.pending;
+          pendingChanges.map((entry) => {
+            const cfg = ACTION_CONFIG[entry.action] ?? ACTION_CONFIG.update;
             return (
               <div key={entry.id} className={styles.SyncEntry}>
                 <div className={[styles.SyncEntryIcon, cfg.css].filter(Boolean).join(" ")}>
                   {cfg.icon}
                 </div>
                 <div className={styles.SyncEntryBody}>
-                  <div className={styles.SyncEntryLabel}>{entry.label}</div>
+                  <div className={styles.SyncEntryLabel}>{entry.table}</div>
                   <div className={styles.SyncEntryMeta}>
-                    {entry.method} {entry.url} · {formatDate(entry.createdAt)}
-                    {entry.attempts > 0 && ` · ${translate("attempts")}: ${entry.attempts}`}
+                    {entry.action} · {entry.uuid} · {formatDate(entry.createdAt)}
                   </div>
-                  {entry.lastError && (
-                    <div className={styles.SyncEntryError}>{entry.lastError}</div>
-                  )}
                 </div>
                 <div className={styles.SyncEntryActions}>
-                  {entry.status === "conflict" && (
-                    <Button onClick={() => setConflictEntry(entry)}>
-                      <span>{translate("resolve")}</span>
-                    </Button>
-                  )}
-                  {entry.status === "failed" && (
-                    <Button onClick={() => handleRetry(entry)}>
-                      <span>{translate("retry")}</span>
-                    </Button>
-                  )}
-                  {entry.status !== "syncing" && (
-                    <Button onClick={() => handleDelete(entry)}>
-                      <span>✕</span>
-                    </Button>
-                  )}
+                  <Button onClick={() => handleDelete(entry)} disabled={isSyncing}>
+                    <span>✕</span>
+                  </Button>
                 </div>
               </div>
             );
