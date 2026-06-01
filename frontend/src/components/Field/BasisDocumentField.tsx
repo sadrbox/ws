@@ -174,6 +174,9 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
       <span>{translate("basisDocument")}</span>
       <select
+        id={`${formUid}_basisType`}
+        name={`${formUid}_basisType`}
+        aria-label={translate("basisDocument")}
         value={selectedType}
         onChange={handleTypeChange}
         disabled={disabled}

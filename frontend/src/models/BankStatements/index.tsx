@@ -173,7 +173,9 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow>
                 <label className={styles.FieldWrapper} style={{ display: "flex", flexDirection: "column", gap: 4, width: "200px" }}>
                   <span>{translate("bankStatementDirection")}</span>
-                  <select value={form.fields.direction} disabled={form.isLoading || !canWrite}
+                  <select id={`${form.formUid}_direction`} name={`${form.formUid}_direction`}
+                    aria-label={translate("bankStatementDirection")}
+                    value={form.fields.direction} disabled={form.isLoading || !canWrite}
                     onChange={e => form.setField("direction", e.target.value)}>
                     <option value="in">{translate("bankStatementIn")}</option>
                     <option value="out">{translate("bankStatementOut")}</option>
