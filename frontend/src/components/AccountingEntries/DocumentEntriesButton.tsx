@@ -64,7 +64,12 @@ const DocumentEntriesButton: FC<Props> = ({ documentType, documentUuid, disabled
         <Icon name="ledger" />
       </IconButton>
       {open && (
-        <Modal title={translate("documentEntries")} onClose={() => setOpen(false)} style={{ minWidth: 720, maxWidth: "90vw" }}>
+        <Modal
+          title={translate("documentEntries")}
+          onClose={() => setOpen(false)}
+          buttons={[{ label: translate("close"), onClick: () => setOpen(false), variant: "secondary" }]}
+          style={{ minWidth: 720, maxWidth: "90vw" }}
+        >
           <div style={{ maxHeight: "60vh", overflow: "auto" }}>
             {isLoading ? (
               <div style={{ padding: 16 }}>{translate("loading")}</div>

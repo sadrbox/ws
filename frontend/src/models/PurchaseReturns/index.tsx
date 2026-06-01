@@ -463,7 +463,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
             <GroupCol>
               <BasisDocumentField
-                allowedTypes={[{ type: "purchase", endpoint: "purchases", label: translate("purchaseReceipt") }]}
+                allowedTypes={[{ type: "purchase", endpoint: "purchases" }]}
                 basisDocumentType={form.fields.basisDocumentType}
                 basisDocumentUuid={form.fields.basisDocumentUuid}
                 basisDocumentLabel={form.fields.basisDocumentLabel}

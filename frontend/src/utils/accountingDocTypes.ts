@@ -1,32 +1,46 @@
-/**
- * Соответствие documentType проводки → метка и frontend-endpoint формы документа.
- * Используется в журнале проводок, карточке счёта и Drawer проводок документа
- * для кликабельной колонки «Документ».
- */
-export const ACCOUNTING_DOC_TYPE_LABELS: Record<string, string> = {
-	purchase: "Поступление товаров и услуг",
-	sale: "Реализация товаров и услуг",
-	sale_return: "Возврат от покупателя",
-	purchase_return: "Возврат поставщику",
-	cash_receipt_order: "Приходный кассовый ордер",
-	cash_expense_order: "Расходный кассовый ордер",
-	payroll_calculation: "Начисление зарплаты",
-	payroll_payment: "Выплата зарплаты",
-};
+import { translate } from "src/i18";
 
+/**
+ * Единый словарь типов документов (documentType) → i18-ключ названия и
+ * frontend-endpoint формы. Источник истины для отображения типа документа:
+ * журнал проводок, карточка счёта, Drawer проводок и поле «Основание».
+ *
+ * Название берётся из i18 по ключу `docType_<type>` (RU/KK), поэтому
+ * добавление языка не требует правок здесь.
+ */
+const DOC_TYPES = [
+	"purchase", "sale", "sale_return", "purchase_return",
+	"purchase_requisition", "purchase_order", "commercial_offer", "sales_order",
+	"reservation", "incoming_invoice", "outgoing_invoice", "payment_invoice",
+	"inventory_transfer", "bank_statement",
+	"cash_receipt_order", "cash_expense_order",
+	"payroll_calculation", "payroll_payment",
+] as const;
+
+// Endpoint формы документа — только для типов, у которых есть фронт-форма.
+// Модели цепочек (commercial_offer, sales_order, reservation, purchase_order,
+// bank_statement) пока без форм — для них endpoint не задаётся.
 const DOC_TYPE_TO_ENDPOINT: Record<string, string> = {
 	purchase: "purchases",
 	sale: "sales",
 	sale_return: "sale-returns",
 	purchase_return: "purchase-returns",
+	purchase_requisition: "purchase-requisitions",
+	incoming_invoice: "incoming-invoices",
+	outgoing_invoice: "outgoing-invoices",
+	payment_invoice: "payment-invoices",
 	cash_receipt_order: "cash-receipt-orders",
 	cash_expense_order: "cash-expense-orders",
 	payroll_calculation: "payroll-calculations",
 	payroll_payment: "payroll-payments",
 };
 
+/** Локализованное название типа документа (i18). Неизвестный тип → как есть. */
 export function docTypeLabel(type: string): string {
-	return ACCOUNTING_DOC_TYPE_LABELS[type] ?? type;
+	if (!type) return "";
+	return DOC_TYPES.includes(type as (typeof DOC_TYPES)[number])
+		? translate(`docType_${type}`)
+		: type;
 }
 
 export function docTypeToEndpoint(type: string): string | undefined {

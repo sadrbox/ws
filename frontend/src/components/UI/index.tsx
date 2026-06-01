@@ -132,7 +132,6 @@ const PaneTabItem: FC<{
       tabIndex={isLocked ? -1 : 0}
       aria-disabled={isLocked}
     >
-      <span className={styles.PaneTabItemLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
       {!isLocked && (
         <IconButton
           icon="close"
@@ -143,6 +142,7 @@ const PaneTabItem: FC<{
           onClick={(e) => { e.stopPropagation(); onClose(); }}
         />
       )}
+      <span className={styles.PaneTabItemLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
     </div>
   );
 };

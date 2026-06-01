@@ -9,11 +9,12 @@
  */
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { translate } from "src/i18";
+import { ErrorIcon, InfoIcon, SuccessIcon, WarningIcon } from "./icons";
 import styles from "./UIToast.module.scss";
 
 const MessageLines: FC<{ text: string }> = ({ text }) => {
-  const lines = text.split("\n");
-  if (lines.length === 1) return <span className={styles.Message}>{text}</span>;
+  const lines = text.split("\n").filter((l) => l.length > 0);
+  if (lines.length <= 1) return <span className={styles.Message}>{text}</span>;
   return (
     <ul className={styles.Lines}>
       {lines.map((line, i) => (
@@ -34,20 +35,23 @@ export interface UIToastDetail {
 
 interface ToastItem extends UIToastDetail {
   id: number;
+  duration: number;
   closing: boolean;
+  paused: boolean;
 }
 
-let _nextId = 1;
-
-const ICONS: Record<UIToastType, string> = {
-  error: "🚫",
-  warning: "⚠️",
-  info: "ℹ️",
-  success: "✅",
+const ICONS: Record<UIToastType, FC> = {
+  error: ErrorIcon,
+  warning: WarningIcon,
+  info: InfoIcon,
+  success: SuccessIcon,
 };
+
+const MAX_VISIBLE = 5;
 
 const UIToast: FC = () => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const nextId = useRef(1);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   // remaining ms per toast when paused (id → ms left)
   const remaining = useRef<Map<number, number>>(new Map());
@@ -63,7 +67,7 @@ const UIToast: FC = () => {
       timers.current.delete(id);
       remaining.current.delete(id);
       startedAt.current.delete(id);
-    }, 280); // длительность CSS-анимации
+    }, 240); // длительность CSS-анимации закрытия
   }, []);
 
   const scheduleTimer = useCallback((id: number, ms: number) => {
@@ -76,15 +80,17 @@ const UIToast: FC = () => {
 
   const addToast = useCallback(
     (detail: UIToastDetail) => {
-      const id = _nextId++;
+      const id = nextId.current++;
       const duration = detail.duration ?? 4000;
       const item: ToastItem = {
         ...detail,
         type: detail.type ?? "error",
         id,
+        duration,
         closing: false,
+        paused: false,
       };
-      setToasts((prev) => [...prev.slice(-4), item]); // не более 5 одновременно
+      setToasts((prev) => [...prev.slice(-(MAX_VISIBLE - 1)), item]);
       scheduleTimer(id, duration);
     },
     [scheduleTimer],
@@ -98,12 +104,14 @@ const UIToast: FC = () => {
     const elapsed = Date.now() - (startedAt.current.get(id) ?? Date.now());
     const left = Math.max((remaining.current.get(id) ?? 0) - elapsed, 0);
     remaining.current.set(id, left);
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, paused: true } : t)));
   }, []);
 
   const handleMouseLeave = useCallback((id: number) => {
     const left = remaining.current.get(id);
     if (left == null) return;
     scheduleTimer(id, left);
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, paused: false } : t)));
   }, [scheduleTimer]);
 
   useEffect(() => {
@@ -123,31 +131,51 @@ const UIToast: FC = () => {
 
   if (toasts.length === 0) return null;
 
+  // Тосты в state хранятся в порядке появления (новый — последний).
+  // В DOM рендерим в обратном порядке: верх — старые, низ — новый,
+  // т.к. .Container имеет flex-direction: column-reverse и стекает снизу.
   return (
     <div className={styles.Container} aria-live="polite" aria-atomic="false">
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          className={`${styles.Toast} ${styles[toast.type!]} ${toast.closing ? styles.closing : ""}`}
-          role="alert"
-          onMouseEnter={() => handleMouseEnter(toast.id)}
-          onMouseLeave={() => handleMouseLeave(toast.id)}
-        >
-          <span className={styles.Icon}>{ICONS[toast.type!]}</span>
-          <div className={styles.Body}>
-            {toast.title && <div className={styles.Title}>{toast.title}</div>}
-            <MessageLines text={toast.message} />
-          </div>
-          <button
-            className={styles.Close}
-            onClick={() => dismiss(toast.id)}
-            aria-label={translate("close")}
-            type="button"
+      {toasts.map((toast, idx) => {
+        const Icon = ICONS[toast.type!];
+        // offset: 0 у нового (последнего в state), 1 у предыдущего и т.д.
+        const offset = toasts.length - 1 - idx;
+        const isAssertive = toast.type === "error" || toast.type === "warning";
+        return (
+          <div
+            key={toast.id}
+            data-offset={offset}
+            className={`${styles.Toast} ${styles[toast.type!]} ${toast.closing ? styles.closing : ""}`}
+            role={isAssertive ? "alert" : "status"}
+            aria-live={isAssertive ? "assertive" : "polite"}
+            onMouseEnter={() => handleMouseEnter(toast.id)}
+            onMouseLeave={() => handleMouseLeave(toast.id)}
           >
-            ×
-          </button>
-        </div>
-      ))}
+            <span className={styles.Icon}>
+              <Icon />
+            </span>
+            <div className={styles.Body}>
+              {toast.title && <div className={styles.Title}>{toast.title}</div>}
+              <MessageLines text={toast.message} />
+            </div>
+            <button
+              className={styles.Close}
+              onClick={() => dismiss(toast.id)}
+              aria-label={translate("close")}
+              type="button"
+            >
+              ×
+            </button>
+            <span
+              className={styles.Progress}
+              style={{
+                animationDuration: `${toast.duration}ms`,
+                animationPlayState: toast.paused ? "paused" : "running",
+              }}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 };

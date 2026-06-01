@@ -52,8 +52,10 @@ const DOC_CONFIG = {
 	sale: { parentModel: "sale", itemModel: "saleItem", parentField: "saleUuid" },
 	sale_return: { parentModel: "saleReturn", itemModel: "saleReturnItem", parentField: "saleReturnUuid" },
 	purchase_return: { parentModel: "purchaseReturn", itemModel: "purchaseReturnItem", parentField: "purchaseReturnUuid" },
+	inventory_transfer: { parentModel: "inventoryTransfer", itemModel: "inventoryTransferItem", parentField: "inventoryTransferUuid" },
 	cash_receipt_order: { parentModel: "cashReceiptOrder" },
 	cash_expense_order: { parentModel: "cashExpenseOrder" },
+	bank_statement: { parentModel: "bankStatement" },
 	payroll_calculation: { parentModel: "payrollCalculation" },
 	payroll_payment: { parentModel: "payrollPayment" },
 };
@@ -166,6 +168,53 @@ export const POSTING_RULES = {
 				debitAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
 				creditAnalytics: compact([an("Nomenclature", it.productUuid), an("Warehouse", doc.warehouseUuid)]),
 			})),
+
+	// Перемещение ТМЗ между складами: Дт 1330 (Номенклатура, Склад-получатель)
+	// Кт 1330 (Номенклатура, Склад-источник). Сумма — по себестоимости (скользящая
+	// средняя из склада-источника), при отсутствии — по цене строки.
+	inventory_transfer: async (doc, items, ctx) => {
+		const out = [];
+		for (const it of items) {
+			if (!it.productUuid) continue;
+			const unit = await ctx.avgCost(it.productUuid, doc.fromWarehouseUuid, doc.date);
+			const cost = r2((unit || Number(it.price) || 0) * Number(it.quantity || 0));
+			if (cost <= 0) continue;
+			out.push({
+				debit: ACC.GOODS,
+				credit: ACC.GOODS,
+				amount: cost,
+				description: "Перемещение товара между складами",
+				debitAnalytics: compact([an("Nomenclature", it.productUuid), an("Warehouse", doc.toWarehouseUuid)]),
+				creditAnalytics: compact([an("Nomenclature", it.productUuid), an("Warehouse", doc.fromWarehouseUuid)]),
+			});
+		}
+		return out;
+	},
+
+	// Банковская выписка. Поступление (in): Дт 1030 Кт 1210 (Контрагент, Договор).
+	// Списание (out): Дт 3310 (Контрагент, Договор) Кт 1030.
+	bank_statement: (doc) => {
+		const amount = r2(doc.amount);
+		if (amount <= 0) return [];
+		if (doc.direction === "out") {
+			return [{
+				debit: ACC.AP,
+				credit: ACC.BANK,
+				amount,
+				description: doc.comment || "Списание с расчётного счёта",
+				debitAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
+				creditAnalytics: [],
+			}];
+		}
+		return [{
+			debit: ACC.BANK,
+			credit: ACC.AR,
+			amount,
+			description: doc.comment || "Поступление на расчётный счёт",
+			debitAnalytics: [],
+			creditAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
+		}];
+	},
 
 	// Приходный кассовый ордер: Дт 1010 Кт <счёт основания = 1210 от покупателя>.
 	cash_receipt_order: (doc) => {

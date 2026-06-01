@@ -446,7 +446,7 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
             <GroupCol>
               <BasisDocumentField
-                allowedTypes={[{ type: "sale", endpoint: "sales", label: translate("saleRealization") }]}
+                allowedTypes={[{ type: "sale", endpoint: "sales" }]}
                 basisDocumentType={form.fields.basisDocumentType}
                 basisDocumentUuid={form.fields.basisDocumentUuid}
                 basisDocumentLabel={form.fields.basisDocumentLabel}
