@@ -23,7 +23,7 @@ const fmtAmount = (v: number | undefined | null): string =>
 const fmtDate = (d?: string): string => (d ? getFormatDateOnly(d) || d : "");
 
 const BankStatementPrint: FC<{ data: BankStatementPrintData }> = ({ data }) => {
-  const isIn = data.direction !== "out";
+  const isIn = data.direction !== "bankStatementOut";
   return (
     <A4Page>
       <A4DocTitle subtitle={`№ ${data.documentId ?? "—"} от ${fmtDate(data.documentDate)}`}>

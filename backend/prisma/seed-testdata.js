@@ -494,7 +494,7 @@ async function purchaseChain(org, idx) {
 	const payRatio = idx % 5 === 0 ? 0.6 : 1; // часть закупок оплачена не полностью (открытая задолженность)
 	const payAmount = round2(total * payRatio);
 	if (idx % 2 === 0) {
-		await createBankStatement({ ...baseHeader, bankAccountUuid: pick(org.bankAccounts).uuid, direction: "out", amount: payAmount, date: D(2026, 1, day + 5), comment: "Оплата поставщику (банк)", ...basisOf("incoming_invoice", inv) });
+		await createBankStatement({ ...baseHeader, bankAccountUuid: pick(org.bankAccounts).uuid, direction: "bankStatementOut", amount: payAmount, date: D(2026, 1, day + 5), comment: "Оплата поставщику (банк)", ...basisOf("incoming_invoice", inv) });
 	} else {
 		await createCashExpense({ ...baseHeader, cashboxUuid: pick(org.cashboxes).uuid, amount: payAmount, date: D(2026, 1, day + 5), comment: "Оплата поставщику (касса)", ...basisOf("incoming_invoice", inv) });
 	}
@@ -544,7 +544,7 @@ async function saleChain(org, idx) {
 	if (idx % 2 === 0) {
 		await createCashReceipt({ ...baseHeader, cashboxUuid: pick(org.cashboxes).uuid, amount: payAmount, date: D(2026, 2, day + 6), comment: "Поступление оплаты (ПКО)", ...basisOf("payment_invoice", bill) });
 	} else {
-		await createBankStatement({ ...baseHeader, bankAccountUuid: pick(org.bankAccounts).uuid, direction: "in", amount: payAmount, date: D(2026, 2, day + 6), comment: "Поступление оплаты (банк)", ...basisOf("payment_invoice", bill) });
+		await createBankStatement({ ...baseHeader, bankAccountUuid: pick(org.bankAccounts).uuid, direction: "bankStatementIn", amount: payAmount, date: D(2026, 2, day + 6), comment: "Поступление оплаты (банк)", ...basisOf("payment_invoice", bill) });
 	}
 	stats.chains.sale = (stats.chains.sale || 0) + 1;
 	return { sale, wh, customer, lines };

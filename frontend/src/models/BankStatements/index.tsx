@@ -10,7 +10,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDateTime } from "src/components/Field";
+import { Field, FieldDateTime, FieldSelect } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
@@ -49,7 +49,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  date: "", comment: "", amount: "", direction: "in",
+  date: "", comment: "", amount: "", direction: "bankStatementIn",
   posted: true,
   organizationUuid: "", organizationName: "",
   counterpartyUuid: "", counterpartyName: "",
@@ -94,7 +94,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
       date: isoToLocalInput(d.date),
       comment: d.comment ?? "",
       amount: d.amount != null ? String(d.amount) : "",
-      direction: d.direction ?? "in",
+      direction: d.direction ?? "bankStatementIn",
       posted: d.posted === true,
       organizationUuid: d.organizationUuid ?? "",
       organizationName: d.organization?.name ?? "",
@@ -117,7 +117,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
         date: localInputToIso(fd.date),
         comment: fd.comment?.trim() || null,
         amount: fd.amount ? parseFloat(fd.amount) : null,
-        direction: fd.direction || "in",
+        direction: fd.direction || "bankStatementIn",
         posted: fd.posted === true,
         organizationUuid: fd.organizationUuid || null,
         counterpartyUuid: fd.counterpartyUuid || null,
@@ -171,16 +171,18 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
                   }} />
               </Group>
               <GroupRow>
-                <label className={styles.FieldWrapper} style={{ display: "flex", flexDirection: "column", gap: 4, width: "200px" }}>
-                  <span>{translate("bankStatementDirection")}</span>
-                  <select id={`${form.formUid}_direction`} name={`${form.formUid}_direction`}
-                    aria-label={translate("bankStatementDirection")}
-                    value={form.fields.direction} disabled={form.isLoading || !canWrite}
-                    onChange={e => form.setField("direction", e.target.value)}>
-                    <option value="in">{translate("bankStatementIn")}</option>
-                    <option value="out">{translate("bankStatementOut")}</option>
-                  </select>
-                </label>
+                <FieldSelect
+                  label={translate("bankStatementDirection")}
+                  name={`${form.formUid}_direction`}
+                  value={form.fields.direction}
+                  options={[
+                    { value: "bankStatementIn", label: translate("bankStatementIn") },
+                    { value: "bankStatementOut", label: translate("bankStatementOut") },
+                  ]}
+                  onChange={e => form.setField("direction", e.target.value)}
+                  disabled={form.isLoading || !canWrite}
+                  style={{ width: "200px" }}
+                />
                 <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
                 <LookupField label={translate("BankAccountsList")} name={`${form.formUid}_bankAccountUuid`} value={form.fields.bankAccountUuid} displayValue={form.fields.bankAccountName} endpoint="bankaccounts" displayField="name"
                   onSelect={(u, d) => form.setFields({ bankAccountUuid: u, bankAccountName: d } as Partial<TFields>)}

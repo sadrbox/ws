@@ -203,16 +203,31 @@ export async function openDocumentFromBasis(
 	});
 }
 
-/** Стандартный маппинг полей шапки для большинства торговых документов. */
+/**
+ * Стандартный маппинг полей шапки для большинства торговых документов.
+ *
+ * Поле копируется ТОЛЬКО если оно реально есть у документа-основания. Если у
+ * основания поля нет (напр. у счёт-фактуры нет склада), оно ОПУСКАЕТСЯ из
+ * результата — тогда «Перезаполнить по основанию» (merge) не затирает значение
+ * соответствующего поля в зависимом документе.
+ */
 export function mapCommonTradeFields(src: any): Record<string, any> {
-	return {
-		organizationUuid: src.organizationUuid ?? "",
-		organizationName: src.organization?.name ?? src.organizationName ?? "",
-		counterpartyUuid: src.counterpartyUuid ?? "",
-		counterpartyName: src.counterparty?.name ?? src.counterpartyName ?? "",
-		contractUuid: src.contractUuid ?? "",
-		contractName: src.contract?.name ?? src.contractName ?? "",
-		warehouseUuid: src.warehouseUuid ?? "",
-		warehouseName: src.warehouse?.name ?? src.warehouseName ?? "",
-	};
+	const out: Record<string, any> = {};
+	if (src.organizationUuid) {
+		out.organizationUuid = src.organizationUuid;
+		out.organizationName = src.organization?.name ?? src.organizationName ?? "";
+	}
+	if (src.counterpartyUuid) {
+		out.counterpartyUuid = src.counterpartyUuid;
+		out.counterpartyName = src.counterparty?.name ?? src.counterpartyName ?? "";
+	}
+	if (src.contractUuid) {
+		out.contractUuid = src.contractUuid;
+		out.contractName = src.contract?.name ?? src.contractName ?? "";
+	}
+	if (src.warehouseUuid) {
+		out.warehouseUuid = src.warehouseUuid;
+		out.warehouseName = src.warehouse?.name ?? src.warehouseName ?? "";
+	}
+	return out;
 }
