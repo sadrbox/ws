@@ -6,6 +6,7 @@ import { api } from "src/services/api/client";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { unwrapItem, unwrapList } from "src/utils/apiUnwrap";
 import type { PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
+import { isEquivalent } from "src/utils/normalize";
 
 export interface BasisFromTarget {
 	/** Название создаваемого документа, напр. "Счёт-фактуру исходящую" */
@@ -242,6 +243,80 @@ export function buildRefillBasisItems(displayed: any[], basisRows: any[]): any[]
 	// Изменений нет — не трогаем таблицу (без лишнего remount/Dirty).
 	if (!changed) return [];
 	return result;
+}
+
+/** Поле, зависящее от организации, для resolveOrgDependentRefill/resolveOrgChangeFields. */
+export interface OrgDependentField {
+	valueType: keyof PermissionDefaultsMap;
+	uuidKey: string;
+	nameKey: string;
+}
+
+/**
+ * Общий движок «Перезаполнить по основанию» для торговых форм (дедупликация).
+ *
+ * Инкапсулирует ВСЁ тело refill, ранее копировавшееся в Sales/Purchases/
+ * SalesReturns/PurchaseReturns/createInvoiceLikeForm:
+ *   • читает текущее основание из свежего снапшота стора;
+ *   • грузит данные основания (refillFromBasisSource + mapCommonTradeFields);
+ *   • при !skipFields — патчит шапку с учётом org-зависимых полей
+ *     (resolveOrgDependentRefill), без ложного Dirty;
+ *   • идемпотентно мержит строки (buildRefillBasisItems) и применяет их.
+ *
+ * Состояние (isRefilling, basisItems, itemsTableKey, allItemsRef) остаётся в
+ * форме — сюда передаются сеттеры/ref, чтобы не ломать порядок объявления
+ * (allItemsRef нужен в onBeforeSave ДО useFormStore).
+ */
+export async function runBasisRefill(opts: {
+	form: any;
+	skipFields: boolean;
+	currentUserUuid: string;
+	permDefaults: PermissionDefaultsMap;
+	itemsEndpoint: string;
+	itemsParentField: string;
+	orgFields: OrgDependentField[];
+	allItemsRef: { current: any[] };
+	setBasisItems: (rows: any[]) => void;
+	bumpItemsTableKey: () => void;
+}): Promise<void> {
+	const snap = opts.form.store.getSnapshot().fields as any;
+	const basisType = snap.basisDocumentType;
+	const basisUuid = snap.basisDocumentUuid;
+	if (!basisUuid || !basisType) return;
+
+	const result = await refillFromBasisSource(basisType, basisUuid, mapCommonTradeFields);
+	if (!result) return;
+
+	if (!opts.skipFields) {
+		const cur = opts.form.store.getSnapshot().fields as any;
+		// Org-зависимые поля (склад/договор), которых нет у основания: при смене
+		// организации — дефолт пользователя для новой орг, иначе очистка.
+		const orgPatch = await resolveOrgDependentRefill(
+			result.fields, cur, opts.currentUserUuid, opts.permDefaults, opts.orgFields,
+		);
+		const rawPatch = { ...result.fields, ...orgPatch };
+		// Только поля, существующие в форме (иначе лишние поля → ложный Dirty).
+		const patch = Object.fromEntries(
+			Object.keys(rawPatch).filter((k) => k in cur).map((k) => [k, rawPatch[k]]),
+		);
+		// Применяем только при реальном изменении — иначе ложный Dirty.
+		if (Object.keys(patch).some((k) => !isEquivalent(cur[k], (patch as any)[k]))) {
+			opts.form.setFields(patch);
+		}
+	}
+
+	// Текущее отображаемое состояние таблицы (сервер + pending, без delete).
+	// Если вкладка ещё не открывалась — дозагружаем строки с сервера.
+	let displayed = opts.allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+	if (displayed.length === 0 && snap.uuid) {
+		displayed = await fetchDocumentItems(opts.itemsEndpoint, opts.itemsParentField, snap.uuid);
+	}
+	// Идемпотентный merge по sourceRowId (без дублей, ручные строки сохраняются).
+	const merged = buildRefillBasisItems(displayed, result.items);
+	if (merged.length) {
+		opts.setBasisItems(merged);
+		opts.bumpItemsTableKey();
+	}
 }
 
 /**

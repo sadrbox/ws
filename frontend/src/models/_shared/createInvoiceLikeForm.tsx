@@ -32,8 +32,7 @@ import DocumentChainButton from "src/components/DocumentChain/DocumentChainButto
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
-import { type BasisFromTarget, openDocumentFromBasis, refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems, resolveOrgDependentRefill, resolveOrgChangeFields, buildRefillBasisItems } from "src/utils/createFromBasis";
-import { isEquivalent } from "src/utils/normalize";
+import { type BasisFromTarget, type OrgDependentField, openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
@@ -256,60 +255,27 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     const effectiveReadonly = !canWrite;
 
     const handleRefillFromBasis = useCallback(async (skipFields = false) => {
-      // Текущее основание из свежего снапшота стора (а не из замыкания) —
-      // после смены типа/документа основания refill заполняет именно по нему.
-      const snap = form.store.getSnapshot().fields as any;
-      const basisType = snap.basisDocumentType;
-      const basisUuid = snap.basisDocumentUuid;
-      if (!basisUuid || !basisType) return;
       setIsRefilling(true);
       try {
-        const result = await refillFromBasisSource(
-          basisType,
-          basisUuid,
-          mapCommonTradeFields,
-        );
-        if (!result) return;
-        if (!skipFields) {
-          const cur = form.store.getSnapshot().fields as any;
-          // Поля, зависящие от организации, которых нет у основания: при смене
-          // организации — дефолт пользователя для новой орг, иначе очистка.
-          // Склад — только для документов со складом (заказы/резерв).
-          const orgFields: Array<{ valueType: "warehouse" | "contract"; uuidKey: string; nameKey: string }> = [
-            { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-          ];
-          if (cfg.hasWarehouse) orgFields.push({ valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" });
-          const orgPatch = await resolveOrgDependentRefill(result.fields, cur, currentUser?.uuid ?? "", permDefaultsRef.current, orgFields);
-          const rawPatch = { ...result.fields, ...orgPatch };
-          // Оставляем в patch только поля, которые реально есть в форме (иначе
-          // лишние поля → ложный Dirty; напр. у счёт-фактуры нет склада).
-          const patch = Object.fromEntries(
-            Object.keys(rawPatch).filter(k => k in cur).map(k => [k, rawPatch[k]]),
-          ) as Partial<TFields>;
-          // Применяем только если поля реально изменились — иначе ложный Dirty.
-          if (Object.keys(patch).some(k => !isEquivalent(cur[k], (patch as any)[k]))) {
-            form.setFields(patch);
-          }
-        }
-        // Текущее отображаемое состояние таблицы (сервер + pending create, без delete).
-        // Если вкладка ещё не открывалась (allItemsRef пуст) — дозагружаем строки
-        // с сервера, иначе первое сравнение даст «0 ≠ N» и поставит ложный Dirty.
-        let displayed = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
-        if (displayed.length === 0 && form.fields.uuid) {
-          displayed = await fetchDocumentItems(cfg.itemsEndpoint, cfg.itemsParentField, form.fields.uuid);
-        }
-        // Идемпотентный merge по sourceRowId (см. buildRefillBasisItems).
-        const merged = buildRefillBasisItems(displayed, result.items);
-        if (merged.length) {
-          setBasisItems(merged);
-          setItemsTableKey(k => k + 1);
-        }
+        // Склад — только для документов со складом (заказы/резерв).
+        const orgFields: OrgDependentField[] = [
+          { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+        ];
+        if (cfg.hasWarehouse) orgFields.push({ valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" });
+        await runBasisRefill({
+          form, skipFields,
+          currentUserUuid: currentUser?.uuid ?? "",
+          permDefaults: permDefaultsRef.current,
+          itemsEndpoint: cfg.itemsEndpoint, itemsParentField: cfg.itemsParentField,
+          orgFields,
+          allItemsRef, setBasisItems, bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
+        });
       } catch (e) {
         console.error("[refill] failed", e);
       } finally {
         setIsRefilling(false);
       }
-    }, [form.fields.basisDocumentType, form.fields.basisDocumentUuid, form.fields.uuid, form.setFields, queryClient, cfg.itemsEndpoint, cfg.itemsParentField]);
+    }, [form, currentUser?.uuid, cfg.itemsEndpoint, cfg.itemsParentField, cfg.hasWarehouse]);
 
     const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
       form.fields.organizationUuid || null,

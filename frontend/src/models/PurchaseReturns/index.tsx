@@ -32,12 +32,11 @@ import DocumentChainButton from "src/components/DocumentChain/DocumentChainButto
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
+import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import PurchaseReturnPrint from "./PurchaseReturnPrint";
 import DocumentTotals from "src/components/DocumentTotals";
-import { refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields, buildRefillBasisItems } from "src/utils/createFromBasis";
-import { isEquivalent } from "src/utils/normalize";
+import { mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 
@@ -241,44 +240,25 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const handleRefillFromBasis = useCallback(async (skipFields = false) => {
-    if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
     setIsRefilling(true);
     try {
-      const result = await refillFromBasisSource(
-        form.fields.basisDocumentType,
-        form.fields.basisDocumentUuid,
-        mapCommonTradeFields,
-      );
-      if (!result) return;
-      if (!skipFields) {
-        const rawPatch = mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
-          { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-          { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-        ]);
-        const cur = form.store.getSnapshot().fields as any;
-        const patch = Object.fromEntries(
-          Object.keys(rawPatch).filter(k => k in cur).map(k => [k, rawPatch[k]]),
-        ) as Partial<TFields>;
-        if (Object.keys(patch).some(k => !isEquivalent(cur[k], (patch as any)[k]))) {
-          form.setFields(patch);
-        }
-      }
-      let displayed = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
-      if (displayed.length === 0 && form.fields.uuid) {
-        displayed = await fetchDocumentItems("purchase-return-items", "purchaseReturnUuid", form.fields.uuid);
-      }
-      // Идемпотентный merge по sourceRowId (см. buildRefillBasisItems).
-      const merged = buildRefillBasisItems(displayed, result.items);
-      if (merged.length) {
-        setBasisItems(merged);
-        setItemsTableKey(k => k + 1);
-      }
+      await runBasisRefill({
+        form, skipFields,
+        currentUserUuid: currentUser?.uuid ?? "",
+        permDefaults: permDefaultsRef.current,
+        itemsEndpoint: "purchase-return-items", itemsParentField: "purchaseReturnUuid",
+        orgFields: [
+          { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+          { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+        ],
+        allItemsRef, setBasisItems, bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
+      });
     } catch (e) {
       console.error("[refill] failed", e);
     } finally {
       setIsRefilling(false);
     }
-  }, [form.fields.basisDocumentType, form.fields.basisDocumentUuid, form.fields.uuid, form.setFields, queryClient]);
+  }, [form, currentUser?.uuid]);
 
   const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
     form.fields.organizationUuid || null,

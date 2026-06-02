@@ -35,7 +35,7 @@ import DocumentChainButton from "src/components/DocumentChain/DocumentChainButto
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
-import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems, resolveOrgDependentRefill, resolveOrgChangeFields, buildRefillBasisItems } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { isEquivalent } from "src/utils/normalize";
 import { PurchaseReturnsForm } from "src/models/PurchaseReturns";
@@ -221,52 +221,25 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const handleRefillFromBasis = useCallback(async (skipFields = false) => {
-    // Берём ТЕКУЩЕЕ основание из свежего снапшота стора (а не из замыкания):
-    // после смены типа/документа основания refill заполняет именно по нему.
-    const snap = form.store.getSnapshot().fields as any;
-    const basisType = snap.basisDocumentType;
-    const basisUuid = snap.basisDocumentUuid;
-    if (!basisUuid || !basisType) return;
     setIsRefilling(true);
     try {
-      const result = await refillFromBasisSource(
-        basisType,
-        basisUuid,
-        mapCommonTradeFields,
-      );
-      if (!result) return;
-      if (!skipFields) {
-        const cur = form.store.getSnapshot().fields as any;
-        // Поля, зависящие от организации (склад/договор), которых нет у основания:
-        // при смене организации — дефолт пользователя для новой орг, иначе очистка.
-        const orgPatch = await resolveOrgDependentRefill(result.fields, cur, currentUser?.uuid ?? "", permDefaultsRef.current, [
+      await runBasisRefill({
+        form, skipFields,
+        currentUserUuid: currentUser?.uuid ?? "",
+        permDefaults: permDefaultsRef.current,
+        itemsEndpoint: "purchaseitems", itemsParentField: "purchaseUuid",
+        orgFields: [
           { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
           { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-        ]);
-        const rawPatch = { ...result.fields, ...orgPatch };
-        const patch = Object.fromEntries(
-          Object.keys(rawPatch).filter(k => k in cur).map(k => [k, rawPatch[k]]),
-        ) as Partial<TFields>;
-        if (Object.keys(patch).some(k => !isEquivalent(cur[k], (patch as any)[k]))) {
-          form.setFields(patch);
-        }
-      }
-      let displayed = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
-      if (displayed.length === 0 && form.fields.uuid) {
-        displayed = await fetchDocumentItems("purchaseitems", "purchaseUuid", form.fields.uuid);
-      }
-      // Идемпотентный merge по sourceRowId (см. buildRefillBasisItems).
-      const merged = buildRefillBasisItems(displayed, result.items);
-      if (merged.length) {
-        setBasisItems(merged);
-        setItemsTableKey(k => k + 1);
-      }
+        ],
+        allItemsRef, setBasisItems, bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
+      });
     } catch (e) {
       console.error("[refill] failed", e);
     } finally {
       setIsRefilling(false);
     }
-  }, [form.fields.basisDocumentType, form.fields.basisDocumentUuid, form.fields.uuid, form.setFields, queryClient]);
+  }, [form, currentUser?.uuid]);
 
   const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
     form.fields.organizationUuid || null,

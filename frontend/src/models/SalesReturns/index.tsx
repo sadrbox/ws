@@ -3,9 +3,8 @@ import { FC, useMemo, useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
-import { refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields, buildRefillBasisItems } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
-import { isEquivalent } from "src/utils/normalize";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -34,7 +33,7 @@ import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntr
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
+import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import SalesReturnPrint from "./SalesReturnPrint";
@@ -226,44 +225,25 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const handleRefillFromBasis = useCallback(async (skipFields = false) => {
-    if (!form.fields.basisDocumentUuid || !form.fields.basisDocumentType) return;
     setIsRefilling(true);
     try {
-      const result = await refillFromBasisSource(
-        form.fields.basisDocumentType,
-        form.fields.basisDocumentUuid,
-        mapCommonTradeFields,
-      );
-      if (!result) return;
-      if (!skipFields) {
-        const rawPatch = mergePermissionDefaultsIntoFields(result.fields, permDefaultsRef.current, [
-          { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-          { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-        ]);
-        const cur = form.store.getSnapshot().fields as any;
-        const patch = Object.fromEntries(
-          Object.keys(rawPatch).filter(k => k in cur).map(k => [k, rawPatch[k]]),
-        ) as Partial<TFields>;
-        if (Object.keys(patch).some(k => !isEquivalent(cur[k], (patch as any)[k]))) {
-          form.setFields(patch);
-        }
-      }
-      let displayed = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
-      if (displayed.length === 0 && form.fields.uuid) {
-        displayed = await fetchDocumentItems("sale-return-items", "saleReturnUuid", form.fields.uuid);
-      }
-      // Идемпотентный merge по sourceRowId (см. buildRefillBasisItems).
-      const merged = buildRefillBasisItems(displayed, result.items);
-      if (merged.length) {
-        setBasisItems(merged);
-        setItemsTableKey(k => k + 1);
-      }
+      await runBasisRefill({
+        form, skipFields,
+        currentUserUuid: currentUser?.uuid ?? "",
+        permDefaults: permDefaultsRef.current,
+        itemsEndpoint: "sale-return-items", itemsParentField: "saleReturnUuid",
+        orgFields: [
+          { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+          { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+        ],
+        allItemsRef, setBasisItems, bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
+      });
     } catch (e) {
       console.error("[refill] failed", e);
     } finally {
       setIsRefilling(false);
     }
-  }, [form.fields.basisDocumentType, form.fields.basisDocumentUuid, form.fields.uuid, form.setFields, queryClient]);
+  }, [form, currentUser?.uuid]);
 
   const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
     form.fields.organizationUuid || null,
