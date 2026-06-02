@@ -26,6 +26,7 @@ import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { Toolbar } from "src/components/Toolbar";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
+import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import SaleInvoicePrint, { type SaleInvoicePrintData, type SaleInvoicePrintColumns, type SaleItemPrintRow } from "./SaleInvoicePrint";
 import ActPrint from "./ActPrint";
 import { buildSaleInvoiceWorkbook } from "./saleInvoiceWorkbook";
@@ -562,6 +563,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (isSavedDoc || hasBasis) ? (
       <>
+        {isSavedDoc && <DocumentChainButton documentType="sale" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType="sale" documentUuid={form.fields.uuid} />}
         {hasBasis && (
           <RefillFromBasisButton

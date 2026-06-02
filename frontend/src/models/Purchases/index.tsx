@@ -31,6 +31,7 @@ import { validateDocumentFields, formatValidationErrors } from "src/utils/valida
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
+import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
@@ -454,6 +455,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (isSavedDoc || hasBasis) ? (
       <>
+        {isSavedDoc && <DocumentChainButton documentType="purchase" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType="purchase" documentUuid={form.fields.uuid} />}
         {hasBasis && (
           <RefillFromBasisButton

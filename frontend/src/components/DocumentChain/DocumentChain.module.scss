@@ -1,0 +1,92 @@
+// Дерево связанных документов (Stage C).
+
+.Wrapper {
+	max-height: 60vh;
+	overflow: auto;
+	min-width: 520px;
+}
+
+.Empty,
+.Loading {
+	padding: 16px;
+	color: #6b7280;
+}
+
+// Блок предупреждений целостности.
+.Integrity {
+	margin-bottom: 8px;
+	padding: 8px 10px;
+	border: 1px solid #fde68a;
+	background: #fffbeb;
+	border-radius: 6px;
+	font-size: 12px;
+	color: #92400e;
+}
+
+.IntegrityItem {
+	display: block;
+}
+
+// Узел дерева (строка).
+.Node {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 13px;
+	border: 1px solid transparent;
+
+	&:hover {
+		background: #f0f7ff;
+	}
+}
+
+// Текущий документ (из которого открыта цепочка).
+.NodeTarget {
+	background: #eff6ff;
+	border-color: #bfdbfe;
+	font-weight: 600;
+}
+
+// Метка типа документа.
+.NodeType {
+	color: #374151;
+}
+
+// № документа и дата.
+.NodeMeta {
+	color: #6b7280;
+	font-size: 12px;
+}
+
+// Сумма документа.
+.NodeAmount {
+	margin-left: auto;
+	font-variant-numeric: tabular-nums;
+	color: #111827;
+}
+
+// Индикатор проведения.
+.Dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.DotPosted {
+	background: #10b981;
+}
+
+.DotUnposted {
+	background: #9ca3af;
+}
+
+// Вертикальная направляющая ветви дерева.
+.Branch {
+	border-left: 1px solid #e5e7eb;
+	margin-left: 14px;
+	padding-left: 6px;
+}

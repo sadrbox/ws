@@ -28,6 +28,7 @@ import BasisDocumentField, { type BasisTypeConfig } from "src/components/Field/B
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import PrintDocumentPane, { type PrintColumnDef } from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
+import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
@@ -367,6 +368,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       form.paneId,
       showHeaderActions ? (
         <>
+          {isSavedDoc && <DocumentChainButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
           {hasBasis && (
             <RefillFromBasisButton
               mismatch={basisMismatch.mismatch}

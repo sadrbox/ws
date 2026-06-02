@@ -439,6 +439,9 @@
 	"documentEntries": "Бухгалтерлік жазбалар",
 	"documentEntriesEmpty": "Жазбалар жоқ",
 	"documentEntriesCount": "Жазбалар саны",
+	"relatedDocuments": "Байланысты құжаттар",
+	"relatedDocumentsEmpty": "Байланысты құжаттар жоқ",
+	"openDocument": "Құжатты ашу",
 	"analyticsDebit": "Дт аналитикасы",
 	"analyticsCredit": "Кт аналитикасы"
 }

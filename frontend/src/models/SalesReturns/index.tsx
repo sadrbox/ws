@@ -31,6 +31,7 @@ import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { useAppContext } from "src/app";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
+import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
 import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "src/hooks/useApplyPermissionDefaults";
@@ -324,6 +325,7 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (isSavedDoc || hasBasis) ? (
       <>
+        {isSavedDoc && <DocumentChainButton documentType="sale_return" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType="sale_return" documentUuid={form.fields.uuid} />}
         {hasBasis && (
           <RefillFromBasisButton

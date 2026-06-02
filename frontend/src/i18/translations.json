@@ -719,6 +719,9 @@
 	"documentEntries": "Бухгалтерские проводки",
 	"documentEntriesEmpty": "Проводки отсутствуют",
 	"documentEntriesCount": "Количество проводок",
+	"relatedDocuments": "Связанные документы",
+	"relatedDocumentsEmpty": "Связанных документов нет",
+	"openDocument": "Открыть документ",
 	"analyticsDebit": "Аналитика Дт",
 	"analyticsCredit": "Аналитика Кт"
 }

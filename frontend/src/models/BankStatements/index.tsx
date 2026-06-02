@@ -28,6 +28,7 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
+import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import BankStatementPrint from "./BankStatementPrint";
@@ -277,6 +278,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     isSavedDoc ? (
       <>
         <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />
+        <DocumentChainButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />
         <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />
       </>
     ) : null,
