@@ -62,6 +62,11 @@ const BASIS_SOURCE_CONFIGS: Record<string, BasisSourceConfig> = {
 		itemsEndpoint: "paymentinvoiceitems",
 		itemsParentField: "paymentInvoiceUuid",
 	},
+	outgoing_invoice: {
+		docEndpoint: (uuid) => `outgoing-invoices/${uuid}`,
+		itemsEndpoint: "outgoinginvoiceitems",
+		itemsParentField: "outgoingInvoiceUuid",
+	},
 	commercial_offer: {
 		docEndpoint: (uuid) => `commercial-offers/${uuid}`,
 		itemsEndpoint: "commercial-offer-items",

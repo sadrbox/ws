@@ -650,6 +650,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 disabled={form.isLoading}
                 onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
                 onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+                mismatch={basisMismatch.mismatch}
+                mismatchDetails={basisMismatch.differences}
               />
             </GroupCol>
             <Group>

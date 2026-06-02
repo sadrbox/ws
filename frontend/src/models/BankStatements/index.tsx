@@ -14,6 +14,8 @@ import { Field, FieldDateTime, FieldSelect } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
+import { useBasisMismatch } from "src/hooks/useBasisMismatch";
+import { mapCommonTradeFields } from "src/utils/createFromBasis";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -138,6 +140,14 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     form.setFields(updates);
   }, [form.setFields]);
 
+  const basisMismatch = useBasisMismatch({
+    basisType: form.fields.basisDocumentType,
+    basisUuid: form.fields.basisDocumentUuid,
+    currentFields: form.fields,
+    currentItems: [],
+    mapFields: mapCommonTradeFields,
+  });
+
   const tabs = useMemo(() => [
     {
       id: "tab-details",
@@ -204,6 +214,8 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
                   disabled={form.isLoading}
                   onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
                   onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+                  mismatch={basisMismatch.mismatch}
+                  mismatchDetails={basisMismatch.differences}
                 />
               </Group>
             </GroupCol>
@@ -215,7 +227,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
         </div>
       ),
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, canWrite]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, canWrite, basisMismatch.mismatch, basisMismatch.differences]);
 
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
 
