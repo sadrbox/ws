@@ -1,6 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
+import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
@@ -180,6 +181,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			basisDocumentUuid,
 			basisDocumentLabel,
 		} = req.body;
+		// Stage D: склад/договор принадлежат организации документа.
+		await assertOrgFieldMembership({ organizationUuid, warehouseUuid, contractUuid }, prisma);
 		const item = await prisma[MODEL].create({
 			data: {
 				date: date ? new Date(date) : new Date(),
@@ -210,6 +213,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgFieldError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -258,10 +262,16 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		}
 		const existing = await prisma[MODEL].findUnique({
 			where: w,
-			select: { uuid: true, organizationUuid: true, posted: true, warehouseUuid: true },
+			select: { uuid: true, organizationUuid: true, posted: true, warehouseUuid: true, contractUuid: true },
 		});
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Stage D: склад/договор принадлежат организации документа (мерж с текущими).
+		await assertOrgFieldMembership({
+			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : existing.organizationUuid,
+			warehouseUuid: data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid,
+			contractUuid: data.contractUuid !== undefined ? data.contractUuid : existing.contractUuid,
+		}, prisma);
 		// Контроль остатка ПЕРЕД фиксацией проведения (расход со склада).
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) {
@@ -286,6 +296,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await reconcileDocumentEntries("purchase_return", item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgFieldError(error, res)) return;
 		if (respondStockError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (error.code === "P2025")

@@ -1,6 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
+import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 const router = express.Router();
@@ -149,6 +150,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			posted,
 			amount,
 		} = req.body;
+		// Stage D: оба склада принадлежат организации документа.
+		await assertOrgFieldMembership({ organizationUuid, fromWarehouseUuid, toWarehouseUuid }, prisma);
 		const item = await prisma[MODEL].create({
 			data: {
 				date: date ? new Date(date) : new Date(),
@@ -169,6 +172,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgFieldError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -198,10 +202,16 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		// Контроль остатка ПЕРЕД фиксацией проведения (расход с fromWarehouse).
 		const existing = await prisma[MODEL].findUnique({
 			where: w,
-			select: { uuid: true, posted: true, fromWarehouseUuid: true },
+			select: { uuid: true, posted: true, fromWarehouseUuid: true, toWarehouseUuid: true, organizationUuid: true },
 		});
 		if (!existing)
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Stage D: оба склада принадлежат организации документа (мерж с текущими).
+		await assertOrgFieldMembership({
+			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : existing.organizationUuid,
+			fromWarehouseUuid: data.fromWarehouseUuid !== undefined ? data.fromWarehouseUuid : existing.fromWarehouseUuid,
+			toWarehouseUuid: data.toWarehouseUuid !== undefined ? data.toWarehouseUuid : existing.toWarehouseUuid,
+		}, prisma);
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) {
 			const fromWarehouseUuid =
@@ -225,6 +235,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await reconcileDocumentRegister("inventory_transfer", item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgFieldError(error, res)) return;
 		if (respondStockError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });

@@ -1,6 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
+import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 const router = express.Router();
 const MODEL = "outgoingInvoice";
@@ -151,6 +152,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			basisDocumentUuid,
 			basisDocumentLabel,
 		} = req.body;
+		// Stage D: договор принадлежит организации документа.
+		await assertOrgFieldMembership({ organizationUuid, contractUuid }, prisma);
 		const item = await prisma[MODEL].create({
 			data: {
 				date: date ? new Date(date) : new Date(),
@@ -174,6 +177,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgFieldError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -203,6 +207,12 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		for (const f of ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"]) {
 			if (req.body[f] !== undefined) data[f] = req.body[f] || null;
 		}
+		// Stage D: договор принадлежит организации документа (мерж с текущими).
+		const _ex = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true, contractUuid: true } });
+		await assertOrgFieldMembership({
+			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : _ex?.organizationUuid,
+			contractUuid: data.contractUuid !== undefined ? data.contractUuid : _ex?.contractUuid,
+		}, prisma);
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -215,6 +225,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgFieldError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);

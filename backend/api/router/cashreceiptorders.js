@@ -1,6 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
+import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
 const router = express.Router();
@@ -165,6 +166,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			posted: willPost,
 			authorUuid: req.user.uuid,
 		};
+		// Stage D: касса/договор принадлежат организации документа.
+		await assertOrgFieldMembership(docData, prisma);
 		// Проверки проведения ДО создания документа.
 		if (willPost) await validatePosting(DOC_TYPE, docData, []);
 		const item = await prisma[MODEL].create({
@@ -180,6 +183,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		if (item.posted) await reconcileDocumentEntries(DOC_TYPE, item.uuid);
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgFieldError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -208,9 +212,15 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
 		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true } });
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true, contractUuid: true, cashboxUuid: true } });
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Stage D: касса/договор принадлежат организации документа (мерж с текущими).
+		await assertOrgFieldMembership({
+			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : existing.organizationUuid,
+			contractUuid: data.contractUuid !== undefined ? data.contractUuid : existing.contractUuid,
+			cashboxUuid: data.cashboxUuid !== undefined ? data.cashboxUuid : existing.cashboxUuid,
+		}, prisma);
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
 		const item = await prisma[MODEL].update({
@@ -227,6 +237,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await reconcileDocumentEntries(DOC_TYPE, item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgFieldError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });

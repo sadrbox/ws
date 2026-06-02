@@ -1,6 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, checkOwnership, checkFkOwnership } from "../../utils/auth.js";
+import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
@@ -165,6 +166,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			{ model: "warehouse", uuid: warehouseUuid },
 		]);
 		if (fkError) return res.status(403).json({ success: false, message: fkError });
+		// Stage D: склад/договор принадлежат организации документа.
+		await assertOrgFieldMembership({ organizationUuid, warehouseUuid, contractUuid }, prisma);
 		const item = await prisma[MODEL].create({
 			data: {
 				date: date ? new Date(date) : new Date(),
@@ -190,6 +193,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgFieldError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -225,9 +229,15 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			const fkError = await checkFkOwnership(req, prisma, [{ model: "warehouse", uuid: data.warehouseUuid }]);
 			if (fkError) return res.status(403).json({ success: false, message: fkError });
 		}
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true } });
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true, warehouseUuid: true, contractUuid: true } });
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Stage D: склад/договор принадлежат организации документа (мерж с текущими).
+		await assertOrgFieldMembership({
+			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : existing.organizationUuid,
+			warehouseUuid: data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid,
+			contractUuid: data.contractUuid !== undefined ? data.contractUuid : existing.contractUuid,
+		}, prisma);
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) {
 			// Бух. проверки проведения (организация, дата, счета, субконто, Дт=Кт).
@@ -249,6 +259,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await reconcileDocumentEntries("purchase", item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgFieldError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
