@@ -177,7 +177,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
+              <GroupRow className={styles.FormHeaderRow}>
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} width="180px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
                 <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
               </GroupRow>
@@ -201,18 +201,18 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
               </Group>
             </GroupCol>
             <Group>
-              <div style={{ background: "#f8f9fa", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5, fontSize: 13, maxWidth: '200px' }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 600, fontSize: 14 }}>
+              <div className={styles.SummaryCard}>
+                <div className={styles.SummaryRow}>
                   <span>{translate("total")}</span>
-                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{form.fields.amount || "0"}</span>
+                  <span className={styles.TabularNums}>{form.fields.amount || "0"}</span>
                 </div>
-                <div style={{ color: "#9ca3af", fontSize: 11 }}>
+                <div className={styles.SummaryNote}>
                   НК РК ст. 372 п.2 пп.3: внутреннее перемещение — не облагаемый оборот
                 </div>
               </div>
             </Group>
           </div>
-          {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+          {form.isEditMode && <Group className={styles.FormFooterRow}>
             <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
             <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
           </Group>}
@@ -235,7 +235,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           showRequiredHighlight={form.meta.tablesValidationFailed}
         />
       ) : (
-        <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", color: "#999", fontSize: 14, padding: "24px 0" }}>
+        <div className={styles.CenteredPlaceholder}>
           {translate("saveDocumentFirst")}
         </div>
       )

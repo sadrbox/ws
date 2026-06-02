@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { TDataItem } from "src/components/Table/types";
 import type { TColumn } from "src/components/Table/types.tsx";
 import { Icon } from "src/components/IconButton/icons";
+import styles from "./renderPostedCell.module.scss";
 
 /** Стандартный рендер ячейки колонки "posted" в списках документов. */
 export function renderPostedCell(row: TDataItem, col: TColumn): ReactNode | undefined {
@@ -12,7 +13,7 @@ export function renderPostedCell(row: TDataItem, col: TColumn): ReactNode | unde
       <Icon
         name={isPosted ? "posted" : "notPosted"}
         width={17} height={17}
-        style={{ color: isPosted ? "#10b981" : "#9ca3af", flexShrink: 0, display: "flex" }}
+        className={[styles.Icon, isPosted ? styles.Posted : styles.Unposted].join(" ")}
       />
     </span>
   );

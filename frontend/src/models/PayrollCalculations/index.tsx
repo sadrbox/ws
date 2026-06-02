@@ -160,7 +160,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
+              <GroupRow className={styles.FormHeaderRow}>
                 <FieldDateTime label={translate("documentDate")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
                 <FieldPeriod label={translate("periodYYYYMM")} name={`${form.formUid}_period`} value={form.fields.period} onChange={e => form.setField("period", e.target.value)} disabled={form.isLoading} />
                 <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
@@ -173,7 +173,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
                 <LookupField label={translate("position.name")} name={`${form.formUid}_positionUuid`} value={form.fields.positionUuid} displayValue={form.fields.positionName} endpoint="positions" displayField="name" onSelect={(u, d) => form.setFields({ positionUuid: u, positionName: d } as Partial<TFields>)} onClear={() => form.setFields({ positionUuid: "", positionName: "" } as Partial<TFields>)} disabled={form.isLoading} />
               </Group>
               <Divider />
-              <h3 style={{ margin: 0, fontSize: 13, color: "#555" }}>{translate("payrollCalcTitle")}</h3>
+              <h3 className={styles.FormSectionTitle}>{translate("payrollCalcTitle")}</h3>
               <GroupRow>
                 <Field label={translate("baseSalaryCharged")} name={`${form.formUid}_baseSalary`} value={form.fields.baseSalary} onChange={e => handleSalaryChange(e.target.value)} disabled={form.isLoading} width="160px" />
                 <Field label={translate("opv")} name={`${form.formUid}_opv`} value={form.fields.opv} disabled width="130px" />
@@ -193,7 +193,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
 
           </div>
-          {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+          {form.isEditMode && <Group className={styles.FormFooterRow}>
             <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
             <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
           </Group>}

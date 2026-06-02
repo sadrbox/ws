@@ -10,8 +10,8 @@
 import { type FC } from "react";
 import IconButton from "src/components/IconButton/IconButton";
 import { translate } from "src/i18";
+import styles from "./RefillFromBasisButton.module.scss";
 
-const WARN_COLOR = "#d97706";
 const BASE_TITLE = "Перезаполнить по основанию";
 
 interface RefillFromBasisButtonProps {
@@ -34,7 +34,7 @@ const RefillFromBasisButton: FC<RefillFromBasisButtonProps> = ({
     : BASE_TITLE;
 
   return (
-    <span style={{ position: "relative", display: "inline-flex" }}>
+    <span className={styles.Wrapper}>
       <IconButton
         icon="syncFromBasis"
         title={title}
@@ -42,24 +42,9 @@ const RefillFromBasisButton: FC<RefillFromBasisButtonProps> = ({
         disabled={disabled}
         loading={loading}
         onClick={onClick}
-        style={mismatch ? { color: WARN_COLOR } : undefined}
+        className={mismatch ? styles.WarnIcon : undefined}
       />
-      {mismatch && (
-        <span
-          aria-hidden
-          style={{
-            position: "absolute",
-            top: -1,
-            right: -1,
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            background: WARN_COLOR,
-            border: "1.5px solid #fff",
-            pointerEvents: "none",
-          }}
-        />
-      )}
+      {mismatch && <span aria-hidden className={styles.WarnDot} />}
     </span>
   );
 };

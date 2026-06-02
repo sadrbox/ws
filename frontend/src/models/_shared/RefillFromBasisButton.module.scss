@@ -1,0 +1,24 @@
+// Кнопка «Перезаполнить по основанию» с маркером несоответствия.
+
+.Wrapper {
+	position: relative;
+	display: inline-flex;
+}
+
+// Иконка в состоянии расхождения с основанием (оранжевая).
+.WarnIcon {
+	color: #d97706;
+}
+
+// Точка-маркер расхождения в правом верхнем углу кнопки.
+.WarnDot {
+	position: absolute;
+	top: -1px;
+	right: -1px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #d97706;
+	border: 1.5px solid #fff;
+	pointer-events: none;
+}

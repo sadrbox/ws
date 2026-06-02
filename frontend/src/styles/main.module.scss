@@ -1090,6 +1090,59 @@ body {
 	justify-content: flex-end;
 }
 
+// Нижний блок формы колонкой (поля слева), прижат к низу.
+.FormFooterCol {
+	flex: 1;
+	align-items: flex-start;
+	justify-content: flex-end;
+}
+
+// Центрированная заглушка пустого состояния («нет данных»).
+.CenteredPlaceholder {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+	color: #999;
+	font-size: 14px;
+	padding: 24px 0;
+}
+
+// Заголовок секции внутри формы (мелкий, приглушённый).
+.FormSectionTitle {
+	margin: 0;
+	font-size: 13px;
+	color: #555;
+}
+
+// Компактная карточка-итог в шапке документа (напр. сумма перемещения).
+.SummaryCard {
+	background: #f8f9fa;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	padding: 10px 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	font-size: 13px;
+	max-width: 200px;
+}
+
+// Строка «подпись — значение» внутри .SummaryCard.
+.SummaryRow {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	font-weight: 600;
+	font-size: 14px;
+}
+
+// Пояснительная сноска под итогом (мелкая, серая).
+.SummaryNote {
+	color: #9ca3af;
+	font-size: 11px;
+}
+
 // Моноширинные цифры для числовых ячеек/итогов (выравнивание разрядов).
 .TabularNums {
 	font-variant-numeric: tabular-nums;

@@ -1,0 +1,14 @@
+// Иконка статуса проведения в ячейке списка документов.
+
+.Icon {
+	flex-shrink: 0;
+	display: flex;
+}
+
+.Posted {
+	color: #10b981;
+}
+
+.Unposted {
+	color: #9ca3af;
+}

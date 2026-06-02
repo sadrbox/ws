@@ -609,7 +609,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             <GroupCol>
               {/* ── Левая колонка: поля ── */}
               {/* Строка 1: Дата · Проведён · Статус */}
-              <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
+              <GroupRow className={styles.FormHeaderRow}>
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
                 <FieldToggle
                   name={`${form.formUid}_posted`}
@@ -665,8 +665,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               />
             </Group>
           </div>
-          {form.isEditMode && <GroupCol style={{ flex: 1, alignItems: "start", justifyContent: "end", gap: 6 }}>
-            <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
+          {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
+            <GroupRow className={styles.FormHeaderRow}>
               <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
               <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
             </GroupRow>
