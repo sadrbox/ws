@@ -616,7 +616,16 @@ const SubTable: FC<SubTableProps> = ({
       // Если сработать на пустом allItems — delete-маркеры в initialPendingRows
       // не совпадут ни с одной серверной строкой и будут отброшены, после чего
       // Branch B смержит старые серверные строки с новыми pending-creates → дубликаты.
-      if (parentUuid && allItems.length === 0 && isAnythingLoading) return;
+      //
+      // Ждём, если идёт загрузка ЛИБО в pending есть delete-маркеры: им нужны
+      // серверные строки (по uuid), без них они теряются. Это исправляет дубли
+      // при «Перезаполнить по основанию» со сменой основания, когда на remount
+      // серверная query ещё не вернула данные (allItems=[] и isAnythingLoading
+      // кратковременно false).
+      const hasDeleteMarkers = initialPendingRows.some(
+        (r) => (r as PendingRow)._pendingAction === "delete",
+      );
+      if (parentUuid && allItems.length === 0 && (isAnythingLoading || hasDeleteMarkers)) return;
 
       pendingAppliedRef.current = true;
       const merged = mergeServerWithPending([...allItems], initialPendingRows);

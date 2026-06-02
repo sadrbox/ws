@@ -2,8 +2,8 @@
 
 .FieldToggle {
   display: flex;
-  flex-direction: column;
-  align-items: end;
+  flex-direction: row;
+  align-items: center;
   gap: 6px;
   font-size: $fontsize;
   color: $color6;
