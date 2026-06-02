@@ -132,7 +132,7 @@ const AccountCard: FC<Props> = ({
             <tr key={r.uuid}>
               <td className={styles.ColDate}>{r.date}</td>
               <td className={styles.ColName}>
-                <span className={styles.ClickableRow} style={{ cursor: "pointer", textDecoration: "underline" }}
+                <span className={styles.ClickableLink}
                   onClick={() => openDocumentByType(r.documentType, r.documentUuid, addPane)}>
                   {docTypeLabel(r.documentType)}{r.documentId ? ` №${r.documentId}` : ""}
                 </span>

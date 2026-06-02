@@ -73,18 +73,19 @@ type TypeGroupProps = {
   type?: 'easy' | 'medium' | 'hard';
   label?: string;
   gap?: string;
+  /** Доп. CSS-класс (для семантических утилит вместо inline-стилей). */
   className?: string;
   style?: CSSProperties;
 } & PropsWithChildren;
 
-export const Group: FC<TypeGroupProps> = ({ style, children }) =>
-  <div style={style} className={[styles.Group, styles.gap6].filter(Boolean).join(" ")}>{children}</div>;
+export const Group: FC<TypeGroupProps> = ({ style, className, children }) =>
+  <div style={style} className={[styles.Group, styles.gap6, className].filter(Boolean).join(" ")}>{children}</div>;
 
-export const GroupRow: FC<TypeGroupProps> = ({ style, children }) =>
-  <div style={style} className={[styles.GroupRow, styles.gap6].filter(Boolean).join(" ")}>{children}</div>;
+export const GroupRow: FC<TypeGroupProps> = ({ style, className, children }) =>
+  <div style={style} className={[styles.GroupRow, styles.gap6, className].filter(Boolean).join(" ")}>{children}</div>;
 
-export const GroupCol: FC<TypeGroupProps> = ({ style, children }) =>
-  <div style={style} className={[styles.GroupCol, styles.gap6].filter(Boolean).join(" ")}>{children}</div>;
+export const GroupCol: FC<TypeGroupProps> = ({ style, className, children }) =>
+  <div style={style} className={[styles.GroupCol, styles.gap6, className].filter(Boolean).join(" ")}>{children}</div>;
 
 
 

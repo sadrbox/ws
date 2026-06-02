@@ -1072,6 +1072,29 @@ body {
 	}
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Утилиты разметки форм — замена повторяющихся inline-стилей.
+// Применяются к Group/GroupRow/GroupCol через проп className.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Верхняя строка формы: «Дата … Переключатель Проведён» по краям.
+.FormHeaderRow {
+	width: 100%;
+	justify-content: space-between;
+}
+
+// Нижняя строка формы: «Комментарий / Автор», прижата к низу и правому краю.
+.FormFooterRow {
+	flex: 1;
+	align-items: flex-end;
+	justify-content: flex-end;
+}
+
+// Моноширинные цифры для числовых ячеек/итогов (выравнивание разрядов).
+.TabularNums {
+	font-variant-numeric: tabular-nums;
+}
+
 .HorizontalLine {
 	border-radius: 2px;
 	background: linear-gradient(to bottom, $silverDark 50%, $silverLightest 50%);

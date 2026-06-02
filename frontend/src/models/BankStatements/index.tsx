@@ -168,7 +168,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
       component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
+            <GroupRow className={styles.FormHeaderRow}>
               <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
               <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
             </GroupRow>
@@ -210,7 +210,6 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
                 ]}
                 onChange={e => form.setField("direction", e.target.value)}
                 disabled={form.isLoading || !canWrite}
-              // style={{ width: "200px" }}
               />
               <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
 
@@ -232,10 +231,10 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
               mismatchDetails={basisMismatch.differences}
             />
           </div>
-          {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
+          {form.isEditMode && <GroupRow className={styles.FormFooterRow}>
             <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
             <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-          </Group>}
+          </GroupRow>}
         </div>
       ),
     },

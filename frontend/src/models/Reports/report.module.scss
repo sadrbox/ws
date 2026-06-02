@@ -152,6 +152,13 @@
   }
 }
 
+// Текстовая ссылка-детализация внутри ячейки отчёта (drill-down).
+// Заменяет повторяющийся inline { cursor: pointer; text-decoration: underline }.
+.ClickableLink {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 // ── Утилиты ───────────────────────────────────────────────────────────────────
 
 .Unposted {

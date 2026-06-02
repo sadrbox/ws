@@ -143,7 +143,7 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
           <td className={styles.ColN}>{idx + 1}</td>
           <td className={styles.ColDate}>{row.date}</td>
           <td className={styles.ColName}>
-            <span className={styles.ClickableRow} style={{ cursor: "pointer", textDecoration: "underline" }}
+            <span className={styles.ClickableLink}
               onClick={() => openDocumentByType(row.docType, row.docUuid, addPane)}>
               {DOC_TYPE_LABELS[row.docType] ?? row.docType} №{row.docId}
             </span>

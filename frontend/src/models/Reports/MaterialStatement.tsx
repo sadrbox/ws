@@ -149,7 +149,7 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
   };
 
   const linkSum = (row: ProductMovement, value: number) => (
-    <span className={styles.ClickableRow} style={{ cursor: "pointer", textDecoration: "underline" }}
+    <span className={styles.ClickableLink}
       onClick={() => openMovements(row)}>{fmtAmt(value)}</span>
   );
 
@@ -211,7 +211,7 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
             <tr key={row.productUuid}>
               <td className={styles.ColN}>{idx + 1}</td>
               <td className={styles.ColName}>
-                <span className={styles.ClickableRow} style={{ cursor: "pointer", textDecoration: "underline" }}
+                <span className={styles.ClickableLink}
                   onClick={() => openProductCard(row)}>{row.productName}</span>
               </td>
               <td className={styles.ColUom}>{row.accountCode}</td>

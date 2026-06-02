@@ -122,7 +122,7 @@ const AccountingJournal: FC<Props> = ({ uniqId }) => {
               <td className={styles.ColN}>{idx + 1}</td>
               <td className={styles.ColDate}>{r.date}</td>
               <td className={styles.ColName}>
-                <span className={styles.ClickableRow} style={{ cursor: "pointer", textDecoration: "underline" }}
+                <span className={styles.ClickableLink}
                   onClick={() => openDocumentByType(r.documentType, r.documentUuid, addPane)}>
                   {docTypeLabel(r.documentType)}{r.documentId ? ` №${r.documentId}` : ""}
                 </span>

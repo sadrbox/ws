@@ -104,7 +104,7 @@ const TurnoverBalanceSheet: FC<Props> = ({ uniqId }) => {
           {rows.map((r) => (
             <tr key={r.code}>
               <td className={styles.ColUom}>
-                <span className={styles.ClickableRow} style={{ cursor: "pointer", textDecoration: "underline" }}
+                <span className={styles.ClickableLink}
                   onClick={() => openCard(r.code, r.name)}>{r.code}</span>
               </td>
               <td className={styles.ColName}>{r.name}</td>
