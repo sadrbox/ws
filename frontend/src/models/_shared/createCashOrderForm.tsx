@@ -19,6 +19,7 @@ import { useAccessRight } from "src/hooks/useAccessRight";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { useUserPermissionDefaults } from "src/hooks/useUserPermissionDefaults";
 import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { resolveOrgChangeFields } from "src/utils/createFromBasis";
 import { useAppContext } from "src/app";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
@@ -141,6 +142,19 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
       form.setFields(updates);
     }, [form.setFields]);
 
+    // Смена организации: зависимые поля (договор, касса) → дефолт пользователя
+    // для новой орг, иначе очистка.
+    const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
+      const cur = form.store.getSnapshot().fields as any;
+      if (cur.organizationUuid === uuid) return;
+      form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
+      const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
+        { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+        { valueType: "cashbox", uuidKey: "cashboxUuid", nameKey: "cashboxName" },
+      ]);
+      form.setFields(patch as Partial<TFields>);
+    }, [form.setFields, form.store, currentUser?.uuid]);
+
     const contractScope = useMemo<Record<string, string> | null>(() => {
       if (!form.fields.organizationUuid) return null;
       const s: Record<string, string> = { organizationUuid: form.fields.organizationUuid };
@@ -185,7 +199,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                 </GroupRow>
                 <Group>
                   <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
-                    onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
+                    onSelect={handleOrganizationSelect}
                     onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                     disabled={form.isLoading} />
                 </Group>
@@ -220,7 +234,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
           </div>
         ),
       },
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, canWrite]);
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, canWrite]);
 
     const isSavedDoc = form.isEditMode && !!form.fields.uuid;
 

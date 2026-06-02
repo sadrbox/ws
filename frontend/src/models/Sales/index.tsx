@@ -35,7 +35,7 @@ import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton"
 import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
-import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems, resolveOrgDependentRefill } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems, resolveOrgDependentRefill, resolveOrgChangeFields } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
@@ -411,6 +411,19 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     form.setFields(updates);
   }, [form.setFields]);
 
+  // Смена организации: зависимые поля (склад/договор) → дефолт пользователя для
+  // новой орг, иначе очистка (значение принадлежало прежней организации).
+  const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
+    const cur = form.store.getSnapshot().fields as any;
+    if (cur.organizationUuid === uuid) return;
+    form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
+    const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
+      { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+    ]);
+    form.setFields(patch as Partial<TFields>);
+  }, [form.setFields, form.store, currentUser?.uuid]);
+
   // ── Печать: накладная З-2 и акт выполненных работ ──────────────────
 
   const handlePrint = useCallback(async (layoutId: "invoice" | "act") => {
@@ -623,7 +636,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
               <Group>
                 {/* Организация — во всю ширину */}
-                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={handleOrganizationSelect} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
 
                 <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
@@ -697,7 +710,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, handleOrganizationSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
 
   return (
     <FormRequiredScope docType="sale" active={form.meta.headerValidationFailed}>

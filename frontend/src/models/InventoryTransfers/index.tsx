@@ -156,6 +156,21 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     form.setField("amount", Number(total));
   }, [form.setField]);
 
+  // Смена организации: склады принадлежали прежней орг — очищаем оба
+  // (для перемещения единый дефолт-склад неприменим к источнику и приёмнику).
+  const handleOrganizationSelect = useCallback((uuid: string, displayValue: string) => {
+    const cur = form.store.getSnapshot().fields as any;
+    if (cur.organizationUuid === uuid) {
+      form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
+      return;
+    }
+    form.setFields({
+      organizationUuid: uuid, organizationName: displayValue,
+      fromWarehouseUuid: "", fromWarehouseName: "",
+      toWarehouseUuid: "", toWarehouseName: "",
+    } as Partial<TFields>);
+  }, [form.setFields, form.store]);
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -168,7 +183,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
               </GroupRow>
               <Group>
                 <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
-                  onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
+                  onSelect={handleOrganizationSelect}
                   onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                   disabled={form.isLoading} />
               </Group>
@@ -225,7 +240,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         </div>
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, canWrite, items]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items]);
 
   return (
     <FormRequiredScope docType="inventory_transfer" active={form.meta.headerValidationFailed}>

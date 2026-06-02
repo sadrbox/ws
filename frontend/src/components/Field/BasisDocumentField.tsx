@@ -5,6 +5,7 @@ import { getFormatDateOnly } from "src/utils/datetime";
 import { docTypeLabel, docTypeToEndpoint } from "src/utils/accountingDocTypes";
 import { api } from "src/services/api/client";
 import styles from "./Field.module.scss";
+import { GroupCol } from "../UI";
 
 export interface BasisTypeConfig {
   type: string;
@@ -177,7 +178,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     const valueType = basisDocumentType || activeType?.type || "";
     const typeName = nameForType(valueType, activeType);
     return (
-      <>
+      <GroupCol>
         <LookupField
           label={hasMultipleTypes ? typeSelectLabel : `${translate("basisDocument")} (${typeName})`}
           name={`${formUid}_basisDocument`}
@@ -197,7 +198,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           searchTransform={extractBasisSearch}
         />
         {mismatchNote}
-      </>
+      </GroupCol>
     );
   }
 

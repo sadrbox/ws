@@ -34,7 +34,7 @@ import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntr
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
-import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems, resolveOrgDependentRefill } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems, resolveOrgDependentRefill, resolveOrgChangeFields } from "src/utils/createFromBasis";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { isEquivalent } from "src/utils/normalize";
 import { PurchaseReturnsForm } from "src/models/PurchaseReturns";
@@ -289,6 +289,19 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     form.setFields(updates);
   }, [form.setFields]);
 
+  // Смена организации: зависимые поля (склад/договор) → дефолт пользователя для
+  // новой орг, иначе очистка.
+  const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
+    const cur = form.store.getSnapshot().fields as any;
+    if (cur.organizationUuid === uuid) return;
+    form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
+    const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
+      { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+    ]);
+    form.setFields(patch as Partial<TFields>);
+  }, [form.setFields, form.store, currentUser?.uuid]);
+
   const contractScope = useMemo<Record<string, string> | null>(() => {
     if (!form.fields.organizationUuid) return null;
     const s: Record<string, string> = { organizationUuid: form.fields.organizationUuid };
@@ -345,7 +358,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
               </GroupRow>
               <Group>
                 <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
-                  onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
+                  onSelect={handleOrganizationSelect}
                   onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                   disabled={form.isLoading} />
                 <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name"
@@ -426,7 +439,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
 
   const handleCreatePurchaseReturn = useCallback(async () => {
     await openDocumentFromBasis(

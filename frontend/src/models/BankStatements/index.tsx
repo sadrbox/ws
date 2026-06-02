@@ -15,7 +15,7 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
-import { mapCommonTradeFields } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, resolveOrgChangeFields } from "src/utils/createFromBasis";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -140,6 +140,19 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     form.setFields(updates);
   }, [form.setFields]);
 
+  // Смена организации: зависимые поля (договор, банк-счёт) → дефолт пользователя
+  // для новой орг, иначе очистка.
+  const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
+    const cur = form.store.getSnapshot().fields as any;
+    if (cur.organizationUuid === uuid) return;
+    form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
+    const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
+      { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+      { valueType: "bankAccount", uuidKey: "bankAccountUuid", nameKey: "bankAccountName" },
+    ]);
+    form.setFields(patch as Partial<TFields>);
+  }, [form.setFields, form.store, currentUser?.uuid]);
+
   const basisMismatch = useBasisMismatch({
     basisType: form.fields.basisDocumentType,
     basisUuid: form.fields.basisDocumentUuid,
@@ -162,7 +175,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
               </GroupRow>
               <Group>
                 <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
-                  onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
+                  onSelect={handleOrganizationSelect}
                   onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                   disabled={form.isLoading} />
               </Group>
@@ -200,7 +213,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
                   disabled={form.isLoading}
                   extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </GroupRow>
-              <Group>
+              <GroupCol>
                 <BasisDocumentField
                   allowedTypes={[
                     { type: "payment_invoice", endpoint: "payment-invoices" },
@@ -217,7 +230,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
                   mismatch={basisMismatch.mismatch}
                   mismatchDetails={basisMismatch.differences}
                 />
-              </Group>
+              </GroupCol>
             </GroupCol>
           </div>
           {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
@@ -227,7 +240,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
         </div>
       ),
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, canWrite, basisMismatch.mismatch, basisMismatch.differences]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, canWrite, basisMismatch.mismatch, basisMismatch.differences]);
 
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
 

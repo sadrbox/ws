@@ -302,6 +302,36 @@ export async function resolveOrgDependentRefill(
 }
 
 /**
+ * Пересчитывает зависящие от организации поля при ПРЯМОЙ смене организации
+ * в форме (пользователь выбрал другую орг в автокомплите «Организация»).
+ *
+ * Для каждого зависимого поля (склад/договор/касса/банк-счёт/ответственный):
+ *   • есть основное значение пользователя (permissionDefaults новой орг) — берём его;
+ *   • иначе — очищаем (значение принадлежало прежней организации и более не валидно).
+ *
+ * Возвращает patch для form.setFields. Всегда включает org-поля (имя+uuid).
+ */
+export async function resolveOrgChangeFields(
+	newOrgUuid: string,
+	userUuid: string,
+	orgFields: Array<{ valueType: keyof PermissionDefaultsMap; uuidKey: string; nameKey: string }>,
+): Promise<Record<string, any>> {
+	const defaults = newOrgUuid ? await fetchOrgPermissionDefaults(userUuid, newOrgUuid) : {};
+	const patch: Record<string, any> = {};
+	for (const f of orgFields) {
+		const def = defaults[f.valueType];
+		if (def) {
+			patch[f.uuidKey] = def.uuid;
+			patch[f.nameKey] = def.name;
+		} else {
+			patch[f.uuidKey] = "";
+			patch[f.nameKey] = "";
+		}
+	}
+	return patch;
+}
+
+/**
  * Стандартный маппинг полей шапки для большинства торговых документов.
  *
  * Поле копируется ТОЛЬКО если оно реально есть у документа-основания. Если у
