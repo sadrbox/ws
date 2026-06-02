@@ -19,6 +19,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import {
 	reconcileDocumentEntries,
 	removeDocumentEntries,
@@ -155,12 +156,15 @@ export function createDocumentHeaderRouter({
 			for (const f of numberFields) data[f] = b[f] != null ? parseFloat(b[f]) : null;
 			if (hasBasis) for (const f of BASIS_FIELDS) data[f] = b[f] || null;
 
+			// Stage D: org-зависимые поля должны принадлежать организации документа.
+			await assertOrgFieldMembership(data, prisma);
 			if (posting && data.posted) await validatePosting(posting.docType, data, []);
 			const item = await prisma[MODEL].create({ data, include });
 			if (posting && item.posted) await reconcileDocumentEntries(posting.docType, item.uuid);
 			if (afterSave) await afterSave(item.uuid);
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
+			if (respondOrgFieldError(error, res)) return;
 			if (posting && respondPostingError(error, res)) return;
 			console.error(`POST /${ROUTE} error:`, error);
 			return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -181,9 +185,16 @@ export function createDocumentHeaderRouter({
 			if (b.posted !== undefined) data.posted = !!b.posted;
 			if (hasBasis) for (const f of BASIS_FIELDS) if (b[f] !== undefined) data[f] = b[f] || null;
 
+			// Существующий документ нужен и для проверки принадлежности полей
+			// организации (мерж data поверх текущих значений ловит и смену орг,
+			// и смену поля), и для проверки проведения.
+			const existing = await prisma[MODEL].findUnique({ where: w });
+			if (!existing) return res.status(404).json({ success: false, message: "Не найдено" });
+
+			// Stage D: org-зависимые поля принадлежат организации документа.
+			await assertOrgFieldMembership({ ...existing, ...data }, prisma);
+
 			if (posting) {
-				const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, posted: true } });
-				if (!existing) return res.status(404).json({ success: false, message: "Не найдено" });
 				const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 				if (willBePosted) await assertPostable(posting.docType, existing.uuid, { ...data, posted: true });
 			}
@@ -192,6 +203,7 @@ export function createDocumentHeaderRouter({
 			if (afterSave) await afterSave(item.uuid);
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
+			if (respondOrgFieldError(error, res)) return;
 			if (posting && respondPostingError(error, res)) return;
 			if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
 			console.error(`PUT /${ROUTE}/:id error:`, error);
