@@ -3,8 +3,9 @@
  * Используется для КП, заказов покупателя/поставщику, резерва — параметризуется
  * заголовком и подписью стороны-контрагента. Зеркалит PurchaseRequisitionPrint.
  */
-import type { CSSProperties, FC } from "react";
+import type { FC } from "react";
 import { A4Page, A4DocTitle, A4Field, A4Row, A4Signature } from "src/components/PrintLayout/A4Page";
+import * as P from "src/components/PrintLayout/printStyles";
 import { getFormatDateOnly } from "src/utils/datetime";
 
 export interface TradeDocPrintRow {
@@ -43,9 +44,6 @@ const fmtDate = (d?: string): string => {
   return getFormatDateOnly(d) || d;
 };
 
-const cell: CSSProperties = { border: "1px solid #000", padding: "3px 5px", fontSize: "9pt", verticalAlign: "middle" };
-const head: CSSProperties = { ...cell, background: "#f3f3f3", fontWeight: 600, textAlign: "center" };
-
 export interface TradeDocumentPrintProps {
   /** Заголовок документа, напр. «КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ». */
   title: string;
@@ -72,7 +70,7 @@ const TradeDocumentPrint: FC<TradeDocumentPrintProps> = ({ title, counterpartyLa
     <A4Page>
       <A4DocTitle subtitle={`№ ${docNumber} от ${docDate}`}>{title}</A4DocTitle>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "3mm", fontSize: "9pt" }}>
+      <div style={P.metaBlock}>
         <A4Row>
           <A4Field label="Организация" width="50%">
             {data.organizationName ?? ""}
@@ -90,58 +88,58 @@ const TradeDocumentPrint: FC<TradeDocumentPrintProps> = ({ title, counterpartyLa
         )}
       </div>
 
-      <table style={{ marginTop: "4mm", borderCollapse: "collapse", width: "100%" }}>
+      <table style={P.table}>
         <thead>
           <tr>
-            <th style={{ ...head, width: "8mm" }}>№</th>
-            <th style={head}>Наименование товаров (работ, услуг)</th>
-            <th style={{ ...head, width: "14mm" }}>Ед. изм.</th>
-            <th style={{ ...head, width: "16mm" }}>Кол-во</th>
-            <th style={{ ...head, width: "22mm" }}>Цена</th>
-            {showVatRate && <th style={{ ...head, width: "12mm" }}>НДС, %</th>}
-            {showVatAmt && <th style={{ ...head, width: "22mm" }}>Сумма НДС</th>}
-            <th style={{ ...head, width: "24mm" }}>Итого</th>
+            <th style={{ ...P.head, width: "8mm" }}>№</th>
+            <th style={P.head}>Наименование товаров (работ, услуг)</th>
+            <th style={{ ...P.head, width: "14mm" }}>Ед. изм.</th>
+            <th style={{ ...P.head, width: "16mm" }}>Кол-во</th>
+            <th style={{ ...P.head, width: "22mm" }}>Цена</th>
+            {showVatRate && <th style={{ ...P.head, width: "12mm" }}>НДС, %</th>}
+            {showVatAmt && <th style={{ ...P.head, width: "22mm" }}>Сумма НДС</th>}
+            <th style={{ ...P.head, width: "24mm" }}>Итого</th>
           </tr>
         </thead>
         <tbody>
           {data.items.length === 0 && (
             <tr>
-              <td style={{ ...cell, textAlign: "center", color: "#888" }} colSpan={totalCols}>Нет товарных позиций</td>
+              <td style={{ ...P.cell, ...P.center, ...P.placeholder }} colSpan={totalCols}>Нет товарных позиций</td>
             </tr>
           )}
           {data.items.map((it) => (
             <tr key={it.number}>
-              <td style={{ ...cell, textAlign: "center" }}>{it.number}</td>
-              <td style={cell}>{it.name}</td>
-              <td style={{ ...cell, textAlign: "center" }}>{it.unit ?? ""}</td>
-              <td style={{ ...cell, textAlign: "right" }}>{fmt(it.quantity)}</td>
-              <td style={{ ...cell, textAlign: "right" }}>{fmt(it.price)}</td>
-              {showVatRate && <td style={{ ...cell, textAlign: "center" }}>{it.vatRate ?? ""}</td>}
-              {showVatAmt && <td style={{ ...cell, textAlign: "right" }}>{fmt(it.vatAmount)}</td>}
-              <td style={{ ...cell, textAlign: "right", fontWeight: 500 }}>{fmt(it.amount)}</td>
+              <td style={{ ...P.cell, ...P.center }}>{it.number}</td>
+              <td style={P.cell}>{it.name}</td>
+              <td style={{ ...P.cell, ...P.center }}>{it.unit ?? ""}</td>
+              <td style={{ ...P.cell, ...P.right }}>{fmt(it.quantity)}</td>
+              <td style={{ ...P.cell, ...P.right }}>{fmt(it.price)}</td>
+              {showVatRate && <td style={{ ...P.cell, ...P.center }}>{it.vatRate ?? ""}</td>}
+              {showVatAmt && <td style={{ ...P.cell, ...P.right }}>{fmt(it.vatAmount)}</td>}
+              <td style={{ ...P.cell, ...P.right, fontWeight: 500 }}>{fmt(it.amount)}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <div style={{ marginTop: "4mm", display: "flex", flexDirection: "column", gap: "2mm", fontSize: "9pt", alignItems: "flex-end" }}>
+      <div style={P.totalsBlock}>
         {showVatAmt && (
-          <div style={{ display: "flex", justifyContent: "space-between", width: "220px", gap: 8 }}>
-            <span style={{ color: "#555" }}>В том числе НДС:</span>
-            <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>{fmt(data.totalVatAmount)}</span>
+          <div style={P.totalsRow}>
+            <span style={P.muted}>В том числе НДС:</span>
+            <span style={{ ...P.tabularNums, fontWeight: 500 }}>{fmt(data.totalVatAmount)}</span>
           </div>
         )}
-        <div style={{ display: "flex", justifyContent: "space-between", width: "220px", gap: 8, fontWeight: 700, fontSize: "11pt", borderTop: "1px solid #000", paddingTop: "2mm" }}>
+        <div style={P.grandTotalRow}>
           <span>{totalLabel}:</span>
-          <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(data.totalAmount)}</span>
+          <span style={P.tabularNums}>{fmt(data.totalAmount)}</span>
         </div>
       </div>
 
-      <div style={{ marginTop: "8mm", display: "flex", justifyContent: "flex-start", gap: "24mm" }}>
+      <div style={P.signaturesRow}>
         <A4Signature role="Руководитель" />
         <A4Signature role="Гл. бухгалтер" />
       </div>
-      <div style={{ marginTop: "4mm", fontSize: "8pt", color: "#555" }}>М.П.</div>
+      <div style={P.stampNote}>М.П.</div>
     </A4Page>
   );
 };
