@@ -1449,7 +1449,10 @@ const SubTable: FC<SubTableProps> = ({
   // ── Кнопки ─────────────────────────────────────────────────────────────
   const extraButtons = useMemo(() => (
     <>
-      {!readonly && !disabled && showEditModeToggle && (
+      {/* Переключатель «Редактирование через форму / в таблице» показываем
+          только если форменный режим реально доступен (задан openFormFor) —
+          без него режим бесполезен (Enter не открывает форму). */}
+      {!readonly && !disabled && showEditModeToggle && openFormFor && (
         <>
           <Toolbar.Divider />
           <Toolbar.InlineEditButton
@@ -1460,7 +1463,7 @@ const SubTable: FC<SubTableProps> = ({
       )}
       {extraButtonsProp && extraButtonsProp}
     </>
-  ), [toggleInlineEditing, inlineEditing, extraButtonsProp, readonly, showEditModeToggle]);
+  ), [toggleInlineEditing, inlineEditing, extraButtonsProp, readonly, disabled, showEditModeToggle, openFormFor]);
 
   // ── Table props ────────────────────────────────────────────────────────
   const combinedLoading = isAnythingLoading || opLoading;
