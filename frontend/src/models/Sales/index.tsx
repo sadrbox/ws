@@ -36,7 +36,7 @@ import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton"
 import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
-import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";

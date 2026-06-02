@@ -36,7 +36,7 @@ import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import PurchaseReturnPrint from "./PurchaseReturnPrint";
 import DocumentTotals from "src/components/DocumentTotals";
-import { mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 
