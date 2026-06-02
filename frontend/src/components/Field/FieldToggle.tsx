@@ -81,27 +81,23 @@ const FieldToggle: FC<FieldToggleProps> = ({
         onChange={handleChange}
         className={styles.input}
       />
-      {label && <span className={styles.label}>{getTranslation(label)}</span>}
-      <span className={styles.track} aria-hidden>
-        <span className={styles.thumb}>
-          {value && (
-            <svg
-              className={styles.checkIcon}
-              viewBox="0 0 16 16"
-              width="10"
-              height="10"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M3 8.5l3 3 7-7" />
-            </svg>
-          )}
-        </span>
+      <span className={styles.badge} aria-hidden>
+        <svg
+          className={styles.checkIcon}
+          viewBox="0 0 16 16"
+          width="13"
+          height="13"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <path d="M3 8.5l3 3 7-7" />
+        </svg>
       </span>
+      {label && <span className={styles.label}>{getTranslation(label)}</span>}
       {caption && <span className={styles.caption}>{caption}</span>}
     </label>
   );

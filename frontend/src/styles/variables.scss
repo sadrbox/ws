@@ -90,6 +90,10 @@ $accentBlueBorder: #bfdbfe;
 
 $indicatorPosted: #10b981; // проведён
 $indicatorMuted: #9ca3af; // не проведён / прочерк
+$successGradFrom: #34d399; // верх градиента «проведён»-бейджа
+$successGradTo: #10b981; // низ градиента (= $indicatorPosted)
+$successSoftBg: #f0fdf4; // мягкий зелёный фон пилюли
+$successSoftBorder: #bbf7d0; // мягкий зелёный бордер пилюли
 
 $warnAccent: #d97706; // маркер расхождения с основанием
 $warnSoftBg: #fffbeb;

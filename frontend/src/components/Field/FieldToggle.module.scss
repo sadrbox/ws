@@ -1,127 +1,129 @@
 @import "src/styles/variables.scss";
 
+// Переключатель-«пилюля» статуса (Проведён/Активен и т.п.):
+// круглый бейдж с галочкой + подпись. Кликабелен целиком.
 .FieldToggle {
-  display: flex;
-  flex-direction: column;
-  align-items: end;
-  gap: 6px;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  background: $color60;
+  border: 1px solid $gray200;
   font-size: $fontsize;
-  color: $color6;
+  color: $gray900;
   cursor: pointer;
   user-select: none;
   line-height: 1;
+  transition: background-color 0.18s ease, border-color 0.18s ease,
+    box-shadow 0.18s ease;
 
   .label {
-    color: $color51;
+    font-weight: 600;
+    color: $gray900;
+    white-space: nowrap;
   }
 
   .caption {
-    color: $color6;
+    color: $gray500;
   }
 
-  // Скрываем нативный input, оставляем доступным.
+  // Скрытый нативный input (доступен с клавиатуры).
   .input {
-    // position: absolute;
     opacity: 0;
     pointer-events: none;
     width: 0;
     height: 0;
-  }
-
-  // Дорожка тумблера.
-  .track {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-    width: 36px;
-    height: 20px;
-    background: $color33;
-    border-radius: 999px;
-    transition: background-color 0.18s ease, box-shadow 0.18s ease;
-    box-sizing: border-box;
-    border: 1px solid transparent;
-  }
-
-  // Кнопка-«пилюля».
-  .thumb {
     position: absolute;
-    top: 50%;
-    left: 2px;
-    transform: translateY(-50%);
-    width: 16px;
-    height: 16px;
-    background: #fff;
+  }
+
+  // Круглый бейдж со статусом.
+  .badge {
+    position: relative;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04);
-    transition: left 0.18s ease, transform 0.18s ease, background-color 0.18s ease;
+    background: $color60;
+    border: 2px solid $gray300;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background 0.18s ease, border-color 0.18s ease,
+      box-shadow 0.2s ease, transform 0.15s ease;
+    box-sizing: border-box;
   }
 
+  // Галочка (по умолчанию скрыта/уменьшена, появляется в checked).
   .checkIcon {
+    color: $color60;
     opacity: 0;
-    color: #fff;
-    transition: opacity 0.18s ease;
+    transform: scale(0.4);
+    transition: opacity 0.18s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
-  // Hover/Focus.
-  &:hover:not(.disabled) .track {
-    box-shadow: 0 0 0 4px rgba($color1, 0.12);
+  // ── Hover / Focus ────────────────────────────────────────────────────────
+  &:hover:not(.disabled) {
+    border-color: $gray300;
+
+    .badge {
+      border-color: $gray400;
+    }
   }
 
-  .input:focus-visible+.track {
+  .input:focus-visible + .badge {
     outline: none;
     box-shadow: 0 0 0 3px rgba($color3, 0.25);
   }
 
-  // Состояние «включено».
+  // ── Состояние «включено» ──────────────────────────────────────────────────
   &.checked {
-    .thumb {
-      left: calc(100% - 18px);
+    .badge {
+      border-color: transparent;
     }
 
     .checkIcon {
       opacity: 1;
-      color: currentColor;
+      transform: scale(1);
     }
   }
 
-  // Цветовая схема — успех (по умолчанию для «Проведено»).
-  &.variant_success.checked .track {
-    background: #1f9d55; // зелёный — «проведён»
+  // success (по умолчанию для «Проведён») — зелёный градиент + свечение.
+  &.variant_success.checked {
+    background: $successSoftBg;
+    border-color: $successSoftBorder;
+
+    .badge {
+      background: linear-gradient(135deg, $successGradFrom, $successGradTo);
+      box-shadow: 0 0 0 3px rgba($indicatorPosted, 0.18),
+        0 2px 6px rgba($indicatorPosted, 0.4);
+    }
   }
 
-  &.variant_success.checked .thumb {
-    color: #1f9d55;
+  // primary — синий вариант.
+  &.variant_primary.checked {
+    background: $primaryBg;
+    border-color: rgba($color3, 0.25);
+
+    .badge {
+      background: linear-gradient(135deg, $colorPrimaryLight, $color3);
+      box-shadow: 0 0 0 3px rgba($color3, 0.18), 0 2px 6px rgba($color3, 0.35);
+    }
   }
 
-  // Цветовая схема — primary.
-  &.variant_primary.checked .track {
-    background: $color3;
+  // ── Размер sm ──────────────────────────────────────────────────────────────
+  &.size_sm {
+    gap: 6px;
+    padding: 3px 10px 3px 3px;
+
+    .badge {
+      width: 20px;
+      height: 20px;
+    }
   }
 
-  &.variant_primary.checked .thumb {
-    color: $color3;
-  }
-
-  // Размер sm.
-  &.size_sm .track {
-    width: 30px;
-    height: 17px;
-  }
-
-  &.size_sm .thumb {
-    width: 13px;
-    height: 13px;
-  }
-
-  &.size_sm.checked .thumb {
-    left: calc(100% - 15px);
-  }
-
-  // Заблокирован.
+  // ── Заблокирован ─────────────────────────────────────────────────────────
   &.disabled {
     cursor: not-allowed;
     opacity: 0.55;
