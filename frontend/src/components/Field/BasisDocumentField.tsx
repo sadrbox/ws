@@ -189,6 +189,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
             `${typeName}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`
           }
           columns={columns}
+          secondaryFields={["name", "counterparty.name", "documentNumber"]}
           onSelect={handleSelect}
           onClear={onClear}
           disabled={disabled || !activeType}

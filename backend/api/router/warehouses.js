@@ -1,6 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter, checkOwnership } from "../../utils/auth.js";
+import { tenantFilter, orgQueryFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
@@ -92,6 +92,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			...searchWhereClause,
 			...filterWhereClause,
 			...tenantFilter(req),
+			...orgQueryFilter(req),
 		};
 		const queryOptions = {
 			take: limitNumber,

@@ -134,6 +134,30 @@ export function tenantFilter(req, field = "organizationUuid") {
 }
 
 /**
+ * Формирует WHERE-фрагмент для фильтрации справочника по организации,
+ * ВЫБРАННОЙ В ФОРМЕ (req.query.organizationUuid), а не по активной орг.
+ *
+ * Используется зависимыми автокомплитами (склад, касса, ответственный и т.п.):
+ * при выбранной в документе организации список ограничивается записями этой
+ * организации + «глобальными» (organizationUuid = null), доступными всем.
+ *
+ * Если query-параметр не передан — возвращает {} (фильтрация не применяется,
+ * изоляцию обеспечивает tenantFilter).
+ *
+ * @param {object} req   — Express request
+ * @param {string} field — поле организации в модели (по умолчанию organizationUuid)
+ * @returns {object} prisma where-fragment ({} | { OR: [...] })
+ */
+export function orgQueryFilter(req, field = "organizationUuid") {
+	const raw = req.query?.[field];
+	if (typeof raw !== "string" || !raw.trim()) return {};
+	const val = raw.trim();
+	if (val === "null") return { [field]: null };
+	// записи выбранной орг + глобальные (общие для всех орг)
+	return { OR: [{ [field]: val }, { [field]: null }] };
+}
+
+/**
  * Проверяет, имеет ли текущий пользователь доступ к конкретной записи.
  * Возвращает false → должен следовать ответ 404 (не 403, чтобы не раскрывать существование).
  *

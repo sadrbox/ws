@@ -2,7 +2,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { enrichWithOwnerName } from "../../utils/resolveOwnerName.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, orgQueryFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -147,6 +147,7 @@ router.get("/bankaccounts", async (req, res) => {
 			...filterWhereClause,
 			...fkFilter,
 			...(fkFilter.ownerUuid ? {} : tenantFilter(req)),
+			...orgQueryFilter(req),
 		};
 
 		// ── Курсорная пагинация ───────────────────────────────────────────────

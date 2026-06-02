@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter, checkOwnership } from "../../utils/auth.js";
+import { tenantFilter, orgQueryFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
@@ -103,7 +103,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 
-		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
+		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req), ...orgQueryFilter(req) };
 		const opts = {
 			take: limitNumber,
 			where: baseWhere,
