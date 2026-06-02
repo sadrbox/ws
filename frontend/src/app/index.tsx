@@ -30,6 +30,7 @@ import { startHealthCheck, stopHealthCheck } from "src/services/networkStatus";
 import { clearAllFormStores } from "src/hooks/useFormSessionStore";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { useAppContext, AppContextProvider } from "src/app/context";
+import { openListByRef } from "src/registry/formRegistry";
 import { SalesList } from "src/models/Sales";
 import { ContractsList, ContractsForm } from "src/models/Contracts";
 import { openFormByRef } from "src/utils/openFormByRef";
@@ -391,10 +392,11 @@ const App: React.FC = () => {
 
     // Открываем конкретную форму ContractsForm по ID при монтировании приложения
     // const uuid = "2"; // Замените на реальный UUID
-    // openFormByRef({ endpoint: "contracts", uuid }, addPane, "Договор");
+    // openFormByRef({ endpoint: "Sales", uuid }, addPane, "Договор");
+    openListByRef("Sales", addPane);
 
     // Открыть материальную ведомость  при монтировании приложения
-    openReport("material-statement", addPane);
+    // openReport("material-statement", addPane);
   }, []);
 
   // ────────────────────────────────────────────────
