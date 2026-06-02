@@ -51,6 +51,10 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					const orConditions = TEXT_FIELDS.map((f) => ({
 						[f]: { contains: w, mode: "insensitive" },
 					}));
+					// Поиск также по дополнительным штрих-кодам товара (таблица).
+					orConditions.push({
+						barcodes: { some: { barcode: { contains: w, mode: "insensitive" } } },
+					});
 					const num = Number(w);
 					if (Number.isInteger(num) && num > 0) {
 						orConditions.push({ id: { equals: num } });

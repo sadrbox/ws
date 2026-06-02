@@ -765,6 +765,7 @@ model Product {
   reservationItems         ReservationItem[]
   purchaseOrderItems       PurchaseOrderItem[]
   reservationRegister      ReservationRegister[]
+  barcodes                 ProductBarcode[]
 
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
@@ -772,6 +773,24 @@ model Product {
   @@index([barcode])
   @@index([updatedAt])
   @@map("products")
+}
+
+/// Штрих-коды номенклатуры (один товар — много штрих-кодов).
+model ProductBarcode {
+  id          Int       @id @default(autoincrement())
+  uuid        String    @unique @default(uuid())
+  barcode     String
+  /// Назначение/пометка штрих-кода (напр. «упаковка», «блок»).
+  comment     String?
+  productUuid String
+  updatedAt   DateTime  @default(now()) @updatedAt
+  deletedAt   DateTime?
+  product     Product   @relation(fields: [productUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([productUuid])
+  @@index([barcode])
+  @@index([updatedAt])
+  @@map("product_barcodes")
 }
 
 model SaleItem {

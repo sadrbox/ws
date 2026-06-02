@@ -1,0 +1,22 @@
+[
+	{
+		"identifier": "barcode",
+		"type": "string",
+		"width": "280px",
+		"minWidth": "180px",
+		"alignment": "left",
+		"hint": "Штрих-код",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "comment",
+		"type": "string",
+		"width": "280px",
+		"minWidth": "160px",
+		"alignment": "left",
+		"hint": "Назначение",
+		"visible": true,
+		"inlist": true
+	}
+]

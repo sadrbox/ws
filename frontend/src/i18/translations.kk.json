@@ -166,6 +166,8 @@
 	"EmployeeHistoriesList": "Кадрлық тарих",
 	"EmployeeHistoryList_part": "Кадрлық тарих",
 	"saveToEmployeeHistory": "Кадрлық тарихты басқару үшін қызметкерді сақтаңыз",
+	"barcodes": "Штрих-кодтар",
+	"saveToBarcodes": "Штрих-кодтарды қосу үшін номенклатураны сақтаңыз",
 	"eventDate": "Күні",
 	"eventType": "Оқиға",
 	"eventTypeHire": "Жалдау",

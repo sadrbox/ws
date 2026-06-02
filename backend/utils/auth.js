@@ -253,6 +253,7 @@ const ROUTE_TO_MODEL = {
 	"cash-expense-orders": "CashExpenseOrder",
 	brands: "Brand",
 	products: "Product",
+	productbarcodes: "Product",
 	saleitems: "SaleItem",
 	employees: "Employee",
 	positions: "Position",
