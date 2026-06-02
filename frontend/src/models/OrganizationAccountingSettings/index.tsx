@@ -197,25 +197,15 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   minWidth="180px"
                   required
                 />
-                <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
+                <span className={styles.SettingHint}>
                   Если организация не выбрана — настройки считаются глобальными.
                   Дата используется для исторических запросов.
                 </span>
               </GroupRow>
 
-              <GroupRow style={{ marginTop: 12 }}>
+              <GroupRow className={styles.SectionGap}>
                 <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 10px",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 6,
-                    background: form.fields.useVat ? "#eff6ff" : "#fff",
-                    cursor: canWrite ? "pointer" : "default",
-                    userSelect: "none",
-                  }}
+                  className={[styles.SettingChip, form.fields.useVat && styles.SettingChipActive, !canWrite && styles.SettingChipReadonly].filter(Boolean).join(" ")}
                 >
                   <input
                     type="checkbox"
@@ -231,7 +221,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                         : undefined
                     }
                   />
-                  <span style={{ fontWeight: 500 }}>Использовать НДС</span>
+                  <span className={styles.SettingLabelStrong}>Использовать НДС</span>
                 </label>
                 <FieldNumber
                   label={translate("vatRate")}
@@ -245,18 +235,9 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   width="140px"
                 />
                 <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 10px",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 6,
-                    background: "#fff",
-                    cursor: canWrite && form.fields.useVat ? "pointer" : "default",
-                  }}
+                  className={[styles.SettingChip, !(canWrite && form.fields.useVat) && styles.SettingChipReadonly].filter(Boolean).join(" ")}
                 >
-                  <span style={{ fontSize: 12, color: "#374151" }}>Способ расчёта:</span>
+                  <span className={styles.SettingSubLabel}>Способ расчёта:</span>
                   <select
                     value={form.fields.vatCalculationMethod}
                     onChange={(e) =>
@@ -271,25 +252,15 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     <option value="ADDED">Сверху</option>
                   </select>
                 </label>
-                <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
+                <span className={styles.SettingHint}>
                   НК РК: стандартная Ставка НДС, % — 12%, расчёт «в сумме»
                   или «сверху» определяется учётной политикой организации.
                 </span>
               </GroupRow>
 
-              <GroupRow style={{ marginTop: 12 }}>
+              <GroupRow className={styles.SectionGap}>
                 <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 10px",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 6,
-                    background: form.fields.useDiscount ? "#eff6ff" : "#fff",
-                    cursor: canWrite ? "pointer" : "default",
-                    userSelect: "none",
-                  }}
+                  className={[styles.SettingChip, form.fields.useDiscount && styles.SettingChipActive, !canWrite && styles.SettingChipReadonly].filter(Boolean).join(" ")}
                 >
                   <input
                     type="checkbox"
@@ -302,27 +273,17 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                         : undefined
                     }
                   />
-                  <span style={{ fontWeight: 500 }}>Использовать скидки</span>
+                  <span className={styles.SettingLabelStrong}>Использовать скидки</span>
                 </label>
-                <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
+                <span className={styles.SettingHint}>
                   При включении в строках документов продажи отображаются колонки
                   «Процент скидки» и «Сумма скидки».
                 </span>
               </GroupRow>
 
-              <GroupRow style={{ marginTop: 12 }}>
+              <GroupRow className={styles.SectionGap}>
                 <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 10px",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 6,
-                    background: form.fields.useExcise ? "#eff6ff" : "#fff",
-                    cursor: canWrite ? "pointer" : "default",
-                    userSelect: "none",
-                  }}
+                  className={[styles.SettingChip, form.fields.useExcise && styles.SettingChipActive, !canWrite && styles.SettingChipReadonly].filter(Boolean).join(" ")}
                 >
                   <input
                     type="checkbox"
@@ -335,15 +296,15 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                         : undefined
                     }
                   />
-                  <span style={{ fontWeight: 500 }}>Использовать акциз</span>
+                  <span className={styles.SettingLabelStrong}>Использовать акциз</span>
                 </label>
-                <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
+                <span className={styles.SettingHint}>
                   При включении в строках документов продажи отображаются колонки
                   «Ставка акциза, %» и «Сумма акциза» (НК РК ст. 463).
                 </span>
               </GroupRow>
 
-              <GroupRow style={{ marginTop: 12 }}>
+              <GroupRow className={styles.SectionGap}>
                 <FieldNumber
                   label={translate("exciseRate")}
                   name="exciseRate"
@@ -354,7 +315,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   min="0"
                   width="200px"
                 />
-                <span style={{ alignSelf: "center", fontSize: 12, color: "#6b7280" }}>
+                <span className={styles.SettingHint}>
                   Подставляется в новые строки документов продажи как значение
                   по умолчанию (можно скорректировать в каждой строке).
                 </span>
@@ -400,19 +361,19 @@ const renderListCell = (row: TDataItem, col: TColumn) => {
     const org = row.organization as { name?: string } | null | undefined;
     if (!org?.name)
       return (
-        <span style={{ color: "#9ca3af", fontStyle: "italic" }}>Глобальные</span>
+        <span className={styles.MutedItalic}>Глобальные</span>
       );
     return <span>{org.name}</span>;
   }
   if (col.identifier === "vatRate") {
     const useVat = Boolean(row.useVat);
-    if (!useVat) return <span style={{ color: "#9ca3af" }}>—</span>;
+    if (!useVat) return <span className={styles.Muted}>—</span>;
     const r = row.vatRate;
     return <span>{r != null ? `${r}%` : "—"}</span>;
   }
   if (col.identifier === "vatCalculationMethod") {
     const useVat = Boolean(row.useVat);
-    if (!useVat) return <span style={{ color: "#9ca3af" }}>—</span>;
+    if (!useVat) return <span className={styles.Muted}>—</span>;
     const m = String(row.vatCalculationMethod ?? "INCLUDED").toUpperCase();
     return <span>{m === "ADDED" ? "Сверху" : "В сумме"}</span>;
   }
@@ -427,7 +388,7 @@ const renderListCell = (row: TDataItem, col: TColumn) => {
   }
   if (col.identifier === "startDate") {
     const v = row.startDate as string | null | undefined;
-    if (!v) return <span style={{ color: "#9ca3af" }}>—</span>;
+    if (!v) return <span className={styles.Muted}>—</span>;
     return <span>{String(v).slice(0, 10)}</span>;
   }
   return undefined;

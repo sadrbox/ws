@@ -1143,6 +1143,86 @@ body {
 	font-size: 11px;
 }
 
+// ── Утилиты форм настроек/справочников ─────────────────────────────────────
+// Подсказка-пояснение рядом с полем (по центру по вертикали).
+.SettingHint {
+	align-self: center;
+	font-size: 12px;
+	color: #6b7280;
+}
+
+// Полужирная подпись переключателя/чекбокса.
+.SettingLabelStrong {
+	font-weight: 500;
+}
+
+// Мелкая подпись внутри чипа («Способ расчёта:» и т.п.).
+.SettingSubLabel {
+	font-size: 12px;
+	color: #374151;
+}
+
+// Отступ между секциями формы.
+.SectionGap {
+	margin-top: 12px;
+}
+
+// Приглушённый текст / прочерк «—» для пустых значений.
+.Muted {
+	color: #9ca3af;
+}
+
+.MutedItalic {
+	color: #9ca3af;
+	font-style: italic;
+}
+
+// Чип-переключатель (label с чекбоксом) в форме настроек.
+.SettingChip {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	background: #fff;
+	cursor: pointer;
+	user-select: none;
+}
+
+// Активное состояние чипа (включённый флаг) — голубая подсветка.
+.SettingChipActive {
+	background: #eff6ff;
+}
+
+// Недоступный для изменения чип — обычный курсор.
+.SettingChipReadonly {
+	cursor: default;
+}
+
+// Строка-обёртка с переносом (для группы переключателей/полей).
+.GroupRowWrap {
+	gap: 16px;
+	flex-wrap: wrap;
+}
+
+// Многоколоночная раскладка формы (напр. карточка сотрудника).
+.FormColumns {
+	display: flex;
+	flex-direction: row;
+	gap: 24px;
+	flex-wrap: wrap;
+}
+
+// Основная колонка формы (ограниченной ширины).
+.FormColumnMain {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	flex: 1;
+	max-width: 640px;
+}
+
 // Моноширинные цифры для числовых ячеек/итогов (выравнивание разрядов).
 .TabularNums {
 	font-variant-numeric: tabular-nums;

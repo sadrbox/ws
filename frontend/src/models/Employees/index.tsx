@@ -110,8 +110,8 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
         id: "tab-details", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
-              <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, maxWidth: 640 }}>
+              <div className={styles.FormColumns}>
+                <div className={styles.FormColumnMain}>
                   <GroupRow>
                     <Field label={translate("lastName")} name={`${form.formUid}_lastName`} minWidth="200px" value={form.fields.lastName} onChange={e => handleNameFieldChange("lastName", e.target.value)} disabled={form.isLoading} required />
                     <Field label={translate("firstName")} name={`${form.formUid}_firstName`} minWidth="180px" value={form.fields.firstName} onChange={e => handleNameFieldChange("firstName", e.target.value)} disabled={form.isLoading} />
