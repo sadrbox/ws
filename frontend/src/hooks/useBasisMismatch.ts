@@ -38,6 +38,8 @@ export interface UseBasisMismatchArgs {
 	fieldLabels?: Record<string, string>;
 	/** Поля строк для сравнения (по умолчанию товар/кол-во/цена/ставки). */
 	itemKeys?: readonly string[];
+	/** Не сравнивать строки (для header-документов без табличной части, напр. банк-выписка). */
+	ignoreItems?: boolean;
 }
 
 export interface BasisMismatchResult {
@@ -61,6 +63,7 @@ export function useBasisMismatch({
 	mapFields,
 	fieldLabels,
 	itemKeys = DEFAULT_ITEM_KEYS,
+	ignoreItems = false,
 }: UseBasisMismatchArgs): BasisMismatchResult {
 	const enabled = !!basisType && !!basisUuid;
 
@@ -90,10 +93,9 @@ export function useBasisMismatch({
 		}
 
 		// ── Строки: число и совпадение по ключевым полям, БЕЗ учёта порядка.
-		// Сравнение мультимножеств: сериализуем каждую строку по itemKeys и
-		// сверяем отсортированные наборы. Порядок строк в таблице (id БД) может
-		// не совпадать с порядком основания — это не считается расхождением.
-		const basisItems = data.items ?? [];
+		// Для header-документов без табличной части (банк-выписка) сравнение
+		// строк пропускается — иначе расхождение было бы всегда.
+		const basisItems = ignoreItems ? [] : (data.items ?? []);
 		const cur = (currentItems ?? []).filter(
 			(r: any) => r._pendingAction !== "delete",
 		);
@@ -120,7 +122,7 @@ export function useBasisMismatch({
 		}
 
 		return { mismatch: differences.length > 0, differences };
-	}, [enabled, data, currentFields, currentItems, fieldLabels, itemKeys]);
+	}, [enabled, data, currentFields, currentItems, fieldLabels, itemKeys, ignoreItems]);
 }
 
 export default useBasisMismatch;

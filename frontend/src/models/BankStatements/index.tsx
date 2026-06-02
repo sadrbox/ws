@@ -4,7 +4,7 @@
  * Header-документ без позиций; проводится (Дт1030/Кт1210 для in, Дт3310/Кт1030
  * для out — см. backend/services/accountingPosting.js).
  */
-import { FC, useMemo, useCallback } from "react";
+import { FC, useMemo, useCallback, useState } from "react";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -15,7 +15,8 @@ import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDoc
 import LookupField from "src/components/Field/LookupField";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
-import { mapCommonTradeFields, resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, resolveOrgChangeFields, refillFromBasisSource } from "src/utils/createFromBasis";
+import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -160,7 +161,35 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     currentFields: form.fields,
     currentItems: [],
     mapFields: mapCommonTradeFields,
+    ignoreItems: true, // банк-выписка без табличной части — сверяем только шапку
   });
+
+  const hasBasis = !!form.fields.basisDocumentUuid;
+  const [isRefilling, setIsRefilling] = useState(false);
+
+  // Header-документ без позиций: перезаполняем только поля шапки
+  // (организация/контрагент/договор) из документа-основания.
+  const handleRefillFromBasis = useCallback(async () => {
+    const snap = form.store.getSnapshot().fields as any;
+    if (!snap.basisDocumentUuid || !snap.basisDocumentType) return;
+    setIsRefilling(true);
+    try {
+      const result = await refillFromBasisSource(snap.basisDocumentType, snap.basisDocumentUuid, mapCommonTradeFields);
+      if (!result) return;
+      const cur = form.store.getSnapshot().fields as any;
+      // Только поля, существующие у банк-выписки (склад и т.п. отбрасываются).
+      const patch = Object.fromEntries(
+        Object.keys(result.fields).filter(k => k in cur).map(k => [k, result.fields[k]]),
+      ) as Partial<TFields>;
+      if (Object.keys(patch).some(k => String(cur[k] ?? "") !== String((patch as any)[k] ?? ""))) {
+        form.setFields(patch);
+      }
+    } catch (e) {
+      console.error("[refill] failed", e);
+    } finally {
+      setIsRefilling(false);
+    }
+  }, [form]);
 
   const tabs = useMemo(() => [
     {
@@ -275,11 +304,20 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
-    isSavedDoc ? (
+    (isSavedDoc || hasBasis) ? (
       <>
-        <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />
-        <DocumentChainButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />
-        <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />
+        {hasBasis && (
+          <RefillFromBasisButton
+            mismatch={basisMismatch.mismatch}
+            mismatchDetails={basisMismatch.differences}
+            disabled={form.isLoading || isRefilling}
+            loading={isRefilling}
+            onClick={() => void handleRefillFromBasis()}
+          />
+        )}
+        {isSavedDoc && <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />}
+        {isSavedDoc && <DocumentChainButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />}
+        {isSavedDoc && <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />}
       </>
     ) : null,
   );

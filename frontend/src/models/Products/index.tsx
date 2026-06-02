@@ -7,7 +7,7 @@ import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
-import { GroupCol } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessRight } from "src/hooks/useAccessRight";
@@ -47,9 +47,10 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="339px" value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("sku")} name={`${form.formUid}_sku`} minWidth="200px" value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("barcode")} name={`${form.formUid}_barcode`} minWidth="200px" value={form.fields.barcode} onChange={e => form.setField("barcode", e.target.value)} disabled={form.isLoading} />
-              <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
+              <GroupRow>
+                <Field label={translate("sku")} name={`${form.formUid}_sku`} minWidth="200px" value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("barcode")} name={`${form.formUid}_barcode`} minWidth="200px" value={form.fields.barcode} onChange={e => form.setField("barcode", e.target.value)} disabled={form.isLoading} />
+              </GroupRow>
               <LookupField label={translate("brand")} name={`${form.formUid}_brand`} minWidth="339px" value={form.fields.brandUuid} displayValue={form.fields.brandName} endpoint="brands" displayField="name"
                 columns={[{ key: "name", label: "Наименование" }]}
                 onSelect={(uuid, display) => form.setFields({ brandUuid: uuid, brandName: display } as Partial<TFields>)}
@@ -58,6 +59,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
                 columns={[{ key: "name", label: "Наименование" }, { key: "code", label: "Код" }]}
                 onSelect={(uuid, display) => form.setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display } as Partial<TFields>)}
                 onClear={() => form.setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+              <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
             </GroupCol>
           </div>
         </div>
