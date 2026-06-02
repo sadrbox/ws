@@ -687,7 +687,7 @@ body {
 	padding: 8px 12px;
 	font-weight: 700;
 	font-size: $fontsize - 1px;
-	color: #555;
+	color: $gray600;
 	border-bottom: 1px solid #eee;
 }
 
@@ -754,7 +754,7 @@ body {
 	border: none;
 	background: transparent;
 	cursor: pointer;
-	color: #999;
+	color: $gray300;
 	font-size: $fontsize - 2px;
 	padding: 0 2px;
 	line-height: 1;
@@ -1103,7 +1103,7 @@ body {
 	flex: 1;
 	align-items: center;
 	justify-content: center;
-	color: #999;
+	color: $gray300;
 	font-size: 14px;
 	padding: 24px 0;
 }
@@ -1112,13 +1112,13 @@ body {
 .FormSectionTitle {
 	margin: 0;
 	font-size: 13px;
-	color: #555;
+	color: $gray600;
 }
 
 // Компактная карточка-итог в шапке документа (напр. сумма перемещения).
 .SummaryCard {
-	background: #f8f9fa;
-	border: 1px solid #e5e7eb;
+	background: $gray50;
+	border: 1px solid $gray200;
 	border-radius: 6px;
 	padding: 10px 14px;
 	display: flex;
@@ -1139,7 +1139,7 @@ body {
 
 // Пояснительная сноска под итогом (мелкая, серая).
 .SummaryNote {
-	color: #9ca3af;
+	color: $gray400;
 	font-size: 11px;
 }
 
@@ -1148,7 +1148,7 @@ body {
 .SettingHint {
 	align-self: center;
 	font-size: 12px;
-	color: #6b7280;
+	color: $gray500;
 }
 
 // Полужирная подпись переключателя/чекбокса.
@@ -1159,7 +1159,7 @@ body {
 // Мелкая подпись внутри чипа («Способ расчёта:» и т.п.).
 .SettingSubLabel {
 	font-size: 12px;
-	color: #374151;
+	color: $gray700;
 }
 
 // Отступ между секциями формы.
@@ -1169,11 +1169,11 @@ body {
 
 // Приглушённый текст / прочерк «—» для пустых значений.
 .Muted {
-	color: #9ca3af;
+	color: $gray400;
 }
 
 .MutedItalic {
-	color: #9ca3af;
+	color: $gray400;
 	font-style: italic;
 }
 
@@ -1183,7 +1183,7 @@ body {
 	align-items: center;
 	gap: 8px;
 	padding: 6px 10px;
-	border: 1px solid #e5e7eb;
+	border: 1px solid $gray200;
 	border-radius: 6px;
 	background: #fff;
 	cursor: pointer;
@@ -1192,7 +1192,7 @@ body {
 
 // Активное состояние чипа (включённый флаг) — голубая подсветка.
 .SettingChipActive {
-	background: #eff6ff;
+	background: $accentBlueSoft;
 }
 
 // Недоступный для изменения чип — обычный курсор.

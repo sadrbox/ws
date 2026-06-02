@@ -7,7 +7,7 @@
 
 // Иконка в состоянии расхождения с основанием (оранжевая).
 .WarnIcon {
-	color: #d97706;
+	color: $warnAccent;
 }
 
 // Точка-маркер расхождения в правом верхнем углу кнопки.
@@ -18,7 +18,7 @@
 	width: 8px;
 	height: 8px;
 	border-radius: 50%;
-	background: #d97706;
+	background: $warnAccent;
 	border: 1.5px solid #fff;
 	pointer-events: none;
 }

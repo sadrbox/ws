@@ -70,6 +70,32 @@ $silverBg: $silverLightest;
 $silverBorder: $silverDark;
 $silverText: $color6;
 
+// ──────────────────────────────────────────────────────────────────────────
+// UI-токены (нейтральная серая шкала + мягкие акценты).
+// Единый источник для форм/плашек/индикаторов — заменяет magic-hex в модулях.
+// ──────────────────────────────────────────────────────────────────────────
+$gray900: #111827;
+$gray700: #374151;
+$gray600: #555555;
+$gray500: #6b7280;
+$gray400: #9ca3af;
+$gray300: #999999;
+$gray200: #e5e7eb;
+$gray100: #f3f3f3;
+$gray50: #f8f9fa;
+
+$accentBlueSoft: #eff6ff; // активная подсветка / чип «вкл»
+$accentBlueHover: #f0f7ff; // hover строки/узла
+$accentBlueBorder: #bfdbfe;
+
+$indicatorPosted: #10b981; // проведён
+$indicatorMuted: #9ca3af; // не проведён / прочерк
+
+$warnAccent: #d97706; // маркер расхождения с основанием
+$warnSoftBg: #fffbeb;
+$warnSoftBorder: #fde68a;
+$warnSoftText: #92400e;
+
 $radius1: 1px;
 $radius2: 2px;
 $radius3: 3px;
