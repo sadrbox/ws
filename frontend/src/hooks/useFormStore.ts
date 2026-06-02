@@ -1860,6 +1860,19 @@ export function useFormStore<F extends object>(
 				void queryClient.invalidateQueries({ queryKey: ["existingDependent", basisUuid, endpoint], refetchType: "active" });
 			}
 
+			// Stage B: если ЭТОТ документ — основание для открытых дочерних форм,
+			// инвалидируем их снимок основания (useBasisMismatch: queryKey
+			// ["basisSnapshot", basisType, basisUuid]), чтобы индикатор расхождения
+			// пересчитался сразу после правки основания (без ожидания staleTime).
+			const savedUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid;
+			if (savedUuid) {
+				void queryClient.invalidateQueries({
+					predicate: (q) =>
+						q.queryKey?.[0] === "basisSnapshot" && q.queryKey?.[2] === savedUuid,
+					refetchType: "active",
+				});
+			}
+
 			void onSaveRef.current?.();
 			store.markClean();
 
