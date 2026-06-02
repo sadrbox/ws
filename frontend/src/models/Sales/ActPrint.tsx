@@ -9,8 +9,9 @@
  * Применяется исключительно для позиций типа «услуга / работа» (product.isService = true).
  * Для товарных позиций используется Накладная З-2 (SaleInvoicePrint).
  */
-import type { CSSProperties, FC } from "react";
+import type { FC } from "react";
 import { A4Page, A4DocTitle, A4Field, A4Row, A4Signature } from "src/components/PrintLayout/A4Page";
+import * as P from "src/components/PrintLayout/printStyles";
 import { getFormatDateOnly } from "src/utils/datetime";
 import type { SaleInvoicePrintData, SaleItemPrintRow } from "./SaleInvoicePrint";
 
@@ -28,20 +29,9 @@ const fmtQty = (v: number): string =>
 const fmtDate = (d?: string): string =>
   d ? (getFormatDateOnly(d) || d) : "";
 
-const cellStyle: CSSProperties = {
-  border: "1px solid #000",
-  padding: "2px 4px",
-  fontSize: "9pt",
-  verticalAlign: "top",
-};
-
-const headCellStyle: CSSProperties = {
-  ...cellStyle,
-  background: "#f3f3f3",
-  fontWeight: 600,
-  textAlign: "center",
-  fontSize: "8pt",
-};
+// Единый источник стилей ячеек печати (плотный вариант) — printStyles.
+const cellStyle = P.cellCompact;
+const headCellStyle = P.headCompact;
 
 const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
   const docNumber = data.documentId ?? "—";

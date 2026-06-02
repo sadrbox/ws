@@ -2,8 +2,9 @@
  * Заявка на закупку — печатная форма для PurchaseRequisition.
  * Зеркало PaymentInvoicePrint, но с заголовком «ЗАЯВКА НА ЗАКУПКУ».
  */
-import type { CSSProperties, FC } from "react";
+import type { FC } from "react";
 import { A4Page, A4DocTitle, A4Field, A4Row, A4Signature } from "src/components/PrintLayout/A4Page";
+import * as P from "src/components/PrintLayout/printStyles";
 import { getFormatDateOnly } from "src/utils/datetime";
 
 export interface PurchaseRequisitionPrintRow {
@@ -42,12 +43,9 @@ const fmtDate = (d?: string): string => {
   return getFormatDateOnly(d) || d;
 };
 
-const cell: CSSProperties = {
-  border: "1px solid #000", padding: "3px 5px", fontSize: "9pt", verticalAlign: "middle",
-};
-const head: CSSProperties = {
-  ...cell, background: "#f3f3f3", fontWeight: 600, textAlign: "center",
-};
+// Единый источник стилей ячеек печати — src/components/PrintLayout/printStyles.
+const cell = P.cell;
+const head = P.head;
 
 const PurchaseRequisitionPrint: FC<{ data: PurchaseRequisitionPrintData }> = ({ data }) => {
   const docNumber = data.documentId ?? "—";

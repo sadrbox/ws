@@ -29,6 +29,23 @@ export const head: CSSProperties = {
 	textAlign: "center",
 };
 
+// Плотный вариант ячейки (счёт-фактуры/акты/возвраты): меньше отступы,
+// выравнивание по верху, мельче шапка. Второй исторический стиль печати.
+export const cellCompact: CSSProperties = {
+	border: "1px solid #000",
+	padding: "2px 4px",
+	fontSize: "9pt",
+	verticalAlign: "top",
+};
+
+export const headCompact: CSSProperties = {
+	...cellCompact,
+	background: "#f3f3f3",
+	fontWeight: 600,
+	textAlign: "center",
+	fontSize: "8pt",
+};
+
 // ── Модификаторы выравнивания/типографики (спред поверх cell/head) ─────────
 export const right: CSSProperties = { textAlign: "right" };
 export const center: CSSProperties = { textAlign: "center" };

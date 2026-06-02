@@ -6,7 +6,8 @@
  * Структура идентична SaleInvoicePrint, но с заголовком «Счёт-фактура»
  * вместо «Накладная З-2».
  */
-import type { CSSProperties, FC } from "react";
+import type { FC } from "react";
+import * as P from "src/components/PrintLayout/printStyles";
 import { A4Page, A4DocTitle, A4Field, A4Row, A4Signature } from "src/components/PrintLayout/A4Page";
 import { getFormatDateOnly } from "src/utils/datetime";
 import type { SaleItemPrintRow, SaleInvoicePrintColumns } from "src/models/Sales/SaleInvoicePrint";
@@ -42,12 +43,9 @@ const fmtDate = (d?: string): string => {
   return getFormatDateOnly(d) || d;
 };
 
-const cell: CSSProperties = {
-  border: "1px solid #000", padding: "2px 4px", fontSize: "9pt", verticalAlign: "top",
-};
-const head: CSSProperties = {
-  ...cell, background: "#f3f3f3", fontWeight: 600, textAlign: "center", fontSize: "8pt",
-};
+// Единый источник стилей ячеек печати (плотный вариант) — printStyles.
+const cell = P.cellCompact;
+const head = P.headCompact;
 
 const OutgoingInvoicePrint: FC<{ data: OutgoingInvoicePrintData }> = ({ data }) => {
   const docNumber = data.documentId ?? "—";
