@@ -147,6 +147,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           warehouseUuid: r.warehouse?.uuid ?? r.warehouseUuid ?? null,
         }),
         updatePayload: (r: any) => ({
+          sourceRowId: r.sourceRowId ?? null,
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,

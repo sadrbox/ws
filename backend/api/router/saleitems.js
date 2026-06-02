@@ -344,6 +344,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				? { connect: { uuid: req.body.unitOfMeasureUuid } }
 				: { disconnect: true };
 		}
+		// Закрепляем sourceRowId на UPDATE (усыновление легаси-строк по основанию).
+		if (req.body.sourceRowId !== undefined) {
+			data.sourceRowId = req.body.sourceRowId ? String(req.body.sourceRowId) : null;
+		}
 
 		// parseFloat("") и parseFloat(null) → NaN. Превращаем NaN в undefined,
 		// чтобы не записывать недопустимое значение в БД (Prisma пропустит).
@@ -557,6 +561,8 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 						updateData.product = data.productUuid ? { connect: { uuid: data.productUuid } } : { disconnect: true };
 					if (data.unitOfMeasureUuid !== undefined)
 						updateData.unitOfMeasure = data.unitOfMeasureUuid ? { connect: { uuid: data.unitOfMeasureUuid } } : { disconnect: true };
+						if (data.sourceRowId !== undefined)
+							updateData.sourceRowId = data.sourceRowId ? String(data.sourceRowId) : null;
 					const qty = parseNum(data.quantity), prc = parseNum(data.price);
 					const discPct = parseNum(data.discountPercent), vRate = parseNum(data.vatRate), exRate = parseNum(data.exciseRate);
 					if (qty !== undefined) updateData.quantity = qty;

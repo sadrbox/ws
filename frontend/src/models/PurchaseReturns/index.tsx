@@ -152,6 +152,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
           discountPercent: r.discountPercent ?? 0,
         }),
         updatePayload: (r: any) => ({
+          sourceRowId: r.sourceRowId ?? null,
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,

@@ -481,6 +481,11 @@ export function createDocumentItemsRouter({
 					? { connect: { uuid: req.body.unitOfMeasureUuid } }
 					: { disconnect: true };
 			}
+			// Закрепляем sourceRowId на UPDATE — чтобы «усыновление» легаси-строк
+			// по основанию (без sourceRowId) сохранялось после первого перезаполнения.
+			if (hasSourceRowId && req.body.sourceRowId !== undefined) {
+				data.sourceRowId = req.body.sourceRowId ? String(req.body.sourceRowId) : null;
+			}
 
 			const parseNum = (v) => {
 				if (v === undefined || v === null || v === "") return undefined;
@@ -696,6 +701,8 @@ export function createDocumentItemsRouter({
 							updateData.product = data.productUuid ? { connect: { uuid: data.productUuid } } : { disconnect: true };
 						if (data.unitOfMeasureUuid !== undefined)
 							updateData.unitOfMeasure = data.unitOfMeasureUuid ? { connect: { uuid: data.unitOfMeasureUuid } } : { disconnect: true };
+						if (hasSourceRowId && data.sourceRowId !== undefined)
+							updateData.sourceRowId = data.sourceRowId ? String(data.sourceRowId) : null;
 						const qty = parseNum(data.quantity);
 						const prc = parseNum(data.price);
 						if (qty !== undefined) updateData.quantity = qty;
