@@ -147,88 +147,99 @@ function basisRowValues(b: any): Record<string, any> {
 }
 
 /**
- * Строит идемпотентный набор pending-маркеров для «Перезаполнить по основанию».
+ * Строит набор pending-маркеров для «Перезаполнить по основанию».
  *
- * Сопоставляет текущие строки документа со строками основания по `sourceRowId`:
- *   • строка-основание ↔ серверная строка, значения совпали → НЕ трогаем
- *     (строка сама подгрузится с сервера при пересборке таблицы);
- *   • строка-основание ↔ серверная строка, значения изменились → update;
- *   • строка-основание ↔ несохранённый черновик → create с тем же uuid
- *     (переинъекция: при remount таблицы черновик иначе пропадёт), без дубля;
- *   • строка-основание новая → create новой tmp-строкой;
- *   • серверная строка БЫЛА из основания, но в основании её больше нет → delete;
- *   • ручные строки (без sourceRowId): серверные сохраняются автоматически,
- *     несохранённые черновики переинъектируются, чтобы пережить remount.
+ * Цель — привести табличную часть документа В ТОЧНОСТИ к строкам основания
+ * (чтобы подсказка о несоответствии после перезаполнения гасла), но при этом:
+ *   • идемпотентно — повторное нажатие не плодит дубли;
+ *   • с переиспользованием существующих строк (по sourceRowId, иначе по товару)
+ *     — сохраняем uuid/id строки, чтобы не плодить движения регистров и проводки.
  *
- * Таблица перемонтируется (key=itemsTableKey) и заново мержит initialPendingRows
- * с серверными данными, поэтому ВСЕ несохранённые черновики обязаны попасть в
- * результат. Если фактических изменений нет — возвращаем [] (без remount/Dirty).
+ * Алгоритм (для каждой строки основания, по порядку):
+ *   1. ищем текущую строку с тем же sourceRowId;
+ *   2. иначе «усыновляем» текущую строку с тем же товаром без sourceRowId
+ *      (легаси-строки, созданные до появления sourceRowId);
+ *   3. иначе — новая строка (create).
+ *   Найденную строку обновляем значениями основания и проставляем sourceRowId
+ *   (серверную — update, черновик — create с тем же uuid, переживёт remount).
+ * Все текущие СЕРВЕРНЫЕ строки, не сопоставленные ни одной строке основания
+ * (лишние/ручные/удалённые из основания), помечаются delete.
+ *
+ * Таблица перемонтируется (key=itemsTableKey) и заново мержит результат с
+ * серверными данными. Если изменений нет — возвращаем [] (без remount/Dirty).
  *
  * @param displayed  текущие отображаемые строки (сервер + pending, без delete)
  * @param basisRows  строки основания после mapItemsForBasis (несут sourceRowId)
  */
 export function buildRefillBasisItems(displayed: any[], basisRows: any[]): any[] {
-	const currentBySource = new Map<string, any>();
+	// Пулы для сопоставления. Усыновление по товару — только строки без sourceRowId.
+	const bySource = new Map<string, any>();
+	const legacyByProduct = new Map<string, any[]>();
 	for (const r of displayed) {
-		if (r?.sourceRowId != null && r.sourceRowId !== "") {
-			currentBySource.set(String(r.sourceRowId), r);
+		const srcId = r?.sourceRowId != null ? String(r.sourceRowId) : "";
+		if (srcId) {
+			if (!bySource.has(srcId)) bySource.set(srcId, r);
+		} else {
+			const pk = String(r?.productUuid ?? "");
+			if (pk) (legacyByProduct.get(pk) ?? legacyByProduct.set(pk, []).get(pk)!).push(r);
 		}
 	}
 
+	const consumed = new Set<any>();
 	const result: any[] = [];
-	const basisSourceIds = new Set<string>();
 	let changed = false;
 
 	for (const b of basisRows) {
 		const srcId = b.sourceRowId != null ? String(b.sourceRowId) : "";
-		if (srcId) basisSourceIds.add(srcId);
-		const existing = srcId ? currentBySource.get(srcId) : undefined;
 		const newValues = basisRowValues(b);
 
+		// 1) по sourceRowId, 2) усыновление легаси-строки по товару, 3) новая.
+		let existing = srcId ? bySource.get(srcId) : undefined;
+		if (existing && consumed.has(existing)) existing = undefined;
 		if (!existing) {
-			// Новая строка основания — добавляем как есть (create с tmp uuid).
-			result.push(b);
+			const pool = legacyByProduct.get(String(b.productUuid ?? ""));
+			while (pool && pool.length) {
+				const cand = pool.shift();
+				if (!consumed.has(cand)) { existing = cand; break; }
+			}
+		}
+
+		if (!existing) {
+			result.push(b); // новая строка основания
 			changed = true;
 			continue;
 		}
 
-		const rowChanged = REFILL_COMPARE_KEYS.some(
-			(k) => String(existing[k] ?? "") !== String((newValues as any)[k] ?? ""),
-		);
+		consumed.add(existing);
+		const rowChanged =
+			REFILL_COMPARE_KEYS.some(
+				(k) => String(existing[k] ?? "") !== String((newValues as any)[k] ?? ""),
+			) || String(existing.sourceRowId ?? "") !== srcId;
 
 		if (isServerRow(existing)) {
-			// Серверная строка: меняем только при расхождении (иначе подгрузится сама).
+			// Серверная строка: при расхождении — update; без расхождения не трогаем
+			// (подгрузится с сервера при remount, остаётся как есть).
 			if (rowChanged) {
-				result.push({ ...existing, ...newValues, sourceRowId: srcId, _pendingAction: "update" });
+				result.push({ ...existing, ...newValues, sourceRowId: srcId || null, _pendingAction: "update" });
 				changed = true;
 			}
 		} else {
-			// Несохранённый черновик: переинъектируем всегда (переживёт remount),
-			// но «изменением» считаем только реальное расхождение значений.
-			result.push({ ...existing, ...newValues, sourceRowId: srcId, _pendingAction: "create" });
+			// Черновик: переинъектируем (create с тем же uuid) — переживёт remount.
+			result.push({ ...existing, ...newValues, sourceRowId: srcId || null, _pendingAction: "create" });
 			if (rowChanged) changed = true;
 		}
 	}
 
-	// Серверные строки, ранее пришедшие из основания, но исчезнувшие из него → delete.
+	// Несопоставленные СЕРВЕРНЫЕ строки (лишние/ручные/убранные из основания) → delete.
 	for (const r of displayed) {
-		const srcId = r?.sourceRowId != null ? String(r.sourceRowId) : "";
-		if (srcId && !basisSourceIds.has(srcId) && isServerRow(r)) {
+		if (consumed.has(r)) continue;
+		if (isServerRow(r) && r?._pendingAction !== "delete") {
 			result.push({ ...r, _pendingAction: "delete" });
 			changed = true;
 		}
 	}
 
-	// Ручные несохранённые черновики (без sourceRowId) — переинъектируем, чтобы
-	// они не потерялись при remount таблицы (серверные ручные строки — сами).
-	for (const r of displayed) {
-		const srcId = r?.sourceRowId != null ? String(r.sourceRowId) : "";
-		if (!srcId && !isServerRow(r) && r?._pendingAction !== "delete") {
-			result.push({ ...r, _pendingAction: "create" });
-		}
-	}
-
-	// Фактических изменений нет — не трогаем таблицу (без лишнего remount/Dirty).
+	// Изменений нет — не трогаем таблицу (без лишнего remount/Dirty).
 	if (!changed) return [];
 	return result;
 }

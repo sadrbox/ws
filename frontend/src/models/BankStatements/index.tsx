@@ -193,6 +193,13 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
                 }} />
             </Group>
             <Group>
+              <LookupField label={translate("BankAccountsList")} name={`${form.formUid}_bankAccountUuid`} value={form.fields.bankAccountUuid} displayValue={form.fields.bankAccountName} endpoint="bankaccounts" displayField="name"
+                onSelect={(u, d) => form.setFields({ bankAccountUuid: u, bankAccountName: d } as Partial<TFields>)}
+                onClear={() => form.setFields({ bankAccountUuid: "", bankAccountName: "" } as Partial<TFields>)}
+                disabled={form.isLoading}
+                extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+            </Group>
+            <Group>
               <FieldSelect
                 label={translate("bankStatementDirection")}
                 name={`${form.formUid}_direction`}
@@ -203,14 +210,10 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
                 ]}
                 onChange={e => form.setField("direction", e.target.value)}
                 disabled={form.isLoading || !canWrite}
-                style={{ width: "200px" }}
+              // style={{ width: "200px" }}
               />
               <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
-              <LookupField label={translate("BankAccountsList")} name={`${form.formUid}_bankAccountUuid`} value={form.fields.bankAccountUuid} displayValue={form.fields.bankAccountName} endpoint="bankaccounts" displayField="name"
-                onSelect={(u, d) => form.setFields({ bankAccountUuid: u, bankAccountName: d } as Partial<TFields>)}
-                onClear={() => form.setFields({ bankAccountUuid: "", bankAccountName: "" } as Partial<TFields>)}
-                disabled={form.isLoading}
-                extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+
             </Group>
             <BasisDocumentField
               allowedTypes={[

@@ -67,17 +67,37 @@ describe("buildRefillBasisItems — идемпотентный refill по sourc
 		expect(merged[0]).toMatchObject({ uuid: "srv-b", _pendingAction: "delete" });
 	});
 
-	it("ручная серверная строка (без sourceRowId) сохраняется при refill", () => {
-		const manual = serverRow("srv-manual", "", { sourceRowId: null });
-		const displayed = [serverRow("srv-a", "a"), manual];
+	it("лишняя серверная строка (нет в основании) → delete (приводим к основанию)", () => {
+		// Ручная/лишняя строка с товаром, которого нет в основании.
+		const extra = serverRow("srv-extra", "", { sourceRowId: null, productUuid: "prod-extra" });
+		const displayed = [serverRow("srv-a", "a"), extra];
 		const basisRows = mapItemsForBasis([basisSrc("a", { quantity: 99 })]);
 		const merged = buildRefillBasisItems(displayed, basisRows);
-		// Только update строки-основания; ручная строка не помечена delete.
-		expect(merged.some((r) => r.uuid === "srv-manual")).toBe(false);
-		expect(merged.some((r) => r._pendingAction === "delete")).toBe(false);
-		expect(merged).toEqual([
+		expect(merged).toContainEqual(
 			expect.objectContaining({ uuid: "srv-a", _pendingAction: "update", quantity: 99 }),
-		]);
+		);
+		expect(merged).toContainEqual(
+			expect.objectContaining({ uuid: "srv-extra", _pendingAction: "delete" }),
+		);
+	});
+
+	it("легаси-строки без sourceRowId усыновляются по товару (без дублей)", () => {
+		// Документ создан до Этапа A: строки без sourceRowId, но соответствуют основанию.
+		const displayed = [
+			serverRow("srv-a", "", { sourceRowId: null, productUuid: "prod-a" }),
+			serverRow("srv-b", "", { sourceRowId: null, productUuid: "prod-b" }),
+		];
+		const basisRows = mapItemsForBasis([basisSrc("a", { quantity: 7 }), basisSrc("b")]);
+		const merged = buildRefillBasisItems(displayed, basisRows);
+		// Обе строки усыновлены по товару → update с проставлением sourceRowId, без create-дублей.
+		expect(merged.every((r) => r._pendingAction === "update")).toBe(true);
+		expect(merged.some((r) => r._pendingAction === "create")).toBe(false);
+		expect(merged).toContainEqual(
+			expect.objectContaining({ uuid: "srv-a", sourceRowId: "a", quantity: 7 }),
+		);
+		expect(merged).toContainEqual(
+			expect.objectContaining({ uuid: "srv-b", sourceRowId: "b" }),
+		);
 	});
 
 	it("новая строка добавлена в основание → create, существующие не дублируются", () => {

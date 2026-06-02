@@ -89,17 +89,30 @@ export function useBasisMismatch({
 			}
 		}
 
-		// ── Строки: число и совпадение по ключевым полям.
+		// ── Строки: число и совпадение по ключевым полям, БЕЗ учёта порядка.
+		// Сравнение мультимножеств: сериализуем каждую строку по itemKeys и
+		// сверяем отсортированные наборы. Порядок строк в таблице (id БД) может
+		// не совпадать с порядком основания — это не считается расхождением.
 		const basisItems = data.items ?? [];
 		const cur = (currentItems ?? []).filter(
 			(r: any) => r._pendingAction !== "delete",
 		);
+		const serializeRow = (r: any) =>
+			itemKeys
+				.map((k) => {
+					const v = r?.[k];
+					// Нормализуем "30" vs 30 vs null → единая строка (как isEquivalent).
+					if (v === null || v === undefined || v === "") return "";
+					const n = Number(v);
+					return Number.isFinite(n) && String(v).trim() !== "" ? String(n) : String(v);
+				})
+				.join("|");
+		const sortedSig = (rows: any[]) => rows.map(serializeRow).sort();
+		const curSig = sortedSig(cur);
+		const basisSig = sortedSig(basisItems);
 		const itemsSame =
-			cur.length === basisItems.length &&
-			cur.every((ci: any, idx: number) => {
-				const bi = basisItems[idx];
-				return itemKeys.every((k) => isEquivalent(ci?.[k], bi?.[k]));
-			});
+			curSig.length === basisSig.length &&
+			curSig.every((s, i) => s === basisSig[i]);
 		if (!itemsSame) {
 			differences.push(
 				translate("basisMismatchItems") || "строки отличаются от основания",
