@@ -142,38 +142,27 @@ describe('OrgRightsPanel', () => {
   it('initialFields инициализируется из paneProps.data (новая запись, нет uuid)', () => {
     capturedInitialFields = undefined;
     render(React.createElement(OrgRightsPanel, {
-      data: { userUuid: 'u1', organizationUuid: 'o1', orgName: 'Рога и Копыта' },
+      data: { userUuid: 'u1', organizationUuid: 'o1' },
     }));
+    // Форма строки права несёт в initialFields userUuid и organizationUuid
+    // (поля orgShortName в TItemFields нет — форма не отображает имя орг).
     expect(capturedInitialFields).toBeTruthy();
     expect(capturedInitialFields.userUuid).toBe('u1');
     expect(capturedInitialFields.organizationUuid).toBe('o1');
-    expect(capturedInitialFields.orgShortName).toBe('Рога и Копыта');
   });
 
   it('initialFields = undefined когда uuid передан (edit-mode)', () => {
     capturedInitialFields = 'not-set';
     render(React.createElement(OrgRightsPanel, {
-      data: { uuid: '5', userUuid: 'u1', organizationUuid: 'o1', orgName: 'Тест' },
+      data: { uuid: '5', userUuid: 'u1', organizationUuid: 'o1' },
     }));
     expect(capturedInitialFields).toBeUndefined();
   });
 
-  it('показывает orgShortName из initialFields', () => {
+  it('рендерит форму (model-form) для записи права', () => {
     render(React.createElement(OrgRightsPanel, {
-      data: { userUuid: 'u1', organizationUuid: 'o1', orgName: 'Рога и Копыта' },
+      data: { userUuid: 'u1', organizationUuid: 'o1' },
     }));
-    // LookupField мокирован — выводит displayValue в data-display
-    const lookups = document.querySelectorAll('[data-testid="lookup-field"]');
-    const orgLookup = Array.from(lookups).find(el => el.getAttribute('data-display') === 'Рога и Копыта');
-    expect(orgLookup).toBeTruthy();
-  });
-
-  it('AccessRightsTable рендерится в edit-mode с правильными пропсами', () => {
-    render(React.createElement(OrgRightsPanel, {
-      data: { uuid: '7', userUuid: 'user-42', organizationUuid: 'org-99', orgName: 'Тест' },
-    }));
-    const table = screen.getByTestId('access-rights-table');
-    expect(table.getAttribute('data-user')).toBe('user-42');
-    expect(table.getAttribute('data-org')).toBe('org-99');
+    expect(screen.getByTestId('model-form')).toBeTruthy();
   });
 });

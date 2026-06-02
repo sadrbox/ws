@@ -32,28 +32,28 @@ describe("makePaneLabel", () => {
 				{ id: 7 },
 				"Товар A · 1 × 100",
 			),
-		).toBe("Товары реализации: №7 · Товар A · 1 × 100");
+		).toBe("Товары реализации: ID 7 · Товар A · 1 × 100");
 	});
 
 	it("если displayValue не задан — берёт saved.name", () => {
 		expect(
 			makePaneLabel("SaleItemsList", "fallback", { id: 5, name: "X" }),
-		).toBe("Товары реализации: №5 · X");
+		).toBe("Товары реализации: ID 5 · X");
 	});
 
-	it("без detail — только №id", () => {
+	it("без detail — только ID id", () => {
 		expect(makePaneLabel("SaleItemsList", "fallback", { id: 3 })).toBe(
-			"Товары реализации: №3",
+			"Товары реализации: ID 3",
 		);
 	});
 
 	it("если ключ перевода неизвестен — fallback", () => {
-		expect(makePaneLabel("UnknownKey", "Резерв", { id: 1 })).toBe("Резерв: №1");
+		expect(makePaneLabel("UnknownKey", "Резерв", { id: 1 })).toBe("Резерв: ID 1");
 	});
 
-	it("без id — №?", () => {
+	it("без id — Новый", () => {
 		expect(makePaneLabel("SaleItemsList", "fallback", {})).toBe(
-			"Товары реализации: №?",
+			"Товары реализации: Новый",
 		);
 	});
 });
@@ -62,12 +62,12 @@ describe("makeDocLabel", () => {
 	it("формирует метку документа с датой", () => {
 		expect(
 			makeDocLabel("SalesList", "fallback", { id: 42, date: "2026-04-21" }),
-		).toBe("Реализация товара и услуг: №42 · 21.04.2026");
+		).toBe("Реализация товара и услуг: ID 42 · 21.04.2026");
 	});
 
-	it("если даты нет — только №id", () => {
+	it("если даты нет — только ID id", () => {
 		expect(makeDocLabel("SalesList", "fallback", { id: 12 })).toBe(
-			"Реализация товара и услуг: №12",
+			"Реализация товара и услуг: ID 12",
 		);
 	});
 
@@ -79,7 +79,7 @@ describe("makeDocLabel", () => {
 				{ id: 8, postedAt: "2026-01-10" },
 				"postedAt",
 			),
-		).toBe("Реализация товара и услуг: №8 · 10.01.2026");
+		).toBe("Реализация товара и услуг: ID 8 · 10.01.2026");
 	});
 });
 
@@ -96,15 +96,17 @@ describe("makePaneLabelFromData", () => {
 		);
 	});
 
-	it("с данными и displayValue", () => {
+	it("с данными и displayValue (displayValue добавляется как есть)", () => {
 		expect(
 			makePaneLabelFromData(
 				"SaleItemsList",
 				"fallback",
 				{ id: 9, uuid: "u" },
-				"Реализация товара и услуг: №7 · 21.04.2026 · Товар",
+				"Реализация товара и услуг: ID 7 · 21.04.2026 · Товар",
 			),
-		).toBe("Товары реализации: №9 · Реализация: №7 · 21.04.2026 · Товар");
+		).toBe(
+			"Товары реализации: ID 9 · Реализация товара и услуг: ID 7 · 21.04.2026 · Товар",
+		);
 	});
 
 	it("без displayValue — берёт name", () => {
@@ -114,6 +116,6 @@ describe("makePaneLabelFromData", () => {
 				uuid: "u",
 				name: "Альфа",
 			}),
-		).toBe("Товары реализации: №1 · Альфа");
+		).toBe("Товары реализации: ID 1 · Альфа");
 	});
 });

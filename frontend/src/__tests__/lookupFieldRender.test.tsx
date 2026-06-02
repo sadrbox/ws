@@ -15,6 +15,9 @@ vi.mock("src/app", () => ({
 }));
 vi.mock("src/hooks/useDirtyHighlight", () => ({
 	useFieldDirty: () => ({}),
+	// LookupField читает контекст состояния ячейки (required/error) —
+	// в тесте отдаём пустое состояние.
+	useCellFieldState: () => ({}),
 }));
 vi.mock("src/registry/modelRegistry", () => ({
 	getByEndpoint: () => null,

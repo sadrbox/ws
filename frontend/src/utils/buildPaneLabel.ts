@@ -25,7 +25,7 @@ function resolveFormName(listOrFormName: string, fallback: string): string {
 }
 
 /**
- * Метка для СПРАВОЧНИКОВ: "Организация: №5" или "Организация: №5 · Рога и Копыта"
+ * Метка для СПРАВОЧНИКОВ: "Организация: ID 5" или "Организация: ID 5 · Рога и Копыта"
  */
 export function makePaneLabel(
 	listName: string,
@@ -41,7 +41,7 @@ export function makePaneLabel(
 }
 
 /**
- * Метка для ДОКУМЕНТОВ: "Реализация товара и услуг: №4 · 21.04.2026"
+ * Метка для ДОКУМЕНТОВ: "Реализация товара и услуг: ID 4 · 21.04.2026"
  * dateField — имя поля даты в saved (по умолчанию "date")
  */
 export function makeDocLabel(
@@ -61,7 +61,7 @@ export function makeDocLabel(
 
 /**
  * Метка при открытии панели из списка/таблицы (до загрузки данных).
- * Единый паттерн: "Label: №id · detail" / "Label: №id" / "Label: Новый"
+ * Единый паттерн: "Label: ID id · detail" / "Label: ID id" / "Label: Новый"
  */
 export function makePaneLabelFromData(
 	listName: string,

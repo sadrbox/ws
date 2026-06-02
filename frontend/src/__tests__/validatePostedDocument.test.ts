@@ -41,7 +41,9 @@ describe("validatePostedDocument", () => {
 		]);
 	});
 
-	it("does not validate when posted is false", () => {
+	it("validates required fields regardless of posted (политика: проверяем всегда)", () => {
+		// Новая политика: обязательные поля проверяются ВСЕГДА при сохранении,
+		// независимо от posted (validatePostedDocument → validateDocumentFields).
 		const result = validatePostedDocument(
 			"purchase",
 			{
@@ -54,8 +56,8 @@ describe("validatePostedDocument", () => {
 			false,
 		);
 
-		expect(result.isValid).toBe(true);
-		expect(result.errors).toHaveLength(0);
+		expect(result.isValid).toBe(false);
+		expect(result.errors.length).toBeGreaterThan(0);
 	});
 
 	it("returns required fields list for sale document type", () => {
