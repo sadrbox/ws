@@ -1,4 +1,4 @@
-import React, { CSSProperties, FC, PropsWithChildren, useEffect, useState, useCallback, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo } from 'react';
+import React, { CSSProperties, FC, PropsWithChildren, useEffect, useLayoutEffect, useState, useCallback, useMemo, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo } from 'react';
 import styles from "../../styles/main.module.scss"
 import modalManager from 'src/components/Modal/modalManager';
 import { createPortal } from 'react-dom';
@@ -153,6 +153,85 @@ const PaneTabItem: FC<{
   );
 };
 
+const NOOP = () => { /* no-op (для скрытого зеркала замера) */ };
+
+/** Выпадающее меню «ещё» для не вмещающихся вкладок. */
+const PaneTabsMore: FC<{
+  panes: TPane[];
+  activePane?: string | null;
+  active: boolean;
+  selectorPane?: TPane;
+  onActivate: (id: string) => void;
+  onClose: (id: string) => void;
+}> = ({ panes, activePane, active, selectorPane, onActivate, onClose }) => {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        btnRef.current && !btnRef.current.contains(e.target as Node) &&
+        popRef.current && !popRef.current.contains(e.target as Node)
+      ) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className={styles.PaneTabsMoreWrap}>
+      <button
+        ref={btnRef}
+        type="button"
+        className={[styles.PaneTabsMoreBtn, active && styles.PaneTabsMoreActive].filter(Boolean).join(" ")}
+        onClick={() => setOpen(v => !v)}
+        title={translate("morePanes")}
+        aria-label={translate("morePanes")}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <span>⋯</span>
+        <span className={styles.PaneTabsMoreCount}>{panes.length}</span>
+      </button>
+      {open && (
+        <div ref={popRef} className={styles.PaneTabsMoreMenu} role="menu">
+          {panes.map(p => {
+            const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
+            return (
+              <div
+                key={`more-${p.uniqId}`}
+                className={[
+                  styles.PaneTabsMoreItem,
+                  p.uniqId === activePane && styles.PaneTabsMoreItemActive,
+                  isLocked && styles.PaneTabItemDisabled,
+                ].filter(Boolean).join(" ")}
+                onClick={isLocked ? undefined : () => { onActivate(p.uniqId); setOpen(false); }}
+                title={p.label}
+                role="menuitem"
+                tabIndex={isLocked ? -1 : 0}
+              >
+                <span className={styles.PaneTabsMoreItemLabel}>{p.isSelector && "🔍 "}{p.label}</span>
+                {!isLocked && (
+                  <IconButton
+                    icon="close"
+                    size="sm"
+                    className={styles.PaneTabsMoreItemClose}
+                    aria-label={translate("close")}
+                    title={translate("close")}
+                    onClick={(e) => { e.stopPropagation(); onClose(p.uniqId); }}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const PanesTabs: FC = () => {
 
   const context = useAppContext();
@@ -162,9 +241,56 @@ export const PanesTabs: FC = () => {
   // Определяем, есть ли активная selector-панель → блокировка остальных вкладок
   const selectorPane = panes.find((p) => p.isSelector);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mirrorRef = useRef<HTMLDivElement>(null);
+  const [visibleCount, setVisibleCount] = useState(panes.length);
+
+  // Ключ для пересчёта при изменении состава/подписей вкладок.
+  const panesKey = useMemo(
+    () => panes.map(p => `${p.uniqId}:${p.label}:${p.isSelector ? 1 : 0}`).join("|"),
+    [panes],
+  );
+
+  // Сколько вкладок влезает: меряем по скрытому зеркалу (все вкладки в натуральную
+  // ширину), отнимая место под кнопку «ещё».
+  const recompute = useCallback(() => {
+    const c = containerRef.current;
+    const m = mirrorRef.current;
+    if (!c || !m) return;
+    const tabEls = Array.from(m.children) as HTMLElement[];
+    const cs = getComputedStyle(c);
+    const padX = parseFloat(cs.paddingLeft || "0") + parseFloat(cs.paddingRight || "0");
+    const avail = c.clientWidth - padX;
+    // -1px на отрицательный margin (наложение вкладок).
+    const widths = tabEls.map(el => el.offsetWidth - 1);
+    const total = widths.reduce((s, w) => s + w, 0);
+    if (total <= avail) { setVisibleCount(tabEls.length); return; }
+    const RESERVE = 52; // место под кнопку «⋯ N»
+    let used = 0, count = 0;
+    for (const w of widths) {
+      if (used + w <= avail - RESERVE) { used += w; count++; } else break;
+    }
+    setVisibleCount(Math.max(count, 1)); // хотя бы одна вкладка видима
+  }, []);
+
+  useLayoutEffect(() => { recompute(); }, [recompute, panesKey]);
+
+  useEffect(() => {
+    const c = containerRef.current;
+    if (!c) return;
+    const ro = new ResizeObserver(() => recompute());
+    ro.observe(c);
+    return () => ro.disconnect();
+  }, [recompute]);
+
+  const vis = Math.min(visibleCount, panes.length);
+  const visiblePanes = panes.slice(0, vis);
+  const overflowPanes = panes.slice(vis);
+  const activeInOverflow = overflowPanes.some(p => p.uniqId === activePane);
+
   return (
-    <div className={styles.PanesTabs}>
-      {panes.map(p => {
+    <div className={styles.PanesTabs} ref={containerRef}>
+      {visiblePanes.map(p => {
         const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
         return (
           <PaneTabItem
@@ -177,6 +303,34 @@ export const PanesTabs: FC = () => {
           />
         );
       })}
+
+      {overflowPanes.length > 0 && (
+        <PaneTabsMore
+          panes={overflowPanes}
+          activePane={activePane}
+          active={activeInOverflow}
+          selectorPane={selectorPane}
+          onActivate={setActivePane}
+          onClose={requestClose}
+        />
+      )}
+
+      {/* Скрытое зеркало: все вкладки в натуральную ширину — только для замера. */}
+      <div ref={mirrorRef} className={styles.PaneTabsMeasure} aria-hidden>
+        {panes.map(p => {
+          const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
+          return (
+            <PaneTabItem
+              key={`measure-${p.uniqId}`}
+              pane={p}
+              isActive={false}
+              isLocked={isLocked}
+              onActivate={NOOP}
+              onClose={NOOP}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 };
