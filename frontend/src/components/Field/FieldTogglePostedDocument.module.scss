@@ -1,0 +1,96 @@
+@import "src/styles/variables.scss";
+
+// Статус «Проведён» — пилюля с круглым бейджем и галочкой.
+// Кликабельна целиком; используется только для флага проведения документа.
+.Toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  background: $color60;
+  border: 1px solid $gray200;
+  font-size: $fontsize;
+  color: $gray900;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1;
+  transition: background-color 0.18s ease, border-color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  .label {
+    font-weight: 600;
+    color: $gray900;
+    white-space: nowrap;
+  }
+
+  // Скрытый нативный input (доступен с клавиатуры).
+  .input {
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+
+  // Круглый бейдж статуса.
+  .badge {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: $color60;
+    border: 2px solid $gray300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    transition: background 0.18s ease, border-color 0.18s ease,
+      box-shadow 0.2s ease;
+  }
+
+  // Галочка — появляется в состоянии «проведён» с pop-анимацией.
+  .checkIcon {
+    color: $color60;
+    opacity: 0;
+    transform: scale(0.4);
+    transition: opacity 0.18s ease,
+      transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  &:hover:not(.disabled) {
+    border-color: $gray300;
+
+    .badge {
+      border-color: $gray400;
+    }
+  }
+
+  .input:focus-visible + .badge {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba($color3, 0.25);
+  }
+
+  // ── Проведён ───────────────────────────────────────────────────────────────
+  &.checked {
+    background: $successSoftBg;
+    border-color: $successSoftBorder;
+
+    .badge {
+      border-color: transparent;
+      background: linear-gradient(135deg, $successGradFrom, $successGradTo);
+      box-shadow: 0 0 0 3px rgba($indicatorPosted, 0.18),
+        0 2px 6px rgba($indicatorPosted, 0.4);
+    }
+
+    .checkIcon {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  &.disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+}

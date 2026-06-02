@@ -7,7 +7,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDateTime, Divider } from "src/components/Field";
-import FieldToggle from "src/components/Field/FieldToggle";
+import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
 import LookupField from "src/components/Field/LookupField";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { Group, GroupRow, GroupCol } from "src/components/UI";
@@ -581,13 +581,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               {/* Строка 1: Дата · Проведён · Статус */}
               <GroupRow className={styles.FormHeaderRow}>
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
-                <FieldToggle
+                <FieldTogglePostedDocument
                   name={`${form.formUid}_posted`}
-                  label={translate("posted")}
                   value={form.fields.posted === true}
                   onChange={(v) => form.setField("posted", v)}
                   disabled={form.isLoading || !canWrite}
-                  variant="success"
                 />
               </GroupRow>
 

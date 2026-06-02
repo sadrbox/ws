@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import type { TPane } from "src/app/types";
 import { Field, FieldDateTime } from "src/components/Field";
-import FieldToggle from "src/components/Field/FieldToggle";
+import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -440,7 +440,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
               <GroupCol>
                 <GroupRow className={styles.FormHeaderRow}>
                   <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
-                  {!cfg.hidePosted && <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />}
+                  {!cfg.hidePosted && <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />}
                 </GroupRow>
                 <Group>
                   <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
