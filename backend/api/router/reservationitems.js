@@ -6,4 +6,5 @@ export default createDocumentItemsRouter({
 	PARENT_MODEL: "reservation",
 	PARENT_FIELD: "reservationUuid",
 	hasTaxes: true,
+	hasSourceRowId: true,
 });

@@ -168,70 +168,66 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
       component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            <GroupCol>
-              <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
-                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
-                <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
-              </GroupRow>
-              <Group>
-                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
-                  onSelect={handleOrganizationSelect}
-                  onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading} />
-              </Group>
-              <Group>
-                <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name"
-                  onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
-                  onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading} />
-                <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name"
-                  onSelect={handleContractSelect}
-                  onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading}
-                  extraParams={{
-                    ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
-                    ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
-                  }} />
-              </Group>
-              <GroupRow>
-                <FieldSelect
-                  label={translate("bankStatementDirection")}
-                  name={`${form.formUid}_direction`}
-                  value={form.fields.direction}
-                  options={[
-                    { value: "bankStatementIn", label: translate("bankStatementIn") },
-                    { value: "bankStatementOut", label: translate("bankStatementOut") },
-                  ]}
-                  onChange={e => form.setField("direction", e.target.value)}
-                  disabled={form.isLoading || !canWrite}
-                  style={{ width: "200px" }}
-                />
-                <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
-                <LookupField label={translate("BankAccountsList")} name={`${form.formUid}_bankAccountUuid`} value={form.fields.bankAccountUuid} displayValue={form.fields.bankAccountName} endpoint="bankaccounts" displayField="name"
-                  onSelect={(u, d) => form.setFields({ bankAccountUuid: u, bankAccountName: d } as Partial<TFields>)}
-                  onClear={() => form.setFields({ bankAccountUuid: "", bankAccountName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading}
-                  extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-              </GroupRow>
-              <GroupCol>
-                <BasisDocumentField
-                  allowedTypes={[
-                    { type: "payment_invoice", endpoint: "payment-invoices" },
-                    { type: "incoming_invoice", endpoint: "incoming-invoices" },
-                    { type: "outgoing_invoice", endpoint: "outgoing-invoices" },
-                  ]}
-                  basisDocumentType={form.fields.basisDocumentType}
-                  basisDocumentUuid={form.fields.basisDocumentUuid}
-                  basisDocumentLabel={form.fields.basisDocumentLabel}
-                  formUid={form.formUid}
-                  disabled={form.isLoading}
-                  onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
-                  onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
-                  mismatch={basisMismatch.mismatch}
-                  mismatchDetails={basisMismatch.differences}
-                />
-              </GroupCol>
-            </GroupCol>
+            <GroupRow style={{ width: "100%", justifyContent: "space-between" }}>
+              <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
+              <FieldToggle name={`${form.formUid}_posted`} label={translate("posted")} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} variant="success" />
+            </GroupRow>
+            <Group>
+              <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
+                onSelect={handleOrganizationSelect}
+                onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
+                disabled={form.isLoading} />
+            </Group>
+            <Group>
+              <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name"
+                onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
+                onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
+                disabled={form.isLoading} />
+              <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name"
+                onSelect={handleContractSelect}
+                onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
+                disabled={form.isLoading}
+                extraParams={{
+                  ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
+                  ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
+                }} />
+            </Group>
+            <Group>
+              <FieldSelect
+                label={translate("bankStatementDirection")}
+                name={`${form.formUid}_direction`}
+                value={form.fields.direction}
+                options={[
+                  { value: "bankStatementIn", label: translate("bankStatementIn") },
+                  { value: "bankStatementOut", label: translate("bankStatementOut") },
+                ]}
+                onChange={e => form.setField("direction", e.target.value)}
+                disabled={form.isLoading || !canWrite}
+                style={{ width: "200px" }}
+              />
+              <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
+              <LookupField label={translate("BankAccountsList")} name={`${form.formUid}_bankAccountUuid`} value={form.fields.bankAccountUuid} displayValue={form.fields.bankAccountName} endpoint="bankaccounts" displayField="name"
+                onSelect={(u, d) => form.setFields({ bankAccountUuid: u, bankAccountName: d } as Partial<TFields>)}
+                onClear={() => form.setFields({ bankAccountUuid: "", bankAccountName: "" } as Partial<TFields>)}
+                disabled={form.isLoading}
+                extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+            </Group>
+            <BasisDocumentField
+              allowedTypes={[
+                { type: "payment_invoice", endpoint: "payment-invoices" },
+                { type: "incoming_invoice", endpoint: "incoming-invoices" },
+                { type: "outgoing_invoice", endpoint: "outgoing-invoices" },
+              ]}
+              basisDocumentType={form.fields.basisDocumentType}
+              basisDocumentUuid={form.fields.basisDocumentUuid}
+              basisDocumentLabel={form.fields.basisDocumentLabel}
+              formUid={form.formUid}
+              disabled={form.isLoading}
+              onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
+              onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+              mismatch={basisMismatch.mismatch}
+              mismatchDetails={basisMismatch.differences}
+            />
           </div>
           {form.isEditMode && <Group align="row" style={{ flex: 1, alignItems: "end", justifyContent: "end", gap: 6 }}>
             <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />

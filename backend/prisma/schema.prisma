@@ -807,7 +807,10 @@ model SaleItem {
   sale              Sale           @relation(fields: [saleUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
+  sourceRowId       String?
+
   @@index([saleUuid])
+  @@index([sourceRowId])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([date])
@@ -850,7 +853,10 @@ model PurchaseItem {
   purchase          Purchase       @relation(fields: [purchaseUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
+  sourceRowId       String?
+
   @@index([purchaseUuid])
+  @@index([sourceRowId])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([date])
@@ -888,7 +894,10 @@ model OutgoingInvoiceItem {
   outgoingInvoice     OutgoingInvoice @relation(fields: [outgoingInvoiceUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure       UnitOfMeasure?  @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
+  sourceRowId       String?
+
   @@index([outgoingInvoiceUuid])
+  @@index([sourceRowId])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([date])
@@ -1307,7 +1316,10 @@ model SaleReturnItem {
   saleReturn        SaleReturn     @relation(fields: [saleReturnUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
+  sourceRowId       String?
+
   @@index([saleReturnUuid])
+  @@index([sourceRowId])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([date])
@@ -1384,7 +1396,10 @@ model PurchaseReturnItem {
   purchaseReturn     PurchaseReturn @relation(fields: [purchaseReturnUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure      UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
+  sourceRowId       String?
+
   @@index([purchaseReturnUuid])
+  @@index([sourceRowId])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([date])
@@ -1457,7 +1472,10 @@ model PurchaseRequisitionItem {
   purchaseRequisition     PurchaseRequisition @relation(fields: [purchaseRequisitionUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure           UnitOfMeasure?      @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
+  sourceRowId       String?
+
   @@index([purchaseRequisitionUuid])
+  @@index([sourceRowId])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([date])
@@ -1728,7 +1746,10 @@ model CommercialOfferItem {
   commercialOffer   CommercialOffer @relation(fields: [commercialOfferUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure?  @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
+  sourceRowId       String?
+
   @@index([commercialOfferUuid])
+  @@index([sourceRowId])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([updatedAt])
@@ -1801,7 +1822,10 @@ model SalesOrderItem {
   salesOrder        SalesOrder     @relation(fields: [salesOrderUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
+  sourceRowId       String?
+
   @@index([salesOrderUuid])
+  @@index([sourceRowId])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([updatedAt])
@@ -1875,7 +1899,10 @@ model ReservationItem {
   reservation       Reservation    @relation(fields: [reservationUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
+  sourceRowId       String?
+
   @@index([reservationUuid])
+  @@index([sourceRowId])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([updatedAt])
@@ -1948,7 +1975,10 @@ model PurchaseOrderItem {
   purchaseOrder     PurchaseOrder  @relation(fields: [purchaseOrderUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
+  sourceRowId       String?
+
   @@index([purchaseOrderUuid])
+  @@index([sourceRowId])
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([updatedAt])

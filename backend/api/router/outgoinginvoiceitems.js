@@ -6,4 +6,5 @@ export default createDocumentItemsRouter({
 	PARENT_MODEL: "outgoingInvoice",
 	PARENT_FIELD: "outgoingInvoiceUuid",
 	hasTaxes: true,
+	hasSourceRowId: true,
 });

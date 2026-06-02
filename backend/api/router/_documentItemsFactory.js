@@ -201,6 +201,10 @@ export function createDocumentItemsRouter({
 	PARENT_MODEL,
 	PARENT_FIELD,
 	hasTaxes = true,
+	// Модель строки имеет колонку sourceRowId (uuid строки документа-основания)
+	// — включается для документов-приёмников «Перезаполнить по основанию»,
+	// чтобы refill был идемпотентным (без дублирования строк).
+	hasSourceRowId = false,
 }) {
 	const router = express.Router();
 
@@ -423,6 +427,9 @@ export function createDocumentItemsRouter({
 					discountPercent: discPct,
 					discountAmount: calc.discountAmount,
 					taxes: calc.taxes ?? undefined,
+					...(hasSourceRowId && req.body.sourceRowId
+						? { sourceRowId: String(req.body.sourceRowId) }
+						: {}),
 					...denorm,
 				};
 			} else {
@@ -666,7 +673,11 @@ export function createDocumentItemsRouter({
 								vatRate: vRate, vatAmount: calc.vatAmount,
 								exciseRate: exRate, exciseAmount: calc.exciseAmount,
 								discountPercent: discPct, discountAmount: calc.discountAmount,
-								taxes: calc.taxes ?? undefined, ...denorm,
+								taxes: calc.taxes ?? undefined,
+								...(hasSourceRowId && data.sourceRowId
+									? { sourceRowId: String(data.sourceRowId) }
+									: {}),
+								...denorm,
 							};
 						} else {
 							itemData = {

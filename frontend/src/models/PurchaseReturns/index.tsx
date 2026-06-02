@@ -35,7 +35,7 @@ import { useApplyPermissionDefaults, mergePermissionDefaultsIntoFields } from "s
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import PurchaseReturnPrint from "./PurchaseReturnPrint";
 import DocumentTotals from "src/components/DocumentTotals";
-import { refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { refillFromBasisSource, mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields, buildRefillBasisItems } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
@@ -142,6 +142,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
         createPayload: (r: any) => ({
+          sourceRowId: r.sourceRowId ?? null,
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
@@ -264,22 +265,10 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
       if (displayed.length === 0 && form.fields.uuid) {
         displayed = await fetchDocumentItems("purchase-return-items", "purchaseReturnUuid", form.fields.uuid);
       }
-      const serverItems = displayed.filter((r: any) =>
-        !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")) && !(typeof r.id === "number" && r.id < 0),
-      );
-      const itemsAreSame = displayed.length === result.items.length &&
-        displayed.every((si: any, idx: number) => {
-          const ni = result.items[idx];
-          return si.productUuid === ni.productUuid &&
-            Number(si.quantity) === Number(ni.quantity) &&
-            Number(si.price) === Number(ni.price) &&
-            Number(si.vatRate) === Number(ni.vatRate) &&
-            Number(si.discountPercent) === Number(ni.discountPercent) &&
-            Number(si.exciseRate) === Number(ni.exciseRate);
-        });
-      if (!itemsAreSame) {
-        const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
-        setBasisItems([...deleteMarkers, ...result.items]);
+      // Идемпотентный merge по sourceRowId (см. buildRefillBasisItems).
+      const merged = buildRefillBasisItems(displayed, result.items);
+      if (merged.length) {
+        setBasisItems(merged);
         setItemsTableKey(k => k + 1);
       }
     } catch (e) {

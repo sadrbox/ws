@@ -6,4 +6,5 @@ export default createDocumentItemsRouter({
 	PARENT_MODEL: "purchaseOrder",
 	PARENT_FIELD: "purchaseOrderUuid",
 	hasTaxes: true,
+	hasSourceRowId: true,
 });

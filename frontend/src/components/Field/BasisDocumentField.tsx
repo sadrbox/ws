@@ -178,7 +178,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     const valueType = basisDocumentType || activeType?.type || "";
     const typeName = nameForType(valueType, activeType);
     return (
-      <GroupCol>
+      <>
         <LookupField
           label={hasMultipleTypes ? typeSelectLabel : `${translate("basisDocument")} (${typeName})`}
           name={`${formUid}_basisDocument`}
@@ -198,7 +198,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           searchTransform={extractBasisSearch}
         />
         {mismatchNote}
-      </GroupCol>
+      </>
     );
   }
 

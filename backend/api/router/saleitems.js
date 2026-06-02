@@ -302,6 +302,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				discountPercent: discPct,
 				discountAmount: calc.discountAmount,
 				taxes: calc.taxes ?? undefined,
+				// uuid строки документа-основания — для идемпотентного refill.
+				...(req.body.sourceRowId ? { sourceRowId: String(req.body.sourceRowId) } : {}),
 			},
 			include: {
 				product: { include: { brand: true } },
@@ -545,6 +547,7 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 							exciseRate: exRate, exciseAmount: calc.exciseAmount,
 							discountPercent: discPct, discountAmount: calc.discountAmount,
 							taxes: calc.taxes ?? undefined,
+							...(data.sourceRowId ? { sourceRowId: String(data.sourceRowId) } : {}),
 						},
 					});
 				} else if (action === "update" && uuid && data) {

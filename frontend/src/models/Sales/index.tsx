@@ -35,7 +35,7 @@ import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton"
 import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
-import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems, resolveOrgDependentRefill, resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, refillFromBasisSource, fetchDocumentItems, resolveOrgDependentRefill, resolveOrgChangeFields, buildRefillBasisItems } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
@@ -132,6 +132,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
         createPayload: (r: any) => ({
+          sourceRowId: r.sourceRowId ?? null,
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
@@ -279,25 +280,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       if (displayed.length === 0 && form.fields.uuid) {
         displayed = await fetchDocumentItems("saleitems", "saleUuid", form.fields.uuid);
       }
-      // Серверные строки (реальный uuid, не tmp) — их помечаем на удаление при заполнении.
-      const serverItems = displayed.filter((r: any) =>
-        !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")) && !(typeof r.id === "number" && r.id < 0),
-      );
-      // Сравниваем новые строки основания с отображаемыми — если совпадают,
-      // не трогаем pending (иначе ложный Dirty при идентичных данных).
-      const itemsAreSame = displayed.length === result.items.length &&
-        displayed.every((si: any, idx: number) => {
-          const ni = result.items[idx];
-          return si.productUuid === ni.productUuid &&
-            Number(si.quantity) === Number(ni.quantity) &&
-            Number(si.price) === Number(ni.price) &&
-            Number(si.vatRate) === Number(ni.vatRate) &&
-            Number(si.discountPercent) === Number(ni.discountPercent) &&
-            Number(si.exciseRate) === Number(ni.exciseRate);
-        });
-      if (!itemsAreSame) {
-        const deleteMarkers = serverItems.map((r: any) => ({ ...r, _pendingAction: "delete" as const }));
-        setBasisItems([...deleteMarkers, ...result.items]);
+      // Идемпотентный merge по sourceRowId: обновляем/добавляем/удаляем строки
+      // основания, ручные строки не трогаем, дубли не создаём (см. helper).
+      const merged = buildRefillBasisItems(displayed, result.items);
+      if (merged.length) {
+        setBasisItems(merged);
         setItemsTableKey(k => k + 1);
       }
     } catch (e) {

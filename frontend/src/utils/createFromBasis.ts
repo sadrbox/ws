@@ -96,6 +96,10 @@ export function mapItemsForBasis(sourceItems: any[]): any[] {
 		id: -(i + 1),
 		uuid: `tmp-basis-${ts}-${i}`,
 		_pendingAction: "create",
+		// uuid строки документа-основания — ключ идемпотентного «Перезаполнить
+		// по основанию» (см. buildRefillBasisItems): повторный refill не плодит
+		// строки, а обновляет/удаляет существующие по этому ключу.
+		sourceRowId: r.uuid ?? null,
 		productUuid: r.productUuid ?? null,
 		product: r.product ?? null,
 		unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
@@ -106,6 +110,127 @@ export function mapItemsForBasis(sourceItems: any[]): any[] {
 		exciseRate: Number(r.exciseRate ?? 0),
 		discountPercent: Number(r.discountPercent ?? 0),
 	}));
+}
+
+/** Поля строки, сравниваемые при определении «строка основания изменилась». */
+const REFILL_COMPARE_KEYS = [
+	"productUuid",
+	"unitOfMeasureUuid",
+	"quantity",
+	"price",
+	"vatRate",
+	"exciseRate",
+	"discountPercent",
+] as const;
+
+/** Является ли строка серверной (сохранена в БД), а не локальным tmp-черновиком. */
+function isServerRow(r: any): boolean {
+	return (
+		!(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")) &&
+		!(typeof r.id === "number" && r.id < 0)
+	);
+}
+
+/** Значения строки-основания, которыми обновляется/создаётся строка документа. */
+function basisRowValues(b: any): Record<string, any> {
+	return {
+		productUuid: b.productUuid ?? null,
+		product: b.product ?? null,
+		unitOfMeasureUuid: b.unitOfMeasureUuid ?? null,
+		unitOfMeasure: b.unitOfMeasure ?? null,
+		quantity: b.quantity,
+		price: b.price,
+		vatRate: b.vatRate,
+		exciseRate: b.exciseRate,
+		discountPercent: b.discountPercent,
+	};
+}
+
+/**
+ * Строит идемпотентный набор pending-маркеров для «Перезаполнить по основанию».
+ *
+ * Сопоставляет текущие строки документа со строками основания по `sourceRowId`:
+ *   • строка-основание ↔ серверная строка, значения совпали → НЕ трогаем
+ *     (строка сама подгрузится с сервера при пересборке таблицы);
+ *   • строка-основание ↔ серверная строка, значения изменились → update;
+ *   • строка-основание ↔ несохранённый черновик → create с тем же uuid
+ *     (переинъекция: при remount таблицы черновик иначе пропадёт), без дубля;
+ *   • строка-основание новая → create новой tmp-строкой;
+ *   • серверная строка БЫЛА из основания, но в основании её больше нет → delete;
+ *   • ручные строки (без sourceRowId): серверные сохраняются автоматически,
+ *     несохранённые черновики переинъектируются, чтобы пережить remount.
+ *
+ * Таблица перемонтируется (key=itemsTableKey) и заново мержит initialPendingRows
+ * с серверными данными, поэтому ВСЕ несохранённые черновики обязаны попасть в
+ * результат. Если фактических изменений нет — возвращаем [] (без remount/Dirty).
+ *
+ * @param displayed  текущие отображаемые строки (сервер + pending, без delete)
+ * @param basisRows  строки основания после mapItemsForBasis (несут sourceRowId)
+ */
+export function buildRefillBasisItems(displayed: any[], basisRows: any[]): any[] {
+	const currentBySource = new Map<string, any>();
+	for (const r of displayed) {
+		if (r?.sourceRowId != null && r.sourceRowId !== "") {
+			currentBySource.set(String(r.sourceRowId), r);
+		}
+	}
+
+	const result: any[] = [];
+	const basisSourceIds = new Set<string>();
+	let changed = false;
+
+	for (const b of basisRows) {
+		const srcId = b.sourceRowId != null ? String(b.sourceRowId) : "";
+		if (srcId) basisSourceIds.add(srcId);
+		const existing = srcId ? currentBySource.get(srcId) : undefined;
+		const newValues = basisRowValues(b);
+
+		if (!existing) {
+			// Новая строка основания — добавляем как есть (create с tmp uuid).
+			result.push(b);
+			changed = true;
+			continue;
+		}
+
+		const rowChanged = REFILL_COMPARE_KEYS.some(
+			(k) => String(existing[k] ?? "") !== String((newValues as any)[k] ?? ""),
+		);
+
+		if (isServerRow(existing)) {
+			// Серверная строка: меняем только при расхождении (иначе подгрузится сама).
+			if (rowChanged) {
+				result.push({ ...existing, ...newValues, sourceRowId: srcId, _pendingAction: "update" });
+				changed = true;
+			}
+		} else {
+			// Несохранённый черновик: переинъектируем всегда (переживёт remount),
+			// но «изменением» считаем только реальное расхождение значений.
+			result.push({ ...existing, ...newValues, sourceRowId: srcId, _pendingAction: "create" });
+			if (rowChanged) changed = true;
+		}
+	}
+
+	// Серверные строки, ранее пришедшие из основания, но исчезнувшие из него → delete.
+	for (const r of displayed) {
+		const srcId = r?.sourceRowId != null ? String(r.sourceRowId) : "";
+		if (srcId && !basisSourceIds.has(srcId) && isServerRow(r)) {
+			result.push({ ...r, _pendingAction: "delete" });
+			changed = true;
+		}
+	}
+
+	// Ручные несохранённые черновики (без sourceRowId) — переинъектируем, чтобы
+	// они не потерялись при remount таблицы (серверные ручные строки — сами).
+	for (const r of displayed) {
+		const srcId = r?.sourceRowId != null ? String(r.sourceRowId) : "";
+		if (!srcId && !isServerRow(r) && r?._pendingAction !== "delete") {
+			result.push({ ...r, _pendingAction: "create" });
+		}
+	}
+
+	// Фактических изменений нет — не трогаем таблицу (без лишнего remount/Dirty).
+	if (!changed) return [];
+	return result;
 }
 
 /**
