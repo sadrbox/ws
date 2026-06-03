@@ -1,6 +1,16 @@
 [
 	{ "identifier": "id", "type": "number", "width": "80px", "minWidth": "80px", "alignment": "left", "hint": "Внутренний номер", "visible": true, "inlist": true },
 	{ "identifier": "uuid", "hint": "Уникальный идентификатор", "type": "string", "visible": false, "inlist": false, "width": "300px", "minWidth": "80px", "alignment": "left" },
+	{
+		"identifier": "number",
+		"type": "string",
+		"width": "130px",
+		"minWidth": "90px",
+		"alignment": "left",
+		"hint": "Номер документа",
+		"visible": true,
+		"inlist": true
+	},
 	{ "identifier": "date", "type": "datetime", "width": "150px", "minWidth": "80px", "alignment": "left", "hint": "Дата документа", "visible": true, "inlist": true },
 	{ "identifier": "comment", "type": "string", "width": "200px", "minWidth": "80px", "alignment": "left", "hint": "Описание", "visible": true, "inlist": true },
 	{ "identifier": "amount", "type": "number", "width": "120px", "minWidth": "80px", "alignment": "right", "hint": "Сумма", "visible": true, "inlist": true },

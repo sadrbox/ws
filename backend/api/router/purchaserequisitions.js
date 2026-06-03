@@ -3,6 +3,7 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { allocateNumber } from "../../services/documentNumbering.js";
 const router = express.Router();
 const MODEL = "purchaseRequisition";
 const ROUTE = "purchase-requisitions";
@@ -156,6 +157,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		await assertOrgFieldMembership({ organizationUuid, contractUuid }, prisma);
 		const item = await prisma[MODEL].create({
 			data: {
+				number: (req.body.number?.trim?.() || null) || await allocateNumber("purchase_requisition", organizationUuid, date),
 				date: date ? new Date(date) : new Date(),
 				comment: comment?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
@@ -190,6 +192,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
 		for (const f of [
+			"number",
 			"comment",
 			"organizationUuid",
 			"counterpartyUuid",
