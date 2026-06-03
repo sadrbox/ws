@@ -53,10 +53,12 @@ export function makeDocLabel(
 	const name = resolveFormName(listName, fallback);
 	const id = saved.id;
 	if (!id) return `${name}: ${translate("new")}`;
+	// Показываем человекочитаемый номер документа, если он есть; иначе — ID.
+	const ref = saved.number ? `№ ${saved.number}` : `ID ${id}`;
 	const date = saved[dateField]
 		? getFormatDateOnly(String(saved[dateField]))
 		: undefined;
-	return date ? `${name}: ID ${id} · ${date}` : `${name}: ID ${id}`;
+	return date ? `${name}: ${ref} · ${date}` : `${name}: ${ref}`;
 }
 
 /**

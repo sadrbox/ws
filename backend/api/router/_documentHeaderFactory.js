@@ -27,12 +27,15 @@ import {
 	validatePosting,
 	respondPostingError,
 } from "../../services/accountingPosting.js";
+import { allocateNumber } from "../../services/documentNumbering.js";
 
 const BASIS_FIELDS = ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"];
 
 export function createDocumentHeaderRouter({
 	MODEL,
 	ROUTE,
+	// Вид документа для нумерации (по умолчанию — тип проведения, если задан).
+	numberDocType = null,
 	TEXT_FIELDS = ["comment"],
 	stringFields = ["organizationUuid", "counterpartyUuid", "contractUuid"],
 	numberFields = ["amount"],
@@ -156,6 +159,10 @@ export function createDocumentHeaderRouter({
 			for (const f of numberFields) data[f] = b[f] != null ? parseFloat(b[f]) : null;
 			if (hasBasis) for (const f of BASIS_FIELDS) data[f] = b[f] || null;
 
+			// Номер документа: из payload или автогенерация по виду документа.
+			const ndt = numberDocType || posting?.docType || null;
+			if (ndt) data.number = (b.number?.trim?.() || null) || await allocateNumber(ndt, data.organizationUuid, data.date);
+
 			// Stage D: org-зависимые поля должны принадлежать организации документа.
 			await assertOrgFieldMembership(data, prisma);
 			if (posting && data.posted) await validatePosting(posting.docType, data, []);
@@ -181,6 +188,7 @@ export function createDocumentHeaderRouter({
 			const data = {};
 			for (const f of stringFields) if (b[f] !== undefined) data[f] = b[f]?.trim?.() ?? b[f] ?? null;
 			for (const f of numberFields) if (b[f] !== undefined) data[f] = b[f] != null ? parseFloat(b[f]) : null;
+			if (b.number !== undefined) data.number = b.number?.trim?.() || null;
 			if (b.date !== undefined) data.date = b.date ? new Date(b.date) : null;
 			if (b.posted !== undefined) data.posted = !!b.posted;
 			if (hasBasis) for (const f of BASIS_FIELDS) if (b[f] !== undefined) data[f] = b[f] || null;

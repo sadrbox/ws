@@ -4,6 +4,7 @@ import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
+import { allocateNumber } from "../../services/documentNumbering.js";
 const router = express.Router();
 const MODEL = "cashReceiptOrder";
 const ROUTE = "cash-receipt-orders";
@@ -170,6 +171,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		await assertOrgFieldMembership(docData, prisma);
 		// Проверки проведения ДО создания документа.
 		if (willPost) await validatePosting(DOC_TYPE, docData, []);
+		docData.number = (req.body.number?.trim?.() || null) || await allocateNumber("cash_receipt_order", docData.organizationUuid, docData.date);
 		const item = await prisma[MODEL].create({
 			data: docData,
 			include: {

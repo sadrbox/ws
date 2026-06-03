@@ -161,6 +161,8 @@
 	"documentDate": "Құжат күні",
 
 	"employee": "Қызметкер",
+	"documentNumber": "Нөмірі",
+	"autoOnSave": "авто",
 	"manager": "Менеджер",
 	"managerReport": "Менеджерлер бойынша есеп",
 	"managerReportTitle": "Менеджерлер бойынша сатулар",

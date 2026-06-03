@@ -115,6 +115,7 @@ async function buildNode(type, rec) {
 		typeLabel: cfg?.label ?? type,
 		uuid: rec.uuid,
 		id: rec.id ?? null,
+		number: rec.number ?? null,
 		date: rec.date ?? null,
 		posted: rec.posted === true,
 		amount,

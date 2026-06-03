@@ -6,6 +6,7 @@ import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgF
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { allocateNumber } from "../../services/documentNumbering.js";
 
 const router = express.Router();
 
@@ -190,8 +191,11 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		if (fkError) return res.status(403).json({ success: false, message: fkError });
 		// Stage D: склад/договор принадлежат организации документа.
 		await assertOrgFieldMembership({ organizationUuid, warehouseUuid, contractUuid }, prisma);
+		// Номер документа: из payload (ручной ввод/импорт) или автогенерация.
+		const docNumber = (req.body.number?.trim?.() || null) || await allocateNumber("sale", organizationUuid, date);
 		const item = await prisma[MODEL].create({
 			data: {
+				number: docNumber,
 				date: date ? new Date(date) : new Date(),
 				comment: comment?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
@@ -236,6 +240,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
 		const strFields = [
+			"number",
 			"comment",
 			"organizationUuid",
 			"counterpartyUuid",

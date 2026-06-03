@@ -22,6 +22,7 @@ interface ChainNode {
   typeLabel: string;
   uuid: string;
   id: number | null;
+  number: string | null;
   date: string | null;
   posted: boolean;
   amount: number | null;
@@ -74,7 +75,7 @@ const NodeRow: FC<{
           </span>
         )}
         <span className={styles.NodeMeta}>
-          ID {node.id ?? "?"}{date ? ` · ${date}` : ""}{node.organizationName ? ` · ${node.organizationName}` : ""}
+          {node.number ? `№ ${node.number}` : `ID ${node.id ?? "?"}`}{date ? ` · ${date}` : ""}{node.organizationName ? ` · ${node.organizationName}` : ""}
         </span>
         {node.amount != null && <span className={styles.NodeAmount}>{fmtAmt(node.amount)}</span>}
       </div>

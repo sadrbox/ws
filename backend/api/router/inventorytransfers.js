@@ -5,6 +5,7 @@ import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgF
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { allocateNumber } from "../../services/documentNumbering.js";
 const router = express.Router();
 const MODEL = "inventoryTransfer";
 const ROUTE = "inventory-transfers";
@@ -153,8 +154,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		} = req.body;
 		// Stage D: оба склада принадлежат организации документа.
 		await assertOrgFieldMembership({ organizationUuid, fromWarehouseUuid, toWarehouseUuid }, prisma);
+		const docNumber = (req.body.number?.trim?.() || null) || await allocateNumber("inventory_transfer", organizationUuid, date);
 		const item = await prisma[MODEL].create({
 			data: {
+				number: docNumber,
 				date: date ? new Date(date) : new Date(),
 				comment: comment?.trim() ?? null,
 				fromWarehouseUuid: fromWarehouseUuid || null,

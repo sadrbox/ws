@@ -6,6 +6,7 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { allocateNumber } from "../../services/documentNumbering.js";
 
 const router = express.Router();
 
@@ -183,8 +184,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		} = req.body;
 		// Stage D: склад/договор принадлежат организации документа.
 		await assertOrgFieldMembership({ organizationUuid, warehouseUuid, contractUuid }, prisma);
+		const docNumber = (req.body.number?.trim?.() || null) || await allocateNumber("purchase_return", organizationUuid, date);
 		const item = await prisma[MODEL].create({
 			data: {
+				number: docNumber,
 				date: date ? new Date(date) : new Date(),
 				comment: comment?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,

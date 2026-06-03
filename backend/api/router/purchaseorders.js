@@ -2,6 +2,7 @@ import { createDocumentHeaderRouter } from "./_documentHeaderFactory.js";
 
 export default createDocumentHeaderRouter({
 	MODEL: "purchaseOrder",
+	numberDocType: "purchase_order",
 	ROUTE: "purchase-orders",
 	stringFields: ["organizationUuid", "counterpartyUuid", "contractUuid", "warehouseUuid"],
 	include: {

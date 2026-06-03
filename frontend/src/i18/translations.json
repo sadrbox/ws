@@ -522,6 +522,8 @@
 	"Author": "Автор",
 
 	"employee": "Сотрудник",
+	"documentNumber": "Номер",
+	"autoOnSave": "авто",
 	"manager": "Менеджер",
 	"managerReport": "Отчёт по менеджерам",
 	"managerReportTitle": "Продажи по менеджерам",

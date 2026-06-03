@@ -3,6 +3,7 @@ import { reconcileReservationRegister, removeReservationRegister } from "../../s
 
 export default createDocumentHeaderRouter({
 	MODEL: "reservation",
+	numberDocType: "reservation",
 	ROUTE: "reservations",
 	stringFields: ["organizationUuid", "counterpartyUuid", "contractUuid", "warehouseUuid"],
 	include: {

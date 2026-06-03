@@ -4,6 +4,7 @@ import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
+import { allocateNumber } from "../../services/documentNumbering.js";
 const DOC_TYPE = "cash_expense_order";
 const router = express.Router();
 const MODEL = "cashExpenseOrder";
@@ -168,6 +169,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		// Stage D: касса/договор принадлежат организации документа.
 		await assertOrgFieldMembership(docData, prisma);
 		if (willPost) await validatePosting(DOC_TYPE, docData, []);
+		docData.number = (req.body.number?.trim?.() || null) || await allocateNumber("cash_expense_order", docData.organizationUuid, docData.date);
 		const item = await prisma[MODEL].create({
 			data: docData,
 			include: {
