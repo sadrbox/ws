@@ -16,6 +16,7 @@ import useOrgAccountingUsageStats from "src/hooks/useOrgAccountingUsageStats";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import { DocumentNumberSettings } from "src/models/DocumentNumberSettings";
 
 const MODEL_ENDPOINT = "organization-accounting-settings";
 const LIST_NAME = "OrganizationAccountingSettingsList";
@@ -320,6 +321,19 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   по умолчанию (можно скорректировать в каждой строке).
                 </span>
               </GroupRow>
+            </div>
+          </div>
+        ),
+      },
+      {
+        id: "tab-numbering",
+        label: translate("documentNumberingSettings"),
+        component: (
+          <div className={styles.FormWrapper}>
+            <div className={styles.Form}>
+              {form.fields.organizationUuid
+                ? <DocumentNumberSettings embedded organizationUuid={form.fields.organizationUuid} />
+                : <span className={styles.SettingHint}>{translate("selectOrgFirst")}</span>}
             </div>
           </div>
         ),

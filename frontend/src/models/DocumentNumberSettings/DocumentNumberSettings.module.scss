@@ -3,6 +3,18 @@
 	max-width: 760px;
 }
 
+.WrapEmbedded {
+	padding: 8px 0 0;
+	max-width: 760px;
+}
+
+.SubTitle {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 600;
+	color: $gray900;
+}
+
 .Header {
 	display: flex;
 	align-items: center;

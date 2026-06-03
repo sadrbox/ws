@@ -2094,11 +2094,14 @@ model DocumentSequence {
 /// документа). Глобально для установки. Отсутствие строки → дефолт из
 /// services/documentNumbering.js (NUMBER_CONFIG).
 model DocumentNumberSetting {
-  id        Int      @id @default(autoincrement())
-  docType   String   @unique
-  prefix    String
-  padding   Int      @default(6)
-  updatedAt DateTime @default(now()) @updatedAt
+  id               Int      @id @default(autoincrement())
+  /// Организация настройки. "__global__" — значения по умолчанию для всех орг.
+  organizationUuid String   @default("__global__")
+  docType          String
+  prefix           String
+  padding          Int      @default(6)
+  updatedAt        DateTime @default(now()) @updatedAt
 
+  @@unique([organizationUuid, docType])
   @@map("document_number_settings")
 }

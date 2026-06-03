@@ -33,30 +33,39 @@ export const NUMBER_CONFIG = {
 	payroll_payment: { prefix: "ВЗП", label: "Выплата зарплаты" },
 };
 
-// Кэш переопределений префиксов (короткий TTL — настройки меняются редко).
-let _settingsCache = null;
-let _settingsCacheAt = 0;
+export const GLOBAL_SETTINGS_KEY = "__global__";
+
+// Кэш переопределений префиксов по организации (короткий TTL).
+const _cache = new Map(); // orgKey → { map, at }
 const SETTINGS_TTL = 15_000;
 
-async function loadSettings(client) {
+/**
+ * Карта docType → {prefix, padding} для организации: глобальные значения
+ * («__global__») переопределяются настройками самой организации.
+ */
+async function loadSettings(client, orgUuid) {
+	const orgKey = orgUuid || GLOBAL_SETTINGS_KEY;
 	const now = Date.now();
-	if (_settingsCache && now - _settingsCacheAt < SETTINGS_TTL) return _settingsCache;
+	const cached = _cache.get(orgKey);
+	if (cached && now - cached.at < SETTINGS_TTL) return cached.map;
 	const map = {};
 	try {
-		const rows = await client.documentNumberSetting.findMany();
-		for (const r of rows) map[r.docType] = { prefix: r.prefix, padding: r.padding };
+		const orgs = orgKey === GLOBAL_SETTINGS_KEY ? [GLOBAL_SETTINGS_KEY] : [GLOBAL_SETTINGS_KEY, orgKey];
+		const rows = await client.documentNumberSetting.findMany({ where: { organizationUuid: { in: orgs } } });
+		// Сначала глобальные, затем — настройки организации (имеют приоритет).
+		for (const r of rows) if (r.organizationUuid === GLOBAL_SETTINGS_KEY) map[r.docType] = { prefix: r.prefix, padding: r.padding };
+		if (orgKey !== GLOBAL_SETTINGS_KEY)
+			for (const r of rows) if (r.organizationUuid === orgKey) map[r.docType] = { prefix: r.prefix, padding: r.padding };
 	} catch {
-		/* нет таблицы/ошибка — используем дефолты */
+		/* нет таблицы/ошибка — используем дефолты из NUMBER_CONFIG */
 	}
-	_settingsCache = map;
-	_settingsCacheAt = now;
+	_cache.set(orgKey, { map, at: now });
 	return map;
 }
 
 /** Сбросить кэш настроек (вызывать после изменения настроек нумерации). */
 export function invalidateNumberSettingsCache() {
-	_settingsCache = null;
-	_settingsCacheAt = 0;
+	_cache.clear();
 }
 
 /**
@@ -66,7 +75,7 @@ export function invalidateNumberSettingsCache() {
 export async function allocateNumber(docType, organizationUuid, date, client = prisma) {
 	const def = NUMBER_CONFIG[docType];
 	if (!def) return null;
-	const settings = await loadSettings(client);
+	const settings = await loadSettings(client, organizationUuid);
 	const prefix = settings[docType]?.prefix || def.prefix;
 	const padding = settings[docType]?.padding || 6;
 	const year = (date ? new Date(date) : new Date()).getFullYear();

@@ -21,11 +21,21 @@ interface Row {
   isOverridden: boolean;
 }
 
-const DocumentNumberSettings: FC = () => {
+interface Props {
+  /** Если задан — настройки префиксов конкретной организации (иначе глобальные). */
+  organizationUuid?: string;
+  /** Встроенный режим (внутри формы организации) — без собственного крупного заголовка. */
+  embedded?: boolean;
+}
+
+const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery<Row[]>({
-    queryKey: ["document-number-settings"],
-    queryFn: async () => (await api.get<any>("document-number-settings"))?.items ?? [],
+    queryKey: ["document-number-settings", organizationUuid ?? "__global__"],
+    queryFn: async () =>
+      (await api.get<any>("document-number-settings", {
+        params: organizationUuid ? { organizationUuid } : undefined,
+      }))?.items ?? [],
   });
   const rows = data ?? [];
 
@@ -43,11 +53,11 @@ const DocumentNumberSettings: FC = () => {
     try {
       for (const [docType, v] of Object.entries(edits)) {
         if (!v.prefix.trim()) { showToast(translate("prefixRequired"), "error"); setSaving(false); return; }
-        await api.put(`document-number-settings/${docType}`, { prefix: v.prefix.trim(), padding: v.padding });
+        await api.put(`document-number-settings/${docType}`, { prefix: v.prefix.trim(), padding: v.padding, organizationUuid });
       }
       showToast(translate("saved"), "success");
       setEdits({});
-      qc.invalidateQueries({ queryKey: ["document-number-settings"] });
+      qc.invalidateQueries({ queryKey: ["document-number-settings", organizationUuid ?? "__global__"] });
     } catch {
       /* тост ошибки — перехватчик api */
     } finally {
@@ -58,14 +68,16 @@ const DocumentNumberSettings: FC = () => {
   const example = (prefix: string, padding: number) => `${prefix}-${String(1).padStart(padding, "0")}`;
 
   return (
-    <div className={styles.Wrap}>
+    <div className={embedded ? styles.WrapEmbedded : styles.Wrap}>
       <div className={styles.Header}>
-        <h2 className={styles.Title}>{translate("documentNumberingSettings")}</h2>
+        {embedded
+          ? <h3 className={styles.SubTitle}>{translate("documentNumberingSettings")}</h3>
+          : <h2 className={styles.Title}>{translate("documentNumberingSettings")}</h2>}
         <Button variant="primary" onClick={save} disabled={!dirty || saving}>
           {saving ? translate("loading") : translate("save")}
         </Button>
       </div>
-      <p className={styles.Hint}>{translate("documentNumberingHint")}</p>
+      {!embedded && <p className={styles.Hint}>{translate("documentNumberingHint")}</p>}
 
       {isLoading ? (
         <div className={styles.Loading}>{translate("loading")}</div>
