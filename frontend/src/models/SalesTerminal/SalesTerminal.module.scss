@@ -142,6 +142,37 @@
 	gap: 8px;
 }
 
+// Переключатель способа оплаты.
+.PayMethods {
+	display: flex;
+	gap: 8px;
+	margin-top: 2px;
+}
+
+.PayMethod {
+	flex: 1 1 0;
+	padding: 9px 8px;
+	border: 1px solid $gray200;
+	border-radius: 8px;
+	background: #fff;
+	color: $gray700;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background 0.12s, border-color 0.12s, color 0.12s;
+
+	&:hover {
+		background: $gray50;
+		border-color: $gray300;
+	}
+}
+
+.PayMethodActive {
+	border-color: $primary;
+	background: $accentBlueSoft;
+	color: $primary;
+}
+
 .Summary {
 	margin-top: auto;
 	border-top: 1px dashed $gray300;

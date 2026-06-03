@@ -48,6 +48,12 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
   const [managerUuid, setManagerUuid] = useState((user as any)?.employee?.uuid ?? "");
   const [managerName, setManagerName] = useState((user as any)?.employee?.fullName ?? "");
 
+  // Оплата: наличные → автосоздание проведённого ПКО (Дт1010 Кт1210); карта/
+  // безнал → только реализация (поступление денег отражается банк-выпиской).
+  const [payment, setPayment] = useState<"cash" | "card">("cash");
+  const [cashboxUuid, setCashboxUuid] = useState("");
+  const [cashboxName, setCashboxName] = useState("");
+
   const [cart, setCart] = useState<CartLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -133,6 +139,24 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
       // Проводим: assertPostable (контрагент/субконто) + контроль остатка + проводки.
       await api.put(`sales/${saleUuid}`, { posted: true });
 
+      // Оплата наличными → проведённый приходный кассовый ордер (Дт1010 Кт1210).
+      if (payment === "cash" && total > 0) {
+        try {
+          await api.post("cash-receipt-orders", {
+            date: new Date().toISOString(),
+            organizationUuid: orgUuid,
+            counterpartyUuid,
+            cashboxUuid: cashboxUuid || null,
+            amount: total,
+            posted: true,
+            comment: translate("terminalPaymentForSale"),
+          });
+        } catch {
+          // Реализация уже проведена; ПКО не создался — кассир оформит вручную.
+          showToast(translate("terminalCashOrderFailed"), "error", 6000);
+        }
+      }
+
       showToast(`${translate("terminalDone")} — ${fmt(total)}`, "success", 4000);
       setCart([]);
     } catch {
@@ -141,7 +165,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [orgUuid, warehouseUuid, counterpartyUuid, managerUuid, cart, total, vatRate]);
+  }, [orgUuid, warehouseUuid, counterpartyUuid, managerUuid, cart, total, vatRate, payment, cashboxUuid]);
 
   const orgParams = orgUuid ? { organizationUuid: orgUuid } : undefined;
 
@@ -219,6 +243,21 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
           <LookupField label={translate("manager")} name="t_mgr" value={managerUuid} displayValue={managerName}
             endpoint="employees" displayField="fullName" extraParams={orgParams}
             onSelect={(u, d) => { setManagerUuid(u); setManagerName(d); }} onClear={() => { setManagerUuid(""); setManagerName(""); }} />
+
+          {/* Способ оплаты */}
+          <div className={styles.PayMethods}>
+            <button type="button"
+              className={[styles.PayMethod, payment === "cash" && styles.PayMethodActive].filter(Boolean).join(" ")}
+              onClick={() => setPayment("cash")}>💵 {translate("paymentCash")}</button>
+            <button type="button"
+              className={[styles.PayMethod, payment === "card" && styles.PayMethodActive].filter(Boolean).join(" ")}
+              onClick={() => setPayment("card")}>💳 {translate("paymentCard")}</button>
+          </div>
+          {payment === "cash" && (
+            <LookupField label={translate("cashbox")} name="t_cashbox" value={cashboxUuid} displayValue={cashboxName}
+              endpoint="cashboxes" displayField="name" extraParams={orgParams}
+              onSelect={(u, d) => { setCashboxUuid(u); setCashboxName(d); }} onClear={() => { setCashboxUuid(""); setCashboxName(""); }} />
+          )}
         </div>
 
         <div className={styles.Summary}>
