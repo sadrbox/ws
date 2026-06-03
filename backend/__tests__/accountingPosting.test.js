@@ -42,9 +42,27 @@ before(async () => {
 		orgUuid: org?.uuid, cpUuid: cp?.uuid, productUuid: product?.uuid,
 		warehouseUuid: warehouse?.uuid, employeeUuid: employee?.uuid, userUuid: user?.uuid,
 	};
+
+	// Тесты разнесения НДС требуют плательщика НДС — включаем useVat для тестовой
+	// организации (запоминаем исходное, чтобы восстановить в after).
+	if (fx.orgUuid) {
+		const ex = await prisma.organizationAccountingSetting.findFirst({
+			where: { organizationUuid: fx.orgUuid, deletedAt: null },
+			orderBy: { startDate: "desc" },
+		});
+		if (ex) {
+			fx._setting = { uuid: ex.uuid, useVat: ex.useVat };
+			await prisma.organizationAccountingSetting.update({ where: { uuid: ex.uuid }, data: { useVat: true } });
+		} else {
+			const cr = await prisma.organizationAccountingSetting.create({ data: { organizationUuid: fx.orgUuid, useVat: true } });
+			fx._settingCreated = cr.uuid;
+		}
+	}
 });
 
 after(async () => {
+	if (fx._setting) await prisma.organizationAccountingSetting.update({ where: { uuid: fx._setting.uuid }, data: { useVat: fx._setting.useVat } }).catch(() => {});
+	if (fx._settingCreated) await prisma.organizationAccountingSetting.delete({ where: { uuid: fx._settingCreated } }).catch(() => {});
 	await prisma.$disconnect();
 });
 

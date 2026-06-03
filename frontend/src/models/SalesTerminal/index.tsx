@@ -17,12 +17,11 @@ import { FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Button } from "src/components/Button";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
+import { useOrgAccountingSettings } from "src/hooks/useOrgAccountingSettings";
 import { useAppContext } from "src/app";
 import { recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
 import type { TPane } from "src/app/types";
 import styles from "./SalesTerminal.module.scss";
-
-const DEFAULT_VAT = 12;
 
 interface CartLine {
   key: string;
@@ -31,14 +30,10 @@ interface CartLine {
   unitOfMeasureUuid: string | null;
   quantity: number;
   price: number;
-  vatRate: number;
 }
 
 const fmt = (n: number) =>
   Number(n || 0).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const lineAmount = (l: CartLine) =>
-  recalcSaleItemAmounts(l.quantity, l.price, l.vatRate, 0, "INCLUDED", 0).amount;
 
 const SalesTerminal: FC<Partial<TPane>> = () => {
   const { organizationUuid: defOrgUuid, organizationName: defOrgName } = useDefaultOrganization();
@@ -56,7 +51,17 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const total = useMemo(() => cart.reduce((s, l) => s + lineAmount(l), 0), [cart]);
+  // Ставка/метод НДС берём из «Параметров учёта» организации (0%, если не
+  // плательщик НДС) — суммы строк считаем так же, как обычная реализация.
+  const acct = useOrgAccountingSettings(orgUuid);
+  const vatRate = acct.vatRate;
+  const vatMethod = acct.vatCalculationMethod;
+  const lineAmount = useCallback(
+    (l: CartLine) => recalcSaleItemAmounts(l.quantity, l.price, vatRate, 0, vatMethod, 0).amount,
+    [vatRate, vatMethod],
+  );
+
+  const total = useMemo(() => cart.reduce((s, l) => s + lineAmount(l), 0), [cart, lineAmount]);
   const itemsCount = useMemo(() => cart.reduce((s, l) => s + (Number(l.quantity) || 0), 0), [cart]);
 
   // ── Добавление товара (из LookupField). Повтор — увеличивает количество. ──
@@ -78,7 +83,6 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
           unitOfMeasureUuid: item?.unitOfMeasureUuid ?? null,
           quantity: 1,
           price: Number(item?.price) || 0,
-          vatRate: DEFAULT_VAT,
         },
       ];
     });
@@ -120,7 +124,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
             productUuid: l.productUuid,
             quantity: l.quantity,
             price: l.price,
-            vatRate: l.vatRate,
+            vatRate,
             unitOfMeasureUuid: l.unitOfMeasureUuid || null,
           },
         })),
@@ -137,7 +141,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [orgUuid, warehouseUuid, counterpartyUuid, managerUuid, cart, total]);
+  }, [orgUuid, warehouseUuid, counterpartyUuid, managerUuid, cart, total, vatRate]);
 
   const orgParams = orgUuid ? { organizationUuid: orgUuid } : undefined;
 

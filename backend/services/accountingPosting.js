@@ -80,17 +80,35 @@ function an(type, objectUuid) {
 const compact = (arr) => arr.filter(Boolean);
 
 /**
- * Разбивка суммы строки на стоимость без НДС и сам НДС (плательщик НДС).
+ * Разбивка суммы строки на стоимость без НДС и сам НДС.
  * net — стоимость без НДС (база, идёт на товар/доход), vat — сумма НДС.
- * Фолбэк: если в строке нет налоговых полей (vat=0) → net=amount, vat=0
- * (поведение как до разнесения НДС — обратная совместимость).
+ *
+ * Разнесение НДС выполняется ТОЛЬКО для плательщика НДС (useVat=true в
+ * «Параметрах учёта» организации). Если useVat=false (или нет налоговых полей)
+ * — vat=0, net=amount (НДС в стоимости; поведение как без разнесения).
  */
-function splitVat(it) {
+function splitVat(it, useVat) {
 	const amount = r2(it.amount);
+	if (!useVat) return { amount, vat: 0, net: amount };
 	const vat = r2(it.vatAmount);
 	const rawNet = it.amountWithoutVat != null ? r2(it.amountWithoutVat) : r2(amount - vat);
 	const net = rawNet > 0 ? rawNet : amount;
 	return { amount, vat, net };
+}
+
+/** Признак плательщика НДС организации (OrganizationAccountingSetting.useVat). */
+export async function resolveUseVat(orgUuid, client = prisma) {
+	if (!orgUuid) return false;
+	try {
+		const s = await client.organizationAccountingSetting.findFirst({
+			where: { organizationUuid: orgUuid, deletedAt: null },
+			orderBy: { startDate: "desc" },
+			select: { useVat: true },
+		});
+		return s?.useVat === true;
+	} catch {
+		return false;
+	}
 }
 
 // ─── Реестр правил формирования проводок ─────────────────────────────────────
@@ -99,11 +117,11 @@ function splitVat(it) {
 export const POSTING_RULES = {
 	// Поступление товаров (плательщик НДС): Дт 1330 (без НДС) + Дт 1420 (входящий
 	// НДС к зачёту) Кт 3310 (полная сумма с НДС). Контрагент/договор — на 3310.
-	purchase: (doc, items) => {
+	purchase: (doc, items, ctx) => {
 		const out = [];
 		for (const it of items) {
 			if (!it.productUuid) continue;
-			const { net, vat } = splitVat(it);
+			const { net, vat } = splitVat(it, ctx.useVat);
 			const apAnalytics = compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
 			if (net > 0) {
 				out.push({
@@ -129,7 +147,7 @@ export const POSTING_RULES = {
 		const out = [];
 		for (const it of items) {
 			if (!it.productUuid) continue;
-			const { net, vat } = splitVat(it);
+			const { net, vat } = splitVat(it, ctx.useVat);
 			const arAnalytics = compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
 			if (net > 0) {
 				out.push({
@@ -170,7 +188,7 @@ export const POSTING_RULES = {
 		const out = [];
 		for (const it of items) {
 			if (!it.productUuid) continue;
-			const { net, vat } = splitVat(it);
+			const { net, vat } = splitVat(it, ctx.useVat);
 			const arAnalytics = compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
 			if (net > 0) {
 				out.push({
@@ -208,11 +226,11 @@ export const POSTING_RULES = {
 
 	// Возврат поставщику (плательщик НДС): Дт 3310 (полная) Кт 1330 (без НДС) +
 	// Кт 1420 (сторно входящего НДС).
-	purchase_return: (doc, items) => {
+	purchase_return: (doc, items, ctx) => {
 		const out = [];
 		for (const it of items) {
 			if (!it.productUuid) continue;
-			const { net, vat } = splitVat(it);
+			const { net, vat } = splitVat(it, ctx.useVat);
 			const apAnalytics = compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
 			if (net > 0) {
 				out.push({
@@ -427,6 +445,8 @@ export async function buildDocumentEntries(documentType, doc, items, client = pr
 	const rule = POSTING_RULES[documentType];
 	if (!rule) return [];
 	const ctx = makeContext(client, doc.organizationUuid ?? null);
+	// Плательщик НДС? (определяет разнесение НДС на 1420/3130).
+	ctx.useVat = await resolveUseVat(doc.organizationUuid ?? null, client);
 	const raw = await rule(doc, items ?? [], ctx);
 	if (!raw?.length) return [];
 

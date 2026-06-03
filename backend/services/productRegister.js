@@ -101,19 +101,30 @@ export async function reconcileDocumentRegister(
 		});
 		if (!items.length) return;
 
+		// Плательщик НДС? Тогда себестоимость в регистре — БЕЗ НДС (НДС к зачёту).
+		// Иначе — полная сумма (НДС в стоимости товара).
+		const useVat = doc.organizationUuid
+			? await client.organizationAccountingSetting
+					.findFirst({
+						where: { organizationUuid: doc.organizationUuid, deletedAt: null },
+						orderBy: { startDate: "desc" },
+						select: { useVat: true },
+					})
+					.then((s) => s?.useVat === true)
+					.catch(() => false)
+			: false;
+
 		// 4. Формируем движения (приход/расход) по каждой строке-товару.
 		const records = [];
 		for (const it of items) {
 			if (!it.productUuid) continue; // движения только по товарам (не услугам)
 			const qty = Number(it.quantity) || 0;
 			const amt = Number(it.amount) || 0;
-			// Стоимость товара для регистра — БЕЗ НДС (плательщик НДС: входящий НДС
-			// идёт к зачёту, а не в себестоимость). Себестоимость (скользящая
-			// средняя) считается по этим суммам — согласована со счётом 1330.
-			// Фолбэк на полную сумму, если в строке нет налоговых полей (напр.
-			// перемещение без НДС).
+			// Стоимость товара для регистра: для плательщика НДС — БЕЗ НДС (входящий
+			// НДС к зачёту, а не в себестоимость; согласовано со счётом 1330).
+			// Иначе — полная сумма. Фолбэк на полную сумму, если нет налоговых полей.
 			const net = Number(it.amountWithoutVat);
-			const value = Number.isFinite(net) && net > 0 ? net : amt;
+			const value = useVat && Number.isFinite(net) && net > 0 ? net : amt;
 			if (qty === 0 && value === 0) continue;
 			for (const mv of cfg.movements) {
 				records.push({
