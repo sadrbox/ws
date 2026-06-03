@@ -1075,7 +1075,9 @@ body {
 // ── Выпадающий список скрытых вкладок ──
 .PaneTabsMoreMenu {
 	position: absolute;
-	top: calc(100% + 6px);
+	// Раскрываем ВВЕРХ: строка вкладок у нижней кромки области — иначе меню
+	// уходит за пределы экрана.
+	bottom: calc(100% + 6px);
 	right: 0;
 	min-width: 240px;
 	max-width: 380px;
@@ -1085,21 +1087,21 @@ body {
 	background: #fff;
 	border: 1px solid $gray200;
 	border-radius: 10px;
-	box-shadow: 0 12px 28px rgba(#000, 0.16), 0 3px 8px rgba(#000, 0.08);
+	box-shadow: 0 -12px 28px rgba(#000, 0.16), 0 -3px 8px rgba(#000, 0.08);
 	z-index: 1000;
 	animation: paneTabsMoreIn 0.14s ease;
 
-	// Хвостик-стрелка к кнопке.
+	// Хвостик-стрелка вниз, к кнопке.
 	&::before {
 		content: "";
 		position: absolute;
-		top: -5px;
+		bottom: -5px;
 		right: 14px;
 		width: 9px;
 		height: 9px;
 		background: #fff;
-		border-left: 1px solid $gray200;
-		border-top: 1px solid $gray200;
+		border-right: 1px solid $gray200;
+		border-bottom: 1px solid $gray200;
 		transform: rotate(45deg);
 	}
 
@@ -1121,7 +1123,7 @@ body {
 @keyframes paneTabsMoreIn {
 	from {
 		opacity: 0;
-		transform: translateY(-4px);
+		transform: translateY(4px);
 	}
 
 	to {

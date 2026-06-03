@@ -78,6 +78,7 @@
 	"BankStatementsList": "Банковские выписки",
 	"basisMismatch": "Документ не соответствует основанию",
 	"basisMismatchItems": "строки отличаются от основания",
+	"basisChainMismatch": "Расходится с основанием (строки отличаются)",
 	"notificationsCenter": "Центр уведомлений",
 	"unsavedRecords": "Несохранённые записи",
 	"deletedReferenceControl": "Контроль удалённых ссылок",

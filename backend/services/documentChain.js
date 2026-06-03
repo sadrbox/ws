@@ -34,9 +34,82 @@ const CHILD_TYPES = Object.entries(DOC_REGISTRY)
 	.filter(([, c]) => c.hasBasis)
 	.map(([type]) => type);
 
-/** Нормализует запись документа в узел цепочки (с устойчивостью к разным полям). */
-function toNode(type, rec, orgName) {
+/** Имя организации по uuid (короткое → полное → null). */
+async function loadOrgName(uuid) {
+	if (!uuid) return null;
+	try {
+		const org = await prisma.organization.findUnique({
+			where: { uuid },
+			select: { name: true, shortName: true },
+		});
+		return org?.shortName || org?.name || null;
+	} catch {
+		return null;
+	}
+}
+
+/** Нормализует число (Decimal/строка) для сравнения: "30.0000" → "30", null → "". */
+const normNum = (v) => (v == null || v === "" ? "" : String(Number(v)));
+
+/** Сигнатура строки товара для сравнения с основанием (без учёта порядка строк). */
+const serializeItem = (it) =>
+	[
+		it.productUuid ?? "",
+		normNum(it.quantity),
+		normNum(it.price),
+		normNum(it.vatRate),
+		normNum(it.discountPercent),
+		normNum(it.exciseRate),
+	].join("|");
+
+/**
+ * Загружает строки документа (если у модели есть *Item-таблица).
+ * @returns {Promise<Array|null>} массив строк или null (у документа нет табличной части).
+ */
+async function loadItems(type, uuid) {
 	const cfg = DOC_REGISTRY[type];
+	if (!cfg) return null;
+	const itemModel = `${cfg.model}Item`;
+	if (!prisma[itemModel]) return null; // header-документ (напр. банк-выписка)
+	try {
+		return await prisma[itemModel].findMany({
+			where: { [`${cfg.model}Uuid`]: uuid, deletedAt: null },
+			select: {
+				productUuid: true,
+				quantity: true,
+				price: true,
+				vatRate: true,
+				discountPercent: true,
+				exciseRate: true,
+				amount: true,
+			},
+		});
+	} catch {
+		return null;
+	}
+}
+
+/** Сравнение двух отсортированных сигнатур строк. */
+const sigEqual = (a, b) =>
+	Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((s, i) => s === b[i]);
+
+/**
+ * Строит узел цепочки из записи документа: подтягивает имя организации, строки;
+ * СУММА считается по строкам (надёжнее хранимого rec.amount, который может
+ * устаревать), сигнатура строк (_sig) — для сравнения с основанием.
+ */
+async function buildNode(type, rec) {
+	const cfg = DOC_REGISTRY[type];
+	const orgName = await loadOrgName(rec.organizationUuid);
+	const items = await loadItems(type, rec.uuid);
+
+	let amount = rec.amount != null ? Number(rec.amount) : null;
+	let sig = null;
+	if (items) {
+		amount = items.reduce((s, it) => s + Number(it.amount ?? 0), 0);
+		sig = items.map(serializeItem).sort();
+	}
+
 	return {
 		type,
 		typeLabel: cfg?.label ?? type,
@@ -44,16 +117,19 @@ function toNode(type, rec, orgName) {
 		id: rec.id ?? null,
 		date: rec.date ?? null,
 		posted: rec.posted === true,
-		amount: rec.amount != null ? Number(rec.amount) : null,
+		amount,
 		organizationUuid: rec.organizationUuid ?? null,
-		organizationName: orgName ?? null,
+		organizationName: orgName,
 		basisDocumentType: rec.basisDocumentType ?? null,
 		basisDocumentUuid: rec.basisDocumentUuid ?? null,
+		// Расхождение со своим основанием (выставляется при построении дерева).
+		basisMismatch: false,
+		_sig: sig,
 		children: [],
 	};
 }
 
-/** Загружает документ по типу+uuid (полная запись) + имя организации. */
+/** Загружает документ по типу+uuid и строит узел. */
 async function fetchDoc(type, uuid) {
 	const cfg = DOC_REGISTRY[type];
 	if (!cfg || !uuid) return null;
@@ -64,17 +140,7 @@ async function fetchDoc(type, uuid) {
 		return null;
 	}
 	if (!rec) return null;
-	let orgName = null;
-	if (rec.organizationUuid) {
-		try {
-			const org = await prisma.organization.findUnique({
-				where: { uuid: rec.organizationUuid },
-				select: { name: true, shortName: true },
-			});
-			orgName = org?.shortName || org?.name || null;
-		} catch { /* noop */ }
-	}
-	return toNode(type, rec, orgName);
+	return buildNode(type, rec);
 }
 
 /** Находит «детей» документа (по всем дочерним моделям). */
@@ -91,20 +157,16 @@ async function fetchChildren(uuid) {
 			continue;
 		}
 		for (const rec of recs) {
-			let orgName = null;
-			if (rec.organizationUuid) {
-				try {
-					const org = await prisma.organization.findUnique({
-						where: { uuid: rec.organizationUuid },
-						select: { name: true, shortName: true },
-					});
-					orgName = org?.shortName || org?.name || null;
-				} catch { /* noop */ }
-			}
-			children.push(toNode(type, rec, orgName));
+			children.push(await buildNode(type, rec));
 		}
 	}
 	return children;
+}
+
+/** Рекурсивно убирает служебные поля (_sig) из дерева перед отдачей. */
+function stripInternal(node) {
+	delete node._sig;
+	node.children.forEach(stripInternal);
 }
 
 /**
@@ -151,9 +213,19 @@ export async function buildDocumentChain(type, uuid) {
 		}
 		downVisited.add(key);
 		node.children = await fetchChildren(node.uuid);
+		// Дочерний документ построен из этого узла-основания → если набор строк
+		// расходится с основанием, помечаем расхождение (тот же смысл, что и
+		// предупреждение у кнопки «Перезаполнить по основанию»). Сравниваем,
+		// только когда у обоих есть табличная часть (_sig != null).
+		for (const child of node.children) {
+			if (node._sig && child._sig) {
+				child.basisMismatch = !sigEqual(node._sig, child._sig);
+			}
+		}
 		for (const child of node.children) await expand(child);
 	};
 	await expand(root);
+	stripInternal(root);
 
 	return { root, target: { type, uuid }, integrity };
 }

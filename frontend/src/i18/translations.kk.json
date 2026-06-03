@@ -64,6 +64,7 @@
 	"BankStatementsList": "Банк көшірмелері",
 	"basisMismatch": "Құжат негізге сәйкес келмейді",
 	"basisMismatchItems": "жолдар негізден ерекшеленеді",
+	"basisChainMismatch": "Негізден ерекшеленеді (жолдар басқа)",
 	"notificationsCenter": "Хабарландыру орталығы",
 	"unsavedRecords": "Сақталмаған жазбалар",
 	"deletedReferenceControl": "Өшірілген сілтемелерді бақылау",

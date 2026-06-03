@@ -55,6 +55,14 @@
 	color: $gray700;
 }
 
+// Индикатор расхождения с основанием (оранжевый треугольник).
+.NodeWarn {
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+	color: $warnAccent;
+}
+
 // № документа и дата.
 .NodeMeta {
 	color: $gray500;
