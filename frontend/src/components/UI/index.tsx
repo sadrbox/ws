@@ -49,6 +49,7 @@ import { UnitOfMeasuresList } from 'src/models/UnitOfMeasures';
 import { TaxesList } from 'src/models/Taxes';
 import { OrganizationAccountingSettingsList } from 'src/models/OrganizationAccountingSettings';
 import GeneralSettings from 'src/models/GeneralSettings';
+import { DocumentNumberSettings } from 'src/models/DocumentNumberSettings';
 import { CurrenciesList } from 'src/models/Currencies';
 import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
@@ -983,6 +984,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>{translate("generalSettings")}</h3>
             <ul className={styles.NavList}>
               <li onClick={() => addPane({ component: GeneralSettings, label: translate("generalSettings") })}>{translate("generalSettings")}</li>
+              <li onClick={() => addPane({ component: DocumentNumberSettings, label: translate("documentNumberingSettings") })}>{translate("documentNumberingSettings")}</li>
             </ul>
           </div>
           <div className={styles.NavGroup}>

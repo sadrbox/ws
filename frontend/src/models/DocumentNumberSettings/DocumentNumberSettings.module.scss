@@ -1,0 +1,70 @@
+.Wrap {
+	padding: 16px 20px;
+	max-width: 760px;
+}
+
+.Header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.Title {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 700;
+	color: $gray900;
+}
+
+.Hint {
+	margin: 6px 0 16px;
+	color: $gray500;
+	font-size: 13px;
+}
+
+.Loading {
+	padding: 16px;
+	color: $gray500;
+}
+
+.Table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+
+	thead th {
+		text-align: left;
+		padding: 8px 10px;
+		border-bottom: 1px solid $gray200;
+		color: $gray700;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	tbody td {
+		padding: 5px 10px;
+		border-bottom: 1px solid $gray100;
+		vertical-align: middle;
+	}
+
+	tbody tr:hover td {
+		background: $accentBlueHover;
+	}
+}
+
+.cLabel { color: $gray900; }
+.cPrefix { width: 150px; }
+.cPad { width: 90px; }
+.cExample {
+	width: 160px;
+	color: $gray500;
+
+	code {
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		background: $gray100;
+		padding: 2px 6px;
+		border-radius: 4px;
+		color: $gray700;
+	}
+}

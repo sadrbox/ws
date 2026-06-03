@@ -2089,3 +2089,16 @@ model DocumentSequence {
   @@unique([organizationUuid, docType, year])
   @@map("document_sequences")
 }
+
+/// Настройки нумерации документов (переопределение префикса/разрядности по виду
+/// документа). Глобально для установки. Отсутствие строки → дефолт из
+/// services/documentNumbering.js (NUMBER_CONFIG).
+model DocumentNumberSetting {
+  id        Int      @id @default(autoincrement())
+  docType   String   @unique
+  prefix    String
+  padding   Int      @default(6)
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("document_number_settings")
+}
