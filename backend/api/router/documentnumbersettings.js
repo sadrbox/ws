@@ -60,4 +60,19 @@ router.put("/document-number-settings/:docType", async (req, res) => {
 	}
 });
 
+// DELETE — сбросить настройку вида документа к значению по умолчанию
+// (удалить переопределение этой организации). Query: organizationUuid.
+router.delete("/document-number-settings/:docType", async (req, res) => {
+	try {
+		const { docType } = req.params;
+		const organizationUuid = req.query.organizationUuid ? String(req.query.organizationUuid) : GLOBAL_SETTINGS_KEY;
+		await prisma.documentNumberSetting.deleteMany({ where: { organizationUuid, docType } });
+		invalidateNumberSettingsCache();
+		return res.json({ success: true });
+	} catch (err) {
+		console.error("DELETE /document-number-settings error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 export default router;
