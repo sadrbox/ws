@@ -57,7 +57,9 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   const [edits, setEdits] = useState<Record<string, EditVal>>({});
   const [busy, setBusy] = useState(false);
 
-  const valOf = (r: Row): EditVal => edits[r.docType] ?? { prefix: r.prefix, padding: r.padding, enabled: r.enabled };
+  // enabled может отсутствовать у старого бэкенда → по умолчанию true
+  // (иначе FieldToggle получает undefined → uncontrolled→controlled warning).
+  const valOf = (r: Row): EditVal => edits[r.docType] ?? { prefix: r.prefix, padding: r.padding, enabled: r.enabled ?? true };
   const patch = (r: Row, p: Partial<EditVal>) =>
     setEdits((prev) => ({ ...prev, [r.docType]: { ...valOf(r), ...p } }));
   const dirty = Object.keys(edits).length > 0;
@@ -77,8 +79,9 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
       showToast(translate("saved"), "success");
       setEdits({});
       qc.invalidateQueries({ queryKey: QKEY(orgKey) });
-    } catch {
-      /* тост ошибки — перехватчик api */
+    } catch (e: any) {
+      // Явная ошибка сохранения (в т.ч. если бэкенд не обновлён / без миграций).
+      showToast(e?.response?.data?.message || translate("numberingSaveError"), "error", 7000);
     } finally {
       setBusy(false);
     }
