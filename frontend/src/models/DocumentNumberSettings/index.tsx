@@ -10,6 +10,7 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { Field, FieldNumber } from "src/components/Field";
+import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { Button } from "src/components/Button";
 import styles from "./DocumentNumberSettings.module.scss";
@@ -20,6 +21,7 @@ interface Row {
   defaultPrefix: string;
   prefix: string;
   padding: number;
+  enabled: boolean;
   isOverridden: boolean;
 }
 
@@ -51,23 +53,26 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   });
   const rows = data ?? [];
 
-  const [edits, setEdits] = useState<Record<string, { prefix: string; padding: number }>>({});
+  type EditVal = { prefix: string; padding: number; enabled: boolean };
+  const [edits, setEdits] = useState<Record<string, EditVal>>({});
   const [busy, setBusy] = useState(false);
 
-  const valOf = (r: Row) => edits[r.docType] ?? { prefix: r.prefix, padding: r.padding };
-  const patch = (r: Row, p: Partial<{ prefix: string; padding: number }>) =>
+  const valOf = (r: Row): EditVal => edits[r.docType] ?? { prefix: r.prefix, padding: r.padding, enabled: r.enabled };
+  const patch = (r: Row, p: Partial<EditVal>) =>
     setEdits((prev) => ({ ...prev, [r.docType]: { ...valOf(r), ...p } }));
   const dirty = Object.keys(edits).length > 0;
 
-  const example = (prefix: string, padding: number) =>
-    `${prefix || "?"}-${String(1).padStart(Math.min(12, Math.max(1, padding || 6)), "0")}`;
+  const example = (v: EditVal) =>
+    v.enabled
+      ? `${v.prefix || "?"}-${String(1).padStart(Math.min(12, Math.max(1, v.padding || 6)), "0")}`
+      : "—";
 
   const save = async () => {
     setBusy(true);
     try {
       for (const [docType, v] of Object.entries(edits)) {
         if (!v.prefix.trim()) { showToast(translate("prefixRequired"), "error"); setBusy(false); return; }
-        await api.put(`document-number-settings/${docType}`, { prefix: v.prefix.trim(), padding: v.padding, organizationUuid: orgKey });
+        await api.put(`document-number-settings/${docType}`, { prefix: v.prefix.trim(), padding: v.padding, enabled: v.enabled, organizationUuid: orgKey });
       }
       showToast(translate("saved"), "success");
       setEdits({});
@@ -121,9 +126,11 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
           <Button variant="secondary" onClick={() => refetch()}>{translate("retry")}</Button>
         </div>
       ) : (
+        <div className={styles.TableScroll}>
         <table className={styles.Table}>
           <thead>
             <tr>
+              <th className={styles.cOn}>{translate("numberingEnabled")}</th>
               <th>{translate("documentType")}</th>
               <th className={styles.cPrefix}>{translate("prefix")}</th>
               <th className={styles.cPad}>{translate("digitsCount")}</th>
@@ -136,16 +143,20 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
             {rows.map((r) => {
               const v = valOf(r);
               const edited = !!edits[r.docType];
+              const off = !v.enabled;
               return (
-                <tr key={r.docType} className={edited ? styles.RowEdited : undefined}>
+                <tr key={r.docType} className={[edited && styles.RowEdited, off && styles.RowOff].filter(Boolean).join(" ") || undefined}>
+                  <td className={styles.cOn}>
+                    <FieldToggle name={`on_${r.docType}`} value={v.enabled} onChange={(val) => patch(r, { enabled: val })} disabled={busy} />
+                  </td>
                   <td className={styles.cLabel}>{r.label}</td>
                   <td className={styles.cPrefix}>
-                    <Field name={`pfx_${r.docType}`} value={v.prefix} onChange={(e) => patch(r, { prefix: e.target.value })} width="110px" />
+                    <Field name={`pfx_${r.docType}`} value={v.prefix} onChange={(e) => patch(r, { prefix: e.target.value })} width="110px" disabled={off} />
                   </td>
                   <td className={styles.cPad}>
-                    <FieldNumber name={`pad_${r.docType}`} value={String(v.padding)} onChange={(e) => patch(r, { padding: Math.min(12, Math.max(1, Number(e.target.value) || 6)) })} width="60px" />
+                    <FieldNumber name={`pad_${r.docType}`} value={String(v.padding)} onChange={(e) => patch(r, { padding: Math.min(12, Math.max(1, Number(e.target.value) || 6)) })} width="60px" disabled={off} />
                   </td>
-                  <td className={styles.cExample}><code>{example(v.prefix, v.padding)}</code></td>
+                  <td className={styles.cExample}><code>{example(v)}</code></td>
                   <td className={styles.cSource}>
                     {r.isOverridden
                       ? <span className={styles.BadgeOwn}>{orgKey ? translate("sourceOrg") : translate("sourceSet")}</span>
@@ -162,6 +173,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       <div className={styles.Footer}>

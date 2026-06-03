@@ -2100,6 +2100,8 @@ model DocumentNumberSetting {
   docType          String
   prefix           String
   padding          Int      @default(6)
+  /// Включена ли автонумерация этого вида документа.
+  enabled          Boolean  @default(true)
   updatedAt        DateTime @default(now()) @updatedAt
 
   @@unique([organizationUuid, docType])

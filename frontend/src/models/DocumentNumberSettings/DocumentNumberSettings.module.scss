@@ -49,10 +49,17 @@
 	font-size: 13px;
 }
 
+// Адаптивная обёртка: горизонтальный скролл на узких экранах.
+.TableScroll {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+}
+
 .Table {
 	width: 100%;
 	border-collapse: collapse;
 	font-size: 14px;
+	min-width: 640px;
 
 	thead th {
 		text-align: left;
@@ -81,6 +88,13 @@
 	background: $warnSoftBg !important;
 }
 
+// Выключенная нумерация — строка приглушена.
+.RowOff td {
+	color: $gray400;
+	background: $gray50;
+}
+
+.cOn { width: 110px; text-align: center; }
 .cLabel { color: $gray900; font-weight: 500; }
 .cPrefix { width: 140px; }
 .cPad { width: 90px; }

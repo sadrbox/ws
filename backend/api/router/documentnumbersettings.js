@@ -26,6 +26,7 @@ router.get("/document-number-settings", async (req, res) => {
 				defaultPrefix: def.prefix,
 				prefix: eff?.prefix ?? def.prefix,
 				padding: eff?.padding ?? 6,
+				enabled: eff?.enabled ?? true,
 				// Задано ли значение на уровне ЭТОЙ организации (а не глобально/дефолт).
 				isOverridden: !!own,
 			};
@@ -47,10 +48,11 @@ router.put("/document-number-settings/:docType", async (req, res) => {
 		if (!prefix) return res.status(400).json({ success: false, message: "Префикс обязателен" });
 		const p = Number(req.body.padding);
 		const padding = Number.isInteger(p) && p >= 1 && p <= 12 ? p : 6;
+		const enabled = req.body.enabled === undefined ? true : !!req.body.enabled;
 		const row = await prisma.documentNumberSetting.upsert({
 			where: { organizationUuid_docType: { organizationUuid, docType } },
-			create: { organizationUuid, docType, prefix, padding },
-			update: { prefix, padding },
+			create: { organizationUuid, docType, prefix, padding, enabled },
+			update: { prefix, padding, enabled },
 		});
 		invalidateNumberSettingsCache();
 		return res.json({ success: true, item: row });

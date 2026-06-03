@@ -53,9 +53,9 @@ async function loadSettings(client, orgUuid) {
 		const orgs = orgKey === GLOBAL_SETTINGS_KEY ? [GLOBAL_SETTINGS_KEY] : [GLOBAL_SETTINGS_KEY, orgKey];
 		const rows = await client.documentNumberSetting.findMany({ where: { organizationUuid: { in: orgs } } });
 		// Сначала глобальные, затем — настройки организации (имеют приоритет).
-		for (const r of rows) if (r.organizationUuid === GLOBAL_SETTINGS_KEY) map[r.docType] = { prefix: r.prefix, padding: r.padding };
+		for (const r of rows) if (r.organizationUuid === GLOBAL_SETTINGS_KEY) map[r.docType] = { prefix: r.prefix, padding: r.padding, enabled: r.enabled };
 		if (orgKey !== GLOBAL_SETTINGS_KEY)
-			for (const r of rows) if (r.organizationUuid === orgKey) map[r.docType] = { prefix: r.prefix, padding: r.padding };
+			for (const r of rows) if (r.organizationUuid === orgKey) map[r.docType] = { prefix: r.prefix, padding: r.padding, enabled: r.enabled };
 	} catch {
 		/* нет таблицы/ошибка — используем дефолты из NUMBER_CONFIG */
 	}
@@ -76,6 +76,8 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 	const def = NUMBER_CONFIG[docType];
 	if (!def) return null;
 	const settings = await loadSettings(client, organizationUuid);
+	// Автонумерация выключена для этого вида документа → номер не присваиваем.
+	if (settings[docType]?.enabled === false) return null;
 	const prefix = settings[docType]?.prefix || def.prefix;
 	const padding = settings[docType]?.padding || 6;
 	const year = (date ? new Date(date) : new Date()).getFullYear();
