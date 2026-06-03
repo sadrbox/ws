@@ -93,14 +93,27 @@ const DocumentChainButton: FC<Props> = ({ documentType, documentUuid, disabled }
   const [open, setOpen] = useState(false);
   const { windows: { addPane } } = useAppContext();
 
-  const { data, isLoading } = useQuery<ChainResponse | null>({
+  const { data, isLoading, isFetching, refetch } = useQuery<ChainResponse | null>({
     queryKey: ["document-chain", documentType, documentUuid],
     queryFn: async () => {
       const resp = await api.get<any>(`documents/${documentType}/${documentUuid}/document-chain`);
       return resp ?? null;
     },
     enabled: open && !!documentUuid,
+    // Цепочка строится на сервере из АКТУАЛЬНЫХ данных БД и зависит не только от
+    // самого документа, но и от его основания/потомков (ключ кэша их не отражает).
+    // Поэтому всегда тянем свежие данные при каждом открытии окна.
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
   });
+
+  // Открытие окна → принудительно перезапрашиваем (на случай, если основание
+  // или потомки изменились с прошлого показа при том же uuid документа).
+  const handleToggleOpen = useCallback(() => {
+    setOpen(true);
+    if (documentUuid) void refetch();
+  }, [documentUuid, refetch]);
 
   const handleOpen = useCallback((type: string, uuid: string) => {
     setOpen(false);
@@ -115,7 +128,7 @@ const DocumentChainButton: FC<Props> = ({ documentType, documentUuid, disabled }
         title={translate("relatedDocuments")}
         aria-label={translate("relatedDocuments")}
         disabled={disabled || !documentUuid}
-        onClick={() => setOpen(true)}
+        onClick={handleToggleOpen}
       >
         <Icon name="fromBasis" />
       </IconButton>
@@ -127,7 +140,7 @@ const DocumentChainButton: FC<Props> = ({ documentType, documentUuid, disabled }
           style={{ minWidth: 560, maxWidth: "90vw" }}
         >
           <div className={styles.Wrapper}>
-            {isLoading ? (
+            {isLoading || isFetching ? (
               <div className={styles.Loading}>{translate("loading")}</div>
             ) : !data?.root ? (
               <div className={styles.Empty}>{translate("relatedDocumentsEmpty")}</div>
