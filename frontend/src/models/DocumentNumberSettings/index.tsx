@@ -33,12 +33,13 @@ const QKEY = (org?: string) => ["document-number-settings", org ?? "__global__"]
 
 const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery<Row[]>({
+  const { data, isLoading, isError, refetch } = useQuery<Row[]>({
     queryKey: QKEY(organizationUuid),
     queryFn: async () =>
       (await api.get<any>("document-number-settings", {
         params: organizationUuid ? { organizationUuid } : undefined,
       }))?.items ?? [],
+    retry: 1,
   });
   const rows = data ?? [];
 
@@ -96,6 +97,11 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
 
       {isLoading ? (
         <div className={styles.Loading}>{translate("loading")}</div>
+      ) : isError || rows.length === 0 ? (
+        <div className={styles.ErrorBox}>
+          <span>{translate("numberingLoadError")}</span>
+          <Button variant="secondary" onClick={() => refetch()}>{translate("retry")}</Button>
+        </div>
       ) : (
         <table className={styles.Table}>
           <thead>

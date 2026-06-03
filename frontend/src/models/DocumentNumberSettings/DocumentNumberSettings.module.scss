@@ -32,6 +32,18 @@
 	color: $gray500;
 }
 
+.ErrorBox {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 16px;
+	border: 1px solid $warnSoftBorder;
+	background: $warnSoftBg;
+	border-radius: 8px;
+	color: $warnSoftText;
+	font-size: 13px;
+}
+
 .Table {
 	width: 100%;
 	border-collapse: collapse;
