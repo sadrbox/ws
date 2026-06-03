@@ -597,6 +597,68 @@ export async function getDocumentEntries(documentType, documentUuid, client = pr
 	});
 }
 
+/**
+ * Защитный фильтр для отчётов/просмотра проводок: оставляет только проводки,
+ * чей документ-источник СЕЙЧАС проведён (posted=true) и не удалён (deletedAt=null).
+ *
+ * Инвариант «проводки есть ⇔ документ проведён» поддерживается reconcile при
+ * сохранении, но read-time проверка гарантирует его даже при «осиротевших»
+ * проводках (legacy-данные, сид, не покрытый код-путь). Дополнительно
+ * САМОИСЦЕЛЯЕТСЯ: найденные осиротевшие проводки физически удаляются.
+ *
+ * Принимает массив проводок (нужны поля documentType, documentUuid) и клиент.
+ */
+export async function filterPostedEntries(entries, client = prisma) {
+	const list = entries ?? [];
+	if (!list.length) return list;
+
+	// Группируем uuid документов по типу.
+	const byType = new Map();
+	for (const e of list) {
+		if (!e.documentType || !e.documentUuid) continue;
+		if (!byType.has(e.documentType)) byType.set(e.documentType, new Set());
+		byType.get(e.documentType).add(e.documentUuid);
+	}
+
+	const postedKey = new Set(); // `${type}:${uuid}` проведённых и не удалённых
+	const orphans = new Map(); // type → Set(uuid) — осиротевшие (известный тип)
+	for (const [type, uuids] of byType) {
+		const cfg = DOC_CONFIG[type];
+		if (!cfg) continue; // неизвестный тип — исключаем из отчёта, но не удаляем
+		let okRows = [];
+		try {
+			okRows = await client[cfg.parentModel].findMany({
+				where: { uuid: { in: Array.from(uuids) }, posted: true, deletedAt: null },
+				select: { uuid: true },
+			});
+		} catch (err) {
+			console.error(`filterPostedEntries(${type}) lookup error:`, err);
+			continue; // при ошибке проверки — исключаем (не доверяем), но не удаляем
+		}
+		const ok = new Set(okRows.map((r) => r.uuid));
+		for (const u of uuids) {
+			if (ok.has(u)) postedKey.add(`${type}:${u}`);
+			else {
+				if (!orphans.has(type)) orphans.set(type, new Set());
+				orphans.get(type).add(u);
+			}
+		}
+	}
+
+	// Самоисцеление: удаляем проводки документов, которые не проведены/удалены.
+	for (const [type, uuids] of orphans) {
+		try {
+			await client.accountingEntry.deleteMany({
+				where: { documentType: type, documentUuid: { in: Array.from(uuids) } },
+			});
+		} catch (err) {
+			console.error(`filterPostedEntries purge(${type}) error:`, err);
+		}
+	}
+
+	return list.filter((e) => postedKey.has(`${e.documentType}:${e.documentUuid}`));
+}
+
 /** Маппинг PostingValidationError → HTTP 422. Возвращает true, если ответ отправлен. */
 export function respondPostingError(err, res) {
 	if (err instanceof PostingValidationError) {
@@ -618,6 +680,7 @@ export default {
 	removeDocumentEntries,
 	assertPostable,
 	getDocumentEntries,
+	filterPostedEntries,
 	PostingValidationError,
 	respondPostingError,
 };

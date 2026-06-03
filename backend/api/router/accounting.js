@@ -6,7 +6,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
-import { getDocumentEntries } from "../../services/accountingPosting.js";
+import { getDocumentEntries, filterPostedEntries } from "../../services/accountingPosting.js";
 
 const router = express.Router();
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -69,7 +69,8 @@ router.get("/accounting/document-entries", async (req, res) => {
 		const { documentType, documentUuid } = req.query;
 		if (!documentType || !documentUuid)
 			return res.status(400).json({ success: false, message: "documentType и documentUuid обязательны" });
-		const entries = await getDocumentEntries(documentType, documentUuid);
+		// Только проводки проведённого документа (непроведённый/удалённый — пусто).
+		const entries = await filterPostedEntries(await getDocumentEntries(documentType, documentUuid));
 		const accMap = await loadAccountMap(req, entries[0]?.organizationUuid);
 		const rows = entries.map((e) => ({
 			uuid: e.uuid,
@@ -112,12 +113,12 @@ router.get("/accounting/journal", async (req, res) => {
 		if (warehouseUuid) analyticAnd.push({ subkontoType: "Warehouse", objectUuid: warehouseUuid });
 		if (analyticAnd.length) where.AND = analyticAnd.map((cond) => ({ analytics: { some: cond } }));
 
-		const entries = await prisma.accountingEntry.findMany({
+		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
 			where,
 			include: { analytics: true },
 			orderBy: [{ date: "asc" }, { id: "asc" }],
 			take: limit,
-		});
+		}));
 		const accMap = await loadAccountMap(req, organizationUuid);
 
 		const rows = entries.map((e) => ({
@@ -153,10 +154,11 @@ router.get("/accounting/balance-sheet", async (req, res) => {
 		// Все проводки до конца периода (включительно) — для начального сальдо
 		// нужны движения ДО dateFrom.
 		const where = entryWhere(req, { dateTo, organizationUuid });
-		const entries = await prisma.accountingEntry.findMany({
+		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
 			where,
-			select: { debitAccountCode: true, creditAccountCode: true, amount: true, date: true },
-		});
+			// documentType/documentUuid нужны фильтру проведённости.
+			select: { debitAccountCode: true, creditAccountCode: true, amount: true, date: true, documentType: true, documentUuid: true },
+		}));
 		const from = dateFrom ? new Date(dateFrom) : null;
 		const accMap = await loadAccountMap(req, organizationUuid);
 
@@ -228,11 +230,11 @@ router.get("/accounting/account-card", async (req, res) => {
 
 		const where = entryWhere(req, { dateTo, organizationUuid });
 		where.OR = [{ debitAccountCode: accountCode }, { creditAccountCode: accountCode }];
-		const entries = await prisma.accountingEntry.findMany({
+		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
 			where,
 			include: { analytics: true },
 			orderBy: [{ date: "asc" }, { id: "asc" }],
-		});
+		}));
 		const from = dateFrom ? new Date(dateFrom) : null;
 		const accMap = await loadAccountMap(req, organizationUuid);
 
@@ -303,11 +305,11 @@ router.get("/accounting/subkonto", async (req, res) => {
 		if (accountCode) where.OR = [{ debitAccountCode: accountCode }, { creditAccountCode: accountCode }];
 		where.analytics = { some: { subkontoType } };
 
-		const entries = await prisma.accountingEntry.findMany({
+		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
 			where,
 			include: { analytics: true },
 			orderBy: [{ date: "asc" }, { id: "asc" }],
-		});
+		}));
 
 		// group[objectUuid] = { objectName, debit, credit }
 		const group = new Map();

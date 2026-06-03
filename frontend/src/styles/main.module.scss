@@ -97,7 +97,7 @@ body {
 	height: $heightFieldInput + 12px;
 	flex-wrap: nowrap;
 	flex-shrink: 0;
-	overflow: visible;
+	overflow: clip;
 	background: $color30;
 	// position: relative нужен для абсолютного позиционирования мобильного меню
 	// sticky уже задаёт containing block, но на мобильных нужен явный relative
