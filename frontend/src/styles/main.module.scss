@@ -35,7 +35,7 @@ body {
 	position: relative;
 	padding: 0px;
 	// width: fit-content;
-	// overflow: auto;
+	overflow: hidden;
 }
 
 .Screen {
@@ -968,6 +968,19 @@ body {
 		// height: $heightFieldInput - 10px;
 	}
 
+}
+
+// ── Контейнер видимых вкладок ──
+// Растёт на всё свободное место и клиппит собственное переполнение: при ресайзе
+// лишние вкладки не «выпирают» (т.к. .PanesTabs — overflow:visible ради меню),
+// а кнопка «ещё» прибита к правому краю и не прыгает при пересчёте.
+.PaneTabsList {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
 }
 
 // ── Скрытое зеркало замера ширин вкладок (не вмещающихся → в дропдаун) ──

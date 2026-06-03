@@ -301,19 +301,24 @@ export const PanesTabs: FC = () => {
 
   return (
     <div className={styles.PanesTabs} ref={containerRef}>
-      {visiblePanes.map(p => {
-        const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
-        return (
-          <PaneTabItem
-            key={`PaneTabItem-${p.uniqId}`}
-            pane={p}
-            isActive={p.uniqId === activePane}
-            isLocked={isLocked}
-            onActivate={() => setActivePane(p.uniqId)}
-            onClose={() => requestClose(p.uniqId)}
-          />
-        );
-      })}
+      {/* Видимые вкладки в отдельном flex-контейнере: он растёт (flex:1) и
+          КЛИППИТ собственное переполнение, поэтому при ресайзе лишние вкладки
+          не «выпирают», а кнопка «ещё» прибита к правому краю и не прыгает. */}
+      <div className={styles.PaneTabsList}>
+        {visiblePanes.map(p => {
+          const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
+          return (
+            <PaneTabItem
+              key={`PaneTabItem-${p.uniqId}`}
+              pane={p}
+              isActive={p.uniqId === activePane}
+              isLocked={isLocked}
+              onActivate={() => setActivePane(p.uniqId)}
+              onClose={() => requestClose(p.uniqId)}
+            />
+          );
+        })}
+      </div>
 
       {overflowPanes.length > 0 && (
         <PaneTabsMore
