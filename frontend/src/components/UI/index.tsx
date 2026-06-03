@@ -54,7 +54,8 @@ import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
 import { PayrollCalculationsList } from 'src/models/PayrollCalculations';
 import { PayrollPaymentsList } from 'src/models/PayrollPayments';
-import { SalesReport, MaterialStatement, CashReport, ProductRegisterReport, AccountingJournal, TurnoverBalanceSheet, AccountCard } from 'src/models/Reports';
+import { SalesReport, MaterialStatement, CashReport, ProductRegisterReport, AccountingJournal, TurnoverBalanceSheet, AccountCard, ManagerReport } from 'src/models/Reports';
+import { SalesTerminal } from 'src/models/SalesTerminal';
 import { ChartOfAccountsList } from 'src/models/ChartOfAccounts';
 import { SubkontoTypesList } from 'src/models/SubkontoTypes';
 import { UnsavedFormsList } from 'src/models/UnsavedForms';
@@ -838,6 +839,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>{translate("sales")}</h3>
             <ul className={styles.NavList}>
+              {can("Sale") && <li className={styles.NavListAccent} onClick={() => addPane({ component: SalesTerminal, label: translate("salesTerminal") })}>⚡ {translate("salesTerminal")}</li>}
               {can("Sale") && <li onClick={() => addPane({ component: SalesList, label: translate("saleRealization") })}>{translate("saleRealization")}</li>}
               {can("SaleReturn") && <li onClick={() => addPane({ component: SalesReturnsList, label: translate("SalesReturnsList") })}>{translate("SalesReturnsList")}</li>}
               {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("outgoingInvoice") })}>{translate("outgoingInvoice")}</li>}
@@ -876,6 +878,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>{translate("reports")}</h3>
             <ul className={styles.NavList}>
               {can("Sale") && <li onClick={() => addPane({ component: SalesReport, label: translate("SalesReportList") })}>{translate("SalesReportList")}</li>}
+              {can("Sale") && <li onClick={() => addPane({ component: ManagerReport, label: translate("managerReport") })}>{translate("managerReport")}</li>}
               {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: MaterialStatement, label: translate("MaterialStatementList") })}>{translate("MaterialStatementList")}</li>}
               {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: ProductRegisterReport, label: translate("ProductRegisterList") })}>{translate("ProductRegisterList")}</li>}
               {(can("CashReceiptOrder") || can("CashExpenseOrder")) && <li onClick={() => addPane({ component: CashReport, label: translate("CashReportList") })}>{translate("CashReportList")}</li>}

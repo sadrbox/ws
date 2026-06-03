@@ -511,6 +511,16 @@ body {
 			background: transparent;
 		}
 	}
+
+	// Акцентный пункт быстрого доступа (напр. «Терминал продаж»).
+	li.NavListAccent {
+		font-weight: 600;
+		color: $primary;
+
+		&:hover {
+			background: $accentBlueSoft;
+		}
+	}
 }
 
 .Panes {

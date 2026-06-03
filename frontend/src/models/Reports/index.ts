@@ -2,6 +2,7 @@ export { SalesReport } from "./SalesReport";
 export { ProductDetailReport } from "./ProductDetailReport";
 export { MaterialStatement } from "./MaterialStatement";
 export { CashReport } from "./CashReport";
+export { ManagerReport } from "./ManagerReport";
 export { ProductRegisterReport } from "./ProductRegisterReport";
 export { AccountingJournal } from "./AccountingJournal";
 export { TurnoverBalanceSheet } from "./TurnoverBalanceSheet";
