@@ -286,6 +286,8 @@
 	"reportWarehouse": "Қойма",
 	"reportCounterparty": "Контрагент",
 	"reportProduct": "Номенклатура",
+	"reportSalesCount": "Сату саны",
+	"reportReturnsCount": "Қайтару саны",
 	"reportQuantity": "Саны",
 	"reportUom": "Өлш. бірл.",
 	"reportAmountIn": "Кіріс сомасы",

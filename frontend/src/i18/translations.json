@@ -554,6 +554,8 @@
 	"reportQtyReturn": "Кол-во возвратов",
 	"reportQtyNet": "Кол-во нетто",
 	"reportAmountSale": "Сумма реализации",
+	"reportSalesCount": "Кол-во реализаций",
+	"reportReturnsCount": "Кол-во возвратов",
 	"reportAmountReturn": "Сумма возвратов",
 	"reportAmountNet": "Сумма нетто",
 	"reportAmountExcise": "Сумма акциза",

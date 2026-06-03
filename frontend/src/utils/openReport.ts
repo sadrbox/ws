@@ -38,6 +38,11 @@ const REPORT_REGISTRY: Record<string, ReportEntry> = {
 		key: "CashReport",
 		labelKey: "CashReportList",
 	},
+	"manager-report": {
+		loader: () => import("src/models/Reports/ManagerReport"),
+		key: "ManagerReport",
+		labelKey: "managerReport",
+	},
 	"product-register": {
 		loader: () => import("src/models/Reports/ProductRegisterReport"),
 		key: "ProductRegisterReport",

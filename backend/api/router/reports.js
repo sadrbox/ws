@@ -329,4 +329,67 @@ router.get("/reports/product-movements", async (req, res) => {
 	}
 });
 
+// ─── GET /reports/sales-by-manager ───────────────────────────────────────────
+// Продажи по менеджерам (аналитика учёта «Manager»). Только проведённые
+// документы. Реализация — оборот продаж, возврат от покупателя — уменьшает.
+// Params: dateFrom, dateTo, organizationUuid.
+router.get("/reports/sales-by-manager", async (req, res) => {
+	try {
+		const { dateFrom, dateTo, organizationUuid } = req.query;
+		const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+		const where = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
+
+		const [sales, returns] = await Promise.all([
+			prisma.sale.groupBy({ by: ["managerUuid"], where, _sum: { amount: true }, _count: { _all: true } }),
+			prisma.saleReturn.groupBy({ by: ["managerUuid"], where, _sum: { amount: true }, _count: { _all: true } }),
+		]);
+
+		// Имена менеджеров.
+		const uuids = [...new Set([...sales, ...returns].map((r) => r.managerUuid).filter(Boolean))];
+		const emps = uuids.length
+			? await prisma.employee.findMany({
+					where: { uuid: { in: uuids } },
+					select: { uuid: true, fullName: true, firstName: true, lastName: true, middleName: true },
+				})
+			: [];
+		const nameOf = new Map(
+			emps.map((e) => [e.uuid, e.fullName || [e.lastName, e.firstName, e.middleName].filter(Boolean).join(" ") || e.uuid]),
+		);
+
+		const map = new Map();
+		const ensure = (u) => {
+			const k = u || "__none__";
+			if (!map.has(k)) {
+				map.set(k, {
+					managerUuid: u || null,
+					managerName: u ? nameOf.get(u) || u : "— без менеджера —",
+					salesCount: 0, salesAmount: 0, returnsCount: 0, returnsAmount: 0,
+				});
+			}
+			return map.get(k);
+		};
+		for (const s of sales) { const r = ensure(s.managerUuid); r.salesCount = s._count._all; r.salesAmount = r2(s._sum.amount); }
+		for (const rr of returns) { const r = ensure(rr.managerUuid); r.returnsCount = rr._count._all; r.returnsAmount = r2(rr._sum.amount); }
+
+		const rows = [...map.values()].map((r) => ({ ...r, netAmount: r2(r.salesAmount - r.returnsAmount) }));
+		rows.sort((a, b) => b.netAmount - a.netAmount);
+
+		const totals = rows.reduce(
+			(t, r) => ({
+				salesCount: t.salesCount + r.salesCount,
+				salesAmount: r2(t.salesAmount + r.salesAmount),
+				returnsCount: t.returnsCount + r.returnsCount,
+				returnsAmount: r2(t.returnsAmount + r.returnsAmount),
+				netAmount: r2(t.netAmount + r.netAmount),
+			}),
+			{ salesCount: 0, salesAmount: 0, returnsCount: 0, returnsAmount: 0, netAmount: 0 },
+		);
+
+		return res.json({ success: true, items: rows, totals });
+	} catch (err) {
+		console.error("GET /reports/sales-by-manager error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 export default router;
