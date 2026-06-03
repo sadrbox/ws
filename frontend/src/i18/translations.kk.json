@@ -161,6 +161,9 @@
 	"documentDate": "Құжат күні",
 
 	"employee": "Қызметкер",
+	"manager": "Менеджер",
+	"managerReport": "Менеджерлер бойынша есеп",
+	"managerReportTitle": "Менеджерлер бойынша сатулар",
 	"employee.fullName": "Қызметкер",
 	"employee.iin": "Қызметкер ЖСН",
 	"EmployeesList": "Қызметкерлер",

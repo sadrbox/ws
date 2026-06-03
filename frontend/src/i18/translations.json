@@ -522,6 +522,9 @@
 	"Author": "Автор",
 
 	"employee": "Сотрудник",
+	"manager": "Менеджер",
+	"managerReport": "Отчёт по менеджерам",
+	"managerReportTitle": "Продажи по менеджерам",
 	"jobPosition": "Должность",
 	"warehouse": "Склад",
 	"fromWarehouse": "Со склада",

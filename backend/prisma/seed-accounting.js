@@ -17,6 +17,7 @@ export const SUBKONTO_TYPES = [
 	{ code: "Counterparty", name: "Контрагент", referenceEndpoint: "counterparties", referenceModel: "counterparty", sortOrder: 30 },
 	{ code: "Contract", name: "Договор", referenceEndpoint: "contracts", referenceModel: "contract", sortOrder: 40 },
 	{ code: "Employee", name: "Сотрудник", referenceEndpoint: "employees", referenceModel: "employee", sortOrder: 50 },
+	{ code: "Manager", name: "Менеджер", referenceEndpoint: "employees", referenceModel: "employee", sortOrder: 55 },
 	{ code: "Department", name: "Подразделение", referenceEndpoint: null, referenceModel: null, sortOrder: 60 },
 	{ code: "FixedAsset", name: "Основное средство", referenceEndpoint: null, referenceModel: null, sortOrder: 70 },
 	{ code: "Project", name: "Проект", referenceEndpoint: null, referenceModel: null, sortOrder: 80 },
@@ -36,7 +37,7 @@ export const KZ_CHART_OF_ACCOUNTS = [
 	{ code: "3310", name: "Краткосрочная задолженность поставщикам и подрядчикам", accountType: "passive", sub: ["Counterparty", "Contract"] },
 	{ code: "3350", name: "Краткосрочная задолженность по оплате труда", accountType: "passive", sub: ["Employee"] },
 	{ code: "5510", name: "Нераспределённая прибыль (непокрытый убыток) отчётного года", accountType: "passive" },
-	{ code: "6010", name: "Доход от реализации продукции и оказания услуг", accountType: "passive", sub: ["Counterparty", "Nomenclature"] },
+	{ code: "6010", name: "Доход от реализации продукции и оказания услуг", accountType: "passive", sub: ["Counterparty", "Nomenclature", "Manager"] },
 	{ code: "7010", name: "Себестоимость реализованных товаров и услуг", accountType: "active", sub: ["Nomenclature", "Warehouse"] },
 	{ code: "7210", name: "Административные расходы", accountType: "active", sub: ["Department", "CostItem"] },
 ];

@@ -444,6 +444,9 @@ model Sale {
   counterpartyUuid String?
   contractUuid     String?
   warehouseUuid    String?
+  /// Менеджер реализации (Employee.uuid) — аналитика учёта движения продаж
+  /// товаров и услуг (НК РК). Необязательное субконто «Manager».
+  managerUuid      String?
   authorUuid       String
   posted           Boolean       @default(false)
   updatedAt        DateTime      @default(now()) @updatedAt
@@ -453,6 +456,7 @@ model Sale {
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
   warehouse        Warehouse?    @relation(fields: [warehouseUuid], references: [uuid])
+  manager          Employee?     @relation("SaleManager", fields: [managerUuid], references: [uuid])
   author           User          @relation("SaleAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   basisDocumentType  String?
@@ -463,6 +467,7 @@ model Sale {
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([warehouseUuid])
+  @@index([managerUuid])
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
@@ -1045,6 +1050,8 @@ model Employee {
   payrollPayments     PayrollPayment[]     @relation("PayrollPayEmployee")
   organization        Organization?        @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid])
   users               User[]
+  salesManaged        Sale[]               @relation("SaleManager")
+  saleReturnsManaged  SaleReturn[]         @relation("SaleReturnManager")
 
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -1282,6 +1289,8 @@ model SaleReturn {
   counterpartyUuid String?
   contractUuid     String?
   warehouseUuid    String?
+  /// Менеджер (Employee.uuid) — аналитика учёта по менеджеру для возврата.
+  managerUuid      String?
   authorUuid       String
   posted           Boolean          @default(false)
   updatedAt        DateTime         @default(now()) @updatedAt
@@ -1291,6 +1300,7 @@ model SaleReturn {
   counterparty     Counterparty?    @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization?    @relation(fields: [organizationUuid], references: [uuid])
   warehouse        Warehouse?       @relation("WhSaleReturns", fields: [warehouseUuid], references: [uuid])
+  manager          Employee?        @relation("SaleReturnManager", fields: [managerUuid], references: [uuid])
   author           User             @relation("SaleReturnAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   basisDocumentType  String?
@@ -1301,6 +1311,7 @@ model SaleReturn {
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([warehouseUuid])
+  @@index([managerUuid])
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])

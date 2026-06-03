@@ -107,7 +107,9 @@ export const POSTING_RULES = {
 					amount,
 					description: "Выручка от реализации",
 					debitAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
-					creditAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Nomenclature", it.productUuid)]),
+					// Аналитика дохода 6010: контрагент + номенклатура + менеджер
+					// (необязательное субконто Manager — учёт движения продаж по менеджеру).
+					creditAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Nomenclature", it.productUuid), an("Manager", doc.managerUuid)]),
 				});
 			}
 			const cost = r2((await ctx.avgCost(it.productUuid, doc.warehouseUuid, doc.date)) * Number(it.quantity || 0));
@@ -137,7 +139,9 @@ export const POSTING_RULES = {
 					credit: ACC.AR,
 					amount,
 					description: "Сторно выручки (возврат от покупателя)",
-					debitAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Nomenclature", it.productUuid)]),
+					// Сторнируем доход 6010 в т.ч. по менеджеру (Manager) — возврат
+					// уменьшает движение продаж менеджера.
+					debitAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Nomenclature", it.productUuid), an("Manager", doc.managerUuid)]),
 					creditAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
 				});
 			}

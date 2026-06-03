@@ -61,6 +61,7 @@ interface TFields {
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
   warehouseUuid: string; warehouseName: string;
+  managerUuid: string; managerName: string;
   vatAmount: number; discountAmount: number; amountWithoutVat: number;
   authorUuid: string; authorName: string;
   basisDocumentType: string; basisDocumentUuid: string; basisDocumentLabel: string;
@@ -70,6 +71,7 @@ const DEFAULT_FIELDS: TFields = {
   date: "", comment: "", amount: 0, posted: false,
   organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "", contractUuid: "", contractName: "",
   warehouseUuid: "", warehouseName: "",
+  managerUuid: "", managerName: "",
   vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
   authorUuid: "", authorName: "",
   basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "",
@@ -178,6 +180,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       contractName: d.contract?.name ?? "",
       warehouseUuid: d.warehouseUuid ?? "",
       warehouseName: d.warehouse?.name ?? "",
+      managerUuid: d.managerUuid ?? "",
+      managerName: d.manager?.fullName ?? [d.manager?.lastName, d.manager?.firstName, d.manager?.middleName].filter(Boolean).join(" "),
       vatAmount: d.vatAmount != null ? Number(d.vatAmount) : 0,
       discountAmount: d.discountAmount != null ? Number(d.discountAmount) : 0,
       amountWithoutVat: d.amountWithoutVat != null ? Number(d.amountWithoutVat) : 0,
@@ -199,6 +203,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         counterpartyUuid: fd.counterpartyUuid || null,
         contractUuid: fd.contractUuid || null,
         warehouseUuid: fd.warehouseUuid || null,
+        managerUuid: fd.managerUuid || null,
         vatAmount: fd.vatAmount ? fd.vatAmount : 0,
         discountAmount: fd.discountAmount ? fd.discountAmount : 0,
         amountWithoutVat: fd.amountWithoutVat ? fd.amountWithoutVat : 0,
@@ -601,6 +606,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
 
                 <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
+
+                {/* Менеджер реализации — аналитика учёта движения продаж по менеджеру (НК РК) */}
+                <LookupField label={translate("manager")} name={`${form.formUid}_managerUuid`} value={form.fields.managerUuid} displayValue={form.fields.managerName} endpoint="employees" displayField="fullName" onSelect={(u, d) => form.setFields({ managerUuid: u, managerName: d } as Partial<TFields>)} onClear={() => form.setFields({ managerUuid: "", managerName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
 
             </GroupCol>
