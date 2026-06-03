@@ -28,6 +28,7 @@ export async function openFormByEndpoint(
     label: `${entry.label} → загрузка…`,
     component: FormComponent,
     data: { uuid } as TDataItem,
+    restore: { kind: "form", endpoint, uuid },
   });
 }
 
@@ -78,5 +79,9 @@ export async function openListByRef(
     console.warn(`[openListByRef] не найден List-компонент для "${entry.endpoint}"`);
     return;
   }
-  addPane({ component: ListComponent, label: paneLabel ?? entry.label });
+  addPane({
+    component: ListComponent,
+    label: paneLabel ?? entry.label,
+    restore: { kind: "list", ref: entry.endpoint },
+  });
 }

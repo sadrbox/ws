@@ -3,6 +3,7 @@
  * Колонка «Документ» кликабельна — открывает форму документа-регистратора.
  */
 import { FC, useState, useCallback } from "react";
+import { usePersistentState } from "src/hooks/usePersistentState";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -42,14 +43,14 @@ const AccountingJournal: FC<Props> = ({ uniqId }) => {
   const { windows: { addPane } } = useAppContext();
   const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = useState(defaultOrgUuid || "");
-  const [orgName, setOrgName] = useState(defaultOrgName || "");
-  const [accountCode, setAccountCode] = useState("");
-  const [accountName, setAccountName] = useState("");
-  const [cpUuid, setCpUuid] = useState(""); const [cpName, setCpName] = useState("");
-  const [productUuid, setProductUuid] = useState(""); const [productName, setProductName] = useState("");
+  const [dateFrom, setDateFrom] = usePersistentState("report.accounting-journal.dateFrom", () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
+  const [dateTo, setDateTo] = usePersistentState("report.accounting-journal.dateTo", () => new Date().toISOString().slice(0, 10));
+  const [orgUuid, setOrgUuid] = usePersistentState("report.accounting-journal.orgUuid", defaultOrgUuid || "");
+  const [orgName, setOrgName] = usePersistentState("report.accounting-journal.orgName", defaultOrgName || "");
+  const [accountCode, setAccountCode] = usePersistentState("report.accounting-journal.accountCode", "");
+  const [accountName, setAccountName] = usePersistentState("report.accounting-journal.accountName", "");
+  const [cpUuid, setCpUuid] = usePersistentState("report.accounting-journal.cpUuid", ""); const [cpName, setCpName] = usePersistentState("report.accounting-journal.cpName", "");
+  const [productUuid, setProductUuid] = usePersistentState("report.accounting-journal.productUuid", ""); const [productName, setProductName] = usePersistentState("report.accounting-journal.productName", "");
 
   const [applied, setApplied] = useState<null | Record<string, string>>(null);
   const handleGenerate = useCallback(() => {

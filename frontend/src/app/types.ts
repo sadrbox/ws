@@ -86,7 +86,17 @@ export type TPane = {
 	 *  При закрытии этой панели активируется опидатель (если ещё открыт) —
 	 *  напр. возврат к форме, из поля «Основание» которой открыли документ. */
 	openerPaneId?: string;
+	/** Сериализуемый «рецепт» для восстановления панели после перезагрузки
+	 *  страницы (см. app/paneRestore.ts). Есть только у панелей, открытых через
+	 *  реестры (список/форма/отчёт); selector-панели рецепта не имеют. */
+	restore?: TPaneRestore;
 };
+
+/** Сериализуемое описание панели для восстановления после перезагрузки. */
+export type TPaneRestore =
+	| { kind: "list"; ref: string }
+	| { kind: "form"; endpoint: string; uuid?: string }
+	| { kind: "report"; key: string; data?: Record<string, any> };
 
 export type TComponentNode =
 	| FC<any>

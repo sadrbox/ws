@@ -5,6 +5,7 @@
  * ТОЛЬКО проведённые документы (posted=true).
  */
 import { FC, useState, useCallback } from "react";
+import { usePersistentState } from "src/hooks/usePersistentState";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -79,16 +80,16 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
   const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } = useDefaultOrganization();
 
   const [view, setView] = useState<"movements" | "balances">("movements");
-  const [dateFrom, setDateFrom] = useState(() => {
+  const [dateFrom, setDateFrom] = usePersistentState("report.product-register.dateFrom", () => {
     const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
   });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = useState(defaultOrgUuid || "");
-  const [orgName, setOrgName] = useState(defaultOrgName || "");
-  const [warehouseUuid, setWarehouseUuid] = useState("");
-  const [warehouseName, setWarehouseName] = useState("");
-  const [productUuid, setProductUuid] = useState("");
-  const [productName, setProductName] = useState("");
+  const [dateTo, setDateTo] = usePersistentState("report.product-register.dateTo", () => new Date().toISOString().slice(0, 10));
+  const [orgUuid, setOrgUuid] = usePersistentState("report.product-register.orgUuid", defaultOrgUuid || "");
+  const [orgName, setOrgName] = usePersistentState("report.product-register.orgName", defaultOrgName || "");
+  const [warehouseUuid, setWarehouseUuid] = usePersistentState("report.product-register.warehouseUuid", "");
+  const [warehouseName, setWarehouseName] = usePersistentState("report.product-register.warehouseName", "");
+  const [productUuid, setProductUuid] = usePersistentState("report.product-register.productUuid", "");
+  const [productName, setProductName] = usePersistentState("report.product-register.productName", "");
 
   // Отчёт формируется только по кнопке «Сформировать» (snapshot параметров).
   // view (Движения/Остатки) переключается независимо — на применённых параметрах.

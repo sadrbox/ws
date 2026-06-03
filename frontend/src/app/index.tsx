@@ -31,6 +31,7 @@ import { clearAllFormStores } from "src/hooks/useFormSessionStore";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { useAppContext, AppContextProvider } from "src/app/context";
 import { openListByRef } from "src/registry/formRegistry";
+import { loadPersistedSession, savePersistedSession, restorePane, type PersistedSession } from "src/app/paneRestore";
 import { SalesList } from "src/models/Sales";
 import { ContractsList, ContractsForm } from "src/models/Contracts";
 import { openFormByRef } from "src/utils/openFormByRef";
@@ -388,16 +389,45 @@ const App: React.FC = () => {
   // Автоматическое открытие начальной панели
   // ────────────────────────────────────────────────
 
+  // Сохранённая сессия панелей (читается один раз, ДО эффекта-персиста, чтобы
+  // тот не затёр её пустым состоянием на первом рендере).
+  const persistedSessionRef = useRef<PersistedSession | null | undefined>(undefined);
+  if (persistedSessionRef.current === undefined) {
+    persistedSessionRef.current = loadPersistedSession();
+  }
+  // restore завершён → можно персистить изменения панелей.
+  const restoreDoneRef = useRef(false);
+
   useEffect(() => {
-
-    // Открываем конкретную форму ContractsForm по ID при монтировании приложения
-    // const uuid = "2"; // Замените на реальный UUID
-    // openFormByRef({ endpoint: "Sales", uuid }, addPane, "Договор");
-    openListByRef("Sales", addPane);
-
-    // Открыть материальную ведомость  при монтировании приложения
-    // openReport("material-statement", addPane);
+    let cancelled = false;
+    (async () => {
+      const session = persistedSessionRef.current;
+      if (session && session.panes.length > 0) {
+        // Восстанавливаем панели прошлой сессии по сериализованным рецептам.
+        for (const p of session.panes) {
+          if (cancelled) return;
+          try { await restorePane(p, addPane); } catch { /* пропускаем сбойную панель */ }
+        }
+        // Делаем активной последнюю активную вкладку (если она восстановлена).
+        const activeId = session.activePaneId;
+        if (activeId && session.panes.some((p) => p.uniqId === activeId)) {
+          setTimeout(() => setActivePaneId(activeId), 0);
+        }
+      } else {
+        // Первый визит / пустая сессия — открываем список по умолчанию.
+        openListByRef("Sales", addPane);
+      }
+      restoreDoneRef.current = true;
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Персист открытых панелей + активной вкладки (после завершения restore).
+  useEffect(() => {
+    if (!restoreDoneRef.current) return;
+    savePersistedSession(panes, activePaneId);
+  }, [panes, activePaneId]);
 
   // ────────────────────────────────────────────────
   // Глобальный confirm (замена window.confirm)

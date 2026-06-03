@@ -4,6 +4,7 @@
  * Показывает: приход (ПКО), расход (РКО) и остаток нарастающим итогом.
  */
 import { FC, useState, useCallback } from "react";
+import { usePersistentState } from "src/hooks/usePersistentState";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -44,12 +45,12 @@ interface CashReportProps {
 const CashReport: FC<CashReportProps> = ({ uniqId }) => {
   const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = useState(() => {
+  const [dateFrom, setDateFrom] = usePersistentState("report.cash-report.dateFrom", () => {
     const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
   });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = useState(defaultOrgUuid || "");
-  const [orgName, setOrgName] = useState(defaultOrgName || "");
+  const [dateTo, setDateTo] = usePersistentState("report.cash-report.dateTo", () => new Date().toISOString().slice(0, 10));
+  const [orgUuid, setOrgUuid] = usePersistentState("report.cash-report.orgUuid", defaultOrgUuid || "");
+  const [orgName, setOrgName] = usePersistentState("report.cash-report.orgName", defaultOrgName || "");
 
   // Отчёт формируется только по кнопке «Сформировать» (snapshot параметров).
   const [applied, setApplied] = useState<null | {

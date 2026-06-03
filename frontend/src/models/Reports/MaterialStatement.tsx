@@ -4,6 +4,7 @@
  * НК РК ст. 242 п.1: учёт ТМЗ обязателен при определении вычетов.
  */
 import { FC, useState, useCallback } from "react";
+import { usePersistentState } from "src/hooks/usePersistentState";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -77,14 +78,14 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
   const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } = useDefaultOrganization();
   const { windows: { addPane } } = useAppContext();
 
-  const [dateFrom, setDateFrom] = useState(() => {
+  const [dateFrom, setDateFrom] = usePersistentState("report.material-statement.dateFrom", () => {
     const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
   });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = useState(defaultOrgUuid || "");
-  const [orgName, setOrgName] = useState(defaultOrgName || "");
-  const [warehouseUuid, setWarehouseUuid] = useState("");
-  const [warehouseName, setWarehouseName] = useState("");
+  const [dateTo, setDateTo] = usePersistentState("report.material-statement.dateTo", () => new Date().toISOString().slice(0, 10));
+  const [orgUuid, setOrgUuid] = usePersistentState("report.material-statement.orgUuid", defaultOrgUuid || "");
+  const [orgName, setOrgName] = usePersistentState("report.material-statement.orgName", defaultOrgName || "");
+  const [warehouseUuid, setWarehouseUuid] = usePersistentState("report.material-statement.warehouseUuid", "");
+  const [warehouseName, setWarehouseName] = usePersistentState("report.material-statement.warehouseName", "");
 
   // Параметры применяются только по кнопке «Сформировать» (snapshot),
   // чтобы отчёт не перезагружался при каждом изменении фильтров.

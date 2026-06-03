@@ -3,6 +3,7 @@
  * Клик по счёту открывает «Карточку счёта» с передачей счёта и периода.
  */
 import { FC, useState, useCallback } from "react";
+import { usePersistentState } from "src/hooks/usePersistentState";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -33,10 +34,10 @@ const TurnoverBalanceSheet: FC<Props> = ({ uniqId }) => {
   const { windows: { addPane } } = useAppContext();
   const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = useState(defaultOrgUuid || "");
-  const [orgName, setOrgName] = useState(defaultOrgName || "");
+  const [dateFrom, setDateFrom] = usePersistentState("report.accounting-osv.dateFrom", () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
+  const [dateTo, setDateTo] = usePersistentState("report.accounting-osv.dateTo", () => new Date().toISOString().slice(0, 10));
+  const [orgUuid, setOrgUuid] = usePersistentState("report.accounting-osv.orgUuid", defaultOrgUuid || "");
+  const [orgName, setOrgName] = usePersistentState("report.accounting-osv.orgName", defaultOrgName || "");
 
   const [applied, setApplied] = useState<null | { dateFrom: string; dateTo: string; orgUuid: string }>(null);
   const handleGenerate = useCallback(() => setApplied({ dateFrom, dateTo, orgUuid }), [dateFrom, dateTo, orgUuid]);

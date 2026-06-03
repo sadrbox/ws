@@ -87,6 +87,7 @@ export async function openReport(
 		component: Component,
 		label: paneLabel ?? translate(entry.labelKey),
 		...(data ? { data } : {}),
+		restore: { kind: "report", key: key.toLowerCase(), ...(data ? { data } : {}) },
 	});
 }
 

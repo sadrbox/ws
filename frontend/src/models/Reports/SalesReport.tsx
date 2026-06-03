@@ -1,4 +1,5 @@
 import { FC, useState, useCallback, useMemo } from "react";
+import { usePersistentState } from "src/hooks/usePersistentState";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -70,14 +71,14 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
   const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } =
     useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = useState(() => {
+  const [dateFrom, setDateFrom] = usePersistentState("report.sales-report.dateFrom", () => {
     const d = new Date();
     d.setDate(1);
     return d.toISOString().slice(0, 10);
   });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = useState(defaultOrgUuid || "");
-  const [orgName, setOrgName] = useState(defaultOrgName || "");
+  const [dateTo, setDateTo] = usePersistentState("report.sales-report.dateTo", () => new Date().toISOString().slice(0, 10));
+  const [orgUuid, setOrgUuid] = usePersistentState("report.sales-report.orgUuid", defaultOrgUuid || "");
+  const [orgName, setOrgName] = usePersistentState("report.sales-report.orgName", defaultOrgName || "");
   const [cptyUuid, setCptyUuid] = useState("");
   const [cptyName, setCptyName] = useState("");
 
