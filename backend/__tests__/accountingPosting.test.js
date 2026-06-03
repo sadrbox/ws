@@ -319,3 +319,40 @@ test("Интеграция: проведённое перемещение соз
 		await prisma.inventoryTransfer.delete({ where: { uuid: doc.uuid } }).catch(() => {});
 	}
 });
+
+// ─── Разнесение НДС (плательщик НДС): 1420 / 3130 ─────────────────────────────
+test("Поступление с НДС: Дт1330 (без НДС) + Дт1420 (НДС) Кт3310 (полная)", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid || !fx.productUuid) return t.skip("нет фикстур");
+	const doc = { organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid, date: new Date(), posted: true };
+	const items = [{ productUuid: fx.productUuid, quantity: 1, amount: 1120, vatAmount: 120, amountWithoutVat: 1000 }];
+	const entries = await buildDocumentEntries("purchase", doc, items);
+	const goods = entries.find((e) => e.debitAccountCode === "1330" && e.creditAccountCode === "3310");
+	const vat = entries.find((e) => e.debitAccountCode === "1420" && e.creditAccountCode === "3310");
+	assert.ok(goods, "товар на 1330 без НДС");
+	assert.equal(goods.amount, 1000);
+	assert.ok(vat, "входящий НДС на 1420");
+	assert.equal(vat.amount, 120);
+	assert.equal(sumDebit(entries), 1120, "Дт = полная сумма с НДС");
+});
+
+test("Реализация с НДС: Кт6010 (без НДС) + Кт3130 (НДС), Дт1210 (полная)", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid || !fx.productUuid) return t.skip("нет фикстур");
+	const doc = { organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid, date: new Date(), posted: true };
+	const items = [{ productUuid: fx.productUuid, quantity: 1, amount: 1120, vatAmount: 120, amountWithoutVat: 1000 }];
+	const entries = await buildDocumentEntries("sale", doc, items);
+	const rev = entries.find((e) => e.debitAccountCode === "1210" && e.creditAccountCode === "6010");
+	const vat = entries.find((e) => e.debitAccountCode === "1210" && e.creditAccountCode === "3130");
+	assert.ok(rev, "доход на 6010 без НДС");
+	assert.equal(rev.amount, 1000);
+	assert.ok(vat, "исходящий НДС на 3130");
+	assert.equal(vat.amount, 120);
+});
+
+test("Без НДС (vat=0) — разнесения нет, поведение как раньше", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid || !fx.productUuid) return t.skip("нет фикстур");
+	const doc = { organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid, date: new Date(), posted: true };
+	const items = [{ productUuid: fx.productUuid, quantity: 1, amount: 1000 }];
+	const entries = await buildDocumentEntries("purchase", doc, items);
+	assert.equal(entries.filter((e) => e.creditAccountCode === "3310").length, 1, "одна проводка на 3310 (нет НДС)");
+	assert.ok(!entries.some((e) => e.debitAccountCode === "1420"), "нет проводки 1420");
+});

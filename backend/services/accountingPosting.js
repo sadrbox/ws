@@ -28,6 +28,8 @@ export const ACC = {
 	GOODS: "1330",
 	FIXED: "2410",
 	AP: "3310", // задолженность поставщикам
+	VAT_IN: "1420", // НДС к возмещению (входящий, к зачёту)
+	VAT_OUT: "3130", // НДС к уплате (исходящий)
 	PAYROLL: "3350",
 	RETAINED: "5510",
 	REVENUE: "6010",
@@ -77,39 +79,75 @@ function an(type, objectUuid) {
 }
 const compact = (arr) => arr.filter(Boolean);
 
+/**
+ * Разбивка суммы строки на стоимость без НДС и сам НДС (плательщик НДС).
+ * net — стоимость без НДС (база, идёт на товар/доход), vat — сумма НДС.
+ * Фолбэк: если в строке нет налоговых полей (vat=0) → net=amount, vat=0
+ * (поведение как до разнесения НДС — обратная совместимость).
+ */
+function splitVat(it) {
+	const amount = r2(it.amount);
+	const vat = r2(it.vatAmount);
+	const rawNet = it.amountWithoutVat != null ? r2(it.amountWithoutVat) : r2(amount - vat);
+	const net = rawNet > 0 ? rawNet : amount;
+	return { amount, vat, net };
+}
+
 // ─── Реестр правил формирования проводок ─────────────────────────────────────
 // Каждое правило: (doc, items, ctx) => Promise<Array<RawEntry>> | Array<RawEntry>
 // RawEntry = { debit, credit, amount, description, debitAnalytics[], creditAnalytics[] }
 export const POSTING_RULES = {
-	// Поступление товаров: Дт 1330 (Номенклатура, Склад) Кт 3310 (Контрагент, Договор)
-	purchase: (doc, items) =>
-		items
-			.filter((it) => it.productUuid && r2(it.amount) > 0)
-			.map((it) => ({
-				debit: ACC.GOODS,
-				credit: ACC.AP,
-				amount: r2(it.amount),
-				description: "Оприходование товара",
-				debitAnalytics: compact([an("Nomenclature", it.productUuid), an("Warehouse", doc.warehouseUuid)]),
-				creditAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
-			})),
+	// Поступление товаров (плательщик НДС): Дт 1330 (без НДС) + Дт 1420 (входящий
+	// НДС к зачёту) Кт 3310 (полная сумма с НДС). Контрагент/договор — на 3310.
+	purchase: (doc, items) => {
+		const out = [];
+		for (const it of items) {
+			if (!it.productUuid) continue;
+			const { net, vat } = splitVat(it);
+			const apAnalytics = compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
+			if (net > 0) {
+				out.push({
+					debit: ACC.GOODS, credit: ACC.AP, amount: net,
+					description: "Оприходование товара",
+					debitAnalytics: compact([an("Nomenclature", it.productUuid), an("Warehouse", doc.warehouseUuid)]),
+					creditAnalytics: apAnalytics,
+				});
+			}
+			if (vat > 0) {
+				out.push({
+					debit: ACC.VAT_IN, credit: ACC.AP, amount: vat,
+					description: "НДС по приобретённым товарам (к зачёту)",
+					debitAnalytics: [], creditAnalytics: apAnalytics,
+				});
+			}
+		}
+		return out;
+	},
 
 	// Реализация: отражение дохода (Дт 1210 Кт 6010) + списание себестоимости (Дт 7010 Кт 1330).
 	sale: async (doc, items, ctx) => {
 		const out = [];
 		for (const it of items) {
 			if (!it.productUuid) continue;
-			const amount = r2(it.amount);
-			if (amount > 0) {
+			const { net, vat } = splitVat(it);
+			const arAnalytics = compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
+			if (net > 0) {
 				out.push({
 					debit: ACC.AR,
 					credit: ACC.REVENUE,
-					amount,
-					description: "Выручка от реализации",
-					debitAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
+					amount: net,
+					description: "Выручка от реализации (без НДС)",
+					debitAnalytics: arAnalytics,
 					// Аналитика дохода 6010: контрагент + номенклатура + менеджер
 					// (необязательное субконто Manager — учёт движения продаж по менеджеру).
 					creditAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Nomenclature", it.productUuid), an("Manager", doc.managerUuid)]),
+				});
+			}
+			if (vat > 0) {
+				out.push({
+					debit: ACC.AR, credit: ACC.VAT_OUT, amount: vat,
+					description: "НДС по реализации (к уплате)",
+					debitAnalytics: arAnalytics, creditAnalytics: [],
 				});
 			}
 			const cost = r2((await ctx.avgCost(it.productUuid, doc.warehouseUuid, doc.date)) * Number(it.quantity || 0));
@@ -132,17 +170,25 @@ export const POSTING_RULES = {
 		const out = [];
 		for (const it of items) {
 			if (!it.productUuid) continue;
-			const amount = r2(it.amount);
-			if (amount > 0) {
+			const { net, vat } = splitVat(it);
+			const arAnalytics = compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
+			if (net > 0) {
 				out.push({
 					debit: ACC.REVENUE,
 					credit: ACC.AR,
-					amount,
+					amount: net,
 					description: "Сторно выручки (возврат от покупателя)",
 					// Сторнируем доход 6010 в т.ч. по менеджеру (Manager) — возврат
 					// уменьшает движение продаж менеджера.
 					debitAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Nomenclature", it.productUuid), an("Manager", doc.managerUuid)]),
-					creditAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
+					creditAnalytics: arAnalytics,
+				});
+			}
+			if (vat > 0) {
+				out.push({
+					debit: ACC.VAT_OUT, credit: ACC.AR, amount: vat,
+					description: "Сторно НДС по реализации (возврат)",
+					debitAnalytics: [], creditAnalytics: arAnalytics,
 				});
 			}
 			const cost = r2((await ctx.avgCost(it.productUuid, doc.warehouseUuid, doc.date)) * Number(it.quantity || 0));
@@ -160,18 +206,32 @@ export const POSTING_RULES = {
 		return out;
 	},
 
-	// Возврат поставщику: Дт 3310 (Контрагент, Договор) Кт 1330 (Номенклатура, Склад).
-	purchase_return: (doc, items) =>
-		items
-			.filter((it) => it.productUuid && r2(it.amount) > 0)
-			.map((it) => ({
-				debit: ACC.AP,
-				credit: ACC.GOODS,
-				amount: r2(it.amount),
-				description: "Возврат товара поставщику",
-				debitAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
-				creditAnalytics: compact([an("Nomenclature", it.productUuid), an("Warehouse", doc.warehouseUuid)]),
-			})),
+	// Возврат поставщику (плательщик НДС): Дт 3310 (полная) Кт 1330 (без НДС) +
+	// Кт 1420 (сторно входящего НДС).
+	purchase_return: (doc, items) => {
+		const out = [];
+		for (const it of items) {
+			if (!it.productUuid) continue;
+			const { net, vat } = splitVat(it);
+			const apAnalytics = compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
+			if (net > 0) {
+				out.push({
+					debit: ACC.AP, credit: ACC.GOODS, amount: net,
+					description: "Возврат товара поставщику",
+					debitAnalytics: apAnalytics,
+					creditAnalytics: compact([an("Nomenclature", it.productUuid), an("Warehouse", doc.warehouseUuid)]),
+				});
+			}
+			if (vat > 0) {
+				out.push({
+					debit: ACC.AP, credit: ACC.VAT_IN, amount: vat,
+					description: "Сторно НДС к зачёту (возврат поставщику)",
+					debitAnalytics: apAnalytics, creditAnalytics: [],
+				});
+			}
+		}
+		return out;
+	},
 
 	// Перемещение ТМЗ между складами: Дт 1330 (Номенклатура, Склад-получатель)
 	// Кт 1330 (Номенклатура, Склад-источник). Сумма — по себестоимости (скользящая

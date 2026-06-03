@@ -107,13 +107,20 @@ export async function reconcileDocumentRegister(
 			if (!it.productUuid) continue; // движения только по товарам (не услугам)
 			const qty = Number(it.quantity) || 0;
 			const amt = Number(it.amount) || 0;
-			if (qty === 0 && amt === 0) continue;
+			// Стоимость товара для регистра — БЕЗ НДС (плательщик НДС: входящий НДС
+			// идёт к зачёту, а не в себестоимость). Себестоимость (скользящая
+			// средняя) считается по этим суммам — согласована со счётом 1330.
+			// Фолбэк на полную сумму, если в строке нет налоговых полей (напр.
+			// перемещение без НДС).
+			const net = Number(it.amountWithoutVat);
+			const value = Number.isFinite(net) && net > 0 ? net : amt;
+			if (qty === 0 && value === 0) continue;
 			for (const mv of cfg.movements) {
 				records.push({
 					date: doc.date ?? new Date(),
 					movementType: mv.type,
 					quantity: qty,
-					amount: amt,
+					amount: value,
 					productUuid: it.productUuid,
 					warehouseUuid: doc[mv.warehouseField] ?? null,
 					organizationUuid: doc.organizationUuid ?? null,
