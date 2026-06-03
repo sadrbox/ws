@@ -286,3 +286,36 @@ test("Интеграция: себестоимость реализации сп
 		await prisma.product.delete({ where: { uuid: product.uuid } }).catch(() => {});
 	}
 });
+
+// ─── Интеграция: перемещение между складами формирует проводки ────────────────
+test("Интеграция: проведённое перемещение создаёт проводку Дт1330 Кт1330, распроведение — удаляет", async (t) => {
+	if (!fx.orgUuid || !fx.productUuid || !fx.warehouseUuid || !fx.userUuid) return t.skip("нет фикстур");
+
+	const doc = await prisma.inventoryTransfer.create({
+		data: {
+			date: new Date(), posted: true, organizationUuid: fx.orgUuid,
+			fromWarehouseUuid: fx.warehouseUuid, toWarehouseUuid: fx.warehouseUuid,
+			authorUuid: fx.userUuid,
+		},
+	});
+	const item = await prisma.inventoryTransferItem.create({
+		data: { inventoryTransferUuid: doc.uuid, productUuid: fx.productUuid, quantity: 2, price: 300 },
+	});
+	try {
+		await reconcileDocumentEntries("inventory_transfer", doc.uuid);
+		let entries = await prisma.accountingEntry.findMany({ where: { documentType: "inventory_transfer", documentUuid: doc.uuid } });
+		assert.equal(entries.length, 1, "после проведения — 1 проводка");
+		assert.equal(entries[0].debitAccountCode, "1330");
+		assert.equal(entries[0].creditAccountCode, "1330");
+		assert.equal(Number(entries[0].amount), 600, "2 ед × 300 (фолбэк на цену) = 600");
+
+		await prisma.inventoryTransfer.update({ where: { uuid: doc.uuid }, data: { posted: false } });
+		await reconcileDocumentEntries("inventory_transfer", doc.uuid);
+		entries = await prisma.accountingEntry.findMany({ where: { documentType: "inventory_transfer", documentUuid: doc.uuid } });
+		assert.equal(entries.length, 0, "после распроведения — 0 проводок");
+	} finally {
+		await removeDocumentEntries("inventory_transfer", doc.uuid);
+		await prisma.inventoryTransferItem.delete({ where: { uuid: item.uuid } }).catch(() => {});
+		await prisma.inventoryTransfer.delete({ where: { uuid: doc.uuid } }).catch(() => {});
+	}
+});
