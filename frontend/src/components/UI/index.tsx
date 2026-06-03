@@ -185,15 +185,26 @@ const PaneTabsMore: FC<{
       <button
         ref={btnRef}
         type="button"
-        className={[styles.PaneTabsMoreBtn, active && styles.PaneTabsMoreActive].filter(Boolean).join(" ")}
+        className={[
+          styles.PaneTabsMoreBtn,
+          active && styles.PaneTabsMoreActive,
+          open && styles.PaneTabsMoreBtnOpen,
+        ].filter(Boolean).join(" ")}
         onClick={() => setOpen(v => !v)}
         title={translate("morePanes")}
         aria-label={translate("morePanes")}
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <span>⋯</span>
         <span className={styles.PaneTabsMoreCount}>{panes.length}</span>
+        <svg
+          className={styles.PaneTabsMoreCaret}
+          width="10" height="10" viewBox="0 0 16 16"
+          fill="none" stroke="currentColor" strokeWidth="2"
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden
+        >
+          <path d="M4 6l4 4 4-4" />
+        </svg>
       </button>
       {open && (
         <div ref={popRef} className={styles.PaneTabsMoreMenu} role="menu">
@@ -315,8 +326,11 @@ export const PanesTabs: FC = () => {
         />
       )}
 
-      {/* Скрытое зеркало: все вкладки в натуральную ширину — только для замера. */}
-      <div ref={mirrorRef} className={styles.PaneTabsMeasure} aria-hidden>
+      {/* Скрытое зеркало: все вкладки в натуральную ширину — только для замера.
+          Обёрнуто в 0×0 overflow:hidden, чтобы не порождать скролл и позволить
+          самому .PanesTabs быть overflow:visible (иначе обрезается дропдаун). */}
+      <div className={styles.PaneTabsMeasureClip} aria-hidden>
+      <div ref={mirrorRef} className={styles.PaneTabsMeasure}>
         {panes.map(p => {
           const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
           return (
@@ -330,6 +344,7 @@ export const PanesTabs: FC = () => {
             />
           );
         })}
+      </div>
       </div>
     </div>
   );
