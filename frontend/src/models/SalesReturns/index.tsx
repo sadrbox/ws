@@ -45,6 +45,7 @@ const FORM_LABEL = "Возврат от покупателя";
 
 interface TFields {
   id?: number; uuid?: string;
+  number: string;
   date: string; comment: string;
   amount: number; vatAmount: number; discountAmount: number; amountWithoutVat: number;
   posted: boolean;
@@ -57,6 +58,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
+  number: "",
   date: "", comment: "",
   amount: 0, vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
   posted: false,
@@ -165,6 +167,7 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
+      number: d.number ?? "",
       date: isoToLocalInput(d.date),
       comment: d.comment ?? "",
       amount: d.amount != null ? Number(d.amount) : 0,
@@ -190,6 +193,7 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
       const validation = validateDocumentFields("sale_return", fd as unknown as Record<string, unknown>);
       if (!validation.isValid) return formatValidationErrors(validation.errors);
       return {
+        number: fd.number?.trim() || null,
         date: localInputToIso(fd.date),
         comment: fd.comment?.trim() || null,
         amount: fd.amount ? fd.amount : null,
@@ -400,6 +404,7 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow className={styles.FormHeaderRow}>
+                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
                 <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
               </GroupRow>

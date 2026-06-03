@@ -10,6 +10,7 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { Field, FieldNumber } from "src/components/Field";
+import LookupField from "src/components/Field/LookupField";
 import { Button } from "src/components/Button";
 import styles from "./DocumentNumberSettings.module.scss";
 
@@ -33,11 +34,18 @@ const QKEY = (org?: string) => ["document-number-settings", org ?? "__global__"]
 
 const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   const qc = useQueryClient();
+
+  // В самостоятельном экране можно выбрать организацию (пусто = значения по
+  // умолчанию для всех). Во встроенном режиме организация задана пропом.
+  const [selOrgUuid, setSelOrgUuid] = useState("");
+  const [selOrgName, setSelOrgName] = useState("");
+  const orgKey = embedded ? organizationUuid : (selOrgUuid || undefined);
+
   const { data, isLoading, isError, refetch } = useQuery<Row[]>({
-    queryKey: QKEY(organizationUuid),
+    queryKey: QKEY(orgKey),
     queryFn: async () =>
       (await api.get<any>("document-number-settings", {
-        params: organizationUuid ? { organizationUuid } : undefined,
+        params: orgKey ? { organizationUuid: orgKey } : undefined,
       }))?.items ?? [],
     retry: 1,
   });
@@ -59,11 +67,11 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
     try {
       for (const [docType, v] of Object.entries(edits)) {
         if (!v.prefix.trim()) { showToast(translate("prefixRequired"), "error"); setBusy(false); return; }
-        await api.put(`document-number-settings/${docType}`, { prefix: v.prefix.trim(), padding: v.padding, organizationUuid });
+        await api.put(`document-number-settings/${docType}`, { prefix: v.prefix.trim(), padding: v.padding, organizationUuid: orgKey });
       }
       showToast(translate("saved"), "success");
       setEdits({});
-      qc.invalidateQueries({ queryKey: QKEY(organizationUuid) });
+      qc.invalidateQueries({ queryKey: QKEY(orgKey) });
     } catch {
       /* тост ошибки — перехватчик api */
     } finally {
@@ -75,10 +83,10 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
     setBusy(true);
     try {
       await api.delete(`document-number-settings/${docType}`, {
-        params: organizationUuid ? { organizationUuid } : undefined,
+        params: orgKey ? { organizationUuid: orgKey } : undefined,
       });
       setEdits((prev) => { const n = { ...prev }; delete n[docType]; return n; });
-      qc.invalidateQueries({ queryKey: QKEY(organizationUuid) });
+      qc.invalidateQueries({ queryKey: QKEY(orgKey) });
       showToast(translate("resetDone"), "success");
     } catch {
       /* noop */
@@ -91,8 +99,18 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
     <div className={embedded ? styles.WrapEmbedded : styles.Wrap}>
       {!embedded && <h2 className={styles.Title}>{translate("documentNumberingSettings")}</h2>}
 
+      {!embedded && (
+        <div className={styles.OrgPicker}>
+          <LookupField label={translate("organization")} name="dns_org" value={selOrgUuid} displayValue={selOrgName}
+            endpoint="organizations" displayField="name"
+            placeholder={translate("numberingDefaultsForAll")}
+            onSelect={(u, d) => { setSelOrgUuid(u); setSelOrgName(d); setEdits({}); }}
+            onClear={() => { setSelOrgUuid(""); setSelOrgName(""); setEdits({}); }} />
+        </div>
+      )}
+
       <div className={styles.Intro}>
-        {organizationUuid ? translate("numberingHintOrg") : translate("numberingHintGlobal")}
+        {orgKey ? translate("numberingHintOrg") : translate("numberingHintGlobal")}
       </div>
 
       {isLoading ? (
@@ -130,7 +148,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
                   <td className={styles.cExample}><code>{example(v.prefix, v.padding)}</code></td>
                   <td className={styles.cSource}>
                     {r.isOverridden
-                      ? <span className={styles.BadgeOwn}>{organizationUuid ? translate("sourceOrg") : translate("sourceSet")}</span>
+                      ? <span className={styles.BadgeOwn}>{orgKey ? translate("sourceOrg") : translate("sourceSet")}</span>
                       : <span className={styles.BadgeDefault}>{translate("sourceDefault")}</span>}
                   </td>
                   <td className={styles.cReset}>
