@@ -1,0 +1,200 @@
+// Терминал кассира/продавца — POS-раскладка: слева корзина, справа итог и оплата.
+
+.Terminal {
+	display: flex;
+	gap: 12px;
+	height: 100%;
+	min-height: 0;
+	padding: 12px;
+	box-sizing: border-box;
+	background: $gray50;
+}
+
+// ── Левая колонка: поиск + корзина ──
+.Left {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.SearchBar {
+	flex-shrink: 0;
+}
+
+.CartWrap {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	background: #fff;
+	border: 1px solid $gray200;
+	border-radius: 10px;
+}
+
+.EmptyCart {
+	height: 100%;
+	min-height: 240px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: $gray400;
+	font-size: 15px;
+	padding: 24px;
+	text-align: center;
+}
+
+.Cart {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+
+	thead th {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		background: $gray100;
+		color: $gray700;
+		font-weight: 600;
+		text-align: left;
+		padding: 10px 10px;
+		border-bottom: 1px solid $gray200;
+		white-space: nowrap;
+	}
+
+	tbody td {
+		padding: 6px 10px;
+		border-bottom: 1px solid $gray100;
+		vertical-align: middle;
+	}
+
+	tbody tr:hover td {
+		background: $accentBlueHover;
+	}
+}
+
+.cN { width: 36px; color: $gray400; text-align: center; }
+.cName { font-weight: 500; color: $gray900; }
+.cQty { width: 140px; }
+.cPrice { width: 120px; }
+.cSum { width: 120px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: $gray900; }
+.cDel { width: 36px; text-align: center; }
+
+// Степпер количества: − [поле] +
+.Stepper {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+
+	button {
+		width: 26px;
+		height: 26px;
+		flex-shrink: 0;
+		border: 1px solid $gray300;
+		background: #fff;
+		border-radius: 6px;
+		font-size: 16px;
+		line-height: 1;
+		cursor: pointer;
+		color: $gray700;
+		transition: background 0.12s, border-color 0.12s;
+
+		&:hover { background: $gray50; border-color: $primary; color: $primary; }
+	}
+
+	:global(input) {
+		width: 56px;
+		text-align: center;
+	}
+}
+
+.DelBtn {
+	width: 26px;
+	height: 26px;
+	border: none;
+	background: transparent;
+	color: $gray400;
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+	border-radius: 6px;
+	transition: background 0.12s, color 0.12s;
+
+	&:hover { background: $warnSoftBg; color: $warnAccent; }
+}
+
+// ── Правая колонка: реквизиты + итог + оплата ──
+.Right {
+	flex: 0 0 340px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	background: #fff;
+	border: 1px solid $gray200;
+	border-radius: 10px;
+	padding: 14px;
+	box-sizing: border-box;
+}
+
+.Fields {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.Summary {
+	margin-top: auto;
+	border-top: 1px dashed $gray300;
+	padding-top: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.SummaryRow {
+	display: flex;
+	justify-content: space-between;
+	color: $gray500;
+	font-size: 13px;
+}
+
+.TotalRow {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	font-size: 16px;
+	font-weight: 600;
+	color: $gray900;
+}
+
+.TotalAmount {
+	font-size: 26px;
+	font-weight: 800;
+	color: $primary;
+	font-variant-numeric: tabular-nums;
+}
+
+.Actions {
+	display: flex;
+	gap: 10px;
+	align-items: stretch;
+}
+
+// Главная кнопка «Провести продажу».
+.PayBtn {
+	flex: 1 1 auto;
+	border: none;
+	border-radius: 10px;
+	padding: 14px 18px;
+	font-size: 16px;
+	font-weight: 700;
+	color: #fff;
+	cursor: pointer;
+	background: linear-gradient(180deg, $successGradFrom, $successGradTo);
+	box-shadow: 0 4px 12px rgba(#000, 0.12);
+	transition: filter 0.12s, transform 0.05s;
+
+	&:hover:not(:disabled) { filter: brightness(1.05); }
+	&:active:not(:disabled) { transform: translateY(1px); }
+	&:disabled { opacity: 0.5; cursor: not-allowed; }
+}
