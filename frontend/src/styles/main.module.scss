@@ -836,7 +836,10 @@ body {
 	background-color: #fff;
 	// background: url("../../assets/bgpane.jpg");
 	// background-size: ;
-	z-index: 1;
+	// ВАЖНО: .Panes (z-index:3) идёт в DOM раньше и перекрывал бы строку
+	// вкладок и её выпадающее меню «ещё», которое раскрывается ВВЕРХ в область
+	// панелей. Поэтому z-index строки вкладок должен быть выше .Panes.
+	z-index: 4;
 	// flex: 1;
 	// width: fit-content;
 
