@@ -22,6 +22,7 @@ import {
 	PostingValidationError,
 	ACC,
 } from "../services/accountingPosting.js";
+import { reconcileDocumentRegister, removeDocumentRegister } from "../services/productRegister.js";
 
 const sumDebit = (entries) => entries.reduce((s, e) => s + e.amount, 0);
 const isBalanced = (entries) => Math.abs(sumDebit(entries) - sumDebit(entries)) < 0.005; // одиночные Дт/Кт всегда сбалансированы
@@ -335,6 +336,41 @@ test("Интеграция: проведённое перемещение соз
 		await removeDocumentEntries("inventory_transfer", doc.uuid);
 		await prisma.inventoryTransferItem.delete({ where: { uuid: item.uuid } }).catch(() => {});
 		await prisma.inventoryTransfer.delete({ where: { uuid: doc.uuid } }).catch(() => {});
+	}
+});
+
+// ─── Услуги: не двигают склад и не списывают себестоимость ────────────────────
+test("Услуга: проведённая реализация не создаёт движений склада и проводки COGS", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid || !fx.warehouseUuid || !fx.userUuid) return t.skip("нет фикстур");
+
+	const service = await prisma.product.create({
+		data: { name: `__test_service_${Date.now()}`, isService: true, organizationUuid: fx.orgUuid },
+	}).catch(() => null);
+	if (!service) return t.skip("не удалось создать услугу");
+
+	const doc = await prisma.sale.create({
+		data: {
+			date: new Date(), posted: true, amount: 5000,
+			organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid,
+			authorUuid: fx.userUuid,
+		},
+	});
+	const item = await prisma.saleItem.create({
+		data: { saleUuid: doc.uuid, productUuid: service.uuid, quantity: 1, price: 5000, amount: 5000, organizationUuid: fx.orgUuid },
+	});
+	try {
+		await reconcileDocumentRegister("sale", doc.uuid);
+		const moves = await prisma.productRegister.findMany({ where: { documentType: "sale", documentUuid: doc.uuid } });
+		assert.equal(moves.length, 0, "услуга не создаёт движений склада");
+
+		const entries = await buildDocumentEntries("sale", { ...doc }, [{ ...item, productUuid: service.uuid }]);
+		assert.ok(entries.some((e) => e.creditAccountCode === "6010"), "доход по услуге отражается (6010)");
+		assert.ok(!entries.some((e) => e.debitAccountCode === "7010"), "нет проводки себестоимости (COGS) по услуге");
+	} finally {
+		await removeDocumentRegister("sale", doc.uuid);
+		await prisma.saleItem.delete({ where: { uuid: item.uuid } }).catch(() => {});
+		await prisma.sale.delete({ where: { uuid: doc.uuid } }).catch(() => {});
+		await prisma.product.delete({ where: { uuid: service.uuid } }).catch(() => {});
 	}
 });
 

@@ -101,6 +101,14 @@ export async function reconcileDocumentRegister(
 		});
 		if (!items.length) return;
 
+		// Услуги не двигают склад: набор uuid товаров-услуг (по флагу isService).
+		const productUuids = [...new Set(items.map((it) => it.productUuid).filter(Boolean))];
+		const serviceSet = new Set(
+			productUuids.length
+				? (await client.product.findMany({ where: { uuid: { in: productUuids }, isService: true }, select: { uuid: true } })).map((p) => p.uuid)
+				: [],
+		);
+
 		// Плательщик НДС? Тогда себестоимость в регистре — БЕЗ НДС (НДС к зачёту).
 		// Иначе — полная сумма (НДС в стоимости товара).
 		const useVat = doc.organizationUuid
@@ -118,6 +126,7 @@ export async function reconcileDocumentRegister(
 		const records = [];
 		for (const it of items) {
 			if (!it.productUuid) continue; // движения только по товарам (не услугам)
+			if (serviceSet.has(it.productUuid)) continue; // услуга — склад не двигаем
 			const qty = Number(it.quantity) || 0;
 			const amt = Number(it.amount) || 0;
 			// Стоимость товара для регистра: для плательщика НДС — БЕЗ НДС (входящий
@@ -376,9 +385,17 @@ export async function assertStockForPosting(
 	if (!cfg || !documentUuid) return;
 	if (!cfg.movements.some((m) => m.type === "out")) return; // приходный — пропуск
 
-	const items = await client[cfg.itemModel].findMany({
+	const allItems = await client[cfg.itemModel].findMany({
 		where: { [cfg.parentField]: documentUuid },
 	});
+	// Услуги не списываются со склада — исключаем из проверки остатка.
+	const productUuids = [...new Set(allItems.map((it) => it.productUuid).filter(Boolean))];
+	const serviceSet = new Set(
+		productUuids.length
+			? (await client.product.findMany({ where: { uuid: { in: productUuids }, isService: true }, select: { uuid: true } })).map((p) => p.uuid)
+			: [],
+	);
+	const items = allItems.filter((it) => !serviceSet.has(it.productUuid));
 	const shortages = await computeShortages(
 		{ documentType, documentUuid, doc: prospectiveDoc, items },
 		client,
