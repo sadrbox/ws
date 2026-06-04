@@ -73,6 +73,11 @@ const REPORT_REGISTRY: Record<string, ReportEntry> = {
 		key: "SettlementsReport",
 		labelKey: "settlementsReport",
 	},
+	"inventory-turnover": {
+		loader: () => import("src/models/Reports/InventoryTurnoverReport"),
+		key: "InventoryTurnoverReport",
+		labelKey: "inventoryTurnover",
+	},
 };
 
 /**
