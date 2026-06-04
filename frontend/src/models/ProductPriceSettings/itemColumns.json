@@ -1,0 +1,6 @@
+[
+	{ "identifier": "product.name", "type": "string", "width": "340px", "minWidth": "200px", "alignment": "left", "hint": "Товар", "visible": true, "inlist": true },
+	{ "identifier": "salePrice", "type": "number", "width": "140px", "minWidth": "100px", "alignment": "right", "hint": "Цена продажи", "visible": true, "inlist": true },
+	{ "identifier": "purchasePrice", "type": "number", "width": "140px", "minWidth": "100px", "alignment": "right", "hint": "Цена закупки", "visible": true, "inlist": true },
+	{ "identifier": "wholesalePrice", "type": "number", "width": "140px", "minWidth": "100px", "alignment": "right", "hint": "Цена оптовая", "visible": true, "inlist": true }
+]

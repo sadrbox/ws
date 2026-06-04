@@ -36,6 +36,14 @@ export interface ModelRegistryEntry {
 
 const MODEL_REGISTRY: ModelRegistryEntry[] = [
 	{
+		endpoint: "product-price-settings",
+		module: () => import("src/models/ProductPriceSettings"),
+		formName: "ProductPriceSettingsForm",
+		listName: "ProductPriceSettingsList",
+		storageKey: "price-settings-form",
+		label: "Установка цен номенклатуры",
+	},
+	{
 		endpoint: "organizations",
 		module: () => import("src/models/Organizations"),
 		formName: "OrganizationsForm",

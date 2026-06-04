@@ -25,6 +25,7 @@ import { TodosList } from 'src/models/Todos';
 import { NotificationsList } from 'src/models/Notifications';
 import { WarehousesList } from 'src/models/Warehouses';
 import { SalesList } from 'src/models/Sales';
+import { ProductPriceSettingsList } from 'src/models/ProductPriceSettings';
 // import { SalesBoardForm } from 'src/models/Sales/SalesBoardForm';
 import { SalesReturnsList } from 'src/models/SalesReturns';
 import { PurchasesList } from 'src/models/Purchases';
@@ -891,6 +892,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>{translate("directories")}</h3>
             <ul className={styles.NavList}>
               {can("Product") && <li onClick={() => addPane({ component: ProductsList, label: translate("ProductsList") })}>{translate("ProductsList")}</li>}
+              {can("Product") && <li onClick={() => addPane({ component: ProductPriceSettingsList, label: translate("ProductPriceSettingsList") })}>{translate("ProductPriceSettingsList")}</li>}
               {can("Brand") && <li onClick={() => addPane({ component: BrandsList, label: translate("BrandsList") })}>{translate("BrandsList")}</li>}
             </ul>
           </div>

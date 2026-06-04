@@ -32,6 +32,7 @@ model User {
   userPermissionDefaults       UserPermissionDefault[]
   // Авторство документов — заполняется при создании, не редактируется.
   authoredSales                Sale[]                @relation("SaleAuthor")
+  authoredPriceSettings        ProductPriceSetting[] @relation("PriceSettingAuthor")
   authoredPurchases            Purchase[]            @relation("PurchaseAuthor")
   authoredSaleReturns          SaleReturn[]          @relation("SaleReturnAuthor")
   authoredPurchaseReturns      PurchaseReturn[]      @relation("PurchaseReturnAuthor")
@@ -139,6 +140,7 @@ model Organization {
   employeeHistories    EmployeeHistory[]
   counterparties       Counterparty[]                  @relation("OrgCounterparties")
   products             Product[]                       @relation("OrgProducts")
+  productPriceSettings ProductPriceSetting[]
   brands               Brand[]                         @relation("OrgBrands")
   positions            Position[]                      @relation("OrgPositions")
   contacts             Contact[]                       @relation("OrgContacts")
@@ -755,9 +757,12 @@ model Product {
   sku                      String?
   barcode                  String?
   isService                Boolean                   @default(false)
-  /// Базовая цена продажи (прайс-лист). Автоподставляется в строки документов
-  /// продажи и в терминал кассира.
+  /// Цены (прайс-лист). Текущие значения денормализуются из последнего
+  /// проведённого документа «Установка цен номенклатуры» (по дате). price —
+  /// цена продажи (автоподстановка в продажи/терминал).
   price                    Decimal?                  @db.Decimal(18, 2)
+  purchasePrice            Decimal?                  @db.Decimal(18, 2)
+  wholesalePrice           Decimal?                  @db.Decimal(18, 2)
   brandUuid                String?
   unitOfMeasureUuid        String?
   organizationUuid         String?
@@ -782,6 +787,7 @@ model Product {
   purchaseOrderItems       PurchaseOrderItem[]
   reservationRegister      ReservationRegister[]
   barcodes                 ProductBarcode[]
+  priceSettingItems        ProductPriceSettingItem[]
 
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
@@ -2109,4 +2115,47 @@ model DocumentNumberSetting {
 
   @@unique([organizationUuid, docType])
   @@map("document_number_settings")
+}
+
+/// Документ «Установка цен номенклатуры» (периодический). Шапка.
+/// Цены, проставленные проведённым документом, денормализуются в Product
+/// (последний по дате проведённый документ задаёт текущие цены товара).
+model ProductPriceSetting {
+  id               Int                       @id @default(autoincrement())
+  uuid             String                    @unique @default(uuid())
+  number           String?
+  date             DateTime                  @default(now())
+  comment          String?
+  organizationUuid String?
+  posted           Boolean                   @default(false)
+  authorUuid       String
+  updatedAt        DateTime                  @default(now()) @updatedAt
+  deletedAt        DateTime?
+  items            ProductPriceSettingItem[]
+  organization     Organization?             @relation(fields: [organizationUuid], references: [uuid])
+  author           User                      @relation("PriceSettingAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+
+  @@index([organizationUuid])
+  @@index([date])
+  @@index([updatedAt])
+  @@map("product_price_settings")
+}
+
+/// Строка документа «Установка цен»: товар и три цены.
+model ProductPriceSettingItem {
+  id               Int                 @id @default(autoincrement())
+  uuid             String              @unique @default(uuid())
+  priceSettingUuid String
+  productUuid      String?
+  salePrice        Decimal?            @db.Decimal(18, 2)
+  purchasePrice    Decimal?            @db.Decimal(18, 2)
+  wholesalePrice   Decimal?            @db.Decimal(18, 2)
+  updatedAt        DateTime            @default(now()) @updatedAt
+  deletedAt        DateTime?
+  priceSetting     ProductPriceSetting @relation(fields: [priceSettingUuid], references: [uuid], onDelete: Cascade)
+  product          Product?            @relation(fields: [productUuid], references: [uuid])
+
+  @@index([priceSettingUuid])
+  @@index([productUuid])
+  @@map("product_price_setting_items")
 }

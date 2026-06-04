@@ -90,6 +90,8 @@ import chartOfAccountsRouter from "./api/router/chartofaccounts.js";
 import subkontoTypesRouter from "./api/router/subkontotypes.js";
 import accountingRouter from "./api/router/accounting.js";
 import documentNumberSettingsRouter from "./api/router/documentnumbersettings.js";
+import productPriceSettingsRouter from "./api/router/productpricesettings.js";
+import productPriceSettingItemsRouter from "./api/router/productpricesettingitems.js";
 
 const app = express();
 
@@ -318,6 +320,8 @@ app.use("/api/v1", chartOfAccountsRouter);
 app.use("/api/v1", subkontoTypesRouter);
 app.use("/api/v1", accountingRouter);
 app.use("/api/v1", documentNumberSettingsRouter);
+app.use("/api/v1", productPriceSettingsRouter);
+app.use("/api/v1", productPriceSettingItemsRouter);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. ОБРАБОТКА 404

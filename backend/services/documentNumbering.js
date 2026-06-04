@@ -31,6 +31,7 @@ export const NUMBER_CONFIG = {
 	purchase_requisition: { prefix: "ЗАЯВ", label: "Заявка на закупку" },
 	payroll_calculation: { prefix: "НЗП", label: "Начисление зарплаты" },
 	payroll_payment: { prefix: "ВЗП", label: "Выплата зарплаты" },
+	price_setting: { prefix: "ЦЕН", label: "Установка цен номенклатуры" },
 };
 
 export const GLOBAL_SETTINGS_KEY = "__global__";

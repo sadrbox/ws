@@ -1,0 +1,9 @@
+[
+	{ "identifier": "id", "type": "number", "width": "70px", "minWidth": "60px", "alignment": "left", "hint": "ID", "visible": true, "inlist": true },
+	{ "identifier": "uuid", "type": "string", "width": "300px", "minWidth": "80px", "alignment": "left", "hint": "uuid", "visible": false, "inlist": false },
+	{ "identifier": "number", "type": "string", "width": "130px", "minWidth": "90px", "alignment": "left", "hint": "Номер документа", "visible": true, "inlist": true },
+	{ "identifier": "date", "type": "datetime", "width": "150px", "minWidth": "90px", "alignment": "left", "hint": "Дата", "visible": true, "inlist": true },
+	{ "identifier": "organization.name", "type": "string", "width": "220px", "minWidth": "120px", "alignment": "left", "hint": "Организация", "visible": true, "inlist": true },
+	{ "identifier": "posted", "type": "boolean", "width": "110px", "minWidth": "90px", "alignment": "center", "hint": "Проведён", "visible": true, "inlist": true },
+	{ "identifier": "comment", "type": "string", "width": "260px", "minWidth": "120px", "alignment": "left", "hint": "Комментарий", "visible": true, "inlist": true }
+]
