@@ -755,6 +755,9 @@ model Product {
   sku                      String?
   barcode                  String?
   isService                Boolean                   @default(false)
+  /// Базовая цена продажи (прайс-лист). Автоподставляется в строки документов
+  /// продажи и в терминал кассира.
+  price                    Decimal?                  @db.Decimal(18, 2)
   brandUuid                String?
   unitOfMeasureUuid        String?
   organizationUuid         String?

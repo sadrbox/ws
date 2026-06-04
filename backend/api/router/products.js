@@ -138,7 +138,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { name, sku, barcode, brandUuid, unitOfMeasureUuid, isService } = req.body;
+		const { name, sku, barcode, brandUuid, unitOfMeasureUuid, isService, price } = req.body;
 		if (!name?.trim())
 			return res
 				.status(400)
@@ -149,6 +149,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				sku: sku?.trim() || null,
 				barcode: barcode?.trim() || null,
 				isService: isService === true,
+				price: price != null && price !== "" ? parseFloat(price) : null,
 				brandUuid: brandUuid || null,
 				unitOfMeasureUuid: unitOfMeasureUuid || null,
 				organizationUuid: req.user?.organizationUuid ?? null,
@@ -176,6 +177,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
 		if (req.body.isService !== undefined) data.isService = req.body.isService === true;
+		if (req.body.price !== undefined) data.price = req.body.price != null && req.body.price !== "" ? parseFloat(req.body.price) : null;
 		const existing = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true } });
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });

@@ -50,6 +50,16 @@
 		"alignment": "left"
 	},
 	{
+		"identifier": "price",
+		"type": "number",
+		"width": "110px",
+		"minWidth": "80px",
+		"alignment": "right",
+		"hint": "Цена продажи",
+		"visible": true,
+		"inlist": true
+	},
+	{
 		"identifier": "brand.name",
 		"hint": "Бренд",
 		"type": "string",

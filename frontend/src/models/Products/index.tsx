@@ -5,7 +5,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import barcodeColumns from "./barcodeColumns.json";
-import { Field } from "src/components/Field";
+import { Field, FieldNumber } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
@@ -23,8 +23,8 @@ import { useQueryClient } from "@tanstack/react-query";
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
 
-interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; }
-const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "" };
+interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; price: string; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; }
+const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, price: "", brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "" };
 
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessRight("Product");
@@ -44,12 +44,13 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       ...(prev ?? DEFAULT_FIELDS), ...d,
       name: d.name ?? "", sku: d.sku ?? "", barcode: d.barcode ?? "",
       isService: d.isService === true,
+      price: d.price != null ? String(d.price) : "",
       brandUuid: d.brandUuid ?? "", brandName: d.brand?.name ?? "",
       unitOfMeasureUuid: d.unitOfMeasureUuid ?? "", unitOfMeasureName: d.unitOfMeasure?.name ?? "",
     }),
     buildPayload: (fd) => {
       if (!fd.name?.trim()) return "Наименование обязательно";
-      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null };
+      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, price: fd.price ? parseFloat(fd.price) : null, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
     afterSave: async (saved) => {
@@ -79,6 +80,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
                   columns={[{ key: "name", label: "Наименование" }, { key: "code", label: "Код" }]}
                   onSelect={(uuid, display) => form.setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display } as Partial<TFields>)}
                   onClear={() => form.setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <FieldNumber label={translate("price")} name={`${form.formUid}_price`} value={form.fields.price} onChange={e => form.setField("price", e.target.value)} disabled={form.isLoading} width="160px" />
                 <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
               </GroupRow>
             </GroupCol>
