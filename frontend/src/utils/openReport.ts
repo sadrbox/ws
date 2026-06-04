@@ -68,6 +68,11 @@ const REPORT_REGISTRY: Record<string, ReportEntry> = {
 		key: "AccountCard",
 		labelKey: "accountCardTitle",
 	},
+	"settlements": {
+		loader: () => import("src/models/Reports/SettlementsReport"),
+		key: "SettlementsReport",
+		labelKey: "settlementsReport",
+	},
 };
 
 /**

@@ -55,7 +55,7 @@ import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
 import { PayrollCalculationsList } from 'src/models/PayrollCalculations';
 import { PayrollPaymentsList } from 'src/models/PayrollPayments';
-import { SalesReport, MaterialStatement, CashReport, ProductRegisterReport, AccountingJournal, TurnoverBalanceSheet, AccountCard, ManagerReport } from 'src/models/Reports';
+import { SalesReport, MaterialStatement, CashReport, ProductRegisterReport, AccountingJournal, TurnoverBalanceSheet, AccountCard, ManagerReport, SettlementsReport } from 'src/models/Reports';
 import { SalesTerminal } from 'src/models/SalesTerminal';
 import { ChartOfAccountsList } from 'src/models/ChartOfAccounts';
 import { SubkontoTypesList } from 'src/models/SubkontoTypes';
@@ -906,6 +906,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountingJournal, label: translate("accountingJournalTitle") })}>{translate("accountingJournalTitle")}</li>}
               {can("AccountingEntry") && <li onClick={() => addPane({ component: TurnoverBalanceSheet, label: translate("osvTitle") })}>{translate("osvTitle")}</li>}
               {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountCard, label: translate("accountCardTitle") })}>{translate("accountCardTitle")}</li>}
+              {can("AccountingEntry") && <li onClick={() => addPane({ component: SettlementsReport, label: translate("settlementsReport") })}>{translate("settlementsReport")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>

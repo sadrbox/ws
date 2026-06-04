@@ -339,4 +339,96 @@ router.get("/accounting/subkonto", async (req, res) => {
 	}
 });
 
+// ─── GET /accounting/settlements ─────────────────────────────────────────────
+// Взаиморасчёты по контрагентам (дебиторка 1210 / кредиторка 3310): входящее
+// сальдо, обороты Дт/Кт за период, исходящее сальдо + старение долга (aging).
+// Params: dateFrom, dateTo, organizationUuid, accountCode (1210|3310, по умолч.
+// 1210), counterpartyUuid (опц.).
+router.get("/accounting/settlements", async (req, res) => {
+	try {
+		const { dateFrom, dateTo, organizationUuid, counterpartyUuid } = req.query;
+		const acc = req.query.accountCode === "3310" ? "3310" : "1210";
+		const accMap = await loadAccountMap(req, organizationUuid);
+		const isActive = (accMap.get(acc)?.accountType ?? (acc[0] === "1" ? "active" : "passive")) === "active";
+
+		const where = entryWhere(req, { dateTo, organizationUuid });
+		where.OR = [{ debitAccountCode: acc }, { creditAccountCode: acc }];
+		if (counterpartyUuid) where.analytics = { some: { subkontoType: "Counterparty", objectUuid: counterpartyUuid } };
+
+		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
+			where, include: { analytics: true }, orderBy: [{ date: "asc" }, { id: "asc" }],
+		}));
+
+		const from = dateFrom ? new Date(dateFrom) : null;
+		const to = dateTo ? new Date(dateTo + "T23:59:59.999Z") : new Date();
+		const dayMs = 86400000;
+
+		// group[cpUuid] = { name, opening, turnDebit, turnCredit, b0_30, b31_60, b61_90, b90 }
+		const group = new Map();
+		const ensure = (uuid, name) => {
+			const k = uuid ?? "__none__";
+			if (!group.has(k)) group.set(k, { counterpartyUuid: uuid ?? null, counterpartyName: name || "— без контрагента —", opening: 0, turnDebit: 0, turnCredit: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90: 0 });
+			return group.get(k);
+		};
+
+		for (const e of entries) {
+			const amt = Number(e.amount) || 0;
+			const onDebit = e.debitAccountCode === acc;
+			const side = onDebit ? "debit" : "credit";
+			// Контрагент берём из аналитики той стороны, где наш счёт.
+			const cpAn = (e.analytics || []).find((a) => a.side === side && a.subkontoType === "Counterparty")
+				|| (e.analytics || []).find((a) => a.subkontoType === "Counterparty");
+			const g = ensure(cpAn?.objectUuid, cpAn?.objectName);
+			// Дт/Кт оборот самого счёта.
+			const accDebit = onDebit ? amt : 0;
+			const accCredit = onDebit ? 0 : amt;
+			// Вклад в сальдо: активный = Дт−Кт, пассивный = Кт−Дт.
+			const contrib = isActive ? accDebit - accCredit : accCredit - accDebit;
+
+			const inPeriod = !from || e.date >= from;
+			if (inPeriod) {
+				g.turnDebit += accDebit;
+				g.turnCredit += accCredit;
+			} else {
+				g.opening += contrib;
+			}
+			// Старение исходящего сальдо по возрасту проводки (приближённо, без
+			// FIFO-сопоставления оплат): сумма по бакетам = исходящее сальдо.
+			const age = Math.floor((to - e.date) / dayMs);
+			if (age <= 30) g.b0_30 += contrib;
+			else if (age <= 60) g.b31_60 += contrib;
+			else if (age <= 90) g.b61_90 += contrib;
+			else g.b90 += contrib;
+		}
+
+		const rows = [];
+		for (const g of group.values()) {
+			const opening = r2(g.opening);
+			const turnDebit = r2(g.turnDebit);
+			const turnCredit = r2(g.turnCredit);
+			const closing = r2(opening + (isActive ? turnDebit - turnCredit : turnCredit - turnDebit));
+			if (!opening && !turnDebit && !turnCredit && !closing) continue;
+			rows.push({
+				counterpartyUuid: g.counterpartyUuid,
+				counterpartyName: g.counterpartyName,
+				opening, turnDebit, turnCredit, closing,
+				aging: { d0_30: r2(g.b0_30), d31_60: r2(g.b31_60), d61_90: r2(g.b61_90), d90: r2(g.b90) },
+			});
+		}
+		rows.sort((a, b) => Math.abs(b.closing) - Math.abs(a.closing));
+
+		const totals = rows.reduce((t, r) => ({
+			opening: r2(t.opening + r.opening), turnDebit: r2(t.turnDebit + r.turnDebit),
+			turnCredit: r2(t.turnCredit + r.turnCredit), closing: r2(t.closing + r.closing),
+			d0_30: r2(t.d0_30 + r.aging.d0_30), d31_60: r2(t.d31_60 + r.aging.d31_60),
+			d61_90: r2(t.d61_90 + r.aging.d61_90), d90: r2(t.d90 + r.aging.d90),
+		}), { opening: 0, turnDebit: 0, turnCredit: 0, closing: 0, d0_30: 0, d31_60: 0, d61_90: 0, d90: 0 });
+
+		return res.json({ success: true, accountCode: acc, accountName: accMap.get(acc)?.name ?? "", items: rows, totals });
+	} catch (err) {
+		console.error("GET /accounting/settlements error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 export default router;
