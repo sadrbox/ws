@@ -21,6 +21,54 @@
 
 .SearchBar {
 	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+// Поле сканера штрих-кодов.
+.ScanBox {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.ScanLabel {
+	font-size: 12px;
+	color: $gray500;
+}
+
+.ScanInput {
+	height: 40px;
+	padding: 0 12px;
+	border: 2px solid $primary;
+	border-radius: 8px;
+	font-size: 16px;
+	font-weight: 600;
+	outline: none;
+	background: #fff;
+	color: $gray900;
+
+	&::placeholder {
+		color: $gray400;
+		font-weight: 400;
+	}
+
+	&:focus {
+		box-shadow: 0 0 0 3px $accentBlueSoft;
+	}
+}
+
+// Активный режим «Возврат» — оранжевый.
+.ModeReturnActive {
+	border-color: $warnAccent;
+	background: $warnSoftBg;
+	color: $warnAccent;
+}
+
+// Кнопка «Провести возврат» — оранжевый градиент вместо зелёного.
+.PayBtnReturn {
+	background: linear-gradient(180deg, #fb923c, $warnAccent);
 }
 
 .CartWrap {

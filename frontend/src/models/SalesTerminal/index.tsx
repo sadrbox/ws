@@ -9,13 +9,14 @@
  * Поток сохранения: POST /sales (черновик) → POST /saleitems/batch →
  * PUT /sales/:uuid { posted:true } (проводка + проводки учёта).
  */
-import { FC, useCallback, useMemo, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Button } from "src/components/Button";
+import { usePersistentState } from "src/hooks/usePersistentState";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useOrgAccountingSettings } from "src/hooks/useOrgAccountingSettings";
 import { useAppContext } from "src/app";
@@ -41,21 +42,32 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
 
   const [orgUuid, setOrgUuid] = useState(defOrgUuid || "");
   const [orgName, setOrgName] = useState(defOrgName || "");
-  const [warehouseUuid, setWarehouseUuid] = useState("");
-  const [warehouseName, setWarehouseName] = useState("");
-  const [counterpartyUuid, setCounterpartyUuid] = useState("");
-  const [counterpartyName, setCounterpartyName] = useState("");
+  // Реквизиты запоминаются между сменами (розничный покупатель/склад/касса
+  // по умолчанию — продавцу не нужно выбирать их каждый раз).
+  const [warehouseUuid, setWarehouseUuid] = usePersistentState("terminal.warehouseUuid", "");
+  const [warehouseName, setWarehouseName] = usePersistentState("terminal.warehouseName", "");
+  const [counterpartyUuid, setCounterpartyUuid] = usePersistentState("terminal.counterpartyUuid", "");
+  const [counterpartyName, setCounterpartyName] = usePersistentState("terminal.counterpartyName", "");
   const [managerUuid, setManagerUuid] = useState((user as any)?.employee?.uuid ?? "");
   const [managerName, setManagerName] = useState((user as any)?.employee?.fullName ?? "");
+
+  // Режим: продажа или возврат от покупателя.
+  const [mode, setMode] = useState<"sale" | "return">("sale");
+  const isReturn = mode === "return";
 
   // Оплата: наличные → автосоздание проведённого ПКО (Дт1010 Кт1210); карта/
   // безнал → только реализация (поступление денег отражается банк-выпиской).
   const [payment, setPayment] = useState<"cash" | "card">("cash");
-  const [cashboxUuid, setCashboxUuid] = useState("");
-  const [cashboxName, setCashboxName] = useState("");
+  const [cashboxUuid, setCashboxUuid] = usePersistentState("terminal.cashboxUuid", "");
+  const [cashboxName, setCashboxName] = usePersistentState("terminal.cashboxName", "");
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // Поле сканера: ввод штрих-кода + Enter → добавить товар (автофокус).
+  const [scan, setScan] = useState("");
+  const scanRef = useRef<HTMLInputElement>(null);
+  const focusScan = useCallback(() => { scanRef.current?.focus(); scanRef.current?.select?.(); }, []);
 
   // Ставка/метод НДС берём из «Параметров учёта» организации (0%, если не
   // плательщик НДС) — суммы строк считаем так же, как обычная реализация.
@@ -102,6 +114,21 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
   }, []);
   const clearCart = useCallback(() => setCart([]), []);
 
+  // Сканер: добавление товара по штрих-коду (Enter). Берём первый точный
+  // результат поиска products (поиск ищет и по штрих-кодам номенклатуры).
+  const handleScan = useCallback(async () => {
+    const code = scan.trim();
+    if (!code) return;
+    setScan("");
+    try {
+      const resp = await api.get<any>("products", { params: { search: code, limit: 1 } });
+      const prod = resp?.items?.[0];
+      if (prod?.uuid) addProduct(prod.uuid, prod.name, prod);
+      else showToast(translate("terminalProductNotFound"), "error", 2200);
+    } catch { /* перехватчик api покажет ошибку */ }
+    focusScan();
+  }, [scan, addProduct, focusScan]);
+
   const submit = useCallback(async () => {
     if (!orgUuid) { showToast(translate("organization") + " — " + translate("required"), "error"); return; }
     if (!warehouseUuid) { showToast(translate("warehouse") + " — " + translate("required"), "error"); return; }
@@ -109,9 +136,14 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
     if (cart.length === 0) { showToast(translate("terminalEmptyCart"), "error"); return; }
     if (cart.some((l) => !(Number(l.quantity) > 0))) { showToast(translate("terminalBadQty"), "error"); return; }
 
+    // Продажа → sales/saleitems; возврат → sale-returns/salereturnitems.
+    const docEndpoint = isReturn ? "sale-returns" : "sales";
+    const itemsEndpoint = isReturn ? "sale-return-items/batch" : "saleitems/batch";
+    const parentField = isReturn ? "saleReturnUuid" : "saleUuid";
+
     setSubmitting(true);
     try {
-      const saleResp = await api.post<any>("sales", {
+      const resp = await api.post<any>(docEndpoint, {
         date: new Date().toISOString(),
         organizationUuid: orgUuid,
         counterpartyUuid,
@@ -119,14 +151,14 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         managerUuid: managerUuid || null,
         posted: false,
       });
-      const saleUuid = saleResp?.item?.uuid;
-      if (!saleUuid) throw new Error(translate("serverError"));
+      const docUuid = resp?.item?.uuid;
+      if (!docUuid) throw new Error(translate("serverError"));
 
-      await api.post("saleitems/batch", {
+      await api.post(itemsEndpoint, {
         operations: cart.map((l) => ({
           action: "create",
           data: {
-            saleUuid,
+            [parentField]: docUuid,
             productUuid: l.productUuid,
             quantity: l.quantity,
             price: l.price,
@@ -136,11 +168,12 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         })),
       });
 
-      // Проводим: assertPostable (контрагент/субконто) + контроль остатка + проводки.
-      await api.put(`sales/${saleUuid}`, { posted: true });
+      await api.put(`${docEndpoint}/${docUuid}`, { posted: true });
 
-      // Оплата наличными → проведённый приходный кассовый ордер (Дт1010 Кт1210).
-      if (payment === "cash" && total > 0) {
+      // Оплата наличными при ПРОДАЖЕ → проведённый ПКО (Дт1010 Кт1210).
+      // Для возврата деньги покупателю возвращаются отдельно (РКО оформляется
+      // вручную — авто-проводка РКО под возврат покупателю некорректна).
+      if (!isReturn && payment === "cash" && total > 0) {
         try {
           await api.post("cash-receipt-orders", {
             date: new Date().toISOString(),
@@ -152,20 +185,33 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
             comment: translate("terminalPaymentForSale"),
           });
         } catch {
-          // Реализация уже проведена; ПКО не создался — кассир оформит вручную.
           showToast(translate("terminalCashOrderFailed"), "error", 6000);
         }
       }
 
-      showToast(`${translate("terminalDone")} — ${fmt(total)}`, "success", 4000);
+      showToast(`${translate(isReturn ? "terminalReturnDone" : "terminalDone")} — ${fmt(total)}`, "success", 4000);
       setCart([]);
+      focusScan();
     } catch {
       // Тосты ошибок (422/409/500) показывает перехватчик api-клиента.
-      // Документ остаётся черновиком — кассир может исправить причину.
     } finally {
       setSubmitting(false);
     }
-  }, [orgUuid, warehouseUuid, counterpartyUuid, managerUuid, cart, total, vatRate, payment, cashboxUuid]);
+  }, [orgUuid, warehouseUuid, counterpartyUuid, managerUuid, cart, total, vatRate, payment, cashboxUuid, isReturn, focusScan]);
+
+  // Горячие клавиши: F9 — провести, F4 — очистить, F2 — фокус на сканер.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F9") { e.preventDefault(); submit(); }
+      else if (e.key === "F4") { e.preventDefault(); clearCart(); }
+      else if (e.key === "F2") { e.preventDefault(); focusScan(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [submit, clearCart, focusScan]);
+
+  // Автофокус на поле сканера при открытии.
+  useEffect(() => { focusScan(); }, [focusScan]);
 
   const orgParams = orgUuid ? { organizationUuid: orgUuid } : undefined;
 
@@ -174,6 +220,19 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
       {/* ЛЕВО: поиск + корзина */}
       <div className={styles.Left}>
         <div className={styles.SearchBar}>
+          {/* Поле сканера: штрих-код + Enter (автофокус, F2). */}
+          <div className={styles.ScanBox}>
+            <label className={styles.ScanLabel}>{translate("terminalScan")}</label>
+            <input
+              ref={scanRef}
+              className={styles.ScanInput}
+              value={scan}
+              onChange={(e) => setScan(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleScan(); } }}
+              placeholder={translate("terminalScanHint")}
+              autoFocus
+            />
+          </div>
           <LookupField
             label={translate("terminalAddProduct")}
             name="terminal_product"
@@ -230,6 +289,15 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
 
       {/* ПРАВО: реквизиты + итог + оплата */}
       <div className={styles.Right}>
+        {/* Режим: продажа / возврат */}
+        <div className={styles.PayMethods}>
+          <button type="button"
+            className={[styles.PayMethod, !isReturn && styles.PayMethodActive].filter(Boolean).join(" ")}
+            onClick={() => setMode("sale")}>🛒 {translate("terminalModeSale")}</button>
+          <button type="button"
+            className={[styles.PayMethod, isReturn && styles.ModeReturnActive].filter(Boolean).join(" ")}
+            onClick={() => setMode("return")}>↩ {translate("terminalModeReturn")}</button>
+        </div>
         <div className={styles.Fields}>
           <LookupField label={translate("organization")} name="t_org" value={orgUuid} displayValue={orgName}
             endpoint="organizations" displayField="name"
@@ -272,9 +340,9 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         </div>
 
         <div className={styles.Actions}>
-          <Button variant="secondary" onClick={clearCart} disabled={submitting || cart.length === 0}>{translate("terminalClear")}</Button>
-          <button type="button" className={styles.PayBtn} onClick={submit} disabled={submitting || cart.length === 0}>
-            {submitting ? translate("loading") : translate("terminalCheckout")}
+          <Button variant="secondary" onClick={clearCart} disabled={submitting || cart.length === 0}>{translate("terminalClear")} (F4)</Button>
+          <button type="button" className={[styles.PayBtn, isReturn && styles.PayBtnReturn].filter(Boolean).join(" ")} onClick={submit} disabled={submitting || cart.length === 0}>
+            {submitting ? translate("loading") : `${translate(isReturn ? "terminalCheckoutReturn" : "terminalCheckout")} (F9)`}
           </button>
         </div>
       </div>

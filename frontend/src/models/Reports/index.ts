@@ -5,6 +5,7 @@ export { CashReport } from "./CashReport";
 export { ManagerReport } from "./ManagerReport";
 export { SettlementsReport } from "./SettlementsReport";
 export { InventoryTurnoverReport } from "./InventoryTurnoverReport";
+export { ABCReport } from "./ABCReport";
 export { ProductRegisterReport } from "./ProductRegisterReport";
 export { AccountingJournal } from "./AccountingJournal";
 export { TurnoverBalanceSheet } from "./TurnoverBalanceSheet";
