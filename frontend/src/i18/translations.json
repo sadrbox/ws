@@ -597,6 +597,8 @@
 	"reportAmountSale": "Сумма реализации",
 	"reportSalesCount": "Кол-во реализаций",
 	"reportReturnsCount": "Кол-во возвратов",
+	"reportCogs": "Себестоимость",
+	"reportGrossProfit": "Вал. прибыль",
 	"reportAmountReturn": "Сумма возвратов",
 	"reportAmountNet": "Сумма нетто",
 	"reportAmountExcise": "Сумма акциза",

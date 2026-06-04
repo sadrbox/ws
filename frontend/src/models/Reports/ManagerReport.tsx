@@ -32,11 +32,15 @@ interface ManagerRow {
   returnsCount: number;
   returnsAmount: number;
   netAmount: number;
+  cogs: number;
+  netRevenue: number;
+  grossProfit: number;
 }
 
 interface Totals {
   salesCount: number; salesAmount: number;
   returnsCount: number; returnsAmount: number; netAmount: number;
+  cogs: number; netRevenue: number; grossProfit: number;
 }
 
 interface ManagerReportProps {
@@ -93,8 +97,11 @@ const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
           returnsCount: a.returnsCount + r.returnsCount,
           returnsAmount: a.returnsAmount + r.returnsAmount,
           netAmount: a.netAmount + r.netAmount,
+          cogs: a.cogs + r.cogs,
+          netRevenue: a.netRevenue + r.netRevenue,
+          grossProfit: a.grossProfit + r.grossProfit,
         }),
-        { salesCount: 0, salesAmount: 0, returnsCount: 0, returnsAmount: 0, netAmount: 0 },
+        { salesCount: 0, salesAmount: 0, returnsCount: 0, returnsAmount: 0, netAmount: 0, cogs: 0, netRevenue: 0, grossProfit: 0 },
       ),
     [data, rows],
   );
@@ -134,6 +141,8 @@ const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
             <th className={styles.ColNum}>{translate("reportReturnsCount")}</th>
             <th className={styles.ColNum}>{translate("reportAmountReturn")}</th>
             <th className={styles.ColNum}>{translate("reportAmountNet")}</th>
+            <th className={styles.ColNum}>{translate("reportCogs")}</th>
+            <th className={styles.ColNum}>{translate("reportGrossProfit")}</th>
           </tr>
         </thead>
         <tbody>
@@ -146,6 +155,8 @@ const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
               <td className={styles.ColNum}>{fmtInt(row.returnsCount)}</td>
               <td className={styles.ColNum}>{fmtAmt(row.returnsAmount)}</td>
               <td className={styles.ColNum}>{fmtAmt(row.netAmount)}</td>
+              <td className={styles.ColNum}>{fmtAmt(row.cogs)}</td>
+              <td className={styles.ColNum}>{fmtAmt(row.grossProfit)}</td>
             </tr>
           ))}
         </tbody>
@@ -157,6 +168,8 @@ const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
             <td className={styles.ColNum}>{fmtInt(totals.returnsCount)}</td>
             <td className={styles.ColNum}>{fmtAmtZ(totals.returnsAmount)}</td>
             <td className={styles.ColNum}>{fmtAmtZ(totals.netAmount)}</td>
+            <td className={styles.ColNum}>{fmtAmtZ(totals.cogs)}</td>
+            <td className={styles.ColNum}>{fmtAmtZ(totals.grossProfit)}</td>
           </tr>
         </tfoot>
       </table>
@@ -175,7 +188,7 @@ const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
       onGenerate={handleGenerate}
       fileBaseName={translate("managerReport")}
       title={translate("managerReport")}
-      orientation="portrait"
+      orientation="landscape"
       sheetFit="content"
     />
   );

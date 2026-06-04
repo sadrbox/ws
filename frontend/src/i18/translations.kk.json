@@ -329,6 +329,8 @@
 	"reportProduct": "Номенклатура",
 	"reportSalesCount": "Сату саны",
 	"reportReturnsCount": "Қайтару саны",
+	"reportCogs": "Өзіндік құны",
+	"reportGrossProfit": "Жалпы пайда",
 	"reportQuantity": "Саны",
 	"reportUom": "Өлш. бірл.",
 	"reportAmountIn": "Кіріс сомасы",

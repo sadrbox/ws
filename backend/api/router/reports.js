@@ -340,8 +340,8 @@ router.get("/reports/sales-by-manager", async (req, res) => {
 		const where = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
 
 		const [sales, returns] = await Promise.all([
-			prisma.sale.groupBy({ by: ["managerUuid"], where, _sum: { amount: true }, _count: { _all: true } }),
-			prisma.saleReturn.groupBy({ by: ["managerUuid"], where, _sum: { amount: true }, _count: { _all: true } }),
+			prisma.sale.groupBy({ by: ["managerUuid"], where, _sum: { amount: true, amountWithoutVat: true }, _count: { _all: true } }),
+			prisma.saleReturn.groupBy({ by: ["managerUuid"], where, _sum: { amount: true, amountWithoutVat: true }, _count: { _all: true } }),
 		]);
 
 		// Имена менеджеров.
@@ -364,15 +364,43 @@ router.get("/reports/sales-by-manager", async (req, res) => {
 					managerUuid: u || null,
 					managerName: u ? nameOf.get(u) || u : "— без менеджера —",
 					salesCount: 0, salesAmount: 0, returnsCount: 0, returnsAmount: 0,
+					salesNet: 0, returnsNet: 0, cogs: 0,
 				});
 			}
 			return map.get(k);
 		};
-		for (const s of sales) { const r = ensure(s.managerUuid); r.salesCount = s._count._all; r.salesAmount = r2(s._sum.amount); }
-		for (const rr of returns) { const r = ensure(rr.managerUuid); r.returnsCount = rr._count._all; r.returnsAmount = r2(rr._sum.amount); }
+		const net = (g) => r2(Number(g._sum.amountWithoutVat) || Number(g._sum.amount) || 0);
+		for (const s of sales) { const r = ensure(s.managerUuid); r.salesCount = s._count._all; r.salesAmount = r2(s._sum.amount); r.salesNet = net(s); }
+		for (const rr of returns) { const r = ensure(rr.managerUuid); r.returnsCount = rr._count._all; r.returnsAmount = r2(rr._sum.amount); r.returnsNet = net(rr); }
 
-		const rows = [...map.values()].map((r) => ({ ...r, netAmount: r2(r.salesAmount - r.returnsAmount) }));
-		rows.sort((a, b) => b.netAmount - a.netAmount);
+		// Себестоимость (COGS) по менеджеру: проводки 7010 реализаций/возвратов
+		// привязаны к документу → менеджер документа (на 7010 субконто менеджера нет).
+		const eWhere = { ...tenantFilter(req), documentType: { in: ["sale", "sale_return"] }, OR: [{ debitAccountCode: "7010" }, { creditAccountCode: "7010" }] };
+		if (organizationUuid) eWhere.organizationUuid = organizationUuid;
+		if (dateFrom || dateTo) { eWhere.date = {}; if (dateFrom) eWhere.date.gte = new Date(dateFrom); if (dateTo) eWhere.date.lte = new Date(dateTo + "T23:59:59.999Z"); }
+		const cogsEntries = await prisma.accountingEntry.findMany({ where: eWhere, select: { amount: true, debitAccountCode: true, documentType: true, documentUuid: true } });
+		const sUuids = [...new Set(cogsEntries.filter((e) => e.documentType === "sale").map((e) => e.documentUuid))];
+		const rUuids = [...new Set(cogsEntries.filter((e) => e.documentType === "sale_return").map((e) => e.documentUuid))];
+		const [sDocs, rDocs] = await Promise.all([
+			sUuids.length ? prisma.sale.findMany({ where: { uuid: { in: sUuids } }, select: { uuid: true, managerUuid: true } }) : [],
+			rUuids.length ? prisma.saleReturn.findMany({ where: { uuid: { in: rUuids } }, select: { uuid: true, managerUuid: true } }) : [],
+		]);
+		const mgrOf = new Map();
+		for (const d of sDocs) mgrOf.set("sale:" + d.uuid, d.managerUuid);
+		for (const d of rDocs) mgrOf.set("sale_return:" + d.uuid, d.managerUuid);
+		for (const e of cogsEntries) {
+			const g = ensure(mgrOf.get(e.documentType + ":" + e.documentUuid));
+			const amt = Number(e.amount) || 0;
+			if (e.documentType === "sale" && e.debitAccountCode === "7010") g.cogs += amt;
+			else if (e.documentType === "sale_return" && e.creditAccountCode === "7010") g.cogs -= amt;
+		}
+
+		const rows = [...map.values()].map((r) => {
+			const netRevenue = r2(r.salesNet - r.returnsNet);
+			const cogs = r2(r.cogs);
+			return { ...r, cogs, netAmount: r2(r.salesAmount - r.returnsAmount), netRevenue, grossProfit: r2(netRevenue - cogs) };
+		});
+		rows.sort((a, b) => b.grossProfit - a.grossProfit);
 
 		const totals = rows.reduce(
 			(t, r) => ({
@@ -381,8 +409,11 @@ router.get("/reports/sales-by-manager", async (req, res) => {
 				returnsCount: t.returnsCount + r.returnsCount,
 				returnsAmount: r2(t.returnsAmount + r.returnsAmount),
 				netAmount: r2(t.netAmount + r.netAmount),
+				netRevenue: r2(t.netRevenue + r.netRevenue),
+				cogs: r2(t.cogs + r.cogs),
+				grossProfit: r2(t.grossProfit + r.grossProfit),
 			}),
-			{ salesCount: 0, salesAmount: 0, returnsCount: 0, returnsAmount: 0, netAmount: 0 },
+			{ salesCount: 0, salesAmount: 0, returnsCount: 0, returnsAmount: 0, netAmount: 0, netRevenue: 0, cogs: 0, grossProfit: 0 },
 		);
 
 		return res.json({ success: true, items: rows, totals });
