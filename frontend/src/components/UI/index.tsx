@@ -25,7 +25,7 @@ import { TodosList } from 'src/models/Todos';
 import { NotificationsList } from 'src/models/Notifications';
 import { WarehousesList } from 'src/models/Warehouses';
 import { SalesList } from 'src/models/Sales';
-import { ProductPriceSettingsList } from 'src/models/ProductPriceSettings';
+import { ProductPriceProcessing } from 'src/models/ProductPriceProcessing';
 // import { SalesBoardForm } from 'src/models/Sales/SalesBoardForm';
 import { SalesReturnsList } from 'src/models/SalesReturns';
 import { PurchasesList } from 'src/models/Purchases';
@@ -338,21 +338,21 @@ export const PanesTabs: FC = () => {
           Обёрнуто в 0×0 overflow:hidden, чтобы не порождать скролл и позволить
           самому .PanesTabs быть overflow:visible (иначе обрезается дропдаун). */}
       <div className={styles.PaneTabsMeasureClip} aria-hidden>
-      <div ref={mirrorRef} className={styles.PaneTabsMeasure}>
-        {panes.map(p => {
-          const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
-          return (
-            <PaneTabItem
-              key={`measure-${p.uniqId}`}
-              pane={p}
-              isActive={false}
-              isLocked={isLocked}
-              onActivate={NOOP}
-              onClose={NOOP}
-            />
-          );
-        })}
-      </div>
+        <div ref={mirrorRef} className={styles.PaneTabsMeasure}>
+          {panes.map(p => {
+            const isLocked = !!selectorPane && !p.isSelector && p.selectorPaneId !== selectorPane.uniqId;
+            return (
+              <PaneTabItem
+                key={`measure-${p.uniqId}`}
+                pane={p}
+                isActive={false}
+                isLocked={isLocked}
+                onActivate={NOOP}
+                onClose={NOOP}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -892,7 +892,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>{translate("directories")}</h3>
             <ul className={styles.NavList}>
               {can("Product") && <li onClick={() => addPane({ component: ProductsList, label: translate("ProductsList") })}>{translate("ProductsList")}</li>}
-              {can("Product") && <li onClick={() => addPane({ component: ProductPriceSettingsList, label: translate("ProductPriceSettingsList") })}>{translate("ProductPriceSettingsList")}</li>}
+              {can("Product") && <li onClick={() => addPane({ component: ProductPriceProcessing, label: translate("ProductPriceProcessing") })}>{translate("ProductPriceProcessing")}</li>}
               {can("Brand") && <li onClick={() => addPane({ component: BrandsList, label: translate("BrandsList") })}>{translate("BrandsList")}</li>}
             </ul>
           </div>

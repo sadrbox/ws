@@ -5,9 +5,11 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import barcodeColumns from "./barcodeColumns.json";
-import { Field, FieldNumber } from "src/components/Field";
+import priceColumns from "./priceColumns.json";
+import { Field, FieldNumber, FieldDate, FieldSelect } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
+import { isoToLocalInput, localInputToIso, getFormatDateOnly } from "src/utils/datetime";
 import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -39,6 +41,13 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
         createPayload: (r: any) => ({ barcode: r.barcode ?? "", comment: r.comment ?? null }),
         updatePayload: (r: any) => ({ barcode: r.barcode ?? "", comment: r.comment ?? null }),
       },
+      prices: {
+        endpoint: "product-prices", parentField: "productUuid",
+        label: translate("prices"),
+        batchEndpoint: "product-prices/batch",
+        createPayload: (r: any) => ({ date: r.date ?? null, priceTypeUuid: r.priceTypeUuid ?? null, price: r.price ?? null }),
+        updatePayload: (r: any) => ({ date: r.date ?? null, priceTypeUuid: r.priceTypeUuid ?? null, price: r.price ?? null }),
+      },
     },
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
@@ -56,10 +65,12 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
     afterSave: async (saved) => {
       const uuid = saved?.uuid ?? form.fields.uuid;
       if (uuid) await invalidateSubTableFor(queryClient, "productbarcodes", "productUuid", uuid);
+      if (uuid) await invalidateSubTableFor(queryClient, "product-prices", "productUuid", uuid);
     },
   });
 
   const barcodes = form.useTable("barcodes");
+  const prices = form.useTable("prices");
 
   const tabs = useMemo(() => [
     {
@@ -99,7 +110,18 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, barcodes.pending, barcodes.onItemsChange, canWrite]);
+    {
+      id: "tab-prices", label: translate("prices"), component: (
+        <ProductPricesTable
+          productUuid={form.fields.uuid ?? ""}
+          disabled={form.isLoading || !canWrite}
+          deferRemoteChanges
+          initialPendingRows={prices.pending}
+          onItemsChange={prices.onItemsChange}
+        />
+      )
+    },
+  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, barcodes.pending, barcodes.onItemsChange, prices?.pending, prices?.onItemsChange, canWrite]);
 
   return (
     <FormRequiredScope requiredKeys={["name"]} active={form.meta.headerValidationFailed}>
@@ -167,6 +189,64 @@ const ProductBarcodesTable: FC<ProductBarcodesTableProps> = ({
   );
 };
 ProductBarcodesTable.displayName = "ProductBarcodesTable";
+
+// ── Табличная часть: цены номенклатуры (по типу, действуют с даты) ───────────
+const PP_MODEL = "product-prices";
+const PP_COMPONENT = "ProductPricesList_part";
+
+interface ProductPricesTableProps {
+  productUuid: string;
+  disabled?: boolean;
+  deferRemoteChanges?: boolean;
+  onItemsChange?: (items: TDataItem[]) => void;
+  initialPendingRows?: TDataItem[];
+}
+
+const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, disabled = false, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
+  const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
+    if (col.identifier === "date") {
+      if (!ctx.inlineEditing) return <span>{getFormatDateOnly(row.date as string)}</span>;
+      return <FieldDate label="" name={`pp_date_${row.id}`} value={isoToLocalInput(row.date as string)} onChange={e => ctx.handleInlineChange(row, "date", isoToLocalInput(e.target.value))} disabled={ctx.disabled} width="100%" variant="table" />;
+    }
+    if (col.identifier === "priceType.name") {
+      if (!ctx.inlineEditing) return <span>{(row.priceType as any)?.name ?? ""}</span>;
+      return (
+        <LookupField label="" name={`pp_pt_${row.id}`} value={(row.priceTypeUuid as string) ?? ""} displayValue={(row.priceType as any)?.name ?? ""}
+          endpoint="price-types" displayField="name"
+          columns={[{ key: "name", label: "Наименование" }]}
+          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "priceTypeUuid", uuid, { priceType: item && uuid ? { uuid, name: item.name ?? "" } : null })}
+          onClear={() => ctx.handleLookupChange(row, "priceTypeUuid", null, { priceType: null })}
+          disabled={ctx.disabled} width="100%" variant="table" />
+      );
+    }
+    if (col.identifier === "price") {
+      if (!ctx.inlineEditing) return <span>{row.price != null ? String(row.price) : ""}</span>;
+      return <FieldNumber name={`pp_price_${row.id}`} value={row.price != null ? String(row.price) : ""} onChange={e => ctx.handleInlineChange(row, "price", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+    }
+    return undefined;
+  }, []);
+
+  const defaultNewRow = useMemo(() => ({ date: new Date().toISOString(), priceTypeUuid: null, price: null }), []);
+
+  return (
+    <SubTable
+      model={PP_MODEL}
+      componentName={PP_COMPONENT}
+      columnsJson={priceColumns}
+      parentKey="productUuid"
+      parentUuid={productUuid}
+      defaultSort={{ date: "desc" }}
+      disabled={disabled}
+      deferRemoteChanges={deferRemoteChanges}
+      initialPendingRows={initialPendingRows}
+      emptyMessage={translate("saveToAddItems")}
+      renderCell={renderCell}
+      defaultNewRow={defaultNewRow}
+      onItemsChange={onItemsChange}
+    />
+  );
+};
+ProductPricesTable.displayName = "ProductPricesTable";
 
 const ProductsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={ProductsForm}

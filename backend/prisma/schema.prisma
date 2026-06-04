@@ -788,6 +788,7 @@ model Product {
   reservationRegister      ReservationRegister[]
   barcodes                 ProductBarcode[]
   priceSettingItems        ProductPriceSettingItem[]
+  productPrices            ProductPrice[]
 
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
@@ -2158,4 +2159,42 @@ model ProductPriceSettingItem {
   @@index([priceSettingUuid])
   @@index([productUuid])
   @@map("product_price_setting_items")
+}
+
+/// Справочник «Типы цен» (Цена продажи / закупки / оптовая и т.п.).
+/// isDefault — тип, используемый как цена продажи по умолчанию (денормализуется
+/// в Product.price для терминала и строк продаж).
+model PriceType {
+  id               Int            @id @default(autoincrement())
+  uuid             String         @unique @default(uuid())
+  name             String
+  isDefault        Boolean        @default(false)
+  sortOrder        Int            @default(100)
+  organizationUuid String?
+  updatedAt        DateTime       @default(now()) @updatedAt
+  deletedAt        DateTime?
+  productPrices    ProductPrice[]
+
+  @@index([organizationUuid])
+  @@map("price_types")
+}
+
+/// Цена номенклатуры по типу, действующая с указанной даты (вкладка «Цены» в
+/// форме товара). Текущая цена типа = последняя по дате (date <= now).
+model ProductPrice {
+  id            Int        @id @default(autoincrement())
+  uuid          String     @unique @default(uuid())
+  productUuid   String
+  priceTypeUuid String?
+  date          DateTime   @default(now())
+  price         Decimal?   @db.Decimal(18, 2)
+  updatedAt     DateTime   @default(now()) @updatedAt
+  deletedAt     DateTime?
+  product       Product    @relation(fields: [productUuid], references: [uuid], onDelete: Cascade)
+  priceType     PriceType? @relation(fields: [priceTypeUuid], references: [uuid])
+
+  @@index([productUuid])
+  @@index([priceTypeUuid])
+  @@index([date])
+  @@map("product_prices")
 }

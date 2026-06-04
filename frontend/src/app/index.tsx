@@ -37,6 +37,7 @@ import { ContractsList, ContractsForm } from "src/models/Contracts";
 import { openFormByRef } from "src/utils/openFormByRef";
 import { MaterialStatement } from "src/models/Reports/MaterialStatement";
 import { openReport } from "src/utils/openReport";
+import { ProductPriceProcessing } from "src/models/ProductPriceProcessing";
 export { useAppContext, AppContextProvider };
 
 export const getComponentName = (node: TComponentNode): string => {
@@ -415,7 +416,10 @@ const App: React.FC = () => {
         }
       } else {
         // Первый визит / пустая сессия — открываем список по умолчанию.
-        openListByRef("Sales", addPane);
+        // openListByRef("Sales", addPane);
+        addPane({
+          component: ProductPriceProcessing,
+        });
       }
       restoreDoneRef.current = true;
     })();

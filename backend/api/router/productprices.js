@@ -1,0 +1,284 @@
+// Цены номенклатуры (вкладка «Цены» в форме товара): дата + тип цены + цена.
+// Sub-таблица товара: GET (по productUuid) / POST / PUT / DELETE / batch.
+// После изменения цен пересчитываем Product.price (цена типа «по умолчанию»).
+import express from "express";
+import { prisma } from "../../prisma/prisma-client.js";
+import {
+	handleDelete,
+	handleBatchDelete,
+} from "../../utils/checkReferences.js";
+import { reconcileProductPrice } from "../../services/productPricing.js";
+
+const router = express.Router();
+const MODEL = "productPrice";
+const ROUTE = "product-price-processing";
+
+const num = (v) => (v != null && v !== "" ? parseFloat(v) : null);
+const toDate = (v) => (v ? new Date(v) : new Date());
+const INCLUDE = { priceType: { select: { uuid: true, name: true } } };
+
+router.get(`/${ROUTE}`, async (req, res) => {
+	try {
+		const { productUuid, priceTypeUuid, date, limit } = req.query;
+		const where = {};
+
+		// Фильтр по productUuid (если указан)
+		if (productUuid) {
+			where.productUuid = String(productUuid);
+		}
+
+		// Фильтр по priceTypeUuid (если указан)
+		if (priceTypeUuid) {
+			const uuidStr = String(priceTypeUuid).trim();
+			if (!uuidStr) {
+				return res.status(400).json({
+					success: false,
+					message: "priceTypeUuid не может быть пустым",
+				});
+			}
+			where.priceTypeUuid = uuidStr;
+		}
+
+		// Фильтр по дате (если указана) — ищем по дате без времени
+		if (date) {
+			try {
+				// Parses date string like "2026-06-04" or "2026-06-04T00:00:00Z"
+				const d = new Date(date);
+				if (isNaN(d.getTime())) {
+					return res.status(400).json({
+						success: false,
+						message: `Неверный формат даты: ${date}. Используйте ISO 8601 формат (2026-06-04 или 2026-06-04T00:00:00Z)`,
+					});
+				}
+
+				// Extract date parts in UTC to avoid timezone issues
+				const year = d.getUTCFullYear();
+				const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+				const day = String(d.getUTCDate()).padStart(2, "0");
+				const dateStr = `${year}-${month}-${day}`;
+
+				// Create start and end of day in UTC
+				const start = new Date(`${dateStr}T00:00:00.000Z`);
+				const end = new Date(`${dateStr}T00:00:00.000Z`);
+				end.setUTCDate(end.getUTCDate() + 1);
+
+				where.date = { gte: start, lt: end };
+			} catch (err) {
+				return res.status(400).json({
+					success: false,
+					message: `Ошибка парсинга даты: ${err.message}`,
+				});
+			}
+		}
+
+		// Если не указаны фильтры — требуем productUuid
+		if (!productUuid && !priceTypeUuid && !date) {
+			return res.status(400).json({
+				success: false,
+				message:
+					"Укажите хотя бы один фильтр: productUuid, priceTypeUuid или date",
+			});
+		}
+
+		const parsedLimit = limit
+			? Math.min(parseInt(limit, 10) || 1000, 5000)
+			: 1000;
+
+		const items = await prisma[MODEL].findMany({
+			where,
+			include: INCLUDE,
+			orderBy: [{ date: "desc" }, { id: "desc" }],
+			take: parsedLimit,
+		});
+		return res.status(200).json({ success: true, items, total: items.length });
+	} catch (error) {
+		console.error(`GET /${ROUTE} error:`, error);
+		return res.status(500).json({
+			success: false,
+			message: "Ошибка сервера",
+			error: error.message,
+		});
+	}
+});
+
+router.get(`/${ROUTE}/:id`, async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w =
+			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const item = await prisma[MODEL].findUnique({ where: w, include: INCLUDE });
+		if (!item)
+			return res.status(404).json({ success: false, message: "Не найдено" });
+		return res.status(200).json({ success: true, item });
+	} catch (error) {
+		console.error(`GET /${ROUTE}/:id error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+router.post(`/${ROUTE}`, async (req, res) => {
+	try {
+		const { productUuid, priceTypeUuid, date, price } = req.body;
+		if (!productUuid)
+			return res
+				.status(400)
+				.json({ success: false, message: "productUuid обязателен" });
+		const item = await prisma[MODEL].create({
+			data: {
+				productUuid,
+				priceTypeUuid: priceTypeUuid || null,
+				date: toDate(date),
+				price: num(price),
+			},
+		});
+		await reconcileProductPrice([productUuid]);
+		return res.status(201).json({ success: true, item });
+	} catch (error) {
+		console.error(`POST /${ROUTE} error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+router.put(`/${ROUTE}/:id`, async (req, res) => {
+	try {
+		const p = req.params.id;
+		const n = Number(p);
+		const w =
+			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const data = {};
+		if (req.body.priceTypeUuid !== undefined)
+			data.priceTypeUuid = req.body.priceTypeUuid || null;
+		if (req.body.date !== undefined) data.date = toDate(req.body.date);
+		if (req.body.price !== undefined) data.price = num(req.body.price);
+		const item = await prisma[MODEL].update({ where: w, data });
+		await reconcileProductPrice([item.productUuid]);
+		return res.status(200).json({ success: true, item });
+	} catch (error) {
+		if (error.code === "P2025")
+			return res.status(404).json({ success: false, message: "Не найдено" });
+		console.error(`PUT /${ROUTE}/:id error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+router.delete(`/${ROUTE}/:id`, (req, res) =>
+	handleDelete({
+		req,
+		res,
+		prisma,
+		modelName: MODEL,
+		onDeleted: (doc) => reconcileProductPrice([doc.productUuid]),
+	}),
+);
+
+router.post(`/${ROUTE}/batch`, async (req, res) => {
+	try {
+		const { operations } = req.body;
+		if (!Array.isArray(operations) || operations.length === 0)
+			return res
+				.status(400)
+				.json({ success: false, message: "operations обязателен" });
+		const affected = new Set();
+		const summary = {
+			created: 0,
+			updated: 0,
+			deleted: 0,
+			skipped: 0,
+			errors: [],
+		};
+		await prisma.$transaction(async (tx) => {
+			for (const [idx, op] of operations.entries()) {
+				const { action, uuid, data } = op;
+				try {
+					if (action === "create" && data?.productUuid) {
+						// Валидация: товар должен существовать
+						const product = await tx.product.findUnique({
+							where: { uuid: data.productUuid },
+						});
+						if (!product) {
+							summary.errors.push({
+								idx,
+								action,
+								message: `Product ${data.productUuid} not found`,
+							});
+							continue;
+						}
+						// Идемпотентность: пропустить если есть запись с той же датой (по дате без времени), типом цены и значением цены
+						const d = toDate(data.date);
+						const start = new Date(d);
+						start.setHours(0, 0, 0, 0);
+						const end = new Date(start);
+						end.setDate(end.getDate() + 1);
+						const whereCond = {
+							productUuid: data.productUuid,
+							date: { gte: start, lt: end },
+							price: num(data.price),
+						};
+						if (data.priceTypeUuid)
+							whereCond.priceTypeUuid = data.priceTypeUuid;
+						else whereCond.priceTypeUuid = null;
+
+						const exists = await tx[MODEL].findFirst({ where: whereCond });
+						if (exists) {
+							summary.skipped++;
+							continue;
+						}
+						await tx[MODEL].create({
+							data: {
+								productUuid: data.productUuid,
+								priceTypeUuid: data.priceTypeUuid || null,
+								date: d,
+								price: num(data.price),
+							},
+						});
+						summary.created++;
+						affected.add(data.productUuid);
+					} else if (action === "update" && uuid && data) {
+						const upd = {};
+						if (data.priceTypeUuid !== undefined)
+							upd.priceTypeUuid = data.priceTypeUuid || null;
+						if (data.date !== undefined) upd.date = toDate(data.date);
+						if (data.price !== undefined) upd.price = num(data.price);
+						if (Object.keys(upd).length) {
+							const row = await tx[MODEL].update({
+								where: { uuid },
+								data: upd,
+							});
+							summary.updated++;
+							affected.add(row.productUuid);
+						}
+					} else if (action === "delete" && uuid) {
+						try {
+							const row = await tx[MODEL].delete({ where: { uuid } });
+							summary.deleted++;
+							affected.add(row.productUuid);
+						} catch (e) {
+							// ignore not found
+						}
+					} else {
+						summary.errors.push({ idx, action, message: "Invalid operation" });
+					}
+				} catch (err) {
+					console.error("batch operation error", err);
+					summary.errors.push({
+						idx,
+						action,
+						message: String(err?.message || err),
+					});
+				}
+			}
+		});
+		await reconcileProductPrice([...affected]);
+		return res.status(200).json({ success: true, summary });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/batch error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+router.post(`/${ROUTE}/batch-delete`, (req, res) =>
+	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
+);
+
+export default router;

@@ -1,0 +1,42 @@
+[
+	{
+		"identifier": "product.name",
+		"type": "string",
+		"width": "280px",
+		"minWidth": "180px",
+		"alignment": "left",
+		"hint": "Номенклатура",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "date",
+		"type": "date",
+		"width": "150px",
+		"minWidth": "110px",
+		"alignment": "left",
+		"hint": "Дата (с которой действует)",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "priceType.name",
+		"type": "string",
+		"width": "220px",
+		"minWidth": "140px",
+		"alignment": "left",
+		"hint": "Тип цены",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "price",
+		"type": "number",
+		"width": "150px",
+		"minWidth": "100px",
+		"alignment": "right",
+		"hint": "Цена",
+		"visible": true,
+		"inlist": true
+	}
+]

@@ -36,12 +36,12 @@ export interface ModelRegistryEntry {
 
 const MODEL_REGISTRY: ModelRegistryEntry[] = [
 	{
-		endpoint: "product-price-settings",
-		module: () => import("src/models/ProductPriceSettings"),
-		formName: "ProductPriceSettingsForm",
-		listName: "ProductPriceSettingsList",
-		storageKey: "price-settings-form",
-		label: "Установка цен номенклатуры",
+		endpoint: "product-prices-processing",
+		module: () => import("src/models/ProductPriceProcessing"),
+		formName: "ProductPriceProcessing",
+		listName: "ProductPriceProcessing",
+		storageKey: "price-processing-form",
+		label: "Корректировка цен номенклатуры",
 	},
 	{
 		endpoint: "organizations",
@@ -130,6 +130,14 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		listName: "ProductsList",
 		storageKey: "products-form",
 		label: "Номенклатура",
+	},
+	{
+		endpoint: "price-types",
+		module: () => import("src/models/PriceTypes"),
+		formName: "PriceTypesForm",
+		listName: "PriceTypesList",
+		storageKey: "price-types-form",
+		label: "Типы цен",
 	},
 	{
 		endpoint: "currencies",

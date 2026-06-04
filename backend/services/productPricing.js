@@ -1,50 +1,31 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Денормализация текущих цен товара из документов «Установка цен номенклатуры».
+// Денормализация текущей цены продажи товара из вкладки «Цены» (ProductPrice).
 //
-// Текущие цены Product (price/purchasePrice/wholesalePrice) = значения из
-// ПОСЛЕДНЕГО по дате ПРОВЕДЁННОГО (posted, !deleted) документа установки цен,
-// содержащего этот товар. Пересчитывается при проведении/правке/удалении
-// документа. Если проведённых документов по товару нет — цены не трогаем.
+// Product.price = последняя по дате (date <= now) цена товара по типу,
+// помеченному как «по умолчанию» (PriceType.isDefault). Используется терминалом
+// и автоподстановкой в строки продаж. Пересчитывается при изменении цен товара.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
 
-/** Пересчитывает текущие цены указанных товаров из проведённых документов. */
-export async function reconcileProductPrices(productUuids, client = prisma) {
+/** Пересчитывает Product.price из актуальной цены типа «по умолчанию». */
+export async function reconcileProductPrice(productUuids, client = prisma) {
 	const uuids = [...new Set((productUuids || []).filter(Boolean))];
+	if (!uuids.length) return;
+	const def = await client.priceType.findFirst({ where: { isDefault: true, deletedAt: null }, select: { uuid: true } });
+	if (!def) return;
+	const now = new Date();
 	for (const productUuid of uuids) {
 		try {
-			const items = await client.productPriceSettingItem.findMany({
-				where: { productUuid, deletedAt: null, priceSetting: { posted: true, deletedAt: null } },
-				select: {
-					salePrice: true, purchasePrice: true, wholesalePrice: true,
-					priceSetting: { select: { date: true } },
-				},
+			const row = await client.productPrice.findFirst({
+				where: { productUuid, priceTypeUuid: def.uuid, deletedAt: null, date: { lte: now } },
+				orderBy: { date: "desc" },
+				select: { price: true },
 			});
-			if (!items.length) continue;
-			items.sort((a, b) => new Date(b.priceSetting.date) - new Date(a.priceSetting.date));
-			const it = items[0];
-			await client.product.update({
-				where: { uuid: productUuid },
-				data: { price: it.salePrice, purchasePrice: it.purchasePrice, wholesalePrice: it.wholesalePrice },
-			});
+			if (row) await client.product.update({ where: { uuid: productUuid }, data: { price: row.price } });
 		} catch (err) {
-			console.error(`reconcileProductPrices(${productUuid}) error:`, err);
+			console.error(`reconcileProductPrice(${productUuid}) error:`, err);
 		}
 	}
 }
 
-/** Пересчитывает цены товаров, входящих в документ установки цен. */
-export async function reconcilePricesForDoc(priceSettingUuid, client = prisma) {
-	if (!priceSettingUuid) return;
-	try {
-		const items = await client.productPriceSettingItem.findMany({
-			where: { priceSettingUuid },
-			select: { productUuid: true },
-		});
-		await reconcileProductPrices(items.map((i) => i.productUuid), client);
-	} catch (err) {
-		console.error(`reconcilePricesForDoc(${priceSettingUuid}) error:`, err);
-	}
-}
-
-export default { reconcileProductPrices, reconcilePricesForDoc };
+export default { reconcileProductPrice };

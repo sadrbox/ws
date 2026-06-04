@@ -1,0 +1,50 @@
+.wrapper {
+  padding: 20px;
+  background: #ffffff;
+  min-height: 320px;
+}
+
+.header {
+  margin-top: 0;
+  font-size: 20px;
+}
+
+.debug {
+  padding: 8px;
+  background: #fffbe6;
+  border: 1px solid #ffd966;
+  margin-bottom: 12px;
+}
+
+.notice {
+  color: #666;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.tableWrap {
+  margin-top: 12px;
+}
+
+.preview {
+  margin-top: 12px;
+  border: 1px dashed #ddd;
+  padding: 8px;
+  background: #fafafa;
+}
+
+.previewTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cell {
+  padding: 6px;
+}
