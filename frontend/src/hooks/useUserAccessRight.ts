@@ -3,7 +3,7 @@ import { useAppContext } from "src/app";
 
 export type AccessLevel = "full" | "readonly" | "none";
 
-export interface AccessRightResult {
+export interface UserAccessRightResult {
 	/** Уровень доступа: "full" | "readonly" | "none" */
 	accessLevel: AccessLevel;
 	/** Есть ли доступ на чтение (full или readonly) */
@@ -15,7 +15,7 @@ export interface AccessRightResult {
 /**
  * Хук для проверки прав текущего пользователя на модель.
  *
- * @param modelName — имя модели в PascalCase (как в AccessRight.modelName).
+ * @param modelName — имя модели в PascalCase (как в UserAccessRight.modelName).
  *   Примеры: "Organization", "Sale", "BankAccount", "Employee".
  *
  * @returns { accessLevel, canRead, canWrite }
@@ -23,17 +23,17 @@ export interface AccessRightResult {
  * Логика:
  *   - Если пользователь не залогинен → "none"
  *   - Если isSuperAdmin → "full"
- *   - Иначе ищет запись в accessRights по modelName
+ *   - Иначе ищет запись в userAccessRights по modelName
  *   - Если записи нет → "none"
  */
-export function useAccessRight(modelName: string): AccessRightResult {
+export function useUserAccessRight(modelName: string): UserAccessRightResult {
 	const user = useAppContext().auth.user;
 
 	return useMemo(() => {
 		if (!user) return { accessLevel: "none" as const, canRead: false, canWrite: false };
 		if (user.isSuperAdmin) return { accessLevel: "full" as const, canRead: true, canWrite: true };
 
-		const rights = user.accessRights ?? user.employee?.accessRights ?? [];
+		const rights = user.userAccessRights ?? user.employee?.userAccessRights ?? [];
 		const entry = rights.find((r) => r.modelName === modelName);
 		const level = (entry?.accessLevel ?? "none") as AccessLevel;
 
@@ -47,15 +47,15 @@ export function useAccessRight(modelName: string): AccessRightResult {
 
 /**
  * Хелпер (не хук) — для использования вне React-компонентов.
- * Принимает массив accessRights напрямую.
+ * Принимает массив userAccessRights напрямую.
  */
 export function getAccessLevel(
-	accessRights: { modelName: string; accessLevel: string }[] | undefined,
+	userAccessRights: { modelName: string; accessLevel: string }[] | undefined,
 	modelName: string,
 	isSuperAdmin?: boolean,
-): AccessRightResult {
+): UserAccessRightResult {
 	if (isSuperAdmin) return { accessLevel: "full", canRead: true, canWrite: true };
-	const entry = accessRights?.find((r) => r.modelName === modelName);
+	const entry = userAccessRights?.find((r) => r.modelName === modelName);
 	const level = (entry?.accessLevel ?? "none") as AccessLevel;
 	return {
 		accessLevel: level,

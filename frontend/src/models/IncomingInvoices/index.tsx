@@ -24,7 +24,7 @@ const IncomingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formLabel: "Счет-фактура входящая",
   itemsTabLabel: "Товары, услуги",
   itemsComponentName: "IncomingInvoiceItemsList_part",
-  accessRightModel: "IncomingInvoice",
+  userAccessRightModel: "IncomingInvoice",
   formDisplayName: "IncomingInvoicesForm",
   docType: "incoming_invoice",
   defaultHiddenItemColumns: ["amountNetOfIndirectTaxes"],

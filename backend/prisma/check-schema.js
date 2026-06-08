@@ -9,11 +9,11 @@ async function check() {
     console.log("\n📋 users:");
     userCols.forEach(c => console.log(`   ${c.column_name} (${c.data_type}, nullable=${c.is_nullable})`));
 
-    // Проверяем столбцы access_rights
+    // Проверяем столбцы user_access_rights
     const arCols = await prisma.$queryRawUnsafe(
-      `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'access_rights' ORDER BY ordinal_position`
+      `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'user_access_rights' ORDER BY ordinal_position`
     );
-    console.log("\n📋 access_rights:");
+    console.log("\n📋 user_access_rights:");
     arCols.forEach(c => console.log(`   ${c.column_name} (${c.data_type}, nullable=${c.is_nullable})`));
 
     // Проверяем столбцы contact_persons

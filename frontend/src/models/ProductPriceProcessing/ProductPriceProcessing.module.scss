@@ -1,50 +1,121 @@
-.wrapper {
-  padding: 20px;
-  background: #ffffff;
-  min-height: 320px;
-}
-
-.header {
-  margin-top: 0;
-  font-size: 20px;
-}
-
-.debug {
-  padding: 8px;
-  background: #fffbe6;
-  border: 1px solid #ffd966;
-  margin-bottom: 12px;
-}
-
-.notice {
-  color: #666;
-  font-size: 13px;
-  margin-bottom: 8px;
-}
-
-.controls {
+// Тело вкладки: пояснение → строка параметров/кнопок → таблица.
+.tab {
   display: flex;
-  gap: 8px;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 6px 4px;
+}
+
+// Поясняющий блок «как пользоваться» — лёгкий info-бокс.
+.help {
+  background: #f4f8ff;
+  border: 1px solid #d6e4ff;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #2b3a4a;
+}
+
+.helpTitle {
+  display: flex;
   align-items: center;
-  margin-top: 12px;
+  gap: 6px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.helpSteps {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+
+.helpSteps b {
+  font-weight: 600;
+}
+
+// Подсказка про колонки файла.
+.notice {
+  color: #6b7280;
+  font-size: 12px;
 }
 
 .tableWrap {
-  margin-top: 12px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 220px;
 }
 
-.preview {
-  margin-top: 12px;
-  border: 1px dashed #ddd;
-  padding: 8px;
+// Панель массовых операций — компактная строка над таблицей.
+.massOps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
   background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 6px;
 }
 
-.previewTable {
-  width: 100%;
-  border-collapse: collapse;
+.massOpsTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  align-self: center;
+  margin-right: 2px;
 }
 
-.cell {
-  padding: 6px;
+.divider {
+  width: 1px;
+  align-self: stretch;
+  background: #e2e2e2;
+  margin: 2px 4px;
+}
+
+// Сводка изменений / сопоставления.
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #444;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #eef2ff;
+  color: #3949ab;
+}
+
+.badgeOk {
+  background: #e6f4ea;
+  color: #137333;
+}
+
+.badgeWarn {
+  background: #fce8e6;
+  color: #c5221f;
+}
+
+// Чекбокс в строке параметров (выравнивание по нижнему краю как у полей).
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+  align-self: center;
+  cursor: pointer;
+  user-select: none;
 }

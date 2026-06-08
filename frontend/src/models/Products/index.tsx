@@ -13,7 +13,7 @@ import { isoToLocalInput, localInputToIso, getFormatDateOnly } from "src/utils/d
 import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
@@ -21,6 +21,9 @@ import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "src/components/Button";
+import { useAppContext } from "src/app";
+import { ProductPriceProcessing } from "src/models/ProductPriceProcessing";
 
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
@@ -29,7 +32,7 @@ interface TFields { id?: number; uuid?: string; name: string; sku: string; barco
 const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, price: "", brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "" };
 
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useAccessRight("Product");
+  const { canWrite } = useUserAccessRight("Product");
   const queryClient = useQueryClient();
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "products-form", defaultFields: DEFAULT_FIELDS, paneProps,
@@ -114,6 +117,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       id: "tab-prices", label: translate("prices"), component: (
         <ProductPricesTable
           productUuid={form.fields.uuid ?? ""}
+          productName={form.fields.name ?? ""}
           disabled={form.isLoading || !canWrite}
           deferRemoteChanges
           initialPendingRows={prices.pending}
@@ -196,13 +200,25 @@ const PP_COMPONENT = "ProductPricesList_part";
 
 interface ProductPricesTableProps {
   productUuid: string;
+  productName?: string;
   disabled?: boolean;
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
   initialPendingRows?: TDataItem[];
 }
 
-const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, disabled = false, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
+const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, productName = "", disabled = false, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
+  const { addPane } = useAppContext().windows;
+  // Открыть обработку «Корректировка цен» с фильтром по этому товару (история цен).
+  const openCorrection = useCallback(() => {
+    if (!productUuid) return;
+    addPane({
+      label: translate("priceCorrectionTab"),
+      component: ProductPriceProcessing,
+      data: { productUuid, productName },
+    });
+  }, [addPane, productUuid, productName]);
+
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     if (col.identifier === "date") {
       if (!ctx.inlineEditing) return <span>{getFormatDateOnly(row.date as string)}</span>;
@@ -228,11 +244,20 @@ const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, disabled
 
   const defaultNewRow = useMemo(() => ({ date: new Date().toISOString(), priceTypeUuid: null, price: null }), []);
 
+  // «Цены» — подчинённый справочник номенклатуры: владельца (колонку
+  // «Номенклатура») не показываем, как в других зависимых таблицах
+  // (Склад/Касса/Договоры). Колонку убираем из набора (а не просто visible:false),
+  // чтобы сбросить возможный устаревший кэш ширин/видимости.
+  const adjustedColumns = useMemo(
+    () => (priceColumns as any[]).filter((c) => c.identifier !== "product.name"),
+    [],
+  );
+
   return (
     <SubTable
       model={PP_MODEL}
       componentName={PP_COMPONENT}
-      columnsJson={priceColumns}
+      columnsJson={adjustedColumns}
       parentKey="productUuid"
       parentUuid={productUuid}
       defaultSort={{ date: "desc" }}
@@ -243,6 +268,7 @@ const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, disabled
       renderCell={renderCell}
       defaultNewRow={defaultNewRow}
       onItemsChange={onItemsChange}
+      extraButtons={<Button type="button" onClick={openCorrection} disabled={!productUuid} title={translate("priceCorrectionTab")}>{translate("priceCorrectionTab")}</Button>}
     />
   );
 };

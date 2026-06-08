@@ -21,7 +21,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { useAppContext } from "src/app";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
@@ -65,7 +65,7 @@ const DEFAULT_FIELDS: TFields = {
 
 const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
-  const { canWrite } = useAccessRight("BankStatement");
+  const { canWrite } = useUserAccessRight("BankStatement");
   const { auth: { user: currentUser }, windows: { addPane } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {

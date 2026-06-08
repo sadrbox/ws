@@ -9,7 +9,7 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -39,7 +39,7 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useAccessRight("ScheduledTask");
+  const { canWrite } = useUserAccessRight("ScheduledTask");
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "scheduled-tasks-form", defaultFields: DEFAULT_FIELDS, paneProps,
     mapServerToForm: (d, prev) => ({

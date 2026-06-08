@@ -15,10 +15,10 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
-import { useUserPermissionDefaults } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { useUserDefaults } from "src/hooks/useUserDefaults";
+import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
 import { resolveOrgChangeFields } from "src/utils/createFromBasis";
 import { useAppContext } from "src/app";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
@@ -40,7 +40,7 @@ export interface CashOrderFormConfig {
   listName: string;
   formLabel: string;
   storageKey: string;
-  accessRightModel: string;
+  userAccessRightModel: string;
   docType: DocumentType;
   formDisplayName: string;
   columnsJson: any;
@@ -75,7 +75,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
 } {
   const Form: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
-    const { canWrite } = useAccessRight(cfg.accessRightModel);
+    const { canWrite } = useUserAccessRight(cfg.userAccessRightModel);
     const { auth: { user: currentUser }, windows: { addPane } } = useAppContext();
 
     const initialFields: TFields | undefined = (() => {
@@ -172,11 +172,11 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
       apply: (uuid, name) => form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
     });
 
-    const permDefaults = useUserPermissionDefaults(
+    const permDefaults = useUserDefaults(
       currentUser?.uuid ?? "",
       form.fields.organizationUuid,
     );
-    useApplyPermissionDefaults({
+    useApplyUserDefaults({
       defaults: permDefaults,
       organizationUuid: form.fields.organizationUuid,
       isEditMode: form.isEditMode,

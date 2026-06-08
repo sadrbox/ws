@@ -2,11 +2,11 @@
  * OrgRightsPanel: тесты
  *
  * Компонент использует useFormStore (→ useAppContext, useSyncExternalStore),
- * ModelForm, Field, FieldSelect, AccessRightsList — все мокируются.
+ * ModelForm, Field, FieldSelect, UserAccessRightsList — все мокируются.
  *
  * Тесты проверяют:
  *  - корректную инициализацию initialFields из paneProps.data
- *  - передачу userUuid/organizationUuid в AccessRightsList (edit-mode)
+ *  - передачу userUuid/organizationUuid в UserAccessRightsList (edit-mode)
  *  - рендер без data (новая форма)
  */
 import React from 'react';
@@ -112,25 +112,25 @@ vi.mock('src/styles/main.module.scss', () => ({
 
 vi.mock('src/i18', () => ({ translate: (key: string) => key }));
 vi.mock('src/utils/buildPaneLabel', () => ({ makePaneLabel: () => 'label' }));
-vi.mock('src/hooks/useAccessRight', () => ({ useAccessRight: () => ({ canWrite: true }) }));
+vi.mock('src/hooks/useUserAccessRight', () => ({ useUserAccessRight: () => ({ canWrite: true }) }));
 
-// ── Мок AccessRightsList + AccessRightsTable ─────────────────────────────
-vi.mock('src/models/AccessRights', () => ({
-  AccessRightsList: ({ userUuid, organizationUuid }: { userUuid?: string; organizationUuid?: string }) =>
+// ── Мок UserAccessRightsList + UserAccessRightsTable ─────────────────────────────
+vi.mock('src/models/UserAccessRights', () => ({
+  UserAccessRightsList: ({ userUuid, organizationUuid }: { userUuid?: string; organizationUuid?: string }) =>
     React.createElement('div', {
-      'data-testid': 'access-rights-list',
+      'data-testid': 'user-access-rights-list',
       'data-user': userUuid ?? '',
       'data-org': organizationUuid ?? '',
     }, 'mock'),
-  AccessRightsTable: ({ userUuid, organizationUuid }: { userUuid?: string; organizationUuid?: string }) =>
+  UserAccessRightsTable: ({ userUuid, organizationUuid }: { userUuid?: string; organizationUuid?: string }) =>
     React.createElement('div', {
-      'data-testid': 'access-rights-table',
+      'data-testid': 'user-access-rights-table',
       'data-user': userUuid ?? '',
       'data-org': organizationUuid ?? '',
     }, 'mock'),
 }));
 
-import { UserPermissionsForm as OrgRightsPanel } from 'src/models/UserPermissions';
+import { UserSettingsForm as OrgRightsPanel } from 'src/models/UserSettings';
 
 describe('OrgRightsPanel', () => {
   it('рендерится без ошибок (без data)', () => {

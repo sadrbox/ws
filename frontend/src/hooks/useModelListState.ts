@@ -17,8 +17,8 @@ import type {
 	TypeTableTypes,
 } from "src/components/Table/types";
 import type { TTableVariant } from "src/components/Table";
-import { useAccessRight } from "src/hooks/useAccessRight";
-import { ENDPOINT_TO_MODEL } from "src/utils/accessRightsMap";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { ENDPOINT_TO_MODEL } from "src/utils/userAccessRightsMap";
 
 const stringifyJson = (v: any): string => {
 	if (v == null) return "";
@@ -73,7 +73,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
 
 	// ── Разрешения пользователей ─────────────────────────────────────────────────────
 	const modelName = ENDPOINT_TO_MODEL[model] ?? "";
-	const { canRead, canWrite } = useAccessRight(modelName);
+	const { canRead, canWrite } = useUserAccessRight(modelName);
 
 	const [columns, setColumns] = useState<TColumn[]>(() =>
 		getModelColumns(opts.columnsJson, componentName, columnsVariant),

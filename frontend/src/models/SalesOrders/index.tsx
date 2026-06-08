@@ -24,7 +24,7 @@ const SalesOrdersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formLabel: "Заказ покупателя",
   itemsTabLabel: "Товары, услуги",
   itemsComponentName: "SalesOrderItemsList_part",
-  accessRightModel: "SalesOrder",
+  userAccessRightModel: "SalesOrder",
   formDisplayName: "SalesOrdersForm",
   docType: "sales_order",
   hidePosted: true,

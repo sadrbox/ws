@@ -19,7 +19,7 @@ import { getFormatDateOnly } from "src/utils/datetime";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -51,7 +51,7 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useAccessRight("Contract");
+  const { canWrite } = useUserAccessRight("Contract");
   const data = paneProps.data;
   const defaultOrg = useDefaultOrganization();
   const [filesRevision, setFilesRevision] = useState(0);

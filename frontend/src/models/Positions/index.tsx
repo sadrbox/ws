@@ -7,7 +7,7 @@ const { Form: PositionsForm, List: PositionsList } = createSimpleModel({
   storageKey: "positions-form",
   formLabel: "Должности",
   columnsJson,
-  accessRight: "Position",
+  userAccessRight: "Position",
   fields: [
     { key: "name", label: "Наименование", required: true, requiredMessage: "Наименование обязательно" },
     { key: "comment", label: "Описание" },

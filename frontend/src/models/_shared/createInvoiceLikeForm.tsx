@@ -13,11 +13,11 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
-import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
+import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
@@ -56,7 +56,7 @@ export interface InvoiceLikeFormConfig {
   formLabel: string;
   itemsTabLabel: string;
   itemsComponentName: string;
-  accessRightModel: string;
+  userAccessRightModel: string;
   formDisplayName: string;
   docType: "outgoing_invoice" | "incoming_invoice" | "payment_invoice" | "purchase_requisition" | "commercial_offer" | "sales_order" | "reservation" | "purchase_order";
   basisConfig?: { allowedTypes: BasisTypeConfig[] };
@@ -113,7 +113,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
   const Form: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
     const queryClient = useQueryClient();
-    const { canWrite } = useAccessRight(cfg.accessRightModel);
+    const { canWrite } = useUserAccessRight(cfg.userAccessRightModel);
     const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
     const initialFields: TFields | undefined = (() => {
@@ -243,7 +243,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
 
     const items = form.useTable("items");
     const allItemsRef = useRef<any[]>([]);
-    const permDefaultsRef = useRef<PermissionDefaultsMap>({});
+    const permDefaultsRef = useRef<UserDefaultsMap>({});
 
     // Подсказка о несоответствии документу-основанию (шапка + строки).
     const basisMismatch = useBasisMismatch({
@@ -407,12 +407,12 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       apply: (uuid, name) => form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
     });
 
-    const permDefaults = useUserPermissionDefaults(
+    const permDefaults = useUserDefaults(
       currentUser?.uuid ?? "",
       form.fields.organizationUuid,
     );
     permDefaultsRef.current = permDefaults;
-    useApplyPermissionDefaults({
+    useApplyUserDefaults({
       defaults: permDefaults,
       organizationUuid: form.fields.organizationUuid,
       isEditMode: form.isEditMode,

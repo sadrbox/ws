@@ -9,13 +9,13 @@ import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { Field } from "src/components/Field";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
-import BankAccountsTable from "../BankAccounts/BankAccountsTable";
-import ContractsTable from "../Contracts/ContractsTable";
-import ContactsTable from "../Contacts/ContactsTable";
+import { BankAccountsTable } from "../BankAccounts";
+import { ContractsTable } from "../Contracts";
+import { ContactsTable } from "../Contacts";
 import { WarehousesTable } from "../Warehouses";
 import { CashboxesTable } from "../Cashboxes";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -39,12 +39,12 @@ interface TFields {
 const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "" };
 
 const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useAccessRight("Organization");
-  const { canRead: canReadBankAccounts } = useAccessRight("BankAccount");
-  const { canRead: canReadContracts } = useAccessRight("Contract");
-  const { canRead: canReadContacts } = useAccessRight("Contact");
-  const { canRead: canReadWarehouses } = useAccessRight("Warehouse");
-  const { canRead: canReadCashboxes } = useAccessRight("Cashbox");
+  const { canWrite } = useUserAccessRight("Organization");
+  const { canRead: canReadBankAccounts } = useUserAccessRight("BankAccount");
+  const { canRead: canReadContracts } = useUserAccessRight("Contract");
+  const { canRead: canReadContacts } = useUserAccessRight("Contact");
+  const { canRead: canReadWarehouses } = useUserAccessRight("Warehouse");
+  const { canRead: canReadCashboxes } = useUserAccessRight("Cashbox");
   const queryClient = useQueryClient();
 
   // refetchType: "active" — ждём завершение refetch смонтированных

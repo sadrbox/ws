@@ -418,7 +418,7 @@ router.get("/users/:id/organizations", async (req, res) => {
 		const isSuperAdmin = req.user?.isSuperAdmin;
 		const isOrgAdmin = req.user?.isOrgAdmin;
 
-		const items = await prisma.userPermission.findMany({
+		const items = await prisma.userSetting.findMany({
 			where: {
 				user: w,
 				// Org-admin видит только своих пользователей
@@ -477,7 +477,7 @@ router.post("/users/:id/organizations", async (req, res) => {
 			return res.status(404).json({ success: false, message: "Пользователь не найден" });
 		}
 
-		const item = await prisma.userPermission.upsert({
+		const item = await prisma.userSetting.upsert({
 			where: {
 				userUuid_organizationUuid: {
 					userUuid: targetUser.uuid,
@@ -526,7 +526,7 @@ router.put("/users/:id/organizations/:orgUuid", async (req, res) => {
 			return res.status(404).json({ success: false, message: "Пользователь не найден" });
 		}
 
-		const item = await prisma.userPermission.update({
+		const item = await prisma.userSetting.update({
 			where: {
 				userUuid_organizationUuid: {
 					userUuid: targetUser.uuid,
@@ -571,7 +571,7 @@ router.delete("/users/:id/organizations/:orgUuid", async (req, res) => {
 			return res.status(404).json({ success: false, message: "Пользователь не найден" });
 		}
 
-		await prisma.userPermission.delete({
+		await prisma.userSetting.delete({
 			where: {
 				userUuid_organizationUuid: {
 					userUuid: targetUser.uuid,
@@ -613,7 +613,7 @@ router.post("/users/:id/switch-organization", async (req, res) => {
 		const callerUuid = req.user?.uuid;
 		const targetUser = await prisma.user.findUnique({
 			where: w,
-			select: { uuid: true, userPermissions: { select: { organizationUuid: true } } },
+			select: { uuid: true, userSettings: { select: { organizationUuid: true } } },
 		});
 		if (!targetUser) {
 			return res.status(404).json({ success: false, message: "Пользователь не найден" });
@@ -625,7 +625,7 @@ router.post("/users/:id/switch-organization", async (req, res) => {
 
 		// Проверяем что организация входит в список доступных
 		if (organizationUuid) {
-			const allowed = targetUser.userPermissions.some(
+			const allowed = targetUser.userSettings.some(
 				(uo) => uo.organizationUuid === organizationUuid,
 			);
 			if (!allowed && !req.user?.isSuperAdmin) {

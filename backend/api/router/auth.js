@@ -7,17 +7,17 @@ import { generateToken, authMiddleware } from "../../utils/auth.js";
 const router = express.Router();
 
 /**
- * Загружает accessRights, отфильтрованные по активной организации.
+ * Загружает userAccessRights, отфильтрованные по активной организации.
  * Возвращает только права для activeOrg + глобальные права (organizationUuid = null).
  * Если нет активной орг — только глобальные права.
  */
-async function loadAccessRights(userUuid, organizationUuid) {
+async function loadUserAccessRights(userUuid, organizationUuid) {
 	try {
 		const orgUuid = organizationUuid || null;
 		const where = orgUuid
 			? { userUuid, OR: [{ organizationUuid: orgUuid }, { organizationUuid: null }] }
 			: { userUuid, organizationUuid: null };
-		return await prisma.accessRight.findMany({ where, orderBy: { modelName: "asc" } });
+		return await prisma.userAccessRight.findMany({ where, orderBy: { modelName: "asc" } });
 	} catch (_) {
 		return [];
 	}
@@ -51,7 +51,7 @@ const ALL_MODEL_NAMES = [
 	"Employee",
 	"Position",
 	"EmployeeHistory",
-	"AccessRight",
+	"UserAccessRight",
 	"Currency",
 	"UnitOfMeasure",
 	"VatRate",
@@ -65,9 +65,9 @@ const ALL_MODEL_NAMES = [
 
 /**
  * Генерирует виртуальные «полные права на всё» для admin-пользователя (dev-режим).
- * Не записывает в БД — возвращает массив объектов, идентичных AccessRight.
+ * Не записывает в БД — возвращает массив объектов, идентичных UserAccessRight.
  */
-function generateFullAccessRights() {
+function generateFullUserAccessRights() {
 	return ALL_MODEL_NAMES.map((name) => ({
 		modelName: name,
 		accessLevel: "full",
@@ -102,7 +102,7 @@ router.post("/auth/login", async (req, res) => {
 				organizationUuid: true,
 				isSuperAdmin: true,
 				avatarPath: true,
-				userPermissions: {
+				userSettings: {
 					select: {
 						organizationUuid: true,
 						role: true,
@@ -146,8 +146,8 @@ router.post("/auth/login", async (req, res) => {
 			});
 		}
 
-		// Подгружаем accessRights (только для активной орг + глобальные)
-		const accessRights = await loadAccessRights(user.uuid, user.organizationUuid);
+		// Подгружаем userAccessRights (только для активной орг + глобальные)
+		const userAccessRights = await loadUserAccessRights(user.uuid, user.organizationUuid);
 
 		// Есть ли у пользователя установленный пароль?
 		const hasPassword = user.password && user.password.trim() !== "";
@@ -202,16 +202,16 @@ router.post("/auth/login", async (req, res) => {
 		const isSuperOrDevAdmin =
 			user.isSuperAdmin || (isDev && trimmedUsername.toLowerCase() === "admin");
 		const rights = isSuperOrDevAdmin
-			? generateFullAccessRights()
-			: accessRights;
+			? generateFullUserAccessRights()
+			: userAccessRights;
 
-		const allowedOrgUuids = (user.userPermissions || []).map(
+		const allowedOrgUuids = (user.userSettings || []).map(
 			(uo) => uo.organizationUuid,
 		);
 
 		let employeeData = user.employee || null;
 		if (employeeData) {
-			employeeData = { ...employeeData, accessRights: rights };
+			employeeData = { ...employeeData, userAccessRights: rights };
 		}
 
 		return res.status(200).json({
@@ -223,9 +223,9 @@ router.post("/auth/login", async (req, res) => {
 				organizationUuid: user.organizationUuid,
 				isSuperAdmin: user.isSuperAdmin,
 				allowedOrgUuids,
-				userPermissions: user.userPermissions || [],
+				userSettings: user.userSettings || [],
 				employee: employeeData,
-				accessRights: rights,
+				userAccessRights: rights,
 			},
 		});
 	} catch (error) {
@@ -258,7 +258,7 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 				employeeUuid: true,
 				organizationUuid: true,
 				isSuperAdmin: true,
-				userPermissions: {
+				userSettings: {
 					select: {
 						organizationUuid: true,
 						role: true,
@@ -284,24 +284,24 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 				.json({ success: false, message: "Пользователь не найден" });
 		}
 
-		// Подгружаем accessRights (только для активной орг + глобальные)
-		const accessRights = await loadAccessRights(user.uuid, user.organizationUuid);
+		// Подгружаем userAccessRights (только для активной орг + глобальные)
+		const userAccessRights = await loadUserAccessRights(user.uuid, user.organizationUuid);
 
 		// Определяем Разрешения пользователей
 		const isDev = process.env.NODE_ENV !== "production";
 		const isSuperOrDevAdmin =
 			user.isSuperAdmin || (isDev && user.username?.toLowerCase() === "admin");
 		const rights = isSuperOrDevAdmin
-			? generateFullAccessRights()
-			: accessRights;
+			? generateFullUserAccessRights()
+			: userAccessRights;
 
-		const allowedOrgUuids = (user.userPermissions || []).map(
+		const allowedOrgUuids = (user.userSettings || []).map(
 			(uo) => uo.organizationUuid,
 		);
 
 		let employeeData = user.employee || null;
 		if (employeeData) {
-			employeeData = { ...employeeData, accessRights: rights };
+			employeeData = { ...employeeData, userAccessRights: rights };
 		}
 
 		return res.status(200).json({
@@ -309,7 +309,7 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 			user: {
 				...user,
 				employee: employeeData,
-				accessRights: rights,
+				userAccessRights: rights,
 				allowedOrgUuids,
 			},
 		});
@@ -623,7 +623,7 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 				username: true,
 				isSuperAdmin: true,
 				organizationUuid: true,
-				userPermissions: {
+				userSettings: {
 					select: {
 						organizationUuid: true,
 						role: true,
@@ -652,7 +652,7 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 		// Суперадмин может переключаться в любую орг
 		// Обычный — только в разрешённые
 		if (!user.isSuperAdmin) {
-			const allowed = user.userPermissions.map((uo) => uo.organizationUuid);
+			const allowed = user.userSettings.map((uo) => uo.organizationUuid);
 			if (organizationUuid !== null && !allowed.includes(organizationUuid)) {
 				console.warn(
 					`[Security] User ${user.username} (${user.uuid}) attempted to switch to unauthorized org ${organizationUuid}`,
@@ -670,16 +670,16 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 		});
 
 		// Подгружаем права для новой орг (только для активной орг + глобальные)
-		const accessRights = await loadAccessRights(user.uuid, organizationUuid ?? null);
+		const userAccessRights = await loadUserAccessRights(user.uuid, organizationUuid ?? null);
 
 		const isDev = process.env.NODE_ENV !== "production";
 		const isSuperOrDevAdmin =
 			user.isSuperAdmin || (isDev && user.username?.toLowerCase() === "admin");
 		const rights = isSuperOrDevAdmin
-			? generateFullAccessRights()
-			: accessRights;
+			? generateFullUserAccessRights()
+			: userAccessRights;
 
-		const allowedOrgUuids = user.userPermissions.map(
+		const allowedOrgUuids = user.userSettings.map(
 			(uo) => uo.organizationUuid,
 		);
 
@@ -690,9 +690,9 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 			organizationUuid: organizationUuid ?? null,
 			isSuperAdmin: user.isSuperAdmin,
 			allowedOrgUuids,
-			userPermissions: user.userPermissions,
+			userSettings: user.userSettings,
 			employee: user.employee,
-			accessRights: rights,
+			userAccessRights: rights,
 		};
 
 		// Выдаём новый JWT с обновлённым uuid (organizationUuid не в токене, берётся из БД)

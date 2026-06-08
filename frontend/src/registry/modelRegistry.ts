@@ -36,12 +36,20 @@ export interface ModelRegistryEntry {
 
 const MODEL_REGISTRY: ModelRegistryEntry[] = [
 	{
-		endpoint: "product-prices-processing",
+		endpoint: "product-prices",
 		module: () => import("src/models/ProductPriceProcessing"),
 		formName: "ProductPriceProcessing",
 		listName: "ProductPriceProcessing",
 		storageKey: "price-processing-form",
 		label: "Корректировка цен номенклатуры",
+	},
+	{
+		endpoint: "product-import-export",
+		module: () => import("src/models/ProductImportExport"),
+		formName: "ProductImportExport",
+		listName: "ProductImportExport",
+		storageKey: "product-import-export-form",
+		label: "Импорт/экспорт номенклатуры",
 	},
 	{
 		endpoint: "organizations",
@@ -197,9 +205,9 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 	},
 	{
 		endpoint: "sale-returns",
-		module: () => import("src/models/SalesReturns"),
-		formName: "SalesReturnsForm",
-		listName: "SalesReturnsList",
+		module: () => import("src/models/SaleReturns"),
+		formName: "SaleReturnsForm",
+		listName: "SaleReturnsList",
 		storageKey: "sale-returns-form",
 		label: "Возврат от покупателя",
 	},
@@ -316,7 +324,7 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Регламентные задачи",
 	},
 	{
-		endpoint: "user-permissions",
+		endpoint: "user-settings",
 		module: () => import("src/models/UserAccessRights"),
 		formName: "UserAccessRightsForm",
 		listName: "UserAccessRightsList",

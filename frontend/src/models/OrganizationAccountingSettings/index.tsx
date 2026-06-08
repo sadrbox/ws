@@ -11,7 +11,7 @@ import { FieldNumber } from "src/components/Field";
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import useOrgAccountingUsageStats from "src/hooks/useOrgAccountingUsageStats";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
@@ -65,7 +65,7 @@ const DEFAULT_FIELDS: TFields = {
 // помечается deletedAt.
 // ─────────────────────────────────────────────────────────────────────────
 const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useAccessRight("OrganizationAccountingSetting");
+  const { canWrite } = useUserAccessRight("OrganizationAccountingSetting");
   const queryClient = useQueryClient();
 
   const form = useFormStore<TFields>({

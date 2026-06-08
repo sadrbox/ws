@@ -570,6 +570,7 @@ const LookupField: FC<LookupFieldProps> = ({
             placeholder={placeholder ?? "Введите для поиска..."}
             style={{
               cursor: disabled ? "default" : "text",
+              "paddingRight": 0
               // ...(fieldActions.length > 0 && {
               //   paddingRight: `${fieldActions.length * 32 + 8}px`,
               // }),

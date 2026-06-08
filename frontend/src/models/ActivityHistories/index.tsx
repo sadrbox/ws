@@ -12,7 +12,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "activityhistories";
@@ -46,7 +46,7 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useAccessRight("ActivityHistory");
+  const { canWrite } = useUserAccessRight("ActivityHistory");
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT,

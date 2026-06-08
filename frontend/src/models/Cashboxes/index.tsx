@@ -9,7 +9,7 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ModelForm from "src/components/ModelForm";
@@ -38,7 +38,7 @@ const DEFAULT_FIELDS: TFields = { name: "", organizationUuid: "", organizationNa
 
 const CashboxesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
-  const { canWrite } = useAccessRight("Cashbox");
+  const { canWrite } = useUserAccessRight("Cashbox");
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "cashboxes-form", paneProps,
     defaultFields: DEFAULT_FIELDS,

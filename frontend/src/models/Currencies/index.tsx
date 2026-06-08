@@ -8,7 +8,7 @@ const { Form: CurrenciesForm, List: CurrenciesList } = createSimpleModel({
   storageKey: "currencies-form",
   formLabel: "Валюты",
   columnsJson,
-  accessRight: "Currency",
+  userAccessRight: "Currency",
   fields: [
     { key: "code", label: "Код валюты (ISO) *", required: true, requiredMessage: "Код валюты обязателен", minWidth: "150px" },
     { key: "name", label: "Наименование *", required: true, requiredMessage: "Наименование обязательно" },

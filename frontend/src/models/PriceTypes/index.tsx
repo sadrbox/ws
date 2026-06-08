@@ -8,11 +8,11 @@ const { Form: PriceTypesForm, List: PriceTypesList } = createSimpleModel({
   storageKey: "price-types-form",
   formLabel: "Типы цен",
   columnsJson,
-  accessRight: "Product",
+  userAccessRight: "Product",
   fields: [
     { key: "name", label: "Наименование типа цены *", required: true, requiredMessage: "Наименование обязательно" },
-    { key: "isDefault", label: "По умолчанию", type: "boolean" },
-    { key: "sortOrder", label: "Порядок сортировки", type: "number" },
+    { key: "isDefault", label: "По умолчанию" },
+    { key: "sortOrder", label: "Порядок сортировки" },
   ],
   buildPaneLabel: (saved) =>
     makePaneLabel("PriceTypesList", "Типы цен", saved, (saved?.name as string | undefined) || undefined),

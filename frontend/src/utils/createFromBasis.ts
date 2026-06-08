@@ -5,7 +5,7 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { unwrapItem, unwrapList } from "src/utils/apiUnwrap";
-import type { PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
+import type { UserDefaultsMap } from "src/hooks/useUserDefaults";
 import { isEquivalent } from "src/utils/normalize";
 
 export interface BasisFromTarget {
@@ -247,7 +247,7 @@ export function buildRefillBasisItems(displayed: any[], basisRows: any[]): any[]
 
 /** Поле, зависящее от организации, для resolveOrgDependentRefill/resolveOrgChangeFields. */
 export interface OrgDependentField {
-	valueType: keyof PermissionDefaultsMap;
+	valueType: keyof UserDefaultsMap;
 	uuidKey: string;
 	nameKey: string;
 }
@@ -256,7 +256,7 @@ export interface OrgDependentField {
  * Общий движок «Перезаполнить по основанию» для торговых форм (дедупликация).
  *
  * Инкапсулирует ВСЁ тело refill, ранее копировавшееся в Sales/Purchases/
- * SalesReturns/PurchaseReturns/createInvoiceLikeForm:
+ * SaleReturns/PurchaseReturns/createInvoiceLikeForm:
  *   • читает текущее основание из свежего снапшота стора;
  *   • грузит данные основания (refillFromBasisSource + mapCommonTradeFields);
  *   • при !skipFields — патчит шапку с учётом org-зависимых полей
@@ -271,7 +271,7 @@ export async function runBasisRefill(opts: {
 	form: any;
 	skipFields: boolean;
 	currentUserUuid: string;
-	permDefaults: PermissionDefaultsMap;
+	permDefaults: UserDefaultsMap;
 	itemsEndpoint: string;
 	itemsParentField: string;
 	orgFields: OrgDependentField[];
@@ -446,18 +446,18 @@ export async function openDocumentFromBasis(
 	});
 }
 
-/** Загружает основные значения пользователя (permissionDefaults) для организации. */
-async function fetchOrgPermissionDefaults(
+/** Загружает основные значения пользователя (userDefaults) для организации. */
+async function fetchOrgUserDefaults(
 	userUuid: string,
 	organizationUuid: string,
-): Promise<PermissionDefaultsMap> {
+): Promise<UserDefaultsMap> {
 	if (!userUuid || !organizationUuid) return {};
 	try {
-		const resp = await api.get<any>("/user-permission-defaults", {
+		const resp = await api.get<any>("/user-defaults", {
 			params: { userUuid, organizationUuid, limit: 100 },
 		});
 		const items: any[] = Array.isArray(resp) ? resp : (resp?.items ?? []);
-		const map: PermissionDefaultsMap = {};
+		const map: UserDefaultsMap = {};
 		for (const it of items) {
 			if (it.valueType && it.valueUuid) {
 				(map as any)[it.valueType] = { uuid: it.valueUuid, name: it.valueName ?? "" };
@@ -474,7 +474,7 @@ async function fetchOrgPermissionDefaults(
  * (склад/договор), которых НЕТ у документа-основания.
  *
  * Если основание сменило организацию:
- *   • есть основное значение пользователя (permissionDefaults целевой орг) — берём его;
+ *   • есть основное значение пользователя (userDefaults целевой орг) — берём его;
  *   • иначе — очищаем поле (оно принадлежало прежней организации).
  * Если организация НЕ менялась — поле не трогаем (сохраняем текущее).
  *
@@ -485,8 +485,8 @@ export async function resolveOrgDependentRefill(
 	basisFields: Record<string, any>,
 	currentFields: Record<string, any>,
 	userUuid: string,
-	currentOrgDefaults: PermissionDefaultsMap,
-	orgFields: Array<{ valueType: keyof PermissionDefaultsMap; uuidKey: string; nameKey: string }>,
+	currentOrgDefaults: UserDefaultsMap,
+	orgFields: Array<{ valueType: keyof UserDefaultsMap; uuidKey: string; nameKey: string }>,
 ): Promise<Record<string, any>> {
 	const targetOrg = basisFields.organizationUuid ?? currentFields.organizationUuid ?? "";
 	const orgChanged = !!basisFields.organizationUuid && basisFields.organizationUuid !== currentFields.organizationUuid;
@@ -495,7 +495,7 @@ export async function resolveOrgDependentRefill(
 	const missing = orgFields.filter((f) => !basisFields[f.uuidKey]);
 	if (!missing.length) return {};
 
-	const defaults = orgChanged ? await fetchOrgPermissionDefaults(userUuid, targetOrg) : currentOrgDefaults;
+	const defaults = orgChanged ? await fetchOrgUserDefaults(userUuid, targetOrg) : currentOrgDefaults;
 
 	const patch: Record<string, any> = {};
 	for (const f of missing) {
@@ -517,7 +517,7 @@ export async function resolveOrgDependentRefill(
  * в форме (пользователь выбрал другую орг в автокомплите «Организация»).
  *
  * Для каждого зависимого поля (склад/договор/касса/банк-счёт/ответственный):
- *   • есть основное значение пользователя (permissionDefaults новой орг) — берём его;
+ *   • есть основное значение пользователя (userDefaults новой орг) — берём его;
  *   • иначе — очищаем (значение принадлежало прежней организации и более не валидно).
  *
  * Возвращает patch для form.setFields. Всегда включает org-поля (имя+uuid).
@@ -525,9 +525,9 @@ export async function resolveOrgDependentRefill(
 export async function resolveOrgChangeFields(
 	newOrgUuid: string,
 	userUuid: string,
-	orgFields: Array<{ valueType: keyof PermissionDefaultsMap; uuidKey: string; nameKey: string }>,
+	orgFields: Array<{ valueType: keyof UserDefaultsMap; uuidKey: string; nameKey: string }>,
 ): Promise<Record<string, any>> {
-	const defaults = newOrgUuid ? await fetchOrgPermissionDefaults(userUuid, newOrgUuid) : {};
+	const defaults = newOrgUuid ? await fetchOrgUserDefaults(userUuid, newOrgUuid) : {};
 	const patch: Record<string, any> = {};
 	for (const f of orgFields) {
 		const def = defaults[f.valueType];

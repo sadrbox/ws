@@ -15,7 +15,7 @@ export function useDefaultOrganization(): {
 		// Берём organizationUuid непосредственно из пользователя
 		if (user?.organizationUuid) {
 			const orgName =
-				user.userPermissions?.find(
+				user.userSettings?.find(
 					(up) => up.organizationUuid === user.organizationUuid,
 				)?.organization?.name ||
 				user.employee?.organization?.name ||

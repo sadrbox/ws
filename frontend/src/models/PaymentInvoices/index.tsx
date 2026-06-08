@@ -23,7 +23,7 @@ const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formLabel: "Счёт на оплату",
   itemsTabLabel: "Товары, услуги",
   itemsComponentName: "PaymentInvoiceItemsList_part",
-  accessRightModel: "PaymentInvoice",
+  userAccessRightModel: "PaymentInvoice",
   formDisplayName: "PaymentInvoicesForm",
   docType: "payment_invoice",
   printConfig: {

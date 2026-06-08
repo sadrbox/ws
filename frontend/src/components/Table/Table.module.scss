@@ -319,6 +319,11 @@
 
 					// Поля ввода без фокуса наследуют pointer от tr;
 					// при получении фокуса — cursor меняется на text мгновенно через :focus
+					&>input[type="checkbox"] {
+						margin: 0 6px;
+						// accent-color: $colorPrimaryDark;
+					}
+
 					input:not([type="checkbox"]),
 					textarea,
 					select {
@@ -372,9 +377,14 @@
 
 				td {
 					.TableBodyCell {
+
 						// Фоновая подсветка строки (`background: $color2`) теперь
 						// задаётся в main.module.scss через @layer table-cell-activeRow.
 						// Здесь оставлены только структурные/контентные правила.
+						&>input[type="checkbox"] {
+							margin: 0 6px;
+							// accent-color: $colorPrimaryDark;
+						}
 
 						&>input[type="text"] {
 							width: 100%;

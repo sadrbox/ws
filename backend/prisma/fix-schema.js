@@ -4,33 +4,33 @@ async function migrate() {
   console.log("🔧 Applying manual schema fixes...\n");
 
   try {
-    // ── 1. access_rights: переименовать employeeUuid → userUuid ──────
+    // ── 1. user_access_rights: переименовать employeeUuid → userUuid ──────
     const arCols = await prisma.$queryRawUnsafe(
-      `SELECT column_name FROM information_schema.columns WHERE table_name = 'access_rights'`
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'user_access_rights'`
     );
     const arColNames = new Set(arCols.map(c => c.column_name));
 
     if (arColNames.has("employeeUuid") && !arColNames.has("userUuid")) {
-      console.log("   → Renaming access_rights.employeeUuid → userUuid");
-      await prisma.$executeRawUnsafe(`ALTER TABLE "access_rights" RENAME COLUMN "employeeUuid" TO "userUuid"`);
+      console.log("   → Renaming user_access_rights.employeeUuid → userUuid");
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user_access_rights" RENAME COLUMN "employeeUuid" TO "userUuid"`);
       // Сделаем nullable (в schema.prisma — required, но для безопасности)
       console.log("   → Done!");
     } else if (!arColNames.has("userUuid")) {
-      console.log("   → Adding access_rights.userUuid");
-      await prisma.$executeRawUnsafe(`ALTER TABLE "access_rights" ADD COLUMN "userUuid" TEXT NOT NULL DEFAULT ''`);
+      console.log("   → Adding user_access_rights.userUuid");
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user_access_rights" ADD COLUMN "userUuid" TEXT NOT NULL DEFAULT ''`);
     } else {
-      console.log("   ✅ access_rights.userUuid already exists");
+      console.log("   ✅ user_access_rights.userUuid already exists");
     }
 
     // Убедимся что есть индекс
     try {
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "access_rights_userUuid_idx" ON "access_rights" ("userUuid")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "user_access_rights_userUuid_idx" ON "user_access_rights" ("userUuid")`);
       console.log("   → Index on userUuid created/verified");
     } catch (e) { /* already exists */ }
 
     // Удалим старый индекс если есть
     try {
-      await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "access_rights_employeeUuid_idx"`);
+      await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "user_access_rights_employeeUuid_idx"`);
     } catch (e) { /* ok */ }
 
     // ── 2. contact_persons: добавить avatarPath ──────────────────────

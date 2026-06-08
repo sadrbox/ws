@@ -70,7 +70,7 @@ export async function tenantMiddleware(req, res, next) {
 			select: {
 				organizationUuid: true,
 				isSuperAdmin: true,
-				userPermissions: {
+				userSettings: {
 					select: { organizationUuid: true, role: true },
 				},
 			},
@@ -81,18 +81,18 @@ export async function tenantMiddleware(req, res, next) {
 			req.user.organizationUuid = dbUser.organizationUuid || null;
 
 			// Список UUID организаций, доступных пользователю
-			req.user.allowedOrgUuids = dbUser.userPermissions.map(
+			req.user.allowedOrgUuids = dbUser.userSettings.map(
 				(uo) => uo.organizationUuid,
 			);
 
 			// Роль в активной организации
-			const activeOrgEntry = dbUser.userPermissions.find(
+			const activeOrgEntry = dbUser.userSettings.find(
 				(uo) => uo.organizationUuid === dbUser.organizationUuid,
 			);
 			req.user.isOrgAdmin = activeOrgEntry?.role === "admin" || false;
 
 			// Является ли администратором хотя бы одной организации
-			req.user.isAnyOrgAdmin = dbUser.userPermissions.some(
+			req.user.isAnyOrgAdmin = dbUser.userSettings.some(
 				(uo) => uo.role === "admin",
 			);
 
@@ -213,7 +213,7 @@ export async function checkFkOwnership(req, tx, checks) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Маппинг URL-путей → имя модели в AccessRight (PascalCase из ALL_MODEL_NAMES)
+// Маппинг URL-путей → имя модели в UserAccessRight (PascalCase из ALL_MODEL_NAMES)
 // ═══════════════════════════════════════════════════════════════════════════
 const ROUTE_TO_MODEL = {
 	organizations: "Organization",
@@ -258,7 +258,7 @@ const ROUTE_TO_MODEL = {
 	employees: "Employee",
 	positions: "Position",
 	"employee-histories": "EmployeeHistory",
-	"access-rights": "AccessRight",
+	"user-access-rights": "UserAccessRight",
 	currencies: "Currency",
 	"unit-of-measures": "UnitOfMeasure",
 	"vat-rates": "VatRate",
@@ -285,7 +285,7 @@ const ROUTE_TO_MODEL = {
  *
  * ДОЛЖЕН вызываться ПОСЛЕ authMiddleware + tenantMiddleware.
  */
-export async function accessRightMiddleware(req, res, next) {
+export async function userAccessRightMiddleware(req, res, next) {
 	if (req.method === "OPTIONS") return next();
 
 	// Суперадмин — пропускаем
@@ -318,7 +318,7 @@ export async function accessRightMiddleware(req, res, next) {
 
 		const [anyOrgRight, globalRight] = await Promise.all([
 			orgsToCheck.length > 0
-				? prisma.accessRight.findFirst({
+				? prisma.userAccessRight.findFirst({
 						where: {
 							userUuid: req.user.uuid,
 							modelName,
@@ -331,7 +331,7 @@ export async function accessRightMiddleware(req, res, next) {
 						select: { accessLevel: true, organizationUuid: true },
 					})
 				: null,
-			prisma.accessRight.findFirst({
+			prisma.userAccessRight.findFirst({
 				where: { userUuid: req.user.uuid, modelName, organizationUuid: null },
 				select: { accessLevel: true },
 			}),
@@ -342,7 +342,7 @@ export async function accessRightMiddleware(req, res, next) {
 		if (orgUuid && anyOrgRight && anyOrgRight.organizationUuid !== orgUuid) {
 			// Есть право для другой орг, но не для активной — оставляем как fallback
 			// Дополнительно ищем именно для активной
-			const activeOrgRight = await prisma.accessRight.findFirst({
+			const activeOrgRight = await prisma.userAccessRight.findFirst({
 				where: {
 					userUuid: req.user.uuid,
 					modelName,
@@ -372,7 +372,7 @@ export async function accessRightMiddleware(req, res, next) {
 			message: `Нет доступа к ${modelName}`,
 		});
 	} catch (err) {
-		console.error("accessRightMiddleware error:", err);
+		console.error("userAccessRightMiddleware error:", err);
 		return next();
 	}
 }

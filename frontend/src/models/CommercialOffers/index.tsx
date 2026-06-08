@@ -23,7 +23,7 @@ const CommercialOffersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formLabel: "Коммерческое предложение",
   itemsTabLabel: "Товары, услуги",
   itemsComponentName: "CommercialOfferItemsList_part",
-  accessRightModel: "CommercialOffer",
+  userAccessRightModel: "CommercialOffer",
   formDisplayName: "CommercialOffersForm",
   docType: "commercial_offer",
   hidePosted: true,

@@ -18,7 +18,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
@@ -39,8 +39,8 @@ import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, ru
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { isEquivalent } from "src/utils/normalize";
 import { PurchaseReturnsForm } from "src/models/PurchaseReturns";
-import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
+import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
 
@@ -59,6 +59,7 @@ interface TFields {
   warehouseUuid: string; warehouseName: string;
   counterpartyUuid: string; counterpartyName: string;
   contractUuid: string; contractName: string;
+  priceTypeUuid: string; priceTypeName: string;
   authorUuid: string; authorName: string;
   basisDocumentType: string; basisDocumentUuid: string; basisDocumentLabel: string;
 }
@@ -72,6 +73,7 @@ const DEFAULT_FIELDS: TFields = {
   warehouseUuid: "", warehouseName: "",
   counterpartyUuid: "", counterpartyName: "",
   contractUuid: "", contractName: "",
+  priceTypeUuid: "", priceTypeName: "",
   authorUuid: "", authorName: "",
   basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "",
 };
@@ -79,7 +81,7 @@ const DEFAULT_FIELDS: TFields = {
 const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
-  const { canWrite } = useAccessRight("Purchase");
+  const { canWrite } = useUserAccessRight("Purchase");
 
   const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
@@ -177,6 +179,8 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
       counterpartyName: d.counterparty?.name ?? "",
       contractUuid: d.contractUuid ?? "",
       contractName: d.contract?.name ?? "",
+      priceTypeUuid: d.priceTypeUuid ?? "",
+      priceTypeName: d.priceType?.name ?? "",
       authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
       authorName: d.author?.username ?? d.author?.email ?? "",
       basisDocumentType: d.basisDocumentType ?? "",
@@ -199,6 +203,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
         warehouseUuid: fd.warehouseUuid || null,
         counterpartyUuid: fd.counterpartyUuid || null,
         contractUuid: fd.contractUuid || null,
+        priceTypeUuid: fd.priceTypeUuid || null,
         basisDocumentType: fd.basisDocumentType || null,
         basisDocumentUuid: fd.basisDocumentUuid || null,
         basisDocumentLabel: fd.basisDocumentLabel || null,
@@ -211,7 +216,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
 
   const items = form.useTable("items");
   const allItemsRef = useRef<any[]>([]);
-  const permDefaultsRef = useRef<PermissionDefaultsMap>({});
+  const permDefaultsRef = useRef<UserDefaultsMap>({});
 
   const hasBasis = !!form.fields.basisDocumentUuid;
 
@@ -282,12 +287,12 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     apply: (uuid, name) => form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
   });
 
-  const permDefaults = useUserPermissionDefaults(
+  const permDefaults = useUserDefaults(
     currentUser?.uuid ?? "",
     form.fields.organizationUuid,
   );
   permDefaultsRef.current = permDefaults;
-  useApplyPermissionDefaults({
+  useApplyUserDefaults({
     defaults: permDefaults,
     organizationUuid: form.fields.organizationUuid,
     isEditMode: form.isEditMode,
@@ -295,8 +300,9 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     fieldMappings: [
       { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
       { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      { type: "purchasePriceType", uuidKey: "priceTypeUuid", nameKey: "priceTypeName" },
     ],
-    currentValues: { contractUuid: form.fields.contractUuid, warehouseUuid: form.fields.warehouseUuid },
+    currentValues: { contractUuid: form.fields.contractUuid, warehouseUuid: form.fields.warehouseUuid, priceTypeUuid: form.fields.priceTypeUuid },
     apply: (fields) => form.setFieldsInitial(fields as Partial<TFields>),
   });
 
@@ -349,6 +355,10 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
                     ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
                     ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
                   }} />
+                <LookupField label={translate("priceType")} name={`${form.formUid}_priceTypeUuid`} value={form.fields.priceTypeUuid} displayValue={form.fields.priceTypeName} endpoint="price-types" displayField="name"
+                  onSelect={(u, d) => form.setFields({ priceTypeUuid: u, priceTypeName: d } as Partial<TFields>)}
+                  onClear={() => form.setFields({ priceTypeUuid: "", priceTypeName: "" } as Partial<TFields>)}
+                  disabled={form.isLoading} />
               </Group>
             </GroupCol>
             <GroupCol>

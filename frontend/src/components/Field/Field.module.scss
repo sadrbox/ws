@@ -14,9 +14,10 @@
 	width: 100%;
 	border: none;
 	height: $heightFieldInput;
-
+	padding: 0px 0px;
 	margin: 1px;
 	box-sizing: content-box;
+	padding: 0px 6px;
 
 	option {
 		padding: 0px;
@@ -35,7 +36,7 @@
 }
 
 .FieldString {
-	padding: 0px;
+	// padding: 0px;
 	// margin-left: 3px;
 	text-overflow: ellipsis;
 	// padding: px;
@@ -44,7 +45,7 @@
 	font-family: "PT Sans", sans-serif;
 	// font-size: 40px;
 	// height: $heightFieldInput;
-	padding: 0px 6px !important;
+	// padding: 0px 6px !important;
 }
 
 .FieldSelect {
@@ -227,7 +228,7 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 			overflow: hidden;
-			padding: 0px 0px 0px 2px;
+			// padding: 0px 6px 0px 6px;
 
 			margin: 0px;
 
@@ -238,16 +239,8 @@
 			}
 		}
 
-		// Скрывать кнопки FieldActions по умолчанию в строках таблицы
-		.FieldActions {
-			display: none;
-		}
-
-		// Показывать FieldActions только при фокусе на input/select внутри обёртки
-		.FieldInputWrapper:focus-within .FieldActions,
-		.FieldSelectWrapper:focus-within .FieldActions {
-			display: flex;
-		}
+		// FieldActions скрыты по умолчанию и показываются при фокусе —
+		// см. глобальное правило ниже (теперь действует для всех вариантов поля).
 	}
 }
 
@@ -259,7 +252,7 @@
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 3px;
+	// gap: 3px;
 	background-color: $color60;
 	border-radius: $radius2;
 	border: 1px solid $color5;
@@ -303,13 +296,46 @@
 	// height: ($heightFieldInput - 7px); // ≈21px
 	// padding: 3px 3px 3px 0px;
 	margin-right: 4px;
-	display: flex;
+	// Скрываем действия поля по умолчанию — показываем только когда поле в фокусе
+	// (фокус на input/select или на самих кнопках действий внутри обёртки).
+	display: none;
 	flex-direction: row;
 	align-items: center;
 	gap: 3px;
 	// кнопки внутри — общий компонент IconButton (size="sm");
 	// все стили (hover/focus/active/disabled) определены в
 	// src/components/icons/IconButton.module.scss
+}
+
+// Показываем FieldActions только при фокусе внутри обёртки поля (любой вариант).
+.FieldInputWrapper:focus-within .FieldActions,
+.FieldSelectWrapper:focus-within .FieldActions,
+.FieldTextareaInputWrapper:focus-within .FieldActions,
+.FieldPeriodWrapper:focus-within .FieldActions {
+	display: flex;
+}
+
+// ── FieldFile (выбор файла в стиле Field + Button) ──────────────────────────
+.FieldFileControl {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.FieldFileName {
+	font-size: $fontsize;
+	color: #6b7280;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.FieldFileHiddenInput {
+	display: none;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

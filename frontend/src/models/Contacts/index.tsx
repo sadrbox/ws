@@ -17,7 +17,7 @@ import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "contacts";
@@ -57,7 +57,7 @@ const DEFAULT_FIELDS: TContactFields = {
 };
 
 const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useAccessRight("Contact");
+  const { canWrite } = useUserAccessRight("Contact");
   const data = paneProps.data;
 
   const initialFields: TContactFields | undefined = (() => {

@@ -10,11 +10,11 @@ import { Field } from "src/components/Field";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
-import ContactsTable from "../Contacts/ContactsTable";
+import { ContactsTable } from "../Contacts";
 import AvatarUpload from "src/components/AvatarUpload";
 import { resolveOwnerName } from "src/utils/resolveOwnerName";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -35,7 +35,7 @@ const DEFAULT_FIELDS: TFields = {
 
 const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
   const queryClient = useQueryClient();
-  const { canWrite } = useAccessRight("ContactPerson");
+  const { canWrite } = useUserAccessRight("ContactPerson");
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;

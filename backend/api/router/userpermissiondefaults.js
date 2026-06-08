@@ -4,8 +4,8 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 
 const router = express.Router();
 
-const MODEL = "userPermissionDefault";
-const ROUTE = "user-permission-defaults";
+const MODEL = "userDefault";
+const ROUTE = "user-defaults";
 
 // ── GET list ───────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {

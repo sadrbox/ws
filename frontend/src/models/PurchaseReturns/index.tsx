@@ -14,7 +14,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
@@ -31,8 +31,8 @@ import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntr
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
-import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
+import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import PurchaseReturnPrint from "./PurchaseReturnPrint";
 import DocumentTotals from "src/components/DocumentTotals";
@@ -84,7 +84,7 @@ const PRINT_COLUMN_DEFS = [
 const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
-  const { canWrite } = useAccessRight("PurchaseReturn");
+  const { canWrite } = useUserAccessRight("PurchaseReturn");
   const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {
@@ -116,7 +116,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
   const [isRefilling, setIsRefilling] = useState(false);
 
   const allItemsRef = useRef<any[]>([]);
-  const permDefaultsRef = useRef<PermissionDefaultsMap>({});
+  const permDefaultsRef = useRef<UserDefaultsMap>({});
 
   const invalidateSubTables = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ["purchase-return-items"], refetchType: "active" });
@@ -382,12 +382,12 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
 
 
 
-  const permDefaults = useUserPermissionDefaults(
+  const permDefaults = useUserDefaults(
     currentUser?.uuid ?? "",
     form.fields.organizationUuid,
   );
   permDefaultsRef.current = permDefaults;
-  useApplyPermissionDefaults({
+  useApplyUserDefaults({
     defaults: permDefaults,
     organizationUuid: form.fields.organizationUuid,
     isEditMode: form.isEditMode,

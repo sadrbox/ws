@@ -23,7 +23,7 @@ const ReservationsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formLabel: "Резервирование товара",
   itemsTabLabel: "Товары, услуги",
   itemsComponentName: "ReservationItemsList_part",
-  accessRightModel: "Reservation",
+  userAccessRightModel: "Reservation",
   formDisplayName: "ReservationsForm",
   docType: "reservation",
   hidePosted: true,

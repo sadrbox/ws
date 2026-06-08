@@ -6,7 +6,7 @@ const { Form: CashExpenseOrdersForm, List: CashExpenseOrdersList } = createCashO
   listName: "CashExpenseOrdersList",
   formLabel: "РКО",
   storageKey: "cash-expense-orders-form",
-  accessRightModel: "CashExpenseOrder",
+  userAccessRightModel: "CashExpenseOrder",
   docType: "cash_expense_order",
   formDisplayName: "CashExpenseOrdersForm",
   columnsJson,

@@ -15,13 +15,13 @@ import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { useUniqueOptionRows } from "src/hooks/useUniqueOptionRows";
 import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
-import { UserPermissionsTable, MODEL_NAME_OPTIONS } from "src/models/UserPermissions";
+import { UserSettingsTable, MODEL_NAME_OPTIONS } from "src/models/UserSettings";
 
-const ENDPOINT = "user-permissions";
+const ENDPOINT = "user-settings";
 
 export const ROLE_OPTIONS = [
   { value: "member", label: translate("roleMember") },
@@ -34,6 +34,8 @@ export const PERMISSION_DEFAULT_TYPE_OPTIONS = [
   { value: "warehouse", label: translate("WarehousesList") },
   { value: "cashbox", label: translate("CashboxesList") },
   { value: "contact", label: translate("ContactsList") },
+  { value: "salePriceType", label: translate("salePriceType") },
+  { value: "purchasePriceType", label: translate("purchasePriceType") },
 ];
 
 const PERMISSION_DEFAULT_TYPE_ENDPOINT: Record<string, string> = {
@@ -42,9 +44,11 @@ const PERMISSION_DEFAULT_TYPE_ENDPOINT: Record<string, string> = {
   warehouse: "warehouses",
   cashbox: "cashboxes",
   contact: "contacts",
+  salePriceType: "price-types",
+  purchasePriceType: "price-types",
 };
 
-interface PermissionDefaultsTableProps {
+interface UserDefaultsTableProps {
   userUuid: string;
   organizationUuid: string;
   disabled?: boolean;
@@ -66,7 +70,7 @@ const DEFAULTS_COLUMNS = [
   { identifier: "valueName", type: "string", width: "1fr", minWidth: "180px", alignment: "left" as const, hint: translate("permDefaultValue"), visible: true, inlist: true },
 ];
 
-const PermissionDefaultsTable: FC<PermissionDefaultsTableProps> = ({
+const UserDefaultsTable: FC<UserDefaultsTableProps> = ({
   userUuid,
   organizationUuid,
   disabled = false,
@@ -158,8 +162,8 @@ const PermissionDefaultsTable: FC<PermissionDefaultsTableProps> = ({
 
   return (
     <SubTable
-      model="user-permission-defaults"
-      componentName="PermissionDefaultsTable"
+      model="user-defaults"
+      componentName="UserDefaultsTable_part"
       columnsJson={DEFAULTS_COLUMNS}
       parentKey="userUuid"
       parentUuid={userUuid}
@@ -178,7 +182,7 @@ const PermissionDefaultsTable: FC<PermissionDefaultsTableProps> = ({
     />
   );
 };
-PermissionDefaultsTable.displayName = "PermissionDefaultsTable";
+UserDefaultsTable.displayName = "UserDefaultsTable";
 
 interface TFormFields {
   id?: number;
@@ -195,14 +199,14 @@ const DEFAULT_FORM_FIELDS: TFormFields = {
 };
 
 const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useAccessRight("AccessRight");
+  const { canWrite } = useUserAccessRight("UserAccessRight");
   const queryClient = useQueryClient();
 
   const invalidateSubTables = useCallback(async (savedData: any) => {
     const userUuid = savedData?.userUuid ?? "";
     await Promise.all([
-      invalidateSubTableFor(queryClient, "access-rights", "userUuid", userUuid),
-      invalidateSubTableFor(queryClient, "user-permission-defaults", "userUuid", userUuid),
+      invalidateSubTableFor(queryClient, "user-access-rights", "userUuid", userUuid),
+      invalidateSubTableFor(queryClient, "user-defaults", "userUuid", userUuid),
     ]);
   }, [queryClient]);
 
@@ -226,12 +230,12 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
     initialFields,
     paneProps,
     tables: {
-      accessRights: {
-        endpoint: "access-rights",
+      userAccessRights: {
+        endpoint: "user-access-rights",
         parentField: "userUuid",
-        label: translate("userPermissions"),
+        label: translate("userSettings"),
         skipParentField: true,
-        batchEndpoint: "access-rights/batch",
+        batchEndpoint: "user-access-rights/batch",
         createPayload: (r: any) => ({
           userUuid: r.userUuid ?? null,
           organizationUuid: r.organizationUuid ?? null,
@@ -243,12 +247,12 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
           accessLevel: r.accessLevel || "none",
         }),
       },
-      permissionDefaults: {
-        endpoint: "user-permission-defaults",
+      userDefaults: {
+        endpoint: "user-defaults",
         parentField: "userUuid",
-        label: translate("permissionDefaults"),
+        label: translate("userDefaults"),
         skipParentField: true,
-        batchEndpoint: "user-permission-defaults/batch",
+        batchEndpoint: "user-defaults/batch",
         createPayload: (r: any) => ({
           userUuid: r.userUuid ?? null,
           organizationUuid: r.organizationUuid ?? null,
@@ -287,22 +291,22 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
     afterSave: invalidateSubTables,
   });
 
-  const accessRights = form.useTable("accessRights");
-  const permissionDefaults = form.useTable("permissionDefaults");
+  const userAccessRights = form.useTable("userAccessRights");
+  const userDefaults = form.useTable("userDefaults");
 
   // Вычисляем доступность кнопки "Добавить" на основе allRows формы:
   // allRows содержит все строки SubTable (сервер + pending), обновляется через onAllItemsChange.
   const allModelsUsed = useMemo(
     () => MODEL_NAME_OPTIONS.length > 0 && MODEL_NAME_OPTIONS.every(o =>
-      accessRights.allRows.some(r => (r as any).modelName === o.value && (r as any)._pendingAction !== "delete")
+      userAccessRights.allRows.some(r => (r as any).modelName === o.value && (r as any)._pendingAction !== "delete")
     ),
-    [accessRights.allRows],
+    [userAccessRights.allRows],
   );
   const allTypesUsed = useMemo(
     () => PERMISSION_DEFAULT_TYPE_OPTIONS.length > 0 && PERMISSION_DEFAULT_TYPE_OPTIONS.every(o =>
-      permissionDefaults.allRows.some(r => (r as any).valueType === o.value && (r as any)._pendingAction !== "delete")
+      userDefaults.allRows.some(r => (r as any).valueType === o.value && (r as any)._pendingAction !== "delete")
     ),
-    [permissionDefaults.allRows],
+    [userDefaults.allRows],
   );
 
   const tabs = useMemo(() => {
@@ -353,33 +357,33 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
 
     if (form.isEditMode && form.fields.userUuid && form.fields.organizationUuid) {
       result.push({
-        id: "accessRights",
-        label: translate("userPermissions"),
+        id: "userAccessRights",
+        label: translate("userSettings"),
         component: (
-          <UserPermissionsTable
+          <UserSettingsTable
             userUuid={form.fields.userUuid}
             organizationUuid={form.fields.organizationUuid}
             deferRemoteChanges={true}
-            initialPendingRows={accessRights.pending}
-            onItemsChange={accessRights.onItemsChange}
-            onAllItemsChange={accessRights.onAllItemsChange}
+            initialPendingRows={userAccessRights.pending}
+            onItemsChange={userAccessRights.onItemsChange}
+            onAllItemsChange={userAccessRights.onAllItemsChange}
             disableAdd={allModelsUsed}
           />
         ),
       });
 
       result.push({
-        id: "permissionDefaults",
-        label: translate("permissionDefaults"),
+        id: "userDefaults",
+        label: translate("userDefaults"),
         component: (
-          <PermissionDefaultsTable
+          <UserDefaultsTable
             userUuid={form.fields.userUuid}
             organizationUuid={form.fields.organizationUuid}
             disabled={!canWrite}
             deferRemoteChanges={true}
-            initialPendingRows={permissionDefaults.pending}
-            onItemsChange={permissionDefaults.onItemsChange}
-            onAllItemsChange={permissionDefaults.onAllItemsChange}
+            initialPendingRows={userDefaults.pending}
+            onItemsChange={userDefaults.onItemsChange}
+            onAllItemsChange={userDefaults.onAllItemsChange}
             disableAdd={allTypesUsed}
           />
         ),
@@ -387,7 +391,7 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
     }
 
     return result;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, accessRights, permissionDefaults, canWrite, allModelsUsed, allTypesUsed]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, userAccessRights, userDefaults, canWrite, allModelsUsed, allTypesUsed]);
 
   return (
     <ModelForm

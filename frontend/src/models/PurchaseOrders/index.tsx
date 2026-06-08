@@ -23,7 +23,7 @@ const PurchaseOrdersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formLabel: "Заказ поставщику",
   itemsTabLabel: "Товары, услуги",
   itemsComponentName: "PurchaseOrderItemsList_part",
-  accessRightModel: "PurchaseOrder",
+  userAccessRightModel: "PurchaseOrder",
   formDisplayName: "PurchaseOrdersForm",
   docType: "purchase_order",
   hidePosted: true,

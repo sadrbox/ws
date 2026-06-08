@@ -9,11 +9,11 @@ import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { Field } from "src/components/Field";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
-import BankAccountsTable from "../BankAccounts/BankAccountsTable";
-import ContractsTable from "../Contracts/ContractsTable";
-import ContactsTable from "../Contacts/ContactsTable";
+import { BankAccountsTable } from "../BankAccounts";
+import { ContractsTable } from "../Contracts";
+import { ContactsTable } from "../Contacts";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -26,10 +26,10 @@ interface TFields { id?: number; uuid?: string; bin: string; name: string; legal
 const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "" };
 
 const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useAccessRight("Counterparty");
-  const { canRead: canReadBankAccounts } = useAccessRight("BankAccount");
-  const { canRead: canReadContracts } = useAccessRight("Contract");
-  const { canRead: canReadContacts } = useAccessRight("Contact");
+  const { canWrite } = useUserAccessRight("Counterparty");
+  const { canRead: canReadBankAccounts } = useUserAccessRight("BankAccount");
+  const { canRead: canReadContracts } = useUserAccessRight("Contract");
+  const { canRead: canReadContacts } = useUserAccessRight("Contact");
   const queryClient = useQueryClient();
 
   // refetchType: "active" — invalidateQueries вернёт Promise, который

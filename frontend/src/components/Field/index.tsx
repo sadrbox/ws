@@ -3,6 +3,7 @@ import { getTranslation } from "src/i18"
 
 import styles from "./Field.module.scss"
 import FieldActionButton from "./FieldActionButton"
+import { Button } from "src/components/Button"
 import type { IconName } from "src/components/IconButton/icons"
 import { useCellFieldState } from "src/hooks/useDirtyHighlight"
 import { useFormRequiredScope, useFormDirtyScope } from "src/hooks/useFormRequired"
@@ -401,6 +402,87 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
     </div>
   );
 };
+
+// ── FieldFile — выбор файла в стиле Field + Button ──────────────────────────
+// Скрытый <input type="file"> + видимая кнопка-триггер и имя выбранного файла.
+interface TypeFieldFileProps {
+  label?: string;
+  name: string;
+  /** Атрибут accept (напр. ".xls,.xlsx"). */
+  accept?: string;
+  disabled?: boolean;
+  required?: boolean;
+  error?: boolean;
+  variant?: FieldVariant;
+  width?: string;
+  minWidth?: string;
+  maxWidth?: string;
+  /** Подпись кнопки выбора (по умолчанию «Выбрать файл»). */
+  buttonLabel?: string;
+  buttonVariant?: 'primary' | 'secondary' | 'danger';
+  /** Плейсхолдер, когда файл не выбран. */
+  placeholder?: string;
+  /** Имя выбранного файла (controlled). Если не задано — компонент хранит сам. */
+  fileName?: string;
+  /** Колбэк выбора файла (основной). */
+  onSelect?: (file: File | null) => void;
+  /** Сырой onChange (если нужен доступ к FileList/event). */
+  onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
+}
+
+export const FieldFile: FC<TypeFieldFileProps> = ({
+  label, name, accept, disabled = false, required = false, error = false,
+  variant = 'default', width, minWidth, maxWidth,
+  buttonLabel = 'Выбрать файл', buttonVariant = 'secondary',
+  placeholder = 'Файл не выбран', fileName, onSelect, onChange,
+}) => {
+  const uid = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [internalName, setInternalName] = useState('');
+  const displayName = fileName !== undefined ? fileName : internalName;
+  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value: displayName });
+
+  const openPicker = () => { if (!disabled) inputRef.current?.click(); };
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    if (fileName === undefined) setInternalName(f?.name ?? '');
+    onSelect?.(f);
+    onChange?.(e);
+  };
+  const handleClear = () => {
+    if (inputRef.current) inputRef.current.value = '';
+    if (fileName === undefined) setInternalName('');
+    onSelect?.(null);
+  };
+
+  return (
+    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
+      <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
+      <div className={styles.FieldFileControl}>
+        <Button variant={buttonVariant} onClick={openPicker} disabled={disabled} title={label || buttonLabel}>
+          {buttonLabel}
+        </Button>
+        <span className={styles.FieldFileName} title={displayName || placeholder}>
+          {displayName || placeholder}
+        </span>
+        {!!displayName && !disabled && (
+          <FieldActionButton icon="clear" label="Очистить" onClick={handleClear} />
+        )}
+        <input
+          ref={inputRef}
+          id={uid}
+          name={name}
+          type="file"
+          accept={accept}
+          disabled={disabled}
+          onChange={handleChange}
+          className={styles.FieldFileHiddenInput}
+        />
+      </div>
+    </div>
+  );
+};
+FieldFile.displayName = 'FieldFile';
 
 type TypeFieldSelectProps = {
   label?: string;

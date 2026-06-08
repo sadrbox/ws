@@ -27,7 +27,11 @@ const OrgSwitcher: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const orgs: OrgEntry[] = user?.userPermissions ?? [];
+  // userSettings — членства пользователя в организациях (бывш. userPermissions).
+  // Фоллбэк на старое имя поля — на случай устаревшего кэша пользователя в
+  // localStorage (до повторного входа / обновления /auth/me после переименования).
+  const orgs: OrgEntry[] =
+    user?.userSettings ?? (user as { userPermissions?: OrgEntry[] } | null)?.userPermissions ?? [];
 
   // Закрытие по клику вне компонента
   useEffect(() => {

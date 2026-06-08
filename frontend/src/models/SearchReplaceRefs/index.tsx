@@ -82,7 +82,7 @@ const RefsTable: FC<{ refs: RefEntry[] }> = ({ refs }) => {
       {rows.length > 0 && (
         <div style={{ height: 300 }}>
           <Table
-            componentName="SearchReplaceRefs_refs"
+            componentName="SearchReplaceRefs_part"
             rows={rows}
             columns={columns}
             total={rows.length}

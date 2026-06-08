@@ -4,8 +4,8 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 
 const router = express.Router();
 
-const MODEL = "accessRight";
-const ROUTE = "access-rights";
+const MODEL = "userAccessRight";
+const ROUTE = "user-access-rights";
 
 // Текстовые поля для полнотекстового поиска
 const TEXT_FIELDS = ["modelName", "accessLevel"];
@@ -69,7 +69,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		}
 
 		// ── Удаляем сортировки по relation-полям (dot-notation) —
-		// они не поддерживаются в AccessRight без include (вызывают 500)
+		// они не поддерживаются в UserAccessRight без include (вызывают 500)
 		const safeOrderBy = orderBy.filter((o) => {
 			const field = Object.keys(o)[0];
 			return !field.includes(".");
@@ -197,7 +197,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
-// ── POST /access-rights/batch ───────────────────────────────────────────
+// ── POST /user-access-rights/batch ───────────────────────────────────────────
 router.post(`/${ROUTE}/batch`, async (req, res) => {
 	try {
 		const { operations } = req.body;

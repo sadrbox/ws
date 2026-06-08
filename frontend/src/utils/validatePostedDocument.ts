@@ -1,9 +1,9 @@
 /**
  * Валидация документов — обязательные поля.
  *
- * Правило: поля из REQUIRED_FIELDS_MAP обязательны ВСЕГДА при сохранении,
- * независимо от статуса posted. Функция validateDocumentFields проверяет
- * только факт заполненности — бизнес-логика posted остаётся в форме.
+ * Правило: поля из REQUIRED_FIELDS_MAP обязательны ТОЛЬКО при проведении
+ * (Проведён = true). Черновик (Проведён НЕ установлен) можно сохранять с
+ * незаполненными полями. Логику реализует validateDocumentFields.
  */
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -144,11 +144,19 @@ export const REQUIRED_FIELDS_MAP: Record<DocumentType, readonly string[]> = {
 // ПУБЛИЧНЫЕ ФУНКЦИИ
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Валидировать обязательные поля документа. Проверяет всегда, не зависит от posted. */
+/**
+ * Валидировать обязательные поля документа.
+ *
+ * Черновик (Проведён НЕ установлен) разрешено сохранять с незаполненными
+ * полями — обязательные поля проверяются ТОЛЬКО при проведении (posted === true).
+ */
 export function validateDocumentFields(
 	docType: DocumentType,
 	fields: Record<string, unknown>,
 ): ValidationResult {
+	// posted !== true → черновик: пропускаем проверку обязательных полей.
+	if (fields.posted !== true) return { isValid: true, errors: [] };
+
 	const required = REQUIRED_FIELDS_MAP[docType];
 	const errors: ValidationError[] = [];
 
@@ -170,7 +178,7 @@ export function validateDocumentFields(
 	return { isValid: errors.length === 0, errors };
 }
 
-/** @deprecated Используй validateDocumentFields — проверяет всегда, не только при posted. */
+/** @deprecated Используй validateDocumentFields — проверяет только при проведении (posted). */
 export function validatePostedDocument(
 	docType: DocumentType,
 	fields: Record<string, unknown>,

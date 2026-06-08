@@ -2,26 +2,26 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "src/services/api/client";
 
-export interface PermissionDefault {
+export interface UserDefault {
 	uuid: string;
 	name: string;
 }
 
-export type PermissionDefaultsMap = Partial<Record<
-	"bankAccount" | "contract" | "warehouse" | "cashbox" | "contact",
-	PermissionDefault
+export type UserDefaultsMap = Partial<Record<
+	"bankAccount" | "contract" | "warehouse" | "cashbox" | "contact" | "salePriceType" | "purchasePriceType",
+	UserDefault
 >>;
 
-export function useUserPermissionDefaults(
+export function useUserDefaults(
 	userUuid: string,
 	organizationUuid: string,
-): PermissionDefaultsMap {
+): UserDefaultsMap {
 	const enabled = !!(userUuid && organizationUuid);
 
 	const { data } = useQuery({
-		queryKey: ["user-permission-defaults", userUuid, organizationUuid],
+		queryKey: ["user-defaults", userUuid, organizationUuid],
 		queryFn: () =>
-			api.get("/user-permission-defaults", {
+			api.get("/user-defaults", {
 				params: { userUuid, organizationUuid, limit: 100 },
 			}),
 		enabled,
@@ -32,7 +32,7 @@ export function useUserPermissionDefaults(
 		const items: any[] = Array.isArray(data)
 			? data
 			: ((data as any)?.items ?? []);
-		const map: PermissionDefaultsMap = {};
+		const map: UserDefaultsMap = {};
 		for (const item of items) {
 			if (item.valueType && item.valueUuid) {
 				(map as any)[item.valueType] = {

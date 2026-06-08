@@ -14,7 +14,7 @@ import { Group, GroupRow, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
@@ -42,9 +42,9 @@ import { checkStockAvailability, formatStockShortages } from "src/utils/stockCon
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { OutgoingInvoicesForm } from "src/models/OutgoingInvoices";
-import { SalesReturnsForm } from "src/models/SalesReturns";
-import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { SaleReturnsForm } from "src/models/SaleReturns";
+import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
+import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
 
@@ -63,6 +63,7 @@ interface TFields {
   contractUuid: string; contractName: string;
   warehouseUuid: string; warehouseName: string;
   managerUuid: string; managerName: string;
+  priceTypeUuid: string; priceTypeName: string;
   vatAmount: number; discountAmount: number; amountWithoutVat: number;
   authorUuid: string; authorName: string;
   basisDocumentType: string; basisDocumentUuid: string; basisDocumentLabel: string;
@@ -74,6 +75,7 @@ const DEFAULT_FIELDS: TFields = {
   organizationUuid: "", organizationName: "", counterpartyUuid: "", counterpartyName: "", contractUuid: "", contractName: "",
   warehouseUuid: "", warehouseName: "",
   managerUuid: "", managerName: "",
+  priceTypeUuid: "", priceTypeName: "",
   vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
   authorUuid: "", authorName: "",
   basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "",
@@ -82,7 +84,7 @@ const DEFAULT_FIELDS: TFields = {
 const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
-  const { canWrite } = useAccessRight("Sale");
+  const { canWrite } = useUserAccessRight("Sale");
   const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {
@@ -185,6 +187,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       warehouseName: d.warehouse?.name ?? "",
       managerUuid: d.managerUuid ?? "",
       managerName: d.manager?.fullName ?? [d.manager?.lastName, d.manager?.firstName, d.manager?.middleName].filter(Boolean).join(" "),
+      priceTypeUuid: d.priceTypeUuid ?? "",
+      priceTypeName: d.priceType?.name ?? "",
       vatAmount: d.vatAmount != null ? Number(d.vatAmount) : 0,
       discountAmount: d.discountAmount != null ? Number(d.discountAmount) : 0,
       amountWithoutVat: d.amountWithoutVat != null ? Number(d.amountWithoutVat) : 0,
@@ -208,6 +212,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         contractUuid: fd.contractUuid || null,
         warehouseUuid: fd.warehouseUuid || null,
         managerUuid: fd.managerUuid || null,
+        priceTypeUuid: fd.priceTypeUuid || null,
         vatAmount: fd.vatAmount ? fd.vatAmount : 0,
         discountAmount: fd.discountAmount ? fd.discountAmount : 0,
         amountWithoutVat: fd.amountWithoutVat ? fd.amountWithoutVat : 0,
@@ -238,7 +243,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const saleItems = form.useTable("saleItems");
-  const permDefaultsRef = useRef<PermissionDefaultsMap>({});
+  const permDefaultsRef = useRef<UserDefaultsMap>({});
 
   const hasBasis = !!form.fields.basisDocumentUuid;
 
@@ -303,12 +308,12 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
   });
 
-  const permDefaults = useUserPermissionDefaults(
+  const permDefaults = useUserDefaults(
     currentUser?.uuid ?? "",
     form.fields.organizationUuid,
   );
   permDefaultsRef.current = permDefaults;
-  useApplyPermissionDefaults({
+  useApplyUserDefaults({
     defaults: permDefaults,
     organizationUuid: form.fields.organizationUuid,
     isEditMode: form.isEditMode,
@@ -316,8 +321,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     fieldMappings: [
       { type: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
       { type: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      { type: "salePriceType", uuidKey: "priceTypeUuid", nameKey: "priceTypeName" },
     ],
-    currentValues: { contractUuid: form.fields.contractUuid, warehouseUuid: form.fields.warehouseUuid },
+    currentValues: { contractUuid: form.fields.contractUuid, warehouseUuid: form.fields.warehouseUuid, priceTypeUuid: form.fields.priceTypeUuid },
     apply: (fields) => form.setFieldsInitial(fields as Partial<TFields>),
   });
 
@@ -556,11 +562,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             label="На основании"
             options={[
               { id: "outgoing", label: formatDependentOption(translate("outgoingInvoice"), existingDeps["outgoing-invoices"]) },
-              { id: "saleReturn", label: formatDependentOption(translate("SalesReturnsList"), existingDeps["sale-returns"]) },
+              { id: "saleReturn", label: formatDependentOption(translate("SaleReturnsList"), existingDeps["sale-returns"]) },
             ]}
             onSelect={(id) => {
               if (id === "outgoing") void handleCreateFromBasis(OutgoingInvoicesForm, translate("outgoingInvoice"), "sale", "saleitems", "outgoing-invoices");
-              if (id === "saleReturn") void handleCreateFromBasis(SalesReturnsForm, translate("SalesReturnsList"), "sale", "saleitems", "sale-returns");
+              if (id === "saleReturn") void handleCreateFromBasis(SaleReturnsForm, translate("SaleReturnsList"), "sale", "saleitems", "sale-returns");
             }}
           />
         )}
@@ -614,6 +620,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
                 {/* Менеджер реализации — аналитика учёта движения продаж по менеджеру (НК РК) */}
                 <LookupField label={translate("manager")} name={`${form.formUid}_managerUuid`} value={form.fields.managerUuid} displayValue={form.fields.managerName} endpoint="employees" displayField="fullName" onSelect={(u, d) => form.setFields({ managerUuid: u, managerName: d } as Partial<TFields>)} onClear={() => form.setFields({ managerUuid: "", managerName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                <LookupField label={translate("priceType")} name={`${form.formUid}_priceTypeUuid`} value={form.fields.priceTypeUuid} displayValue={form.fields.priceTypeName} endpoint="price-types" displayField="name" onSelect={(u, d) => form.setFields({ priceTypeUuid: u, priceTypeName: d } as Partial<TFields>)} onClear={() => form.setFields({ priceTypeUuid: "", priceTypeName: "" } as Partial<TFields>)} disabled={form.isLoading} />
               </Group>
 
             </GroupCol>

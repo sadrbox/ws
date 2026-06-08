@@ -10,7 +10,7 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import AvatarUpload from "src/components/AvatarUpload";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { useFormStore } from "src/hooks/useFormStore";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
@@ -33,24 +33,24 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 const UsersForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useAccessRight("User");
+  const { canWrite } = useUserAccessRight("User");
   const queryClient = useQueryClient();
 
   // refetchType: "active" — ждём завершение refetch смонтированной SubTable,
   // чтобы useFormStore.submit() очистил pending-строки только после
   // появления свежих серверных данных (см. useFormStore.ts → submit).
   const invalidateSubTables = useCallback(async (savedData: any) => {
-    await invalidateSubTableFor(queryClient, "user-permissions", "userUuid", savedData?.uuid ?? "");
+    await invalidateSubTableFor(queryClient, "user-settings", "userUuid", savedData?.uuid ?? "");
   }, [queryClient]);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "users-form", defaultFields: DEFAULT_FIELDS, paneProps,
     tables: {
-      userPermissions: {
-        endpoint: "user-permissions",
+      userSettings: {
+        endpoint: "user-settings",
         parentField: "userUuid",
-        label: translate("userPermissions"),
-        batchEndpoint: "user-permissions/batch",
+        label: translate("userSettings"),
+        batchEndpoint: "user-settings/batch",
       },
     },
     mapServerToForm: (d, prev) => ({
@@ -74,7 +74,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
     afterSave: invalidateSubTables,
   });
 
-  const userPermissions = form.useTable("userPermissions");
+  const userSettings = form.useTable("userSettings");
 
   const tabs = useMemo(() => {
     const result: { id: string; label: string; component: React.ReactNode }[] = [
@@ -114,14 +114,14 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
           <UserAccessRightsTable
             userUuid={form.fields.uuid}
             deferRemoteChanges={true}
-            initialPendingRows={userPermissions.pending}
-            onItemsChange={userPermissions.onItemsChange}
+            initialPendingRows={userSettings.pending}
+            onItemsChange={userSettings.onItemsChange}
           />
         ),
       });
     }
     return result;
-  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields, userPermissions]);
+  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields, userSettings]);
 
   return (
     <FormRequiredScope requiredKeys={["username"]} active={form.meta.headerValidationFailed}>

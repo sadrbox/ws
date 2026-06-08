@@ -41,8 +41,8 @@ export type TypeAppContextProps = {
 			organizationUuid?: string | null;
 			isSuperAdmin?: boolean;
 			allowedOrgUuids?: string[];
-			userPermissions?: OrgEntry[];
-			accessRights?: { modelName: string; accessLevel: string }[];
+			userSettings?: OrgEntry[];
+			userAccessRights?: { modelName: string; accessLevel: string }[];
 			employee?: {
 				uuid: string;
 				fullName: string | null;
@@ -53,7 +53,7 @@ export type TypeAppContextProps = {
 				avatarPath?: string | null;
 				organizationUuid?: string | null;
 				organization?: { uuid: string; name: string; bin?: string } | null;
-				accessRights?: { modelName: string; accessLevel: string }[];
+				userAccessRights?: { modelName: string; accessLevel: string }[];
 			} | null;
 		} | null;
 		logout: () => void;

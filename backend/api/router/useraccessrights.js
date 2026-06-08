@@ -2,7 +2,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 
 const router = express.Router();
-const ROUTE = "user-permissions";
+const ROUTE = "user-settings";
 
 // ── GET /user-organizations?userUuid=xxx — список с курсорной пагинацией ──
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -71,7 +71,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			if (!hasId) orderBy.push({ id: "asc" });
 		}
 
-		const items = await prisma.userPermission.findMany({
+		const items = await prisma.userSetting.findMany({
 			where: {
 				...where,
 				...(cursorNumber ? { id: { gt: cursorNumber } } : {}),
@@ -107,7 +107,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 
-		const item = await prisma.userPermission.findUnique({
+		const item = await prisma.userSetting.findUnique({
 			where: w,
 			include: {
 				organization: {
@@ -162,7 +162,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 
-		const item = await prisma.userPermission.upsert({
+		const item = await prisma.userSetting.upsert({
 			where: { userUuid_organizationUuid: { userUuid, organizationUuid } },
 			update: { role },
 			create: { userUuid, organizationUuid, role },
@@ -209,7 +209,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const callerOrgUuid = req.user?.organizationUuid;
 
 		// Загружаем существующую запись
-		const existing = await prisma.userPermission.findUnique({ where: w });
+		const existing = await prisma.userSetting.findUnique({ where: w });
 		if (!existing)
 			return res
 				.status(404)
@@ -248,7 +248,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 
 		if (keyChanged) {
 			// Ищем конфликтующую запись (та же пара userUuid+organizationUuid)
-			const conflict = await prisma.userPermission.findUnique({
+			const conflict = await prisma.userSetting.findUnique({
 				where: {
 					userUuid_organizationUuid: {
 						userUuid: finalUserUuid,
@@ -260,19 +260,19 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			if (conflict && conflict.id !== existing.id) {
 				// Конфликт с другой записью — обновляем её и удаляем текущую (merge)
 				const [mergedItem] = await prisma.$transaction([
-					prisma.userPermission.update({
+					prisma.userSetting.update({
 						where: { id: conflict.id },
 						data: { role: finalRole },
 						include,
 					}),
-					prisma.userPermission.delete({ where: { id: existing.id } }),
+					prisma.userSetting.delete({ where: { id: existing.id } }),
 				]);
 				return res.json({ success: true, item: mergedItem });
 			}
 
 			// Нет конфликта — создаём новую запись, удаляем старую
 			const [newItem] = await prisma.$transaction([
-				prisma.userPermission.create({
+				prisma.userSetting.create({
 					data: {
 						userUuid: finalUserUuid,
 						organizationUuid: finalOrgUuid,
@@ -280,14 +280,14 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 					},
 					include,
 				}),
-				prisma.userPermission.delete({ where: { id: existing.id } }),
+				prisma.userSetting.delete({ where: { id: existing.id } }),
 			]);
 
 			return res.json({ success: true, item: newItem });
 		}
 
 		// Только роль изменилась — простое обновление
-		const item = await prisma.userPermission.update({
+		const item = await prisma.userSetting.update({
 			where: { id: existing.id },
 			data: { role: finalRole },
 			include,
@@ -320,7 +320,7 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 		const isOrgAdmin = req.user?.isOrgAdmin;
 
 		// Находим запись для проверки доступа
-		const record = await prisma.userPermission.findUnique({ where: w });
+		const record = await prisma.userSetting.findUnique({ where: w });
 		if (!record)
 			return res
 				.status(404)
@@ -333,7 +333,7 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 			return res.status(403).json({ success: false, message: "Нет доступа" });
 		}
 
-		await prisma.userPermission.delete({ where: { id: record.id } });
+		await prisma.userSetting.delete({ where: { id: record.id } });
 
 		// Если удалили активную орг — сбрасываем
 		const targetUser = await prisma.user.findUnique({
@@ -358,7 +358,7 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
-// ── POST /user-permissions/batch ──────────────────────────────────────────
+// ── POST /user-settings/batch ──────────────────────────────────────────
 router.post(`/${ROUTE}/batch`, async (req, res) => {
 	try {
 		const { operations } = req.body;
@@ -367,16 +367,16 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 		await prisma.$transaction(async (tx) => {
 			for (const { action, uuid, data } of operations) {
 				if (action === "create" && data) {
-					await tx.userPermission.upsert({
+					await tx.userSetting.upsert({
 						where: { userUuid_organizationUuid: { userUuid: data.userUuid, organizationUuid: data.organizationUuid } },
 						update: { role: data.role ?? "member" },
 						create: { userUuid: data.userUuid, organizationUuid: data.organizationUuid, role: data.role ?? "member" },
 					});
 				} else if (action === "update" && uuid && data) {
 					if (data.role !== undefined)
-						await tx.userPermission.update({ where: { uuid }, data: { role: data.role } });
+						await tx.userSetting.update({ where: { uuid }, data: { role: data.role } });
 				} else if (action === "delete" && uuid) {
-					try { await tx.userPermission.delete({ where: { uuid } }); } catch {}
+					try { await tx.userSetting.delete({ where: { uuid } }); } catch {}
 				}
 			}
 		});

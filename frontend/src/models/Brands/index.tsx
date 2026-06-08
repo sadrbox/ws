@@ -7,7 +7,7 @@ const { Form: BrandsForm, List: BrandsList } = createSimpleModel({
   storageKey: "brands-form",
   formLabel: "Бренды",
   columnsJson,
-  accessRight: "Brand",
+  userAccessRight: "Brand",
   fields: [
     { key: "name", label: "Наименование", required: true, requiredMessage: "Наименование обязательно" },
   ],

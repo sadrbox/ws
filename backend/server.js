@@ -18,7 +18,7 @@ import { getLocalIP } from "./utils/module.js";
 import {
 	authMiddleware,
 	tenantMiddleware,
-	accessRightMiddleware,
+	userAccessRightMiddleware,
 } from "./utils/auth.js";
 
 // ── Роутеры ─────────────────────────────────────────────────────────────
@@ -74,9 +74,9 @@ import currenciesRouter from "./api/router/currencies.js";
 import employeesRouter from "./api/router/employees.js";
 import positionsRouter from "./api/router/positions.js";
 import employeeHistoriesRouter from "./api/router/employeehistories.js";
-import userPermissionsRouter from "./api/router/userpermissions.js";
+import userSettingsRouter from "./api/router/userpermissions.js";
 import userAccessRightsRouter from "./api/router/useraccessrights.js";
-import userPermissionDefaultsRouter from "./api/router/userpermissiondefaults.js";
+import userDefaultsRouter from "./api/router/userpermissiondefaults.js";
 import payrollCalculationsRouter from "./api/router/payrollcalculations.js";
 import payrollPaymentsRouter from "./api/router/payrollpayments.js";
 import unitOfMeasuresRouter from "./api/router/unitofmeasures.js";
@@ -251,7 +251,7 @@ app.use("/api/v1", authRouter);
 
 app.use("/api/v1", authMiddleware);
 app.use("/api/v1", tenantMiddleware);
-app.use("/api/v1", accessRightMiddleware);
+app.use("/api/v1", userAccessRightMiddleware);
 
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);
@@ -304,9 +304,9 @@ app.use("/api/v1", currenciesRouter);
 app.use("/api/v1", employeesRouter);
 app.use("/api/v1", positionsRouter);
 app.use("/api/v1", employeeHistoriesRouter);
-app.use("/api/v1", userPermissionsRouter);
+app.use("/api/v1", userSettingsRouter);
 app.use("/api/v1", userAccessRightsRouter);
-app.use("/api/v1", userPermissionDefaultsRouter);
+app.use("/api/v1", userDefaultsRouter);
 app.use("/api/v1", payrollCalculationsRouter);
 app.use("/api/v1", payrollPaymentsRouter);
 app.use("/api/v1", unitOfMeasuresRouter);

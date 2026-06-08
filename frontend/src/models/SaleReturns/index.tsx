@@ -16,7 +16,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useAccessRight } from "src/hooks/useAccessRight";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
@@ -32,15 +32,15 @@ import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
-import { useUserPermissionDefaults, type PermissionDefaultsMap } from "src/hooks/useUserPermissionDefaults";
-import { useApplyPermissionDefaults } from "src/hooks/useApplyPermissionDefaults";
+import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
+import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import SalesReturnPrint from "./SalesReturnPrint";
 import DocumentTotals from "src/components/DocumentTotals";
 
 const MODEL_ENDPOINT = "sale-returns";
-const LIST_NAME = "SalesReturnsList";
+const LIST_NAME = "SaleReturnsList";
 const FORM_LABEL = "Возврат от покупателя";
 
 interface TFields {
@@ -80,10 +80,10 @@ const PRINT_COLUMN_DEFS = [
   { key: "vatAmount", label: "Сумма НДС", defaultVisible: true },
 ];
 
-const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
+const SaleReturnsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
-  const { canWrite } = useAccessRight("SaleReturn");
+  const { canWrite } = useUserAccessRight("SaleReturn");
   const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {
@@ -115,7 +115,7 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
   const [isRefilling, setIsRefilling] = useState(false);
 
   const allItemsRef = useRef<any[]>([]);
-  const permDefaultsRef = useRef<PermissionDefaultsMap>({});
+  const permDefaultsRef = useRef<UserDefaultsMap>({});
 
   const invalidateSubTables = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ["sale-return-items"], refetchType: "active" });
@@ -365,12 +365,12 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     apply: (uuid, name) => form.setFieldsInitial({ contractUuid: uuid, contractName: name } as Partial<TFields>),
   });
 
-  const permDefaults = useUserPermissionDefaults(
+  const permDefaults = useUserDefaults(
     currentUser?.uuid ?? "",
     form.fields.organizationUuid,
   );
   permDefaultsRef.current = permDefaults;
-  useApplyPermissionDefaults({
+  useApplyUserDefaults({
     defaults: permDefaults,
     organizationUuid: form.fields.organizationUuid,
     isEditMode: form.isEditMode,
@@ -476,7 +476,7 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
           onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
-          parentLabel={`${translate("SalesReturnsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
+          parentLabel={`${translate("SaleReturnsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           key={itemsTableKey}
           initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
           onTotalChange={handleTotalChange}
@@ -502,19 +502,19 @@ const SalesReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     </FormRequiredScope>
   );
 };
-SalesReturnsForm.displayName = "SalesReturnsForm";
+SaleReturnsForm.displayName = "SaleReturnsForm";
 
-const SalesReturnsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
+const SaleReturnsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
   { variant, onSelectItem, ownerUuid, ownerField }
 ) => (
   <ModelList
-    endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={SalesReturnsForm}
+    endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={SaleReturnsForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
     variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
     defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />
 );
-SalesReturnsList.displayName = LIST_NAME;
+SaleReturnsList.displayName = LIST_NAME;
 
-export { SalesReturnsForm, SalesReturnsList };
+export { SaleReturnsForm, SaleReturnsList };

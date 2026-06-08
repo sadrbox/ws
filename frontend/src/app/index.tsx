@@ -38,6 +38,7 @@ import { openFormByRef } from "src/utils/openFormByRef";
 import { MaterialStatement } from "src/models/Reports/MaterialStatement";
 import { openReport } from "src/utils/openReport";
 import { ProductPriceProcessing } from "src/models/ProductPriceProcessing";
+import { ProductImportExport } from "src/models/ProductImportExport";
 export { useAppContext, AppContextProvider };
 
 export const getComponentName = (node: TComponentNode): string => {
@@ -418,7 +419,7 @@ const App: React.FC = () => {
         // Первый визит / пустая сессия — открываем список по умолчанию.
         // openListByRef("Sales", addPane);
         addPane({
-          component: ProductPriceProcessing,
+          component: ProductImportExport,
         });
       }
       restoreDoneRef.current = true;

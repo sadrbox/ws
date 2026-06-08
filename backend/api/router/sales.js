@@ -106,6 +106,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				contract: true,
 				warehouse: true,
 				manager: true,
+				priceType: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		};
@@ -148,6 +149,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 				contract: true,
 				warehouse: true,
 				manager: true,
+				priceType: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
@@ -181,6 +183,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			contractUuid,
 			warehouseUuid,
 			managerUuid,
+			priceTypeUuid,
 			basisDocumentType,
 			basisDocumentUuid,
 			basisDocumentLabel,
@@ -210,6 +213,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				contractUuid: contractUuid || null,
 				warehouseUuid: warehouseUuid || null,
 				managerUuid: managerUuid || null,
+				priceTypeUuid: priceTypeUuid || null,
 				basisDocumentType: basisDocumentType || null,
 				basisDocumentUuid: basisDocumentUuid || null,
 				basisDocumentLabel: basisDocumentLabel || null,
@@ -221,6 +225,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				contract: true,
 				warehouse: true,
 				manager: true,
+				priceType: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
@@ -247,6 +252,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			"contractUuid",
 			"warehouseUuid",
 			"managerUuid",
+			"priceTypeUuid",
 		];
 		for (const f of strFields) {
 			if (req.body[f] !== undefined)
@@ -309,6 +315,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				contract: true,
 				warehouse: true,
 				manager: true,
+				priceType: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});

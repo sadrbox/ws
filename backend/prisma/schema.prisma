@@ -17,19 +17,19 @@ model User {
   isSuperAdmin                 Boolean               @default(false)
   avatarPath                   String?
   /// UUID активной (текущей) организации пользователя.
-  /// Должен совпадать с одной из записей в userPermissions.
+  /// Должен совпадать с одной из записей в userSettings.
   organizationUuid             String?
   createdAt                    DateTime              @default(now())
   updatedAt                    DateTime              @default(now()) @updatedAt
   deletedAt                    DateTime?
-  accessRights                 AccessRight[]
+  userAccessRights                 UserAccessRight[]
   curatorTodos                 Todo[]                @relation("TodoCurator")
   executorTodos                Todo[]                @relation("TodoExecutor")
   employee                     Employee?             @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
   organization                 Organization?         @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   /// Список организаций, к которым у пользователя есть доступ
-  userPermissions              UserPermission[]
-  userPermissionDefaults       UserPermissionDefault[]
+  userSettings              UserSetting[]
+  userDefaults       UserDefault[]
   // Авторство документов — заполняется при создании, не редактируется.
   authoredSales                Sale[]                @relation("SaleAuthor")
   authoredPriceSettings        ProductPriceSetting[] @relation("PriceSettingAuthor")
@@ -61,7 +61,7 @@ model User {
 /// Членство пользователя в организации с ролью.
 /// role: "admin"  — может управлять правами доступа пользователей своей орг.
 /// role: "member" — обычный пользователь.
-model UserPermission {
+model UserSetting {
   id               Int      @id @default(autoincrement())
   uuid             String   @unique @default(uuid())
   userUuid         String
@@ -78,12 +78,12 @@ model UserPermission {
   @@index([userUuid])
   @@index([organizationUuid])
   @@index([updatedAt])
-  @@map("user_permissions")
+  @@map("user_settings")
 }
 
 /// Предопределённые значения реквизитов для пользователя в рамках организации.
 /// Используются для автозаполнения новых документов (склад, касса, договор, банковский счёт, контакт).
-model UserPermissionDefault {
+model UserDefault {
   id               Int      @id @default(autoincrement())
   uuid             String   @unique @default(uuid())
   userUuid         String
@@ -102,7 +102,7 @@ model UserPermissionDefault {
   @@index([userUuid])
   @@index([organizationUuid])
   @@index([updatedAt])
-  @@map("user_permission_defaults")
+  @@map("user_defaults")
 }
 
 model Organization {
@@ -133,9 +133,9 @@ model Organization {
   scheduledTasks       ScheduledTask[]
   todos                Todo[]
   users                User[]                          @relation("UserOrganization")
-  userPermissions        UserPermission[]
-  userPermissionDefaults UserPermissionDefault[]
-  accessRights           AccessRight[]
+  userSettings        UserSetting[]
+  userDefaults UserDefault[]
+  userAccessRights           UserAccessRight[]
   warehouses           Warehouse[]
   employeeHistories    EmployeeHistory[]
   counterparties       Counterparty[]                  @relation("OrgCounterparties")
@@ -450,6 +450,9 @@ model Sale {
   /// Менеджер реализации (Employee.uuid) — аналитика учёта движения продаж
   /// товаров и услуг (НК РК). Необязательное субконто «Manager».
   managerUuid      String?
+  /// Тип цен документа (PriceType.uuid) — подставляется из предопределённых
+  /// значений пользователя при создании.
+  priceTypeUuid    String?
   authorUuid       String
   posted           Boolean       @default(false)
   updatedAt        DateTime      @default(now()) @updatedAt
@@ -460,6 +463,7 @@ model Sale {
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
   warehouse        Warehouse?    @relation(fields: [warehouseUuid], references: [uuid])
   manager          Employee?     @relation("SaleManager", fields: [managerUuid], references: [uuid])
+  priceType        PriceType?    @relation(fields: [priceTypeUuid], references: [uuid], onDelete: SetNull)
   author           User          @relation("SaleAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   basisDocumentType  String?
@@ -471,6 +475,7 @@ model Sale {
   @@index([contractUuid])
   @@index([warehouseUuid])
   @@index([managerUuid])
+  @@index([priceTypeUuid])
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
@@ -492,6 +497,9 @@ model Purchase {
   counterpartyUuid String?
   contractUuid     String?
   warehouseUuid    String?
+  /// Тип цен документа (PriceType.uuid) — подставляется из предопределённых
+  /// значений пользователя при создании.
+  priceTypeUuid    String?
   authorUuid       String
   posted           Boolean        @default(false)
   updatedAt        DateTime       @default(now()) @updatedAt
@@ -501,6 +509,7 @@ model Purchase {
   counterparty     Counterparty?  @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization?  @relation(fields: [organizationUuid], references: [uuid])
   warehouse        Warehouse?     @relation("WhPurchases", fields: [warehouseUuid], references: [uuid])
+  priceType        PriceType?     @relation(fields: [priceTypeUuid], references: [uuid], onDelete: SetNull)
   author           User           @relation("PurchaseAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   basisDocumentType  String?
@@ -511,6 +520,7 @@ model Purchase {
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([warehouseUuid])
+  @@index([priceTypeUuid])
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
@@ -1115,7 +1125,7 @@ model EmployeeHistory {
   @@map("employee_history")
 }
 
-model AccessRight {
+model UserAccessRight {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
   modelName        String
@@ -1133,7 +1143,7 @@ model AccessRight {
   @@index([userUuid])
   @@index([organizationUuid])
   @@index([updatedAt])
-  @@map("access_rights")
+  @@map("user_access_rights")
 }
 
 model Currency {
@@ -2174,6 +2184,8 @@ model PriceType {
   updatedAt        DateTime       @default(now()) @updatedAt
   deletedAt        DateTime?
   productPrices    ProductPrice[]
+  sales            Sale[]
+  purchases        Purchase[]
 
   @@index([organizationUuid])
   @@map("price_types")

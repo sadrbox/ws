@@ -91,6 +91,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				counterparty: true,
 				contract: true,
 				warehouse: true,
+				priceType: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		};
@@ -130,6 +131,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 				counterparty: true,
 				contract: true,
 				warehouse: true,
+				priceType: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
@@ -158,6 +160,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			counterpartyUuid,
 			contractUuid,
 			warehouseUuid,
+			priceTypeUuid,
 			posted,
 			basisDocumentType,
 			basisDocumentUuid,
@@ -180,6 +183,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
 				warehouseUuid: warehouseUuid || null,
+				priceTypeUuid: priceTypeUuid || null,
 				posted: typeof posted === "boolean" ? posted : false,
 				basisDocumentType: basisDocumentType || null,
 				basisDocumentUuid: basisDocumentUuid || null,
@@ -191,6 +195,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				counterparty: true,
 				contract: true,
 				warehouse: true,
+				priceType: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
@@ -215,6 +220,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			"counterpartyUuid",
 			"contractUuid",
 			"warehouseUuid",
+			"priceTypeUuid",
 		]) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
@@ -254,6 +260,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				counterparty: true,
 				contract: true,
 				warehouse: true,
+				priceType: true,
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});

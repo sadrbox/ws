@@ -1764,8 +1764,12 @@ export function useFormStore<F extends object>(
 			// сохранение isLoading=true (используется handleSaveAndClose, чтобы
 			// поля не «прыгали» enabled↔disabled во время анмаунта панели).
 
-			// Проверка обязательных полей в pending-строках вложенных таблиц
-			for (const [tableKey, def] of Object.entries(tableDefs)) {
+			// Проверка обязательных полей в pending-строках вложенных таблиц.
+			// Черновик документа (Проведён = false) можно сохранять с незаполненными
+			// строками — проверяем только при проведении (posted=true) либо для
+			// не-документов (без поля posted).
+			const isDraftDoc = (store.getSnapshot().fields as { posted?: unknown } | undefined)?.posted === false;
+			if (!isDraftDoc) for (const [tableKey, def] of Object.entries(tableDefs)) {
 				if (!def.requiredItemFields?.length) continue;
 				const { pending } = store.getSnapshot().tables[tableKey] ?? { pending: [] };
 				const toSave = pending.filter((r: any) => r._pendingAction !== "delete");

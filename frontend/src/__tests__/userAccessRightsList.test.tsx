@@ -1,12 +1,12 @@
 /**
- * AccessRightsList: unit-тесты логики пропсов
+ * UserAccessRightsList: unit-тесты логики пропсов
  *
  * Тестируем изолированную логику формирования пропсов SubTable
  * (extraQueryParams и showEditModeToggle), не рендеря компонент.
  */
 import { describe, it, expect } from 'vitest';
 
-// ── Логика extraQueryParams (воспроизводит AccessRightsList) ──────────────────
+// ── Логика extraQueryParams (воспроизводит UserAccessRightsList) ──────────────────
 
 function getExtraQueryParams(organizationUuid?: string): Record<string, string> | undefined {
   return organizationUuid ? { organizationUuid } : undefined;
@@ -44,7 +44,7 @@ function getDisabled(userUuid?: string): boolean {
 
 // ── Тесты ─────────────────────────────────────────────────────────────────────
 
-describe('AccessRightsList: extraQueryParams логика', () => {
+describe('UserAccessRightsList: extraQueryParams логика', () => {
   it('с organizationUuid → объект { organizationUuid }', () => {
     expect(getExtraQueryParams('org-42')).toEqual({ organizationUuid: 'org-42' });
   });
@@ -59,7 +59,7 @@ describe('AccessRightsList: extraQueryParams логика', () => {
   });
 });
 
-describe('AccessRightsList: showEditModeToggle логика', () => {
+describe('UserAccessRightsList: showEditModeToggle логика', () => {
   it('deferRemoteChanges=false → showEditModeToggle=true (кнопка видна)', () => {
     expect(getshowEditModeToggle(false)).toBe(true);
   });
@@ -69,7 +69,7 @@ describe('AccessRightsList: showEditModeToggle логика', () => {
   });
 });
 
-describe('AccessRightsList: defaultNewRow логика', () => {
+describe('UserAccessRightsList: defaultNewRow логика', () => {
   it('с userUuid и organizationUuid → строка содержит все поля', () => {
     const row = getDefaultNewRow('user-1', 'org-1');
     expect(row?.userUuid).toBe('user-1');
@@ -96,7 +96,7 @@ describe('AccessRightsList: defaultNewRow логика', () => {
   });
 });
 
-describe('AccessRightsList: disabled логика', () => {
+describe('UserAccessRightsList: disabled логика', () => {
   it('без userUuid → disabled=true', () => {
     expect(getDisabled(undefined)).toBe(true);
     expect(getDisabled('')).toBe(true);

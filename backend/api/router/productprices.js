@@ -8,23 +8,40 @@ import {
 	handleBatchDelete,
 } from "../../utils/checkReferences.js";
 import { reconcileProductPrice } from "../../services/productPricing.js";
+import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 const MODEL = "productPrice";
-const ROUTE = "product-price-processing";
+const ROUTE = "product-prices";
 
 const num = (v) => (v != null && v !== "" ? parseFloat(v) : null);
 const toDate = (v) => (v ? new Date(v) : new Date());
-const INCLUDE = { priceType: { select: { uuid: true, name: true } } };
+const INCLUDE = {
+	priceType: { select: { uuid: true, name: true } },
+	product: {
+		select: {
+			uuid: true,
+			name: true,
+			sku: true,
+			barcode: true,
+			brand: { select: { name: true } },
+		},
+	},
+};
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { productUuid, priceTypeUuid, date, limit } = req.query;
+		const { productUuid, priceTypeUuid, date, brandUuid, limit } = req.query;
 		const where = {};
 
 		// Фильтр по productUuid (если указан)
 		if (productUuid) {
 			where.productUuid = String(productUuid);
+		}
+
+		// Фильтр по бренду номенклатуры (через связь product)
+		if (brandUuid) {
+			where.product = { brandUuid: String(brandUuid) };
 		}
 
 		// Фильтр по priceTypeUuid (если указан)
@@ -71,14 +88,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 
-		// Если не указаны фильтры — требуем productUuid
-		if (!productUuid && !priceTypeUuid && !date) {
-			return res.status(400).json({
-				success: false,
-				message:
-					"Укажите хотя бы один фильтр: productUuid, priceTypeUuid или date",
-			});
-		}
+		// Фильтры необязательны: без них вернём последние цены (по дате убыв.),
+		// ограниченные limit — для обработки «Корректировка цен».
 
 		const parsedLimit = limit
 			? Math.min(parseInt(limit, 10) || 1000, 5000)
@@ -98,6 +109,22 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			message: "Ошибка сервера",
 			error: error.message,
 		});
+	}
+});
+
+// Полный экспорт всех цен (бэкап) — без фильтров и без ограничения limit.
+// Объявлен ДО `/:id`, иначе "export" будет принят за id.
+router.get(`/${ROUTE}/export`, async (req, res) => {
+	try {
+		const items = await prisma[MODEL].findMany({
+			include: INCLUDE,
+			orderBy: [{ date: "desc" }, { id: "desc" }],
+			take: 100000,
+		});
+		return res.status(200).json({ success: true, items, total: items.length });
+	} catch (error) {
+		console.error(`GET /${ROUTE}/export error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 
@@ -171,6 +198,49 @@ router.delete(`/${ROUTE}/:id`, (req, res) =>
 		onDeleted: (doc) => reconcileProductPrice([doc.productUuid]),
 	}),
 );
+
+// Серверное сопоставление номенклатуры по артикулам / штрих-кодам.
+// Используется обработкой «Загрузка цен» вместо выгрузки всего каталога.
+router.post(`/${ROUTE}/resolve-products`, async (req, res) => {
+	try {
+		const skus = Array.isArray(req.body?.skus)
+			? req.body.skus.map((s) => String(s).trim()).filter(Boolean)
+			: [];
+		const barcodes = Array.isArray(req.body?.barcodes)
+			? req.body.barcodes.map((b) => String(b).trim()).filter(Boolean)
+			: [];
+		const names = Array.isArray(req.body?.names)
+			? req.body.names.map((n) => String(n).trim()).filter(Boolean)
+			: [];
+		if (skus.length === 0 && barcodes.length === 0 && names.length === 0) {
+			return res.status(200).json({ success: true, items: [] });
+		}
+		const or = [];
+		if (skus.length > 0) or.push({ sku: { in: skus } });
+		if (barcodes.length > 0) or.push({ barcode: { in: barcodes } });
+		// Дополнительные штрих-коды (таблица productBarcodes)
+		if (barcodes.length > 0)
+			or.push({ barcodes: { some: { barcode: { in: barcodes } } } });
+		// Резервное сопоставление по наименованию (точное совпадение)
+		if (names.length > 0) or.push({ name: { in: names } });
+
+		const items = await prisma.product.findMany({
+			where: { OR: or, ...tenantFilter(req) },
+			select: {
+				uuid: true,
+				name: true,
+				sku: true,
+				barcode: true,
+				barcodes: { select: { barcode: true } },
+			},
+			take: 50000,
+		});
+		return res.status(200).json({ success: true, items });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/resolve-products error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
 
 router.post(`/${ROUTE}/batch`, async (req, res) => {
 	try {
