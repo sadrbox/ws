@@ -30,6 +30,7 @@ const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
     buildLayout: (fields: any, items, cols) => (
       <PaymentInvoicePrint data={{
         documentId: fields.id,
+        documentNumber: fields.number || undefined,
         documentDate: fields.date,
         organizationName: fields.organizationName,
         organizationBin: fields.organization?.bin ?? fields.organization?.iin ?? undefined,

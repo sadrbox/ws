@@ -63,6 +63,8 @@ export interface SaleInvoicePrintColumns {
 export interface SaleInvoicePrintData {
   /** Идентификатор документа (используется поле id из БД). */
   documentId?: string | number;
+  /** Ручной номер документа (Номер) — печатается при наличии вместо id. */
+  documentNumber?: string | number | null;
   documentDate?: string;
   organizationName?: string;
   organizationBin?: string;
@@ -108,7 +110,7 @@ const cellStyle = P.cellCompact;
 const headCellStyle = P.headCompact;
 
 const SaleInvoicePrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
-  const docNumber = data.documentId ?? "—";
+  const docNumber = P.printDocNumber(data);
   const docDate = fmtDate(data.documentDate);
 
   // Видимость колонок: явный пользовательский выбор (через «В печать») имеет

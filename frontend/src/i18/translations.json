@@ -182,7 +182,6 @@
 	"shipping": "Доставка",
 	"billingAddress": "Платежный адрес",
 	"shippingAddress": "Адрес доставки",
-
 	"id": "ID",
 	"todo": "Задача",
 	"completed": "Завершено",
@@ -201,7 +200,6 @@
 	"binIin": "БИН / ИНН",
 	"binMustBe12Digits": "БИН должен состоять ровно из 12 цифр",
 	"legalName": "Полное наименование",
-
 	"warrantyInformation": "Информация о гарантии",
 	"shippingInformation": "Информация о доставке",
 	"availabilityStatus": "Статус доступности",
@@ -233,7 +231,6 @@
 	"hint": "Подсказка",
 	"sortable": "Сортировка",
 	"alignment": "Выравнивание",
-
 	"actiondate": "Дата действия",
 	"actiontype": "Тип действия",
 	"actionDate": "Дата действия",
@@ -250,7 +247,6 @@
 	"organization": "Организация",
 	"organization.name": "Организация",
 	"props": "Реквизиты",
-
 	"ownerUID": "UID владельца",
 	"ownerName": "Владелец",
 	"iban": "IBAN",
@@ -260,7 +256,6 @@
 	"currencyUID": "UID валюты",
 	"currency": "Валюта",
 	"currency.name": "Валюта",
-
 	"contractText": "Текст договора",
 	"value": "Значение",
 	"valueType": "Вид значения",
@@ -276,7 +271,6 @@
 	"middleName": "Отчество",
 	"fullName": "ФИО",
 	"name": "Наименование",
-
 	"OrganizationsList": "Организации",
 	"CounterpartiesList": "Контрагенты",
 	"ContractsList": "Договора",
@@ -341,7 +335,6 @@
 	"noName": "Без названия",
 	"new": "Новый",
 	"errorTitle": "Ошибка загрузки",
-
 	"WarehousesList": "Склады",
 	"WarehousesList_part": "Склады",
 	"CashboxesList": "Кассы",
@@ -369,20 +362,16 @@
 	"CashReceiptOrdersList_part": "Приходный кассовый ордер",
 	"CashExpenseOrdersList": "Расходный кассовый ордер",
 	"CashExpenseOrdersList_part": "Расходный кассовый ордер",
-
 	"BrandsList": "Бренды",
 	"BrandsList_part": "Бренды",
 	"ProductsList": "Номенклатура",
 	"ProductsList_part": "Номенклатура",
 	"CurrenciesList": "Валюты",
 	"CurrenciesList_part": "Валюты",
-
 	"EmployeesList": "Сотрудники",
 	"EmployeesList_part": "Сотрудники",
-
 	"PositionsList": "Должности",
 	"PositionsList_part": "Должности",
-
 	"documentDate": "Дата документа",
 	"date": "Дата",
 	"amount": "Сумма",
@@ -398,10 +387,8 @@
 	"fileSize": "Размер",
 	"mimeType": "Тип файла",
 	"uploadedAt": "Дата загрузки",
-
 	"symbol": "Символ",
 	"code": "Код",
-
 	"modelName": "Модель",
 	"modelRights": "Разрешения",
 	"accessLevel": "Уровень доступа",
@@ -415,38 +402,32 @@
 	"employee.fullName": "Сотрудник",
 	"employee.iin": "ИИН сотрудника",
 	"employee.position": "Должность",
-
 	"eventDate": "Дата события",
 	"eventType": "Тип события",
 	"eventTypeHire": "Приём",
 	"eventTypeFire": "Увольнение",
 	"eventTypeTransfer": "Перемещение",
-
 	"EmployeeHistoriesList": "Кадровая история",
 	"EmployeeHistoriesList_part": "Кадровая история",
 	"saveToEmployeeHistory": "Сохраните сотрудника для управления кадровой историей",
 	"position.name": "Должность",
-
 	"UnsavedFormsList": "Несохранённые записи",
 	"formLabel": "Тип объекта",
 	"entityId": "ID записи",
 	"pendingSummary": "Вложенные таблицы",
-
-	"userSettings": "Разрешения",
-	"UserSettingsList": "Разрешения",
-	"UserSettingsList_part": "Разрешения",
-	"UserSettingsTable": "Разрешения",
-
+	"userSettings": "Настройки пользователя",
+	"UserSettingsList": "Настройки пользователя",
+	"UserSettingsList_part": "Настройки пользователя",
+	"UserSettingsTable": "Настройки пользователя_UserSettingsTable",
 	"userAccessRights": "Права доступа",
 	"userAccessRight": "Права пользователя",
 	"UserAccessRightsList": "Права доступа",
 	"UserAccessRightsList_part": "Права доступа",
 	"UserAccessRightsTable": "Права доступа",
 	"UserAccessRightsTable_part": "Права доступа",
-	"UserSettingsTable_part": "Права доступа",
+	"UserSettingsTable_part": "Настройки пользователя_UserSettingsTable_part",
 	"user.username": "Пользователь",
 	"role": "Роль",
-
 	"SaleItemsList": "Товары, услуги",
 	"SaleItemsList_part": "Товары, услуги",
 	"lineNumber": "№",
@@ -464,12 +445,10 @@
 	"organization.uuid": "Организация",
 	"counterparty.uuid": "Контрагент",
 	"warehouse.uuid": "Склад",
-
 	"PayrollCalculationsList": "Начисление заработной платы",
 	"PayrollCalculationsList_part": "Начисление заработной платы",
 	"PayrollPaymentsList": "Выплата заработной платы",
 	"PayrollPaymentsList_part": "Выплата заработной платы",
-
 	"UnitOfMeasuresList": "Единицы измерения",
 	"UnitOfMeasuresList_part": "Единицы измерения",
 	"UnitOfMeasureList": "Единицы измерения",
@@ -482,19 +461,15 @@
 	"OrganizationAccountingSettingsList": "Параметры учёта",
 	"OrganizationAccountingSettingsList_part": "Параметры учёта",
 	"OrganizationAccountingSettingList": "Параметры учёта",
-
 	"unitOfMeasure.name": "Ед. изм.",
 	"rate": "Ставка %",
-
 	"period": "Период",
 	"baseSalary": "Оклад",
 	"netSalary": "К выплате",
 	"paymentMethod": "Способ выплаты",
-
 	"userName": "Пользователь",
 	"salary": "Оклад",
 	"bankAccounts": "Банковские счета",
-
 	"noUserAccessRights": "Нет настроенных прав доступа",
 	"saveUserFirst": "Сохраните запись, чтобы управлять правами доступа",
 	"saveToBankAccounts": "Сохраните запись для управления банковскими счетами",
@@ -503,7 +478,6 @@
 	"saveToWarehouses": "Сохраните запись для управления складами",
 	"saveToCashboxes": "Сохраните запись для управления кассами",
 	"cashbox": "Касса",
-
 	"OrganizationsForm": "Организация",
 	"CounterpartiesForm": "Контрагент",
 	"ContactTypesForm": "Тип контакта",
@@ -532,15 +506,14 @@
 	"CashExpenseOrdersForm": "Расходный кассовый ордер",
 	"InventoryTransfersForm": "Перемещение ТМЗ",
 	"ScheduledTasksForm": "Регламентная задача",
-	"UserSettingsForm": "Права пользователя",
-	"UserAccessRightsForm": "Разрешение",
+	"UserSettingsForm": "Настройки пользователя",
+	"UserAccessRightsForm": "Разрешения пользователя",
 	"PayrollCalculationsForm": "Начисление заработной платы",
 	"PayrollPaymentsForm": "Выплата заработной платы",
 	"UnitOfMeasuresForm": "Единица измерения",
 	"TaxesForm": "Налог",
 	"OrganizationAccountingSettingsForm": "Параметры учёта",
 	"Author": "Автор",
-
 	"employee": "Сотрудник",
 	"documentNumber": "Номер",
 	"number": "Номер",
@@ -709,7 +682,6 @@
 	"reportTotalExpenses": "Итого расход",
 	"reportCashBalance": "Остаток в кассе",
 	"reportPeriodLabel": "за период",
-
 	"ct_email": "Email",
 	"ct_telephone": "Телефон",
 	"ct_address": "Адрес",
@@ -828,5 +800,7 @@
 	"relatedDocumentsEmpty": "Связанных документов нет",
 	"openDocument": "Открыть документ",
 	"analyticsDebit": "Аналитика Дт",
-	"analyticsCredit": "Аналитика Кт"
+	"analyticsCredit": "Аналитика Кт",
+	"priceDate": "Дата цен",
+	"requiredFieldsFilled": "Обязательные поля заполнены"
 }

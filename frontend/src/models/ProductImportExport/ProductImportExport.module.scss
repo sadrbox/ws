@@ -63,3 +63,15 @@
 
 .badgeOk { background: #e6f4ea; color: #137333; }
 .badgeWarn { background: #fce8e6; color: #c5221f; }
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+  align-self: center;
+  cursor: pointer;
+  user-select: none;
+}

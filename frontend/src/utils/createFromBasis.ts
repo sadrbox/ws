@@ -124,6 +124,29 @@ const REFILL_COMPARE_KEYS = [
 	"discountPercent",
 ] as const;
 
+// Числовые поля сравниваем по значению, а не по строке — иначе Decimal с сервера
+// ("100.00") и число из основания (100) считаются разными → ложный changed → ложный Dirty.
+const REFILL_NUMERIC_KEYS = new Set<string>([
+	"quantity",
+	"price",
+	"vatRate",
+	"exciseRate",
+	"discountPercent",
+]);
+
+/** Эквивалентны ли значения поля строки для сравнения при refill. */
+function refillFieldEqual(key: string, a: unknown, b: unknown): boolean {
+	if (REFILL_NUMERIC_KEYS.has(key)) {
+		const na = a == null || a === "" ? null : Number(a);
+		const nb = b == null || b === "" ? null : Number(b);
+		if (na === null && nb === null) return true;
+		if (na === null || nb === null) return false;
+		if (Number.isNaN(na) || Number.isNaN(nb)) return String(a) === String(b);
+		return na === nb;
+	}
+	return String(a ?? "") === String(b ?? "");
+}
+
 /** Является ли строка серверной (сохранена в БД), а не локальным tmp-черновиком. */
 function isServerRow(r: any): boolean {
 	return (
@@ -212,22 +235,26 @@ export function buildRefillBasisItems(displayed: any[], basisRows: any[]): any[]
 		}
 
 		consumed.add(existing);
-		const rowChanged =
-			REFILL_COMPARE_KEYS.some(
-				(k) => String(existing[k] ?? "") !== String((newValues as any)[k] ?? ""),
-			) || String(existing.sourceRowId ?? "") !== srcId;
+		// «Изменилась» — ТОЛЬКО по бизнес-значениям (кол-во/цена/ставки/товар/ед.).
+		// Расхождение служебного sourceRowId само по себе НЕ считается изменением:
+		// иначе «усыновление» строки по товару проставляло бы ключ и помечало форму
+		// Dirty, хотя фактические значения не менялись (см. вопрос про ложный Dirty).
+		const valuesChanged = REFILL_COMPARE_KEYS.some(
+			(k) => !refillFieldEqual(k, existing[k], (newValues as any)[k]),
+		);
 
 		if (isServerRow(existing)) {
-			// Серверная строка: при расхождении — update; без расхождения не трогаем
-			// (подгрузится с сервера при remount, остаётся как есть).
-			if (rowChanged) {
+			// Серверная строка: трогаем только при реальном изменении значений.
+			// sourceRowId при этом тоже проставляем (идемпотентность будущих refill),
+			// но не ради него одного. Если значения совпали — строку не трогаем.
+			if (valuesChanged) {
 				result.push({ ...existing, ...newValues, sourceRowId: srcId || null, _pendingAction: "update" });
 				changed = true;
 			}
 		} else {
 			// Черновик: переинъектируем (create с тем же uuid) — переживёт remount.
 			result.push({ ...existing, ...newValues, sourceRowId: srcId || null, _pendingAction: "create" });
-			if (rowChanged) changed = true;
+			if (valuesChanged) changed = true;
 		}
 	}
 
@@ -495,19 +522,19 @@ export async function resolveOrgDependentRefill(
 	const missing = orgFields.filter((f) => !basisFields[f.uuidKey]);
 	if (!missing.length) return {};
 
-	const defaults = orgChanged ? await fetchOrgUserDefaults(userUuid, targetOrg) : currentOrgDefaults;
+	// Поля, которых нет в основании, трогаем ТОЛЬКО при смене организации
+	// (текущее значение ссылается на старую орг → невалидно). Если организация
+	// не менялась — НЕ заполняем и НЕ очищаем (сохраняем то, что выбрал пользователь:
+	// «Склад» и пр.), т.к. их нет в документе-основании.
+	if (!orgChanged) return {};
 
+	const defaults = await fetchOrgUserDefaults(userUuid, targetOrg);
 	const patch: Record<string, any> = {};
 	for (const f of missing) {
 		const def = defaults[f.valueType];
-		if (def) {
-			patch[f.uuidKey] = def.uuid;
-			patch[f.nameKey] = def.name;
-		} else if (orgChanged) {
-			patch[f.uuidKey] = "";
-			patch[f.nameKey] = "";
-		}
-		// орг не менялась и нет дефолта → поле не трогаем (сохраняем текущее).
+		// При смене орг: дефолт новой орг, иначе очищаем (нельзя оставлять ссылку на старую орг).
+		patch[f.uuidKey] = def ? def.uuid : "";
+		patch[f.nameKey] = def ? def.name : "";
 	}
 	return patch;
 }

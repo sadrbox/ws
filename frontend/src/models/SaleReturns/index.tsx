@@ -25,7 +25,7 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
-import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { validateDocumentFields, formatValidationErrors, getDocumentFillHint } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { useAppContext } from "src/app";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
@@ -283,6 +283,7 @@ const SaleReturnsForm: FC<Partial<TPane>> = (paneProps) => {
         buildLayout: (cols: any) => (
           <SalesReturnPrint data={{
             documentId: form.fields.id,
+            documentNumber: form.fields.number || undefined,
             documentDate: form.fields.date,
             organizationName: form.fields.organizationName,
             counterpartyName: form.fields.counterpartyName,
@@ -446,6 +447,7 @@ const SaleReturnsForm: FC<Partial<TPane>> = (paneProps) => {
                 onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
                 mismatch={basisMismatch.mismatch}
                 mismatchDetails={basisMismatch.differences}
+                hint={getDocumentFillHint("sale_return", form.fields as unknown as Record<string, unknown>)}
               />
             </GroupCol>
             <Group>
@@ -482,7 +484,7 @@ const SaleReturnsForm: FC<Partial<TPane>> = (paneProps) => {
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}
           onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
-          showRequiredHighlight={form.meta.tablesValidationFailed}
+          showRequiredHighlight
           defaultHiddenColumns={["amountNetOfIndirectTaxes", "amountWithoutVat"]}
         />
       )
@@ -490,7 +492,7 @@ const SaleReturnsForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
 
   return (
-    <FormRequiredScope docType="sale_return" active={form.meta.headerValidationFailed}>
+    <FormRequiredScope docType="sale_return" active>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
         {headerActionsPortal}
         <ModelForm paneId={form.paneId} tabs={tabs}

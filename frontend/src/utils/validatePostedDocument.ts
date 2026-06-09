@@ -201,6 +201,29 @@ export function getRequiredFieldsForDocType(
 	return REQUIRED_FIELDS_MAP[docType];
 }
 
+/**
+ * Подсказка о корректности заполнения документа (живая пре-валидация в UI,
+ * независимо от «Проведён»). Возвращает перечень незаполненных обязательных
+ * полей либо "" — если всё заполнено.
+ */
+export function getDocumentFillHint(
+	docType: DocumentType,
+	fields: Record<string, unknown>,
+): string {
+	const required = REQUIRED_FIELDS_MAP[docType] ?? [];
+	const missing: string[] = [];
+	for (const fieldName of required) {
+		const value = fields[fieldName];
+		const isEmpty =
+			value === undefined ||
+			value === null ||
+			(typeof value === "string" && value.trim() === "");
+		if (isEmpty) missing.push(getFieldLabel(fieldName));
+	}
+	if (missing.length === 0) return "";
+	return `Заполните: ${missing.join(", ")}`;
+}
+
 /** Человекочитаемые метки полей для сообщений об ошибках. */
 export function getFieldLabel(fieldName: string): string {
 	const labels: Record<string, string> = {

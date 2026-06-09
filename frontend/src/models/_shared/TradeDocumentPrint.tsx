@@ -21,6 +21,8 @@ export interface TradeDocPrintRow {
 
 export interface TradeDocPrintData {
   documentId?: string | number;
+  /** Ручной номер документа (Номер) — печатается при наличии вместо id. */
+  documentNumber?: string | number | null;
   documentDate?: string;
   organizationName?: string;
   organizationBin?: string;
@@ -55,7 +57,7 @@ export interface TradeDocumentPrintProps {
 }
 
 const TradeDocumentPrint: FC<TradeDocumentPrintProps> = ({ title, counterpartyLabel, totalLabel = "Итого", data }) => {
-  const docNumber = data.documentId ?? "—";
+  const docNumber = P.printDocNumber(data);
   const docDate = fmtDate(data.documentDate);
   const cols = data.columns ?? {};
 

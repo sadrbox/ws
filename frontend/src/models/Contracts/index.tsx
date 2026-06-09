@@ -138,7 +138,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, filesRevision, handleFilesChange]);
 
   return (
-    <FormRequiredScope requiredKeys={["name"]} active={form.meta.headerValidationFailed}>
+    <FormRequiredScope requiredKeys={["name"]} active>
       <ModelForm
         paneId={form.paneId}
         tabs={tabs}

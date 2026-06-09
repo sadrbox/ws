@@ -91,6 +91,12 @@ export interface LookupFieldProps {
   required?: boolean;
   /** Ошибка валидации — подсвечивает поле красным */
   error?: boolean;
+  /** Разрешить свободный ввод текста без выбора записи (напр. новая номенклатура
+   *  при импорте). Введённый текст НЕ теряется при потере фокуса — он отдаётся
+   *  через onTextChange, а value (uuid) остаётся пустым до выбора из списка. */
+  allowFreeText?: boolean;
+  /** Колбэк свободного ввода (только при allowFreeText): (text) => void. */
+  onTextChange?: (text: string) => void;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -149,6 +155,8 @@ const LookupField: FC<LookupFieldProps> = ({
   required = false,
   error = false,
   searchTransform,
+  allowFreeText = false,
+  onTextChange,
 }) => {
   // Подавляем неиспользуемые переменные совместимости
   void _columns;
@@ -273,7 +281,10 @@ const LookupField: FC<LookupFieldProps> = ({
         (!dropdownRef.current || !dropdownRef.current.contains(target))) {
         setIsDropdownOpen(false);
         // Если значение не выбрано — восстановить displayValue
-        if (!value) {
+        // (в режиме allowFreeText сохраняем введённый текст как есть).
+        if (allowFreeText) {
+          // оставляем текущий inputText
+        } else if (!value) {
           setInputText("");
         } else {
           setInputText(displayValue || "");
@@ -282,7 +293,7 @@ const LookupField: FC<LookupFieldProps> = ({
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [value, displayValue]);
+  }, [value, displayValue, allowFreeText]);
 
   const handleOpenModal = useCallback(() => {
     if (disabled) return;
@@ -393,13 +404,19 @@ const LookupField: FC<LookupFieldProps> = ({
       onSelect("", "", {});
       onClear?.();
     }
+    // Свободный ввод: отдаём текст наружу (не теряем при потере фокуса).
+    // Любое ручное редактирование сбрасывает ранее выбранный uuid.
+    if (allowFreeText) {
+      if (value) { onSelect("", val, {}); onClear?.(); }
+      onTextChange?.(val);
+    }
     if (val) {
       setIsDropdownOpen(true);
     } else {
       setIsDropdownOpen(false);
       setSuggestions([]);
     }
-  }, [value, onSelect, onClear]);
+  }, [value, onSelect, onClear, allowFreeText, onTextChange]);
 
   // Навигация клавишами в dropdown
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {

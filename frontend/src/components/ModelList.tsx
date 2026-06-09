@@ -163,11 +163,17 @@ const ModelList: FC<ModelListProps> = ({
       const d = formProps.data;
       const isEdit = !!d?.uuid;
 
-      // При создании новой записи в контексте владельца — проставляем FK автоматически
-      const newData =
-        !isEdit && ownerUuid && ownerField
-          ? ({ [ownerField]: ownerUuid } as unknown as TDataItem)
-          : d;
+      // При создании новой записи в контексте владельца — проставляем FK автоматически.
+      // Для каждой новой записи добавляем уникальный _paneToken, чтобы повторное
+      // «Добавить» открывало НОВЫЙ Pane (*Form), а не активировало уже открытый
+      // (getUniqId без uuid/token делает форму синглтоном по имени компонента).
+      const newData = isEdit
+        ? d
+        : ({
+            ...(d as object | undefined),
+            ...(ownerUuid && ownerField ? { [ownerField]: ownerUuid } : {}),
+            _paneToken: `new-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+          } as unknown as TDataItem);
 
       const listTitle = t(componentName) || componentName;
       const label = isEdit

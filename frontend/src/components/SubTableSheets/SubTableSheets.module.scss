@@ -1,0 +1,80 @@
+// SubTableSheets — «простыня» только для чтения: авто-высота строк, перенос текста,
+// без чекбоксов. Заголовки прилипают к верху при прокрутке контейнера.
+
+.wrap {
+	width: 100%;
+	overflow: auto;
+}
+
+.table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+	color: #222;
+}
+
+.th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: #f4f6f8;
+	padding: 6px 8px;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.18);
+	border-right: 1px solid rgba(0, 0, 0, 0.06);
+	font-weight: 600;
+	white-space: nowrap;
+	user-select: none;
+	vertical-align: bottom;
+
+	&:last-child {
+		border-right: none;
+	}
+}
+
+.sortArrow {
+	margin-left: 4px;
+	font-size: 10px;
+	opacity: 0.7;
+}
+
+// Базовая ячейка (без переноса) — вариант на случай wrap=false.
+.td {
+	padding: 5px 8px;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+	border-right: 1px solid rgba(0, 0, 0, 0.05);
+	vertical-align: top;
+	white-space: nowrap;
+
+	&:last-child {
+		border-right: none;
+	}
+}
+
+// Ячейка с переносом: высота тянется под содержимое, \n уважается.
+.tdWrap {
+	padding: 5px 8px;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+	border-right: 1px solid rgba(0, 0, 0, 0.05);
+	vertical-align: top;
+	white-space: pre-wrap;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+
+	&:last-child {
+		border-right: none;
+	}
+}
+
+.table tbody tr:nth-child(even) {
+	background: rgba(0, 0, 0, 0.02);
+}
+
+.table tbody tr:hover {
+	background: rgba(7, 57, 137, 0.06);
+}
+
+.empty {
+	padding: 16px;
+	color: #888;
+	font-size: 13px;
+}

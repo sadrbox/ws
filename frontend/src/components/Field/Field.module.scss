@@ -338,6 +338,24 @@
 	display: none;
 }
 
+// Индикатор загрузки рядом с выбранным файлом.
+.FieldFileSpinner {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	border: 2px solid rgba($color3, 0.25);
+	border-top-color: $color3;
+	border-radius: 50%;
+	animation: fieldFileSpin 0.7s linear infinite;
+}
+
+@keyframes fieldFileSpin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // LOOKUP AUTOCOMPLETE DROPDOWN
 // ═══════════════════════════════════════════════════════════════════════════
@@ -566,4 +584,34 @@ input[type="number"]::-webkit-inner-spin-button {
 input[type="number"] {
 	-moz-appearance: textfield;
 	appearance: textfield;
+}
+// ── Подпись/примечание под полем (расхождение с основанием, подсказки) ──────
+// Заменяет повторяющийся inline-style примечаний под Field. Слот рендерится
+// ВСЕГДА с зарезервированной высотой строки (min-height), чтобы появление/
+// скрытие предупреждения или подсказки не сдвигало разметку.
+.FieldNote {
+	color: var(--color-danger, #c0392b);
+	font-size: 12px;
+	margin-top: 2px;
+	line-height: 1.3;
+	min-height: 1.3em;
+}
+
+// То же место, но янтарная подсказка (напр. «что ещё заполнить в документе»),
+// когда «предупреждения» о расхождении нет.
+.FieldNoteHint {
+	color: $warningText;
+	font-size: 12px;
+	margin-top: 2px;
+	line-height: 1.3;
+	min-height: 1.3em;
+}
+
+// Нейтральная/положительная подсказка («Обязательные поля заполнены»).
+.FieldNoteOk {
+	color: $color5;
+	font-size: 12px;
+	margin-top: 2px;
+	line-height: 1.3;
+	min-height: 1.3em;
 }

@@ -128,7 +128,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, barcodes.pending, barcodes.onItemsChange, prices?.pending, prices?.onItemsChange, canWrite]);
 
   return (
-    <FormRequiredScope requiredKeys={["name"]} active={form.meta.headerValidationFailed}>
+    <FormRequiredScope requiredKeys={["name"]} active>
       <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />

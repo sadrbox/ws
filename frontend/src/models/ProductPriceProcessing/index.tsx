@@ -263,18 +263,23 @@ const PriceCorrectionTab: FC<{
   // Дата записи: выбранная пользователем либо сегодня (сырая YYYY-MM-DD).
   const writeDate = () => date || todayDateOnly();
 
+  // Реальная серверная строка (а не локально добавленная кнопкой «Добавить»,
+  // у которой uuid вида "tmp-…"). По нему отличаем update от create.
+  const realUuid = (r: any) => (r.uuid && !String(r.uuid).startsWith("tmp-") ? r.uuid : null);
+
   const buildOps = () => {
     const ops: any[] = [];
     const wDate = writeDate();
     for (const r of currentRows) {
-      if (r._pendingAction === "delete") { if (r.uuid) ops.push({ action: "delete", uuid: r.uuid }); continue; }
+      const ru = realUuid(r);
+      if (r._pendingAction === "delete") { if (ru) ops.push({ action: "delete", uuid: ru }); continue; }
       const price = toNum(r.price);
       if (writeMode === "newDate") {
         if (r.productUuid && price != null)
           ops.push({ action: "create", data: { productUuid: r.productUuid, priceTypeUuid: r.priceTypeUuid ?? priceTypeUuid, date: wDate, price } });
-      } else if (r.uuid) {
+      } else if (ru) {
         const changed = r._origPrice == null || toNum(r._origPrice) !== price;
-        if (changed) ops.push({ action: "update", uuid: r.uuid, data: { price, date: r.date ?? wDate, priceTypeUuid: r.priceTypeUuid ?? priceTypeUuid } });
+        if (changed) ops.push({ action: "update", uuid: ru, data: { price, date: r.date ?? wDate, priceTypeUuid: r.priceTypeUuid ?? priceTypeUuid } });
       } else if (r.productUuid && price != null) {
         ops.push({ action: "create", data: { productUuid: r.productUuid, priceTypeUuid: r.priceTypeUuid ?? priceTypeUuid, date: r.date ?? wDate, price } });
       }
@@ -359,7 +364,7 @@ const PriceCorrectionTab: FC<{
           options={[{ value: "update", label: translate("modeUpdate") }, { value: "newDate", label: translate("modeNewDate") }]}
           onChange={(e) => setWriteMode(e.target.value as "update" | "newDate")} disabled={isLoading}
         />
-        <Button onClick={handleWrite} disabled={isLoading || !canWrite || !filled}>{translate("writePrices")}</Button>
+        <Button onClick={handleWrite} disabled={isLoading || !canWrite || (!filled && currentRows.length === 0)}>{translate("writePrices")}</Button>
       </GroupRow>
 
       {filled && (
@@ -393,11 +398,19 @@ const PriceCorrectionTab: FC<{
           parentKey="productUuid"
           parentUuid=""
           deferRemoteChanges
+          clientSort
           initialPendingRows={pendingRows}
           defaultInlineEditing
           emptyMessage={"Нажмите «Заполнить» — фильтры необязательны"}
           onAllItemsChange={setCurrentRows}
           renderCell={priceCellRenderer}
+          defaultNewRow={{
+            productUuid: "", product: null,
+            priceTypeUuid: priceTypeUuid || "",
+            priceType: priceTypeName ? { name: priceTypeName } : null,
+            date: date || todayDateOnly(),
+            price: "", _origPrice: null,
+          }}
         />
       </div>
     </div>
@@ -701,7 +714,7 @@ const PriceImportTab: FC<{ canWrite: boolean }> = ({ canWrite }) => {
         <FieldDate label={translate("date")} name="imp_date" value={date} onChange={(e) => setDate(e.target.value)} disabled={isLoading} />
         <FieldFile
           key={`file-${fillVersion}`} name="imp_file" accept=".xls,.xlsx" disabled={isLoading || !canWrite}
-          onSelect={(f) => { setFile(f); setParsed(false); }}
+          loading={isLoading} onSelect={(f) => { setFile(f); setParsed(false); }}
         />
         <Button variant="primary" onClick={handleFill} disabled={isLoading || !file}>{translate("fill")}</Button>
         <Button onClick={handleUpload} disabled={isLoading || !canWrite || !parsed}>{translate("upload")}</Button>
@@ -731,6 +744,7 @@ const PriceImportTab: FC<{ canWrite: boolean }> = ({ canWrite }) => {
           parentKey="productUuid"
           parentUuid=""
           deferRemoteChanges
+          clientSort
           initialPendingRows={pendingRows}
           defaultInlineEditing
           emptyMessage={"Выберите файл и нажмите «Заполнить»"}

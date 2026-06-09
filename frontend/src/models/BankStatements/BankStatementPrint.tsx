@@ -3,6 +3,7 @@
  */
 import type { FC } from "react";
 import { A4Page, A4DocTitle, A4Field, A4Row, A4Signature } from "src/components/PrintLayout/A4Page";
+import { printDocNumber } from "src/components/PrintLayout/printStyles";
 import { getFormatDateOnly } from "src/utils/datetime";
 
 export interface BankStatementPrintData {
@@ -26,7 +27,7 @@ const BankStatementPrint: FC<{ data: BankStatementPrintData }> = ({ data }) => {
   const isIn = data.direction !== "bankStatementOut";
   return (
     <A4Page>
-      <A4DocTitle subtitle={`№ ${data.documentId ?? "—"} от ${fmtDate(data.documentDate)}`}>
+      <A4DocTitle subtitle={`№ ${printDocNumber(data)} от ${fmtDate(data.documentDate)}`}>
         БАНКОВСКАЯ ВЫПИСКА
       </A4DocTitle>
 

@@ -16,7 +16,7 @@ import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { UserAccessRightsTable } from "src/models/UserAccessRights";
+import { UserSettingsTable } from "src/models/UserSettings";
 import { TDataItem } from "src/components/Table/types";
 
 const MODEL_ENDPOINT = "users";
@@ -111,7 +111,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
         id: "userAccessRights",
         label: translate("userAccessRights"),
         component: (
-          <UserAccessRightsTable
+          <UserSettingsTable
             userUuid={form.fields.uuid}
             deferRemoteChanges={true}
             initialPendingRows={userSettings.pending}

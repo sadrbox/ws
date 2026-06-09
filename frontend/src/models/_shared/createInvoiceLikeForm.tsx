@@ -22,7 +22,7 @@ import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
-import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { validateDocumentFields, formatValidationErrors, getDocumentFillHint } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import BasisDocumentField, { type BasisTypeConfig } from "src/components/Field/BasisDocumentField";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
@@ -490,6 +490,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                     onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
                     mismatch={basisMismatch.mismatch}
                     mismatchDetails={basisMismatch.differences}
+                    hint={getDocumentFillHint(cfg.docType, form.fields as unknown as Record<string, unknown>)}
                   />
                 </GroupCol>
               )}
@@ -531,7 +532,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             onTotalChange={handleTotalChange}
             onItemsChange={items.onItemsChange}
             onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
-            showRequiredHighlight={form.meta.tablesValidationFailed}
+            showRequiredHighlight
             defaultHiddenColumns={cfg.defaultHiddenItemColumns}
           />
         )
@@ -539,7 +540,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
 
     return (
-      <FormRequiredScope docType={cfg.docType} active={form.meta.headerValidationFailed}>
+      <FormRequiredScope docType={cfg.docType} active>
         <FormDirtyScope dirtyKeys={form.unsavedFields}>
           {headerActionsPortal}
           <ModelForm paneId={form.paneId} tabs={tabs}

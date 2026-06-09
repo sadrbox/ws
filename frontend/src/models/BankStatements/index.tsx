@@ -33,7 +33,7 @@ import DocumentChainButton from "src/components/DocumentChain/DocumentChainButto
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import BankStatementPrint from "./BankStatementPrint";
-import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { validateDocumentFields, formatValidationErrors, getDocumentFillHint } from "src/utils/validatePostedDocument";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 
 const ENDPOINT = "bank-statements";
@@ -259,6 +259,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
               onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
               mismatch={basisMismatch.mismatch}
               mismatchDetails={basisMismatch.differences}
+              hint={getDocumentFillHint(DOC_TYPE, form.fields as unknown as Record<string, unknown>)}
             />
           </div>
           {form.isEditMode && <GroupRow className={styles.FormFooterRow}>

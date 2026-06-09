@@ -67,7 +67,7 @@ import { UnsavedFormsList } from 'src/models/UnsavedForms';
 import { SyncDashboard } from 'src/models/SyncDashboard';
 import { SearchReplaceRefsForm } from 'src/models/SearchReplaceRefs';
 import { OrphanRefsForm } from 'src/models/OrphanRefs';
-// UserAccessRightsModuleList/UserSettingsList загружаются динамически (разрыв цикла UI→models→app→UI)
+// UserSettingsModuleList/UserAccessRightsList загружаются динамически (разрыв цикла UI→models→app→UI)
 import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
 import UIToast from 'src/components/UIToast';
@@ -144,6 +144,7 @@ const PaneTabItem: FC<{
       tabIndex={isLocked ? -1 : 0}
       aria-disabled={isLocked}
     >
+      <span className={styles.PaneTabItemLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
       {!isLocked && (
         <IconButton
           icon="close"
@@ -154,7 +155,7 @@ const PaneTabItem: FC<{
           onClick={(e) => { e.stopPropagation(); onClose(); }}
         />
       )}
-      <span className={styles.PaneTabItemLabel}>{pane.isSelector && "🔍 "}{pane.label}</span>
+
     </div>
   );
 };
@@ -1002,7 +1003,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>{translate("administration")}</h3>
             <ul className={styles.NavList}>
               {can("User") && <li onClick={() => addPane({ component: UsersList, label: translate("UsersList") })}>{translate("UsersList")}</li>}
-              {can("UserAccessRight") && <li onClick={async () => { const m = await import("src/models/UserAccessRights"); addPane({ component: m.UserAccessRightsModuleList, label: translate("userAccessRights") }); }}>{translate("userAccessRights")}</li>}
+              {can("UserSettings") && <li onClick={async () => { const m = await import("src/models/UserSettings"); addPane({ component: m.UserSettingsModuleList, label: translate("UserSettings") }); }}>{translate("UserSettings")}</li>}
               {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList, label: translate("ActivityHistoriesList") })}>{translate("ActivityHistoriesList")}</li>}
               {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</li>}
               <li onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</li>

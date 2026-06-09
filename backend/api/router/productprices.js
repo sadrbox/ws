@@ -232,6 +232,11 @@ router.post(`/${ROUTE}/resolve-products`, async (req, res) => {
 				sku: true,
 				barcode: true,
 				barcodes: { select: { barcode: true } },
+				brandUuid: true,
+				brand: { select: { name: true } },
+				unitOfMeasureUuid: true,
+				unitOfMeasure: { select: { name: true } },
+				isService: true,
 			},
 			take: 50000,
 		});

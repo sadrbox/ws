@@ -3,12 +3,15 @@
  */
 import type { FC } from "react";
 import { A4Page, A4DocTitle, A4Field, A4Row, A4Signature } from "src/components/PrintLayout/A4Page";
+import { printDocNumber } from "src/components/PrintLayout/printStyles";
 import { getFormatDateOnly } from "src/utils/datetime";
 
 export interface CashOrderPrintData {
   title: string;            // «ПРИХОДНЫЙ КАССОВЫЙ ОРДЕР» | «РАСХОДНЫЙ …»
   amountLabel: string;      // «Принято» | «Выдано»
   documentId?: string | number;
+  /** Ручной номер документа («Номер»). Печатается при наличии вместо id. */
+  documentNumber?: string | number | null;
   documentDate?: string;
   amount?: number;
   organizationName?: string;
@@ -25,7 +28,7 @@ const fmtDate = (d?: string): string => (d ? getFormatDateOnly(d) || d : "");
 
 const CashOrderPrint: FC<{ data: CashOrderPrintData }> = ({ data }) => (
   <A4Page>
-    <A4DocTitle subtitle={`№ ${data.documentId ?? "—"} от ${fmtDate(data.documentDate)}`}>
+    <A4DocTitle subtitle={`№ ${printDocNumber(data)} от ${fmtDate(data.documentDate)}`}>
       {data.title}
     </A4DocTitle>
 

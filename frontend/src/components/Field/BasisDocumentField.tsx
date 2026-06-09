@@ -27,6 +27,9 @@ export interface BasisDocumentFieldProps {
   mismatch?: boolean;
   /** Перечень расхождений с основанием (для подсказки). */
   mismatchDetails?: string[];
+  /** Подсказка о корректности заполнения документа. Показывается в месте
+   *  «предупреждения» о расхождении, когда самого расхождения нет (mismatch=false). */
+  hint?: string;
 }
 
 /**
@@ -51,6 +54,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   formUid,
   mismatch,
   mismatchDetails,
+  hint,
 }) => {
   const [selectedType, setSelectedType] = useState<string>(
     basisDocumentType || allowedTypes[0]?.type || "",
@@ -159,18 +163,25 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     { key: "date", label: translate("date") },
   ];
 
-  // Предупреждение о расхождении документа с основанием (организация/контрагент/
-  // строки изменены после создания «на основании»). Показывается только при значении.
-  const mismatchNote = mismatch ? (
-    <div
-      className={styles.BasisMismatch}
-      title={(mismatchDetails ?? []).join(", ")}
-      style={{ color: "var(--color-danger, #c0392b)", fontSize: 12, marginTop: 2, lineHeight: 1.3 }}
-    >
+  // Примечание под полем. Слот рендерится ВСЕГДА (с зарезервированной высотой —
+  // см. .FieldNote*), чтобы появление/скрытие не сдвигало разметку. Приоритет:
+  //   1) «предупреждение» о расхождении документа с основанием (красное);
+  //   2) подсказка о незаполненных обязательных полях (янтарная), если передана;
+  //   3) когда всё заполнено (hint === "") — нейтральное «Обязательные поля
+  //      заполнены»; если подсказка не передана (hint === undefined) — пустой
+  //      зарезервированный слот.
+  const note = mismatch ? (
+    <div className={styles.FieldNote} title={(mismatchDetails ?? []).join(", ")}>
       ⚠ {translate("basisMismatch")}
       {mismatchDetails && mismatchDetails.length > 0 ? `: ${mismatchDetails.join(", ")}` : ""}
     </div>
-  ) : null;
+  ) : hint ? (
+    <div className={styles.FieldNoteHint}>{hint}</div>
+  ) : (
+    <div className={styles.FieldNoteOk}>
+      {hint === "" ? `✓ ${translate("requiredFieldsFilled")}` : " "}
+    </div>
+  );
 
   // Когда значение уже выбрано — отдаём управление LookupField (он сам рисует FieldWrapper + label).
   // Тип документа берём из basisDocumentType (надёжно даже вне allowedTypes).
@@ -197,7 +208,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           variant="default"
           searchTransform={extractBasisSearch}
         />
-        {mismatchNote}
+        {note}
       </>
     );
   }
@@ -210,22 +221,25 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     ? typeSelectLabel
     : `${translate("basisDocument")}${newTypeName ? ` (${newTypeName})` : ""}`;
   return (
-    <LookupField
-      label={labelNode}
-      name={`${formUid}_basisDocument`}
-      value={undefined}
-      displayValue={undefined}
-      endpoint={activeType?.endpoint ?? ""}
-      displayField="id"
-      getSuggestionLabel={(item) =>
-        `${newTypeName}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`
-      }
-      columns={columns}
-      secondaryFields={["name", "counterparty.name", "documentNumber"]}
-      onSelect={handleSelect}
-      disabled={disabled || !activeType}
-      searchTransform={extractBasisSearch}
-    />
+    <>
+      <LookupField
+        label={labelNode}
+        name={`${formUid}_basisDocument`}
+        value={undefined}
+        displayValue={undefined}
+        endpoint={activeType?.endpoint ?? ""}
+        displayField="id"
+        getSuggestionLabel={(item) =>
+          `${newTypeName}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`
+        }
+        columns={columns}
+        secondaryFields={["name", "counterparty.name", "documentNumber"]}
+        onSelect={handleSelect}
+        disabled={disabled || !activeType}
+        searchTransform={extractBasisSearch}
+      />
+      {note}
+    </>
   );
 };
 

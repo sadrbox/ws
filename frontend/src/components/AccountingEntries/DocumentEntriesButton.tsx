@@ -2,14 +2,20 @@
  * Кнопка «Бухгалтерские проводки» для шапки документа (PaneItemHeaderActionsSlot).
  * Открывает модальное окно со списком проводок документа: счёт Дт/Кт, сумма,
  * аналитика Дт/Кт, описание + итог (количество и общая сумма).
+ *
+ * Таблица проводок выводится через SubTableSheets (read-only «простыня»: авто-
+ * высота строк, перенос длинного текста в аналитике/описании, без чекбоксов).
+ * Данные грузятся запросом к accounting/document-entries.
  */
-import { FC, useState } from "react";
+import { FC, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import Modal from "src/components/Modal";
+import SubTableSheets from "src/components/SubTableSheets";
+import type { TColumn, TDataItem } from "src/components/Table/types";
 import toolbarStyles from "src/components/Toolbar/Toolbar.module.scss";
 
 interface EntryRow {
@@ -31,14 +37,41 @@ interface Props {
 const fmt = (n: number) =>
   Number(n || 0).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const th: React.CSSProperties = { textAlign: "left", padding: "4px 8px", borderBottom: "1px solid var(--border-color, #ccc)", fontWeight: 600, whiteSpace: "nowrap" };
-const td: React.CSSProperties = { padding: "4px 8px", borderBottom: "1px solid var(--border-color-light, #eee)", verticalAlign: "top" };
-const tdNum: React.CSSProperties = { ...td, textAlign: "right", whiteSpace: "nowrap" };
+// Колонки проводок. identifier совпадает с i18-ключами (заголовки переводятся
+// через getTranslateColumn). Значения собираются в renderCell.
+const ENTRY_COLUMNS = [
+  { identifier: "accountDebit", type: "string", width: "200px", minWidth: "140px", alignment: "left", visible: true, inlist: true, sortable: false },
+  { identifier: "accountCredit", type: "string", width: "200px", minWidth: "140px", alignment: "left", visible: true, inlist: true, sortable: false },
+  { identifier: "amount", type: "number", width: "120px", minWidth: "90px", alignment: "right", visible: true, inlist: true, sortable: false },
+  { identifier: "analyticsDebit", type: "string", width: "200px", minWidth: "130px", alignment: "left", visible: true, inlist: true, sortable: false },
+  { identifier: "analyticsCredit", type: "string", width: "200px", minWidth: "130px", alignment: "left", visible: true, inlist: true, sortable: false },
+  { identifier: "description", type: "string", width: "260px", minWidth: "150px", alignment: "left", visible: true, inlist: true, sortable: false },
+] as unknown as TColumn[];
+
+const join = (...xs: (string | undefined)[]) => xs.map((x) => (x ?? "").trim()).filter(Boolean).join(" ");
+
+const entryCellRenderer = (row: TDataItem, col: TColumn): React.ReactNode | undefined => {
+  const r = row as unknown as EntryRow;
+  switch (col.identifier) {
+    case "accountDebit": return <span>{join(r.debitAccountCode, r.debitAccountName) || "—"}</span>;
+    case "accountCredit": return <span>{join(r.creditAccountCode, r.creditAccountName) || "—"}</span>;
+    case "amount": return <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(r.amount)}</span>;
+    case "analyticsDebit": return <span>{r.debitAnalytics || "—"}</span>;
+    case "analyticsCredit": return <span>{r.creditAnalytics || "—"}</span>;
+    case "description": return <span>{r.description || "—"}</span>;
+    default: return undefined;
+  }
+};
 
 const DocumentEntriesButton: FC<Props> = ({ documentType, documentUuid, disabled }) => {
   const [open, setOpen] = useState(false);
 
-  const { data, isLoading } = useQuery<{ items: EntryRow[]; count: number; total: number }>({
+  // staleTime:0 + refetchOnMount — при каждом открытии модалки тянем актуальные
+  // проводки с сервера. Сервер сам соблюдает инвариант «проводки ⇔ Проведён»
+  // (filterPostedEntries), поэтому после отмены «Проведён» вернётся пусто. Без
+  // этого React Query отдавал бы закэшированные проводки (staleTime по умолчанию
+  // 2 мин) — и они «висели» бы после распроведения.
+  const { data, isFetching } = useQuery<{ items: EntryRow[]; count: number; total: number }>({
     queryKey: ["document-entries", documentType, documentUuid],
     queryFn: async () => {
       const resp = await api.get<any>("accounting/document-entries", {
@@ -47,9 +80,14 @@ const DocumentEntriesButton: FC<Props> = ({ documentType, documentUuid, disabled
       return { items: resp?.items ?? [], count: resp?.count ?? 0, total: resp?.total ?? 0 };
     },
     enabled: open && !!documentUuid,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
-  const rows = data?.items ?? [];
+  const rows = useMemo<TDataItem[]>(
+    () => (data?.items ?? []) as unknown as TDataItem[],
+    [data],
+  );
 
   return (
     <>
@@ -71,44 +109,23 @@ const DocumentEntriesButton: FC<Props> = ({ documentType, documentUuid, disabled
           style={{ minWidth: 720, maxWidth: "90vw" }}
         >
           <div style={{ maxHeight: "60vh", overflow: "auto" }}>
-            {isLoading ? (
+            {isFetching ? (
               <div style={{ padding: 16 }}>{translate("loading")}</div>
             ) : rows.length === 0 ? (
               <div style={{ padding: 16 }}>{translate("documentEntriesEmpty")}</div>
             ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    <th style={th}>{translate("accountDebit")}</th>
-                    <th style={th}>{translate("accountCredit")}</th>
-                    <th style={{ ...th, textAlign: "right" }}>{translate("amount")}</th>
-                    <th style={th}>{translate("analyticsDebit")}</th>
-                    <th style={th}>{translate("analyticsCredit")}</th>
-                    <th style={th}>{translate("description")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.uuid}>
-                      <td style={td}>{r.debitAccountCode} {r.debitAccountName}</td>
-                      <td style={td}>{r.creditAccountCode} {r.creditAccountName}</td>
-                      <td style={tdNum}>{fmt(r.amount)}</td>
-                      <td style={td}>{r.debitAnalytics || "—"}</td>
-                      <td style={td}>{r.creditAnalytics || "—"}</td>
-                      <td style={td}>{r.description || "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td style={{ ...td, fontWeight: 600 }} colSpan={2}>
-                      {translate("documentEntriesCount")}: {data?.count ?? rows.length}
-                    </td>
-                    <td style={{ ...tdNum, fontWeight: 600 }}>{fmt(data?.total ?? 0)}</td>
-                    <td style={td} colSpan={3} />
-                  </tr>
-                </tfoot>
-              </table>
+              <>
+                <SubTableSheets
+                  columns={ENTRY_COLUMNS}
+                  rows={rows}
+                  renderCell={entryCellRenderer}
+                  emptyMessage={translate("documentEntriesEmpty")}
+                />
+                <div style={{ padding: "8px 4px", fontWeight: 600, display: "flex", justifyContent: "space-between" }}>
+                  <span>{translate("documentEntriesCount")}: {data?.count ?? rows.length}</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(data?.total ?? 0)}</span>
+                </div>
+              </>
             )}
           </div>
         </Modal>

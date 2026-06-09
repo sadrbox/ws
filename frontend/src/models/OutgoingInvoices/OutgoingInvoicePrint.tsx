@@ -15,6 +15,8 @@ import type { SaleItemPrintRow, SaleInvoicePrintColumns } from "src/models/Sales
 export interface OutgoingInvoicePrintData {
   direction: "outgoing" | "incoming";
   documentId?: string | number;
+  /** Ручной номер документа (Номер) — печатается при наличии вместо id. */
+  documentNumber?: string | number | null;
   documentDate?: string;
   organizationName?: string;
   organizationBin?: string;
@@ -48,7 +50,7 @@ const cell = P.cellCompact;
 const head = P.headCompact;
 
 const OutgoingInvoicePrint: FC<{ data: OutgoingInvoicePrintData }> = ({ data }) => {
-  const docNumber = data.documentId ?? "—";
+  const docNumber = P.printDocNumber(data);
   const docDate = fmtDate(data.documentDate);
 
   const cols = data.columns ?? {};

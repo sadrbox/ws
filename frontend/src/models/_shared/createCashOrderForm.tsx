@@ -261,6 +261,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
               title,
               amountLabel: isReceipt ? "Принято" : "Выдано",
               documentId: form.fields.id,
+              documentNumber: form.fields.number || undefined,
               documentDate: form.fields.date,
               amount: form.fields.amount ? parseFloat(form.fields.amount) : 0,
               organizationName: form.fields.organizationName,
@@ -287,7 +288,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
     );
 
     return (
-      <FormRequiredScope docType={cfg.docType} active={form.meta.headerValidationFailed}>
+      <FormRequiredScope docType={cfg.docType} active>
         <FormDirtyScope dirtyKeys={form.unsavedFields}>
           <ModelForm
             paneId={form.paneId} tabs={tabs}

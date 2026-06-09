@@ -36,6 +36,7 @@ const OutgoingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       <OutgoingInvoicePrint data={{
         direction: "outgoing",
         documentId: fields.id,
+        documentNumber: fields.number || undefined,
         documentDate: fields.date,
         organizationName: fields.organizationName,
         counterpartyName: fields.counterpartyName,

@@ -2,11 +2,11 @@
  * OrgRightsPanel: тесты
  *
  * Компонент использует useFormStore (→ useAppContext, useSyncExternalStore),
- * ModelForm, Field, FieldSelect, UserAccessRightsList — все мокируются.
+ * ModelForm, Field, FieldSelect, UserSettingsList — все мокируются.
  *
  * Тесты проверяют:
  *  - корректную инициализацию initialFields из paneProps.data
- *  - передачу userUuid/organizationUuid в UserAccessRightsList (edit-mode)
+ *  - передачу userUuid/organizationUuid в UserSettingsList (edit-mode)
  *  - рендер без data (новая форма)
  */
 import React from 'react';
@@ -114,15 +114,15 @@ vi.mock('src/i18', () => ({ translate: (key: string) => key }));
 vi.mock('src/utils/buildPaneLabel', () => ({ makePaneLabel: () => 'label' }));
 vi.mock('src/hooks/useUserAccessRight', () => ({ useUserAccessRight: () => ({ canWrite: true }) }));
 
-// ── Мок UserAccessRightsList + UserAccessRightsTable ─────────────────────────────
-vi.mock('src/models/UserAccessRights', () => ({
-  UserAccessRightsList: ({ userUuid, organizationUuid }: { userUuid?: string; organizationUuid?: string }) =>
+// ── Мок UserSettingsList + UserSettingsTable ─────────────────────────────
+vi.mock('src/models/UserSettings', () => ({
+  UserSettingsList: ({ userUuid, organizationUuid }: { userUuid?: string; organizationUuid?: string }) =>
     React.createElement('div', {
       'data-testid': 'user-access-rights-list',
       'data-user': userUuid ?? '',
       'data-org': organizationUuid ?? '',
     }, 'mock'),
-  UserAccessRightsTable: ({ userUuid, organizationUuid }: { userUuid?: string; organizationUuid?: string }) =>
+  UserSettingsTable: ({ userUuid, organizationUuid }: { userUuid?: string; organizationUuid?: string }) =>
     React.createElement('div', {
       'data-testid': 'user-access-rights-table',
       'data-user': userUuid ?? '',
@@ -130,7 +130,7 @@ vi.mock('src/models/UserAccessRights', () => ({
     }, 'mock'),
 }));
 
-import { UserSettingsForm as OrgRightsPanel } from 'src/models/UserSettings';
+import { UserAccessRightsForm as OrgRightsPanel } from 'src/models/UserAccessRights';
 
 describe('OrgRightsPanel', () => {
   it('рендерится без ошибок (без data)', () => {

@@ -152,7 +152,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, handleNameFieldChange, contacts, history, canReadContacts, canReadEmployeeHistory, canWrite]);
 
   return (
-    <FormRequiredScope requiredKeys={["lastName"]} active={form.meta.headerValidationFailed}>
+    <FormRequiredScope requiredKeys={["lastName"]} active>
       <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />

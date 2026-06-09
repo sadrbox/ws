@@ -2,9 +2,9 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 
 const router = express.Router();
-const ROUTE = "user-organizations";
+const ROUTE = "user-settings";
 
-// ── GET /user-organizations?userUuid=xxx — список с курсорной пагинацией ──
+// ── GET /user-settings?userUuid=xxx — список с курсорной пагинацией ──
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
 		const { userUuid } = req.query;
@@ -15,7 +15,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 
 		// userUuid обязателен для всех, кроме суперадмина (который видит все записи)
 		if (!userUuid && !isSuperAdmin) {
-			return res.status(400).json({ success: false, message: "Параметр userUuid обязателен" });
+			return res
+				.status(400)
+				.json({ success: false, message: "Параметр userUuid обязателен" });
 		}
 
 		const rawLimit = req.query.limit;
@@ -25,7 +27,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0)) {
-			return res.status(400).json({ success: false, message: "Некорректный параметр cursor" });
+			return res
+				.status(400)
+				.json({ success: false, message: "Некорректный параметр cursor" });
 		}
 
 		const where = {
@@ -36,7 +40,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		};
 
 		const orderBy = [];
-		const sortParam = typeof req.query.sort === "string" ? req.query.sort : null;
+		const sortParam =
+			typeof req.query.sort === "string" ? req.query.sort : null;
 		if (sortParam) {
 			try {
 				const sortObj = JSON.parse(sortParam);
@@ -66,7 +71,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			if (!hasId) orderBy.push({ id: "asc" });
 		}
 
-		const items = await prisma.userOrganization.findMany({
+		const items = await prisma.userSetting.findMany({
 			where: {
 				...where,
 				...(cursorNumber ? { id: { gt: cursorNumber } } : {}),
@@ -94,14 +99,15 @@ router.get(`/${ROUTE}`, async (req, res) => {
 	}
 });
 
-// ── GET /user-organizations/:id — одна запись ─────────────────────────────
+// ── GET /user-settings/:id — одна запись ─────────────────────────────
 router.get(`/${ROUTE}/:id`, async (req, res) => {
 	try {
 		const p = req.params.id;
 		const n = Number(p);
-		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const w =
+			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 
-		const item = await prisma.userOrganization.findUnique({
+		const item = await prisma.userSetting.findUnique({
 			where: w,
 			include: {
 				organization: {
@@ -112,7 +118,10 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 				},
 			},
 		});
-		if (!item) return res.status(404).json({ success: false, message: "Запись не найдена" });
+		if (!item)
+			return res
+				.status(404)
+				.json({ success: false, message: "Запись не найдена" });
 
 		return res.json({ success: true, item });
 	} catch (error) {
@@ -121,13 +130,19 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
-// ── POST /user-organizations — добавить организацию пользователю ──────────
+// ── POST /user-settings — добавить организацию пользователю ──────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
 		const { userUuid, organizationUuid, role = "member" } = req.body;
 
-		if (!userUuid) return res.status(400).json({ success: false, message: "userUuid обязателен" });
-		if (!organizationUuid) return res.status(400).json({ success: false, message: "organizationUuid обязателен" });
+		if (!userUuid)
+			return res
+				.status(400)
+				.json({ success: false, message: "userUuid обязателен" });
+		if (!organizationUuid)
+			return res
+				.status(400)
+				.json({ success: false, message: "organizationUuid обязателен" });
 
 		const isSuperAdmin = req.user?.isSuperAdmin;
 		const isOrgAdmin = req.user?.isOrgAdmin;
@@ -138,11 +153,16 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				return res.status(403).json({ success: false, message: "Нет доступа" });
 			}
 			if (role === "admin") {
-				return res.status(403).json({ success: false, message: "Назначить роль admin может только суперадмин" });
+				return res
+					.status(403)
+					.json({
+						success: false,
+						message: "Назначить роль admin может только суперадмин",
+					});
 			}
 		}
 
-		const item = await prisma.userOrganization.upsert({
+		const item = await prisma.userSetting.upsert({
 			where: { userUuid_organizationUuid: { userUuid, organizationUuid } },
 			update: { role },
 			create: { userUuid, organizationUuid, role },
@@ -159,35 +179,45 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2002") {
-			return res.status(409).json({ success: false, message: "Такая запись уже существует" });
+			return res
+				.status(409)
+				.json({ success: false, message: "Такая запись уже существует" });
 		}
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 
-// ── PUT /user-organizations/:id — изменить запись ────────────────────────
+// ── PUT /user-settings/:id — изменить запись ────────────────────────
 // Поддерживает: только role (простое обновление) ИЛИ смену organizationUuid/userUuid
 // (составной уникальный ключ) — в этом случае выполняется транзакция delete+create.
 router.put(`/${ROUTE}/:id`, async (req, res) => {
 	try {
 		const p = req.params.id;
 		const n = Number(p);
-		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const w =
+			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 
-		const { role, organizationUuid: newOrgUuid, userUuid: newUserUuid } = req.body;
+		const {
+			role,
+			organizationUuid: newOrgUuid,
+			userUuid: newUserUuid,
+		} = req.body;
 
 		const isSuperAdmin = req.user?.isSuperAdmin;
 		const isOrgAdmin = req.user?.isOrgAdmin;
 		const callerOrgUuid = req.user?.organizationUuid;
 
 		// Загружаем существующую запись
-		const existing = await prisma.userOrganization.findUnique({ where: w });
-		if (!existing) return res.status(404).json({ success: false, message: "Запись не найдена" });
+		const existing = await prisma.userSetting.findUnique({ where: w });
+		if (!existing)
+			return res
+				.status(404)
+				.json({ success: false, message: "Запись не найдена" });
 
-		const finalOrgUuid  = newOrgUuid  ?? existing.organizationUuid;
+		const finalOrgUuid = newOrgUuid ?? existing.organizationUuid;
 		const finalUserUuid = newUserUuid ?? existing.userUuid;
-		const finalRole     = role        ?? existing.role;
+		const finalRole = role ?? existing.role;
 
 		// Проверка прав
 		if (!isSuperAdmin) {
@@ -195,12 +225,19 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				return res.status(403).json({ success: false, message: "Нет доступа" });
 			}
 			if (finalRole === "admin") {
-				return res.status(403).json({ success: false, message: "Назначить роль admin может только суперадмин" });
+				return res
+					.status(403)
+					.json({
+						success: false,
+						message: "Назначить роль admin может только суперадмин",
+					});
 			}
 		}
 
 		const include = {
-			organization: { select: { uuid: true, bin: true, name: true, legalName: true } },
+			organization: {
+				select: { uuid: true, bin: true, name: true, legalName: true },
+			},
 			user: { select: { uuid: true, username: true } },
 		};
 
@@ -210,27 +247,47 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			finalUserUuid !== existing.userUuid;
 
 		if (keyChanged) {
-			// Проверяем нет ли уже такой пары
-			const conflict = await prisma.userOrganization.findUnique({
-				where: { userUuid_organizationUuid: { userUuid: finalUserUuid, organizationUuid: finalOrgUuid } },
+			// Ищем конфликтующую запись (та же пара userUuid+organizationUuid)
+			const conflict = await prisma.userSetting.findUnique({
+				where: {
+					userUuid_organizationUuid: {
+						userUuid: finalUserUuid,
+						organizationUuid: finalOrgUuid,
+					},
+				},
 			});
-			if (conflict) {
-				return res.status(409).json({ success: false, message: "Такая связь пользователь-организация уже существует" });
+
+			if (conflict && conflict.id !== existing.id) {
+				// Конфликт с другой записью — обновляем её и удаляем текущую (merge)
+				const [mergedItem] = await prisma.$transaction([
+					prisma.userSetting.update({
+						where: { id: conflict.id },
+						data: { role: finalRole },
+						include,
+					}),
+					prisma.userSetting.delete({ where: { id: existing.id } }),
+				]);
+				return res.json({ success: true, item: mergedItem });
 			}
 
+			// Нет конфликта — создаём новую запись, удаляем старую
 			const [newItem] = await prisma.$transaction([
-				prisma.userOrganization.create({
-					data: { userUuid: finalUserUuid, organizationUuid: finalOrgUuid, role: finalRole },
+				prisma.userSetting.create({
+					data: {
+						userUuid: finalUserUuid,
+						organizationUuid: finalOrgUuid,
+						role: finalRole,
+					},
 					include,
 				}),
-				prisma.userOrganization.delete({ where: { id: existing.id } }),
+				prisma.userSetting.delete({ where: { id: existing.id } }),
 			]);
 
 			return res.json({ success: true, item: newItem });
 		}
 
 		// Только роль изменилась — простое обновление
-		const item = await prisma.userOrganization.update({
+		const item = await prisma.userSetting.update({
 			where: { id: existing.id },
 			data: { role: finalRole },
 			include,
@@ -238,32 +295,45 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 
 		return res.json({ success: true, item });
 	} catch (error) {
-		if (error.code === "P2025") return res.status(404).json({ success: false, message: "Запись не найдена" });
-		if (error.code === "P2002") return res.status(409).json({ success: false, message: "Такая связь уже существует" });
+		if (error.code === "P2025")
+			return res
+				.status(404)
+				.json({ success: false, message: "Запись не найдена" });
+		if (error.code === "P2002")
+			return res
+				.status(409)
+				.json({ success: false, message: "Такая связь уже существует" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 
-// ── DELETE /user-organizations/:id ───────────────────────────────────────
+// ── DELETE /user-settings/:id ───────────────────────────────────────
 router.delete(`/${ROUTE}/:id`, async (req, res) => {
 	try {
 		const p = req.params.id;
 		const n = Number(p);
-		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const w =
+			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 
 		const isSuperAdmin = req.user?.isSuperAdmin;
 		const isOrgAdmin = req.user?.isOrgAdmin;
 
 		// Находим запись для проверки доступа
-		const record = await prisma.userOrganization.findUnique({ where: w });
-		if (!record) return res.status(404).json({ success: false, message: "Запись не найдена" });
+		const record = await prisma.userSetting.findUnique({ where: w });
+		if (!record)
+			return res
+				.status(404)
+				.json({ success: false, message: "Запись не найдена" });
 
-		if (!isSuperAdmin && (!isOrgAdmin || record.organizationUuid !== req.user?.organizationUuid)) {
+		if (
+			!isSuperAdmin &&
+			(!isOrgAdmin || record.organizationUuid !== req.user?.organizationUuid)
+		) {
 			return res.status(403).json({ success: false, message: "Нет доступа" });
 		}
 
-		await prisma.userOrganization.delete({ where: { id: record.id } });
+		await prisma.userSetting.delete({ where: { id: record.id } });
 
 		// Если удалили активную орг — сбрасываем
 		const targetUser = await prisma.user.findUnique({
@@ -271,13 +341,48 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 			select: { organizationUuid: true },
 		});
 		if (targetUser?.organizationUuid === record.organizationUuid) {
-			await prisma.user.update({ where: { uuid: record.userUuid }, data: { organizationUuid: null } });
+			await prisma.user.update({
+				where: { uuid: record.userUuid },
+				data: { organizationUuid: null },
+			});
 		}
 
 		return res.json({ success: true });
 	} catch (error) {
-		if (error.code === "P2025") return res.status(404).json({ success: false, message: "Запись не найдена" });
+		if (error.code === "P2025")
+			return res
+				.status(404)
+				.json({ success: false, message: "Запись не найдена" });
 		console.error(`DELETE /${ROUTE}/:id error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ── POST /user-settings/batch ──────────────────────────────────────────
+router.post(`/${ROUTE}/batch`, async (req, res) => {
+	try {
+		const { operations } = req.body;
+		if (!Array.isArray(operations) || operations.length === 0)
+			return res.status(400).json({ success: false, message: "operations обязателен" });
+		await prisma.$transaction(async (tx) => {
+			for (const { action, uuid, data } of operations) {
+				if (action === "create" && data) {
+					await tx.userSetting.upsert({
+						where: { userUuid_organizationUuid: { userUuid: data.userUuid, organizationUuid: data.organizationUuid } },
+						update: { role: data.role ?? "member" },
+						create: { userUuid: data.userUuid, organizationUuid: data.organizationUuid, role: data.role ?? "member" },
+					});
+				} else if (action === "update" && uuid && data) {
+					if (data.role !== undefined)
+						await tx.userSetting.update({ where: { uuid }, data: { role: data.role } });
+				} else if (action === "delete" && uuid) {
+					try { await tx.userSetting.delete({ where: { uuid } }); } catch {}
+				}
+			}
+		});
+		return res.status(200).json({ success: true });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/batch error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

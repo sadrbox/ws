@@ -16,7 +16,7 @@ const cellStyle = P.cellCompact;
 const headCellStyle = P.headCompact;
 
 const PurchaseReturnPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
-  const docNumber = data.documentId ?? "—";
+  const docNumber = P.printDocNumber(data);
   const docDate = fmtDate(data.documentDate);
 
   const items: SaleItemPrintRow[] = data.items;

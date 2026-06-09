@@ -3,6 +3,7 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileProductPrice } from "../../services/productPricing.js";
+import { findBarcodeOwner } from "../../utils/barcodeUniqueness.js";
 
 const router = express.Router();
 
@@ -176,6 +177,11 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			return res
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
+		if (barcode?.trim()) {
+			const owner = await findBarcodeOwner(barcode);
+			if (owner)
+				return res.status(409).json({ success: false, message: `Штрих-код «${barcode.trim()}» уже используется другим товаром` });
+		}
 		const item = await prisma[MODEL].create({
 			data: {
 				name: name.trim(),
@@ -211,9 +217,14 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		}
 		if (req.body.isService !== undefined) data.isService = req.body.isService === true;
 		if (req.body.price !== undefined) data.price = req.body.price != null && req.body.price !== "" ? parseFloat(req.body.price) : null;
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true } });
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true } });
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		if (data.barcode) {
+			const owner = await findBarcodeOwner(data.barcode, existing.uuid);
+			if (owner)
+				return res.status(409).json({ success: false, message: `Штрих-код «${data.barcode}» уже используется другим товаром` });
+		}
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -261,16 +272,42 @@ router.post(`/${ROUTE}/import`, async (req, res) => {
 					const unitOfMeasureUuid = r.unitName ? unitMap.get(norm(r.unitName).toLowerCase()) ?? null : null;
 					const isService = r.isService === true || r.isService === 1 || /^(да|yes|true|1|услуга)$/i.test(norm(r.isService));
 
-					// Поиск существующего товара: по артикулу, затем по штрих-коду.
+					// Явная ссылка из формы (LookupField «Номенклатура») имеет приоритет.
+					const orgWhere = orgUuid ? { organizationUuid: orgUuid } : {};
 					let product = null;
-					if (sku) product = await tx.product.findFirst({ where: { sku, ...(orgUuid ? { organizationUuid: orgUuid } : {}) } });
-					if (!product && barcodes.length) product = await tx.product.findFirst({ where: { barcode: barcodes[0], ...(orgUuid ? { organizationUuid: orgUuid } : {}) } });
+					if (r.productUuid)
+						product = await tx.product.findFirst({ where: { uuid: String(r.productUuid), ...orgWhere } });
+
+					// Иначе — поиск существующего товара (приоритет по требованию #6):
+					//   1) по штрих-коду (основной Product.barcode ИЛИ доп. ProductBarcode),
+					//   2) по «артикул + бренд» (или просто артикул, если бренд не задан),
+					//   3) по наименованию.
+					for (const bc of (product ? [] : barcodes)) {
+						product = await tx.product.findFirst({ where: { barcode: bc, ...orgWhere } });
+						if (!product) {
+							const pb = await tx.productBarcode.findFirst({ where: { barcode: bc, deletedAt: null }, select: { productUuid: true } });
+							if (pb) product = await tx.product.findFirst({ where: { uuid: pb.productUuid, ...orgWhere } });
+						}
+						if (product) break;
+					}
+					if (!product && sku)
+						product = await tx.product.findFirst({ where: { sku, ...(brandUuid ? { brandUuid } : {}), ...orgWhere } });
+					if (!product && name)
+						product = await tx.product.findFirst({ where: { name, ...orgWhere } });
+
+					// Основной штрих-код товара: первый из строки, ещё не занятый другим товаром.
+					let mainBarcode = null;
+					for (const bc of barcodes) {
+						const owner = await findBarcodeOwner(bc, product?.uuid ?? null, tx);
+						if (owner) { summary.errors.push({ idx, message: `Штрих-код «${bc}» уже у другого товара — пропущен` }); continue; }
+						mainBarcode = bc; break;
+					}
 
 					if (product) {
 						const data = {};
 						if (name) data.name = name;
 						if (sku) data.sku = sku;
-						if (barcodes.length) data.barcode = barcodes[0];
+						if (mainBarcode) data.barcode = mainBarcode;
 						if (r.brandName !== undefined) data.brandUuid = brandUuid;
 						if (r.unitName !== undefined) data.unitOfMeasureUuid = unitOfMeasureUuid;
 						if (r.isService !== undefined) data.isService = isService;
@@ -280,15 +317,18 @@ router.post(`/${ROUTE}/import`, async (req, res) => {
 						if (!name) { summary.skipped++; summary.errors.push({ idx, message: "Пустое наименование" }); continue; }
 						product = await tx.product.create({
 							data: {
-								name, sku: sku || null, barcode: barcodes[0] || null,
+								name, sku: sku || null, barcode: mainBarcode || null,
 								isService, brandUuid, unitOfMeasureUuid, organizationUuid: orgUuid,
 							},
 						});
 						summary.created++;
 					}
 
-					// Штрих-коды: гарантируем наличие записи на каждый ШК (без дублей).
+					// Доп. штрих-коды: только те, что НЕ равны основному и свободны (без дублей #3/#4).
 					for (const bc of barcodes) {
+						if (bc === mainBarcode) continue; // основной хранится в Product.barcode
+						const owner = await findBarcodeOwner(bc, product.uuid, tx);
+						if (owner) { summary.errors.push({ idx, message: `Штрих-код «${bc}» уже у другого товара — пропущен` }); continue; }
 						const exists = await tx.productBarcode.findFirst({ where: { productUuid: product.uuid, barcode: bc } });
 						if (!exists) { await tx.productBarcode.create({ data: { productUuid: product.uuid, barcode: bc } }); summary.barcodesAdded++; }
 					}

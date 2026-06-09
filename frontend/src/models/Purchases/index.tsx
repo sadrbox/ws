@@ -27,7 +27,7 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
-import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { validateDocumentFields, formatValidationErrors, getDocumentFillHint } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
@@ -377,6 +377,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
                 onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
                 mismatch={basisMismatch.mismatch}
                 mismatchDetails={basisMismatch.differences}
+                hint={getDocumentFillHint("purchase", form.fields as unknown as Record<string, unknown>)}
               />
             </GroupCol>
             <Group>
@@ -413,7 +414,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}
           onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
-          showRequiredHighlight={form.meta.tablesValidationFailed}
+          showRequiredHighlight
           defaultHiddenColumns={["amountNetOfIndirectTaxes", "amountWithoutVat"]}
         />
       )
@@ -467,7 +468,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   );
 
   return (
-    <FormRequiredScope docType="purchase" active={form.meta.headerValidationFailed}>
+    <FormRequiredScope docType="purchase" active>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
         {headerActionsPortal}
         <ModelForm paneId={form.paneId} tabs={tabs}

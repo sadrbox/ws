@@ -19,6 +19,8 @@ export interface PaymentInvoicePrintRow {
 
 export interface PaymentInvoicePrintData {
   documentId?: string | number;
+  /** Ручной номер документа (Номер) — печатается при наличии вместо id. */
+  documentNumber?: string | number | null;
   documentDate?: string;
   organizationName?: string;
   organizationBin?: string;
@@ -47,7 +49,7 @@ const cell = P.cell;
 const head = P.head;
 
 const PaymentInvoicePrint: FC<{ data: PaymentInvoicePrintData }> = ({ data }) => {
-  const docNumber = data.documentId ?? "—";
+  const docNumber = P.printDocNumber(data);
   const docDate = fmtDate(data.documentDate);
   const cols = data.columns ?? {};
 

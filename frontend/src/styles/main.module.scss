@@ -849,7 +849,7 @@ body {
 	// ВАЖНО: .Panes (z-index:3) идёт в DOM раньше и перекрывал бы строку
 	// вкладок и её выпадающее меню «ещё», которое раскрывается ВВЕРХ в область
 	// панелей. Поэтому z-index строки вкладок должен быть выше .Panes.
-	z-index: 4;
+	z-index: 3;
 	// flex: 1;
 	// width: fit-content;
 
@@ -889,9 +889,10 @@ body {
 		justify-content: left;
 		align-items: center;
 		/* Используем SVG для скошенного угла */
-		padding: 6px 5px;
+		padding: 6px 5px 6px 12px;
 		cursor: pointer;
 		margin-right: -1px;
+		// margin-left: 3px;
 		gap: 3px;
 		/* Наложение краев с учетом границы */
 		// font-weight: bold;

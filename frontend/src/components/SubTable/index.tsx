@@ -27,6 +27,7 @@ import { useModelDelete } from "src/hooks/useModelDelete";
 import { useAppContext } from "src/app";
 import Toolbar from "src/components/Toolbar";
 import { useQueryClient } from "@tanstack/react-query";
+import { stableStringify } from "src/utils/normalize";
 import styles from "./SubTable.module.scss";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -43,10 +44,58 @@ type PendingRow = TDataItem & {
   _untouched?: boolean;
   /** Визуальная позиция строки (1-based) в момент отправки родителю. */
   _lineNumber?: number;
+  /** Снимок исходных (чистых) значений строки — фиксируется при первом
+   *  редактировании, чтобы no-op правку (изменили и вернули) не считать Dirty. */
+  _baseline?: string;
 };
 
 /** Хелпер: безопасный каст к PendingRow (TDataItem уже типизирован, но без приватных полей) */
 const asPending = (r: TDataItem): PendingRow => r as PendingRow;
+
+// Производные (вычисляемые) поля строки — функции от редактируемых значений,
+// на сервер напрямую не пишутся. Исключаем из сравнения, иначе расхождение
+// округления сервер/клиент мешало бы распознать возврат к исходным значениям.
+const DERIVED_ROW_KEYS = new Set([
+  "amount", "vatAmount", "amountWithoutVat", "discountAmount", "total", "sum",
+]);
+
+// Снимок скалярных «бизнес-значений» строки (без служебных _-полей, без
+// relation-объектов/массивов и без производных полей) — для сравнения с исходным
+// состоянием. Числовые строки нормализуются (stableStringify): "100.00" === 100.
+const businessSnapshot = (row: Record<string, unknown>): string => {
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(row)) {
+    if (k.startsWith("_") || DERIVED_ROW_KEYS.has(k)) continue;
+    const v = row[k];
+    if (v !== null && typeof v === "object" && !(v instanceof Date)) continue;
+    out[k] = v;
+  }
+  return stableStringify(out);
+};
+
+/**
+ * Применяет patch к строке и проставляет/снимает маркер pending.
+ * Если после правки скалярные значения вернулись к исходным (зафиксированным
+ * при первом редактировании) — снимаем `_pendingAction`, чтобы форма не была
+ * Dirty при фактически неизменённых значениях. Строки create всегда остаются
+ * pending (их ещё нет на сервере).
+ */
+export const applyEditMarker = (r: PendingRow, patch: Record<string, unknown>): PendingRow => {
+  if (r._pendingAction === "create") return { ...r, ...patch };
+  // Базовый снимок: при первом редактировании = текущее (чистое) состояние строки.
+  const baseline = r._pendingAction ? r._baseline : businessSnapshot(r);
+  const next: PendingRow = { ...r, ...patch, _pendingAction: "update" };
+  delete next._untouched;
+  if (baseline != null) {
+    next._baseline = baseline;
+    if (businessSnapshot(next) === baseline) {
+      // Значения вернулись к исходным — строка снова «чистая».
+      delete next._pendingAction;
+      delete next._baseline;
+    }
+  }
+  return next;
+};
 
 /**
  * Правило валидации ячейки SubTable.
@@ -112,6 +161,14 @@ export interface SubTableProps {
   extraButtons?: ReactNode;
   /** Если false — убирает жирное выделение строки с isPrimary=true (data-primary) */
   disablePrimaryRowHighlight?: boolean;
+  /**
+   * Таблица отображает чисто клиентский набор строк (инъекция через
+   * initialPendingRows, parentUuid=""), а не серверную выборку. В этом режиме
+   * сортировка применяется ко ВСЕМ строкам на клиенте: инъектированные create-
+   * строки НЕ приклеиваются к концу (иначе сортировка «не работает»). Серверного
+   * refetch нет, поэтому кэш при смене сортировки не сбрасывается.
+   */
+  clientSort?: boolean;
   /** Колбэк при изменении allItems (например для пересчёта суммы) */
   onItemsChange?: (items: TDataItem[]) => void;
   /**
@@ -407,6 +464,7 @@ const SubTable: FC<SubTableProps> = ({
   onAllItemsChange,
   onRefresh,
   disablePrimaryRowHighlight = false,
+  clientSort = false,
 }) => {
   const queryClient = useQueryClient();
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
@@ -718,11 +776,14 @@ const SubTable: FC<SubTableProps> = ({
     );
     const prevServerSort = serverSort ?? {};
     const serverChanged = JSON.stringify(nextServerSort) !== JSON.stringify(prevServerSort);
-    if (serverChanged) {
+    // Сбрасываем кэш только если реально будет серверный refetch (есть parentUuid
+    // и не клиентская сортировка). Иначе (инъектированные данные, parentUuid="")
+    // refetch не сработает и таблица просто опустеет.
+    if (serverChanged && parentUuid && !clientSort) {
       cachedRowsRef.current = []; setCacheVersion(0); updateAdaptiveLimit(500);
     }
     setSort(next);
-  }, [updateAdaptiveLimit, defaultSort, columns, serverSort]);
+  }, [updateAdaptiveLimit, defaultSort, columns, serverSort, parentUuid, clientSort]);
 
   const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => {
     setFilter(prev => {
@@ -768,14 +829,9 @@ const SubTable: FC<SubTableProps> = ({
 
     // Если режим отложенных изменений — изменяем локальную копию и помечаем строку как обновлённую
     if (deferRemoteChanges) {
-      cachedRowsRef.current = cachedRowsRef.current.map(r => {
-        if (!isSameRow(r, row)) return r;
-        const next: PendingRow = { ...r, [field]: value };
-        if (next._pendingAction !== "create") next._pendingAction = "update";
-        // Строка была отредактирована — снимаем маркер «нетронутая»
-        delete next._untouched;
-        return next;
-      });
+      cachedRowsRef.current = cachedRowsRef.current.map(r =>
+        isSameRow(r, row) ? applyEditMarker(r, { [field]: value }) : r
+      );
       setCacheVersion(v => v + 1);
       notifyParent(cachedRowsRef.current);
       return;
@@ -822,14 +878,9 @@ const SubTable: FC<SubTableProps> = ({
       setCellError(rowId, field, error);
     }
 
-    cachedRowsRef.current = cachedRowsRef.current.map(r => {
-      if (!isSameRow(r, row)) return r;
-      const next: PendingRow = { ...r, ...patch };
-      if (next._pendingAction !== "create") next._pendingAction = "update";
-      // Строка была отредактирована — снимаем маркер «нетронутая»
-      delete next._untouched;
-      return next;
-    });
+    cachedRowsRef.current = cachedRowsRef.current.map(r =>
+      isSameRow(r, row) ? applyEditMarker(r, patch) : r
+    );
     setCacheVersion(v => v + 1);
     notifyParent(cachedRowsRef.current);
   }, [validateCell, setCellError]);
@@ -967,7 +1018,10 @@ const SubTable: FC<SubTableProps> = ({
       r._pendingAction === "create" ||
       (typeof r.id === "number" && r.id < 0) ||
       (typeof r.uuid === "string" && r.uuid.startsWith("tmp-"));
-    const pendingCreates = enriched.filter(isTmpRow);
+    // В режиме clientSort весь набор — инъектированные данные (все «create»),
+    // поэтому сортируем ВСЕ строки. В обычном режиме новые (несохранённые)
+    // строки выносим в конец, чтобы только что добавленная «+» не «прыгала».
+    const pendingCreates = clientSort ? [] : enriched.filter(isTmpRow);
     const others = pendingCreates.length
       ? enriched.filter(r => !isTmpRow(r))
       : enriched;
@@ -985,7 +1039,7 @@ const SubTable: FC<SubTableProps> = ({
       .map(w => w.replace(',', '.'));
     const visibleCols = columns.filter(c => c.visible);
     return sorted.filter((row: TDataItem) => matchRowBySearch(row, visibleCols, words));
-  }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow, columns]);
+  }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow, columns, clientSort]);
 
   // Синхронизируем ref c актуальным displayRows (используется в ctx.rows
   // и в клавиатурном обработчике для навигации).

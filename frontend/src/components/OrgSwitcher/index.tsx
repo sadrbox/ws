@@ -9,6 +9,7 @@
  * При выборе отправляет PATCH /auth/switch-org и обновляет контекст.
  */
 import { FC, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAppContext } from "src/app/context";
 import { switchOrganization, type OrgEntry } from "src/services/auth";
 import { translate } from "src/i18";
@@ -25,7 +26,12 @@ const OrgSwitcher: FC = () => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  // Координаты для портала (dropdown рендерится в body, чтобы не обрезался
+  // навбаром с overflow: clip).
+  const [pos, setPos] = useState<{ top: number; right: number; minWidth: number } | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // userSettings — членства пользователя в организациях (бывш. userPermissions).
   // Фоллбэк на старое имя поля — на случай устаревшего кэша пользователя в
@@ -33,11 +39,30 @@ const OrgSwitcher: FC = () => {
   const orgs: OrgEntry[] =
     user?.userSettings ?? (user as { userPermissions?: OrgEntry[] } | null)?.userPermissions ?? [];
 
-  // Закрытие по клику вне компонента
+  // Пересчёт позиции портала под кнопкой (правый край совмещён с кнопкой).
+  useEffect(() => {
+    if (!open) { setPos(null); return; }
+    const update = () => {
+      const el = btnRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right), minWidth: r.width });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
+
+  // Закрытие по клику вне компонента (учитываем и портал dropdown)
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (!dropdownRef.current?.contains(e.target as Node)) {
+      const t = e.target as Node;
+      if (!wrapperRef.current?.contains(t) && !menuRef.current?.contains(t)) {
         setOpen(false);
         setError(null);
       }
@@ -78,8 +103,9 @@ const OrgSwitcher: FC = () => {
     (user.organizationUuid ? translate("organization") : translate("noOrganization"));
 
   return (
-    <div className={styles.OrgSwitcher} ref={dropdownRef}>
+    <div className={styles.OrgSwitcher} ref={wrapperRef}>
       <button
+        ref={btnRef}
         className={styles.OrgButton}
         onClick={() => { setOpen((p) => !p); setError(null); }}
         disabled={loading}
@@ -91,8 +117,12 @@ const OrgSwitcher: FC = () => {
         <span className={styles.OrgChevron}>{open ? "▴" : "▾"}</span>
       </button>
 
-      {open && (
-        <div className={styles.OrgDropdown}>
+      {open && pos && createPortal(
+        <div
+          ref={menuRef}
+          className={styles.OrgDropdown}
+          style={{ position: "fixed", top: pos.top, right: pos.right, minWidth: pos.minWidth }}
+        >
           <div className={styles.OrgDropdownHeader}>{translate("organization")}</div>
 
           {orgs.map((o) => {
@@ -122,7 +152,8 @@ const OrgSwitcher: FC = () => {
           })}
 
           {error && <div className={styles.OrgError}>{error}</div>}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

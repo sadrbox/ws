@@ -206,7 +206,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, warehouses, cashboxes, canReadBankAccounts, canReadContracts, canReadContacts, canReadWarehouses, canReadCashboxes, canWrite, ownerUuid]);
 
   return (
-    <FormRequiredScope requiredKeys={["bin"]} active={form.meta.headerValidationFailed}>
+    <FormRequiredScope requiredKeys={["bin"]} active>
       <ModelForm
         paneId={form.paneId}
         tabs={tabs}

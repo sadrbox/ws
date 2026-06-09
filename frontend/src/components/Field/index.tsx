@@ -424,6 +424,8 @@ interface TypeFieldFileProps {
   placeholder?: string;
   /** Имя выбранного файла (controlled). Если не задано — компонент хранит сам. */
   fileName?: string;
+  /** Показать индикатор загрузки (спиннер) — напр. пока файл обрабатывается. */
+  loading?: boolean;
   /** Колбэк выбора файла (основной). */
   onSelect?: (file: File | null) => void;
   /** Сырой onChange (если нужен доступ к FileList/event). */
@@ -434,7 +436,7 @@ export const FieldFile: FC<TypeFieldFileProps> = ({
   label, name, accept, disabled = false, required = false, error = false,
   variant = 'default', width, minWidth, maxWidth,
   buttonLabel = 'Выбрать файл', buttonVariant = 'secondary',
-  placeholder = 'Файл не выбран', fileName, onSelect, onChange,
+  placeholder = 'Файл не выбран', fileName, loading = false, onSelect, onChange,
 }) => {
   const uid = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -465,7 +467,8 @@ export const FieldFile: FC<TypeFieldFileProps> = ({
         <span className={styles.FieldFileName} title={displayName || placeholder}>
           {displayName || placeholder}
         </span>
-        {!!displayName && !disabled && (
+        {loading && <span className={styles.FieldFileSpinner} role="status" aria-label="Загрузка" />}
+        {!!displayName && !disabled && !loading && (
           <FieldActionButton icon="clear" label="Очистить" onClick={handleClear} />
         )}
         <input

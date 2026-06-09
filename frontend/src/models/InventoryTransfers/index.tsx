@@ -237,7 +237,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}
           onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
-          showRequiredHighlight={form.meta.tablesValidationFailed}
+          showRequiredHighlight
         />
       ) : (
         <div className={styles.CenteredPlaceholder}>
@@ -248,7 +248,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items]);
 
   return (
-    <FormRequiredScope docType="inventory_transfer" active={form.meta.headerValidationFailed}>
+    <FormRequiredScope docType="inventory_transfer" active>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
         <ModelForm paneId={form.paneId} tabs={tabs}
           onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}

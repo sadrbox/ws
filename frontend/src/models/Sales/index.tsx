@@ -21,7 +21,7 @@ import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { validateDocumentFields, formatValidationErrors, getDocumentFillHint } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { Toolbar } from "src/components/Toolbar";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
@@ -439,6 +439,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
       const baseData: SaleInvoicePrintData = {
         documentId: sale?.id ?? form.fields.id,
+        documentNumber: (sale?.number ?? form.fields.number) || undefined,
         documentDate: sale?.date ?? form.fields.date,
         organizationName: sale?.organization?.name ?? form.fields.organizationName,
         organizationBin: sale?.organization?.bin ?? sale?.organization?.iin ?? undefined,
@@ -640,6 +641,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
                 mismatch={basisMismatch.mismatch}
                 mismatchDetails={basisMismatch.differences}
+                hint={getDocumentFillHint("sale", form.fields as unknown as Record<string, unknown>)}
               />
             </GroupCol>
             <Group>
@@ -680,7 +682,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           onTotalChange={handleTotalChange}
           onItemsChange={saleItems.onItemsChange}
           onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
-          showRequiredHighlight={form.meta.tablesValidationFailed}
+          showRequiredHighlight
           defaultHiddenColumns={["amountNetOfIndirectTaxes", "amountWithoutVat"]}
         />
       )
@@ -688,7 +690,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, handleOrganizationSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
 
   return (
-    <FormRequiredScope docType="sale" active={form.meta.headerValidationFailed}>
+    <FormRequiredScope docType="sale" active>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
         <ModelForm paneId={form.paneId} tabs={tabs}
           onSave={form.handleSave}

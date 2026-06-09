@@ -1,6 +1,6 @@
 import React, { FC, useMemo, useState } from "react";
 import { translate } from "src/i18";
-import { Field, FieldFile } from "src/components/Field";
+import { Field, FieldFile, FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Button } from "src/components/Button";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
@@ -31,6 +31,44 @@ const FIXED: Record<string, string[]> = {
 const splitBarcodes = (s: unknown): string[] =>
   String(s ?? "").split(/[;,\s]+/).map((x) => x.trim()).filter(Boolean);
 
+const lc = (s: unknown) => String(s ?? "").trim().toLowerCase();
+
+// Серверное сопоставление номенклатуры (для предпросмотра импорта, #6):
+// строим карты ШК / «артикул+бренд» / артикул / наименование.
+async function resolveImportProducts(rows: any[]) {
+  const uniq = (xs: string[]) => Array.from(new Set(xs.filter(Boolean)));
+  const allBarcodes = rows.flatMap((r) => splitBarcodes(r.barcodes));
+  const skus = rows.map((r) => r.sku);
+  const names = rows.map((r) => r.name);
+  const resp = await apiClient.post(`/product-prices/resolve-products`, {
+    skus: uniq(skus), barcodes: uniq(allBarcodes), names: uniq(names),
+  });
+  const items = (resp.data?.items ?? []) as any[];
+  const byBarcode = new Map<string, any>();
+  const bySkuBrand = new Map<string, any>();
+  const bySku = new Map<string, any>();
+  const byName = new Map<string, any>();
+  for (const p of items) {
+    if (p.barcode) byBarcode.set(String(p.barcode).trim(), p);
+    for (const b of p.barcodes ?? []) if (b.barcode) byBarcode.set(String(b.barcode).trim(), p);
+    if (p.sku) {
+      bySku.set(lc(p.sku), p);
+      bySkuBrand.set(`${lc(p.sku)}|${lc(p.brand?.name)}`, p);
+    }
+    if (p.name) byName.set(lc(p.name), p);
+  }
+  // Приоритет #6: ШК → (артикул+бренд) → артикул → наименование.
+  return (r: any) => {
+    for (const bc of splitBarcodes(r.barcodes)) { const p = byBarcode.get(bc); if (p) return p; }
+    if (r.sku) {
+      const sb = bySkuBrand.get(`${lc(r.sku)}|${lc(r.brand)}`); if (sb) return sb;
+      const s = bySku.get(lc(r.sku)); if (s) return s;
+    }
+    if (r.name) { const n = byName.get(lc(r.name)); if (n) return n; }
+    return null;
+  };
+}
+
 const IMPORT_COLUMNS = [
   { identifier: "sku", type: "string", width: "120px", minWidth: "90px", alignment: "left", hint: "Артикул", visible: true, inlist: true },
   { identifier: "name", type: "string", width: "260px", minWidth: "160px", alignment: "left", hint: "Наименование", visible: true, inlist: true },
@@ -44,58 +82,106 @@ const IMPORT_COLUMNS = [
 const pricesSummary = (r: any): string =>
   (r.prices ?? []).map((p: any) => `${p.typeName}=${p.value}`).join("; ");
 
-const cellRenderer = (row: TDataItem, col: TColumn, ctx: SubTableContext): React.ReactNode | undefined => {
-  const r: any = row;
-  // Бренд / Ед. изм. — ссылки на справочники (по наименованию; бэкенд сопоставляет по имени).
-  if (col.identifier === "brand" || col.identifier === "unit") {
-    const endpoint = col.identifier === "brand" ? "brands" : "unit-of-measures";
-    const uuidKey = col.identifier === "brand" ? "brandUuid" : "unitUuid";
-    if (ctx.inlineEditing)
+// Фабрика рендера ячеек: замыкает дату цен (для колонки «Цены» — #5).
+const makeCellRenderer = (priceDate: string) =>
+  (row: TDataItem, col: TColumn, ctx: SubTableContext): React.ReactNode | undefined => {
+    const r: any = row;
+    // «Номенклатура» — LookupField на справочник товаров (#2). allowFreeText
+    // позволяет ввести новое наименование (товар будет создан при импорте).
+    if (col.identifier === "name") {
+      if (ctx.inlineEditing)
+        return (
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span title={r.productUuid ? "Сопоставлено с существующим" : "Новый товар (будет создан)"}
+              style={{ color: r.productUuid ? "#137333" : "#1a73e8", fontSize: 12 }}>
+              {r.productUuid ? "✓" : "＋"}
+            </span>
+            <LookupField
+              label="" name={`pie_name_${r.id}`} value={String(r.productUuid ?? "")} displayValue={String(r.name ?? "")}
+              endpoint="products" displayField="name" variant="table" disabled={ctx.disabled}
+              allowFreeText
+              onTextChange={(text) => ctx.updateLocalRow(r, { name: text, productUuid: "", _matched: false })}
+              onSelect={(u, dv, item) => ctx.handleLookupChange(r, "productUuid", u, {
+                name: item?.name ?? dv,
+                _matched: !!u,
+                ...(item?.sku !== undefined ? { sku: item.sku ?? "" } : {}),
+                ...(item ? { brand: item.brand?.name ?? "", brandUuid: item.brandUuid ?? "" } : {}),
+                ...(item ? { unit: item.unitOfMeasure?.name ?? "", unitUuid: item.unitOfMeasureUuid ?? "" } : {}),
+              })}
+              onClear={() => ctx.handleLookupChange(r, "productUuid", null, { _matched: false })}
+            />
+          </div>
+        );
+      return <span>{r.productUuid ? "" : "＋ "}{String(r.name ?? "")}</span>;
+    }
+    // Бренд / Ед. изм. — ссылки на справочники (по наименованию; бэкенд сопоставляет по имени).
+    if (col.identifier === "brand" || col.identifier === "unit") {
+      const endpoint = col.identifier === "brand" ? "brands" : "unit-of-measures";
+      const uuidKey = col.identifier === "brand" ? "brandUuid" : "unitUuid";
+      if (ctx.inlineEditing)
+        return (
+          <LookupField
+            label="" name={`pie_${col.identifier}_${r.id}`} value={String(r[uuidKey] ?? "")} displayValue={String(r[col.identifier] ?? "")}
+            endpoint={endpoint} displayField="name" variant="table" disabled={ctx.disabled}
+            onSelect={(u, dv) => ctx.handleLookupChange(r, uuidKey, u, { [col.identifier]: dv })}
+            onClear={() => ctx.handleLookupChange(r, uuidKey, null, { [col.identifier]: "" })}
+          />
+        );
+      return <span>{String(r[col.identifier] ?? "")}</span>;
+    }
+    if (["sku", "barcodes"].includes(col.identifier)) {
+      if (ctx.inlineEditing)
+        return (
+          <Field label="" name={`pie_${col.identifier}_${r.id}`} value={String(r[col.identifier] ?? "")} variant="table" width="100%"
+            onChange={(e) => ctx.handleInlineChange(r, col.identifier, e.target.value)} disabled={ctx.disabled} />
+        );
+      return <span>{String(r[col.identifier] ?? "")}</span>;
+    }
+    if (col.identifier === "isService") {
       return (
-        <LookupField
-          label="" name={`pie_${col.identifier}_${r.id}`} value={String(r[uuidKey] ?? "")} displayValue={String(r[col.identifier] ?? "")}
-          endpoint={endpoint} displayField="name" variant="table" disabled={ctx.disabled}
-          onSelect={(u, dv) => ctx.handleLookupChange(r, uuidKey, u, { [col.identifier]: dv })}
-          onClear={() => ctx.handleLookupChange(r, uuidKey, null, { [col.identifier]: "" })}
-        />
+        <input type="checkbox" checked={!!r.isService} disabled={ctx.disabled || !ctx.inlineEditing}
+          onChange={(e) => ctx.updateLocalRow(r, { isService: e.target.checked })} />
       );
-    return <span>{String(r[col.identifier] ?? "")}</span>;
-  }
-  if (["sku", "name", "barcodes"].includes(col.identifier)) {
-    if (ctx.inlineEditing)
-      return (
-        <Field label="" name={`pie_${col.identifier}_${r.id}`} value={String(r[col.identifier] ?? "")} variant="table" width="100%"
-          onChange={(e) => ctx.handleInlineChange(r, col.identifier, e.target.value)} disabled={ctx.disabled} />
-      );
-    return <span>{String(r[col.identifier] ?? "")}</span>;
-  }
-  if (col.identifier === "isService") {
-    return (
-      <input type="checkbox" checked={!!r.isService} disabled={ctx.disabled || !ctx.inlineEditing}
-        onChange={(e) => ctx.updateLocalRow(r, { isService: e.target.checked })} />
-    );
-  }
-  if (col.identifier === "prices") {
-    return <span style={{ color: "#555" }}>{pricesSummary(r)}</span>;
-  }
-  return undefined;
-};
+    }
+    if (col.identifier === "prices") {
+      const txt = pricesSummary(r);
+      return <span style={{ color: "#555" }} title={txt && priceDate ? `Цены будут записаны на ${priceDate}` : undefined}>
+        {txt}{txt && priceDate ? `  ·  ${priceDate}` : ""}
+      </span>;
+    }
+    return undefined;
+  };
 
 export const ProductImportExport: FC<Partial<TPane>> = () => {
   const { canWrite } = useUserAccessRight("Product");
   const { actions: { confirm } } = useAppContext();
   const [file, setFile] = useState<File | null>(null);
+  const [priceDate, setPriceDate] = useState(today());
+  const [allRows, setAllRows] = useState<any[]>([]);
+  const [hideExisting, setHideExisting] = useState(false);
   const [pendingRows, setPendingRows] = useState<any[]>([]);
   const [currentRows, setCurrentRows] = useState<any[]>([]);
   const [fillVersion, setFillVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [parsed, setParsed] = useState(false);
 
+  const cellRenderer = useMemo(() => makeCellRenderer(priceDate), [priceDate]);
   const productCount = currentRows.length;
+  const matchedCount = useMemo(() => allRows.filter((r) => r.productUuid).length, [allRows]);
+  const newCount = allRows.length - matchedCount;
   const newBarcodes = useMemo(
     () => currentRows.reduce((acc, r) => acc + splitBarcodes(r.barcodes).length, 0),
     [currentRows],
   );
+
+  // Показ строк с учётом «Скрыть существующие» (#7): существующие = сопоставленные.
+  const showRows = (rows: any[], hide: boolean) => {
+    const shown = hide ? rows.filter((r) => !r.productUuid) : rows;
+    setPendingRows(shown);
+    setCurrentRows(shown);
+    setFillVersion((v) => v + 1);
+  };
+  const applyHideExisting = (next: boolean) => { setHideExisting(next); showRows(allRows, next); };
 
   // ── Заполнить: парсинг файла в таблицу предпросмотра ──
   const handleFill = async () => {
@@ -134,18 +220,33 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
             isService: /^(да|yes|true|1|услуга)$/i.test(get(r, idx.isService)),
             barcodes: get(r, idx.barcodes),
             prices,
+            productUuid: "",
+            _matched: false,
             _pendingAction: "create",
           };
         })
         .filter((r) => r.sku || r.name || r.barcodes || r.prices.length);
 
       if (rows.length === 0) { showToast("В файле нет строк с данными", "warning"); return; }
-      setPendingRows(rows);
-      setCurrentRows(rows);
+
+      // Сопоставление с существующей номенклатурой (#6): ШК → артикул+бренд → наименование.
+      try {
+        const match = await resolveImportProducts(rows);
+        for (const r of rows) {
+          const p = match(r);
+          if (p) { r.productUuid = p.uuid; r._matched = true; }
+        }
+      } catch (e) { console.error("resolveImportProducts", e); }
+
+      setAllRows(rows);
+      showRows(rows, hideExisting);
       setParsed(true);
-      setFillVersion((v) => v + 1);
       const noName = rows.filter((r) => !r.name).length;
-      showToast(`Загружено строк: ${rows.length}${noName ? `, без наименования: ${noName}` : ""}`, noName ? "warning" : "success");
+      const matched = rows.filter((r) => r.productUuid).length;
+      showToast(
+        `Строк: ${rows.length}, сопоставлено: ${matched}, новых: ${rows.length - matched}${noName ? `, без наименования: ${noName}` : ""}`,
+        noName ? "warning" : "success",
+      );
     } catch (err) {
       console.error(err);
       showToast("Ошибка чтения файла", "error");
@@ -160,6 +261,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
     const rows = currentRows
       .filter((r) => r.name || r.sku || splitBarcodes(r.barcodes).length)
       .map((r) => ({
+        productUuid: r.productUuid || undefined, // явная ссылка из LookupField (#2/#6)
         sku: r.sku || "",
         name: r.name || "",
         brandName: r.brand || "",
@@ -169,20 +271,21 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
         prices: r.prices ?? [],
       }));
     if (rows.length === 0) { showToast("Нет строк для загрузки", "warning"); return; }
-    const noName = rows.filter((r) => !r.name).length;
+    const noName = rows.filter((r) => !r.name && !r.productUuid).length;
     const msg = noName > 0
-      ? `Загрузить ${rows.length} строк? ${noName} без наименования будут пропущены (если товар не найден по артикулу).`
-      : `Загрузить ${rows.length} позиций номенклатуры?`;
+      ? `Загрузить ${rows.length} строк? ${noName} без наименования будут пропущены (если товар не найден).`
+      : `Загрузить ${rows.length} позиций номенклатуры? Цены — на ${priceDate}.`;
     if (!(await confirm(msg))) return;
 
     setIsLoading(true);
     try {
-      const resp = await apiClient.post(`/${ENDPOINT}/import`, { rows, date: today() });
+      const resp = await apiClient.post(`/${ENDPOINT}/import`, { rows, date: priceDate });
       const s = resp.data?.summary;
       showToast(s
         ? `Готово. Создано: ${s.created || 0}, обновлено: ${s.updated || 0}, штрих-кодов: +${s.barcodesAdded || 0}, цен: +${s.pricesAdded || 0}, пропущено: ${s.skipped || 0}`
         : "Импорт завершён", "success");
       setFile(null);
+      setAllRows([]);
       setPendingRows([]);
       setCurrentRows([]);
       setParsed(false);
@@ -257,8 +360,8 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
         <ol className={styles.helpSteps}>
           <li><b>Выгрузка</b>: «Выгрузить номенклатуру» — все товары одним файлом. Штрих-коды одного товара — в одной ячейке через «;», цены — отдельной колонкой на каждый тип цены.</li>
           <li><b>Загрузка</b>: «Скачать шаблон» → заполнить → выбрать файл → «Заполнить» (предпросмотр, можно править) → «Загрузить».</li>
-          <li>Товар ищется по <b>артикулу</b> (затем по первому штрих-коду): найден — обновляется, иначе создаётся. Бренд / ед. изм. / тип цены сопоставляются по наименованию.</li>
-          <li>Штрих-коды добавляются без дублей; цены создаются на сегодняшнюю дату (повторы пропускаются).</li>
+          <li>Номенклатура сопоставляется по <b>штрих-коду</b> → <b>артикул + бренд</b> → <b>наименованию</b>: найден — обновляется (<span style={{ color: "#137333" }}>✓</span>), иначе создаётся (<span style={{ color: "#1a73e8" }}>＋</span>). Ячейку «Номенклатура» можно поправить вручную (выбрать товар из справочника или ввести новое наименование).</li>
+          <li>Штрих-коды уникальны: дубль другого товара пропускается. Цены записываются на дату <b>«{translate("priceDate")}»</b> (по умолчанию сегодня), повторы пропускаются. «{translate("hideExisting")}» — показать только новые позиции.</li>
         </ol>
         <div className={styles.notice} style={{ marginTop: 6 }}>
           Колонки: «sku / артикул», «name / наименование», «brand / бренд», «unit / ед. изм.», «isService / услуга», «barcodes / штрих-коды», далее по колонке на каждый тип цены.
@@ -267,16 +370,23 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
 
       <GroupRow className={mainStyles.GroupRowWrap}>
         <FieldFile key={`file-${fillVersion}`} name="pie_file" accept=".xls,.xlsx" disabled={isLoading || !canWrite}
-          buttonLabel="Выбрать файл" onSelect={(f) => { setFile(f); setParsed(false); }} />
+          buttonLabel="Выбрать файл" loading={isLoading} onSelect={(f) => { setFile(f); setParsed(false); }} />
+        <FieldDate label={translate("priceDate")} name="pie_priceDate" value={priceDate} onChange={(e) => setPriceDate(e.target.value)} disabled={isLoading} />
         <Button variant="primary" onClick={handleFill} disabled={isLoading || !file}>{translate("fill")}</Button>
         <Button onClick={handleUpload} disabled={isLoading || !canWrite || !parsed}>{translate("upload")}</Button>
         <Button onClick={handleTemplate} type="button">{translate("downloadTemplate")}</Button>
         <Button onClick={handleExport} type="button" disabled={isLoading}>{translate("downloadBackup") || "Выгрузить номенклатуру"}</Button>
+        <label className={styles.checkbox}>
+          <input type="checkbox" checked={hideExisting} onChange={(e) => applyHideExisting(e.target.checked)} disabled={isLoading} />
+          {translate("hideExisting")}
+        </label>
       </GroupRow>
 
       {parsed && (
         <div className={styles.summary}>
           <span className={`${styles.badge} ${styles.badgeOk}`}>Позиций: {productCount}</span>
+          <span className={styles.badge}>{translate("matched")}: {matchedCount}</span>
+          <span className={`${styles.badge} ${newCount ? styles.badgeWarn : ""}`}>Новых: {newCount}</span>
           <span className={styles.badge}>Штрих-кодов: {newBarcodes}</span>
         </div>
       )}
@@ -290,12 +400,13 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
           parentKey="uuid"
           parentUuid=""
           deferRemoteChanges
+          clientSort
           initialPendingRows={pendingRows}
           defaultInlineEditing
           emptyMessage={"Выберите файл и нажмите «Заполнить», либо выгрузите всю номенклатуру"}
           onAllItemsChange={setCurrentRows}
           renderCell={cellRenderer}
-          defaultNewRow={{ sku: "", name: "", brand: "", brandUuid: "", unit: "", unitUuid: "", isService: false, barcodes: "", prices: [] }}
+          defaultNewRow={{ sku: "", name: "", productUuid: "", _matched: false, brand: "", brandUuid: "", unit: "", unitUuid: "", isService: false, barcodes: "", prices: [] }}
         />
       </div>
     </div>

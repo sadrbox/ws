@@ -81,7 +81,7 @@ describe("buildRefillBasisItems — идемпотентный refill по sourc
 		);
 	});
 
-	it("легаси-строки без sourceRowId усыновляются по товару (без дублей)", () => {
+	it("легаси-строки: усыновляется по товару ТОЛЬКО изменённая (без ложного Dirty)", () => {
 		// Документ создан до Этапа A: строки без sourceRowId, но соответствуют основанию.
 		const displayed = [
 			serverRow("srv-a", "", { sourceRowId: null, productUuid: "prod-a" }),
@@ -89,15 +89,22 @@ describe("buildRefillBasisItems — идемпотентный refill по sourc
 		];
 		const basisRows = mapItemsForBasis([basisSrc("a", { quantity: 7 }), basisSrc("b")]);
 		const merged = buildRefillBasisItems(displayed, basisRows);
-		// Обе строки усыновлены по товару → update с проставлением sourceRowId, без create-дублей.
-		expect(merged.every((r) => r._pendingAction === "update")).toBe(true);
-		expect(merged.some((r) => r._pendingAction === "create")).toBe(false);
-		expect(merged).toContainEqual(
-			expect.objectContaining({ uuid: "srv-a", sourceRowId: "a", quantity: 7 }),
-		);
-		expect(merged).toContainEqual(
-			expect.objectContaining({ uuid: "srv-b", sourceRowId: "b" }),
-		);
+		// a изменилась (кол-во 10→7) → update с проставлением sourceRowId.
+		// b НЕ изменилась → строку не трогаем (служебный sourceRowId сам по себе
+		// НЕ повод для update/Dirty); сопоставление при следующем refill — по товару.
+		expect(merged).toHaveLength(1);
+		expect(merged[0]).toMatchObject({ uuid: "srv-a", sourceRowId: "a", quantity: 7, _pendingAction: "update" });
+		expect(merged.some((r) => r.uuid === "srv-b")).toBe(false);
+	});
+
+	it("числовой формат не считается изменением: Decimal '100.00' vs 100 → [] (без ложного Dirty)", () => {
+		// Серверные значения приходят как Decimal-строки с хвостовыми нулями.
+		const displayed = [
+			serverRow("srv-a", "a", { quantity: "10.000", price: "100.00", vatRate: "12.00", discountPercent: "0.00" }),
+		];
+		const basisRows = mapItemsForBasis([basisSrc("a")]); // те же значения, но как числа
+		const merged = buildRefillBasisItems(displayed, basisRows);
+		expect(merged).toEqual([]); // значения эквивалентны → ничего не меняем
 	});
 
 	it("новая строка добавлена в основание → create, существующие не дублируются", () => {

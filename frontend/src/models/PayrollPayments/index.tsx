@@ -138,7 +138,7 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
   );
 
   return (
-    <FormRequiredScope docType="payroll_payment" active={form.meta.headerValidationFailed}>
+    <FormRequiredScope docType="payroll_payment" active>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
         <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
           onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
