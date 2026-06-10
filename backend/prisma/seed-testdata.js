@@ -234,8 +234,7 @@ async function cleanup() {
 		await prisma[def.model].deleteMany(byOrg);
 	}
 	await prisma.bankStatement.deleteMany(byOrg);
-	await prisma.cashReceiptOrder.deleteMany(byOrg);
-	await prisma.cashExpenseOrder.deleteMany(byOrg);
+	await prisma.cashOrder.deleteMany(byOrg);
 	await prisma.payrollPayment.deleteMany(byOrg);
 	await prisma.payrollCalculation.deleteMany(byOrg);
 
@@ -441,13 +440,13 @@ async function createReferenceData(globals) {
 // ─── Простые денежные документы (без позиций) ────────────────────────────────
 async function createCashReceipt(rawHeader) {
 	const header = applyBasis("cash_receipt_order", rawHeader);
-	const rec = await prisma.cashReceiptOrder.create({ data: { ...header, authorUuid: ADMIN, posted: true } });
+	const rec = await prisma.cashOrder.create({ data: { ...header, direction: "receipt", authorUuid: ADMIN, posted: true } });
 	recordDoc("cash_receipt_order", rec, header);
 	return rec;
 }
 async function createCashExpense(rawHeader) {
 	const header = applyBasis("cash_expense_order", rawHeader);
-	const rec = await prisma.cashExpenseOrder.create({ data: { ...header, authorUuid: ADMIN, posted: true } });
+	const rec = await prisma.cashOrder.create({ data: { ...header, direction: "expense", authorUuid: ADMIN, posted: true } });
 	recordDoc("cash_expense_order", rec, header);
 	return rec;
 }
@@ -693,8 +692,8 @@ async function integrityCheck(orgUuids) {
 	const errors = [];
 	const exists = async (model, uuid) => (uuid ? !!(await prisma[model].findUnique({ where: { uuid } })) : true);
 	const modelByType = Object.fromEntries(Object.entries(DOC_DEFS).map(([t, d]) => [t, d.model]));
-	modelByType.cash_receipt_order = "cashReceiptOrder";
-	modelByType.cash_expense_order = "cashExpenseOrder";
+	modelByType.cash_receipt_order = "cashOrder";
+	modelByType.cash_expense_order = "cashOrder";
 	modelByType.bank_statement = "bankStatement";
 	modelByType.payroll_calculation = "payrollCalculation";
 	modelByType.payroll_payment = "payrollPayment";

@@ -40,8 +40,7 @@ model User {
   authoredIncomingInvoices     IncomingInvoice[]     @relation("IncomingInvoiceAuthor")
   authoredPaymentInvoices      PaymentInvoice[]      @relation("PaymentInvoiceAuthor")
   authoredInventoryTransfers   InventoryTransfer[]   @relation("InventoryTransferAuthor")
-  authoredCashReceiptOrders    CashReceiptOrder[]    @relation("CashReceiptOrderAuthor")
-  authoredCashExpenseOrders    CashExpenseOrder[]    @relation("CashExpenseOrderAuthor")
+  authoredCashOrders           CashOrder[]           @relation("CashOrderAuthor")
   authoredPayrollCalculations  PayrollCalculation[]  @relation("PayrollCalculationAuthor")
   authoredPayrollPayments      PayrollPayment[]      @relation("PayrollPaymentAuthor")
   authoredScheduledTasks       ScheduledTask[]       @relation("ScheduledTaskAuthor")
@@ -116,8 +115,7 @@ model Organization {
   updatedAt            DateTime                        @default(now()) @updatedAt
   deletedAt            DateTime?
   activityHistories    ActivityHistory[]
-  cashExpenseOrders    CashExpenseOrder[]              @relation("OrgCashExpenses")
-  cashReceiptOrders    CashReceiptOrder[]              @relation("OrgCashReceipts")
+  cashOrders           CashOrder[]                     @relation("OrgCashOrders")
   contracts            Contract[]                      @relation("OrgContracts")
   employees            Employee[]                      @relation("EmployeeOrganization")
   incomingInvoices     IncomingInvoice[]               @relation("OrgIncomingInvoices")
@@ -174,8 +172,7 @@ model Counterparty {
   updatedAt            DateTime              @default(now()) @updatedAt
   deletedAt            DateTime?
   organization         Organization?         @relation("OrgCounterparties", fields: [organizationUuid], references: [uuid])
-  cashExpenseOrders    CashExpenseOrder[]    @relation("CpCashExpenses")
-  cashReceiptOrders    CashReceiptOrder[]    @relation("CpCashReceipts")
+  cashOrders           CashOrder[]           @relation("CpCashOrders")
   contracts            Contract[]            @relation("CpContracts")
   incomingInvoices     IncomingInvoice[]     @relation("CpIncomingInvoices")
   outgoingInvoices     OutgoingInvoice[]     @relation("CpOutgoingInvoices")
@@ -213,8 +210,7 @@ model Contract {
   deletedAt            DateTime?
   organization         Organization?         @relation("OrgContracts", fields: [organizationUuid], references: [uuid])
   counterparty         Counterparty?         @relation("CpContracts", fields: [counterpartyUuid], references: [uuid])
-  cashExpenseOrders    CashExpenseOrder[]
-  cashReceiptOrders    CashReceiptOrder[]
+  cashOrders           CashOrder[]           @relation("ContractCashOrders")
   incomingInvoices     IncomingInvoice[]
   outgoingInvoices     OutgoingInvoice[]
   paymentInvoices      PaymentInvoice[]
@@ -425,8 +421,7 @@ model Cashbox {
   updatedAt         DateTime           @default(now()) @updatedAt
   deletedAt         DateTime?
   organization      Organization?      @relation("OrgCashboxes", fields: [organizationUuid], references: [uuid])
-  cashReceiptOrders CashReceiptOrder[]
-  cashExpenseOrders CashExpenseOrder[]
+  cashOrders        CashOrder[]        @relation("CashboxCashOrders")
 
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -683,10 +678,17 @@ model InventoryTransfer {
   @@map("inventory_transfers")
 }
 
-model CashReceiptOrder {
+
+
+/// Кассовый ордер (объединяет ПКО и РКО). direction задаёт тип:
+/// "receipt" — приходный (ПКО), "expense" — расходный (РКО). Документ-тип для
+/// проводок/нумерации выводится из direction (cash_receipt_order / cash_expense_order).
+model CashOrder {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  number             String?
+  /// "receipt" (ПКО) | "expense" (РКО)
+  direction        String
+  number           String?
   date             DateTime      @default(now())
   comment          String?
   amount           Decimal?      @db.Decimal(18, 2)
@@ -698,51 +700,21 @@ model CashReceiptOrder {
   posted           Boolean       @default(true)
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
-  cashbox          Cashbox?      @relation(fields: [cashboxUuid], references: [uuid])
-  contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
-  counterparty     Counterparty? @relation("CpCashReceipts", fields: [counterpartyUuid], references: [uuid])
-  organization     Organization? @relation("OrgCashReceipts", fields: [organizationUuid], references: [uuid])
-  author           User          @relation("CashReceiptOrderAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+  cashbox          Cashbox?      @relation("CashboxCashOrders", fields: [cashboxUuid], references: [uuid])
+  contract         Contract?     @relation("ContractCashOrders", fields: [contractUuid], references: [uuid])
+  counterparty     Counterparty? @relation("CpCashOrders", fields: [counterpartyUuid], references: [uuid])
+  organization     Organization? @relation("OrgCashOrders", fields: [organizationUuid], references: [uuid])
+  author           User          @relation("CashOrderAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([cashboxUuid])
   @@index([authorUuid])
+  @@index([direction])
   @@index([date])
   @@index([updatedAt])
-  @@map("cash_receipt_orders")
-}
-
-model CashExpenseOrder {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
-  number             String?
-  date             DateTime      @default(now())
-  comment          String?
-  amount           Decimal?      @db.Decimal(18, 2)
-  organizationUuid String?
-  counterpartyUuid String?
-  contractUuid     String?
-  cashboxUuid      String?
-  authorUuid       String
-  posted           Boolean       @default(true)
-  updatedAt        DateTime      @default(now()) @updatedAt
-  deletedAt        DateTime?
-  cashbox          Cashbox?      @relation(fields: [cashboxUuid], references: [uuid])
-  contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
-  counterparty     Counterparty? @relation("CpCashExpenses", fields: [counterpartyUuid], references: [uuid])
-  organization     Organization? @relation("OrgCashExpenses", fields: [organizationUuid], references: [uuid])
-  author           User          @relation("CashExpenseOrderAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
-
-  @@index([organizationUuid])
-  @@index([counterpartyUuid])
-  @@index([contractUuid])
-  @@index([cashboxUuid])
-  @@index([authorUuid])
-  @@index([date])
-  @@index([updatedAt])
-  @@map("cash_expense_orders")
+  @@map("cash_orders")
 }
 
 model Brand {

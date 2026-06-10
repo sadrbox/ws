@@ -792,10 +792,4 @@ export const ProductPriceProcessing: FC<Partial<TPane>> = (paneProps) => {
 };
 ProductPriceProcessing.displayName = "ProductPriceProcessing";
 
-// List-обёртка реестра — открывает форму обработки.
-export const ProductPriceSettingsList: FC<{ variant?: any; onSelectItem?: any }> = () => (
-  <ProductPriceProcessing />
-);
-ProductPriceSettingsList.displayName = "ProductPriceSettingsList";
-
-export default ProductPriceSettingsList;
+export default ProductPriceProcessing;

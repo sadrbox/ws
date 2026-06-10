@@ -283,12 +283,15 @@ body {
 		font-size: $fontsize;
 	}
 
-	// Мобильное меню — абсолютное позиционирование ПОД навбаром
+	// Мобильное меню — ПОД навбаром. Используем position: fixed (а не absolute),
+	// потому что навбар (.NavbarWrapper) имеет overflow: clip и обрезал бы
+	// absolute-потомка, свисающего ниже своей высоты (меню было невидимым).
+	// fixed позиционируется от вьюпорта и не клиппится overflow-предком.
 	.NavbarMobileMenu {
 		display: flex;
 		flex-direction: column;
-		position: absolute;
-		top: 100%; // ← сразу под NavbarWrapper
+		position: fixed;
+		top: var(--navbar-h, #{$heightFieldInput + 12px}); // высота навбара (ResizeObserver)
 		left: 0;
 		right: 0;
 		z-index: 10;

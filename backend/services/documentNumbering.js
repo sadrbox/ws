@@ -79,8 +79,10 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 	const settings = await loadSettings(client, organizationUuid);
 	// Автонумерация выключена для этого вида документа → номер не присваиваем.
 	if (settings[docType]?.enabled === false) return null;
-	const prefix = settings[docType]?.prefix || def.prefix;
-	const padding = settings[docType]?.padding || 6;
+	// Префикс опционален: по умолчанию его нет, номер — только дополненный нулями
+	// счётчик («000000001»). Префикс добавляется через «-», только если задан.
+	const prefix = (settings[docType]?.prefix ?? "").trim();
+	const padding = settings[docType]?.padding || 9;
 	const year = (date ? new Date(date) : new Date()).getFullYear();
 	const org = organizationUuid || "__global__";
 	try {
@@ -89,7 +91,8 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 			create: { organizationUuid: org, docType, year, lastValue: 1 },
 			update: { lastValue: { increment: 1 } },
 		});
-		return `${prefix}-${String(row.lastValue).padStart(padding, "0")}`;
+		const seq = String(row.lastValue).padStart(padding, "0");
+		return prefix ? `${prefix}-${seq}` : seq;
 	} catch (err) {
 		console.error(`allocateNumber(${docType}) error:`, err);
 		return null;

@@ -610,4 +610,4 @@ const SyncDashboard: FC<Partial<TPane>> = (paneProps) => {
 };
 
 SyncDashboard.displayName = "SyncDashboard";
-export { SyncDashboard, SyncDashboard as SyncDashboardList };
+export { SyncDashboard };

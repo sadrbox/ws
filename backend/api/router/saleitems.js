@@ -1,5 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { reconcileDocumentRegister } from "../../services/productRegister.js";
+import { reconcileDocumentEntries } from "../../services/accountingPosting.js";
 
 const router = express.Router();
 
@@ -495,6 +497,13 @@ async function recalcSaleAmount(saleUuid) {
 				amountWithoutVat: amountWithoutVat,
 			},
 		});
+		// Строки продажи изменились → пересобираем движения регистра товаров и
+		// бухгалтерские проводки. Это единая точка после любой мутации строк
+		// (POST/PUT/DELETE/batch). Сервисы сами пропускают непроведённые документы,
+		// поэтому для черновиков — no-op. Гарантирует, что склад/проводки не
+		// отстают от строк независимо от порядка сохранения шапки/строк на фронте.
+		try { await reconcileDocumentRegister("sale", saleUuid); } catch (e) { console.error("reconcile register(sale)", e); }
+		try { await reconcileDocumentEntries("sale", saleUuid); } catch (e) { console.error("reconcile entries(sale)", e); }
 	} catch (err) {
 		console.error("recalcSaleAmount error:", err);
 	}

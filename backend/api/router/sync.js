@@ -35,8 +35,8 @@ const MODEL_MAP = {
 	"payment-invoices": "paymentInvoice",
 	"scheduled-tasks": "scheduledTask",
 	"inventory-transfers": "inventoryTransfer",
-	"cash-receipt-orders": "cashReceiptOrder",
-	"cash-expense-orders": "cashExpenseOrder",
+	"cash-receipt-orders": "cashOrder",
+	"cash-expense-orders": "cashOrder",
 	brands: "brand",
 	products: "product",
 	saleitems: "saleItem",
@@ -52,6 +52,18 @@ const MODEL_MAP = {
 
 // Таблицы, которые не поддерживают updatedAt (ActivityHistory, AttachedFile)
 const SKIP_TABLES = new Set(["activityhistories", "attached-files"]);
+
+// Доп. фильтр where при pull и значения по умолчанию при create — для эндпоинтов,
+// которые делят одну prisma-модель (ПКО/РКО → одна таблица cash_orders, различие
+// по direction). Без этого pull для cash-receipt-orders вернул бы и РКО.
+const WHERE_MAP = {
+	"cash-receipt-orders": { direction: "receipt" },
+	"cash-expense-orders": { direction: "expense" },
+};
+const CREATE_DEFAULTS = {
+	"cash-receipt-orders": { direction: "receipt" },
+	"cash-expense-orders": { direction: "expense" },
+};
 
 // Include-карта для подгрузки связей (как в GET /:id роутерах)
 const INCLUDE_MAP = {
@@ -96,8 +108,7 @@ const INCLUDE_MAP = {
 		fromWarehouse: true,
 		toWarehouse: true,
 	},
-	cashReceiptOrder: { organization: true, counterparty: true, contract: true },
-	cashExpenseOrder: { organization: true, counterparty: true, contract: true },
+	cashOrder: { organization: true, counterparty: true, contract: true },
 	brand: {},
 	product: { brand: true },
 	saleItem: { product: true },
@@ -142,6 +153,7 @@ router.post("/sync/pull", async (req, res) => {
 				const items = await prisma[modelKey].findMany({
 					where: {
 						updatedAt: { gt: since },
+						...(WHERE_MAP[tableName] || {}),
 					},
 					...(hasIncludes ? { include } : {}),
 					orderBy: { updatedAt: "asc" },
@@ -208,7 +220,7 @@ router.post("/sync/push", async (req, res) => {
 						applied.push({ uuid, table, action: "skip" });
 						continue;
 					}
-					await prisma[modelKey].create({ data: { uuid, ...data } });
+					await prisma[modelKey].create({ data: { uuid, ...(CREATE_DEFAULTS[table] || {}), ...data } });
 					applied.push({ uuid, table, action: "create" });
 				} else if (action === "update") {
 					// Проверяем на конфликт: если серверная версия новее клиентской

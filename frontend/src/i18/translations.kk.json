@@ -539,5 +539,20 @@
   "analyticsDebit": "Дт аналитикасы",
   "analyticsCredit": "Кт аналитикасы",
   "priceDate": "Баға күні",
-  "requiredFieldsFilled": "Міндетті өрістер толтырылған"
+  "requiredFieldsFilled": "Міндетті өрістер толтырылған",
+  "optional": "міндетті емес",
+  "Comment": "Пікір",
+  "clear": "Тазалау",
+  "resolve": "Шешу",
+  "restore": "Қалпына келтіру",
+  "recalc": "Қайта есептеу",
+  "model": "Бөлім",
+  "isDefault": "Әдепкі",
+  "inlineEdit": "Өңдеу",
+  "loadingEllipsis": "Жүктелуде…",
+  "referenceEndpoint": "Анықтама",
+  "subkonto1Type": "Субконто 1",
+  "subkonto2Type": "Субконто 2",
+  "subkonto3Type": "Субконто 3",
+  "UserSettings": "Пайдаланушы баптаулары"
 }

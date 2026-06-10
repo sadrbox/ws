@@ -414,7 +414,4 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
 };
 ProductImportExport.displayName = "ProductImportExport";
 
-export const ProductImportExportList: FC<{ variant?: any; onSelectItem?: any }> = () => <ProductImportExport />;
-ProductImportExportList.displayName = "ProductImportExportList";
-
-export default ProductImportExportList;
+export default ProductImportExport;
