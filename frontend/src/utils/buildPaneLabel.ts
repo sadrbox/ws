@@ -2,6 +2,19 @@ import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
 
 /**
+ * Минимальный источник данных для метки панели: записи справочника/документа.
+ * Известные поля типизированы (id/number/name/uuid), остальные (например поле
+ * даты, имя которого передаётся параметром) доступны через индекс как unknown.
+ */
+export interface LabelSource {
+	id?: number | string | null;
+	uuid?: string | null;
+	name?: string | null;
+	number?: string | number | null;
+	[key: string]: unknown;
+}
+
+/**
  * Префикс заголовка панели формы.
  *
  * Правило: для форм используется ключ `*Form` (единственное число — «Сотрудник»,
@@ -30,7 +43,7 @@ function resolveFormName(listOrFormName: string, fallback: string): string {
 export function makePaneLabel(
 	listName: string,
 	fallback: string,
-	saved: Record<string, any>,
+	saved: LabelSource,
 	displayValue?: string,
 ): string {
 	const name = resolveFormName(listName, fallback);
@@ -47,7 +60,7 @@ export function makePaneLabel(
 export function makeDocLabel(
 	listName: string,
 	fallback: string,
-	saved: Record<string, any>,
+	saved: LabelSource,
 	dateField = "date",
 ): string {
 	const name = resolveFormName(listName, fallback);
@@ -55,8 +68,9 @@ export function makeDocLabel(
 	if (!id) return `${name}: ${translate("new")}`;
 	// Показываем человекочитаемый номер документа, если он есть; иначе — ID.
 	const ref = saved.number ? `№ ${saved.number}` : `ID ${id}`;
-	const date = saved[dateField]
-		? getFormatDateOnly(String(saved[dateField]))
+	const rawDate = saved[dateField];
+	const date = (typeof rawDate === "string" || typeof rawDate === "number" || rawDate instanceof Date)
+		? getFormatDateOnly(String(rawDate))
 		: undefined;
 	return date ? `${name}: ${ref} · ${date}` : `${name}: ${ref}`;
 }
@@ -68,7 +82,7 @@ export function makeDocLabel(
 export function makePaneLabelFromData(
 	listName: string,
 	fallback: string,
-	data?: Record<string, any> | null,
+	data?: LabelSource | null,
 	displayValue?: string,
 ): string {
 	const name = resolveFormName(listName, fallback);

@@ -43,6 +43,17 @@ export interface BasisDocumentFieldProps {
  */
 const extractBasisSearch = (): string => "";
 
+/**
+ * Метка документа-основания: «{Тип}: №{number} · {дата}». Если номер документа
+ * не задан — фолбэк на «ID {id}». Независимо от типа/вида документа.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const basisItemLabel = (name: string, item: Record<string, any>): string => {
+  const num = item.number ?? item.documentNumber;
+  const ref = num != null && String(num).trim() !== "" ? `№${num}` : `ID ${item.id}`;
+  return `${name}: ${ref} · ${getFormatDateOnly(item.date) ?? ""}`;
+};
+
 const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   allowedTypes,
   basisDocumentType,
@@ -91,7 +102,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   // подтягиваем документ-основание по uuid и собираем корректную метку.
   const [resolvedLabel, setResolvedLabel] = useState<string | undefined>(undefined);
   useEffect(() => {
-    const isCanonical = !!basisDocumentLabel && /:\s*ID\s+\d+/i.test(basisDocumentLabel);
+    const isCanonical = !!basisDocumentLabel && /:\s*(?:ID\s+\d+|№\S+)/i.test(basisDocumentLabel);
     const type = basisDocumentType || "";
     const endpoint = allowedTypes.find((t) => t.type === type)?.endpoint ?? docTypeToEndpoint(type);
     if (!basisDocumentUuid || !type || !endpoint || isCanonical) {
@@ -105,7 +116,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
         const item = resp?.item ?? resp;
         if (!cancelled && item) {
           const name = nameForType(type, allowedTypes.find((t) => t.type === type));
-          setResolvedLabel(`${name}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`);
+          setResolvedLabel(basisItemLabel(name, item));
         }
       } catch {
         /* недоступно — оставляем исходную метку */
@@ -117,7 +128,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   const handleSelect = useCallback(
     (_uuid: string, _display: string, item: Record<string, any>) => {
       if (!activeType) return;
-      const label = `${nameForType(activeType.type, activeType)}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`;
+      const label = basisItemLabel(nameForType(activeType.type, activeType), item);
       onSelect(activeType.type, item.uuid, label);
     },
     [activeType, onSelect, nameForType],
@@ -197,9 +208,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           displayValue={resolvedLabel ?? basisDocumentLabel}
           endpoint={activeType?.endpoint ?? docTypeToEndpoint(valueType) ?? ""}
           displayField="id"
-          getSuggestionLabel={(item) =>
-            `${typeName}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`
-          }
+          getSuggestionLabel={(item) => basisItemLabel(typeName, item)}
           columns={columns}
           secondaryFields={["name", "counterparty.name", "documentNumber"]}
           onSelect={handleSelect}
@@ -229,9 +238,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
         displayValue={undefined}
         endpoint={activeType?.endpoint ?? ""}
         displayField="id"
-        getSuggestionLabel={(item) =>
-          `${newTypeName}: ID ${item.id} · ${getFormatDateOnly(item.date) ?? ""}`
-        }
+        getSuggestionLabel={(item) => basisItemLabel(newTypeName, item)}
         columns={columns}
         secondaryFields={["name", "counterparty.name", "documentNumber"]}
         onSelect={handleSelect}

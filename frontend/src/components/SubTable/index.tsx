@@ -11,7 +11,7 @@ import {
   FC, useMemo, useCallback, useState, useEffect, useRef, ReactNode,
   createContext, useContext, type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { getModelColumns, getFormatColumnValue, getColumnAlignment, sortTableRows, matchRowBySearch } from "src/components/Table/services";
+import { getModelColumns, getFormatColumnValue, getColumnAlignment } from "src/components/Table/services";
 import {
   CHECKBOX_COL_ID,
   computeNextActiveColId,
@@ -27,75 +27,22 @@ import { useModelDelete } from "src/hooks/useModelDelete";
 import { useAppContext } from "src/app";
 import Toolbar from "src/components/Toolbar";
 import { useQueryClient } from "@tanstack/react-query";
-import { stableStringify } from "src/utils/normalize";
 import styles from "./SubTable.module.scss";
+import {
+  applyEditMarker, computeDisplayRows, isSameRow, type PendingRow,
+} from "./rowModel";
+import { useSubTableRows } from "./useSubTableRows";
+
+// Реэкспорт чистых примитивов модели строк — тесты и потребители импортируют
+// их из "src/components/SubTable" (публичная точка входа компонента).
+export { applyEditMarker, computeDisplayRows };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Типы
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Внутренний тип строки таблицы с pending-маркерами.
- * Расширяет TDataItem полями, которые SubTable добавляет локально
- * для отслеживания несохранённых изменений (`deferRemoteChanges`).
- */
-type PendingRow = TDataItem & {
-  _pendingAction?: "create" | "update" | "delete";
-  _untouched?: boolean;
-  /** Визуальная позиция строки (1-based) в момент отправки родителю. */
-  _lineNumber?: number;
-  /** Снимок исходных (чистых) значений строки — фиксируется при первом
-   *  редактировании, чтобы no-op правку (изменили и вернули) не считать Dirty. */
-  _baseline?: string;
-};
-
-/** Хелпер: безопасный каст к PendingRow (TDataItem уже типизирован, но без приватных полей) */
-const asPending = (r: TDataItem): PendingRow => r as PendingRow;
-
-// Производные (вычисляемые) поля строки — функции от редактируемых значений,
-// на сервер напрямую не пишутся. Исключаем из сравнения, иначе расхождение
-// округления сервер/клиент мешало бы распознать возврат к исходным значениям.
-const DERIVED_ROW_KEYS = new Set([
-  "amount", "vatAmount", "amountWithoutVat", "discountAmount", "total", "sum",
-]);
-
-// Снимок скалярных «бизнес-значений» строки (без служебных _-полей, без
-// relation-объектов/массивов и без производных полей) — для сравнения с исходным
-// состоянием. Числовые строки нормализуются (stableStringify): "100.00" === 100.
-const businessSnapshot = (row: Record<string, unknown>): string => {
-  const out: Record<string, unknown> = {};
-  for (const k of Object.keys(row)) {
-    if (k.startsWith("_") || DERIVED_ROW_KEYS.has(k)) continue;
-    const v = row[k];
-    if (v !== null && typeof v === "object" && !(v instanceof Date)) continue;
-    out[k] = v;
-  }
-  return stableStringify(out);
-};
-
-/**
- * Применяет patch к строке и проставляет/снимает маркер pending.
- * Если после правки скалярные значения вернулись к исходным (зафиксированным
- * при первом редактировании) — снимаем `_pendingAction`, чтобы форма не была
- * Dirty при фактически неизменённых значениях. Строки create всегда остаются
- * pending (их ещё нет на сервере).
- */
-export const applyEditMarker = (r: PendingRow, patch: Record<string, unknown>): PendingRow => {
-  if (r._pendingAction === "create") return { ...r, ...patch };
-  // Базовый снимок: при первом редактировании = текущее (чистое) состояние строки.
-  const baseline = r._pendingAction ? r._baseline : businessSnapshot(r);
-  const next: PendingRow = { ...r, ...patch, _pendingAction: "update" };
-  delete next._untouched;
-  if (baseline != null) {
-    next._baseline = baseline;
-    if (businessSnapshot(next) === baseline) {
-      // Значения вернулись к исходным — строка снова «чистая».
-      delete next._pendingAction;
-      delete next._baseline;
-    }
-  }
-  return next;
-};
+// Примитивы модели строк (PendingRow, applyEditMarker, computeDisplayRows,
+// isSameRow, mergeServerWithPending) вынесены в ./rowModel — см. импорт выше.
 
 /**
  * Правило валидации ячейки SubTable.
@@ -115,8 +62,7 @@ export interface SubTableProps {
   /** Ключ для columns.json (например "SaleItemsList_part") */
   componentName: string;
   /** JSON-конфиг колонок (import columnsJson from "./saleItemsColumns.json") */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  columnsJson: any;
+  columnsJson: TColumn[];
   /** Имя FK-параметра для фильтрации (например "saleUuid", "employeeUuid") */
   parentKey: string;
   /** Значение FK родителя */
@@ -359,7 +305,10 @@ function formatReadOnlyValue(
     }
     return value;
   }
-  return String(value);
+  // Примитивы, для которых String() осмысленна (boolean/bigint). Объекты,
+  // функции и symbol в readonly-ячейке не отображаем — возвращаем "".
+  if (typeof value === "boolean" || typeof value === "bigint") return String(value);
+  return "";
 }
 
 export const ReadOnlyCell: FC<ReadOnlyCellProps> = ({
@@ -386,11 +335,6 @@ export const ReadOnlyCell: FC<ReadOnlyCellProps> = ({
 };
 ReadOnlyCell.displayName = "ReadOnlyCell";
 
-/** Сравнение по бизнес-id (uuid приоритетнее, fallback на числовой id) */
-function isSameRow(a: TDataItem, b: TDataItem): boolean {
-  return (!!a.uuid && a.uuid === b.uuid) || a.id === b.id;
-}
-
 /** Безопасное извлечение сообщения ошибки сервера из axios-подобного err */
 function extractServerError(err: unknown): string {
   if (typeof err === "object" && err !== null) {
@@ -398,34 +342,6 @@ function extractServerError(err: unknown): string {
     return e.response?.data?.message || e.message || "Ошибка сохранения";
   }
   return "Ошибка сохранения";
-}
-
-/**
- * Мерж серверных строк с pending-строками (update/delete/create).
- * Возвращает объединённый массив.
- */
-function mergeServerWithPending(serverItems: TDataItem[], pendingRows: TDataItem[]): PendingRow[] {
-  const serverUuidSet = new Set(serverItems.map(r => r.uuid).filter(Boolean));
-  const merged: PendingRow[] = [];
-
-  // 1. Обходим серверные строки: если есть pending update/delete — подставляем его
-  for (const item of serverItems) {
-    const pendingRow = (pendingRows as PendingRow[]).find(p =>
-      p._pendingAction && p._pendingAction !== "create" &&
-      ((p.uuid && p.uuid === item.uuid) || p.id === item.id)
-    );
-    merged.push(pendingRow ?? asPending(item));
-  }
-
-  // 2. Добавляем temp-строки (create), которых нет на сервере — В КОНЕЦ списка,
-  //    чтобы новые строки всегда появлялись после последней существующей.
-  for (const p of pendingRows as PendingRow[]) {
-    if (p._pendingAction === "create" && !serverUuidSet.has(p.uuid)) {
-      merged.push(p);
-    }
-  }
-
-  return merged;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -470,12 +386,6 @@ const SubTable: FC<SubTableProps> = ({
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
   // удаления при нажатии клавиши Delete.
   const { actions: { confirm } } = useAppContext();
-
-  // ── Стабильный ref для onItemsChange (избегаем бесконечного цикла) ────
-  const onItemsChangeRef = useRef(onItemsChange);
-  onItemsChangeRef.current = onItemsChange;
-  const onAllItemsChangeRef = useRef(onAllItemsChange);
-  onAllItemsChangeRef.current = onAllItemsChange;
 
   // ── Ошибки валидации ячеек ─────────────────────────────────────────────
   const [cellErrors, setCellErrors] = useState<TCellErrors>({});
@@ -552,52 +462,18 @@ const SubTable: FC<SubTableProps> = ({
 
   const handleDeleteRaw = useModelDelete(model, refetch);
 
-  // temp id counter for local rows (negative ids)
-  // Инициализируем СИНХРОННО: если есть initialPendingRows с отрицательными id —
-  // ставим счётчик ниже минимума, чтобы новые строки не получали дублирующиеся ключи.
-  const tempIdRef = useRef(
-    deferRemoteChanges && initialPendingRows?.length
-      ? Math.min(-1, Math.min(...initialPendingRows.map(r => (typeof r.id === "number" ? r.id : 0))) - 1)
-      : -1,
-  );
-  // Флаг: были ли initialPendingRows уже применены (мерж выполняется один раз)
-  const pendingAppliedRef = useRef(false);
-  // Счётчик для принудительного запуска основного эффекта после применения stash
-  const [mergeTrigger, setMergeTrigger] = useState(0);
-
-  // Сброс pendingAppliedRef когда pending очищается (после commit) —
-  // это позволяет повторный мерж при следующем восстановлении из sessionStorage.
-  const prevInitialPendingLenRef = useRef(initialPendingRows?.length ?? 0);
-  useEffect(() => {
-    const prevLen = prevInitialPendingLenRef.current;
-    const curLen = initialPendingRows?.length ?? 0;
-    prevInitialPendingLenRef.current = curLen;
-
-    if (deferRemoteChanges && prevLen > 0 && curLen === 0) {
-      // pending очищен после коммита — сбрасываем флаг мержа
-      pendingAppliedRef.current = false;
-
-      // Строки с delete-маркером удаляем из кэша — они уже удалены на сервере.
-      // Строки с create/update-маркером оставляем без маркера, чтобы они
-      // оставались видимы до прихода ответа refetch (без мерцания / без дублей).
-      // Ветка B основного эффекта заменит их реальными данными сервера.
-      cachedRowsRef.current = cachedRowsRef.current
-        .filter(r => r._pendingAction !== "delete")
-        .map(r => {
-          if (r._pendingAction) {
-            const { _pendingAction: _a, _untouched: _u, ...rest } = r;
-            return rest as PendingRow;
-          }
-          return r;
-        });
-      setCacheVersion(v => v + 1);
-      // Refetch is handled by the parent form's afterSave → invalidateSubTables.
-    } else if (deferRemoteChanges && curLen > 0 && prevLen === 0) {
-      // stash применён — сбрасываем флаг мержа и запускаем основной эффект заново
-      pendingAppliedRef.current = false;
-      setMergeTrigger(v => v + 1);
-    }
-  }, [deferRemoteChanges, initialPendingRows]);
+  // ── Машина состояния строк (#5 — вынесена в useSubTableRows) ───────────
+  // Кэш строк, мерж pending-строк, синхронизация с сервером и оповещение
+  // родителя. Обработчики ниже патчат cachedRowsRef и вызывают
+  // setCacheVersion/notifyParent, как и раньше.
+  const {
+    rows, cacheVersion, setCacheVersion, cachedRowsRef,
+    notifyParent, tempIdRef, pendingAppliedRef,
+  } = useSubTableRows({
+    deferRemoteChanges, initialPendingRows, parentUuid,
+    allItems, isAnythingLoading, dataUpdatedAt,
+    onItemsChange, onAllItemsChange,
+  });
 
   // Обёртка для delete — показывает спиннер во время удаления
   const handleDelete = useCallback(async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
@@ -630,135 +506,7 @@ const SubTable: FC<SubTableProps> = ({
     } finally {
       setOpCount(c => c - 1);
     }
-  }, [handleDeleteRaw, deferRemoteChanges]);
-
-  // ── Оповещение родителя об изменении данных ───────────────────────────
-  // НЕ вызываем onItemsChange при каждом allItems — это вызывало бесконечный цикл,
-  // т.к. onItemsChange → setFormData → re-render → onItemsChange пересоздаётся → эффект снова.
-  // Вместо этого onItemsChange вызывается только при ЛОКАЛЬНЫХ изменениях (add/edit/delete/merge).
-
-  /**
-   * Оповестить родителя об изменении данных.
-   * При передаче исключаем «нетронутые» строки (_untouched) —
-   * новые пустые строки, которые пользователь ещё не редактировал,
-   * не должны попадать в pending (sessionStorage) и не должны коммититься.
-   */
-  const notifyParent = useCallback((items: PendingRow[]) => {
-    // Always notify onAllItemsChange with the full row set so consumers that track
-    // unique-option usage (useUniqueOptionRows) stay in sync on every user action,
-    // not just on server-data refetch.
-    onAllItemsChangeRef.current?.(items);
-
-    if (!onItemsChangeRef.current) return;
-    // Нумеруем только видимые (не удалённые) строки — чтобы _lineNumber совпадал
-    // с номером строки в displayRows (ctx.rows тоже фильтрует _pendingAction==="delete").
-    // Присваиваем ДО фильтрации _untouched, чтобы пустые нетронутые строки не
-    // сдвигали нумерацию заполненных.
-    let visIdx = 0;
-    const withNums = items.map(r => {
-      if (r._pendingAction !== "delete") visIdx++;
-      return { ...r, _lineNumber: r._pendingAction !== "delete" ? visIdx : 0 };
-    });
-    const filtered = withNums.filter(r => !r._untouched);
-    onItemsChangeRef.current(filtered);
-  }, []);
-
-  // ── Кэширование строк ─────────────────────────────────────────────────
-  const cachedRowsRef = useRef<PendingRow[]>([]);
-  const [cacheVersion, setCacheVersion] = useState(0);
-
-  useEffect(() => {
-    // ── Ветка A: мерж pending-строк из initialPendingRows (один раз при восстановлении) ──
-    if (deferRemoteChanges && initialPendingRows?.length && !pendingAppliedRef.current) {
-      // Для сохранённых документов ждём, пока придут серверные данные.
-      // Если сработать на пустом allItems — delete-маркеры в initialPendingRows
-      // не совпадут ни с одной серверной строкой и будут отброшены, после чего
-      // Branch B смержит старые серверные строки с новыми pending-creates → дубликаты.
-      //
-      // Ждём, если идёт загрузка ЛИБО в pending есть delete-маркеры: им нужны
-      // серверные строки (по uuid), без них они теряются. Это исправляет дубли
-      // при «Перезаполнить по основанию» со сменой основания, когда на remount
-      // серверная query ещё не вернула данные (allItems=[] и isAnythingLoading
-      // кратковременно false).
-      const hasDeleteMarkers = initialPendingRows.some(
-        (r) => (r as PendingRow)._pendingAction === "delete",
-      );
-      if (parentUuid && allItems.length === 0 && (isAnythingLoading || hasDeleteMarkers)) return;
-
-      pendingAppliedRef.current = true;
-      const merged = mergeServerWithPending([...allItems], initialPendingRows);
-
-      cachedRowsRef.current = merged;
-      setCacheVersion(v => v + 1);
-      onAllItemsChangeRef.current?.(merged);
-      notifyParent(merged);
-      return;
-    }
-
-    // ── Ветка B: синхронизация кэша с серверными данными ──
-    // Убираем любые остаточные temp-строки (отрицательный id или uuid "tmp-...")
-    const clean = allItems.filter(r =>
-      !(typeof r.id === "number" && r.id < 0) && !(typeof r.uuid === "string" && r.uuid.startsWith("tmp-"))
-    ) as PendingRow[];
-
-    const prev = cachedRowsRef.current;
-    // Собираем dirty-строки, исключая «нетронутые» (новые пустые строки — не были отредактированы)
-    const dirtyRows: PendingRow[] = deferRemoteChanges
-      ? prev.filter(r => r._pendingAction && !r._untouched)
-      : [];
-
-    // Если есть pending-строки при deferRemoteChanges — мержим с серверными данными,
-    // чтобы не потерять локальные изменения при invalidateQueries (например после
-    // сохранения формы открытой из SubTable в режиме "Редактирование в форме").
-    // НЕ мержим если родитель уже очистил pending (initialPendingRows === []) —
-    // это значит коммит прошёл успешно, серверные данные теперь авторитетны.
-    if (dirtyRows.length > 0 && (initialPendingRows?.length ?? 0) > 0) {
-      const merged = mergeServerWithPending(clean, dirtyRows);
-
-      cachedRowsRef.current = merged;
-      setCacheVersion(v => v + 1);
-      onAllItemsChangeRef.current?.(merged);
-      // Оповещаем родителя — данные могли обновиться на сервере
-      notifyParent(merged);
-      return;
-    }
-
-    // Нет pending-строк — чистая замена кэша.
-    // Исключение: если кэш содержит tmp-строки (уже закоммиченные, но ещё
-    // не подтверждённые refetch) и сервер вернул 0 строк — ждём refetch.
-    // Это устраняет мерцание в момент когда parentUuid только что появился
-    // (новый документ) и query ещё не успела вернуть свежие данные.
-    const hasTmpRows = deferRemoteChanges && prev.some(r =>
-      typeof r.uuid === "string" && r.uuid.startsWith("tmp-"),
-    );
-    if (hasTmpRows && clean.length === 0) return;
-
-    const hadDirtyRows = prev.some(r => r._pendingAction);
-    const countChanged = prev.length !== clean.length;
-    // Сравниваем содержимое: проверяем id, uuid и все скалярные поля (deep compare).
-    // Ранее сравнивались только id/uuid, что пропускало обновления содержимого строк.
-    const contentChanged = countChanged || prev.some((r, i) => {
-      const c = clean[i];
-      if (!c || r.id !== c.id || r.uuid !== c.uuid) return true;
-      // Быстрая deep-проверка через JSON
-      return JSON.stringify(r) !== JSON.stringify(c);
-    });
-
-    cachedRowsRef.current = clean;
-    setCacheVersion(v => v + 1);
-    onAllItemsChangeRef.current?.(clean);
-
-    // Оповещаем родителя:
-    // - ВСЕГДА если были dirty-строки (чтобы родитель узнал что pending очищен)
-    // - ВСЕГДА если данные реально изменились (новые/удалённые строки с сервера)
-    if (deferRemoteChanges && (hadDirtyRows || contentChanged)) {
-      notifyParent(clean);
-    }
-  }, [allItems, dataUpdatedAt, mergeTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const rows = useMemo(() => {
-    return cachedRowsRef.current;
-  }, [cacheVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [handleDeleteRaw, deferRemoteChanges, cachedRowsRef, setCacheVersion, notifyParent]);
 
   // ── Обработчики ────────────────────────────────────────────────────────
   const handleSortChange = useCallback((s: typeof sort) => {
@@ -783,7 +531,7 @@ const SubTable: FC<SubTableProps> = ({
       cachedRowsRef.current = []; setCacheVersion(0); updateAdaptiveLimit(500);
     }
     setSort(next);
-  }, [updateAdaptiveLimit, defaultSort, columns, serverSort, parentUuid, clientSort]);
+  }, [updateAdaptiveLimit, defaultSort, columns, serverSort, parentUuid, clientSort, cachedRowsRef, setCacheVersion]);
 
   const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => {
     setFilter(prev => {
@@ -818,7 +566,7 @@ const SubTable: FC<SubTableProps> = ({
     // Кэш cachedRowsRef НЕ сбрасываем — useEffect на [allItems] обновит его когда придут новые данные,
     // а пока пользователь видит предыдущие строки вместо пустой таблицы.
     void queryClient.invalidateQueries({ queryKey: [model] });
-  }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model, deferRemoteChanges, notifyParent]);
+  }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model, deferRemoteChanges, notifyParent, cachedRowsRef, setCacheVersion, pendingAppliedRef]);
 
   // ── Inline-редактирование ──────────────────────────────────────────────
   const handleInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
@@ -865,7 +613,7 @@ const SubTable: FC<SubTableProps> = ({
     } finally {
       setOpCount(c => c - 1);
     }
-  }, [model, refetch, customInlineChange, deferRemoteChanges, validateCell, setCellError]);
+  }, [model, refetch, customInlineChange, deferRemoteChanges, validateCell, setCellError, cachedRowsRef, setCacheVersion, notifyParent]);
 
   const toggleInlineEditing = useCallback(() => setInlineEditing(prev => !prev), []);
 
@@ -883,7 +631,7 @@ const SubTable: FC<SubTableProps> = ({
     );
     setCacheVersion(v => v + 1);
     notifyParent(cachedRowsRef.current);
-  }, [validateCell, setCellError]);
+  }, [validateCell, setCellError, cachedRowsRef, setCacheVersion, notifyParent]);
 
   // ── Refs для фокуса после добавления строки ──────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null);
@@ -962,7 +710,7 @@ const SubTable: FC<SubTableProps> = ({
     } finally {
       setOpCount(c => c - 1);
     }
-  }, [deferRemoteChanges, updateLocalRow, model, refetch, setCellError]);
+  }, [deferRemoteChanges, updateLocalRow, model, refetch, setCellError, cachedRowsRef, setCacheVersion]);
 
   const ctx: SubTableContext = useMemo(() => ({
     // Важно: возвращаем именно displayRows (отображаемые строки в их видимом
@@ -980,66 +728,12 @@ const SubTable: FC<SubTableProps> = ({
   }), [refetch, inlineEditing, disabled, handleInlineChange, updateLocalRow, deferRemoteChanges, setCellError, handleLookupChange, expandedRowIds, toggleExpandRow]);
 
   // ── Фронтенд-фильтрация (всегда на фронте) ─────────────────────────────
-  const displayRows = useMemo(() => {
-    // 1. Скрываем строки, помеченные на удаление
-    let visible: PendingRow[] = deferRemoteChanges
-      ? rows.filter(r => r._pendingAction !== "delete")
-      : rows;
-
-
-    // 2. Фильтруем по владельцу (parentKey) — защитный слой на фронтенде,
-    //    даже если сервер вернул лишние строки или данные из кеша
-    if (parentUuid && parentKey) {
-      visible = visible.filter(r => {
-        // Пропускаем новые temp-строки (id < 0) — у них parentKey всегда правильный
-        if (typeof r.id === "number" && r.id < 0) return true;
-        return r[parentKey] === parentUuid;
-      });
-    }
-
-    // 3. Применяем клиентскую сортировку: корректно обрабатывает ссылочные поля
-    //    (напр. "unitOfMeasure.name") и pending-строки, не отправленные на сервер.
-    //    sortTableRows использует getNestedValue → поддерживает dot-notation.
-    //    Pending create строки выносим из сортировки и приклеиваем В КОНЕЦ —
-    //    новая добавленная строка всегда отображается после последней существующей,
-    //    независимо от направления сортировки и знака временного id.
-    // 3a. Если задан computeRow — обогащаем строки динамическими полями
-    //     (например "amountNetOfIndirectTaxes"), чтобы sortTableRows нашёл значение
-    //     через getNestedValue. Серверные поля при этом не перезаписываются —
-    //     computeRow возвращает только дополнительные ключи.
-    const enriched = computeRow
-      ? visible.map(r => ({ ...r, ...computeRow(r) }))
-      : visible;
-    // Новые (несохранённые) строки — либо активный pending create, либо
-    // уже закоммиченные tmp-строки (отрицательный id / uuid "tmp-...") до
-    // прихода refetch. Оба случая приклеиваем В КОНЕЦ, чтобы порядок не
-    // менялся в момент между commit и подтверждением с сервера.
-    const isTmpRow = (r: PendingRow) =>
-      r._pendingAction === "create" ||
-      (typeof r.id === "number" && r.id < 0) ||
-      (typeof r.uuid === "string" && r.uuid.startsWith("tmp-"));
-    // В режиме clientSort весь набор — инъектированные данные (все «create»),
-    // поэтому сортируем ВСЕ строки. В обычном режиме новые (несохранённые)
-    // строки выносим в конец, чтобы только что добавленная «+» не «прыгала».
-    const pendingCreates = clientSort ? [] : enriched.filter(isTmpRow);
-    const others = pendingCreates.length
-      ? enriched.filter(r => !isTmpRow(r))
-      : enriched;
-    const sortedOthers = sortTableRows(others, sort);
-    const sorted = pendingCreates.length
-      ? [...sortedOthers, ...pendingCreates]
-      : sortedOthers;
-
-    if (!search) return sorted;
-    // Если задан кастомный filterRows — используем его
-    if (filterRows) return filterRows(sorted, search);
-    // Иначе — поиск только по видимым колонкам (включая ссылочные поля)
-    // Нормализуем слова поиска: заменяем запятую на точку, чтобы "3,5" находило числа "3.5"
-    const words = search.toLowerCase().split(/\s+/).filter(Boolean)
-      .map(w => w.replace(',', '.'));
-    const visibleCols = columns.filter(c => c.visible);
-    return sorted.filter((row: TDataItem) => matchRowBySearch(row, visibleCols, words));
-  }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow, columns, clientSort]);
+  // Конвейер отображаемых строк вынесен в чистую computeDisplayRows (см. выше),
+  // useMemo лишь кеширует результат по тем же зависимостям.
+  const displayRows = useMemo(
+    () => computeDisplayRows({ rows, deferRemoteChanges, parentUuid, parentKey, computeRow, clientSort, sort, search, filterRows, columns }),
+    [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow, columns, clientSort],
+  );
 
   // Синхронизируем ref c актуальным displayRows (используется в ctx.rows
   // и в клавиатурном обработчике для навигации).
@@ -1180,7 +874,7 @@ const SubTable: FC<SubTableProps> = ({
         setOpCount(c => c - 1);
       }
     }
-  }, [deferRemoteChanges, tempIdRef, columns, parentKey, parentUuid, extraQueryParams, onInlineAddProp, defaultNewRow, model, ctx, refetch]);
+  }, [deferRemoteChanges, tempIdRef, columns, parentKey, parentUuid, extraQueryParams, onInlineAddProp, defaultNewRow, model, ctx, refetch, cachedRowsRef, setCacheVersion, notifyParent]);
 
   // ── Обработчик клавиатуры на контейнере таблицы ───────────────────────
   // Поведение (только в inline-режиме редактирования; в readonly — не работает):

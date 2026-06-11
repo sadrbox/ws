@@ -40,6 +40,9 @@ export interface UseBasisMismatchArgs {
 	itemKeys?: readonly string[];
 	/** Не сравнивать строки (для header-документов без табличной части, напр. банк-выписка). */
 	ignoreItems?: boolean;
+	/** Ключи шапки, которых НЕТ в дочернем документе (напр. у счёта-фактуры нет
+	 *  warehouseUuid) — не считать расхождением, даже если они есть у основания. */
+	ignoreFields?: readonly string[];
 }
 
 export interface BasisMismatchResult {
@@ -64,6 +67,7 @@ export function useBasisMismatch({
 	fieldLabels,
 	itemKeys = DEFAULT_ITEM_KEYS,
 	ignoreItems = false,
+	ignoreFields,
 }: UseBasisMismatchArgs): BasisMismatchResult {
 	const enabled = !!basisType && !!basisUuid;
 
@@ -87,6 +91,7 @@ export function useBasisMismatch({
 			// Сравниваем только поля, которые реально есть у зависимого документа
 			// (напр. у счёта-фактуры нет warehouseUuid — не считаем расхождением).
 			if (!(key in (currentFields ?? {}))) continue;
+			if (ignoreFields?.includes(key)) continue;
 			if (!isEquivalent(basisFields[key], currentFields?.[key])) {
 				differences.push(fieldLabel(key, fieldLabels));
 			}
@@ -122,7 +127,7 @@ export function useBasisMismatch({
 		}
 
 		return { mismatch: differences.length > 0, differences };
-	}, [enabled, data, currentFields, currentItems, fieldLabels, itemKeys, ignoreItems]);
+	}, [enabled, data, currentFields, currentItems, fieldLabels, itemKeys, ignoreItems, ignoreFields]);
 }
 
 export default useBasisMismatch;

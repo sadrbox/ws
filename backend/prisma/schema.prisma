@@ -692,10 +692,18 @@ model CashOrder {
   date             DateTime      @default(now())
   comment          String?
   amount           Decimal?      @db.Decimal(18, 2)
+  /// Тип кассовой операции (определяет корр-счёт проводки). null → дефолт по direction.
+  operationType    String?
+  /// Документ-основание (тип/uuid + человекочитаемая метка).
+  basisDocumentType  String?
+  basisDocumentUuid  String?
+  basisDocumentLabel String?
   organizationUuid String?
   counterpartyUuid String?
   contractUuid     String?
   cashboxUuid      String?
+  /// Подотчётное лицо (сотрудник) — для операций «выдача/возврат подотчёт» (счёт 1250).
+  employeeUuid     String?
   authorUuid       String
   posted           Boolean       @default(true)
   updatedAt        DateTime      @default(now()) @updatedAt
@@ -704,12 +712,14 @@ model CashOrder {
   contract         Contract?     @relation("ContractCashOrders", fields: [contractUuid], references: [uuid])
   counterparty     Counterparty? @relation("CpCashOrders", fields: [counterpartyUuid], references: [uuid])
   organization     Organization? @relation("OrgCashOrders", fields: [organizationUuid], references: [uuid])
+  employee         Employee?     @relation("CashOrderEmployee", fields: [employeeUuid], references: [uuid])
   author           User          @relation("CashOrderAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
   @@index([cashboxUuid])
+  @@index([employeeUuid])
   @@index([authorUuid])
   @@index([direction])
   @@index([date])
@@ -1052,6 +1062,7 @@ model Employee {
   users               User[]
   salesManaged        Sale[]               @relation("SaleManager")
   saleReturnsManaged  SaleReturn[]         @relation("SaleReturnManager")
+  accountableCashOrders CashOrder[]        @relation("CashOrderEmployee")
 
   @@index([organizationUuid])
   @@index([updatedAt])

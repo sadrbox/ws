@@ -90,6 +90,7 @@ import chartOfAccountsRouter from "./api/router/chartofaccounts.js";
 import subkontoTypesRouter from "./api/router/subkontotypes.js";
 import accountingRouter from "./api/router/accounting.js";
 import documentNumberSettingsRouter from "./api/router/documentnumbersettings.js";
+import documentNumberRouter from "./api/router/documentNumber.js";
 import priceTypesRouter from "./api/router/pricetypes.js";
 import productPricesRouter from "./api/router/productprices.js";
 
@@ -320,6 +321,7 @@ app.use("/api/v1", chartOfAccountsRouter);
 app.use("/api/v1", subkontoTypesRouter);
 app.use("/api/v1", accountingRouter);
 app.use("/api/v1", documentNumberSettingsRouter);
+app.use("/api/v1", documentNumberRouter);
 app.use("/api/v1", priceTypesRouter);
 app.use("/api/v1", productPricesRouter);
 

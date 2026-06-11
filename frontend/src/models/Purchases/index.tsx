@@ -7,6 +7,7 @@ import { FC, useMemo, useCallback, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
+import { useAssignNumber } from "src/hooks/useAssignNumber";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -37,7 +38,6 @@ import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
 import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
-import { isEquivalent } from "src/utils/normalize";
 import { PurchaseReturnsForm } from "src/models/PurchaseReturns";
 import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
 import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
@@ -78,6 +78,40 @@ const DEFAULT_FIELDS: TFields = {
   basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "",
 };
 
+/** Сид панели формы поступления (paneProps.data). */
+interface PurchasePaneData {
+  uuid?: string;
+  fromBasisFields?: Partial<TFields>;
+  fromBasisItems?: TDataItem[];
+  organizationUuid?: string;
+  organizationName?: string;
+  counterpartyUuid?: string;
+  counterpartyName?: string;
+}
+
+/** Серверная запись документа поступления (вход mapServerToForm). */
+interface PurchaseServerRecord {
+  id?: number;
+  uuid?: string;
+  number?: string | null;
+  date?: string | null;
+  comment?: string | null;
+  amount?: number | string | null;
+  vatAmount?: number | string | null;
+  discountAmount?: number | string | null;
+  amountWithoutVat?: number | string | null;
+  posted?: boolean;
+  organizationUuid?: string | null; organization?: { name?: string | null } | null;
+  warehouseUuid?: string | null; warehouse?: { name?: string | null } | null;
+  counterpartyUuid?: string | null; counterparty?: { name?: string | null } | null;
+  contractUuid?: string | null; contract?: { name?: string | null } | null;
+  priceTypeUuid?: string | null; priceType?: { name?: string | null } | null;
+  authorUuid?: string | null; author?: { uuid?: string | null; username?: string | null; email?: string | null } | null;
+  basisDocumentType?: string | null;
+  basisDocumentUuid?: string | null;
+  basisDocumentLabel?: string | null;
+}
+
 const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
@@ -86,27 +120,27 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {
-    const data = paneProps.data as any;
+    const data = paneProps.data as PurchasePaneData | undefined;
     if (data?.uuid) return undefined;
-    if (data?.fromBasisFields) return { ...DEFAULT_FIELDS, ...data.fromBasisFields } as TFields;
+    if (data?.fromBasisFields) return { ...DEFAULT_FIELDS, ...data.fromBasisFields };
     const init = { ...DEFAULT_FIELDS };
     init.date = isoToLocalInput(new Date().toISOString());
     if (data?.organizationUuid) {
-      init.organizationUuid = data?.organizationUuid as string;
-      init.organizationName = (data?.organizationName as string) || "";
+      init.organizationUuid = data.organizationUuid;
+      init.organizationName = data.organizationName || "";
     } else if (defaultOrg.organizationUuid) {
       init.organizationUuid = defaultOrg.organizationUuid;
       init.organizationName = defaultOrg.organizationName;
     }
     if (data?.counterpartyUuid) {
-      init.counterpartyUuid = data?.counterpartyUuid as string;
-      init.counterpartyName = (data?.counterpartyName as string) || "";
+      init.counterpartyUuid = data.counterpartyUuid;
+      init.counterpartyName = data.counterpartyName || "";
     }
     return init;
   })();
 
-  const [basisItems, setBasisItems] = useState<any[]>(() => {
-    const data = paneProps.data as any;
+  const [basisItems, setBasisItems] = useState<TDataItem[]>(() => {
+    const data = paneProps.data as PurchasePaneData | undefined;
     return Array.isArray(data?.fromBasisItems) && data.fromBasisItems.length > 0
       ? data.fromBasisItems : [];
   });
@@ -138,7 +172,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
         batchEndpoint: "purchaseitems/batch",
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
-        createPayload: (r: any) => ({
+        createPayload: (r: TDataItem) => ({
           sourceRowId: r.sourceRowId ?? null,
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
@@ -148,7 +182,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
           exciseRate: r.exciseRate ?? 0,
           discountPercent: r.discountPercent ?? 0,
         }),
-        updatePayload: (r: any) => ({
+        updatePayload: (r: TDataItem) => ({
           sourceRowId: r.sourceRowId ?? null,
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
@@ -161,7 +195,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
         extraSkipFields: ["purchaseUuid"],
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: PurchaseServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       number: d.number ?? "",
       date: isoToLocalInput(d.date),
@@ -215,7 +249,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   });
 
   const items = form.useTable("items");
-  const allItemsRef = useRef<any[]>([]);
+  const allItemsRef = useRef<TDataItem[]>([]);
   const permDefaultsRef = useRef<UserDefaultsMap>({});
 
   const hasBasis = !!form.fields.basisDocumentUuid;
@@ -265,7 +299,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
   // Смена организации: зависимые поля (склад/договор) → дефолт пользователя для
   // новой орг, иначе очистка.
   const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
-    const cur = form.store.getSnapshot().fields as any;
+    const cur = form.store.getSnapshot().fields;
     if (cur.organizationUuid === uuid) return;
     form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
     const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
@@ -306,7 +340,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     apply: (fields) => form.setFieldsInitial(fields as Partial<TFields>),
   });
 
-  const handleTotalChange = useCallback((total: number, rows?: any[]) => {
+  const handleTotalChange = useCallback((total: number, rows?: TDataItem[]) => {
     form.setField("amount", Number(total));
     if (rows) {
       const vatSum = rows.reduce((s, r) => s + (Number(r.vatAmount) || 0), 0);
@@ -320,6 +354,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     }
   }, [form.setField, form.setFields]);
 
+  const assignNumber = useAssignNumber();
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -327,7 +362,11 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow className={styles.FormHeaderRow}>
-                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")} />
+                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")}
+                  actions={[
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, (n) => form.setField("number", n)) },
+                    { type: "clear", onClick: () => form.setField("number", "") },
+                  ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
                 <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
               </GroupRow>
@@ -419,7 +458,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, assignNumber]);
 
   const handleCreatePurchaseReturn = useCallback(async () => {
     await openDocumentFromBasis(

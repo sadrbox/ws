@@ -21,6 +21,7 @@ const INCLUDE = {
 	counterparty: true,
 	contract: true,
 	cashbox: true,
+	employee: { select: { uuid: true, fullName: true } },
 	author: { select: { uuid: true, username: true, email: true } },
 };
 
@@ -112,17 +113,24 @@ export function createCashOrderRouter({ direction, route, docType }) {
 		try {
 			if (!req.user?.uuid)
 				return res.status(401).json({ success: false, message: "Автор документа обязателен: требуется авторизация" });
-			const { date, comment, amount, organizationUuid, counterpartyUuid, contractUuid, cashboxUuid, posted } = req.body;
+			const { date, comment, amount, organizationUuid, counterpartyUuid, contractUuid, cashboxUuid, employeeUuid, posted,
+				operationType, basisDocumentType, basisDocumentUuid, basisDocumentLabel } = req.body;
 			const willPost = posted === undefined ? true : !!posted;
 			const docData = {
 				direction,
 				date: date ? new Date(date) : new Date(),
 				comment: comment?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
+				// Тип операции определяет проводку; при отсутствии — дефолт по направлению.
+				operationType: operationType || (direction === "receipt" ? "payment_from_customer" : "payment_to_supplier"),
+				basisDocumentType: basisDocumentType || null,
+				basisDocumentUuid: basisDocumentUuid || null,
+				basisDocumentLabel: basisDocumentLabel?.trim?.() ?? basisDocumentLabel ?? null,
 				organizationUuid: organizationUuid || null,
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
 				cashboxUuid: cashboxUuid || null,
+				employeeUuid: employeeUuid || null,
 				posted: willPost,
 				authorUuid: req.user.uuid,
 			};
@@ -146,7 +154,8 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			const n = Number(p);
 			const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 			const data = {};
-			for (const f of ["comment", "organizationUuid", "counterpartyUuid", "contractUuid", "cashboxUuid"]) {
+			for (const f of ["comment", "organizationUuid", "counterpartyUuid", "contractUuid", "cashboxUuid", "employeeUuid",
+				"operationType", "basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"]) {
 				if (req.body[f] !== undefined) data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 			}
 			if (req.body.date !== undefined) data.date = req.body.date ? new Date(req.body.date) : null;

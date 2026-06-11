@@ -14,6 +14,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDateTime } from "src/components/Field";
+import { useAssignNumber } from "src/hooks/useAssignNumber";
 import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
@@ -175,6 +176,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     } as Partial<TFields>);
   }, [form.setFields, form.store]);
 
+  const assignNumber = useAssignNumber();
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -182,7 +184,11 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow className={styles.FormHeaderRow}>
-                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")} />
+                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")}
+                  actions={[
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, (n) => form.setField("number", n)) },
+                    { type: "clear", onClick: () => form.setField("number", "") },
+                  ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} width="180px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
                 <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
               </GroupRow>
@@ -245,7 +251,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         </div>
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items, assignNumber]);
 
   return (
     <FormRequiredScope docType="inventory_transfer" active>

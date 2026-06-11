@@ -18,6 +18,9 @@ export interface CashOrderPrintData {
   counterpartyName?: string;
   contractName?: string;
   cashboxName?: string;
+  operationTypeLabel?: string;   // вид кассовой операции
+  basisDocumentLabel?: string;   // документ-основание
+  employeeName?: string;         // подотчётное лицо (для операций по счёту 1250)
   comment?: string;
 }
 
@@ -37,12 +40,24 @@ const CashOrderPrint: FC<{ data: CashOrderPrintData }> = ({ data }) => (
         <A4Field label="Организация" width="50%">{data.organizationName ?? ""}</A4Field>
         <A4Field label="Касса" width="50%">{data.cashboxName ?? ""}</A4Field>
       </A4Row>
-      <A4Row>
-        <A4Field label="Контрагент" width="50%">{data.counterpartyName ?? ""}</A4Field>
-        <A4Field label="Договор" width="50%">{data.contractName ?? ""}</A4Field>
-      </A4Row>
+      {(data.operationTypeLabel || data.basisDocumentLabel) && (
+        <A4Row>
+          <A4Field label="Вид операции" width="50%">{data.operationTypeLabel ?? ""}</A4Field>
+          <A4Field label="Основание" width="50%">{data.basisDocumentLabel ?? ""}</A4Field>
+        </A4Row>
+      )}
+      {data.employeeName ? (
+        <A4Row>
+          <A4Field label="Подотчётное лицо" width="100%">{data.employeeName}</A4Field>
+        </A4Row>
+      ) : (
+        <A4Row>
+          <A4Field label="Контрагент" width="50%">{data.counterpartyName ?? ""}</A4Field>
+          <A4Field label="Договор" width="50%">{data.contractName ?? ""}</A4Field>
+        </A4Row>
+      )}
       {data.comment && (
-        <A4Row><A4Field label="Основание / комментарий" width="100%">{data.comment}</A4Field></A4Row>
+        <A4Row><A4Field label="Комментарий" width="100%">{data.comment}</A4Field></A4Row>
       )}
     </div>
 

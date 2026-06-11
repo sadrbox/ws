@@ -189,6 +189,12 @@ export const REFERENCE_LABELS = {
 	purchase_requisitions: "Заявки на закупку",
 	cash_receipt_orders: "Приходные кассовые ордера",
 	cash_expense_orders: "Расходные кассовые ордера",
+	cash_orders: "Кассовые ордера",
+	sales_orders: "Заказы покупателя",
+	purchase_orders: "Заказы поставщику",
+	commercial_offers: "Коммерческие предложения",
+	reservations: "Резервирования",
+	bank_statements: "Банковские выписки",
 	payroll_calculations: "Начисления ЗП",
 	payroll_payments: "Выплаты ЗП",
 	brands: "Бренды",
@@ -259,6 +265,12 @@ const BASIS_CHILD_TABLES = [
 	"sale_returns",
 	"purchase_returns",
 	"purchase_requisitions",
+	"cash_orders",
+	"sales_orders",
+	"purchase_orders",
+	"commercial_offers",
+	"reservations",
+	"bank_statements",
 ];
 
 /**
@@ -276,6 +288,10 @@ const BASIS_SOURCE_MODELS = new Set([
 	"purchaseReturn",
 	"purchaseRequisition",
 	"inventoryTransfer",
+	"salesOrder",
+	"purchaseOrder",
+	"commercialOffer",
+	"reservation",
 ]);
 
 /**

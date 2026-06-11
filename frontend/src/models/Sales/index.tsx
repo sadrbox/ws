@@ -2,11 +2,12 @@ import { FC, useMemo, useCallback, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
+import { useAssignNumber } from "src/hooks/useAssignNumber";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDateTime, Divider } from "src/components/Field";
+import { Field, FieldDateTime } from "src/components/Field";
 import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
 import LookupField from "src/components/Field/LookupField";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
@@ -23,7 +24,6 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { validateDocumentFields, formatValidationErrors, getDocumentFillHint } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
-import { Toolbar } from "src/components/Toolbar";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
@@ -37,7 +37,6 @@ import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
 import { openDocumentFromBasis, mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
-import { isEquivalent } from "src/utils/normalize";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
@@ -81,6 +80,84 @@ const DEFAULT_FIELDS: TFields = {
   basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "",
 };
 
+/** Строка таблицы saleItems с типизированными бизнес-полями (payload / контроль остатка). */
+interface SaleItemRow extends TDataItem {
+  _pendingAction?: "create" | "update" | "delete";
+  sourceRowId?: string | null;
+  productUuid?: string | null;
+  quantity?: number | string | null;
+  price?: number | string | null;
+  unitOfMeasureUuid?: string | null;
+  vatRate?: number | string | null;
+  exciseRate?: number | string | null;
+  discountPercent?: number | string | null;
+  datetime?: string | null;
+  posted?: boolean;
+  organization?: { uuid?: string | null } | null;
+  counterparty?: { uuid?: string | null } | null;
+  warehouse?: { uuid?: string | null } | null;
+  organizationUuid?: string | null;
+  counterpartyUuid?: string | null;
+  warehouseUuid?: string | null;
+}
+
+/** Сид панели формы реализации (paneProps.data). */
+interface SalesPaneData {
+  uuid?: string;
+  fromBasisFields?: Partial<TFields>;
+  fromBasisItems?: TDataItem[];
+  organizationUuid?: string;
+  counterpartyUuid?: string;
+}
+
+interface OrgRef { name?: string | null; bin?: string | null; iin?: string | null; address?: string | null }
+interface ManagerRef { fullName?: string | null; lastName?: string | null; firstName?: string | null; middleName?: string | null }
+interface AuthorRef { uuid?: string | null; username?: string | null; email?: string | null }
+
+/** Серверная запись документа реализации (ответ GET sales/:uuid, вход mapServerToForm). */
+interface SaleServerRecord {
+  id?: number;
+  uuid?: string;
+  number?: string | null;
+  date?: string | null;
+  comment?: string | null;
+  amount?: number | string | null;
+  posted?: boolean;
+  organizationUuid?: string | null; organization?: OrgRef | null;
+  counterpartyUuid?: string | null; counterparty?: OrgRef | null;
+  contractUuid?: string | null; contract?: { name?: string | null } | null;
+  warehouseUuid?: string | null; warehouse?: { name?: string | null } | null;
+  managerUuid?: string | null; manager?: ManagerRef | null;
+  priceTypeUuid?: string | null; priceType?: { name?: string | null } | null;
+  vatAmount?: number | string | null;
+  discountAmount?: number | string | null;
+  amountWithoutVat?: number | string | null;
+  authorUuid?: string | null; author?: AuthorRef | null;
+  basisDocumentType?: string | null;
+  basisDocumentUuid?: string | null;
+  basisDocumentLabel?: string | null;
+}
+
+/** Серверная позиция документа реализации (ответ GET saleitems, вход печати). */
+interface SaleItemServerRecord {
+  product?: { name?: string | null; isService?: boolean | null } | null;
+  productName?: string | null;
+  name?: string | null;
+  unitOfMeasure?: { name?: string | null } | null;
+  unitOfMeasureName?: string | null;
+  quantity?: number | string | null;
+  price?: number | string | null;
+  discountPercent?: number | string | null;
+  discountAmount?: number | string | null;
+  exciseRate?: number | string | null;
+  exciseAmount?: number | string | null;
+  amountWithoutVat?: number | string | null;
+  amountNetOfIndirectTaxes?: number | string | null;
+  vatRate?: number | string | null;
+  vatAmount?: number | string | null;
+  amount?: number | string | null;
+}
+
 const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
@@ -88,19 +165,19 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {
-    const data = paneProps.data as any;
+    const data = paneProps.data as SalesPaneData | undefined;
     if (data?.uuid) return undefined;
-    if (data?.fromBasisFields) return { ...DEFAULT_FIELDS, ...data.fromBasisFields } as TFields;
+    if (data?.fromBasisFields) return { ...DEFAULT_FIELDS, ...data.fromBasisFields };
     const init = { ...DEFAULT_FIELDS };
     init.date = isoToLocalInput(new Date().toISOString());
-    if (data?.organizationUuid) { init.organizationUuid = data?.organizationUuid as string; }
+    if (data?.organizationUuid) { init.organizationUuid = data.organizationUuid; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
-    if (data?.counterpartyUuid) { init.counterpartyUuid = data?.counterpartyUuid as string; }
+    if (data?.counterpartyUuid) { init.counterpartyUuid = data.counterpartyUuid; }
     return init;
   })();
 
-  const [basisItems, setBasisItems] = useState<any[]>(() => {
-    const data = paneProps.data as any;
+  const [basisItems, setBasisItems] = useState<TDataItem[]>(() => {
+    const data = paneProps.data as SalesPaneData | undefined;
     return Array.isArray(data?.fromBasisItems) && data.fromBasisItems.length > 0
       ? data.fromBasisItems : [];
   });
@@ -123,7 +200,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
   // Текущие строки таблицы (server + pending) — заполняется onAllItemsChange.
   // Объявлено до useFormStore, т.к. используется в onBeforeSave (контроль остатка).
-  const allItemsRef = useRef<any[]>([]);
+  const allItemsRef = useRef<TDataItem[]>([]);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "sales-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
@@ -138,40 +215,46 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         batchEndpoint: "saleitems/batch",
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
-        createPayload: (r: any) => ({
-          sourceRowId: r.sourceRowId ?? null,
-          productUuid: r.productUuid ?? null,
-          quantity: r.quantity ?? 0,
-          price: r.price ?? 0,
-          unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
-          vatRate: r.vatRate ?? 0,
-          exciseRate: r.exciseRate ?? 0,
-          discountPercent: r.discountPercent ?? 0,
-          datetime: r.datetime ?? null,
-          posted: r.posted === true,
-          organizationUuid: r.organization?.uuid ?? r.organizationUuid ?? null,
-          counterpartyUuid: r.counterparty?.uuid ?? r.counterpartyUuid ?? null,
-          warehouseUuid: r.warehouse?.uuid ?? r.warehouseUuid ?? null,
-        }),
-        updatePayload: (r: any) => ({
-          sourceRowId: r.sourceRowId ?? null,
-          productUuid: r.productUuid ?? null,
-          quantity: r.quantity ?? 0,
-          price: r.price ?? 0,
-          unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
-          vatRate: r.vatRate ?? 0,
-          exciseRate: r.exciseRate ?? 0,
-          discountPercent: r.discountPercent ?? 0,
-          datetime: r.datetime ?? null,
-          posted: r.posted === true,
-          organizationUuid: r.organization?.uuid ?? r.organizationUuid ?? null,
-          counterpartyUuid: r.counterparty?.uuid ?? r.counterpartyUuid ?? null,
-          warehouseUuid: r.warehouse?.uuid ?? r.warehouseUuid ?? null,
-        }),
+        createPayload: (r: TDataItem) => {
+          const row = r as SaleItemRow;
+          return {
+            sourceRowId: row.sourceRowId ?? null,
+            productUuid: row.productUuid ?? null,
+            quantity: row.quantity ?? 0,
+            price: row.price ?? 0,
+            unitOfMeasureUuid: row.unitOfMeasureUuid ?? null,
+            vatRate: row.vatRate ?? 0,
+            exciseRate: row.exciseRate ?? 0,
+            discountPercent: row.discountPercent ?? 0,
+            datetime: row.datetime ?? null,
+            posted: row.posted === true,
+            organizationUuid: row.organization?.uuid ?? row.organizationUuid ?? null,
+            counterpartyUuid: row.counterparty?.uuid ?? row.counterpartyUuid ?? null,
+            warehouseUuid: row.warehouse?.uuid ?? row.warehouseUuid ?? null,
+          };
+        },
+        updatePayload: (r: TDataItem) => {
+          const row = r as SaleItemRow;
+          return {
+            sourceRowId: row.sourceRowId ?? null,
+            productUuid: row.productUuid ?? null,
+            quantity: row.quantity ?? 0,
+            price: row.price ?? 0,
+            unitOfMeasureUuid: row.unitOfMeasureUuid ?? null,
+            vatRate: row.vatRate ?? 0,
+            exciseRate: row.exciseRate ?? 0,
+            discountPercent: row.discountPercent ?? 0,
+            datetime: row.datetime ?? null,
+            posted: row.posted === true,
+            organizationUuid: row.organization?.uuid ?? row.organizationUuid ?? null,
+            counterpartyUuid: row.counterparty?.uuid ?? row.counterpartyUuid ?? null,
+            warehouseUuid: row.warehouse?.uuid ?? row.warehouseUuid ?? null,
+          };
+        },
         extraSkipFields: ["saleUuid"],
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: SaleServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       number: d.number ?? "",
       date: isoToLocalInput(d.date),
@@ -228,7 +311,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     // покрывает списываемые количества. Прерывает сохранение до любого HTTP.
     onBeforeSave: async (fd) => {
       if (fd.posted !== true) return null;
-      let rows = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+      let rows = allItemsRef.current.filter((r) => (r as SaleItemRow)._pendingAction !== "delete");
       if (rows.length === 0 && fd.uuid) {
         rows = await fetchDocumentItems("saleitems", "saleUuid", fd.uuid);
       }
@@ -236,7 +319,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         documentType: "sale",
         documentUuid: fd.uuid || undefined,
         warehouseUuid: fd.warehouseUuid || null,
-        items: rows.map((r: any) => ({ productUuid: r.productUuid, quantity: r.quantity })),
+        items: rows.map((r) => { const row = r as SaleItemRow; return { productUuid: row.productUuid, quantity: row.quantity }; }),
       });
       return shortages.length ? formatStockShortages(shortages) : null;
     },
@@ -327,7 +410,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     apply: (fields) => form.setFieldsInitial(fields as Partial<TFields>),
   });
 
-  const handleTotalChange = useCallback((total: number, items?: any[]) => {
+  const handleTotalChange = useCallback((total: number, items?: TDataItem[]) => {
     form.setField("amount", Number(total));
     if (items) {
       const vatSum = items.reduce((s, r) => s + (Number(r.vatAmount) || 0), 0);
@@ -385,7 +468,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   // Смена организации: зависимые поля (склад/договор) → дефолт пользователя для
   // новой орг, иначе очистка (значение принадлежало прежней организации).
   const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
-    const cur = form.store.getSnapshot().fields as any;
+    const cur = form.store.getSnapshot().fields;
     if (cur.organizationUuid === uuid) return;
     form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
     const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
@@ -401,11 +484,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     if (!form.fields.uuid) return;
     try {
       const [saleResp, itemsResp] = await Promise.all([
-        api.get<{ success?: boolean; item?: any } | any>(`sales/${form.fields.uuid}`),
-        api.get<{ success?: boolean; items?: any[] } | any>(`saleitems`, { params: { saleUuid: form.fields.uuid } }),
+        api.get<{ success?: boolean; item?: SaleServerRecord }>(`sales/${form.fields.uuid}`),
+        api.get<{ success?: boolean; items?: SaleItemServerRecord[] }>(`saleitems`, { params: { saleUuid: form.fields.uuid } }),
       ]);
-      const sale = (saleResp)?.item ?? saleResp;
-      const allItems: any[] = (itemsResp)?.items ?? (Array.isArray(itemsResp) ? itemsResp : []);
+      const sale = (saleResp?.item ?? saleResp) as SaleServerRecord;
+      const allItems = (itemsResp?.items ?? (Array.isArray(itemsResp) ? itemsResp : [])) as SaleItemServerRecord[];
 
       // Фильтрация по типу позиции: накладная — только товары, акт — только услуги/работы
       const filtered = allItems.filter((it) =>
@@ -586,6 +669,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     ) : null,
   );
 
+  const assignNumber = useAssignNumber();
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -596,7 +680,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               {/* ── Левая колонка: поля ── */}
               {/* Строка 1: Дата · Проведён · Статус */}
               <GroupRow className={styles.FormHeaderRow}>
-                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")} />
+                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")}
+                  actions={[
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, (n) => form.setField("number", n)) },
+                    { type: "clear", onClick: () => form.setField("number", "") },
+                  ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
                 <FieldTogglePostedDocument
                   name={`${form.formUid}_posted`}
@@ -687,7 +775,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, handleOrganizationSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, handleOrganizationSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, assignNumber]);
 
   return (
     <FormRequiredScope docType="sale" active>

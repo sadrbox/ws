@@ -136,7 +136,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
 
   const recalcedInitialPendingRows = useMemo(() => {
     if (!initialPendingRows || initialPendingRows.length === 0) return initialPendingRows;
-    const method = (vatCalculationMethod || "INCLUDED") as string;
+    const method = vatCalculationMethod || "INCLUDED";
     return initialPendingRows.map((row) => {
       const calc = recalcSaleItemAmounts(
         row.quantity, row.price, row.vatRate, row.discountPercent, method, row.exciseRate,
@@ -146,8 +146,8 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   }, [initialPendingRows, vatCalculationMethod]);
 
   const dynamicColumns = useMemo(() => {
-    let base = (columnsJson as Array<Record<string, unknown>>).filter((c) => {
-      const id = c.identifier as string;
+    let base = (columnsJson as unknown as TColumn[]).filter((c) => {
+      const id = c.identifier;
       if (!isVatEnabled && VAT_COLUMN_IDS.has(id)) return false;
       if (!useDiscount && DISCOUNT_COLUMN_IDS.has(id)) return false;
       if (!useExcise && EXCISE_COLUMN_IDS.has(id)) return false;
@@ -214,7 +214,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       dynHints["amount"] = { hint: lines.join("\n"), ...(name ? { name } : {}) };
     }
     base = base.map((c) => {
-      const id = c.identifier as string;
+      const id = c.identifier;
       const patch = dynHints[id];
       return patch ? { ...c, ...patch } : c;
     });
@@ -233,7 +233,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     }
     if (defaultHiddenColumns && defaultHiddenColumns.length > 0) {
       const hidden = new Set(defaultHiddenColumns);
-      base = base.map((c) => hidden.has(c.identifier as string) ? { ...c, visible: false } : c);
+      base = base.map((c) => hidden.has(c.identifier) ? { ...c, visible: false } : c);
     }
     return base;
   }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns]);

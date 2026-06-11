@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FC } from "react";
 import type { TPane } from "src/app/types";
+import type { TDataItem } from "src/components/Table/types";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { getFormatDateOnly } from "src/utils/datetime";
@@ -387,12 +388,12 @@ export async function fetchDocumentItems(
 	itemsEndpoint: string,
 	parentField: string,
 	parentUuid: string,
-): Promise<any[]> {
+): Promise<TDataItem[]> {
 	if (!parentUuid) return [];
 	const resp = await api.get(`/${itemsEndpoint}`, {
 		params: { [parentField]: parentUuid, limit: 1000 },
 	});
-	return unwrapList(resp);
+	return unwrapList<TDataItem>(resp);
 }
 
 /**

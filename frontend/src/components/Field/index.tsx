@@ -39,14 +39,15 @@ import { getFormatNumerical, parseNumericInput } from 'src/components/Table/serv
 // Карта тип-действия → иконка из общего реестра + подпись.
 // fieldActions описывают только тип, обработчик и (опц.) состояние —
 // визуал инкапсулирован в FieldActionButton/IconButton.
-const FIELD_ACTION_META: Record<'clear' | 'list' | 'open', { icon: IconName; label: string }> = {
+const FIELD_ACTION_META: Record<'clear' | 'list' | 'open' | 'assignNumber', { icon: IconName; label: string }> = {
   clear: { icon: "clear", label: "Очистить" },
   list: { icon: "list", label: "Выбрать из списка" },
   open: { icon: "open", label: "Открыть" },
+  assignNumber: { icon: "recalc", label: "Присвоить номер" },
 };
 
 // Типы для действий
-type FieldActionType = 'clear' | 'list' | 'open';
+type FieldActionType = 'clear' | 'list' | 'open' | 'assignNumber';
 
 interface FieldAction {
   type: FieldActionType;

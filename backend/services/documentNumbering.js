@@ -100,6 +100,32 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 }
 
 /**
+ * Текущий формат нумерации документа: префикс/ширина/включена. Префикс и ширина —
+ * из настроек организации (с глобальным дефолтом). По умолчанию префикса нет.
+ * @returns {Promise<{prefix:string, padding:number, enabled:boolean}|null>}
+ */
+export async function getNumberFormat(docType, organizationUuid, client = prisma) {
+	if (!NUMBER_CONFIG[docType]) return null;
+	const settings = await loadSettings(client, organizationUuid);
+	return {
+		prefix: (settings[docType]?.prefix ?? "").trim(),
+		padding: settings[docType]?.padding || 9,
+		enabled: settings[docType]?.enabled !== false,
+	};
+}
+
+/**
+ * Форматирует числовое значение номера: «{ПРЕФИКС}-{NNNN}» или «{NNNN}» (без
+ * префикса), с дополнением нулями до padding. Best practice: номера группируются
+ * по ПРЕФИКСУ — это отдельные последовательности («ыва34234» с префиксом «ыва» и
+ * «000034235» без префикса — РАЗНЫЕ ряды).
+ */
+export function formatDocNumber(prefix, padding, value) {
+	const seq = String(Number(value) || 0).padStart(padding, "0");
+	return prefix ? `${prefix}-${seq}` : seq;
+}
+
+/**
  * Проставляет data.number, если он не задан явно (мутирует data). Вызывать в
  * create-эндпоинтах ПЕРЕД prisma.create.
  */

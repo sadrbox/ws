@@ -6,7 +6,9 @@ import { FC, useMemo, useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import type { TPane } from "src/app/types";
+import type { TDataItem } from "src/components/Table/types";
 import { Field, FieldDateTime } from "src/components/Field";
+import { useAssignNumber } from "src/hooks/useAssignNumber";
 import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
 import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
@@ -105,6 +107,57 @@ const DEFAULT_FIELDS: TFields = {
   basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "",
 };
 
+/** Сид панели инвойс-подобной формы (paneProps.data). */
+interface InvoicePaneData {
+  uuid?: string;
+  fromBasisFields?: Partial<TFields>;
+  fromBasisItems?: TDataItem[];
+  organizationUuid?: string;
+  organizationName?: string;
+  counterpartyUuid?: string;
+  counterpartyName?: string;
+}
+
+/** Серверная запись инвойс-подобного документа (вход mapServerToForm). */
+interface InvoiceServerRecord {
+  id?: number;
+  uuid?: string;
+  number?: string | null;
+  date?: string | null;
+  comment?: string | null;
+  amount?: number | string | null;
+  vatAmount?: number | string | null;
+  discountAmount?: number | string | null;
+  amountWithoutVat?: number | string | null;
+  posted?: boolean;
+  organizationUuid?: string | null; organization?: { name?: string | null } | null;
+  counterpartyUuid?: string | null; counterparty?: { name?: string | null } | null;
+  contractUuid?: string | null; contract?: { name?: string | null } | null;
+  warehouseUuid?: string | null; warehouse?: { name?: string | null } | null;
+  authorUuid?: string | null; author?: { uuid?: string | null; username?: string | null; email?: string | null } | null;
+  basisDocumentType?: string | null;
+  basisDocumentUuid?: string | null;
+  basisDocumentLabel?: string | null;
+}
+
+/** Строка позиции инвойса для печати (live-строки таблицы с relation-объектами). */
+interface InvoiceItemRow extends TDataItem {
+  product?: { name?: string | null } | null;
+  productName?: string | null;
+  unitOfMeasure?: { name?: string | null } | null;
+  unitName?: string | null;
+  quantity?: number | string | null;
+  price?: number | string | null;
+  amount?: number | string | null;
+  amountWithoutVat?: number | string | null;
+  vatRate?: number | string | null;
+  vatAmount?: number | string | null;
+  exciseRate?: number | string | null;
+  exciseAmount?: number | string | null;
+  discountPercent?: number | string | null;
+  discountAmount?: number | string | null;
+}
+
 export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TPane>> {
   const dependentEndpoints = (cfg.createFromBasisTargets ?? [])
     .map((t) => t.existingCheckEndpoint)
@@ -117,27 +170,27 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
     const initialFields: TFields | undefined = (() => {
-      const data = paneProps.data as any;
+      const data = paneProps.data as InvoicePaneData | undefined;
       if (data?.uuid) return undefined;
-      if (data?.fromBasisFields) return { ...DEFAULT_FIELDS, ...data.fromBasisFields } as TFields;
+      if (data?.fromBasisFields) return { ...DEFAULT_FIELDS, ...data.fromBasisFields };
       const init = { ...DEFAULT_FIELDS };
       init.date = isoToLocalInput(new Date().toISOString());
       if (data?.organizationUuid) {
-        init.organizationUuid = data?.organizationUuid as string;
-        init.organizationName = (data?.organizationName as string) || "";
+        init.organizationUuid = data.organizationUuid;
+        init.organizationName = data.organizationName || "";
       } else if (defaultOrg.organizationUuid) {
         init.organizationUuid = defaultOrg.organizationUuid;
         init.organizationName = defaultOrg.organizationName;
       }
       if (data?.counterpartyUuid) {
-        init.counterpartyUuid = data?.counterpartyUuid as string;
-        init.counterpartyName = (data?.counterpartyName as string) || "";
+        init.counterpartyUuid = data.counterpartyUuid;
+        init.counterpartyName = data.counterpartyName || "";
       }
       return init;
     })();
 
-    const [basisItems, setBasisItems] = useState<any[]>(() => {
-      const data = paneProps.data as any;
+    const [basisItems, setBasisItems] = useState<TDataItem[]>(() => {
+      const data = paneProps.data as InvoicePaneData | undefined;
       return Array.isArray(data?.fromBasisItems) && data.fromBasisItems.length > 0
         ? data.fromBasisItems : [];
     });
@@ -167,7 +220,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           endpoint: cfg.itemsEndpoint, parentField: cfg.itemsParentField,
           label: cfg.itemsTabLabel,
           batchEndpoint: `${cfg.itemsEndpoint}/batch`,
-          createPayload: (r: any) => ({
+          createPayload: (r: TDataItem) => ({
             sourceRowId: r.sourceRowId ?? null,
             productUuid: r.productUuid ?? null,
             quantity: r.quantity ?? 0,
@@ -177,7 +230,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             exciseRate: r.exciseRate ?? 0,
             discountPercent: r.discountPercent ?? 0,
           }),
-          updatePayload: (r: any) => ({
+          updatePayload: (r: TDataItem) => ({
             sourceRowId: r.sourceRowId ?? null,
             productUuid: r.productUuid ?? null,
             quantity: r.quantity ?? 0,
@@ -190,7 +243,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           extraSkipFields: [cfg.itemsParentField],
         },
       },
-      mapServerToForm: (d, prev) => ({
+      mapServerToForm: (d: InvoiceServerRecord, prev) => ({
         ...(prev ?? DEFAULT_FIELDS), ...d,
         number: d.number ?? "",
         date: isoToLocalInput(d.date),
@@ -242,7 +295,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     });
 
     const items = form.useTable("items");
-    const allItemsRef = useRef<any[]>([]);
+    const allItemsRef = useRef<TDataItem[]>([]);
     const permDefaultsRef = useRef<UserDefaultsMap>({});
 
     // Подсказка о несоответствии документу-основанию (шапка + строки).
@@ -252,6 +305,9 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       currentFields: form.fields,
       currentItems: allItemsRef.current,
       mapFields: mapCommonTradeFields,
+      // У документов без склада (счёт-фактура, счёт на оплату) поля «Склад» нет —
+      // не считаем расхождением с основанием, у которого склад есть.
+      ignoreFields: cfg.hasWarehouse ? undefined : ["warehouseUuid"],
     });
 
     const hasBasis = !!form.fields.basisDocumentUuid;
@@ -289,7 +345,9 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     const handlePrint = useCallback(() => {
       if (!cfg.printConfig || !form.fields.uuid) return;
       try {
-        const rows = allItemsRef.current.map((r: any, i: number) => ({
+        const rows = allItemsRef.current.map((raw, i) => {
+          const r = raw as InvoiceItemRow;
+          return {
           number: i + 1,
           name: r.product?.name ?? r.productName ?? "",
           unit: r.unitOfMeasure?.name ?? r.unitName ?? "",
@@ -303,7 +361,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           exciseAmount: Number(r.exciseAmount ?? 0),
           discountPercent: Number(r.discountPercent ?? 0),
           discountAmount: Number(r.discountAmount ?? 0),
-        }));
+          };
+        });
         const titleStr = cfg.printConfig.title(form.fields);
         const fileBase = cfg.printConfig.fileBaseName(form.fields);
         addPane({
@@ -315,7 +374,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             uuid: String(form.fields.uuid ?? ""),
             columnsKey: cfg.printConfig.columnsKey,
             columnDefs: cfg.printConfig.columnDefs,
-            buildLayout: (cols: any) => cfg.printConfig!.buildLayout(form.fields, rows, cols),
+            buildLayout: (cols: Record<string, boolean>) => cfg.printConfig!.buildLayout(form.fields, rows, cols),
             fileBaseName: fileBase,
             title: titleStr,
           },
@@ -384,7 +443,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     // Смена организации: зависимые поля (договор, склад если есть) →
     // дефолт пользователя для новой орг, иначе очистка.
     const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
-      const cur = form.store.getSnapshot().fields as any;
+      const cur = form.store.getSnapshot().fields;
       if (cur.organizationUuid === uuid) return;
       form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
       const orgFields: Array<{ valueType: "warehouse" | "contract"; uuidKey: string; nameKey: string }> = [
@@ -422,7 +481,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       apply: (fields) => form.setFieldsInitial(fields as Partial<TFields>),
     });
 
-    const handleTotalChange = useCallback((total: number, rows?: any[]) => {
+    const handleTotalChange = useCallback((total: number, rows?: TDataItem[]) => {
       form.setField("amount", Number(total));
       if (rows) {
         const vatSum = rows.reduce((s, r) => s + (Number(r.vatAmount) || 0), 0);
@@ -436,6 +495,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       }
     }, [form.setField, form.setFields]);
 
+    const assignNumber = useAssignNumber();
     const tabs = useMemo(() => [
       {
         id: "tab-details", label: translate("general"), component: (
@@ -443,7 +503,11 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             <div className={styles.Form}>
               <GroupCol>
                 <GroupRow className={styles.FormHeaderRow}>
-                  <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")} />
+                  <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")}
+                    actions={[
+                      { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, (n) => form.setField("number", n)) },
+                      { type: "clear", onClick: () => form.setField("number", "") },
+                    ]} />
                   <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
                   {!cfg.hidePosted && <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />}
                 </GroupRow>
@@ -537,7 +601,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           />
         )
       },
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch]);
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, assignNumber]);
 
     return (
       <FormRequiredScope docType={cfg.docType} active>

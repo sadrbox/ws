@@ -154,12 +154,22 @@ export function validateDocumentFields(
 	docType: DocumentType,
 	fields: Record<string, unknown>,
 ): ValidationResult {
+	return validateRequiredFields(REQUIRED_FIELDS_MAP[docType], fields);
+}
+
+/**
+ * Как validateDocumentFields, но с явным набором обязательных полей — для
+ * документов, у которых обязательность зависит от выбора (напр. кассовый ордер:
+ * тип операции «перевод банк↔касса» не требует контрагента/договора).
+ */
+export function validateRequiredFields(
+	required: readonly string[],
+	fields: Record<string, unknown>,
+): ValidationResult {
 	// posted !== true → черновик: пропускаем проверку обязательных полей.
 	if (fields.posted !== true) return { isValid: true, errors: [] };
 
-	const required = REQUIRED_FIELDS_MAP[docType];
 	const errors: ValidationError[] = [];
-
 	for (const fieldName of required) {
 		const value = fields[fieldName];
 		const isEmpty =

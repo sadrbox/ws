@@ -31,6 +31,7 @@ export const KZ_CHART_OF_ACCOUNTS = [
 	{ code: "1010", name: "Касса", accountType: "active", isCurrency: true },
 	{ code: "1030", name: "Денежные средства на текущих банковских счетах", accountType: "active", isCurrency: true },
 	{ code: "1210", name: "Краткосрочная дебиторская задолженность покупателей и заказчиков", accountType: "active", sub: ["Counterparty", "Contract"] },
+	{ code: "1250", name: "Краткосрочная дебиторская задолженность работников и других лиц", accountType: "active", sub: ["Employee"] },
 	{ code: "1310", name: "Сырьё и материалы", accountType: "active", isQuantitative: true, sub: ["Nomenclature", "Warehouse"] },
 	{ code: "1330", name: "Товары", accountType: "active", isQuantitative: true, sub: ["Nomenclature", "Warehouse"] },
 	{ code: "1420", name: "НДС к возмещению", accountType: "active" },

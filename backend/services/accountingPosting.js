@@ -24,6 +24,7 @@ export const ACC = {
 	CASH: "1010",
 	BANK: "1030",
 	AR: "1210", // дебиторская задолженность покупателей
+	ACCOUNTABLE: "1250", // подотчётные суммы (дебиторка работников)
 	MATERIALS: "1310",
 	GOODS: "1330",
 	FIXED: "2410",
@@ -35,6 +36,36 @@ export const ACC = {
 	REVENUE: "6010",
 	COGS: "7010",
 	ADMIN_EXP: "7210",
+};
+
+// Корр-счёт проводки кассового ордера по типу операции (см. cashOperationTypes на фронте).
+// ПКО: Дт 1010 Кт account; РКО: Дт account Кт 1010. analyticsType задаёт субконто на
+// стороне корр-счёта: "counterparty" → Контрагент+Договор (1210/3310), "employee" →
+// Сотрудник (1250, подотчёт), null → без аналитики (банк 1030).
+const CASH_OP_OFFSET = {
+	// ПКО (receipt)
+	payment_from_customer:   { account: ACC.AR, analyticsType: "counterparty" },         // Кт 1210
+	return_from_supplier:    { account: ACC.AP, analyticsType: "counterparty" },         // Кт 3310
+	return_from_accountable: { account: ACC.ACCOUNTABLE, analyticsType: "employee" },    // Кт 1250
+	cash_from_bank:          { account: ACC.BANK, analyticsType: null },                 // Кт 1030
+	other_receipt:           { account: ACC.AR, analyticsType: "counterparty" },
+	// РКО (expense)
+	payment_to_supplier:     { account: ACC.AP, analyticsType: "counterparty" },         // Дт 3310
+	return_to_customer:      { account: ACC.AR, analyticsType: "counterparty" },         // Дт 1210
+	issue_to_accountable:    { account: ACC.ACCOUNTABLE, analyticsType: "employee" },    // Дт 1250
+	cash_to_bank:            { account: ACC.BANK, analyticsType: null },                 // Дт 1030
+	other_expense:           { account: ACC.AP, analyticsType: "counterparty" },
+};
+// Дефолт при operationType=null (старые записи): сохраняет прежнее поведение.
+const CASH_OP_DEFAULT = {
+	cash_receipt_order: CASH_OP_OFFSET.payment_from_customer, // Кт 1210
+	cash_expense_order: CASH_OP_OFFSET.payment_to_supplier,   // Дт 3310
+};
+// Аналитика корр-счёта кассового ордера по типу.
+const buildCashAnalytics = (analyticsType, doc) => {
+	if (analyticsType === "counterparty") return compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
+	if (analyticsType === "employee") return compact([an("Employee", doc.employeeUuid)]);
+	return [];
 };
 
 // Субконто, обязательные при проверке проведения. «Основные» измерения —
@@ -298,30 +329,34 @@ export const POSTING_RULES = {
 		}];
 	},
 
-	// Приходный кассовый ордер: Дт 1010 Кт <счёт основания = 1210 от покупателя>.
+	// Приходный кассовый ордер: Дт 1010 Кт <корр-счёт по типу операции>.
 	cash_receipt_order: (doc) => {
 		const amount = r2(doc.amount);
 		if (amount <= 0) return [];
+		const offset = CASH_OP_OFFSET[doc.operationType] ?? CASH_OP_DEFAULT.cash_receipt_order;
+		const analytics = buildCashAnalytics(offset.analyticsType, doc);
 		return [{
 			debit: ACC.CASH,
-			credit: ACC.AR,
+			credit: offset.account,
 			amount,
 			description: doc.comment || "Поступление денег в кассу",
 			debitAnalytics: [],
-			creditAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
+			creditAnalytics: analytics,
 		}];
 	},
 
-	// Расходный кассовый ордер: Дт <счёт основания = 3310 поставщику> Кт 1010.
+	// Расходный кассовый ордер: Дт <корр-счёт по типу операции> Кт 1010.
 	cash_expense_order: (doc) => {
 		const amount = r2(doc.amount);
 		if (amount <= 0) return [];
+		const offset = CASH_OP_OFFSET[doc.operationType] ?? CASH_OP_DEFAULT.cash_expense_order;
+		const analytics = buildCashAnalytics(offset.analyticsType, doc);
 		return [{
-			debit: ACC.AP,
+			debit: offset.account,
 			credit: ACC.CASH,
 			amount,
 			description: doc.comment || "Выдача денег из кассы",
-			debitAnalytics: compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]),
+			debitAnalytics: analytics,
 			creditAnalytics: [],
 		}];
 	},
