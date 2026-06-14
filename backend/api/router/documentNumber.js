@@ -36,31 +36,16 @@ const NUMBER_JOURNALS = {
 	"month-closes": { table: "month_closes", docType: "month_close" },
 };
 
-// Числовое значение СОБСТВЕННОГО номера документа, если он принадлежит той же
-// последовательности (тот же префикс); иначе 0. Чтобы инкремент учитывал номер
-// самого документа (напр. вручную проставленный больший, чем в журнале).
-function ownSequenceValue(num, prefix) {
-	if (!num) return 0;
-	if (prefix) {
-		const head = `${prefix}-`;
-		if (!num.startsWith(head)) return 0;
-		const tail = num.slice(head.length);
-		return /^[0-9]+$/.test(tail) ? Number(tail) : 0;
-	}
-	return /^[0-9]+$/.test(num) ? Number(num) : 0;
-}
-
 router.get("/document-number/next", async (req, res) => {
 	try {
 		const endpoint = String(req.query.endpoint || "");
 		const cfg = NUMBER_JOURNALS[endpoint];
 		if (!cfg) return res.status(400).json({ success: false, message: "Неизвестный тип документа" });
 		const organizationUuid = req.query.organizationUuid ? String(req.query.organizationUuid) : null;
-		const currentNumber = req.query.currentNumber ? String(req.query.currentNumber).trim() : "";
 
 		// Формат нумерации (префикс/ширина) — определяет, ЗА КАКУЮ последовательность
 		// (по префиксу) ищем максимум. Best practice: ряды разделены по префиксу.
-		const fmt = (await getNumberFormat(cfg.docType, organizationUuid)) ?? { prefix: "", padding: 9 };
+		const fmt = (await getNumberFormat(cfg.docType, organizationUuid)) ?? { prefix: "", padding: 6 };
 		const { prefix, padding } = fmt;
 
 		const params = [];
@@ -90,9 +75,10 @@ router.get("/document-number/next", async (req, res) => {
 			`SELECT COALESCE(${maxExpr}, 0) AS maxnum FROM "${cfg.table}" WHERE ${where}`,
 			params,
 		);
-		// Учитываем и максимум журнала, и собственный номер документа (если он той
-		// же последовательности и больше) — инкремент «из своего номера».
-		const maxNumeric = Math.max(Number(rows[0]?.maxnum ?? 0), ownSequenceValue(currentNumber, prefix));
+		// Строго СЛЕДУЮЩИЙ номер в очереди последовательности: максимум по журналу + 1.
+		// Не «перепрыгиваем» (не учитываем больший собственный номер документа) — номер
+		// должен соответствовать порядку ранее присвоенных, не больше и не меньше.
+		const maxNumeric = Number(rows[0]?.maxnum ?? 0);
 		const number = formatDocNumber(prefix, padding, maxNumeric + 1);
 		return res.json({ success: true, number });
 	} catch (err) {

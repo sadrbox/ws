@@ -13,14 +13,14 @@ function mockClient({ settings = [], seq = 1 } = {}) {
 
 const D = new Date("2026-01-01");
 
-test("без настроек → 000000001 (9 разрядов, без префикса)", async () => {
+test("без настроек → 000001 (6 разрядов по умолчанию, без префикса)", async () => {
 	invalidateNumberSettingsCache();
-	assert.equal(await allocateNumber("sale", null, D, mockClient({ seq: 1 })), "000000001");
+	assert.equal(await allocateNumber("sale", null, D, mockClient({ seq: 1 })), "000001");
 });
 
-test("счётчик дополняется нулями до 9 разрядов", async () => {
+test("счётчик дополняется нулями до 6 разрядов (умолч.)", async () => {
 	invalidateNumberSettingsCache();
-	assert.equal(await allocateNumber("sale", null, D, mockClient({ seq: 42 })), "000000042");
+	assert.equal(await allocateNumber("sale", null, D, mockClient({ seq: 42 })), "000042");
 });
 
 test("пустой префикс в настройках → номер без дефиса", async () => {

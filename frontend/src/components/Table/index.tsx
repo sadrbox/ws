@@ -1068,7 +1068,9 @@ const TableHeader = memo(() => {
       const mapped = columns.map(c => c.identifier === r.colId ? { ...c, width: newWidth + 'px' } : c);
       const updatedColumns = r.isLastCol ? mapped : normalizeLastColumnWidth(mapped);
       actions.setColumns(updatedColumns);
-      localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(updatedColumns));
+      // Служебные колонки (__*) не сохраняем в localStorage (иначе сигнатура колонок
+      // не совпадёт с defaults и настройки будут сбрасываться).
+      localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(updatedColumns.filter(c => !c.identifier.startsWith("__"))));
       resizingRef.current = null;
       setTimeout(() => { isResizingRef.current = false; }, 0);
     };
@@ -1670,15 +1672,16 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
 
 const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
   const { columns, componentName, actions } = useTableContext();
-  const [columnsConfig, setColumnsConfig] = useState<TColumn[]>(columns);
+  // Служебные колонки (__*) скрываем из настроек и не сохраняем.
+  const [columnsConfig, setColumnsConfig] = useState<TColumn[]>(columns.filter(c => !c.identifier.startsWith("__")));
 
   const onApply = useCallback(() => {
-    const normalized = normalizeLastColumnWidth(columnsConfig);
+    const normalized = normalizeLastColumnWidth(columnsConfig.filter(c => !c.identifier.startsWith("__")));
     localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(normalized));
     actions?.setColumns?.(normalized);
   }, [columnsConfig, componentName, actions]);
 
-  useEffect(() => { setColumnsConfig(columns); }, [columns]);
+  useEffect(() => { setColumnsConfig(columns.filter(c => !c.identifier.startsWith("__"))); }, [columns]);
 
   return (
     <Modal title="Колонки таблицы" method={method} onApply={onApply} className={styles.ColumnsModal}>

@@ -115,6 +115,36 @@ router.post("/counterparties", async (req, res) => {
 });
 
 // ============================================
+// Розничный покупатель (продажи населению без выбора контрагента).
+// Идемпотентно создаёт/возвращает ГЛОБАЛЬНОГО (organizationUuid=null) контрагента
+// «Розничный покупатель» (резерв BIN 000000000000) + договор по умолчанию.
+// Объявлен ДО `/counterparties/:uuid`. Используется терминалом продаж.
+// ============================================
+const RETAIL_BIN = "000000000000";
+router.get("/counterparties/retail", async (_req, res) => {
+	try {
+		let counterparty = await prisma.counterparty.findFirst({ where: { bin: RETAIL_BIN }, select: { uuid: true, name: true } });
+		if (!counterparty) {
+			counterparty = await prisma.counterparty.create({
+				data: { bin: RETAIL_BIN, name: "Розничный покупатель", legalName: "Розничный покупатель", organizationUuid: null },
+				select: { uuid: true, name: true },
+			});
+		}
+		let contract = await prisma.contract.findFirst({ where: { counterpartyUuid: counterparty.uuid, deletedAt: null }, orderBy: [{ isPrimary: "desc" }, { id: "asc" }], select: { uuid: true, name: true } });
+		if (!contract) {
+			contract = await prisma.contract.create({
+				data: { name: "Розничная продажа", counterpartyUuid: counterparty.uuid, organizationUuid: null, isPrimary: true },
+				select: { uuid: true, name: true },
+			});
+		}
+		return res.status(200).json({ success: true, counterparty, contract });
+	} catch (error) {
+		console.error("GET /counterparties/retail error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ============================================
 // READ - Получение списка контрагентов (курсорная пагинация)
 // ============================================
 router.get("/counterparties", async (req, res) => {

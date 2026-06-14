@@ -8,8 +8,6 @@ const GeneralSettings: FC = () => {
 
   return (
     <div className={styles.Wrapper}>
-      <h2 className={styles.Title}>{translate("generalSettings")}</h2>
-
       <div className={styles.Section}>
         <div className={styles.Row}>
           <label className={styles.Label} htmlFor="utcOffsetSelect">

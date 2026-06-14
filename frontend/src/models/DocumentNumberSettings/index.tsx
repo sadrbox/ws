@@ -67,7 +67,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   const example = (v: EditVal) => {
     if (!v.enabled) return "—";
     // Префикс опционален: без него номер — только дополненный нулями счётчик.
-    const seq = String(1).padStart(Math.min(12, Math.max(1, v.padding || 9)), "0");
+    const seq = String(1).padStart(Math.min(9, Math.max(1, v.padding || 6)), "0");
     const pfx = v.prefix.trim();
     return pfx ? `${pfx}-${seq}` : seq;
   };
@@ -107,8 +107,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   };
 
   return (
-    <div className={embedded ? styles.WrapEmbedded : styles.Wrap}>
-      {!embedded && <h2 className={styles.Title}>{translate("documentNumberingSettings")}</h2>}
+    <div>
 
       {!embedded && (
         <div className={styles.OrgPicker}>
@@ -123,6 +122,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
       <div className={styles.Intro}>
         {orgKey ? translate("numberingHintOrg") : translate("numberingHintGlobal")}
       </div>
+      <div className={styles.Intro}>{translate("numberingUniqueNote")}</div>
 
       {isLoading ? (
         <div className={styles.Loading}>{translate("loading")}</div>
@@ -160,7 +160,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
                     <Field name={`pfx_${r.docType}`} value={v.prefix} onChange={(e) => patch(r, { prefix: e.target.value })} width="110px" disabled={off} placeholder={r.defaultPrefix || translate("optional")} />
                   </td>
                   <td className={styles.cPad}>
-                    <FieldNumber name={`pad_${r.docType}`} value={String(v.padding)} onChange={(e) => patch(r, { padding: Math.min(12, Math.max(1, Number(e.target.value) || 9)) })} width="60px" disabled={off} />
+                    <FieldNumber name={`pad_${r.docType}`} value={String(v.padding)} onChange={(e) => patch(r, { padding: Math.min(9, Math.max(1, Number(e.target.value) || 6)) })} width="60px" disabled={off} />
                   </td>
                   <td className={styles.cExample}><code>{example(v)}</code></td>
                   <td className={styles.cSource}>

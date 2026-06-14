@@ -14,13 +14,14 @@
 //                              облагаемым оборотом (hasTaxes=false)
 // ─────────────────────────────────────────────────────────────────────────────
 import { FC, useCallback, useMemo, useState } from "react";
+import type { MutableRefObject, ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import apiClient from "src/services/api/client";
 import columnsJson from "./documentItemsColumns.json";
-import SubTable, { ReadOnlyCell, type SubTableContext, type TCellValidator, useSubTableContext } from "src/components/SubTable";
+import SubTable, { ReadOnlyCell, type SubTableContext, type SubTableApi, type TCellValidator, useSubTableContext } from "src/components/SubTable";
 import { withSaleItemRecalc, withSaleItemRecalcFromDiscountAmount, recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
 import { parseNumericInput } from "src/components/Table/services";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
@@ -100,6 +101,12 @@ export interface TradeDocumentItemsTableProps {
    * редактировать» (data-pulse). Используется когда у документа есть основание.
    */
   fieldsReadOnly?: boolean;
+  /** Императивный API SubTable (внешнее добавление строк — например корзина терминала). */
+  apiRef?: MutableRefObject<SubTableApi | null>;
+  /** Замыкающая колонка действий строки (кнопки в ячейке, например ✕ удалить). */
+  rowActions?: (row: TDataItem, ctx: SubTableContext) => ReactNode;
+  /** Кнопки −/+ вокруг поля «Количество» (быстрое изменение, для терминала/кассы). */
+  quantityStepper?: boolean;
 }
 
 const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
@@ -123,6 +130,9 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   disableAddRows = false,
   disableDeleteRows = false,
   fieldsReadOnly = false,
+  apiRef,
+  rowActions,
+  quantityStepper = false,
 }) => {
   const queryClient = useQueryClient();
   const settings = useOrgAccountingSettings(organizationUuid ?? null, documentDate ?? null);
@@ -413,7 +423,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       );
     }
     if (id === "quantity") {
-      return (
+      const field = (
         <FieldNumber
           name={`docitem_qty_${row.id}`}
           value={row.quantity != null ? String(row.quantity as number | string) : ""}
@@ -423,11 +433,26 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           }}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
           disabled={ctx.disabled}
-          textAlign="right"
+          textAlign={quantityStepper ? "center" : "right"}
           width="100%"
           actions={[]}
           variant="table"
         />
+      );
+      if (!quantityStepper) return field;
+      const setQty = (nq: number) => {
+        const q = Math.max(0, nq);
+        if (ctx.deferRemoteChanges) { ctx.updateLocalRow(row, recalcWithFlags(row as any, { quantity: q })); return; }
+        ctx.handleInlineChange(row, "quantity", String(q));
+      };
+      const cur = Number(row.quantity) || 0;
+      const btn: React.CSSProperties = { width: 24, height: 24, flex: "0 0 auto", border: "1px solid #d1d5db", background: "#fff", borderRadius: 6, fontSize: 16, lineHeight: 1, cursor: "pointer", color: "#374151" };
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <button type="button" style={btn} disabled={ctx.disabled} onClick={() => setQty(cur - 1)} title="−1">−</button>
+          <div style={{ flex: "1 1 auto", minWidth: 0 }}>{field}</div>
+          <button type="button" style={btn} disabled={ctx.disabled} onClick={() => setQty(cur + 1)} title="+1">+</button>
+        </div>
       );
     }
     if (id === "price") {
@@ -524,7 +549,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       );
     }
     return undefined;
-  }, [recalcWithFlags, vatCalculationMethod, fieldsReadOnly]);
+  }, [recalcWithFlags, vatCalculationMethod, fieldsReadOnly, quantityStepper]);
 
   const defaultNewRow = useMemo(() => ({
     productUuid: null,
@@ -568,6 +593,8 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       })}
       onRefresh={onRefresh}
       showEditModeToggle={false}
+      apiRef={apiRef}
+      rowActions={rowActions}
       extraButtons={
         <>
           <Toolbar.Divider />

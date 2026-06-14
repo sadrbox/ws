@@ -51,6 +51,12 @@ export interface LookupFieldProps {
   columns?: { key: string; label: string }[];
   /** Кастомная функция для формирования текста подсказки в LookupDropdown */
   getSuggestionLabel?: (item: Record<string, any>) => string;
+  /** Автофокус поля при монтировании (например единственное поле ввода в терминале). */
+  autoFocus?: boolean;
+  /** Показывать индикатор проведения (цветная точка) для элементов-документов
+   *  с булевым `posted`. По умолчанию выкл. — включается там, где это уместно
+   *  (поле «Основание»). Если у элемента нет `posted` — точка не рисуется. */
+  postedIndicator?: boolean;
   /** Преобразует введённый пользователем текст перед отправкой на бэкенд (search-параметр).
    *  Полезно когда displayValue имеет составной формат (напр. "Тип: ID 5 · дата"),
    *  а бэкенд ожидает только числовой id или другой простой ключ. */
@@ -157,6 +163,8 @@ const LookupField: FC<LookupFieldProps> = ({
   searchTransform,
   allowFreeText = false,
   onTextChange,
+  autoFocus = false,
+  postedIndicator = false,
 }) => {
   // Подавляем неиспользуемые переменные совместимости
   void _columns;
@@ -558,6 +566,7 @@ const LookupField: FC<LookupFieldProps> = ({
             id={uid}
             name={name}
             value={inputText}
+            autoFocus={autoFocus}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             // Combobox-паттерн: aria-expanded сигнализирует обёрткам (например,
@@ -630,7 +639,7 @@ const LookupField: FC<LookupFieldProps> = ({
                   }}
                   onMouseEnter={() => setActiveIndex(idx)}
                 >
-                  <span className={styles.LookupDropdownPrimary}>{primary}</span>
+                  <span className={styles.LookupDropdownPrimary}>{postedIndicator && typeof item.posted === "boolean" && <span aria-hidden title={item.posted ? translate("posted") : translate("draft")} style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", verticalAlign: "middle", marginRight: 6, background: item.posted ? "#1a7f37" : "#cbd5e1" }} />}{primary}</span>
                   {secondary && <span className={styles.LookupDropdownSecondary}>{secondary}</span>}
                 </div>
               );
@@ -671,7 +680,7 @@ const LookupField: FC<LookupFieldProps> = ({
                 }}
                 onMouseEnter={() => setActiveIndex(idx)}
               >
-                <span className={styles.LookupDropdownPrimary}>{primary}</span>
+                <span className={styles.LookupDropdownPrimary}>{postedIndicator && typeof item.posted === "boolean" && <span aria-hidden title={item.posted ? translate("posted") : translate("draft")} style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", verticalAlign: "middle", marginRight: 6, background: item.posted ? "#1a7f37" : "#cbd5e1" }} />}{primary}</span>
                 {secondary && <span className={styles.LookupDropdownSecondary}>{secondary}</span>}
               </div>
             );

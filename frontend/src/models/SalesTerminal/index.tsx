@@ -1,21 +1,22 @@
 /**
- * SalesTerminal — терминал кассира/продавца для быстрого создания реализации.
+ * SalesTerminal — терминал кассира для быстрой розничной продажи.
  *
- * Сценарий: продавец быстро набирает товары (поиск по названию/штрих-коду),
- * правит количество и цену, выбирает покупателя/склад/менеджера и одной кнопкой
- * создаёт ПРОВЕДЁННУЮ реализацию. Суммы строк считаются на сервере; терминал
- * показывает предварительный расчёт (НДС включён в цену, ставка 12%).
+ * Сценарий: продавец сканирует/ищет товары → корзина (SubTable с контролами) →
+ * одной кнопкой создаёт ПРОВЕДЁННУЮ реализацию + ПКО (нал) + фискальный чек.
+ * Продажа НАСЕЛЕНИЮ: по умолчанию контрагент «Розничный покупатель» (договор по
+ * умолчанию) — выбирать не нужно; при необходимости можно указать именного покупателя.
  *
- * Поток сохранения: POST /sales (черновик) → POST /saleitems/batch →
- * PUT /sales/:uuid { posted:true } (проводка + проводки учёта).
+ * Поток: POST /sales (черновик) → POST /saleitems/batch → PUT posted:true → ПКО → чек.
  */
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
-import { FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Button } from "src/components/Button";
+import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
+import type { SubTableApi } from "src/components/SubTable";
+import type { TDataItem } from "src/components/Table/types";
 import { usePersistentState } from "src/hooks/usePersistentState";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useOrgAccountingSettings } from "src/hooks/useOrgAccountingSettings";
@@ -25,74 +26,74 @@ import FiscalReceiptPane from "src/models/FiscalReceipts/FiscalReceiptPane";
 import type { TPane } from "src/app/types";
 import styles from "./SalesTerminal.module.scss";
 
-interface CartLine {
-  key: string;
-  productUuid: string;
-  productName: string;
-  unitOfMeasureUuid: string | null;
-  quantity: number;
-  price: number;
-}
+const EMPTY_ROWS: TDataItem[] = []; // стабильная ссылка для initialPendingRows
 
 const fmt = (n: number) =>
   Number(n || 0).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+interface RetailRef { counterpartyUuid: string; counterpartyName: string; contractUuid: string }
 
 const SalesTerminal: FC<Partial<TPane>> = () => {
   const { organizationUuid: defOrgUuid, organizationName: defOrgName } = useDefaultOrganization();
   const { auth: { user }, windows: { addPane } } = useAppContext();
 
+  // Организация — основная организация пользователя (значение по умолчанию).
   const [orgUuid, setOrgUuid] = useState(defOrgUuid || "");
   const [orgName, setOrgName] = useState(defOrgName || "");
-  // Реквизиты запоминаются между сменами (розничный покупатель/склад/касса
-  // по умолчанию — продавцу не нужно выбирать их каждый раз).
+  // Реквизиты запоминаются между сменами (по умолчанию для кассы).
   const [warehouseUuid, setWarehouseUuid] = usePersistentState("terminal.warehouseUuid", "");
   const [warehouseName, setWarehouseName] = usePersistentState("terminal.warehouseName", "");
-  const [counterpartyUuid, setCounterpartyUuid] = usePersistentState("terminal.counterpartyUuid", "");
-  const [counterpartyName, setCounterpartyName] = usePersistentState("terminal.counterpartyName", "");
-  const [managerUuid, setManagerUuid] = useState((user as any)?.employee?.uuid ?? "");
-  const [managerName, setManagerName] = useState((user as any)?.employee?.fullName ?? "");
-  // Тип цены: определяет, какие цены подставляются при добавлении товара.
+  const [managerUuid, setManagerUuid] = useState((user as { employee?: { uuid?: string } })?.employee?.uuid ?? "");
+  const [managerName, setManagerName] = useState((user as { employee?: { fullName?: string } })?.employee?.fullName ?? "");
   const [priceTypeUuid, setPriceTypeUuid] = usePersistentState("terminal.priceTypeUuid", "");
   const [priceTypeName, setPriceTypeName] = usePersistentState("terminal.priceTypeName", "");
-
-  // Режим: продажа или возврат от покупателя.
-  const [mode, setMode] = useState<"sale" | "return">("sale");
-  const isReturn = mode === "return";
-
-  // Оплата: наличные → автосоздание проведённого ПКО (Дт1010 Кт1210); карта/
-  // безнал → только реализация (поступление денег отражается банк-выпиской).
-  const [payment, setPayment] = useState<"cash" | "card" | "kaspi">("cash");
   const [cashboxUuid, setCashboxUuid] = usePersistentState("terminal.cashboxUuid", "");
   const [cashboxName, setCashboxName] = usePersistentState("terminal.cashboxName", "");
 
-  const [cart, setCart] = useState<CartLine[]>([]);
+  // Именной покупатель (необязательно): пусто → «Розничный покупатель».
+  const [buyerUuid, setBuyerUuid] = useState("");
+  const [buyerName, setBuyerName] = useState("");
+  const [contractUuid, setContractUuid] = useState("");
+  const [contractName, setContractName] = useState("");
+
+  // Розничный покупатель + договор по умолчанию (загружается с бэкенда).
+  const retailRef = useRef<RetailRef | null>(null);
+  const [retailName, setRetailName] = useState("Розничный покупатель");
+  useEffect(() => {
+    let cancelled = false;
+    api.get<{ counterparty?: { uuid: string; name: string }; contract?: { uuid: string } }>("counterparties/retail")
+      .then((r) => {
+        if (cancelled || !r?.counterparty) return;
+        retailRef.current = { counterpartyUuid: r.counterparty.uuid, counterpartyName: r.counterparty.name, contractUuid: r.contract?.uuid ?? "" };
+        setRetailName(r.counterparty.name);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const [mode, setMode] = useState<"sale" | "return">("sale");
+  const isReturn = mode === "return";
+  const [payment, setPayment] = useState<"cash" | "card" | "kaspi">("cash");
   const [submitting, setSubmitting] = useState(false);
+  const [reqOpen, setReqOpen] = useState(false); // свёрнутая панель «Реквизиты»
 
-  // Поле сканера: ввод штрих-кода + Enter → добавить товар (автофокус).
-  const [scan, setScan] = useState("");
-  const scanRef = useRef<HTMLInputElement>(null);
-  const focusScan = useCallback(() => { scanRef.current?.focus(); scanRef.current?.select?.(); }, []);
+  // Итог и количество позиций приходят из таблицы-корзины.
+  const [total, setTotal] = useState(0);
+  const [cartCount, setCartCount] = useState(0);
 
-  // Ставка/метод НДС берём из «Параметров учёта» организации (0%, если не
-  // плательщик НДС) — суммы строк считаем так же, как обычная реализация.
+  // Параметры НДС организации — для предрасчёта сумм добавляемых строк.
   const acct = useOrgAccountingSettings(orgUuid);
   const vatRate = acct.vatRate;
   const vatMethod = acct.vatCalculationMethod;
-  const lineAmount = useCallback(
-    (l: CartLine) => recalcSaleItemAmounts(l.quantity, l.price, vatRate, 0, vatMethod, 0).amount,
-    [vatRate, vatMethod],
-  );
 
-  const total = useMemo(() => cart.reduce((s, l) => s + lineAmount(l), 0), [cart, lineAmount]);
-  const itemsCount = useMemo(() => cart.reduce((s, l) => s + (Number(l.quantity) || 0), 0), [cart]);
+  // Императивный API корзины (SubTable) — скан/лукап добавляют строки сюда.
+  const cartApiRef = useRef<SubTableApi | null>(null);
 
   // ── Автоподстановка цен по выбранному типу цены ──────────────────────────
-  // Карта productUuid→цена для выбранного типа (последняя цена из ProductPrice).
   const priceMapRef = useRef<Map<string, number>>(new Map());
   const priceTypeUuidRef = useRef(priceTypeUuid);
   priceTypeUuidRef.current = priceTypeUuid;
 
-  // Загружает цены типа в Map одним запросом. reprice=true — переоценивает корзину.
   const loadPriceMap = useCallback(async (typeUuid: string, reprice: boolean) => {
     try {
       const params: Record<string, string> = {};
@@ -104,84 +105,82 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
       const map = new Map<string, number>();
       for (const it of resp?.items ?? []) if (it.price != null) map.set(it.productUuid, Number(it.price));
       priceMapRef.current = map;
-      // Тип не задан → подставляем дефолтный (резолвится бэкендом).
       if (!typeUuid && resp?.priceTypeUuid) { setPriceTypeUuid(resp.priceTypeUuid); setPriceTypeName(resp.priceTypeName ?? ""); }
-      if (reprice) setCart((prev) => prev.map((l) => { const p = map.get(l.productUuid); return p != null ? { ...l, price: p } : l; }));
+      if (reprice && cartApiRef.current) {
+        for (const r of cartApiRef.current.getRows()) {
+          const p = map.get(String(r.productUuid));
+          if (p != null) {
+            const calc = recalcSaleItemAmounts(Number(r.quantity) || 0, p, vatRate, 0, vatMethod, 0);
+            cartApiRef.current.updateRow(r, { price: p, ...calc });
+          }
+        }
+      }
     } catch { /* перехватчик api покажет ошибку */ }
-  }, [orgUuid, setPriceTypeUuid, setPriceTypeName]);
+  }, [orgUuid, vatRate, vatMethod, setPriceTypeUuid, setPriceTypeName]);
 
-  // Загрузка карты цен при открытии и смене организации (тип — из ref, без переоценки).
   useEffect(() => { void loadPriceMap(priceTypeUuidRef.current, false); }, [loadPriceMap]);
 
-  // ── Добавление товара (из LookupField). Повтор — увеличивает количество. ──
-  const addProduct = useCallback((uuid: string, name: string, item: Record<string, any>) => {
+  // ── Добавление товара (скан/лукап). Повтор — увеличивает количество. ──────
+  const addProduct = useCallback((uuid: string, name: string, item: Record<string, unknown>) => {
     if (!uuid) return;
-    setCart((prev) => {
-      const idx = prev.findIndex((l) => l.productUuid === uuid);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
-        return next;
-      }
-      return [
-        ...prev,
-        {
-          key: `${uuid}-${Date.now().toString(36)}`,
-          productUuid: uuid,
-          productName: name || item?.name || "—",
-          unitOfMeasureUuid: item?.unitOfMeasureUuid ?? null,
-          quantity: 1,
-          // Цена выбранного типа (если есть), иначе — дефолтная цена товара.
-          price: priceMapRef.current.get(uuid) ?? (Number(item?.price) || 0),
-        },
-      ];
+    const cart = cartApiRef.current;
+    if (!cart) return;
+    const existing = cart.getRows().find((r) => r.productUuid === uuid);
+    if (existing) {
+      const q = (Number(existing.quantity) || 0) + 1;
+      const calc = recalcSaleItemAmounts(q, Number(existing.price) || 0, vatRate, 0, vatMethod, 0);
+      cart.updateRow(existing, { quantity: q, ...calc });
+      return;
+    }
+    const price = priceMapRef.current.get(uuid) ?? (Number(item?.price) || 0);
+    const calc = recalcSaleItemAmounts(1, price, vatRate, 0, vatMethod, 0);
+    const umUuid = (item?.unitOfMeasureUuid as string) ?? null;
+    const um = item?.unitOfMeasure as { name?: string } | undefined;
+    cart.addRow({
+      productUuid: uuid,
+      product: { uuid, name: name || (item?.name as string) || "" },
+      quantity: 1,
+      price,
+      unitOfMeasureUuid: umUuid,
+      unitOfMeasure: umUuid ? { uuid: umUuid, name: um?.name ?? "" } : null,
+      vatRate: vatRate || 0,
+      ...calc,
     });
-  }, []);
+  }, [vatRate, vatMethod]);
 
-  const patchLine = useCallback((key: string, patch: Partial<CartLine>) => {
-    setCart((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
-  }, []);
-  const removeLine = useCallback((key: string) => {
-    setCart((prev) => prev.filter((l) => l.key !== key));
-  }, []);
-  const clearCart = useCallback(() => setCart([]), []);
+  const clearCart = useCallback(() => { cartApiRef.current?.clear(); }, []);
 
-  // Сканер: добавление товара по штрих-коду (Enter). Берём первый точный
-  // результат поиска products (поиск ищет и по штрих-кодам номенклатуры).
-  const handleScan = useCallback(async () => {
-    const code = scan.trim();
-    if (!code) return;
-    setScan("");
-    try {
-      const resp = await api.get<any>("products", { params: { search: code, limit: 1 } });
-      const prod = resp?.items?.[0];
-      if (prod?.uuid) addProduct(prod.uuid, prod.name, prod);
-      else showToast(translate("terminalProductNotFound"), "error", 2200);
-    } catch { /* перехватчик api покажет ошибку */ }
-    focusScan();
-  }, [scan, addProduct, focusScan]);
+  const handleTableTotal = useCallback((t: number, items?: TDataItem[]) => {
+    setTotal(t);
+    setCartCount((items ?? []).length);
+  }, []);
 
   const submit = useCallback(async () => {
+    const rows = (cartApiRef.current?.getRows() ?? []).filter((r) => r.productUuid);
+    const cpUuid = buyerUuid || retailRef.current?.counterpartyUuid || "";
+    const ctUuid = contractUuid || retailRef.current?.contractUuid || "";
     if (!orgUuid) { showToast(translate("organization") + " — " + translate("required"), "error"); return; }
     if (!warehouseUuid) { showToast(translate("warehouse") + " — " + translate("required"), "error"); return; }
-    if (!counterpartyUuid) { showToast(translate("counterparty") + " — " + translate("required"), "error"); return; }
-    if (cart.length === 0) { showToast(translate("terminalEmptyCart"), "error"); return; }
-    if (cart.some((l) => !(Number(l.quantity) > 0))) { showToast(translate("terminalBadQty"), "error"); return; }
+    if (!cpUuid) { showToast(translate("retailBuyerNotReady"), "error"); return; }
+    // Наличные → ПКО в конкретную кассу: касса обязательна (иначе не идентифицировать,
+    // в какую кассу поступили деньги). Карта/Kaspi — без кассы (поступление в банк/эквайринг).
+    if (!isReturn && payment === "cash" && !cashboxUuid) { showToast(translate("cashbox") + " — " + translate("required"), "error"); setReqOpen(true); return; }
+    if (rows.length === 0) { showToast(translate("terminalEmptyCart"), "error"); return; }
+    if (rows.some((r) => !(Number(r.quantity) > 0))) { showToast(translate("terminalBadQty"), "error"); return; }
 
-    // Продажа → sales/saleitems; возврат → sale-returns/salereturnitems.
     const docEndpoint = isReturn ? "sale-returns" : "sales";
     const itemsEndpoint = isReturn ? "sale-return-items/batch" : "saleitems/batch";
     const parentField = isReturn ? "saleReturnUuid" : "saleUuid";
 
     setSubmitting(true);
     try {
-      const resp = await api.post<any>(docEndpoint, {
+      const resp = await api.post<{ item?: { uuid?: string } }>(docEndpoint, {
         date: new Date().toISOString(),
         organizationUuid: orgUuid,
-        counterpartyUuid,
+        counterpartyUuid: cpUuid,
+        contractUuid: ctUuid || null,
         warehouseUuid,
         managerUuid: managerUuid || null,
-        // Реализация фиксирует использованный тип цены (возврат поля не имеет — игнор).
         ...(isReturn ? {} : { priceTypeUuid: priceTypeUuid || null }),
         posted: false,
       });
@@ -189,30 +188,28 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
       if (!docUuid) throw new Error(translate("serverError"));
 
       await api.post(itemsEndpoint, {
-        operations: cart.map((l) => ({
+        operations: rows.map((r) => ({
           action: "create",
           data: {
             [parentField]: docUuid,
-            productUuid: l.productUuid,
-            quantity: l.quantity,
-            price: l.price,
-            vatRate,
-            unitOfMeasureUuid: l.unitOfMeasureUuid || null,
+            productUuid: r.productUuid,
+            quantity: Number(r.quantity) || 0,
+            price: Number(r.price) || 0,
+            vatRate: r.vatRate != null ? Number(r.vatRate) : vatRate,
+            unitOfMeasureUuid: r.unitOfMeasureUuid || null,
           },
         })),
       });
 
       await api.put(`${docEndpoint}/${docUuid}`, { posted: true });
 
-      // Оплата наличными при ПРОДАЖЕ → проведённый ПКО (Дт1010 Кт1210).
-      // Для возврата деньги покупателю возвращаются отдельно (РКО оформляется
-      // вручную — авто-проводка РКО под возврат покупателю некорректна).
+      // Нал при ПРОДАЖЕ → проведённый ПКО (Дт1010 Кт1210).
       if (!isReturn && payment === "cash" && total > 0) {
         try {
           await api.post("cash-receipt-orders", {
             date: new Date().toISOString(),
             organizationUuid: orgUuid,
-            counterpartyUuid,
+            counterpartyUuid: cpUuid,
             cashboxUuid: cashboxUuid || null,
             amount: total,
             posted: true,
@@ -223,11 +220,10 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         }
       }
 
-      // Фискальный чек (ОФД/Kaspi) для продажи. Для Kaspi — оплата по QR и
-      // фискализация выполняются в FiscalReceiptPane (поллинг статуса).
+      // Фискальный чек (ОФД/Kaspi) для продажи (Kaspi → оплата/фискализация в Pane).
       if (!isReturn) {
         try {
-          const fr = await api.post<any>("fiscal-receipts", {
+          const fr = await api.post<{ item?: Record<string, unknown> }>("fiscal-receipts", {
             documentType: "sale", documentUuid: docUuid, paymentMethod: payment,
           });
           if (fr?.item) {
@@ -236,7 +232,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
               label: translate("fiscalReceiptTitle"),
               data: {
                 receipt: fr.item,
-                items: cart.map((l) => ({ name: l.productName, quantity: l.quantity, price: l.price })),
+                items: rows.map((r) => ({ name: (r.product as { name?: string })?.name ?? "", quantity: Number(r.quantity) || 0, price: Number(r.price) || 0 })),
                 organizationName: orgName,
               },
             });
@@ -245,106 +241,65 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
       }
 
       showToast(`${translate(isReturn ? "terminalReturnDone" : "terminalDone")} — ${fmt(total)}`, "success", 4000);
-      setCart([]);
-      focusScan();
+      cartApiRef.current?.clear();
     } catch {
       // Тосты ошибок (422/409/500) показывает перехватчик api-клиента.
     } finally {
       setSubmitting(false);
     }
-  }, [orgUuid, warehouseUuid, counterpartyUuid, managerUuid, priceTypeUuid, cart, total, vatRate, payment, cashboxUuid, isReturn, focusScan, addPane, orgName]);
+  }, [orgUuid, warehouseUuid, buyerUuid, contractUuid, managerUuid, priceTypeUuid, total, vatRate, payment, cashboxUuid, isReturn, addPane, orgName]);
 
-  // Горячие клавиши: F9 — провести, F4 — очистить, F2 — фокус на сканер.
+  // Горячие клавиши: F9 — провести, F4 — очистить.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "F9") { e.preventDefault(); submit(); }
+      if (e.key === "F9") { e.preventDefault(); void submit(); }
       else if (e.key === "F4") { e.preventDefault(); clearCart(); }
-      else if (e.key === "F2") { e.preventDefault(); focusScan(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [submit, clearCart, focusScan]);
+  }, [submit, clearCart]);
 
-  // Автофокус на поле сканера при открытии.
-  useEffect(() => { focusScan(); }, [focusScan]);
-
-  const orgParams = orgUuid ? { organizationUuid: orgUuid } : undefined;
+  const orgParams = useMemo(() => (orgUuid ? { organizationUuid: orgUuid } : undefined), [orgUuid]);
+  const buyerLabel = buyerName || retailName;
 
   return (
     <div className={styles.Terminal}>
-      {/* ЛЕВО: поиск + корзина */}
+      {/* ЛЕВО: поиск (он же скан) + корзина (SubTable) */}
       <div className={styles.Left}>
-        <div className={styles.SearchBar}>
-          {/* Поле сканера: штрих-код + Enter (автофокус, F2). */}
-          <div className={styles.ScanBox}>
-            <label className={styles.ScanLabel}>{translate("terminalScan")}</label>
-            <input
-              ref={scanRef}
-              className={styles.ScanInput}
-              value={scan}
-              onChange={(e) => setScan(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleScan(); } }}
-              placeholder={translate("terminalScanHint")}
-              autoFocus
-            />
-          </div>
-          <LookupField
-            label={translate("terminalAddProduct")}
-            name="terminal_product"
-            value=""
-            displayValue=""
-            endpoint="products"
-            displayField="name"
-            onSelect={addProduct}
-            extraParams={orgParams}
-          />
-        </div>
-
+        <LookupField
+          label={translate("terminalAddProduct")}
+          name="terminal_product"
+          value=""
+          displayValue=""
+          endpoint="products"
+          displayField="name"
+          autoFocus
+          onSelect={(u, d, item) => addProduct(u, d, (item as Record<string, unknown>) ?? {})}
+          extraParams={orgParams}
+        />
+        {/* Структурный контейнер (flex-размер для таблицы); своя рамка у SubTable. */}
         <div className={styles.CartWrap}>
-          {cart.length === 0 ? (
-            <div className={styles.EmptyCart}>{translate("terminalEmptyHint")}</div>
-          ) : (
-            <table className={styles.Cart}>
-              <thead>
-                <tr>
-                  <th className={styles.cN}>№</th>
-                  <th className={styles.cName}>{translate("reportProduct")}</th>
-                  <th className={styles.cQty}>{translate("quantity")}</th>
-                  <th className={styles.cPrice}>{translate("price")}</th>
-                  <th className={styles.cSum}>{translate("amount")}</th>
-                  <th className={styles.cDel}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {cart.map((l, i) => (
-                  <tr key={l.key}>
-                    <td className={styles.cN}>{i + 1}</td>
-                    <td className={styles.cName}>{l.productName}</td>
-                    <td className={styles.cQty}>
-                      <div className={styles.Stepper}>
-                        <button type="button" onClick={() => patchLine(l.key, { quantity: Math.max(1, l.quantity - 1) })}>−</button>
-                        <FieldNumber name={`q_${l.key}`} value={String(l.quantity)} onChange={(e) => patchLine(l.key, { quantity: Number(e.target.value) || 0 })} variant="table" />
-                        <button type="button" onClick={() => patchLine(l.key, { quantity: l.quantity + 1 })}>+</button>
-                      </div>
-                    </td>
-                    <td className={styles.cPrice}>
-                      <FieldNumber name={`p_${l.key}`} value={String(l.price)} onChange={(e) => patchLine(l.key, { price: Number(e.target.value) || 0 })} variant="table" />
-                    </td>
-                    <td className={styles.cSum}>{fmt(lineAmount(l))}</td>
-                    <td className={styles.cDel}>
-                      <button type="button" className={styles.DelBtn} onClick={() => removeLine(l.key)} title={translate("delete")}>×</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <TradeDocumentItemsTable
+            parentUuid=""
+            parentField="saleUuid"
+            endpoint="saleitems"
+            componentName="TerminalCart"
+            organizationUuid={orgUuid}
+            deferRemoteChanges
+            initialPendingRows={EMPTY_ROWS}
+            apiRef={cartApiRef}
+            quantityStepper
+            onTotalChange={handleTableTotal}
+            emptyMessage={translate("terminalEmptyHint")}
+            rowActions={(row, ctx) => (
+              <button type="button" className={styles.DelBtn} onClick={() => void ctx.removeRow(row)} title={translate("delete")}>×</button>
+            )}
+          />
         </div>
       </div>
 
-      {/* ПРАВО: реквизиты + итог + оплата */}
+      {/* ПРАВО: режим, реквизиты (свёрнуто), итог, оплата, действия */}
       <div className={styles.Right}>
-        {/* Режим: продажа / возврат */}
         <div className={styles.PayMethods}>
           <button type="button"
             className={[styles.PayMethod, !isReturn && styles.PayMethodActive].filter(Boolean).join(" ")}
@@ -353,47 +308,68 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
             className={[styles.PayMethod, isReturn && styles.ModeReturnActive].filter(Boolean).join(" ")}
             onClick={() => setMode("return")}>↩ {translate("terminalModeReturn")}</button>
         </div>
-        <div className={styles.Fields}>
-          <LookupField label={translate("organization")} name="t_org" value={orgUuid} displayValue={orgName}
-            endpoint="organizations" displayField="name"
-            onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }} onClear={() => { setOrgUuid(""); setOrgName(""); }} />
-          <LookupField label={translate("warehouse")} name="t_wh" value={warehouseUuid} displayValue={warehouseName}
-            endpoint="warehouses" displayField="name" extraParams={orgParams}
-            onSelect={(u, d) => { setWarehouseUuid(u); setWarehouseName(d); }} onClear={() => { setWarehouseUuid(""); setWarehouseName(""); }} />
-          <LookupField label={translate("counterparty")} name="t_cp" value={counterpartyUuid} displayValue={counterpartyName}
-            endpoint="counterparties" displayField="name"
-            onSelect={(u, d) => { setCounterpartyUuid(u); setCounterpartyName(d); }} onClear={() => { setCounterpartyUuid(""); setCounterpartyName(""); }} />
-          <LookupField label={translate("manager")} name="t_mgr" value={managerUuid} displayValue={managerName}
-            endpoint="employees" displayField="fullName" extraParams={orgParams}
-            onSelect={(u, d) => { setManagerUuid(u); setManagerName(d); }} onClear={() => { setManagerUuid(""); setManagerName(""); }} />
-          <LookupField label={translate("priceType")} name="t_pt" value={priceTypeUuid} displayValue={priceTypeName}
-            endpoint="price-types" displayField="name"
-            onSelect={(u, d) => { setPriceTypeUuid(u); setPriceTypeName(d); void loadPriceMap(u, true); }}
-            onClear={() => { setPriceTypeUuid(""); setPriceTypeName(""); void loadPriceMap("", true); }} />
 
-          {/* Способ оплаты */}
-          <div className={styles.PayMethods}>
-            <button type="button"
-              className={[styles.PayMethod, payment === "cash" && styles.PayMethodActive].filter(Boolean).join(" ")}
-              onClick={() => setPayment("cash")}>💵 {translate("paymentCash")}</button>
-            <button type="button"
-              className={[styles.PayMethod, payment === "card" && styles.PayMethodActive].filter(Boolean).join(" ")}
-              onClick={() => setPayment("card")}>💳 {translate("paymentCard")}</button>
-            <button type="button"
-              className={[styles.PayMethod, payment === "kaspi" && styles.PayMethodActive].filter(Boolean).join(" ")}
-              onClick={() => setPayment("kaspi")}>🔴 {translate("paymentKaspi")}</button>
+        {/* Реквизиты — свёрнуты по умолчанию (лёгкий вид). Сводка → раскрытие. */}
+        <button type="button" className={styles.PayMethod} style={{ width: "100%", justifyContent: "space-between", display: "flex" }} onClick={() => setReqOpen((v) => !v)}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {orgName || translate("organization")} · {warehouseName || translate("warehouse")} · {buyerLabel}{priceTypeName ? ` · ${priceTypeName}` : ""}
+          </span>
+          <span>{reqOpen ? "▲" : "▼"}</span>
+        </button>
+        {reqOpen && (
+          <div className={styles.Fields}>
+            <LookupField label={translate("organization")} name="t_org" value={orgUuid} displayValue={orgName}
+              endpoint="organizations" displayField="name"
+              onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }} onClear={() => { setOrgUuid(""); setOrgName(""); }} />
+            <LookupField label={translate("warehouse")} name="t_wh" value={warehouseUuid} displayValue={warehouseName}
+              endpoint="warehouses" displayField="name" extraParams={orgParams}
+              onSelect={(u, d) => { setWarehouseUuid(u); setWarehouseName(d); }} onClear={() => { setWarehouseUuid(""); setWarehouseName(""); }} />
+            <LookupField label={translate("manager")} name="t_mgr" value={managerUuid} displayValue={managerName}
+              endpoint="employees" displayField="fullName" extraParams={orgParams}
+              onSelect={(u, d) => { setManagerUuid(u); setManagerName(d); }} onClear={() => { setManagerUuid(""); setManagerName(""); }} />
+            <LookupField label={translate("priceType")} name="t_pt" value={priceTypeUuid} displayValue={priceTypeName}
+              endpoint="price-types" displayField="name"
+              onSelect={(u, d) => { setPriceTypeUuid(u); setPriceTypeName(d); void loadPriceMap(u, true); }}
+              onClear={() => { setPriceTypeUuid(""); setPriceTypeName(""); void loadPriceMap("", true); }} />
+            {/* Именной покупатель (необязательно). Пусто → «Розничный покупатель». */}
+            <LookupField label={translate("terminalNamedBuyer")} name="t_buyer" value={buyerUuid} displayValue={buyerName}
+              endpoint="counterparties" displayField="name"
+              onSelect={(u, d) => { setBuyerUuid(u); setBuyerName(d); setContractUuid(""); setContractName(""); }}
+              onClear={() => { setBuyerUuid(""); setBuyerName(""); setContractUuid(""); setContractName(""); }} />
+            {buyerUuid && (
+              <LookupField label={translate("contract")} name="t_contract" value={contractUuid} displayValue={contractName}
+                endpoint="contracts" displayField="name"
+                onSelect={(u, d) => { setContractUuid(u); setContractName(d); }}
+                onClear={() => { setContractUuid(""); setContractName(""); }}
+                extraParams={{ ...(orgParams ?? {}), counterpartyUuid: buyerUuid }} />
+            )}
           </div>
-          {payment === "cash" && (
+        )}
+
+        {/* Способ оплаты */}
+        <div className={styles.PayMethods}>
+          <button type="button"
+            className={[styles.PayMethod, payment === "cash" && styles.PayMethodActive].filter(Boolean).join(" ")}
+            onClick={() => setPayment("cash")}>💵 {translate("paymentCash")}</button>
+          <button type="button"
+            className={[styles.PayMethod, payment === "card" && styles.PayMethodActive].filter(Boolean).join(" ")}
+            onClick={() => setPayment("card")}>💳 {translate("paymentCard")}</button>
+          <button type="button"
+            className={[styles.PayMethod, payment === "kaspi" && styles.PayMethodActive].filter(Boolean).join(" ")}
+            onClick={() => setPayment("kaspi")}>🔴 {translate("paymentKaspi")}</button>
+        </div>
+        {payment === "cash" && reqOpen && (
+          <div className={styles.Fields}>
             <LookupField label={translate("cashbox")} name="t_cashbox" value={cashboxUuid} displayValue={cashboxName}
               endpoint="cashboxes" displayField="name" extraParams={orgParams}
               onSelect={(u, d) => { setCashboxUuid(u); setCashboxName(d); }} onClear={() => { setCashboxUuid(""); setCashboxName(""); }} />
-          )}
-        </div>
+          </div>
+        )}
 
         <div className={styles.Summary}>
           <div className={styles.SummaryRow}>
             <span>{translate("terminalPositions")}</span>
-            <span>{cart.length} / {fmt(itemsCount).replace(/,00$/, "")}</span>
+            <span>{cartCount}</span>
           </div>
           <div className={styles.TotalRow}>
             <span>{translate("total")}</span>
@@ -402,8 +378,8 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         </div>
 
         <div className={styles.Actions}>
-          <Button variant="secondary" onClick={clearCart} disabled={submitting || cart.length === 0}>{translate("terminalClear")} (F4)</Button>
-          <button type="button" className={[styles.PayBtn, isReturn && styles.PayBtnReturn].filter(Boolean).join(" ")} onClick={submit} disabled={submitting || cart.length === 0}>
+          <Button variant="secondary" onClick={clearCart} disabled={submitting || cartCount === 0}>{translate("terminalClear")} (F4)</Button>
+          <button type="button" className={[styles.PayBtn, isReturn && styles.PayBtnReturn].filter(Boolean).join(" ")} onClick={() => void submit()} disabled={submitting || cartCount === 0}>
             {submitting ? translate("loading") : `${translate(isReturn ? "terminalCheckoutReturn" : "terminalCheckout")} (F9)`}
           </button>
         </div>

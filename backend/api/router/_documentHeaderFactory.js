@@ -29,6 +29,7 @@ import {
 } from "../../services/accountingPosting.js";
 import { allocateNumber } from "../../services/documentNumbering.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
+import { assertUniqueNumber, respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 
 const BASIS_FIELDS = ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"];
 
@@ -169,6 +170,8 @@ export function createDocumentHeaderRouter({
 			// Номер документа: из payload или автогенерация по виду документа.
 			const ndt = numberDocType || posting?.docType || null;
 			if (ndt) data.number = (b.number?.trim?.() || null) || await allocateNumber(ndt, data.organizationUuid, data.date);
+			// Уникальность номера в пределах года.
+			await assertUniqueNumber(MODEL, { number: data.number, date: data.date, organizationUuid: data.organizationUuid });
 
 			// Stage D: org-зависимые поля должны принадлежать организации документа.
 			await assertOrgFieldMembership(data, prisma);
@@ -182,6 +185,7 @@ export function createDocumentHeaderRouter({
 		} catch (error) {
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
+			if (respondDuplicateNumberError(error, res)) return;
 			if (posting && respondPostingError(error, res)) return;
 			console.error(`POST /${ROUTE} error:`, error);
 			return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -217,6 +221,11 @@ export function createDocumentHeaderRouter({
 				await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
 			}
 
+			// Уникальность номера в пределах года (при изменении номера).
+			if (b.number !== undefined) {
+				await assertUniqueNumber(MODEL, { number: data.number, date: data.date ?? existing.date, organizationUuid: data.organizationUuid ?? existing.organizationUuid, excludeUuid: existing.uuid });
+			}
+
 			// Stage D: org-зависимые поля принадлежат организации документа.
 			await assertOrgFieldMembership({ ...existing, ...data }, prisma);
 
@@ -231,6 +240,7 @@ export function createDocumentHeaderRouter({
 		} catch (error) {
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
+			if (respondDuplicateNumberError(error, res)) return;
 			if (posting && respondPostingError(error, res)) return;
 			if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
 			console.error(`PUT /${ROUTE}/:id error:`, error);

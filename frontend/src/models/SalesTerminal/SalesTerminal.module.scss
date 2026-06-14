@@ -19,46 +19,6 @@
 	gap: 10px;
 }
 
-.SearchBar {
-	flex-shrink: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-
-// Поле сканера штрих-кодов.
-.ScanBox {
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-}
-
-.ScanLabel {
-	font-size: 12px;
-	color: $gray500;
-}
-
-.ScanInput {
-	height: 40px;
-	padding: 0 12px;
-	border: 2px solid $primary;
-	border-radius: 8px;
-	font-size: 16px;
-	font-weight: 600;
-	outline: none;
-	background: #fff;
-	color: $gray900;
-
-	&::placeholder {
-		color: $gray400;
-		font-weight: 400;
-	}
-
-	&:focus {
-		box-shadow: 0 0 0 3px $accentBlueSoft;
-	}
-}
-
 // Активный режим «Возврат» — оранжевый.
 .ModeReturnActive {
 	border-color: $warnAccent;
@@ -71,89 +31,10 @@
 	background: linear-gradient(180deg, #fb923c, $warnAccent);
 }
 
+// Структурный контейнер корзины: только flex-размер (рамку рисует сам SubTable).
 .CartWrap {
 	flex: 1 1 auto;
 	min-height: 0;
-	overflow: auto;
-	background: #fff;
-	border: 1px solid $gray200;
-	border-radius: 10px;
-}
-
-.EmptyCart {
-	height: 100%;
-	min-height: 240px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: $gray400;
-	font-size: 15px;
-	padding: 24px;
-	text-align: center;
-}
-
-.Cart {
-	width: 100%;
-	border-collapse: collapse;
-	font-size: 14px;
-
-	thead th {
-		position: sticky;
-		top: 0;
-		z-index: 1;
-		background: $gray100;
-		color: $gray700;
-		font-weight: 600;
-		text-align: left;
-		padding: 10px 10px;
-		border-bottom: 1px solid $gray200;
-		white-space: nowrap;
-	}
-
-	tbody td {
-		padding: 6px 10px;
-		border-bottom: 1px solid $gray100;
-		vertical-align: middle;
-	}
-
-	tbody tr:hover td {
-		background: $accentBlueHover;
-	}
-}
-
-.cN { width: 36px; color: $gray400; text-align: center; }
-.cName { font-weight: 500; color: $gray900; }
-.cQty { width: 140px; }
-.cPrice { width: 120px; }
-.cSum { width: 120px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: $gray900; }
-.cDel { width: 36px; text-align: center; }
-
-// Степпер количества: − [поле] +
-.Stepper {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-
-	button {
-		width: 26px;
-		height: 26px;
-		flex-shrink: 0;
-		border: 1px solid $gray300;
-		background: #fff;
-		border-radius: 6px;
-		font-size: 16px;
-		line-height: 1;
-		cursor: pointer;
-		color: $gray700;
-		transition: background 0.12s, border-color 0.12s;
-
-		&:hover { background: $gray50; border-color: $primary; color: $primary; }
-	}
-
-	:global(input) {
-		width: 56px;
-		text-align: center;
-	}
 }
 
 .DelBtn {
@@ -199,13 +80,23 @@
 
 .PayMethod {
 	flex: 1 1 0;
-	padding: 9px 8px;
+	min-width: 0;
+	height: 34px;
+	padding: 0 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
 	border: 1px solid $gray200;
 	border-radius: 8px;
 	background: #fff;
 	color: $gray700;
 	font-size: 13px;
 	font-weight: 600;
+	line-height: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	cursor: pointer;
 	transition: background 0.12s, border-color 0.12s, color 0.12s;
 

@@ -95,7 +95,11 @@ export function getModelColumns(
 	const storageColumns = localStorage.getItem(storageKey);
 	if (storageColumns !== null) {
 		try {
-			const cached: TColumn[] = JSON.parse(storageColumns);
+			const parsed: TColumn[] = JSON.parse(storageColumns);
+			// Служебные колонки (identifier начинается с "__", напр. "__rowActions")
+			// инжектируются в рантайме и НЕ участвуют в кэше/сигнатуре — иначе
+			// сигнатура не совпадёт с defaults и настройки колонок будут сбрасываться.
+			const cached = parsed.filter((c) => !c.identifier.startsWith("__"));
 			// Проверяем актуальность кэша: набор identifier + type должен совпадать
 			const initSig = defaults
 				.map((c) => `${c.identifier}:${c.type}`)

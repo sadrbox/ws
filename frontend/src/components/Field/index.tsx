@@ -132,6 +132,8 @@ interface TypeFieldStringProps {
   actions?: TypeFieldActions;
   variant?: FieldVariant;
   autoFocus?: boolean;
+  /** Максимальная длина ввода (символов). Напр. 12 для номера документа. */
+  maxLength?: number;
   /** Поле имеет несохранённые изменения (при открытии через "Несохранённые записи") */
   isDirty?: boolean;
 }
@@ -199,6 +201,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   actions,
   variant = 'default',
   autoFocus,
+  maxLength,
   isDirty,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -245,13 +248,14 @@ export const Field: FC<TypeFieldStringProps> = ({
       error={error}
       variant={variant}
       autoFocus={autoFocus}
+      maxLength={maxLength}
       isDirty={isDirty}
     />
   );
 };
 
 // Компонент FieldGroup
-export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean }> = ({
+export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength?: number }> = ({
   name,
   label,
   value = '',
@@ -266,6 +270,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean }> = ({
   error = false,
   variant = 'default',
   autoFocus,
+  maxLength,
   isDirty,
 }) => {
   const uid = useId();
@@ -287,6 +292,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean }> = ({
           autoComplete='off'
           disabled={disabled}
           placeholder={placeholder}
+          maxLength={maxLength}
           autoFocus={autoFocus}
         />
         {actions && actions.length > 0 && (

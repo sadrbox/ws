@@ -505,7 +505,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             <div className={styles.Form}>
               <GroupCol>
                 <GroupRow className={styles.FormHeaderRow}>
-                  <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")}
+                  <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
                     actions={[
                       { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n)) },
                       { type: "clear", onClick: () => form.setField("number", "") },

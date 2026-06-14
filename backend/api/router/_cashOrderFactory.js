@@ -13,6 +13,7 @@ import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgF
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
+import { assertUniqueNumber, respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { allocateNumber } from "../../services/documentNumbering.js";
 
 const MODEL = "cashOrder";
@@ -140,12 +141,14 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			await assertPeriodOpen(docData.organizationUuid, docData.date);
 			if (willPost) await validatePosting(docType, docData, []);
 			docData.number = (req.body.number?.trim?.() || null) || await allocateNumber(docType, docData.organizationUuid, docData.date);
+			await assertUniqueNumber(MODEL, { number: docData.number, date: docData.date, organizationUuid: docData.organizationUuid });
 			const item = await prisma[MODEL].create({ data: docData, include: INCLUDE });
 			if (item.posted) await reconcileDocumentEntries(docType, item.uuid);
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
+			if (respondDuplicateNumberError(error, res)) return;
 			if (respondPostingError(error, res)) return;
 			console.error(`POST /${route} error:`, error);
 			return res.status(500).json({ success: false, message: "Ошибка сервера" });

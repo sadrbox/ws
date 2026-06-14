@@ -83,7 +83,7 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 	// Префикс опционален: по умолчанию его нет, номер — только дополненный нулями
 	// счётчик («000000001»). Префикс добавляется через «-», только если задан.
 	const prefix = (settings[docType]?.prefix ?? "").trim();
-	const padding = settings[docType]?.padding || 9;
+	const padding = settings[docType]?.padding || 6;
 	const year = (date ? new Date(date) : new Date()).getFullYear();
 	const org = organizationUuid || "__global__";
 	try {
@@ -110,7 +110,7 @@ export async function getNumberFormat(docType, organizationUuid, client = prisma
 	const settings = await loadSettings(client, organizationUuid);
 	return {
 		prefix: (settings[docType]?.prefix ?? "").trim(),
-		padding: settings[docType]?.padding || 9,
+		padding: settings[docType]?.padding || 6,
 		enabled: settings[docType]?.enabled !== false,
 	};
 }

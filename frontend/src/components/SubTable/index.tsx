@@ -178,6 +178,16 @@ export interface SubTableProps {
    * сортировкой в displayRows. Используется вместе с `dynamic: true` на колонке.
    */
   computeRow?: (row: TDataItem) => Partial<TDataItem>;
+  /**
+   * Императивный API для внешнего управления строками (см. SubTableApi).
+   * Нужен, когда строки добавляются ИЗВНЕ (скан/лукап в терминале), а не кнопкой «+».
+   */
+  apiRef?: React.MutableRefObject<SubTableApi | null>;
+  /**
+   * Рендер замыкающей колонки действий строки (кнопки в ячейке, например ✕ удалить).
+   * Если задан — добавляется служебная колонка `__rowActions`. По умолчанию нет.
+   */
+  rowActions?: (row: TDataItem, ctx: SubTableContext) => ReactNode;
 }
 
 /** Контекст, передаваемый в кастомные колбэки */
@@ -222,6 +232,28 @@ export interface SubTableContext {
   expandedRowIds: Set<string>;
   /** Переключить раскрытие строки */
   toggleExpandRow: (rowId: string) => void;
+  /**
+   * Удалить ОДНУ строку (для кнопки ✕ в ячейке). deferred → create-строку убрать,
+   * существующую пометить delete; иначе DELETE на сервере + refetch.
+   */
+  removeRow: (row: TDataItem) => void | Promise<void>;
+}
+
+/**
+ * Императивный API SubTable (через проп `apiRef`) — для ВНЕШНЕГО управления
+ * строками клиентской таблицы (например корзина терминала: скан добавляет строки).
+ */
+export interface SubTableApi {
+  /** Добавить строку с готовыми данными (deferred create / POST). Возвращает строку. */
+  addRow: (data?: Record<string, unknown>) => TDataItem | undefined;
+  /** Удалить строку (как ctx.removeRow). */
+  removeRow: (row: TDataItem) => void | Promise<void>;
+  /** Обновить поля строки локально. */
+  updateRow: (row: TDataItem, patch: Record<string, unknown>) => void;
+  /** Очистить все строки. */
+  clear: () => void;
+  /** Текущие видимые строки (без delete-маркеров). */
+  getRows: () => TDataItem[];
 }
 
 /** Получить rowId для идентификации строки в cellErrors */
@@ -381,6 +413,8 @@ const SubTable: FC<SubTableProps> = ({
   onRefresh,
   disablePrimaryRowHighlight = false,
   clientSort = false,
+  apiRef,
+  rowActions,
 }) => {
   const queryClient = useQueryClient();
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
@@ -507,6 +541,12 @@ const SubTable: FC<SubTableProps> = ({
       setOpCount(c => c - 1);
     }
   }, [handleDeleteRaw, deferRemoteChanges, cachedRowsRef, setCacheVersion, notifyParent]);
+
+  // Удаление ОДНОЙ строки (кнопка ✕ в ячейке) — тонкая обёртка над handleDelete.
+  const removeRow = useCallback((row: TDataItem) => {
+    const id = typeof row.id === "number" ? row.id : NaN;
+    return handleDelete(new Set<number>(Number.isNaN(id) ? [] : [id]), [row]);
+  }, [handleDelete]);
 
   // ── Обработчики ────────────────────────────────────────────────────────
   const handleSortChange = useCallback((s: typeof sort) => {
@@ -725,7 +765,8 @@ const SubTable: FC<SubTableProps> = ({
     handleLookupChange,
     expandedRowIds,
     toggleExpandRow,
-  }), [refetch, inlineEditing, disabled, handleInlineChange, updateLocalRow, deferRemoteChanges, setCellError, handleLookupChange, expandedRowIds, toggleExpandRow]);
+    removeRow,
+  }), [refetch, inlineEditing, disabled, handleInlineChange, updateLocalRow, deferRemoteChanges, setCellError, handleLookupChange, expandedRowIds, toggleExpandRow, removeRow]);
 
   // ── Фронтенд-фильтрация (всегда на фронте) ─────────────────────────────
   // Конвейер отображаемых строк вынесен в чистую computeDisplayRows (см. выше),
@@ -751,6 +792,8 @@ const SubTable: FC<SubTableProps> = ({
   // Table через getCellMeta; required/error стили применяются Field-компонентами
   // через CellFieldStateScope → useCellFieldState.
   const renderCell = useCallback((row: TDataItem, col: TColumn): ReactNode | undefined => {
+    // Служебная колонка действий строки (кнопки в ячейке, например ✕ удалить).
+    if (col.identifier === "__rowActions") return rowActions ? rowActions(row, ctx) : null;
     // Для несохранённых (temp) строк скрываем служебные поля id / uuid
     if (deferRemoteChanges && typeof row.id === "number" && row.id < 0) {
       if (col.identifier === "id") return <span className={styles.TempIdBadge}>Новый</span>;
@@ -779,7 +822,7 @@ const SubTable: FC<SubTableProps> = ({
     })();
     if (!hasError && !isCellEmpty) return undefined;
     return <ReadOnlyCell row={row} column={col} />;
-  }, [renderCellProp, ctx, deferRemoteChanges, cellErrors, requiredFields, inlineEditing]);
+  }, [renderCellProp, ctx, deferRemoteChanges, cellErrors, requiredFields, inlineEditing, rowActions]);
 
   // ── getCellMeta ────────────────────────────────────────────────────────
   // Возвращает required/error-флаги и визуальный errorTooltip. Table передаёт
@@ -875,6 +918,47 @@ const SubTable: FC<SubTableProps> = ({
       }
     }
   }, [deferRemoteChanges, tempIdRef, columns, parentKey, parentUuid, extraQueryParams, onInlineAddProp, defaultNewRow, model, ctx, refetch, cachedRowsRef, setCacheVersion, notifyParent]);
+
+  // ── Императивный API (apiRef): внешнее добавление/очистка строк ─────────
+  // Нужен, когда строки приходят ИЗВНЕ (скан/лукап в терминале): initialPendingRows
+  // мержится один раз, поэтому инкрементальные добавления делаем через addRow.
+  const addRowExternal = useCallback((data?: Record<string, unknown>): TDataItem | undefined => {
+    if (deferRemoteChanges) {
+      const tmpId = tempIdRef.current--;
+      const tmpUuid = `tmp-${Date.now()}-${Math.abs(tmpId)}`;
+      const newRow: PendingRow = { id: tmpId, uuid: tmpUuid, [parentKey]: parentUuid, ...(extraQueryParams ?? {}) };
+      columns.forEach((c) => { if (!(c.identifier in newRow)) newRow[c.identifier] = c.type === "number" ? null : ""; });
+      if (data) Object.assign(newRow, data);
+      newRow._pendingAction = "create"; // данные осмысленные → без _untouched (строка сохранится)
+      cachedRowsRef.current = [...cachedRowsRef.current, newRow];
+      setCacheVersion(v => v + 1);
+      notifyParent(cachedRowsRef.current);
+      return newRow;
+    }
+    void (async () => {
+      try {
+        const { default: apiClient } = await import("src/services/api/client");
+        await apiClient.post(`/${model}`, { ...(data ?? {}), [parentKey]: parentUuid, ...(extraQueryParams ?? {}) });
+      } catch { /* ignore */ } finally { void refetch(); }
+    })();
+    return undefined;
+  }, [deferRemoteChanges, tempIdRef, parentKey, parentUuid, extraQueryParams, columns, model, refetch, cachedRowsRef, setCacheVersion, notifyParent]);
+
+  const clearExternal = useCallback(() => {
+    cachedRowsRef.current = cachedRowsRef.current
+      .map((r): PendingRow | null => r._pendingAction === "create" ? null : { ...r, _pendingAction: "delete" })
+      .filter((r): r is PendingRow => r !== null);
+    setCacheVersion(v => v + 1);
+    notifyParent(cachedRowsRef.current);
+  }, [cachedRowsRef, setCacheVersion, notifyParent]);
+
+  const getRowsExternal = useCallback(() => cachedRowsRef.current.filter(r => r._pendingAction !== "delete"), [cachedRowsRef]);
+
+  useEffect(() => {
+    if (!apiRef) return;
+    apiRef.current = { addRow: addRowExternal, removeRow, updateRow: updateLocalRow, clear: clearExternal, getRows: getRowsExternal };
+    return () => { if (apiRef) apiRef.current = null; };
+  }, [apiRef, addRowExternal, removeRow, updateLocalRow, clearExternal, getRowsExternal]);
 
   // ── Обработчик клавиатуры на контейнере таблицы ───────────────────────
   // Поведение (только в inline-режиме редактирования; в readonly — не работает):
@@ -1213,6 +1297,15 @@ const SubTable: FC<SubTableProps> = ({
     </>
   ), [toggleInlineEditing, inlineEditing, extraButtonsProp, readonly, disabled, showEditModeToggle, openFormFor]);
 
+  // Обёртка setColumns: не даём служебной колонке `__rowActions` попасть в
+  // сохраняемые настройки/state (Table при resize/настройке пишет columns целиком).
+  const setColumnsForTable = useCallback((next: React.SetStateAction<TColumn[]>) => {
+    setColumns((prev) => {
+      const resolved = typeof next === "function" ? (next as (p: TColumn[]) => TColumn[])(prev) : next;
+      return resolved.filter((c) => c.identifier !== "__rowActions");
+    });
+  }, [setColumns]);
+
   // ── Table props ────────────────────────────────────────────────────────
   const combinedLoading = isAnythingLoading || opLoading;
   const tableProps = useMemo(() => ({
@@ -1220,7 +1313,12 @@ const SubTable: FC<SubTableProps> = ({
     enableDateRange: false,
     componentName,
     rows: disablePrimaryRowHighlight ? displayRows.map(r => ({ ...r, isPrimary: false })) : displayRows,
-    columns,
+    // Дедуп: служебная колонка действий добавляется РОВНО один раз. Фильтруем
+    // возможные ранее просочившиеся `__rowActions` (resize Table пишет columns с ней
+    // в state/localStorage) — иначе колонка дублируется при изменении настроек.
+    columns: rowActions
+      ? [...columns.filter((c) => c.identifier !== "__rowActions"), { identifier: "__rowActions", name: "", type: "string", visible: true, inlist: false, width: "44px", minWidth: "44px", alignment: "center" } as TColumn]
+      : columns,
     total: displayRows.length,
     totalPages: Math.ceil(displayRows.length / adaptiveLimit),
     isLoading: combinedLoading,
@@ -1232,7 +1330,7 @@ const SubTable: FC<SubTableProps> = ({
     sorting: { sort, onSortChange: handleSortChange },
     filtering: { filters: filter, onFilterChange: handleFilterChange, onClearAll: clearFilters },
     search: { value: search, onChange: handleSearch },
-    actions: { openModelForm: readonly ? undefined : openModelForm, refetch: onRefresh ?? handleCleanRefresh, setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
+    actions: { openModelForm: readonly ? undefined : openModelForm, refetch: onRefresh ?? handleCleanRefresh, setColumns: rowActions ? setColumnsForTable : setColumns, fetchNextPage, setAdaptiveLimit: updateAdaptiveLimit },
     onDelete: (disabled || disableDelete) ? undefined : handleDelete,
     extraButtons,
     inlineEditing,
@@ -1249,9 +1347,9 @@ const SubTable: FC<SubTableProps> = ({
   }), [
     componentName, displayRows, columns, adaptiveLimit, combinedLoading, error,
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
-    openModelForm, setColumns, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
+    openModelForm, setColumns, setColumnsForTable, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
     handleCleanRefresh, onRefresh, handleDelete, disabled, extraButtons, inlineEditing, renderCell, getCellMeta, handleInlineAdd, onInlineAddProp, defaultNewRow,
-    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd, disableDelete, disablePrimaryRowHighlight,
+    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd, disableDelete, disablePrimaryRowHighlight, rowActions,
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────

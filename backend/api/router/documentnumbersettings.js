@@ -26,7 +26,7 @@ router.get("/document-number-settings", async (req, res) => {
 				// Подсказка-префикс вида документа (опционально, не подставляется автоматически).
 				defaultPrefix: def.prefix,
 				prefix: eff?.prefix ?? "",
-				padding: eff?.padding ?? 9,
+				padding: eff?.padding ?? 6,
 				enabled: eff?.enabled ?? true,
 				// Задано ли значение на уровне ЭТОЙ организации (а не глобально/дефолт).
 				isOverridden: !!own,
@@ -47,7 +47,7 @@ router.put("/document-number-settings/:docType", async (req, res) => {
 		const organizationUuid = req.body.organizationUuid ? String(req.body.organizationUuid) : GLOBAL_SETTINGS_KEY;
 		const prefix = String(req.body.prefix ?? "").trim();
 		const p = Number(req.body.padding);
-		const padding = Number.isInteger(p) && p >= 1 && p <= 12 ? p : 9;
+		const padding = Number.isInteger(p) && p >= 1 && p <= 9 ? p : 6;
 		const enabled = req.body.enabled === undefined ? true : !!req.body.enabled;
 		const row = await prisma.documentNumberSetting.upsert({
 			where: { organizationUuid_docType: { organizationUuid, docType } },

@@ -211,6 +211,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           getSuggestionLabel={(item) => basisItemLabel(typeName, item)}
           columns={columns}
           secondaryFields={["name", "counterparty.name", "documentNumber"]}
+          postedIndicator
           onSelect={handleSelect}
           onClear={onClear}
           disabled={disabled || !activeType}
