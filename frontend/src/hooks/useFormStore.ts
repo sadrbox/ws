@@ -731,6 +731,9 @@ function createFormStore<F extends object>(
 					translateError(err.response.data?.message) || "Запись уже существует";
 			else if (err.response?.status === 400)
 				msg = translateError(err.response.data?.message) || "Ошибка валидации";
+			else if (err.response?.status === 423)
+				// Закрытый период: показываем серверное сообщение «Период закрыт…».
+				msg = translateError(err.response.data?.message) || "Период закрыт для изменений";
 			else if (err.message) msg = translateError(err.message);
 			setError(msg, noteType);
 			setMeta({ isLoading: false });
@@ -1794,9 +1797,12 @@ export function useFormStore<F extends object>(
 				}
 			}
 
-			// Async-гард перед сохранением (например контроль остатка перед
-			// проведением). Прерывает сохранение ДО любого HTTP-запроса.
+			// Async-гард перед сохранением (например контроль остатка
+			// check-availability перед проведением). Блокируем форму (isLoading=true)
+			// на время гарда — иначе элементы управления остаются активными, пока
+			// идёт запрос. Прерывает сохранение ДО основного HTTP-запроса.
 			if (onBeforeSaveRef.current) {
+				store.setMeta({ isLoading: true });
 				let guardMsg: string | null | undefined;
 				try {
 					guardMsg = await onBeforeSaveRef.current(store.getSnapshot().fields);

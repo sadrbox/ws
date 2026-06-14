@@ -39,6 +39,8 @@ interface TFields {
   useExcise: boolean;
   /** Ставка акциза по умолчанию, % (ввод в форме как строка). */
   exciseRate: string;
+  /** Метод расчёта себестоимости списания: AVERAGE — средняя; FIFO — по партиям. */
+  costingMethod: "AVERAGE" | "FIFO";
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -53,6 +55,7 @@ const DEFAULT_FIELDS: TFields = {
   useDiscount: false,
   useExcise: false,
   exciseRate: "0",
+  costingMethod: "AVERAGE",
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -96,6 +99,10 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
         d.exciseRate != null && d.exciseRate !== ""
           ? String(d.exciseRate)
           : "0",
+      costingMethod:
+        String(d.costingMethod ?? "AVERAGE").toUpperCase() === "FIFO"
+          ? "FIFO"
+          : "AVERAGE",
     }),
     buildPayload: (fd) => {
       const vatRateNum =
@@ -120,6 +127,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
         useDiscount: Boolean(fd.useDiscount),
         useExcise: Boolean(fd.useExcise),
         exciseRate: fd.useExcise ? exciseRateNum : 0,
+        costingMethod: fd.costingMethod === "FIFO" ? "FIFO" : "AVERAGE",
       };
     },
     buildPaneLabel: (saved) => {
@@ -260,6 +268,32 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
 
               <GroupRow className={styles.SectionGap}>
                 <label
+                  className={[styles.SettingChip, !canWrite && styles.SettingChipReadonly].filter(Boolean).join(" ")}
+                >
+                  <span className={styles.SettingSubLabel}>Метод себестоимости:</span>
+                  <select
+                    value={form.fields.costingMethod}
+                    onChange={(e) =>
+                      form.setField(
+                        "costingMethod",
+                        e.target.value === "FIFO" ? "FIFO" : "AVERAGE",
+                      )
+                    }
+                    disabled={form.isLoading || !canWrite}
+                  >
+                    <option value="AVERAGE">Средняя (скользящая)</option>
+                    <option value="FIFO">ФИФО (по партиям)</option>
+                  </select>
+                </label>
+                <span className={styles.SettingHint}>
+                  Способ списания себестоимости ТМЗ: средняя или ФИФО (первая партия
+                  прихода списывается первой). Применяется к реализации, перемещению и
+                  возврату от покупателя.
+                </span>
+              </GroupRow>
+
+              <GroupRow className={styles.SectionGap}>
+                <label
                   className={[styles.SettingChip, form.fields.useDiscount && styles.SettingChipActive, !canWrite && styles.SettingChipReadonly].filter(Boolean).join(" ")}
                 >
                   <input
@@ -376,6 +410,10 @@ const renderListCell = (row: TDataItem, col: TColumn) => {
     if (!useVat) return <span className={styles.Muted}>—</span>;
     const m = String(row.vatCalculationMethod ?? "INCLUDED").toUpperCase();
     return <span>{m === "ADDED" ? "Сверху" : "В сумме"}</span>;
+  }
+  if (col.identifier === "costingMethod") {
+    const m = String(row.costingMethod ?? "AVERAGE").toUpperCase();
+    return <span>{m === "FIFO" ? "ФИФО" : "Средняя"}</span>;
   }
   if (col.identifier === "useVat") {
     return <span>{row.useVat ? "Да" : "Нет"}</span>;

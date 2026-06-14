@@ -45,6 +45,8 @@ import { SalesOrdersList } from 'src/models/SalesOrders';
 import { ReservationsList } from 'src/models/Reservations';
 import { PurchaseOrdersList } from 'src/models/PurchaseOrders';
 import { BankStatementsList } from 'src/models/BankStatements';
+import { MonthClosesList } from 'src/models/MonthCloses';
+import { FiscalReceiptsList } from 'src/models/FiscalReceipts';
 import { CashReceiptOrdersList } from 'src/models/CashReceiptOrders';
 import { CashExpenseOrdersList } from 'src/models/CashExpenseOrders';
 import { BrandsList } from 'src/models/Brands';
@@ -59,7 +61,7 @@ import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
 import { PayrollCalculationsList } from 'src/models/PayrollCalculations';
 import { PayrollPaymentsList } from 'src/models/PayrollPayments';
-import { SalesReport, MaterialStatement, CashReport, ProductRegisterReport, AccountingJournal, TurnoverBalanceSheet, AccountCard, ManagerReport, SettlementsReport, InventoryTurnoverReport, ABCReport } from 'src/models/Reports';
+import { SalesReport, MaterialStatement, CashReport, ProductRegisterReport, AccountingJournal, TurnoverBalanceSheet, AccountCard, ManagerReport, SettlementsReport, InventoryTurnoverReport, ABCReport, PriceListReport } from 'src/models/Reports';
 import { SalesTerminal } from 'src/models/SalesTerminal';
 import { ChartOfAccountsList } from 'src/models/ChartOfAccounts';
 import { SubkontoTypesList } from 'src/models/SubkontoTypes';
@@ -591,6 +593,9 @@ const NavbarPaneBell: FC = () => {
   const { windows: { addPane } } = useAppContext();
   const groups = useAllPaneNotifications();
   const [showNotes, setShowNotes] = useState(false);
+  // Позиция попапа (position:fixed) — попап портируется в body, т.к. навбар имеет
+  // overflow: clip и иначе обрезал бы absolute-потомка (как .NavbarMobileMenu).
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -623,7 +628,13 @@ const NavbarPaneBell: FC = () => {
       <button
         ref={bellRef}
         className={[styles.NavbarBellBtn, styles.PaneNoteBell].join(" ")}
-        onClick={() => setShowNotes((v) => !v)}
+        onClick={() => {
+          if (!showNotes && bellRef.current) {
+            const r = bellRef.current.getBoundingClientRect();
+            setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+          }
+          setShowNotes((v) => !v);
+        }}
         title={translate("panelNotifications")}
         type="button"
       >
@@ -633,8 +644,8 @@ const NavbarPaneBell: FC = () => {
         </svg>
         <span className={styles.PaneNoteBadge}>{totalCount}</span>
       </button>
-      {showNotes && (
-        <div ref={popoverRef} className={styles.PaneNotePopover}>
+      {showNotes && pos && createPortal(
+        <div ref={popoverRef} className={styles.PaneNotePopover} style={{ position: "fixed", top: pos.top, right: pos.right }}>
           <div className={styles.PaneNotePopoverHeader}>
             <span>{translate("notifications")}</span>
             <button className={styles.PaneNoteJournalLink} onClick={openJournal} type="button">
@@ -691,7 +702,8 @@ const NavbarPaneBell: FC = () => {
               </div>
             ))
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -878,6 +890,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList, label: translate("CashReceiptOrdersList") })}>{translate("CashReceiptOrdersList")}</li>}
               {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList, label: translate("CashExpenseOrdersList") })}>{translate("CashExpenseOrdersList")}</li>}
               {can("BankStatement") && <li onClick={() => addPane({ component: BankStatementsList, label: translate("docType_bank_statement") })}>{translate("docType_bank_statement")}</li>}
+              {can("FiscalReceipt") && <li onClick={() => addPane({ component: FiscalReceiptsList, label: translate("FiscalReceiptsList") })}>{translate("FiscalReceiptsList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
@@ -887,6 +900,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("Sale") && <li onClick={() => addPane({ component: ManagerReport, label: translate("managerReport") })}>{translate("managerReport")}</li>}
               {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: MaterialStatement, label: translate("MaterialStatementList") })}>{translate("MaterialStatementList")}</li>}
               {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: ProductRegisterReport, label: translate("ProductRegisterList") })}>{translate("ProductRegisterList")}</li>}
+              {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceListReport, label: translate("priceListReport") })}>{translate("priceListReport")}</li>}
               {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: InventoryTurnoverReport, label: translate("inventoryTurnover") })}>{translate("inventoryTurnover")}</li>}
               {can("Sale") && <li onClick={() => addPane({ component: ABCReport, label: translate("abcAnalysis") })}>{translate("abcAnalysis")}</li>}
               {(can("CashReceiptOrder") || can("CashExpenseOrder")) && <li onClick={() => addPane({ component: CashReport, label: translate("CashReportList") })}>{translate("CashReportList")}</li>}
@@ -917,6 +931,12 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("AccountingEntry") && <li onClick={() => addPane({ component: TurnoverBalanceSheet, label: translate("osvTitle") })}>{translate("osvTitle")}</li>}
               {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountCard, label: translate("accountCardTitle") })}>{translate("accountCardTitle")}</li>}
               {can("AccountingEntry") && <li onClick={() => addPane({ component: SettlementsReport, label: translate("settlementsReport") })}>{translate("settlementsReport")}</li>}
+            </ul>
+          </div>
+          <div className={styles.NavGroup}>
+            <h3>{translate("monthCloseRegulatory")}</h3>
+            <ul className={styles.NavList}>
+              {can("MonthClose") && <li onClick={() => addPane({ component: MonthClosesList, label: translate("MonthClosesList") })}>{translate("MonthClosesList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>

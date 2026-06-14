@@ -6,6 +6,7 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { allocateNumber } from "../../services/documentNumbering.js";
 
 const router = express.Router();
@@ -172,6 +173,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		if (fkError) return res.status(403).json({ success: false, message: fkError });
 		// Stage D: склад/договор принадлежат организации документа.
 		await assertOrgFieldMembership({ organizationUuid, warehouseUuid, contractUuid }, prisma);
+		// Блокировка закрытого периода: нельзя создавать документ в закрытом месяце.
+		await assertPeriodOpen(organizationUuid, date);
 		const docNumber = (req.body.number?.trim?.() || null) || await allocateNumber("purchase", organizationUuid, date);
 		const item = await prisma[MODEL].create({
 			data: {
@@ -202,6 +205,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
 		if (respondOrgFieldError(error, res)) return;
+		if (respondPeriodLockError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -238,9 +242,12 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			const fkError = await checkFkOwnership(req, prisma, [{ model: "warehouse", uuid: data.warehouseUuid }]);
 			if (fkError) return res.status(403).json({ success: false, message: fkError });
 		}
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true, warehouseUuid: true, contractUuid: true } });
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true, warehouseUuid: true, contractUuid: true, date: true } });
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Блокировка закрытого периода: нельзя трогать закрытый документ и переносить в закрытый период.
+		await assertPeriodOpen(existing.organizationUuid, existing.date);
+		await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
 		// Stage D: склад/договор принадлежат организации документа (мерж с текущими).
 		await assertOrgFieldMembership({
 			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : existing.organizationUuid,
@@ -271,6 +278,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 	} catch (error) {
 		if (respondOrgFieldError(error, res)) return;
 		if (respondPostingError(error, res)) return;
+		if (respondPeriodLockError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);

@@ -306,6 +306,88 @@ test("Интеграция: себестоимость реализации сп
 	}
 });
 
+// ─── Интеграция: ФИФО-себестоимость списания через границу слоёв ───────────────
+test("Интеграция: при costingMethod=FIFO себестоимость считается по партиям (не по средней)", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid || !fx.warehouseUuid) return t.skip("нет фикстур");
+	const setting = await prisma.organizationAccountingSetting.findFirst({
+		where: { organizationUuid: fx.orgUuid, deletedAt: null }, orderBy: { startDate: "desc" },
+	});
+	if (!setting) return t.skip("нет параметров учёта организации");
+
+	const product = await prisma.product.create({
+		data: { name: `__test_fifo_${Date.now()}`, organizationUuid: fx.orgUuid },
+	}).catch(() => null);
+	if (!product) return t.skip("не удалось создать тестовый товар");
+
+	// Два прихода разной цены: 10 ед × 500 (старее) + 10 ед × 700 (новее).
+	const baseDoc = { productUuid: product.uuid, warehouseUuid: fx.warehouseUuid, organizationUuid: fx.orgUuid, documentType: "purchase" };
+	const reg1 = await prisma.productRegister.create({ data: { ...baseDoc, date: new Date(Date.now() - 2 * 86400000), movementType: "in", quantity: 10, amount: 5000, documentUuid: crypto.randomUUID() } });
+	const reg2 = await prisma.productRegister.create({ data: { ...baseDoc, date: new Date(Date.now() - 1 * 86400000), movementType: "in", quantity: 10, amount: 7000, documentUuid: crypto.randomUUID() } });
+	const savedMethod = setting.costingMethod;
+	try {
+		const doc = { organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid, date: new Date(), posted: true };
+		const items = [{ productUuid: product.uuid, quantity: 12, amount: 20000 }]; // продаём 12 (через границу слоёв)
+
+		// FIFO: 10×500 + 2×700 = 6400.
+		await prisma.organizationAccountingSetting.update({ where: { uuid: setting.uuid }, data: { costingMethod: "FIFO" } });
+		const fifoEntries = await buildDocumentEntries("sale", doc, items);
+		const fifoCogs = fifoEntries.find((e) => e.debitAccountCode === "7010" && e.creditAccountCode === "1330");
+		assert.ok(fifoCogs, "должна быть проводка себестоимости");
+		assert.equal(fifoCogs.amount, 6400, "ФИФО: 10×500 + 2×700 = 6400");
+
+		// AVERAGE: 12 × (12000/20=600) = 7200 — отличается от ФИФО.
+		await prisma.organizationAccountingSetting.update({ where: { uuid: setting.uuid }, data: { costingMethod: "AVERAGE" } });
+		const avgEntries = await buildDocumentEntries("sale", doc, items);
+		const avgCogs = avgEntries.find((e) => e.debitAccountCode === "7010" && e.creditAccountCode === "1330");
+		assert.equal(avgCogs.amount, 7200, "средняя: 12 × 600 = 7200");
+	} finally {
+		await prisma.organizationAccountingSetting.update({ where: { uuid: setting.uuid }, data: { costingMethod: savedMethod } }).catch(() => {});
+		await prisma.productRegister.delete({ where: { uuid: reg1.uuid } }).catch(() => {});
+		await prisma.productRegister.delete({ where: { uuid: reg2.uuid } }).catch(() => {});
+		await prisma.product.delete({ where: { uuid: product.uuid } }).catch(() => {});
+	}
+});
+
+// ─── Интеграция: ФИФО при нескольких документах ОДНОЙ даты (порядок по documentId) ─
+// Регресс на двойной «пропуск» партий: 2 реализации одной даты, пересекающие границу
+// слоёв, должны в сумме давать корректный ФИФО (а не задвоенный «skip»).
+test("Интеграция: FIFO для двух документов одной даты упорядочен по documentId (без двойного skip)", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid || !fx.warehouseUuid) return t.skip("нет фикстур");
+	const setting = await prisma.organizationAccountingSetting.findFirst({
+		where: { organizationUuid: fx.orgUuid, deletedAt: null }, orderBy: { startDate: "desc" },
+	});
+	if (!setting) return t.skip("нет параметров учёта организации");
+	const product = await prisma.product.create({ data: { name: `__test_fifo_sameday_${Date.now()}`, organizationUuid: fx.orgUuid } }).catch(() => null);
+	if (!product) return t.skip("не удалось создать тестовый товар");
+
+	const D1 = new Date("2026-01-01T00:00:00Z");
+	const D5 = new Date("2026-01-05T00:00:00Z");
+	const base = { productUuid: product.uuid, warehouseUuid: fx.warehouseUuid, organizationUuid: fx.orgUuid };
+	const aUuid = crypto.randomUUID(); const bUuid = crypto.randomUUID();
+	const reg = [];
+	// Слои: 8×500 (раньше) + 8×700 (позже).
+	reg.push(await prisma.productRegister.create({ data: { ...base, date: D1, movementType: "in", quantity: 8, amount: 4000, documentType: "purchase", documentUuid: crypto.randomUUID() } }));
+	reg.push(await prisma.productRegister.create({ data: { ...base, date: D5, movementType: "in", quantity: 8, amount: 5600, documentType: "purchase", documentUuid: crypto.randomUUID() } }));
+	// Расходы двух реализаций одной даты (A.id<B.id), по 6 ед.
+	reg.push(await prisma.productRegister.create({ data: { ...base, date: D5, movementType: "out", quantity: 6, amount: 0, documentType: "sale", documentUuid: aUuid, documentId: 100001 } }));
+	reg.push(await prisma.productRegister.create({ data: { ...base, date: D5, movementType: "out", quantity: 6, amount: 0, documentType: "sale", documentUuid: bUuid, documentId: 100002 } }));
+	const savedMethod = setting.costingMethod;
+	try {
+		await prisma.organizationAccountingSetting.update({ where: { uuid: setting.uuid }, data: { costingMethod: "FIFO" } });
+		const items = [{ productUuid: product.uuid, quantity: 6, amount: 9000 }];
+		const cogs = (es) => es.find((e) => e.debitAccountCode === "7010" && e.creditAccountCode === "1330")?.amount ?? 0;
+		const a = cogs(await buildDocumentEntries("sale", { uuid: aUuid, id: 100001, organizationUuid: fx.orgUuid, warehouseUuid: fx.warehouseUuid, date: D5, posted: true }, items));
+		const b = cogs(await buildDocumentEntries("sale", { uuid: bUuid, id: 100002, organizationUuid: fx.orgUuid, warehouseUuid: fx.warehouseUuid, date: D5, posted: true }, items));
+		assert.equal(a, 3000, "A (раньше по id): 6×500 = 3000");
+		assert.equal(b, 3800, "B (позже по id): 2×500 + 4×700 = 3800");
+		assert.equal(a + b, 6800, "сумма = истинный ФИФО 6800 (без двойного skip)");
+	} finally {
+		await prisma.organizationAccountingSetting.update({ where: { uuid: setting.uuid }, data: { costingMethod: savedMethod } }).catch(() => {});
+		for (const r of reg) await prisma.productRegister.delete({ where: { uuid: r.uuid } }).catch(() => {});
+		await prisma.product.delete({ where: { uuid: product.uuid } }).catch(() => {});
+	}
+});
+
 // ─── Интеграция: перемещение между складами формирует проводки ────────────────
 test("Интеграция: проведённое перемещение создаёт проводку Дт1330 Кт1330, распроведение — удаляет", async (t) => {
 	if (!fx.orgUuid || !fx.productUuid || !fx.warehouseUuid || !fx.userUuid) return t.skip("нет фикстур");

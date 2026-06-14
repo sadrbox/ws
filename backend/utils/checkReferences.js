@@ -18,6 +18,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma, pool } from "../prisma/prisma-client.js";
 import { checkOwnership } from "./auth.js";
+import { PERIOD_LOCKED_MODELS, assertPeriodOpen, respondPeriodLockError, PeriodLockedError } from "../services/periodLock.js";
 
 /**
  * Кэш карты FK: { [referencedTable]: Array<{ table, column, refColumn }> }
@@ -195,6 +196,7 @@ export const REFERENCE_LABELS = {
 	commercial_offers: "Коммерческие предложения",
 	reservations: "Резервирования",
 	bank_statements: "Банковские выписки",
+	month_closes: "Закрытия месяца",
 	payroll_calculations: "Начисления ЗП",
 	payroll_payments: "Выплаты ЗП",
 	brands: "Бренды",
@@ -397,6 +399,11 @@ export async function handleDelete({
 			return res.status(404).json({ success: false, message: notFoundMessage });
 		}
 
+		// Блокировка закрытого периода: дотированный документ в закрытом месяце нельзя удалить.
+		if (PERIOD_LOCKED_MODELS.has(modelName)) {
+			await assertPeriodOpen(existing.organizationUuid, existing.date);
+		}
+
 		if (
 			await guardReferences(res, modelName, {
 				uuid: existing.uuid,
@@ -427,6 +434,7 @@ export async function handleDelete({
 		}
 		return res.status(200).json({ success: true, message: "Удалено" });
 	} catch (error) {
+		if (respondPeriodLockError(error, res)) return;
 		if (error.code === "P2025") {
 			return res.status(404).json({ success: false, message: notFoundMessage });
 		}
@@ -472,6 +480,19 @@ export async function handleBatchDelete({
 			if (!existing || !checkOwnership(existing, req)) {
 				failed.push({ uuid, message: "Не найдено" });
 				continue;
+			}
+
+			// Блокировка закрытого периода: документ в закрытом месяце пропускаем (в failed).
+			if (PERIOD_LOCKED_MODELS.has(modelName)) {
+				try {
+					await assertPeriodOpen(existing.organizationUuid, existing.date);
+				} catch (lockErr) {
+					if (lockErr instanceof PeriodLockedError) {
+						failed.push({ uuid, message: lockErr.message });
+						continue;
+					}
+					throw lockErr;
+				}
 			}
 
 			const refs = await findReferences(resolveTableName(modelName), { uuid: existing.uuid, id: existing.id });

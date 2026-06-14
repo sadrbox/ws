@@ -33,9 +33,26 @@ export const ACC = {
 	VAT_OUT: "3130", // НДС к уплате (исходящий)
 	PAYROLL: "3350",
 	RETAINED: "5510",
+	RESULT: "5610", // итоговая прибыль/убыток (закрытие месяца)
 	REVENUE: "6010",
 	COGS: "7010",
 	ADMIN_EXP: "7210",
+};
+
+// Счета, закрываемые при закрытии месяца на 5610, и их нормальная сторона.
+// 6010 (доход) — кредитовый; 7010/7210 (расходы) — дебетовые. Чистый оборот по
+// нормальной стороне переносится на счёт итоговой прибыли 5610.
+const CLOSE_ACCOUNTS = [
+	{ account: ACC.REVENUE, normal: "credit" }, // 6010 доход
+	{ account: ACC.COGS, normal: "debit" },     // 7010 себестоимость
+	{ account: ACC.ADMIN_EXP, normal: "debit" }, // 7210 админрасходы
+];
+
+// Формат даты для описания закрывающих проводок (детерминированно, по UTC).
+const fmtDateUTC = (d) => {
+	const dd = String(d.getUTCDate()).padStart(2, "0");
+	const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+	return `${dd}.${mm}.${d.getUTCFullYear()}`;
 };
 
 // Корр-счёт проводки кассового ордера по типу операции (см. cashOperationTypes на фронте).
@@ -91,6 +108,7 @@ const DOC_CONFIG = {
 	bank_statement: { parentModel: "bankStatement" },
 	payroll_calculation: { parentModel: "payrollCalculation" },
 	payroll_payment: { parentModel: "payrollPayment" },
+	month_close: { parentModel: "monthClose" },
 };
 
 export const POSTING_DOC_TYPES = Object.keys(DOC_CONFIG);
@@ -140,6 +158,33 @@ export async function resolveUseVat(orgUuid, client = prisma) {
 	} catch {
 		return false;
 	}
+}
+
+/** Метод расчёта себестоимости организации: "AVERAGE" (по умолчанию) | "FIFO". */
+export async function resolveCostingMethod(orgUuid, client = prisma) {
+	if (!orgUuid) return "AVERAGE";
+	try {
+		const s = await client.organizationAccountingSetting.findFirst({
+			where: { organizationUuid: orgUuid, deletedAt: null },
+			orderBy: { startDate: "desc" },
+			select: { costingMethod: true },
+		});
+		return s?.costingMethod === "FIFO" ? "FIFO" : "AVERAGE";
+	} catch {
+		return "AVERAGE";
+	}
+}
+
+/**
+ * Себестоимость единицы товара по методу организации (AVERAGE|FIFO) — для оценки
+ * ПРИХОДА по себестоимости (например возврат от покупателя на склад), а не по цене
+ * документа. consume=false: партии не списываются (оценка текущего остатка).
+ * Используется в productRegister.js, чтобы возврат входил в ФИФО-слои по cost-basis.
+ */
+export async function resolveUnitCost(orgUuid, productUuid, warehouseUuid, dateUpTo, quantity, client = prisma) {
+	const ctx = makeContext(client, orgUuid ?? null);
+	ctx.beginDocument(await resolveCostingMethod(orgUuid ?? null, client), null, null);
+	return ctx.unitCost(productUuid, warehouseUuid, dateUpTo, quantity, { consume: false });
 }
 
 // ─── Реестр правил формирования проводок ─────────────────────────────────────
@@ -199,7 +244,7 @@ export const POSTING_RULES = {
 					debitAnalytics: arAnalytics, creditAnalytics: [],
 				});
 			}
-			const cost = r2((await ctx.avgCost(it.productUuid, doc.warehouseUuid, doc.date)) * Number(it.quantity || 0));
+			const cost = r2((await ctx.unitCost(it.productUuid, doc.warehouseUuid, doc.date, Number(it.quantity || 0), { consume: true })) * Number(it.quantity || 0));
 			if (cost > 0) {
 				out.push({
 					debit: ACC.COGS,
@@ -240,7 +285,7 @@ export const POSTING_RULES = {
 					debitAnalytics: [], creditAnalytics: arAnalytics,
 				});
 			}
-			const cost = r2((await ctx.avgCost(it.productUuid, doc.warehouseUuid, doc.date)) * Number(it.quantity || 0));
+			const cost = r2((await ctx.unitCost(it.productUuid, doc.warehouseUuid, doc.date, Number(it.quantity || 0), { consume: false })) * Number(it.quantity || 0));
 			if (cost > 0) {
 				out.push({
 					debit: ACC.GOODS,
@@ -289,7 +334,7 @@ export const POSTING_RULES = {
 		const out = [];
 		for (const it of items) {
 			if (!it.productUuid) continue;
-			const unit = await ctx.avgCost(it.productUuid, doc.fromWarehouseUuid, doc.date);
+			const unit = await ctx.unitCost(it.productUuid, doc.fromWarehouseUuid, doc.date, Number(it.quantity || 0), { consume: true });
 			const cost = r2((unit || Number(it.price) || 0) * Number(it.quantity || 0));
 			if (cost <= 0) continue;
 			out.push({
@@ -389,6 +434,68 @@ export const POSTING_RULES = {
 			creditAnalytics: [],
 		}];
 	},
+
+	// Закрытие месяца: счета доходов/расходов (6010/7010/7210) закрываются на счёт
+	// итоговой прибыли 5610 по ЧИСТЫМ оборотам периода. Обороты берутся из регистра
+	// AccountingEntry за [periodStart, periodEnd] (исключая собственные проводки
+	// закрытия) и фильтруются filterPostedEntries (только проведённые документы).
+	// Закрытие агрегатное (без аналитики), идемпотентное (reconcile удаляет старые
+	// проводки документа перед пересборкой). Сальдо 5610 после закрытия = финрезультат
+	// (Кт = прибыль, Дт = убыток).
+	month_close: async (doc, _items, ctx) => {
+		if (!doc.organizationUuid || !doc.periodStart || !doc.periodEnd) return [];
+		const start = new Date(doc.periodStart);
+		const endRaw = new Date(doc.periodEnd);
+		const end = new Date(endRaw);
+		end.setHours(23, 59, 59, 999); // включительно по последний день периода
+		const codes = CLOSE_ACCOUNTS.map((c) => c.account);
+
+		// Обороты периода по закрываемым счетам (без собственных проводок закрытия).
+		const raw = await ctx.client.accountingEntry.findMany({
+			where: {
+				organizationUuid: doc.organizationUuid,
+				date: { gte: start, lte: end },
+				documentType: { not: "month_close" },
+				OR: [{ debitAccountCode: { in: codes } }, { creditAccountCode: { in: codes } }],
+			},
+			select: { debitAccountCode: true, creditAccountCode: true, amount: true, documentType: true, documentUuid: true },
+		});
+		// Самолечение: учитываем только проводки реально проведённых документов.
+		const posted = await filterPostedEntries(raw, ctx.client);
+		const periodLabel = `${fmtDateUTC(start)}–${fmtDateUTC(endRaw)}`;
+
+		const out = [];
+		for (const { account, normal } of CLOSE_ACCOUNTS) {
+			let debit = 0;
+			let credit = 0;
+			for (const e of posted) {
+				if (e.debitAccountCode === account) debit += Number(e.amount) || 0;
+				if (e.creditAccountCode === account) credit += Number(e.amount) || 0;
+			}
+			// Чистый оборот по нормальной стороне счёта.
+			const net = r2(normal === "credit" ? credit - debit : debit - credit);
+			if (Math.abs(net) < 0.005) continue;
+			// Доход (нормально кредитовый): Дт 6010 Кт 5610 на прибыль (net>0).
+			// Расход (нормально дебетовый): Дт 5610 Кт <счёт> на расход (net>0).
+			// При обратном знаке (возвраты перекрыли) — меняем стороны местами.
+			let from;
+			let to;
+			if (normal === "credit") {
+				[from, to] = net > 0 ? [account, ACC.RESULT] : [ACC.RESULT, account];
+			} else {
+				[from, to] = net > 0 ? [ACC.RESULT, account] : [account, ACC.RESULT];
+			}
+			out.push({
+				debit: from,
+				credit: to,
+				amount: Math.abs(net),
+				description: `Закрытие счёта ${account} за ${periodLabel}`,
+				debitAnalytics: [],
+				creditAnalytics: [],
+			});
+		}
+		return out;
+	},
 };
 
 // ─── Резолверы счетов и наименований субконто (с кэшем на вызов) ──────────────
@@ -396,6 +503,21 @@ function makeContext(client, orgUuid) {
 	const accCache = new Map(); // code → account|null
 	const subkontoCache = new Map(); // code → SubkontoType|null
 	const nameCache = new Map(); // `${model}:${uuid}` → name
+
+	// Состояние себестоимости на время сборки одного документа (см. beginDocument).
+	let costingMethod = "AVERAGE";
+	let docUuid = null;
+	let docId = null;
+	const fifoOffset = new Map(); // `product|warehouse` → потреблено строками документа
+
+	// Инициализация контекста под конкретный документ: метод себестоимости, uuid+id
+	// (для исключения собственных outs и упорядочивания ФИФО) и сброс offset строк.
+	function beginDocument(method, uuid, id) {
+		costingMethod = method === "FIFO" ? "FIFO" : "AVERAGE";
+		docUuid = uuid ?? null;
+		docId = id ?? null;
+		fifoOffset.clear();
+	}
 
 	async function resolveAccount(code) {
 		if (accCache.has(code)) return accCache.get(code);
@@ -463,7 +585,81 @@ function makeContext(client, orgUuid) {
 		return qty > 0 ? amt / qty : 0;
 	}
 
-	return { resolveAccount, resolveSubkontoType, resolveName, avgCost };
+	// ФИФО-себестоимость: эффективная удельная цена = (полная стоимость списания
+	// `quantity` единиц по слоям прихода)/quantity. Слои — приходы (in) по дате;
+	// пропускаем уже потреблённые единицы (outs других документов до даты +
+	// потреблённое ранними строками ЭТОГО документа), затем потребляем `quantity`.
+	// consume=true фиксирует потребление в offset (для следующих строк документа).
+	// Путь-зависимость (правка старых документов) страхуется блокировкой периодов.
+	async function fifoCost(productUuid, warehouseUuid, dateUpTo, quantity, consume) {
+		const qtyNeed = Number(quantity) || 0;
+		if (!productUuid || qtyNeed <= 0) return 0;
+		const base = { productUuid };
+		if (warehouseUuid) base.warehouseUuid = warehouseUuid;
+		if (orgUuid) base.organizationUuid = orgUuid;
+		const dateCond = dateUpTo ? { lte: dateUpTo } : undefined;
+
+		// Слои прихода (oldest → newest).
+		const ins = await client.productRegister.findMany({
+			where: { ...base, movementType: "in", ...(dateCond ? { date: dateCond } : {}) },
+			select: { quantity: true, amount: true },
+			orderBy: [{ date: "asc" }, { id: "asc" }],
+		});
+		// Потреблено ДО этого документа в порядке ФИФО (date, затем documentId) —
+		// расходы других документов. Строгий порядок исключает двойной «пропуск»
+		// при нескольких документах одной даты (иначе COGS считается неверно).
+		const outRows = await client.productRegister.findMany({
+			where: { ...base, movementType: "out", ...(dateCond ? { date: dateCond } : {}), documentUuid: { not: docUuid ?? undefined } },
+			select: { quantity: true, date: true, documentId: true },
+		});
+		const upTo = dateUpTo ? (dateUpTo instanceof Date ? dateUpTo.getTime() : new Date(dateUpTo).getTime()) : null;
+		let priorOut = 0;
+		for (const r of outRows) {
+			const rt = r.date instanceof Date ? r.date.getTime() : new Date(r.date).getTime();
+			const before =
+				upTo == null || rt < upTo // строго раньше по дате
+					? true
+					: rt === upTo && docId != null && r.documentId != null && r.documentId < docId; // та же дата → по documentId
+			if (before) priorOut += Number(r.quantity) || 0;
+		}
+		const key = `${productUuid}|${warehouseUuid ?? ""}`;
+		let skip = priorOut + (fifoOffset.get(key) || 0);
+
+		let total = 0;
+		let consumed = 0;
+		let need = qtyNeed;
+		for (const layer of ins) {
+			let lQty = Number(layer.quantity) || 0;
+			const lAmt = Number(layer.amount) || 0;
+			if (lQty <= 0) continue;
+			const unit = lAmt / lQty;
+			if (skip > 0) {
+				const s = Math.min(skip, lQty);
+				skip -= s;
+				lQty -= s;
+				if (lQty <= 0) continue;
+			}
+			const take = Math.min(need, lQty);
+			total += take * unit;
+			consumed += take;
+			need -= take;
+			if (need <= 0) break;
+		}
+		if (consume) fifoOffset.set(key, (fifoOffset.get(key) || 0) + qtyNeed);
+		// Эффективная удельная: полную стоимость доступной части распределяем на
+		// весь запрошенный объём (недостаток → 0; вызывающий применит fallback цены).
+		return consumed > 0 ? total / qtyNeed : 0;
+	}
+
+	// Удельная себестоимость по выбранному методу (AVERAGE по умолчанию, FIFO опц.).
+	async function unitCost(productUuid, warehouseUuid, dateUpTo, quantity, opts) {
+		if (costingMethod === "FIFO") {
+			return fifoCost(productUuid, warehouseUuid, dateUpTo, quantity, opts?.consume === true);
+		}
+		return avgCost(productUuid, warehouseUuid, dateUpTo);
+	}
+
+	return { resolveAccount, resolveSubkontoType, resolveName, avgCost, unitCost, beginDocument, client };
 }
 
 // ─── Сборка проводок документа (без записи в БД) ─────────────────────────────
@@ -482,6 +678,8 @@ export async function buildDocumentEntries(documentType, doc, items, client = pr
 	const ctx = makeContext(client, doc.organizationUuid ?? null);
 	// Плательщик НДС? (определяет разнесение НДС на 1420/3130).
 	ctx.useVat = await resolveUseVat(doc.organizationUuid ?? null, client);
+	// Метод себестоимости организации (AVERAGE|FIFO) + инициализация ФИФО-состояния.
+	ctx.beginDocument(await resolveCostingMethod(doc.organizationUuid ?? null, client), doc.uuid, doc.id);
 	const raw = await rule(doc, items ?? [], ctx);
 	if (!raw?.length) return [];
 
@@ -572,6 +770,9 @@ export async function validatePosting(documentType, doc, items, client = prisma)
 		// Обязательные субконто заполнены (по объявленным на счёте видам).
 		const ctx = makeContext(client, doc.organizationUuid ?? null);
 		const checkSide = async (accCode, analytics, sideLabel) => {
+			// Закрытие месяца — агрегатная операция без аналитики: обязательность
+			// субконто счетов 6010/7010/7210 здесь не применяется.
+			if (documentType === "month_close") return;
 			const acc = await ctx.resolveAccount(accCode);
 			if (!acc) return;
 			const declared = [acc.subkonto1Type, acc.subkonto2Type, acc.subkonto3Type].filter(Boolean);

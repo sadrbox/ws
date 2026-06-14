@@ -100,6 +100,16 @@
 		"alignment": "right"
 	},
 	{
+		"identifier": "costingMethod",
+		"hint": "Метод себестоимости: AVERAGE — средняя; FIFO — по партиям",
+		"type": "string",
+		"visible": true,
+		"inlist": true,
+		"width": "130px",
+		"minWidth": "90px",
+		"alignment": "center"
+	},
+	{
 		"identifier": "updatedAt",
 		"hint": "Дата последнего изменения",
 		"type": "datetime",

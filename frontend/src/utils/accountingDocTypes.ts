@@ -15,6 +15,7 @@ const DOC_TYPES = [
 	"inventory_transfer", "bank_statement",
 	"cash_receipt_order", "cash_expense_order",
 	"payroll_calculation", "payroll_payment",
+	"month_close",
 ] as const;
 
 // Endpoint формы документа — только для типов, у которых есть фронт-форма.
@@ -38,6 +39,7 @@ const DOC_TYPE_TO_ENDPOINT: Record<string, string> = {
 	reservation: "reservations",
 	purchase_order: "purchase-orders",
 	bank_statement: "bank-statements",
+	month_close: "month-closes",
 };
 
 /** Локализованное название типа документа (i18). Неизвестный тип → как есть. */

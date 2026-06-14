@@ -101,3 +101,27 @@ export const localInputToIso = (value?: string | null): string | null => {
 	const d = new Date(s);
 	return isNaN(d.getTime()) ? null : d.toISOString();
 };
+
+/**
+ * Период «YYYY-MM» → границы месяца в ISO (UTC-полночь первого и последнего дня).
+ * Используется регламентными документами (закрытие месяца): periodStart — 1-е
+ * число, periodEnd — последний день месяца. Пустой/некорректный ввод → null/null.
+ */
+export const monthPeriodToRange = (period?: string | null): { start: string | null; end: string | null } => {
+	const m = /^(\d{4})-(\d{2})$/.exec((period ?? "").trim());
+	if (!m) return { start: null, end: null };
+	const y = parseInt(m[1], 10);
+	const mo = parseInt(m[2], 10);
+	if (mo < 1 || mo > 12) return { start: null, end: null };
+	const start = new Date(Date.UTC(y, mo - 1, 1, 0, 0, 0));
+	const end = new Date(Date.UTC(y, mo, 0, 0, 0, 0)); // день 0 след. месяца = последний день текущего
+	return { start: start.toISOString(), end: end.toISOString() };
+};
+
+/** ISO-дата → период «YYYY-MM» (по UTC). Для обратной инициализации FieldPeriod. */
+export const isoToMonthPeriod = (value?: string | null): string => {
+	if (!value) return "";
+	const d = new Date(value);
+	if (isNaN(d.getTime())) return "";
+	return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+};

@@ -21,6 +21,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useOrgAccountingSettings } from "src/hooks/useOrgAccountingSettings";
 import { useAppContext } from "src/app";
 import { recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
+import FiscalReceiptPane from "src/models/FiscalReceipts/FiscalReceiptPane";
 import type { TPane } from "src/app/types";
 import styles from "./SalesTerminal.module.scss";
 
@@ -38,7 +39,7 @@ const fmt = (n: number) =>
 
 const SalesTerminal: FC<Partial<TPane>> = () => {
   const { organizationUuid: defOrgUuid, organizationName: defOrgName } = useDefaultOrganization();
-  const { auth: { user } } = useAppContext();
+  const { auth: { user }, windows: { addPane } } = useAppContext();
 
   const [orgUuid, setOrgUuid] = useState(defOrgUuid || "");
   const [orgName, setOrgName] = useState(defOrgName || "");
@@ -50,6 +51,9 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
   const [counterpartyName, setCounterpartyName] = usePersistentState("terminal.counterpartyName", "");
   const [managerUuid, setManagerUuid] = useState((user as any)?.employee?.uuid ?? "");
   const [managerName, setManagerName] = useState((user as any)?.employee?.fullName ?? "");
+  // Тип цены: определяет, какие цены подставляются при добавлении товара.
+  const [priceTypeUuid, setPriceTypeUuid] = usePersistentState("terminal.priceTypeUuid", "");
+  const [priceTypeName, setPriceTypeName] = usePersistentState("terminal.priceTypeName", "");
 
   // Режим: продажа или возврат от покупателя.
   const [mode, setMode] = useState<"sale" | "return">("sale");
@@ -57,7 +61,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
 
   // Оплата: наличные → автосоздание проведённого ПКО (Дт1010 Кт1210); карта/
   // безнал → только реализация (поступление денег отражается банк-выпиской).
-  const [payment, setPayment] = useState<"cash" | "card">("cash");
+  const [payment, setPayment] = useState<"cash" | "card" | "kaspi">("cash");
   const [cashboxUuid, setCashboxUuid] = usePersistentState("terminal.cashboxUuid", "");
   const [cashboxName, setCashboxName] = usePersistentState("terminal.cashboxName", "");
 
@@ -82,6 +86,33 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
   const total = useMemo(() => cart.reduce((s, l) => s + lineAmount(l), 0), [cart, lineAmount]);
   const itemsCount = useMemo(() => cart.reduce((s, l) => s + (Number(l.quantity) || 0), 0), [cart]);
 
+  // ── Автоподстановка цен по выбранному типу цены ──────────────────────────
+  // Карта productUuid→цена для выбранного типа (последняя цена из ProductPrice).
+  const priceMapRef = useRef<Map<string, number>>(new Map());
+  const priceTypeUuidRef = useRef(priceTypeUuid);
+  priceTypeUuidRef.current = priceTypeUuid;
+
+  // Загружает цены типа в Map одним запросом. reprice=true — переоценивает корзину.
+  const loadPriceMap = useCallback(async (typeUuid: string, reprice: boolean) => {
+    try {
+      const params: Record<string, string> = {};
+      if (orgUuid) params.organizationUuid = orgUuid;
+      if (typeUuid) params.priceTypeUuid = typeUuid;
+      const resp = await api.get<{ priceTypeUuid: string | null; priceTypeName: string | null; items: Array<{ productUuid: string; price: number | null }> }>(
+        "product-prices/price-list", { params },
+      );
+      const map = new Map<string, number>();
+      for (const it of resp?.items ?? []) if (it.price != null) map.set(it.productUuid, Number(it.price));
+      priceMapRef.current = map;
+      // Тип не задан → подставляем дефолтный (резолвится бэкендом).
+      if (!typeUuid && resp?.priceTypeUuid) { setPriceTypeUuid(resp.priceTypeUuid); setPriceTypeName(resp.priceTypeName ?? ""); }
+      if (reprice) setCart((prev) => prev.map((l) => { const p = map.get(l.productUuid); return p != null ? { ...l, price: p } : l; }));
+    } catch { /* перехватчик api покажет ошибку */ }
+  }, [orgUuid, setPriceTypeUuid, setPriceTypeName]);
+
+  // Загрузка карты цен при открытии и смене организации (тип — из ref, без переоценки).
+  useEffect(() => { void loadPriceMap(priceTypeUuidRef.current, false); }, [loadPriceMap]);
+
   // ── Добавление товара (из LookupField). Повтор — увеличивает количество. ──
   const addProduct = useCallback((uuid: string, name: string, item: Record<string, any>) => {
     if (!uuid) return;
@@ -100,7 +131,8 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
           productName: name || item?.name || "—",
           unitOfMeasureUuid: item?.unitOfMeasureUuid ?? null,
           quantity: 1,
-          price: Number(item?.price) || 0,
+          // Цена выбранного типа (если есть), иначе — дефолтная цена товара.
+          price: priceMapRef.current.get(uuid) ?? (Number(item?.price) || 0),
         },
       ];
     });
@@ -149,6 +181,8 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         counterpartyUuid,
         warehouseUuid,
         managerUuid: managerUuid || null,
+        // Реализация фиксирует использованный тип цены (возврат поля не имеет — игнор).
+        ...(isReturn ? {} : { priceTypeUuid: priceTypeUuid || null }),
         posted: false,
       });
       const docUuid = resp?.item?.uuid;
@@ -189,6 +223,27 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         }
       }
 
+      // Фискальный чек (ОФД/Kaspi) для продажи. Для Kaspi — оплата по QR и
+      // фискализация выполняются в FiscalReceiptPane (поллинг статуса).
+      if (!isReturn) {
+        try {
+          const fr = await api.post<any>("fiscal-receipts", {
+            documentType: "sale", documentUuid: docUuid, paymentMethod: payment,
+          });
+          if (fr?.item) {
+            addPane({
+              component: FiscalReceiptPane,
+              label: translate("fiscalReceiptTitle"),
+              data: {
+                receipt: fr.item,
+                items: cart.map((l) => ({ name: l.productName, quantity: l.quantity, price: l.price })),
+                organizationName: orgName,
+              },
+            });
+          }
+        } catch { /* перехватчик api покажет ошибку */ }
+      }
+
       showToast(`${translate(isReturn ? "terminalReturnDone" : "terminalDone")} — ${fmt(total)}`, "success", 4000);
       setCart([]);
       focusScan();
@@ -197,7 +252,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [orgUuid, warehouseUuid, counterpartyUuid, managerUuid, cart, total, vatRate, payment, cashboxUuid, isReturn, focusScan]);
+  }, [orgUuid, warehouseUuid, counterpartyUuid, managerUuid, priceTypeUuid, cart, total, vatRate, payment, cashboxUuid, isReturn, focusScan, addPane, orgName]);
 
   // Горячие клавиши: F9 — провести, F4 — очистить, F2 — фокус на сканер.
   useEffect(() => {
@@ -311,6 +366,10 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
           <LookupField label={translate("manager")} name="t_mgr" value={managerUuid} displayValue={managerName}
             endpoint="employees" displayField="fullName" extraParams={orgParams}
             onSelect={(u, d) => { setManagerUuid(u); setManagerName(d); }} onClear={() => { setManagerUuid(""); setManagerName(""); }} />
+          <LookupField label={translate("priceType")} name="t_pt" value={priceTypeUuid} displayValue={priceTypeName}
+            endpoint="price-types" displayField="name"
+            onSelect={(u, d) => { setPriceTypeUuid(u); setPriceTypeName(d); void loadPriceMap(u, true); }}
+            onClear={() => { setPriceTypeUuid(""); setPriceTypeName(""); void loadPriceMap("", true); }} />
 
           {/* Способ оплаты */}
           <div className={styles.PayMethods}>
@@ -320,6 +379,9 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
             <button type="button"
               className={[styles.PayMethod, payment === "card" && styles.PayMethodActive].filter(Boolean).join(" ")}
               onClick={() => setPayment("card")}>💳 {translate("paymentCard")}</button>
+            <button type="button"
+              className={[styles.PayMethod, payment === "kaspi" && styles.PayMethodActive].filter(Boolean).join(" ")}
+              onClick={() => setPayment("kaspi")}>🔴 {translate("paymentKaspi")}</button>
           </div>
           {payment === "cash" && (
             <LookupField label={translate("cashbox")} name="t_cashbox" value={cashboxUuid} displayValue={cashboxName}

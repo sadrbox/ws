@@ -1,5 +1,6 @@
 // 1. React
-import { FC, ComponentType, useMemo, useCallback } from "react";
+import { FC, ComponentType, useMemo, useCallback, useState } from "react";
+import { consumePendingHighlight } from "src/utils/listHighlight";
 import type { ReactNode } from "react";
 
 // 2. Контекст приложения
@@ -132,6 +133,10 @@ const ModelList: FC<ModelListProps> = ({
 
   const { addPane } = useAppContext().windows;
 
+  // Забираем «подсветить документ» (если список открыт из формы кнопкой
+  // «Показать в журнале»). Одноразово — только при монтировании этого списка.
+  const [highlightUuid] = useState(() => (isPartOf ? undefined : consumePendingHighlight(endpoint)));
+
   const ownerFilter = useMemo(() => {
     const f: Record<string, { value: unknown; operator: string }> = {};
 
@@ -202,7 +207,7 @@ const ModelList: FC<ModelListProps> = ({
 
   return (
     <Table
-      {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange, renderCell })}
+      {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange, renderCell, highlightUuid })}
     />
   );
 };

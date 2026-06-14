@@ -186,7 +186,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow className={styles.FormHeaderRow}>
                 <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")}
                   actions={[
-                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, (n) => form.setField("number", n)) },
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n)) },
                     { type: "clear", onClick: () => form.setField("number", "") },
                   ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} width="180px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />

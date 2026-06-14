@@ -16,6 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
 import { reservedQuantity } from "./reservationRegister.js";
+import { resolveUnitCost } from "./accountingPosting.js";
 
 // Конфигурация документов-регистраторов.
 const DOC_CONFIG = {
@@ -133,7 +134,16 @@ export async function reconcileDocumentRegister(
 			// НДС к зачёту, а не в себестоимость; согласовано со счётом 1330).
 			// Иначе — полная сумма. Фолбэк на полную сумму, если нет налоговых полей.
 			const net = Number(it.amountWithoutVat);
-			const value = useVat && Number.isFinite(net) && net > 0 ? net : amt;
+			let value = useVat && Number.isFinite(net) && net > 0 ? net : amt;
+			// Возврат от покупателя приходует товар на склад: в регистр (и в ФИФО-слои)
+			// он должен входить по СЕБЕСТОИМОСТИ остатка, а не по цене строки возврата
+			// (иначе слой переоценён ≈ ценой продажи и завышает будущий COGS). Фолбэк на
+			// сумму строки, если себестоимость не определена (нет приходов).
+			if (documentType === "sale_return" && qty > 0) {
+				const unit = await resolveUnitCost(doc.organizationUuid ?? null, it.productUuid, doc.warehouseUuid ?? null, doc.date ?? new Date(), qty, client);
+				const costValue = Math.round((Number(unit) || 0) * qty * 100) / 100;
+				if (costValue > 0) value = costValue;
+			}
 			if (qty === 0 && value === 0) continue;
 			for (const mv of cfg.movements) {
 				records.push({

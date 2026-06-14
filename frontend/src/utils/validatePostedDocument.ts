@@ -28,7 +28,8 @@ export type DocumentType =
 	| "sales_order"
 	| "reservation"
 	| "purchase_order"
-	| "bank_statement";
+	| "bank_statement"
+	| "month_close";
 
 export interface ValidationError {
 	field: string;
@@ -138,6 +139,9 @@ export const REQUIRED_FIELDS_MAP: Record<DocumentType, readonly string[]> = {
 
 	// ── Банковская выписка ───────────────────────────────────────────────────
 	bank_statement: ["date", "organizationUuid", "counterpartyUuid"],
+
+	// ── Регламентные операции ────────────────────────────────────────────────
+	month_close: ["periodStart", "periodEnd", "organizationUuid"],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

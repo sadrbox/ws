@@ -128,6 +128,83 @@ router.get(`/${ROUTE}/export`, async (req, res) => {
 	}
 });
 
+// ── GET price-list: текущие цены номенклатуры по ОДНОМУ типу цены ──────────────
+// Последняя цена выбранного типа на каждый товар (relation take:1). Питает отчёт
+// «Прайс-лист» и префетч цен в терминале. Объявлен ДО `/:id`.
+// Params: priceTypeUuid (опц.→дефолтный isDefault), brandUuid, search, onlyPriced.
+router.get(`/${ROUTE}/price-list`, async (req, res) => {
+	try {
+		const reqType = typeof req.query.priceTypeUuid === "string" ? req.query.priceTypeUuid.trim() : "";
+		const brandUuid = typeof req.query.brandUuid === "string" ? req.query.brandUuid.trim() : "";
+		const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+		const onlyPriced = req.query.onlyPriced === "1" || req.query.onlyPriced === "true";
+
+		// Тип цены: из параметра или тип «по умолчанию» (как в productPricing.js).
+		let priceType = null;
+		if (reqType) {
+			priceType = await prisma.priceType.findFirst({ where: { uuid: reqType, deletedAt: null }, select: { uuid: true, name: true } });
+		}
+		if (!priceType) {
+			priceType = await prisma.priceType.findFirst({ where: { isDefault: true, deletedAt: null }, select: { uuid: true, name: true } });
+		}
+		if (!priceType) {
+			return res.status(200).json({ success: true, priceTypeUuid: null, priceTypeName: null, items: [] });
+		}
+
+		const where = { ...tenantFilter(req), deletedAt: null };
+		if (brandUuid) where.brandUuid = brandUuid;
+		if (search) {
+			where.OR = [
+				{ name: { contains: search, mode: "insensitive" } },
+				{ sku: { contains: search, mode: "insensitive" } },
+				{ barcode: { contains: search, mode: "insensitive" } },
+				{ barcodes: { some: { barcode: { contains: search, mode: "insensitive" } } } },
+			];
+		}
+
+		const now = new Date();
+		const products = await prisma.product.findMany({
+			where,
+			select: {
+				uuid: true,
+				name: true,
+				sku: true,
+				barcode: true,
+				brand: { select: { name: true } },
+				unitOfMeasure: { select: { name: true } },
+				productPrices: {
+					where: { priceTypeUuid: priceType.uuid, deletedAt: null, date: { lte: now } },
+					orderBy: { date: "desc" },
+					take: 1,
+					select: { price: true, date: true },
+				},
+			},
+			orderBy: { name: "asc" },
+			take: 100000,
+		});
+
+		let items = products.map((p) => {
+			const pp = p.productPrices[0] ?? null;
+			return {
+				productUuid: p.uuid,
+				name: p.name,
+				sku: p.sku ?? null,
+				barcode: p.barcode ?? null,
+				brandName: p.brand?.name ?? null,
+				unitName: p.unitOfMeasure?.name ?? null,
+				price: pp?.price != null ? Number(pp.price) : null,
+				priceDate: pp?.date ?? null,
+			};
+		});
+		if (onlyPriced) items = items.filter((i) => i.price != null);
+
+		return res.status(200).json({ success: true, priceTypeUuid: priceType.uuid, priceTypeName: priceType.name, items });
+	} catch (error) {
+		console.error(`GET /${ROUTE}/price-list error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 router.get(`/${ROUTE}/:id`, async (req, res) => {
 	try {
 		const p = req.params.id;

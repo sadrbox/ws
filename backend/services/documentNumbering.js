@@ -32,6 +32,7 @@ export const NUMBER_CONFIG = {
 	payroll_calculation: { prefix: "НЗП", label: "Начисление зарплаты" },
 	payroll_payment: { prefix: "ВЗП", label: "Выплата зарплаты" },
 	price_setting: { prefix: "ЦЕН", label: "Установка цен номенклатуры" },
+	month_close: { prefix: "ЗМ", label: "Закрытие месяца" },
 };
 
 export const GLOBAL_SETTINGS_KEY = "__global__";

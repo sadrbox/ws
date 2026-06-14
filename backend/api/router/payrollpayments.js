@@ -3,6 +3,7 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
+import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 const DOC_TYPE = "payroll_payment";
 
 const router = express.Router();
@@ -149,6 +150,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			amount,
 			posted,
 		} = req.body;
+		// Блокировка закрытого периода: нельзя создавать документ в закрытом месяце.
+		await assertPeriodOpen(organizationUuid, date);
 		const willPost = posted === undefined ? true : !!posted;
 		const docData = {
 			date: date ? new Date(date) : new Date(),
@@ -167,6 +170,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
 		if (respondPostingError(error, res)) return;
+		if (respondPeriodLockError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -195,8 +199,11 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.amount !== undefined)
 			data.amount = req.body.amount != null ? parseFloat(req.body.amount) : 0;
 		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, posted: true } });
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, posted: true, organizationUuid: true, date: true } });
 		if (!existing) return res.status(404).json({ success: false, message: "Не найдено" });
+		// Блокировка закрытого периода: нельзя трогать закрытый документ и переносить в закрытый период.
+		await assertPeriodOpen(existing.organizationUuid, existing.date);
+		await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
 		const item = await prisma[MODEL].update({
@@ -208,6 +215,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (respondPostingError(error, res)) return;
+		if (respondPeriodLockError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);

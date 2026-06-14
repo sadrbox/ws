@@ -226,6 +226,8 @@ export interface TableProps {
   renderExpandedRow?: (row: TDataItem) => React.ReactNode;
   /** Императивный ref для внешнего управления таблицей (activeRow, focus). */
   apiRef?: Ref<TableApi>;
+  /** uuid строки для подсветки + центрирования («Показать в журнале»). */
+  highlightUuid?: string;
 }
 
 /**
@@ -365,6 +367,7 @@ const Table: FC<TableProps> = memo((props) => {
     expandedRowIds,
     renderExpandedRow,
     apiRef,
+    highlightUuid,
   } = props;
 
 
@@ -415,6 +418,28 @@ const Table: FC<TableProps> = memo((props) => {
     const el = scrollRef.current.querySelector<HTMLElement>('[data-active="true"]');
     if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [activeRow]);
+
+  // Подсветка + ЦЕНТРИРОВАНИЕ строки документа по uuid («Показать в журнале»):
+  // ставим activeRow и скроллим строку в центр. Если строки ещё нет (пагинация) —
+  // догружаем следующие страницы, пока не найдём (с разумным лимитом попыток).
+  const highlightDoneRef = useRef(false);
+  const highlightTriesRef = useRef(0);
+  useEffect(() => { highlightDoneRef.current = false; highlightTriesRef.current = 0; }, [highlightUuid]);
+  useEffect(() => {
+    if (!highlightUuid || highlightDoneRef.current) return;
+    const row = rows.find(r => r.uuid === highlightUuid);
+    if (row) {
+      highlightDoneRef.current = true;
+      setActiveRow(row.id);
+      requestAnimationFrame(() => {
+        scrollRef.current?.querySelector<HTMLElement>('[data-active="true"]')
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      });
+    } else if (hasNextPage && !isFetchingNextPage && highlightTriesRef.current < 50) {
+      highlightTriesRef.current += 1;
+      actions.fetchNextPage?.();
+    }
+  }, [highlightUuid, rows, hasNextPage, isFetchingNextPage, actions]);
 
   // Сбрасываем activeCell, когда снимается activeRow (нет смысла подсвечивать
   // ячейку без активной строки).

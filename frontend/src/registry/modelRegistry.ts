@@ -316,6 +316,22 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Банковские выписки",
 	},
 	{
+		endpoint: "month-closes",
+		module: () => import("src/models/MonthCloses"),
+		formName: "MonthClosesForm",
+		listName: "MonthClosesList",
+		storageKey: "month-closes-form",
+		label: "Закрытие месяца",
+	},
+	{
+		endpoint: "fiscal-receipts",
+		module: () => import("src/models/FiscalReceipts"),
+		formName: "FiscalReceiptsForm",
+		listName: "FiscalReceiptsList",
+		storageKey: "fiscal-receipts-form",
+		label: "Фискальные чеки",
+	},
+	{
 		endpoint: "scheduled-tasks",
 		module: () => import("src/models/ScheduledTasks"),
 		formName: "ScheduledTasksForm",

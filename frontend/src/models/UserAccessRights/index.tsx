@@ -58,6 +58,8 @@ export const MODEL_NAME_OPTIONS = [
     { value: "Reservation", i18: "ReservationsList" },
     { value: "PurchaseOrder", i18: "PurchaseOrdersList" },
     { value: "BankStatement", i18: "BankStatementsList" },
+    { value: "MonthClose", i18: "MonthClosesList" },
+    { value: "FiscalReceipt", i18: "FiscalReceiptsList" },
     { value: "UnitOfMeasure", i18: "UnitOfMeasuresList" },
     { value: "Tax", i18: "TaxesList" },
     { value: "OrganizationAccountingSetting", i18: "OrganizationAccountingSettingsList" },

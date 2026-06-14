@@ -225,9 +225,11 @@ export function useModelListState(opts: UseModelListStateOptions) {
 			openModelForm: (formProps: any) => void;
 			enableDateRange?: boolean;
 			renderCell?: (row: TDataItem, col: TColumn) => ReactNode | undefined;
+			highlightUuid?: string;
 		}) => ({
 			variant: extra.variant,
 			onSelectItem: extra.onSelectItem,
+			highlightUuid: extra.highlightUuid,
 			enableDateRange: extra.enableDateRange ?? false,
 			componentName,
 			rows,

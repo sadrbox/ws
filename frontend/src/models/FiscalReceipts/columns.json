@@ -1,0 +1,12 @@
+[
+	{ "identifier": "id", "type": "number", "width": "70px", "minWidth": "60px", "alignment": "left", "hint": "Внутренний номер", "visible": true, "inlist": true },
+	{ "identifier": "uuid", "hint": "UUID", "type": "string", "visible": false, "inlist": false, "width": "0px", "minWidth": "0px", "alignment": "left" },
+	{ "identifier": "createdAt", "type": "datetime", "width": "150px", "minWidth": "120px", "alignment": "left", "hint": "Дата чека", "visible": true, "inlist": true },
+	{ "identifier": "documentType", "type": "string", "width": "130px", "minWidth": "90px", "alignment": "left", "hint": "Документ-основание", "visible": true, "inlist": true },
+	{ "identifier": "amount", "type": "number", "width": "120px", "minWidth": "80px", "alignment": "right", "hint": "Сумма", "visible": true, "inlist": true },
+	{ "identifier": "paymentMethod", "type": "string", "width": "110px", "minWidth": "80px", "alignment": "center", "hint": "Способ оплаты", "visible": true, "inlist": true },
+	{ "identifier": "status", "type": "string", "width": "130px", "minWidth": "90px", "alignment": "center", "hint": "Статус", "visible": true, "inlist": true },
+	{ "identifier": "fiscalNumber", "type": "string", "width": "140px", "minWidth": "100px", "alignment": "left", "hint": "Номер фискального чека", "visible": true, "inlist": true },
+	{ "identifier": "provider", "type": "string", "width": "90px", "minWidth": "70px", "alignment": "center", "hint": "Провайдер", "visible": true, "inlist": true },
+	{ "identifier": "organization.name", "type": "string", "width": "200px", "minWidth": "120px", "alignment": "left", "hint": "Организация", "visible": true, "inlist": true }
+]

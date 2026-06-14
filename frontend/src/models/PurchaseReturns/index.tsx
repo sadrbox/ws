@@ -28,6 +28,7 @@ import { validateDocumentFields, formatValidationErrors, getDocumentFillHint } f
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { useAppContext } from "src/app";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
+import ShowInJournalButton from "src/components/ShowInJournalButton";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
@@ -384,6 +385,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
       <>
         {isSavedDoc && <DocumentChainButton documentType="purchase_return" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType="purchase_return" documentUuid={form.fields.uuid} />}
+        {isSavedDoc && <ShowInJournalButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} />}
         {hasBasis && (
           <RefillFromBasisButton
             mismatch={basisMismatch.mismatch}
@@ -482,7 +484,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow className={styles.FormHeaderRow}>
                 <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" placeholder={translate("autoOnSave")}
                   actions={[
-                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, (n) => form.setField("number", n)) },
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n)) },
                     { type: "clear", onClick: () => form.setField("number", "") },
                   ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />

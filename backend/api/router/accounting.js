@@ -7,6 +7,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { getDocumentEntries, filterPostedEntries } from "../../services/accountingPosting.js";
+import { getClosedBoundary } from "../../services/periodLock.js";
 
 const router = express.Router();
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -427,6 +428,22 @@ router.get("/accounting/settlements", async (req, res) => {
 		return res.json({ success: true, accountCode: acc, accountName: accMap.get(acc)?.name ?? "", items: rows, totals });
 	} catch (err) {
 		console.error("GET /accounting/settlements error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ─── GET /accounting/closed-period ───────────────────────────────────────────
+// Граница запрета изменений для организации = конец последнего закрытого месяца
+// (max periodEnd среди проведённых month_close). null — закрытий нет. Для фронта
+// (баннер «период закрыт до DD.MM») и проактивных проверок.
+router.get("/accounting/closed-period", async (req, res) => {
+	try {
+		const organizationUuid = typeof req.query.organizationUuid === "string" ? req.query.organizationUuid : null;
+		if (!organizationUuid) return res.json({ success: true, boundary: null });
+		const boundary = await getClosedBoundary(organizationUuid);
+		return res.json({ success: true, boundary: boundary ? boundary.toISOString() : null });
+	} catch (err) {
+		console.error("GET /accounting/closed-period error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

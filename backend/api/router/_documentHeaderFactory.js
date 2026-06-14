@@ -28,6 +28,7 @@ import {
 	respondPostingError,
 } from "../../services/accountingPosting.js";
 import { allocateNumber } from "../../services/documentNumbering.js";
+import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 
 const BASIS_FIELDS = ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"];
 
@@ -39,6 +40,8 @@ export function createDocumentHeaderRouter({
 	TEXT_FIELDS = ["comment"],
 	stringFields = ["organizationUuid", "counterpartyUuid", "contractUuid"],
 	numberFields = ["amount"],
+	// Доп. поля-даты (DateTime) помимо `date` — например период закрытия месяца.
+	dateFields = [],
 	include = {
 		organization: true,
 		counterparty: true,
@@ -48,6 +51,9 @@ export function createDocumentHeaderRouter({
 	hasBasis = false,
 	posting = null,
 	defaultPosted = false,
+	// Документ исключён из блокировки закрытых периодов (например month_close —
+	// сам управляет границей и должен оставаться редактируемым).
+	periodExempt = false,
 	// Доп. хуки: afterSave(uuid) — после create/update; afterDelete(doc) — после удаления.
 	afterSave = null,
 	afterDelete = null,
@@ -157,6 +163,7 @@ export function createDocumentHeaderRouter({
 			};
 			for (const f of stringFields) data[f] = b[f]?.trim?.() ?? b[f] ?? null;
 			for (const f of numberFields) data[f] = b[f] != null ? parseFloat(b[f]) : null;
+			for (const f of dateFields) data[f] = b[f] ? new Date(b[f]) : null;
 			if (hasBasis) for (const f of BASIS_FIELDS) data[f] = b[f] || null;
 
 			// Номер документа: из payload или автогенерация по виду документа.
@@ -165,6 +172,8 @@ export function createDocumentHeaderRouter({
 
 			// Stage D: org-зависимые поля должны принадлежать организации документа.
 			await assertOrgFieldMembership(data, prisma);
+			// Блокировка закрытого периода (кроме документов с periodExempt — month_close).
+			if (!periodExempt) await assertPeriodOpen(data.organizationUuid, data.date);
 			if (posting && data.posted) await validatePosting(posting.docType, data, []);
 			const item = await prisma[MODEL].create({ data, include });
 			if (posting && item.posted) await reconcileDocumentEntries(posting.docType, item.uuid);
@@ -172,6 +181,7 @@ export function createDocumentHeaderRouter({
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
 			if (respondOrgFieldError(error, res)) return;
+			if (respondPeriodLockError(error, res)) return;
 			if (posting && respondPostingError(error, res)) return;
 			console.error(`POST /${ROUTE} error:`, error);
 			return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -188,6 +198,7 @@ export function createDocumentHeaderRouter({
 			const data = {};
 			for (const f of stringFields) if (b[f] !== undefined) data[f] = b[f]?.trim?.() ?? b[f] ?? null;
 			for (const f of numberFields) if (b[f] !== undefined) data[f] = b[f] != null ? parseFloat(b[f]) : null;
+			for (const f of dateFields) if (b[f] !== undefined) data[f] = b[f] ? new Date(b[f]) : null;
 			if (b.number !== undefined) data.number = b.number?.trim?.() || null;
 			if (b.date !== undefined) data.date = b.date ? new Date(b.date) : null;
 			if (b.posted !== undefined) data.posted = !!b.posted;
@@ -198,6 +209,13 @@ export function createDocumentHeaderRouter({
 			// и смену поля), и для проверки проведения.
 			const existing = await prisma[MODEL].findUnique({ where: w });
 			if (!existing) return res.status(404).json({ success: false, message: "Не найдено" });
+
+			// Блокировка закрытого периода: нельзя трогать закрытый документ и переносить
+			// его в закрытый период (кроме документов с periodExempt — month_close).
+			if (!periodExempt) {
+				await assertPeriodOpen(existing.organizationUuid, existing.date);
+				await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
+			}
 
 			// Stage D: org-зависимые поля принадлежат организации документа.
 			await assertOrgFieldMembership({ ...existing, ...data }, prisma);
@@ -212,6 +230,7 @@ export function createDocumentHeaderRouter({
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
 			if (respondOrgFieldError(error, res)) return;
+			if (respondPeriodLockError(error, res)) return;
 			if (posting && respondPostingError(error, res)) return;
 			if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
 			console.error(`PUT /${ROUTE}/:id error:`, error);

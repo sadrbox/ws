@@ -7,6 +7,7 @@ export { SettlementsReport } from "./SettlementsReport";
 export { InventoryTurnoverReport } from "./InventoryTurnoverReport";
 export { ABCReport } from "./ABCReport";
 export { ProductRegisterReport } from "./ProductRegisterReport";
+export { PriceListReport } from "./PriceListReport";
 export { AccountingJournal } from "./AccountingJournal";
 export { TurnoverBalanceSheet } from "./TurnoverBalanceSheet";
 export { AccountCard } from "./AccountCard";

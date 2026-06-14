@@ -323,6 +323,14 @@ async function buildBodyData(body, existing = null) {
 	}
 	if (!useExcise) exciseRate = 0;
 
+	// costingMethod — метод себестоимости списания: "AVERAGE" (средняя) | "FIFO".
+	let costingMethod;
+	if (Object.prototype.hasOwnProperty.call(body, "costingMethod")) {
+		costingMethod = String(body.costingMethod ?? "AVERAGE").toUpperCase() === "FIFO" ? "FIFO" : "AVERAGE";
+	} else {
+		costingMethod = String(existing?.costingMethod ?? "AVERAGE").toUpperCase() === "FIFO" ? "FIFO" : "AVERAGE";
+	}
+
 	// startDate
 	let startDate;
 	if (Object.prototype.hasOwnProperty.call(body, "startDate")) {
@@ -343,6 +351,7 @@ async function buildBodyData(body, existing = null) {
 			useDiscount,
 			useExcise,
 			exciseRate,
+			costingMethod,
 			startDate,
 		},
 	};

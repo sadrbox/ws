@@ -5,6 +5,7 @@ import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgF
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { allocateNumber } from "../../services/documentNumbering.js";
 const router = express.Router();
 const MODEL = "inventoryTransfer";
@@ -154,6 +155,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		} = req.body;
 		// Stage D: оба склада принадлежат организации документа.
 		await assertOrgFieldMembership({ organizationUuid, fromWarehouseUuid, toWarehouseUuid }, prisma);
+		// Блокировка закрытого периода: нельзя создавать документ в закрытом месяце.
+		await assertPeriodOpen(organizationUuid, date);
 		const docNumber = (req.body.number?.trim?.() || null) || await allocateNumber("inventory_transfer", organizationUuid, date);
 		const item = await prisma[MODEL].create({
 			data: {
@@ -177,6 +180,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
 		if (respondOrgFieldError(error, res)) return;
+		if (respondPeriodLockError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -206,10 +210,13 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		// Контроль остатка ПЕРЕД фиксацией проведения (расход с fromWarehouse).
 		const existing = await prisma[MODEL].findUnique({
 			where: w,
-			select: { uuid: true, posted: true, fromWarehouseUuid: true, toWarehouseUuid: true, organizationUuid: true },
+			select: { uuid: true, posted: true, fromWarehouseUuid: true, toWarehouseUuid: true, organizationUuid: true, date: true },
 		});
 		if (!existing)
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Блокировка закрытого периода: нельзя трогать закрытый документ и переносить в закрытый период.
+		await assertPeriodOpen(existing.organizationUuid, existing.date);
+		await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
 		// Stage D: оба склада принадлежат организации документа (мерж с текущими).
 		await assertOrgFieldMembership({
 			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : existing.organizationUuid,
@@ -246,6 +253,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondOrgFieldError(error, res)) return;
 		if (respondStockError(error, res)) return;
 		if (respondPostingError(error, res)) return;
+		if (respondPeriodLockError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);

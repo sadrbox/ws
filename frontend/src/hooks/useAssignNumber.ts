@@ -12,10 +12,14 @@ import { api } from "src/services/api/client";
 
 export function useAssignNumber() {
   return useCallback(
-    async (endpoint: string, organizationUuid: string | undefined, onAssigned: (number: string) => void) => {
+    async (endpoint: string, organizationUuid: string | undefined, currentNumber: string | undefined, onAssigned: (number: string) => void) => {
       try {
         const resp = await api.get<{ success?: boolean; number?: string }>("document-number/next", {
-          params: { endpoint, ...(organizationUuid ? { organizationUuid } : {}) },
+          params: {
+            endpoint,
+            ...(organizationUuid ? { organizationUuid } : {}),
+            ...(currentNumber ? { currentNumber } : {}),
+          },
         });
         if (resp?.number) onAssigned(resp.number);
       } catch (e) {
