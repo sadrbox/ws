@@ -1,11 +1,12 @@
 import { FC, useCallback, useMemo } from "react";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { GroupCol } from "src/components/UI";
@@ -114,25 +115,19 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="339px" value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("iban")} name={`${form.formUid}_iban`} minWidth="339px" value={form.fields.iban} onChange={e => form.setField("iban", e.target.value)} disabled={form.isLoading} required />
+              <Field label={translate("name")} name={`${form.formUid}_name`} minWidth={FIELD_WIDTH.lg} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("iban")} name={`${form.formUid}_iban`} minWidth={FIELD_WIDTH.lg} value={form.fields.iban} onChange={e => form.setField("iban", e.target.value)} disabled={form.isLoading} required />
               <Field label={translate("bik")} name={`${form.formUid}_bik`} minWidth="200px" value={form.fields.bik} onChange={e => form.setField("bik", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("bankName")} name={`${form.formUid}_bankName`} minWidth="339px" value={form.fields.bankName} onChange={e => form.setField("bankName", e.target.value)} disabled={form.isLoading} />
-              <LookupField
-                label={translate("currency")}
-                name={`${form.formUid}_currency`}
-                value={form.fields.currencyUuid}
-                displayValue={form.fields.currencyName}
+              <Field label={translate("bankName")} name={`${form.formUid}_bankName`} minWidth={FIELD_WIDTH.lg} value={form.fields.bankName} onChange={e => form.setField("bankName", e.target.value)} disabled={form.isLoading} />
+              <FormLookup
+                form={form}
+                field="currency"
                 endpoint="currencies"
                 displayField="code"
-                onSelect={(uuid, _display, item) =>
-                  form.setFields({ currencyUuid: uuid, currencyName: `${item.code} — ${item.name}` } as any)
-                }
-                onClear={() =>
-                  form.setFields({ currencyUuid: "", currencyName: "" } as any)
-                }
                 minWidth="250px"
-                disabled={form.isLoading}
+                onSelect={(uuid, _display, item) =>
+                  form.setFields({ currencyUuid: uuid, currencyName: uuid ? `${item.code} — ${item.name}` : "" } as any)
+                }
               />
               <OwnerLookupField
                 ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
@@ -152,7 +147,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <ModelForm
-      paneId={form.paneId}
+      paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid}
       tabs={tabs}
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}

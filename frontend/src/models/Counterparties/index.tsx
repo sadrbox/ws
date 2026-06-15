@@ -1,4 +1,5 @@
 import React, { FC, useMemo, useCallback } from "react";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -76,9 +77,9 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="339px" value={form.fields.name} onChange={e => form.setField("name", e.target.value)} onBlur={e => { if (!form.isEditMode && !form.fields.legalName && e.target.value) form.setField("legalName", e.target.value); }} disabled={form.isLoading} />
-                <Field label={translate("legalName")} name={`${form.formUid}_legalName`} minWidth="339px" value={form.fields.legalName} onChange={e => form.setField("legalName", e.target.value)} disabled={form.isLoading} />
-                <Field label={`${translate("binIin")}`} name={`${form.formUid}_bin`} minWidth="339px" value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} />
+                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth={FIELD_WIDTH.lg} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} onBlur={e => { if (!form.isEditMode && !form.fields.legalName && e.target.value) form.setField("legalName", e.target.value); }} disabled={form.isLoading} />
+                <Field label={translate("legalName")} name={`${form.formUid}_legalName`} minWidth={FIELD_WIDTH.lg} value={form.fields.legalName} onChange={e => form.setField("legalName", e.target.value)} disabled={form.isLoading} />
+                <Field label={`${translate("binIin")}`} name={`${form.formUid}_bin`} minWidth={FIELD_WIDTH.lg} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading || form.isEditMode} />
               </GroupCol>
             </div>
           </div>
@@ -105,7 +106,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <FormRequiredScope requiredKeys={["bin"]} active>
-      <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+      <ModelForm paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />
     </FormRequiredScope>

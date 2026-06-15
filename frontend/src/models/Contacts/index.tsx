@@ -1,4 +1,5 @@
 import { FC, useCallback, useMemo } from "react";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -112,7 +113,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label={`${translate("value")}`} name={`${form.formUid}_value`} minWidth="339px" value={form.fields.value} onChange={e => form.setField("value", e.target.value)} disabled={form.isLoading} />
+              <Field label={`${translate("value")}`} name={`${form.formUid}_value`} minWidth={FIELD_WIDTH.lg} value={form.fields.value} onChange={e => form.setField("value", e.target.value)} disabled={form.isLoading} />
               <FieldSelect
                 label={`${translate("contactType")}`} name={`${form.formUid}_contactType`}
                 value={form.fields.contactType}
@@ -138,7 +139,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <ModelForm
-      paneId={form.paneId}
+      paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid}
       tabs={tabs}
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}

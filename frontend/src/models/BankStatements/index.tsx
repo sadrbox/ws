@@ -12,7 +12,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDateTime, FieldSelect } from "src/components/Field";
 import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { mapCommonTradeFields, resolveOrgChangeFields, refillFromBasisSource } from "src/utils/createFromBasis";
@@ -42,6 +42,7 @@ const DOC_TYPE = "bank_statement" as const;
 
 interface TFields {
   id?: number; uuid?: string;
+  number: string;
   date: string; comment: string; amount: string; direction: string;
   posted: boolean;
   organizationUuid: string; organizationName: string;
@@ -53,6 +54,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
+  number: "",
   date: "", comment: "", amount: "", direction: "bankStatementIn",
   posted: true,
   organizationUuid: "", organizationName: "",
@@ -95,6 +97,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     paneProps,
     mapServerToForm: (d: any, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
+      number: d.number ?? "",
       date: isoToLocalInput(d.date),
       comment: d.comment ?? "",
       amount: d.amount != null ? String(d.amount) : "",
@@ -203,30 +206,20 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
               <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
             </GroupRow>
             <Group>
-              <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
-                onSelect={handleOrganizationSelect}
-                onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
-                disabled={form.isLoading} />
+              <FormLookup form={form} field="organization" endpoint="organizations"
+                onSelect={handleOrganizationSelect} />
             </Group>
             <Group>
-              <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name"
-                onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
-                onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
-                disabled={form.isLoading} />
-              <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name"
+              <FormLookup form={form} field="counterparty" endpoint="counterparties" />
+              <FormLookup form={form} field="contract" endpoint="contracts"
                 onSelect={handleContractSelect}
-                onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
-                disabled={form.isLoading}
                 extraParams={{
                   ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
                   ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
                 }} />
             </Group>
             <Group>
-              <LookupField label={translate("BankAccountsList")} name={`${form.formUid}_bankAccountUuid`} value={form.fields.bankAccountUuid} displayValue={form.fields.bankAccountName} endpoint="bankaccounts" displayField="name"
-                onSelect={(u, d) => form.setFields({ bankAccountUuid: u, bankAccountName: d } as Partial<TFields>)}
-                onClear={() => form.setFields({ bankAccountUuid: "", bankAccountName: "" } as Partial<TFields>)}
-                disabled={form.isLoading}
+              <FormLookup form={form} field="bankAccount" endpoint="bankaccounts" label="BankAccountsList"
                 extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
             </Group>
             <Group>
@@ -286,7 +279,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
         columnDefs: [],
         buildLayout: () => (
           <BankStatementPrint data={{
-            documentId: form.fields.id,
+            documentId: form.fields.id, documentNumber: form.fields.number || undefined,
             documentDate: form.fields.date,
             direction: form.fields.direction,
             amount: form.fields.amount ? parseFloat(form.fields.amount) : 0,
@@ -326,7 +319,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <>
       <ModelForm
-        paneId={form.paneId} tabs={tabs}
+        paneId={form.paneId} endpoint={ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs}
         onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined}
         isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}

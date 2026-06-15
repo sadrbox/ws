@@ -1,0 +1,57 @@
+[
+	{
+		"identifier": "documentType",
+		"hint": "Вид документа",
+		"type": "string",
+		"visible": true,
+		"inlist": true,
+		"width": "260px",
+		"minWidth": "160px",
+		"alignment": "left",
+		"sortable": false
+	},
+	{
+		"identifier": "prefix",
+		"hint": "Префикс",
+		"type": "string",
+		"visible": true,
+		"inlist": true,
+		"width": "150px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"sortable": false
+	},
+	{
+		"identifier": "digitsCount",
+		"hint": "Цифр в номере",
+		"type": "number",
+		"visible": true,
+		"inlist": true,
+		"width": "130px",
+		"minWidth": "90px",
+		"alignment": "left",
+		"sortable": false
+	},
+	{
+		"identifier": "exampleNumber",
+		"hint": "Пример номера",
+		"type": "string",
+		"visible": true,
+		"inlist": true,
+		"width": "170px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"sortable": false
+	},
+	{
+		"identifier": "source",
+		"hint": "Источник",
+		"type": "string",
+		"visible": true,
+		"inlist": true,
+		"width": "130px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"sortable": false
+	}
+]

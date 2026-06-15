@@ -271,8 +271,19 @@ export const SyncFromBasisIcon: FC<SvgProps> = (props) => (
 
 // ── Реестр + универсальный <Icon name="…" /> ─────────────────────────────
 
+/** Удалить — корзина. */
+export const TrashIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M3 4.5h10" />
+    <path d="M6.5 4.5V3h3v1.5" />
+    <path d="M4.5 4.5l.7 8.5h5.6l.7-8.5" />
+    <path d="M6.7 6.8v4.4M9.3 6.8v4.4" />
+  </svg>
+);
+
 export const ICONS = {
   recalc: RecalcIcon,
+  trash: TrashIcon,
   ledger: LedgerIcon,
   settings: SettingsIcon,
   reload: ReloadIcon,

@@ -78,25 +78,155 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 	const def = NUMBER_CONFIG[docType];
 	if (!def) return null;
 	const settings = await loadSettings(client, organizationUuid);
-	// Автонумерация выключена для этого вида документа → номер не присваиваем.
-	if (settings[docType]?.enabled === false) return null;
+	// Номер присваивается ВСЕГДА автоматически при записи документа (требование).
+	// Поля enabled больше нет блокировки — настройки задают только префикс/разрядность.
 	// Префикс опционален: по умолчанию его нет, номер — только дополненный нулями
 	// счётчик («000000001»). Префикс добавляется через «-», только если задан.
 	const prefix = (settings[docType]?.prefix ?? "").trim();
 	const padding = settings[docType]?.padding || 6;
 	const year = (date ? new Date(date) : new Date()).getFullYear();
-	const org = organizationUuid || "__global__";
+	const org = organizationUuid || GLOBAL_SETTINGS_KEY;
 	try {
-		const row = await client.documentSequence.upsert({
-			where: { organizationUuid_docType_year: { organizationUuid: org, docType, year } },
-			create: { organizationUuid: org, docType, year, lastValue: 1 },
-			update: { lastValue: { increment: 1 } },
-		});
-		const seq = String(row.lastValue).padStart(padding, "0");
+		// Самовосстановление: счётчик не должен отставать от ручного ввода/импорта.
+		const jmax = await journalMaxForYear(docType, organizationUuid, year, prefix, client);
+		// Атомарно одним SQL: lastValue = GREATEST(текущий, journalMax) + 1 (без гонок).
+		const rows = await client.$queryRawUnsafe(
+			`INSERT INTO "document_sequences" ("organizationUuid","docType","year","lastValue")
+			 VALUES ($1,$2,$3,$4 + 1)
+			 ON CONFLICT ("organizationUuid","docType","year")
+			 DO UPDATE SET "lastValue" = GREATEST("document_sequences"."lastValue", $4) + 1, "updatedAt" = now()
+			 RETURNING "lastValue"`,
+			org, docType, year, jmax,
+		);
+		const seq = String(rows[0].lastValue).padStart(padding, "0");
 		return prefix ? `${prefix}-${seq}` : seq;
 	} catch (err) {
 		console.error(`allocateNumber(${docType}) error:`, err);
 		return null;
+	}
+}
+
+// docType → таблица журнала (+ direction для cash_orders). Имена фиксированы в
+// коде (НЕ из ввода) → безопасны для подстановки в SQL. Нужны для самовос-
+// становления счётчика по фактическому максимуму номеров за год.
+const DOC_JOURNAL = {
+	sale: { table: "sales" },
+	purchase: { table: "purchases" },
+	sale_return: { table: "sale_returns" },
+	purchase_return: { table: "purchase_returns" },
+	inventory_transfer: { table: "inventory_transfers" },
+	cash_receipt_order: { table: "cash_orders", direction: "receipt" },
+	cash_expense_order: { table: "cash_orders", direction: "expense" },
+	outgoing_invoice: { table: "outgoing_invoices" },
+	incoming_invoice: { table: "incoming_invoices" },
+	payment_invoice: { table: "payment_invoices" },
+	sales_order: { table: "sales_orders" },
+	purchase_order: { table: "purchase_orders" },
+	commercial_offer: { table: "commercial_offers" },
+	reservation: { table: "reservations" },
+	purchase_requisition: { table: "purchase_requisitions" },
+	month_close: { table: "month_closes" },
+};
+
+/**
+ * Максимальный ЧИСЛОВОЙ номер в журнале за КАЛЕНДАРНЫЙ ГОД (по полю date) для
+ * текущей последовательности (того же префикса). Устойчив к «грязным» данным:
+ * учитываются только номера нужного ряда («P-цифры» при префиксе P, либо чистые
+ * цифры без префикса). Нужен, чтобы счётчик догонял ручной ввод/импорт.
+ * @returns {Promise<number>} максимум или 0.
+ */
+export async function journalMaxForYear(docType, organizationUuid, year, prefix, client = prisma) {
+	const j = DOC_JOURNAL[docType];
+	if (!j) return 0;
+	const params = [];
+	let where = `"deletedAt" IS NULL AND "number" IS NOT NULL`;
+	if (j.direction) where += ` AND "direction" = '${j.direction}'`;
+	if (organizationUuid) { params.push(organizationUuid); where += ` AND "organizationUuid" = $${params.length}`; }
+	params.push(new Date(year, 0, 1)); const ys = `$${params.length}`;
+	params.push(new Date(year + 1, 0, 1)); const ye = `$${params.length}`;
+	where += ` AND "date" >= ${ys} AND "date" < ${ye}`;
+	let maxExpr;
+	if (prefix) {
+		params.push(prefix); const p = `$${params.length}`;
+		maxExpr = `MAX(CASE WHEN starts_with("number", ${p} || '-')
+		                AND substring("number" from char_length(${p}) + 2) ~ '^[0-9]+$'
+		               THEN substring("number" from char_length(${p}) + 2)::bigint END)`;
+	} else {
+		maxExpr = `MAX(CASE WHEN "number" ~ '^[0-9]+$' THEN "number"::bigint END)`;
+	}
+	try {
+		const rows = await client.$queryRawUnsafe(
+			`SELECT COALESCE(${maxExpr}, 0) AS maxnum FROM "${j.table}" WHERE ${where}`,
+			...params,
+		);
+		return Number(rows?.[0]?.maxnum ?? 0);
+	} catch (err) {
+		console.error(`journalMaxForYear(${docType}) error:`, err);
+		return 0;
+	}
+}
+
+/**
+ * Предпросмотр следующего номера БЕЗ изменения счётчика (для кнопки «Присвоить
+ * номер»). Использует ТОТ ЖЕ источник, что и allocateNumber: max(счётчик,
+ * максимум журнала за год) + 1 — поэтому превью совпадает с тем, что реально
+ * присвоится при сохранении.
+ * @returns {Promise<string|null>} номер или null (нет конфига/нумерация выключена).
+ */
+export async function peekNextNumber(docType, organizationUuid, date, client = prisma) {
+	const def = NUMBER_CONFIG[docType];
+	if (!def) return null;
+	const settings = await loadSettings(client, organizationUuid);
+	// ВАЖНО: enabled здесь НЕ проверяем. enabled управляет АВТОприсвоением при
+	// сохранении (allocateNumber), а кнопка «Присвоить номер» — явное действие
+	// пользователя: предлагаем следующий номер даже при выключенной автонумерации.
+	const prefix = (settings[docType]?.prefix ?? "").trim();
+	const padding = settings[docType]?.padding || 6;
+	const year = (date ? new Date(date) : new Date()).getFullYear();
+	const org = organizationUuid || GLOBAL_SETTINGS_KEY;
+	let last = 0;
+	try {
+		const row = await client.documentSequence.findUnique({
+			where: { organizationUuid_docType_year: { organizationUuid: org, docType, year } },
+			select: { lastValue: true },
+		});
+		last = row?.lastValue ?? 0;
+	} catch { /* нет строки/таблицы — стартуем с максимума журнала */ }
+	const jmax = await journalMaxForYear(docType, organizationUuid, year, prefix, client);
+	return formatDocNumber(prefix, padding, Math.max(last, jmax) + 1);
+}
+
+/**
+ * Откатывает счётчик последовательности к фактическому максимуму ОСТАВШИХСЯ
+ * документов за год — вызывать ПОСЛЕ удаления документа. Освобождает номер
+ * удалённого «верхнего» документа: следующий номер переиспользует его, счётчик
+ * не уходит вперёд. (Удаление документа из середины ряда оставляет пропуск —
+ * это неизбежно; переиспользуется только освободившийся максимум.)
+ *
+ * @param {string} docType   вид удалённого документа
+ * @param {{organizationUuid?:string|null, date?:Date|string|null, number?:string|null}} deletedDoc
+ */
+export async function resyncSequenceAfterDelete(docType, deletedDoc, client = prisma) {
+	if (!NUMBER_CONFIG[docType] || !deletedDoc) return;
+	// У документа не было номера — освобождать нечего.
+	if (!String(deletedDoc.number ?? "").trim()) return;
+	const settings = await loadSettings(client, deletedDoc.organizationUuid ?? null);
+	const prefix = (settings[docType]?.prefix ?? "").trim();
+	const year = (deletedDoc.date ? new Date(deletedDoc.date) : new Date()).getFullYear();
+	const org = deletedDoc.organizationUuid || GLOBAL_SETTINGS_KEY;
+	try {
+		// Максимум среди ОСТАВШИХСЯ (удалённый документ уже физически удалён).
+		const jmax = await journalMaxForYear(docType, deletedDoc.organizationUuid ?? null, year, prefix, client);
+		// Счётчик = текущий максимум журнала → следующий allocate даст jmax+1.
+		await client.$queryRawUnsafe(
+			`INSERT INTO "document_sequences" ("organizationUuid","docType","year","lastValue")
+			 VALUES ($1,$2,$3,$4)
+			 ON CONFLICT ("organizationUuid","docType","year")
+			 DO UPDATE SET "lastValue" = $4, "updatedAt" = now()`,
+			org, docType, year, jmax,
+		);
+	} catch (err) {
+		console.error(`resyncSequenceAfterDelete(${docType}) error:`, err);
 	}
 }
 

@@ -111,15 +111,13 @@ export const metaBlock: CSSProperties = {
 
 // ── Номер документа для печати ─────────────────────────────────────────────
 /**
- * Номер документа для печатной формы с учётом ручного поля «Номер» (number).
- * Если у документа задан собственный номер — печатаем его; иначе откатываемся
- * к идентификатору записи (documentId); если нет и его — «—».
+ * Номер документа для печатной формы — ТОЛЬКО поле «Номер» (number).
+ * ID записи в печатной форме не показываем; если номера нет (черновик) — «—».
  */
 export const printDocNumber = (d: {
 	documentNumber?: string | number | null;
 	documentId?: string | number | null;
 }): string => {
 	const manual = d.documentNumber != null ? String(d.documentNumber).trim() : "";
-	if (manual) return manual;
-	return d.documentId != null && d.documentId !== "" ? String(d.documentId) : "—";
+	return manual || "—";
 };

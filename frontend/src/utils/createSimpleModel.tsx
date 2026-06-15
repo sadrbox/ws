@@ -167,7 +167,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
       <FormRequiredScope requiredKeys={requiredKeys}>
         <FormDirtyScope dirtyKeys={form.unsavedFields}>
           <ModelForm
-            paneId={form.paneId}
+            paneId={form.paneId} endpoint={endpoint} recordUuid={(form.fields as { uuid?: string }).uuid}
             tabs={tabs}
             onSave={form.handleSave}
             onSaveAndClose={form.handleSaveAndClose}

@@ -205,7 +205,10 @@ export interface TableProps {
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   extraButtons?: React.ReactNode;
-  onDelete?: (selectedRows: Set<number>, rows: TDataItem[]) => void;
+  /** Удаление выбранных строк. Может вернуть набор РЕАЛЬНО удалённых id —
+   *  таблица сдвигает activeRow и снимает выделение только с них (неудалённые,
+   *  напр. документ-основание с 409, остаются активными/выделенными). */
+  onDelete?: (selectedRows: Set<number>, rows: TDataItem[]) => void | Promise<{ deletedIds?: Set<number> } | void>;
   // ── Inline-редактирование ──────────────────────────────────────────────
   inlineEditing?: boolean;
   renderCell?: (row: TDataItem, col: TColumn) => React.ReactNode | undefined;
@@ -556,7 +559,7 @@ const Table: FC<TableProps> = memo((props) => {
     refetch();
   }, [refetch]);
 
-  const handleDeleteClick = useCallback(() => {
+  const handleDeleteClick = useCallback(async () => {
     // Собираем реальный набор id выбранных строк
     let effectiveIds: Set<number>;
     if (isAllSelectedMode) {
@@ -574,38 +577,39 @@ const Table: FC<TableProps> = memo((props) => {
     }
 
     if (effectiveIds.size === 0) return;
+    if (!onDelete) { alert('Удалить выбранные'); return; }
 
-    // ── Вычисляем следующий activeRow ДО удаления ─────────────────────
-    // Поведение: если активная строка удаляется — переносим фокус
-    // на ближайшую строку НИЖЕ удаляемого блока (которая сама не удаляется);
-    // если её нет — на ближайшую строку ВЫШЕ. Если все строки удалены —
-    // сбрасываем activeRow в null.
+    // Узнаём, какие строки РЕАЛЬНО удалены. Если onDelete вернул deletedIds —
+    // используем их (неудалённые, напр. документ-основание → 409, останутся
+    // активными/выделенными); иначе (старый контракт) считаем удалёнными все.
+    const result = (await onDelete(effectiveIds, rows)) as { deletedIds?: Set<number> } | undefined;
+    const deletedIds = result?.deletedIds instanceof Set ? result.deletedIds : effectiveIds;
+    // Ничего не удалено (отмена/полный отказ) — состояние таблицы НЕ трогаем.
+    if (deletedIds.size === 0) return;
+
+    // activeRow сдвигаем ТОЛЬКО если активная строка действительно удалена:
+    // на ближайшую НЕудалённую ниже, иначе выше, иначе null.
     let nextActiveRow: number | null = activeRow;
-    if (activeRow !== null && effectiveIds.has(activeRow)) {
+    if (activeRow !== null && deletedIds.has(activeRow)) {
       nextActiveRow = null;
       const idx = rows.findIndex(r => r.id === activeRow);
       if (idx !== -1) {
         for (let i = idx + 1; i < rows.length; i++) {
-          if (!effectiveIds.has(rows[i].id)) { nextActiveRow = rows[i].id; break; }
+          if (!deletedIds.has(rows[i].id)) { nextActiveRow = rows[i].id; break; }
         }
         if (nextActiveRow === null) {
           for (let i = idx - 1; i >= 0; i--) {
-            if (!effectiveIds.has(rows[i].id)) { nextActiveRow = rows[i].id; break; }
+            if (!deletedIds.has(rows[i].id)) { nextActiveRow = rows[i].id; break; }
           }
         }
       }
     }
 
-    if (onDelete) {
-      onDelete(effectiveIds, rows);
-      // Сбрасываем выделение после удаления
-      setSelectedRows(new Set());
-      setIsAllSelectedMode(false);
-      setExcludedRows(new Set());
-      setActiveRow(nextActiveRow);
-    } else {
-      alert('Удалить выбранные');
-    }
+    // Снимаем выделение только с УДАЛЁННЫХ строк (неудалённые остаются выбранными).
+    setSelectedRows(prev => { const n = new Set(prev); for (const id of deletedIds) n.delete(id); return n; });
+    setIsAllSelectedMode(false);
+    setExcludedRows(new Set());
+    setActiveRow(nextActiveRow);
   }, [onDelete, selectedRows, rows, isAllSelectedMode, excludedRows, activeRow, setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow]);
 
   // ── Клавиатурная навигация по таблице (Insert / Delete / Home / End /

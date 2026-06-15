@@ -1628,6 +1628,21 @@ export function useFormStore<F extends object>(
 		}
 	}, [uuid, store, refreshPaneLabel]);
 
+	// ── Единый источник заголовка для НОВЫХ документов ──
+	// Заголовок панели генерируется ТОЛЬКО формой (buildPaneLabel). Метка, заданная
+	// при открытии (addPane из ModelList / registry / createFromBasis), — лишь
+	// временный плейсхолдер; она может быть во множественном числе (напр. docLabel
+	// «Реализация товаров» у зависимого документа). Для существующих документов
+	// заголовок переопределяет эффект auto-load выше; для новых (без uuid) load не
+	// вызывается — поэтому формируем заголовок из формы здесь, на монтировании.
+	const newDocLabelSetRef = useRef(false);
+	useEffect(() => {
+		if (!uuid && !newDocLabelSetRef.current) {
+			newDocLabelSetRef.current = true;
+			refreshPaneLabel();
+		}
+	}, [uuid, refreshPaneLabel]);
+
 	// ── Регистрация beforeClose guard ──
 	useEffect(() => {
 		if (!uniqId) return;

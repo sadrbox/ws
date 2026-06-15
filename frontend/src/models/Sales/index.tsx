@@ -9,7 +9,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDateTime } from "src/components/Field";
 import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { Group, GroupRow, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -26,6 +26,7 @@ import { validateDocumentFields, formatValidationErrors, getDocumentFillHint } f
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import ShowInJournalButton from "src/components/ShowInJournalButton";
+import DeleteDocumentButton from "src/components/DeleteDocumentButton";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import SaleInvoicePrint, { type SaleInvoicePrintData, type SaleInvoicePrintColumns, type SaleItemPrintRow } from "./SaleInvoicePrint";
@@ -544,11 +545,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
       const isAct = layoutId === "act";
       const titleStr = isAct
-        ? `Акт вып. работ № ${baseData.documentId ?? ""}`
-        : `Накладная № ${baseData.documentId ?? ""}`;
+        ? `Акт вып. работ № ${baseData.documentNumber ?? ""}`
+        : `Накладная № ${baseData.documentNumber ?? ""}`;
       const fileBase = (isAct
-        ? `Акт_${baseData.documentId ?? "draft"}`
-        : `Накладная_${baseData.documentId ?? "draft"}`
+        ? `Акт_${baseData.documentNumber ?? "draft"}`
+        : `Накладная_${baseData.documentNumber ?? "draft"}`
       ).replace(/\s+/g, "_");
 
       const columnDefs: PrintColumnDef[] = [
@@ -632,7 +633,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       <>
         {isSavedDoc && <DocumentChainButton documentType="sale" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType="sale" documentUuid={form.fields.uuid} />}
-        {isSavedDoc && <ShowInJournalButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} />}
+        {isSavedDoc && <ShowInJournalButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} paneId={form.paneId} />}
         {hasBasis && (
           <RefillFromBasisButton
             mismatch={basisMismatch.mismatch}
@@ -684,7 +685,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow className={styles.FormHeaderRow}>
                 <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
                   actions={[
-                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n)) },
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date) },
                     { type: "clear", onClick: () => form.setField("number", "") },
                   ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
@@ -698,20 +699,20 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
               <Group>
                 {/* Организация — во всю ширину */}
-                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={handleOrganizationSelect} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <FormLookup form={form} field="organization" endpoint="organizations" onSelect={handleOrganizationSelect} />
 
-                <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name" onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)} onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                <FormLookup form={form} field="warehouse" endpoint="warehouses" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
 
               <Group>
                 {/* Контрагент — во всю ширину */}
-                <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <FormLookup form={form} field="counterparty" endpoint="counterparties" />
 
-                <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name" onSelect={handleContractSelect} onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={contractExtraParams} />
+                <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect} extraParams={contractExtraParams} />
 
                 {/* Менеджер реализации — аналитика учёта движения продаж по менеджеру (НК РК) */}
-                <LookupField label={translate("manager")} name={`${form.formUid}_managerUuid`} value={form.fields.managerUuid} displayValue={form.fields.managerName} endpoint="employees" displayField="fullName" onSelect={(u, d) => form.setFields({ managerUuid: u, managerName: d } as Partial<TFields>)} onClear={() => form.setFields({ managerUuid: "", managerName: "" } as Partial<TFields>)} disabled={form.isLoading} extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-                <LookupField label={translate("priceType")} name={`${form.formUid}_priceTypeUuid`} value={form.fields.priceTypeUuid} displayValue={form.fields.priceTypeName} endpoint="price-types" displayField="name" onSelect={(u, d) => form.setFields({ priceTypeUuid: u, priceTypeName: d } as Partial<TFields>)} onClear={() => form.setFields({ priceTypeUuid: "", priceTypeName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <FormLookup form={form} field="manager" endpoint="employees" displayField="fullName" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                <FormLookup form={form} field="priceType" endpoint="price-types" />
               </Group>
 
             </GroupCol>
@@ -720,6 +721,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 allowedTypes={[
                   { type: "sales_order", endpoint: "sales-orders" },
                   { type: "reservation", endpoint: "reservations" },
+                  { type: "commercial_offer", endpoint: "commercial-offers" },
                   { type: "payment_invoice", endpoint: "payment-invoices" },
                 ]}
                 basisDocumentType={form.fields.basisDocumentType}

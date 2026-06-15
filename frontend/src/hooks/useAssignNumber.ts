@@ -1,11 +1,11 @@
 /**
  * useAssignNumber — присвоение следующего номера документу («Присвоить номер»).
  *
- * Возвращает СТАБИЛЬНУЮ функцию `assign(endpoint, organizationUuid, onAssigned)`.
- * Запрашивает у сервера следующий номер (числовой максимум в журнале + 1, с
- * корректным форматом — backend /document-number/next). Сервер устойчив к
- * «грязным» данным (разная ширина/префиксы), поэтому номера уникальны и
- * последовательны.
+ * Возвращает СТАБИЛЬНУЮ функцию `assign(endpoint, organizationUuid, currentNumber,
+ * onAssigned, date?)`. Запрашивает у сервера предпросмотр следующего номера
+ * (backend /document-number/next → peekNextNumber): тот же счётчик, что и при
+ * автосохранении, с учётом года (по `date`) и самовосстановлением до максимума
+ * журнала. Поэтому превью совпадает с тем, что реально присвоится при сохранении.
  */
 import { useCallback } from "react";
 import { api } from "src/services/api/client";
@@ -14,7 +14,7 @@ import { showToast } from "src/components/UIToast";
 
 export function useAssignNumber() {
   return useCallback(
-    async (endpoint: string, organizationUuid: string | undefined, currentNumber: string | undefined, onAssigned: (number: string) => void) => {
+    async (endpoint: string, organizationUuid: string | undefined, currentNumber: string | undefined, onAssigned: (number: string) => void, date?: string) => {
       // Документу уже присвоен номер — НЕ переназначаем (он занимает место в
       // последовательности; новое присвоение «перепрыгнуло» бы и нарушило порядок).
       // Чтобы сменить номер — сначала очистить поле, затем «Присвоить номер».
@@ -27,6 +27,8 @@ export function useAssignNumber() {
           params: {
             endpoint,
             ...(organizationUuid ? { organizationUuid } : {}),
+            // Год берётся из даты документа — превью соответствует ряду нужного года.
+            ...(date ? { date } : {}),
           },
         });
         if (resp?.number) onAssigned(resp.number);

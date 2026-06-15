@@ -31,7 +31,7 @@ const ReservationsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   printConfig: {
     buildLayout: (fields, items, cols) => (
       <TradeDocumentPrint title="РЕЗЕРВИРОВАНИЕ ТОВАРА" counterpartyLabel="Покупатель" totalLabel="Итого" data={{
-        documentId: fields.id, documentDate: fields.date,
+        documentId: fields.id, documentNumber: fields.number || undefined, documentDate: fields.date,
         organizationName: fields.organizationName, counterpartyName: fields.counterpartyName, contractName: fields.contractName,
         items: items.map((r, i) => ({ number: i + 1, name: r.name, unit: r.unit, quantity: r.quantity, price: r.price, vatRate: r.vatRate, vatAmount: r.vatAmount, amount: r.amount })),
         totalAmount: items.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
@@ -44,8 +44,8 @@ const ReservationsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       { key: "vatAmount", label: "Сумма НДС", defaultVisible: true },
     ],
     columnsKey: "reservation",
-    fileBaseName: (f) => `Резерв_${f.id ?? "новый"}`,
-    title: (f) => `Резервирование № ${f.id ?? "—"}`,
+    fileBaseName: (f) => `Резерв_${f.number || "новый"}`,
+    title: (f) => `Резервирование № ${f.number || "—"}`,
   },
   basisConfig: {
     allowedTypes: [{ type: "sales_order", endpoint: "sales-orders" }],

@@ -128,6 +128,42 @@ export function getModelColumns(
 	return columns;
 }
 
+// ── Персистентность вида таблицы: сортировка + период (dateRange) ────────────
+// Колонки хранятся отдельно (table_columns_*, см. getModelColumns). Здесь —
+// параметры сортировки и выбранный период, по тому же componentName.
+const TABLE_VIEW_PREFIX = "table_view_";
+
+export interface TableViewState {
+	sort?: Record<string, "asc" | "desc">;
+	dateRange?: { startDate?: string; endDate?: string };
+}
+
+export function loadTableView(componentName: string): TableViewState | null {
+	try {
+		const raw = localStorage.getItem(TABLE_VIEW_PREFIX + componentName);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw);
+		return parsed && typeof parsed === "object" ? (parsed as TableViewState) : null;
+	} catch {
+		return null;
+	}
+}
+
+export function saveTableView(componentName: string, view: TableViewState): void {
+	try {
+		const hasSort = view.sort && Object.keys(view.sort).length > 0;
+		const hasRange = !!(view.dateRange && (view.dateRange.startDate || view.dateRange.endDate));
+		// Пустое состояние — убираем ключ, чтобы не копить мусор в localStorage.
+		if (!hasSort && !hasRange) {
+			localStorage.removeItem(TABLE_VIEW_PREFIX + componentName);
+			return;
+		}
+		localStorage.setItem(TABLE_VIEW_PREFIX + componentName, JSON.stringify(view));
+	} catch {
+		/* localStorage недоступен (приватный режим/квота) — не критично */
+	}
+}
+
 export function getFormatColumnValue(
 	row: TDataItem,
 	column: TColumn,

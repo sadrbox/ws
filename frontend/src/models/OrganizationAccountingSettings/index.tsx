@@ -1,11 +1,12 @@
 import { FC, useEffect, useMemo } from "react";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import type { TDataItem, TColumn } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import { FieldDate } from "src/components/Field";
 import { FieldNumber } from "src/components/Field";
 import { GroupRow } from "src/components/UI";
@@ -173,28 +174,15 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupRow>
-                <LookupField
-                  label={translate("organization")}
-                  name={`${form.formUid}_org`}
-                  value={form.fields.organizationUuid ?? ""}
-                  displayValue={form.fields.organizationName}
+                <FormLookup
+                  form={form}
+                  field="organization"
                   endpoint="organizations"
-                  displayField="name"
-                  columns={[
-                    { key: "name", label: "Краткое имя" },
-                    { key: "bin", label: "БИН" },
-                  ]}
-                  onSelect={(uuid, display) =>
-                    form.setFields({
-                      organizationUuid: uuid,
-                      organizationName: display,
-                    })
-                  }
+                  width={FIELD_WIDTH.lg}
+                  disabled={form.isLoading || !canWrite}
                   onClear={() =>
                     form.setFields({ organizationUuid: null, organizationName: "" })
                   }
-                  disabled={form.isLoading || !canWrite}
-                  width="320px"
                 />
                 <FieldDate
                   label={translate("startDate")}

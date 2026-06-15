@@ -15,8 +15,9 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDateTime, FieldPeriod } from "src/components/Field";
 import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import ShowInJournalButton from "src/components/ShowInJournalButton";
+import DeleteDocumentButton from "src/components/DeleteDocumentButton";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -180,7 +181,7 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow className={styles.FormHeaderRow}>
                 <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
                   actions={[
-                    { type: "assignNumber", onClick: () => void assignNumber(ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n)) },
+                    { type: "assignNumber", onClick: () => void assignNumber(ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date) },
                     { type: "clear", onClick: () => form.setField("number", "") },
                   ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
@@ -190,10 +191,7 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
                 <FieldPeriod label={translate("monthClosePeriod")} name={`${form.formUid}_period`} value={form.fields.period} onChange={handlePeriodChange} disabled={form.isLoading} width="200px" />
               </Group>
               <Group>
-                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
-                  onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)}
-                  onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading} />
+                <FormLookup form={form} field="organization" endpoint="organizations" />
               </Group>
               {!form.fields.organizationUuid && (
                 <div className={styles.SettingHint}>{getDocumentFillHint(DOC_TYPE, form.fields as unknown as Record<string, unknown>)}</div>
@@ -224,7 +222,7 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     isSavedDoc ? (
       <>
-        <ShowInJournalButton endpoint={ENDPOINT} uuid={form.fields.uuid} />
+        <ShowInJournalButton endpoint={ENDPOINT} uuid={form.fields.uuid} /> <DeleteDocumentButton endpoint={ENDPOINT} uuid={form.fields.uuid} paneId={form.paneId} />
         <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />
       </>
     ) : null,

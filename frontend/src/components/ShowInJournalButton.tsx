@@ -1,5 +1,5 @@
 /**
- * ShowInJournalButton — кнопка «Показать в журнале» в шапке формы документа.
+ * ShowInJournalButton — кнопка «Показать в списке» в шапке формы документа.
  *
  * Открывает *List документа и подсвечивает текущий документ: строка получает
  * activeRow и прокручивается В ЦЕНТР видимой области (см. listHighlight + Table).
@@ -17,8 +17,8 @@ const ShowInJournalButton: FC<{ endpoint: string; uuid?: string }> = ({ endpoint
   return (
     <IconButton
       icon="list"
-      title="Показать в журнале"
-      aria-label="Показать в журнале"
+      title="Показать в списке"
+      aria-label="Показать в списке"
       onClick={() => {
         setPendingHighlight(endpoint, uuid);
         void openListByRef(endpoint, addPane);

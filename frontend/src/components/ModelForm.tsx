@@ -2,7 +2,8 @@ import { FC, ReactNode, useRef } from "react";
 import { translate } from "src/i18";
 import FormPanel from "src/components/FormPanel";
 import Tabs from "src/components/Tabs";
-import { usePaneToolbar } from "src/hooks/usePaneToolbar";
+import { usePaneToolbar, usePaneHeaderActions } from "src/hooks/usePaneToolbar";
+import ShowInJournalButton from "src/components/ShowInJournalButton";
 import skeletonStyles from "./ModelForm.module.scss";
 
 /**
@@ -69,6 +70,10 @@ interface ModelFormProps {
   readonly?: boolean;
   /** uniqId панели для регистрации тулбара */
   paneId?: string;
+  /** endpoint + uuid записи → кнопка «Показать в списке» в шапке панели
+   *  (для справочников; в формах документов кнопка добавляется вручную). */
+  endpoint?: string;
+  recordUuid?: string;
 }
 
 const ModelForm: FC<ModelFormProps> = ({
@@ -82,6 +87,8 @@ const ModelForm: FC<ModelFormProps> = ({
   // showReload,
   readonly,
   paneId,
+  endpoint,
+  recordUuid,
 }) => {
   // Рендерим кнопки формы в заголовок панели через портал
   const toolbarPortal = usePaneToolbar(
@@ -95,6 +102,14 @@ const ModelForm: FC<ModelFormProps> = ({
       isLoading={isLoading}
     // showReload={showReload}
     />,
+  );
+
+  // «Показать в списке» в шапке панели — для справочников (опционально, если
+  // переданы endpoint + uuid сохранённой записи). Формы документов добавляют
+  // эту кнопку самостоятельно вместе с прочими действиями.
+  const headerActionsPortal = usePaneHeaderActions(
+    paneId,
+    endpoint && recordUuid ? <ShowInJournalButton endpoint={endpoint} uuid={recordUuid} /> : null,
   );
 
   // ── Skeleton для первой загрузки ─────────────────────────────────────
@@ -114,6 +129,7 @@ const ModelForm: FC<ModelFormProps> = ({
     <>
       {showSkeleton ? <FormSkeleton /> : <Tabs tabs={tabs} />}
       {toolbarPortal}
+      {headerActionsPortal}
     </>
   );
 };

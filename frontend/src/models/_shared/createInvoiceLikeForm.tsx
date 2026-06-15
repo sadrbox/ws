@@ -10,7 +10,7 @@ import type { TDataItem } from "src/components/Table/types";
 import { Field, FieldDateTime } from "src/components/Field";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -29,6 +29,7 @@ import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import BasisDocumentField, { type BasisTypeConfig } from "src/components/Field/BasisDocumentField";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import ShowInJournalButton from "src/components/ShowInJournalButton";
+import DeleteDocumentButton from "src/components/DeleteDocumentButton";
 import PrintDocumentPane, { type PrintColumnDef } from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
@@ -399,7 +400,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       showHeaderActions ? (
         <>
           {isSavedDoc && <DocumentChainButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
-          {isSavedDoc && <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} />}
+          {isSavedDoc && <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
           {hasBasis && (
             <RefillFromBasisButton
               mismatch={basisMismatch.mismatch}
@@ -413,12 +414,14 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             <ActionsDropdownButton
               icon="fromBasis"
               label="На основании"
-              options={cfg.createFromBasisTargets.map((t) => ({
-                  id: t.basisType,
+              options={cfg.createFromBasisTargets.map((t, i) => ({
+                  // id — индекс цели: basisType одинаков у всех целей одного источника,
+                  // поэтому по нему нельзя различить цели (открывалась бы первая).
+                  id: String(i),
                   label: formatDependentOption(t.docLabel, t.existingCheckEndpoint ? existingDeps[t.existingCheckEndpoint] : null),
                 }))}
               onSelect={(id) => {
-                const target = cfg.createFromBasisTargets!.find((t) => t.basisType === id);
+                const target = cfg.createFromBasisTargets![Number(id)];
                 if (target) void handleCreateFromBasis(target);
               }}
             />
@@ -507,26 +510,22 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                 <GroupRow className={styles.FormHeaderRow}>
                   <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
                     actions={[
-                      { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n)) },
+                      { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date) },
                       { type: "clear", onClick: () => form.setField("number", "") },
                     ]} />
                   <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
                   {!cfg.hidePosted && <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />}
                 </GroupRow>
                 <Group>
-                  <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
+                  <FormLookup form={form} field="organization" endpoint="organizations"
                     onSelect={handleOrganizationSelect}
-                    onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
                     disabled={form.isLoading || basisLock} />
                 </Group>
                 <Group>
-                  <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name"
-                    onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
-                    onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
+                  <FormLookup form={form} field="counterparty" endpoint="counterparties"
                     disabled={form.isLoading || basisLock} />
-                  <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name"
+                  <FormLookup form={form} field="contract" endpoint="contracts"
                     onSelect={handleContractSelect}
-                    onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
                     disabled={form.isLoading || basisLock}
                     extraParams={{
                       ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
@@ -535,9 +534,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                 </Group>
                 {cfg.hasWarehouse && (
                   <Group>
-                    <LookupField label={translate("warehouse")} name={`${form.formUid}_warehouseUuid`} value={form.fields.warehouseUuid} displayValue={form.fields.warehouseName} endpoint="warehouses" displayField="name"
-                      onSelect={(u, d) => form.setFields({ warehouseUuid: u, warehouseName: d } as Partial<TFields>)}
-                      onClear={() => form.setFields({ warehouseUuid: "", warehouseName: "" } as Partial<TFields>)}
+                    <FormLookup form={form} field="warehouse" endpoint="warehouses"
                       disabled={form.isLoading || basisLock}
                       extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
                   </Group>

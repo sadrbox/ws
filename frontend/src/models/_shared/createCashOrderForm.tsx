@@ -16,7 +16,7 @@ import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { refillFromBasisSource } from "src/utils/createFromBasis";
 import { cashOperationTypes, defaultCashOperationType, findCashOperationType, type CashDirection } from "src/models/_shared/cashOperationTypes";
 import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -33,6 +33,7 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import ShowInJournalButton from "src/components/ShowInJournalButton";
+import DeleteDocumentButton from "src/components/DeleteDocumentButton";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
@@ -343,7 +344,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                 <GroupRow className={styles.FormHeaderRow}>
                   <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
                     actions={[
-                      { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n)) },
+                      { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date) },
                       { type: "clear", onClick: () => form.setField("number", "") },
                     ]} />
                   <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
@@ -371,29 +372,19 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                   </Group>
                 )}
                 <Group>
-                  <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
-                    onSelect={handleOrganizationSelect}
-                    onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
-                    disabled={form.isLoading} />
+                  <FormLookup form={form} field="organization" endpoint="organizations"
+                    onSelect={handleOrganizationSelect} />
                 </Group>
                 {currentOp.requiresEmployee ? (
                   <Group>
-                    <LookupField label={translate("employee")} name={`${form.formUid}_employeeUuid`} value={form.fields.employeeUuid} displayValue={form.fields.employeeName} endpoint="employees" displayField="fullName"
-                      onSelect={(u, d) => form.setFields({ employeeUuid: u, employeeName: d } as Partial<TFields>)}
-                      onClear={() => form.setFields({ employeeUuid: "", employeeName: "" } as Partial<TFields>)}
-                      disabled={form.isLoading}
+                    <FormLookup form={form} field="employee" endpoint="employees" displayField="fullName"
                       extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
                   </Group>
                 ) : (
                   <Group>
-                    <LookupField label={translate("counterparty")} name={`${form.formUid}_counterpartyUuid`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name"
-                      onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)}
-                      onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)}
-                      disabled={form.isLoading} />
-                    <LookupField label={translate("contract")} name={`${form.formUid}_contractUuid`} value={form.fields.contractUuid} displayValue={form.fields.contractName} endpoint="contracts" displayField="name"
+                    <FormLookup form={form} field="counterparty" endpoint="counterparties" />
+                    <FormLookup form={form} field="contract" endpoint="contracts"
                       onSelect={handleContractSelect}
-                      onClear={() => form.setFields({ contractUuid: "", contractName: "" } as Partial<TFields>)}
-                      disabled={form.isLoading}
                       extraParams={{
                         ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
                         ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
@@ -402,10 +393,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                 )}
                 <GroupRow>
                   <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
-                  <LookupField label={translate("cashbox")} name={`${form.formUid}_cashboxUuid`} value={form.fields.cashboxUuid} displayValue={form.fields.cashboxName} endpoint="cashboxes" displayField="name"
-                    onSelect={(u, d) => form.setFields({ cashboxUuid: u, cashboxName: d } as Partial<TFields>)}
-                    onClear={() => form.setFields({ cashboxUuid: "", cashboxName: "" } as Partial<TFields>)}
-                    disabled={form.isLoading}
+                  <FormLookup form={form} field="cashbox" endpoint="cashboxes"
                     extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
                 </GroupRow>
               </GroupCol>
@@ -464,7 +452,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
         <>
           {isSavedDoc && <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />}
           {isSavedDoc && <DocumentEntriesButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
-          {isSavedDoc && <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} />}
+          {isSavedDoc && <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
           {hasBasis && (
             <RefillFromBasisButton
               mismatch={basisMismatch.mismatch}

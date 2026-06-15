@@ -61,8 +61,8 @@ const OutgoingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       { key: "vatAmount", label: "Сумма НДС", defaultVisible: true },
     ],
     columnsKey: "outgoing_invoice",
-    fileBaseName: (f) => `СчФактура_${f.id ?? "новый"}`,
-    title: (f) => `Счёт-фактура № ${f.id ?? "—"}`,
+    fileBaseName: (f) => `СчФактура_${f.number || "новый"}`,
+    title: (f) => `Счёт-фактура № ${f.number || "—"}`,
   },
 });
 

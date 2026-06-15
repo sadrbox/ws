@@ -3,7 +3,8 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
-import { allocateNumber } from "../../services/documentNumbering.js";
+import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
+import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 const router = express.Router();
 const MODEL = "purchaseRequisition";
 const ROUTE = "purchase-requisitions";
@@ -155,9 +156,11 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		} = req.body;
 		// Stage D: договор принадлежит организации документа.
 		await assertOrgFieldMembership({ organizationUuid, contractUuid }, prisma);
+		// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
+		const docNumber = await ensureDocumentNumber({ docType: "purchase_requisition", modelName: MODEL, manual: req.body.number, organizationUuid, date });
 		const item = await prisma[MODEL].create({
 			data: {
-				number: (req.body.number?.trim?.() || null) || await allocateNumber("purchase_requisition", organizationUuid, date),
+				number: docNumber,
 				date: date ? new Date(date) : new Date(),
 				comment: comment?.trim() ?? null,
 				amount: amount != null ? parseFloat(amount) : null,
@@ -180,6 +183,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
 		if (respondOrgFieldError(error, res)) return;
+		if (respondDuplicateNumberError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -211,11 +215,16 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			if (req.body[f] !== undefined) data[f] = req.body[f] || null;
 		}
 		// Stage D: договор принадлежит организации документа (мерж с текущими).
-		const _ex = await prisma[MODEL].findUnique({ where: w, select: { organizationUuid: true, contractUuid: true } });
+		const _ex = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true, number: true, contractUuid: true, date: true } });
 		await assertOrgFieldMembership({
 			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : _ex?.organizationUuid,
 			contractUuid: data.contractUuid !== undefined ? data.contractUuid : _ex?.contractUuid,
 		}, prisma);
+		// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
+		{
+			const _num = await ensureDocumentNumber({ docType: "purchase_requisition", modelName: MODEL, manual: data.number !== undefined ? data.number : _ex?.number, organizationUuid: data.organizationUuid ?? _ex?.organizationUuid, date: data.date ?? _ex?.date, excludeUuid: _ex?.uuid });
+			if (_num && _num !== _ex?.number) data.number = _num;
+		}
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -229,6 +238,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (respondOrgFieldError(error, res)) return;
+		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);
@@ -236,10 +246,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 router.delete(`/${ROUTE}/:id`, (req, res) =>
-	handleDelete({ req, res, prisma, modelName: MODEL }),
+	handleDelete({ req, res, prisma, modelName: MODEL, numberDocType: "purchase_requisition" }),
 );
 router.post(`/${ROUTE}/batch-delete`, (req, res) =>
-	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
+	handleBatchDelete({ req, res, prisma, modelName: MODEL, numberDocType: "purchase_requisition" }),
 );
 
 export default router;

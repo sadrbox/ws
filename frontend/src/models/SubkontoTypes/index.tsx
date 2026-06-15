@@ -94,7 +94,7 @@ const SubkontoTypesForm: FC<Partial<TPane>> = (paneProps) => {
     <FormRequiredScope requiredKeys={["code", "name"]}>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
         <ModelForm
-          paneId={form.paneId} tabs={tabs}
+          paneId={form.paneId} endpoint={ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs}
           onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
           onReload={form.isEditMode ? form.handleReload : undefined}
           isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}

@@ -1,4 +1,5 @@
 import { FC, useCallback, useMemo } from "react";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { translate } from "src/i18";
@@ -6,7 +7,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import { GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import AvatarUpload from "src/components/AvatarUpload";
@@ -94,9 +95,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
                         <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
                       )}
                     </div>
-                    <LookupField label={translate("employee")} name={`${form.formUid}_employee`} value={form.fields.employeeUuid} displayValue={form.fields.employeeName} endpoint="employees" displayField="fullName" minWidth="400px" disabled={form.isLoading}
-                      onSelect={(uuid, displayValue) => form.setFields({ employeeUuid: uuid, employeeName: displayValue } as Partial<TFields>)}
-                      onClear={() => form.setFields({ employeeUuid: "", employeeName: "" } as Partial<TFields>)} />
+                    <FormLookup form={form} field="employee" endpoint="employees" displayField="fullName" minWidth={FIELD_WIDTH.xl} />
                   </GroupRow>
                 </div>
               </div>
@@ -125,7 +124,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <FormRequiredScope requiredKeys={["username"]} active={form.meta.headerValidationFailed}>
-      <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+      <ModelForm paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />
     </FormRequiredScope>

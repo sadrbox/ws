@@ -5,6 +5,7 @@ import { useAppContext, getComponentName } from "src/app";
 import { showToast } from "src/components/UIToast";
 import { isSyncableEndpoint } from "src/services/offlineDataService";
 import { upsertRecords, getRecordByUuid } from "src/services/offlineDb";
+import { describeRow } from "src/utils/describeRow";
 
 /**
  * Хук для удаления записей модели по выбранным строкам таблицы.
@@ -37,15 +38,22 @@ export function useModelDelete(
 	const handleDelete = useCallback(
 		async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
 			const items = tableRows.filter((r) => selectedRowIds.has(Number(r.id)));
-			if (items.length === 0) return;
+			if (items.length === 0) return { deletedIds: new Set<number>() };
 
+			// Понятный текст подтверждения: имя сущности + № документа·дата (или ID·имя),
+			// списком при множественном выборе. confirm рендерит как HTML → экранируем.
+			const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+			const MAX_LIST = 12;
 			const message =
 				items.length === 1
-					? `Удалить запись ${items[0].id}?`
-					: `Удалить записи (${items.length})?`;
+					? `Удалить ${esc(describeRow(model, items[0]))}?`
+					: `Удалить выбранные (${items.length}):\n` +
+						items.slice(0, MAX_LIST).map((r) => `• ${esc(describeRow(model, r))}`).join("\n") +
+						(items.length > MAX_LIST ? `\n… и ещё ${items.length - MAX_LIST}` : "");
 
 			const confirmed = await confirm(message);
-			if (!confirmed) return;
+			// Отмена — ничего не удалено; возвращаем пустой набор (таблица не двигает activeRow).
+			if (!confirmed) return { deletedIds: new Set<number>() };
 
 			const errors: string[] = [];
 			const deletedUuids = new Set<string>();
@@ -137,25 +145,34 @@ export function useModelDelete(
 			}
 
 			// ── 3) Показываем результат через toast (вместо native alert) ────────
-			if (errors.length > 0) {
+			//   Частичный результат (удалено не всё) — отдельное предупреждение, где
+			//   видно и сколько удалено, и сколько/почему НЕ удалено.
+			const deletedCount = deletedIds.size;
+			const failedCount = errors.length;
+			if (deletedCount > 0 && failedCount > 0) {
 				showToast(
-					errors.length === 1
-						? errors[0]
-						: `Ошибки при удалении:\n${errors.join("\n")}`,
-					"error",
-					8000,
+					`Удалено: ${deletedCount}. Не удалось удалить: ${failedCount}.\n${errors.join("\n")}`,
+					"warning",
+					9000,
 				);
-			} else if (deletedUuids.size + deletedIds.size > 0) {
+			} else if (failedCount > 0) {
 				showToast(
-					items.length === 1
-						? "Запись удалена"
-						: `Удалено записей: ${items.length}`,
+					failedCount === 1
+						? errors[0]
+						: `Не удалось удалить (${failedCount}):\n${errors.join("\n")}`,
+					"error",
+					9000,
+				);
+			} else if (deletedCount > 0) {
+				showToast(
+					deletedCount === 1 ? "Запись удалена" : `Удалено записей: ${deletedCount}`,
 					"success",
 					3000,
 				);
 			}
 
 			void refetch();
+			return { deletedIds };
 		},
 		[model, refetch, confirm, panes, requestClose],
 	);

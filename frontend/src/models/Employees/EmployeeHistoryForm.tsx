@@ -1,8 +1,8 @@
 import { FC, useMemo } from "react";
-import apiClient from "src/services/api/client";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import type { TPane } from "src/app/types";
 import { FieldDate, FieldNumber, FieldSelect } from "src/components/Field";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import styles from "src/styles/main.module.scss";
 import { translate } from "src/i18";
 import { GroupRow } from "src/components/UI";
@@ -105,30 +105,8 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
                 value={form.fields.eventType} onChange={e => form.setField("eventType", e.target.value)}
                 disabled={form.isLoading} options={EVENT_TYPE_OPTIONS} style={{ width: "180px" }} required />
             </div>
-            <LookupField label={translate("organization")} name={`${form.formUid}_org`} width="339px"
-              value={form.fields.organizationUuid} displayValue={form.fields.organizationName}
-              endpoint="organizations" displayField="name"
-              columns={[{ key: "name", label: "Наименование" }, { key: "bin", label: "БИН" }]}
-              onSelect={(uuid) => {
-                void apiClient.get(`/organizations/${uuid}`).then(r => {
-                  const o = r.data?.item ?? r.data;
-                  form.setFields({ organizationUuid: o.uuid, organizationName: o.name ?? "" } as any);
-                });
-              }}
-              onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as any)}
-              disabled={form.isLoading} />
-            <LookupField label={translate("position.name")} name={`${form.formUid}_pos`} width="339px"
-              value={form.fields.positionUuid} displayValue={form.fields.positionName}
-              endpoint="positions" displayField="name"
-              columns={[{ key: "name", label: "Наименование" }]}
-              onSelect={(uuid) => {
-                void apiClient.get(`/positions/${uuid}`).then(r => {
-                  const o = r.data?.item ?? r.data;
-                  form.setFields({ positionUuid: o.uuid, positionName: o.name ?? "" } as any);
-                });
-              }}
-              onClear={() => form.setFields({ positionUuid: "", positionName: "" } as any)}
-              disabled={form.isLoading} />
+            <FormLookup form={form} field="organization" endpoint="organizations" width={FIELD_WIDTH.lg} />
+            <FormLookup form={form} field="position" endpoint="positions" label="position.name" width={FIELD_WIDTH.lg} />
             <FieldNumber label={translate("salary")} name={`${form.formUid}_salary`} width="180px"
               value={form.fields.salary} onChange={e => form.setField("salary", e.target.value)}
               disabled={form.isLoading} step="0.1" textAlign="right" />

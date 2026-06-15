@@ -132,7 +132,7 @@ interface TypeFieldStringProps {
   actions?: TypeFieldActions;
   variant?: FieldVariant;
   autoFocus?: boolean;
-  /** Максимальная длина ввода (символов). Напр. 12 для номера документа. */
+  /** Максимальная длина ввода (символов). Напр. 9 для номера документа. */
   maxLength?: number;
   /** Поле имеет несохранённые изменения (при открытии через "Несохранённые записи") */
   isDirty?: boolean;

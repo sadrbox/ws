@@ -4,15 +4,17 @@
  * (GET/PUT/DELETE /document-number-settings). organizationUuid → настройки
  * конкретной организации (иначе — значения по умолчанию для всех).
  */
-import { FC, useState } from "react";
+import { FC, useState, useMemo, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { Field, FieldNumber } from "src/components/Field";
-import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { Button } from "src/components/Button";
+import SubTable from "src/components/SubTable";
+import type { TColumn, TDataItem } from "src/components/Table/types";
+import columnsJson from "./columns.json";
 import styles from "./DocumentNumberSettings.module.scss";
 
 interface Row {
@@ -65,11 +67,52 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   const dirty = Object.keys(edits).length > 0;
 
   const example = (v: EditVal) => {
-    if (!v.enabled) return "—";
     // Префикс опционален: без него номер — только дополненный нулями счётчик.
     const seq = String(1).padStart(Math.min(9, Math.max(1, v.padding || 6)), "0");
     const pfx = v.prefix.trim();
     return pfx ? `${pfx}-${seq}` : seq;
+  };
+
+  // Строки для SubTable (клиентский режим): добавляем числовой id для ключей/выделения.
+  const tableRows = useMemo<TDataItem[]>(
+    () => rows.map((r, i) => ({ ...r, id: i + 1 } as unknown as TDataItem)),
+    [rows],
+  );
+  // key пересевает SubTable при изменении серверных данных (после сохранения/сброса),
+  // т.к. initialPendingRows мержатся однократно. Редактирование (edits) key не меняет.
+  const tableKey = useMemo(
+    () => `${orgKey ?? "global"}|${rows.map((r) => `${r.docType}:${r.prefix}:${r.padding}:${r.isOverridden ? 1 : 0}`).join(",")}`,
+    [rows, orgKey],
+  );
+
+  // Кастомный рендер ячеек: контролы редактирования (живые значения из edits).
+  const renderCell = (row: TDataItem, col: TColumn): ReactNode | undefined => {
+    const r = row as unknown as Row;
+    const v = valOf(r);
+    switch (col.identifier) {
+      case "documentType":
+        return <span className={styles.cLabel}>{r.label}</span>;
+      case "prefix":
+        return <Field name={`pfx_${r.docType}`} value={v.prefix} onChange={(e) => patch(r, { prefix: e.target.value })} width="120px" placeholder={r.defaultPrefix || translate("optional")} />;
+      case "digitsCount":
+        return <FieldNumber name={`pad_${r.docType}`} value={String(v.padding)} onChange={(e) => patch(r, { padding: Math.min(9, Math.max(1, Number(e.target.value) || 6)) })} width="70px" />;
+      case "exampleNumber":
+        return <code>{example(v)}</code>;
+      case "source":
+        return r.isOverridden
+          ? <span className={styles.BadgeOwn}>{orgKey ? translate("sourceOrg") : translate("sourceSet")}</span>
+          : <span className={styles.BadgeDefault}>{translate("sourceDefault")}</span>;
+      default:
+        return undefined;
+    }
+  };
+
+  // Замыкающая колонка действий: сброс переопределения к значению по умолчанию.
+  const rowActions = (row: TDataItem): ReactNode => {
+    const r = row as unknown as Row;
+    return r.isOverridden
+      ? <button type="button" className={styles.ResetBtn} disabled={busy} title={translate("resetToDefault")} onClick={() => reset(r.docType)}>↺</button>
+      : null;
   };
 
   const save = async () => {
@@ -77,7 +120,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
     try {
       for (const [docType, v] of Object.entries(edits)) {
         // Префикс необязателен — пустой допустим (номер без префикса).
-        await api.put(`document-number-settings/${docType}`, { prefix: v.prefix.trim(), padding: v.padding, enabled: v.enabled, organizationUuid: orgKey });
+        await api.put(`document-number-settings/${docType}`, { prefix: v.prefix.trim(), padding: v.padding, enabled: true, organizationUuid: orgKey });
       }
       showToast(translate("saved"), "success");
       setEdits({});
@@ -133,52 +176,21 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
         </div>
       ) : (
         <div className={styles.TableScroll}>
-        <table className={styles.Table}>
-          <thead>
-            <tr>
-              <th className={styles.cOn}>{translate("numberingEnabled")}</th>
-              <th>{translate("documentType")}</th>
-              <th className={styles.cPrefix}>{translate("prefix")}</th>
-              <th className={styles.cPad}>{translate("digitsCount")}</th>
-              <th className={styles.cExample}>{translate("exampleNumber")}</th>
-              <th className={styles.cSource}>{translate("source")}</th>
-              <th className={styles.cReset}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const v = valOf(r);
-              const edited = !!edits[r.docType];
-              const off = !v.enabled;
-              return (
-                <tr key={r.docType} className={[edited && styles.RowEdited, off && styles.RowOff].filter(Boolean).join(" ") || undefined}>
-                  <td className={styles.cOn}>
-                    <FieldToggle name={`on_${r.docType}`} value={v.enabled} onChange={(val) => patch(r, { enabled: val })} disabled={busy} />
-                  </td>
-                  <td className={styles.cLabel}>{r.label}</td>
-                  <td className={styles.cPrefix}>
-                    <Field name={`pfx_${r.docType}`} value={v.prefix} onChange={(e) => patch(r, { prefix: e.target.value })} width="110px" disabled={off} placeholder={r.defaultPrefix || translate("optional")} />
-                  </td>
-                  <td className={styles.cPad}>
-                    <FieldNumber name={`pad_${r.docType}`} value={String(v.padding)} onChange={(e) => patch(r, { padding: Math.min(9, Math.max(1, Number(e.target.value) || 6)) })} width="60px" disabled={off} />
-                  </td>
-                  <td className={styles.cExample}><code>{example(v)}</code></td>
-                  <td className={styles.cSource}>
-                    {r.isOverridden
-                      ? <span className={styles.BadgeOwn}>{orgKey ? translate("sourceOrg") : translate("sourceSet")}</span>
-                      : <span className={styles.BadgeDefault}>{translate("sourceDefault")}</span>}
-                  </td>
-                  <td className={styles.cReset}>
-                    {r.isOverridden && (
-                      <button type="button" className={styles.ResetBtn} disabled={busy}
-                        title={translate("resetToDefault")} onClick={() => reset(r.docType)}>↺</button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+          <SubTable
+            key={tableKey}
+            model="document-number-settings"
+            componentName="DocumentNumberSettingsList"
+            columnsJson={columnsJson as TColumn[]}
+            parentKey="docType"
+            parentUuid=""
+            deferRemoteChanges
+            clientSort
+            initialPendingRows={tableRows}
+            readonly
+            emptyMessage=""
+            renderCell={renderCell}
+            rowActions={rowActions}
+          />
         </div>
       )}
 

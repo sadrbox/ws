@@ -208,7 +208,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <FormRequiredScope requiredKeys={["bin"]} active>
       <ModelForm
-        paneId={form.paneId}
+        paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid}
         tabs={tabs}
         onSave={form.handleSave}
         onSaveAndClose={form.handleSaveAndClose}

@@ -10,6 +10,7 @@ import { createInvoiceLikeForm } from "src/models/_shared/createInvoiceLikeForm"
 import { mapCommonTradeFields } from "src/utils/createFromBasis";
 import TradeDocumentPrint from "src/models/_shared/TradeDocumentPrint";
 import { SalesOrdersForm } from "src/models/SalesOrders";
+import { SalesForm } from "src/models/Sales";
 
 const MODEL_ENDPOINT = "commercial-offers";
 const LIST_NAME = "CommercialOffersList";
@@ -30,7 +31,7 @@ const CommercialOffersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   printConfig: {
     buildLayout: (fields, items, cols) => (
       <TradeDocumentPrint title="КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ" counterpartyLabel="Покупатель" totalLabel="Итого по КП" data={{
-        documentId: fields.id, documentDate: fields.date,
+        documentId: fields.id, documentNumber: fields.number || undefined, documentDate: fields.date,
         organizationName: fields.organizationName, counterpartyName: fields.counterpartyName, contractName: fields.contractName,
         items: items.map((r, i) => ({ number: i + 1, name: r.name, unit: r.unit, quantity: r.quantity, price: r.price, vatRate: r.vatRate, vatAmount: r.vatAmount, amount: r.amount })),
         totalAmount: items.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
@@ -43,8 +44,8 @@ const CommercialOffersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       { key: "vatAmount", label: "Сумма НДС", defaultVisible: true },
     ],
     columnsKey: "commercial_offer",
-    fileBaseName: (f) => `КП_${f.id ?? "новый"}`,
-    title: (f) => `Коммерческое предложение № ${f.id ?? "—"}`,
+    fileBaseName: (f) => `КП_${f.number || "новый"}`,
+    title: (f) => `Коммерческое предложение № ${f.number || "—"}`,
   },
   createFromBasisTargets: [
     {
@@ -55,6 +56,15 @@ const CommercialOffersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsParentField: "commercialOfferUuid",
       mapFields: mapCommonTradeFields,
       existingCheckEndpoint: "sales-orders",
+    },
+    {
+      docLabel: "Реализация товаров",
+      FormComponent: SalesForm,
+      basisType: "commercial_offer",
+      sourceItemsEndpoint: "commercial-offer-items",
+      sourceItemsParentField: "commercialOfferUuid",
+      mapFields: mapCommonTradeFields,
+      existingCheckEndpoint: "sales",
     },
   ],
 });

@@ -6,7 +6,8 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
-import { allocateNumber } from "../../services/documentNumbering.js";
+import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
+import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 const router = express.Router();
 const MODEL = "inventoryTransfer";
 const ROUTE = "inventory-transfers";
@@ -157,7 +158,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		await assertOrgFieldMembership({ organizationUuid, fromWarehouseUuid, toWarehouseUuid }, prisma);
 		// Блокировка закрытого периода: нельзя создавать документ в закрытом месяце.
 		await assertPeriodOpen(organizationUuid, date);
-		const docNumber = (req.body.number?.trim?.() || null) || await allocateNumber("inventory_transfer", organizationUuid, date);
+		// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
+		const docNumber = await ensureDocumentNumber({ docType: "inventory_transfer", modelName: MODEL, manual: req.body.number, organizationUuid, date });
 		const item = await prisma[MODEL].create({
 			data: {
 				number: docNumber,
@@ -181,6 +183,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 	} catch (error) {
 		if (respondOrgFieldError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
+		if (respondDuplicateNumberError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -210,13 +213,18 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		// Контроль остатка ПЕРЕД фиксацией проведения (расход с fromWarehouse).
 		const existing = await prisma[MODEL].findUnique({
 			where: w,
-			select: { uuid: true, posted: true, fromWarehouseUuid: true, toWarehouseUuid: true, organizationUuid: true, date: true },
+			select: { uuid: true, posted: true, number: true, fromWarehouseUuid: true, toWarehouseUuid: true, organizationUuid: true, date: true },
 		});
 		if (!existing)
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		// Блокировка закрытого периода: нельзя трогать закрытый документ и переносить в закрытый период.
 		await assertPeriodOpen(existing.organizationUuid, existing.date);
 		await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
+		// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
+		{
+			const _num = await ensureDocumentNumber({ docType: "inventory_transfer", modelName: MODEL, manual: data.number !== undefined ? data.number : existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
+			if (_num && _num !== existing.number) data.number = _num;
+		}
 		// Stage D: оба склада принадлежат организации документа (мерж с текущими).
 		await assertOrgFieldMembership({
 			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : existing.organizationUuid,
@@ -254,6 +262,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondStockError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
+		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025")
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		console.error(`PUT /${ROUTE}/:id error:`, error);
@@ -265,10 +274,10 @@ const onTransferDeleted = async (doc) => {
 	await removeDocumentEntries("inventory_transfer", doc.uuid);
 };
 router.delete(`/${ROUTE}/:id`, (req, res) =>
-	handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: onTransferDeleted }),
+	handleDelete({ req, res, prisma, modelName: MODEL, numberDocType: "inventory_transfer", onDeleted: onTransferDeleted }),
 );
 router.post(`/${ROUTE}/batch-delete`, (req, res) =>
-	handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: onTransferDeleted }),
+	handleBatchDelete({ req, res, prisma, modelName: MODEL, numberDocType: "inventory_transfer", onDeleted: onTransferDeleted }),
 );
 
 export default router;

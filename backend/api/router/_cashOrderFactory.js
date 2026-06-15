@@ -13,8 +13,8 @@ import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgF
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
-import { assertUniqueNumber, respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
-import { allocateNumber } from "../../services/documentNumbering.js";
+import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
+import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 
 const MODEL = "cashOrder";
 const TEXT_FIELDS = ["comment"];
@@ -140,8 +140,8 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			// Блокировка закрытого периода: нельзя создавать кассовый ордер в закрытом месяце.
 			await assertPeriodOpen(docData.organizationUuid, docData.date);
 			if (willPost) await validatePosting(docType, docData, []);
-			docData.number = (req.body.number?.trim?.() || null) || await allocateNumber(docType, docData.organizationUuid, docData.date);
-			await assertUniqueNumber(MODEL, { number: docData.number, date: docData.date, organizationUuid: docData.organizationUuid });
+			// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
+			docData.number = await ensureDocumentNumber({ docType, modelName: MODEL, manual: req.body.number, organizationUuid: docData.organizationUuid, date: docData.date });
 			const item = await prisma[MODEL].create({ data: docData, include: INCLUDE });
 			if (item.posted) await reconcileDocumentEntries(docType, item.uuid);
 			return res.status(201).json({ success: true, item });
@@ -169,7 +169,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (req.body.amount !== undefined) data.amount = req.body.amount != null ? parseFloat(req.body.amount) : null;
 			if (req.body.posted !== undefined) data.posted = !!req.body.posted;
 			// Проверяем существование И принадлежность маршруту (direction).
-			const existing = await prisma[MODEL].findFirst({ where: { ...w, direction }, select: { uuid: true, organizationUuid: true, posted: true, contractUuid: true, cashboxUuid: true, date: true } });
+			const existing = await prisma[MODEL].findFirst({ where: { ...w, direction }, select: { uuid: true, organizationUuid: true, posted: true, number: true, contractUuid: true, cashboxUuid: true, date: true } });
 			if (!existing || !checkOwnership(existing, req))
 				return res.status(404).json({ success: false, message: "Не найдено" });
 			// Блокировка закрытого периода: нельзя трогать закрытый ордер и переносить в закрытый период.
@@ -182,6 +182,11 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			}, prisma);
 			const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 			if (willBePosted) await assertPostable(docType, existing.uuid, { ...data, posted: true });
+			// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
+			{
+				const _num = await ensureDocumentNumber({ docType, modelName: MODEL, manual: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
+				if (_num && _num !== existing.number) data.number = _num;
+			}
 			const item = await prisma[MODEL].update({ where: { uuid: existing.uuid }, data, include: INCLUDE });
 			await reconcileDocumentEntries(docType, item.uuid);
 			return res.status(200).json({ success: true, item });
@@ -196,10 +201,10 @@ export function createCashOrderRouter({ direction, route, docType }) {
 	});
 
 	router.delete(`/${route}/:id`, (req, res) =>
-		handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(docType, doc.uuid) }),
+		handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(docType, doc.uuid), numberDocType: docType }),
 	);
 	router.post(`/${route}/batch-delete`, (req, res) =>
-		handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(docType, doc.uuid) }),
+		handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(docType, doc.uuid), numberDocType: docType }),
 	);
 
 	return router;

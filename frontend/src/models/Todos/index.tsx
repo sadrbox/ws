@@ -1,4 +1,5 @@
 import { FC, useMemo, useCallback } from "react";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -7,7 +8,7 @@ import columnsJson from "./columns.json";
 import FilesPanel from "src/components/FilesPanel";
 import PrintPreview from "src/components/PrintPreview";
 import { Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -95,21 +96,17 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
             <div className={styles.Form}>
               <GroupCol>
                 <FieldSelect label={translate("status")} name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} style={{ minWidth: 200 }} />
-                <LookupField label={translate("organization")} name={`${form.formUid}_organization`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
-                  onSelect={(uuid, display) => form.setFields({ organizationUuid: uuid, organizationName: display } as Partial<TFields>)}
-                  onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-                <LookupField label={translate("curator")} name={`${form.formUid}_curator`} value={form.fields.curatorUuid} displayValue={form.fields.curatorName} endpoint="users" displayField="username" secondaryFields={["employee.fullName"]}
-                  onSelect={(uuid, display, item) => form.setFields({ curatorUuid: uuid, curatorName: item?.employee?.fullName || display } as Partial<TFields>)}
-                  onClear={() => form.setFields({ curatorUuid: "", curatorName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-                <LookupField label={translate("executor")} name={`${form.formUid}_executor`} value={form.fields.executorUuid} displayValue={form.fields.executorName} endpoint="users" displayField="username" secondaryFields={["employee.fullName"]}
-                  onSelect={(uuid, display, item) => form.setFields({ executorUuid: uuid, executorName: item?.employee?.fullName || display } as Partial<TFields>)}
-                  onClear={() => form.setFields({ executorUuid: "", executorName: "" } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
+                <FormLookup form={form} field="organization" endpoint="organizations" minWidth={FIELD_WIDTH.lg} />
+                <FormLookup form={form} field="curator" endpoint="users" displayField="username" secondaryFields={["employee.fullName"]} minWidth={FIELD_WIDTH.lg}
+                  onSelect={(uuid, display, item) => form.setFields({ curatorUuid: uuid, curatorName: item?.employee?.fullName || display } as Partial<TFields>)} />
+                <FormLookup form={form} field="executor" endpoint="users" displayField="username" secondaryFields={["employee.fullName"]} minWidth={FIELD_WIDTH.lg}
+                  onSelect={(uuid, display, item) => form.setFields({ executorUuid: uuid, executorName: item?.employee?.fullName || display } as Partial<TFields>)} />
                 <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                   <FieldDate label={translate("createdAt")} name={`${form.formUid}_createdAt`} width="200px" value={form.fields.createdAt} disabled />
                   <Field label={translate("days")} name={`${form.formUid}_deadlineDays`} width="100px" value={form.fields.deadlineDays} onChange={e => handleDeadlineDaysChange(e.target.value)} disabled={form.isLoading} />
                   <FieldDate label={translate("deadline")} name={`${form.formUid}_deadline`} width="200px" value={form.fields.deadline} onChange={e => form.setField("deadline", e.target.value)} disabled={form.isLoading} />
                 </div>
-                <FieldTextarea label={translate("taskDescription")} name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="120px" rows={6} />
+                <FieldTextarea label={translate("taskDescription")} name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth={FIELD_WIDTH.lg} minHeight="120px" rows={6} />
               </GroupCol>
             </div>
 
@@ -125,7 +122,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleDeadlineDaysChange]);
 
   return (
-    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelForm paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
       readonly={!canWrite} />
   );

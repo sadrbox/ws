@@ -1,4 +1,5 @@
 import { FC, useCallback, useMemo, useState } from "react";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -8,6 +9,7 @@ import FilesPanel from "src/components/FilesPanel";
 import PrintPreview from "src/components/PrintPreview";
 import { Field, FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -117,12 +119,12 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="339px" value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
-                <Field label={translate("contractNumber")} name={`${form.formUid}_contractNumber`} minWidth="339px" value={form.fields.contractNumber} onChange={e => form.setField("contractNumber", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth={FIELD_WIDTH.lg} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("contractNumber")} name={`${form.formUid}_contractNumber`} minWidth={FIELD_WIDTH.lg} value={form.fields.contractNumber} onChange={e => form.setField("contractNumber", e.target.value)} disabled={form.isLoading} />
                 <FieldDate label={translate("startDate")} name={`${form.formUid}_startDate`} minWidth="200px" value={form.fields.startDate} onChange={e => form.setField("startDate", e.target.value)} disabled={form.isLoading} />
                 <FieldDate label={translate("endDate")} name={`${form.formUid}_endDate`} minWidth="200px" value={form.fields.endDate} onChange={e => form.setField("endDate", e.target.value)} disabled={form.isLoading} />
-                <LookupField label={translate("organizationOwner")} name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)} disabled={form.isLoading} minWidth="339px" />
-                <LookupField label={translate("counterparty")} name={`${form.formUid}_cpty`} value={form.fields.counterpartyUuid} displayValue={form.fields.counterpartyName} endpoint="counterparties" displayField="name" onSelect={(u, d) => form.setFields({ counterpartyUuid: u, counterpartyName: d } as Partial<TFields>)} onClear={() => form.setFields({ counterpartyUuid: "", counterpartyName: "" } as Partial<TFields>)} disabled={form.isLoading} minWidth="339px" />
+                <FormLookup form={form} field="organization" endpoint="organizations" label="organizationOwner" minWidth={FIELD_WIDTH.lg} />
+                <FormLookup form={form} field="counterparty" endpoint="counterparties" minWidth={FIELD_WIDTH.lg} />
               </GroupCol>
             </div>
 
@@ -140,7 +142,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <FormRequiredScope requiredKeys={["name"]} active>
       <ModelForm
-        paneId={form.paneId}
+        paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid}
         tabs={tabs}
         onSave={form.handleSave}
         onSaveAndClose={form.handleSaveAndClose}

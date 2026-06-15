@@ -1,11 +1,12 @@
 import { FC, useMemo } from "react";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDateTime, FieldSelect, FieldTextarea } from "src/components/Field";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -67,14 +68,14 @@ const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="339px" value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
-              <Field label="Cron выражение" name={`${form.formUid}_cron`} minWidth="339px" value={form.fields.cronExpr} onChange={e => form.setField("cronExpr", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("name")} name={`${form.formUid}_name`} minWidth={FIELD_WIDTH.lg} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+              <Field label="Cron выражение" name={`${form.formUid}_cron`} minWidth={FIELD_WIDTH.lg} value={form.fields.cronExpr} onChange={e => form.setField("cronExpr", e.target.value)} disabled={form.isLoading} />
               <FieldSelect label={translate("status")} name={`${form.formUid}_status`} value={form.fields.status} options={STATUS_OPTIONS} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} />
               <FieldDateTime label={translate("lastRunAt")} name={`${form.formUid}_lastRun`} minWidth="200px" value={form.fields.lastRunAt} onChange={e => form.setField("lastRunAt", e.target.value)} disabled={form.isLoading} />
               <Field label={translate("Author")} name={`${form.formUid}_author`} width="220px" value={form.fields.authorName || "-"} disabled />
               <FieldDateTime label={translate("nextRunAt")} name={`${form.formUid}_nextRun`} minWidth="200px" value={form.fields.nextRunAt} onChange={e => form.setField("nextRunAt", e.target.value)} disabled={form.isLoading} />
-              <LookupField label={translate("organization")} name={`${form.formUid}_org`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name" onSelect={(u, d) => form.setFields({ organizationUuid: u, organizationName: d } as Partial<TFields>)} minWidth="339px" disabled={form.isLoading} />
-              <FieldTextarea label={translate("description")} name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth="339px" minHeight="80px" rows={4} />
+              <FormLookup form={form} field="organization" endpoint="organizations" minWidth={FIELD_WIDTH.lg} />
+              <FieldTextarea label={translate("description")} name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth={FIELD_WIDTH.lg} minHeight="80px" rows={4} />
             </GroupCol>
           </div>
         </div>
@@ -83,7 +84,7 @@ const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);
 
   return (
-    <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+    <ModelForm paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
       readonly={!canWrite} />
   );

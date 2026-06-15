@@ -9,6 +9,7 @@ import priceColumns from "./priceColumns.json";
 import { Field, FieldNumber, FieldDate, FieldSelect } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import { isoToLocalInput, localInputToIso, getFormatDateOnly } from "src/utils/datetime";
 import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -84,16 +85,10 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
               <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
               <GroupRow>
                 <Field label={translate("sku")} name={`${form.formUid}_sku`} value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
-                <LookupField label={translate("brand")} name={`${form.formUid}_brand`} value={form.fields.brandUuid} displayValue={form.fields.brandName} endpoint="brands" displayField="name"
-                  columns={[{ key: "name", label: "Наименование" }]}
-                  onSelect={(uuid, display) => form.setFields({ brandUuid: uuid, brandName: display } as Partial<TFields>)}
-                  onClear={() => form.setFields({ brandUuid: "", brandName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <FormLookup form={form} field="brand" endpoint="brands" />
               </GroupRow>
               <GroupRow>
-                <LookupField label={translate("unitOfMeasure")} name={`${form.formUid}_unitOfMeasure`} maxWidth="160px" value={form.fields.unitOfMeasureUuid} displayValue={form.fields.unitOfMeasureName} endpoint="unit-of-measures" displayField="name"
-                  columns={[{ key: "name", label: "Наименование" }, { key: "code", label: "Код" }]}
-                  onSelect={(uuid, display) => form.setFields({ unitOfMeasureUuid: uuid, unitOfMeasureName: display } as Partial<TFields>)}
-                  onClear={() => form.setFields({ unitOfMeasureUuid: "", unitOfMeasureName: "" } as Partial<TFields>)} disabled={form.isLoading} />
+                <FormLookup form={form} field="unitOfMeasure" endpoint="unit-of-measures" maxWidth="160px" />
                 <FieldNumber label={translate("price")} name={`${form.formUid}_price`} value={form.fields.price} onChange={e => form.setField("price", e.target.value)} disabled={form.isLoading} width="160px" />
                 <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
               </GroupRow>
@@ -129,7 +124,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <FormRequiredScope requiredKeys={["name"]} active>
-      <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+      <ModelForm paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />
     </FormRequiredScope>

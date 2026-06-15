@@ -19,6 +19,7 @@ import { Prisma } from "@prisma/client";
 import { prisma, pool } from "../prisma/prisma-client.js";
 import { checkOwnership } from "./auth.js";
 import { PERIOD_LOCKED_MODELS, assertPeriodOpen, respondPeriodLockError, PeriodLockedError } from "../services/periodLock.js";
+import { resyncSequenceAfterDelete } from "../services/documentNumbering.js";
 
 /**
  * Кэш карты FK: { [referencedTable]: Array<{ table, column, refColumn }> }
@@ -387,6 +388,9 @@ export async function handleDelete({
 	notFoundMessage = "Не найдено",
 	softDelete = false,
 	onDeleted = null,
+	/** Вид документа для нумерации: задан → после удаления откатываем счётчик
+	 *  (освобождаем номер удалённого верхнего документа для переиспользования). */
+	numberDocType = null,
 }) {
 	const param = req.params.id ?? req.params.uuid;
 	const numId = Number(param);
@@ -432,6 +436,8 @@ export async function handleDelete({
 				console.error(`handleDelete onDeleted(${modelName}) error:`, hookErr);
 			}
 		}
+		// Нумерация: освобождаем номер удалённого документа (откат счётчика к максимуму оставшихся).
+		if (numberDocType) await resyncSequenceAfterDelete(numberDocType, existing, prisma);
 		return res.status(200).json({ success: true, message: "Удалено" });
 	} catch (error) {
 		if (respondPeriodLockError(error, res)) return;
@@ -465,6 +471,7 @@ export async function handleBatchDelete({
 	modelName,
 	softDelete = false,
 	onDeleted = null,
+	numberDocType = null,
 }) {
 	const { uuids } = req.body;
 	if (!Array.isArray(uuids) || uuids.length === 0) {
@@ -522,6 +529,7 @@ export async function handleBatchDelete({
 					console.error(`handleBatchDelete onDeleted(${modelName}) error:`, hookErr);
 				}
 			}
+			if (numberDocType) await resyncSequenceAfterDelete(numberDocType, existing, prisma);
 			deleted++;
 		} catch (err) {
 			const msg = err.code === "P2003"

@@ -12,7 +12,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { Field, FieldSelect, FieldTextarea } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -118,10 +118,7 @@ const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupRow>
             <GroupRow>
               <FieldSelect label={translate("accountType")} name={`${form.formUid}_accountType`} options={accountTypeOptions} value={form.fields.accountType} onChange={e => form.setField("accountType", e.target.value)} disabled={form.isLoading} />
-              <LookupField label={translate("parentAccount")} name={`${form.formUid}_parent`} value={form.fields.parentUuid} displayValue={form.fields.parentName} endpoint="chart-of-accounts" displayField="name"
-                onSelect={(u, d) => form.setFields({ parentUuid: u, parentName: d } as Partial<TFields>)}
-                onClear={() => form.setFields({ parentUuid: "", parentName: "" } as Partial<TFields>)}
-                disabled={form.isLoading} />
+              <FormLookup form={form} field="parent" endpoint="chart-of-accounts" label="parentAccount" />
             </GroupRow>
             <Group>
               <FieldSelect label={translate("subkonto1")} name={`${form.formUid}_sub1`} options={subkontoOptions} value={form.fields.subkonto1Type} onChange={e => form.setField("subkonto1Type", e.target.value)} disabled={form.isLoading} />
@@ -147,7 +144,7 @@ const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
     <FormRequiredScope requiredKeys={["code", "name"]}>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
         <ModelForm
-          paneId={form.paneId} tabs={tabs}
+          paneId={form.paneId} endpoint={ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs}
           onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
           onReload={form.isEditMode ? form.handleReload : undefined}
           isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}

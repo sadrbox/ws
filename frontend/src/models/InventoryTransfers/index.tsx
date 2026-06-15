@@ -16,7 +16,7 @@ import columnsJson from "./columns.json";
 import { Field, FieldDateTime } from "src/components/Field";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
-import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -186,28 +186,20 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow className={styles.FormHeaderRow}>
                 <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
                   actions={[
-                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n)) },
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date) },
                     { type: "clear", onClick: () => form.setField("number", "") },
                   ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} width="180px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
                 <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
               </GroupRow>
               <Group>
-                <LookupField label={translate("organization")} name={`${form.formUid}_organizationUuid`} value={form.fields.organizationUuid} displayValue={form.fields.organizationName} endpoint="organizations" displayField="name"
-                  onSelect={handleOrganizationSelect}
-                  onClear={() => form.setFields({ organizationUuid: "", organizationName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading} />
+                <FormLookup form={form} field="organization" endpoint="organizations"
+                  onSelect={handleOrganizationSelect} />
               </Group>
               <Group>
-                <LookupField label={translate("fromWarehouse")} name={`${form.formUid}_fromWarehouseUuid`} value={form.fields.fromWarehouseUuid} displayValue={form.fields.fromWarehouseName} endpoint="warehouses" displayField="name"
-                  onSelect={(u, d) => form.setFields({ fromWarehouseUuid: u, fromWarehouseName: d } as Partial<TFields>)}
-                  onClear={() => form.setFields({ fromWarehouseUuid: "", fromWarehouseName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading}
+                <FormLookup form={form} field="fromWarehouse" endpoint="warehouses"
                   extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-                <LookupField label={translate("toWarehouse")} name={`${form.formUid}_toWarehouseUuid`} value={form.fields.toWarehouseUuid} displayValue={form.fields.toWarehouseName} endpoint="warehouses" displayField="name"
-                  onSelect={(u, d) => form.setFields({ toWarehouseUuid: u, toWarehouseName: d } as Partial<TFields>)}
-                  onClear={() => form.setFields({ toWarehouseUuid: "", toWarehouseName: "" } as Partial<TFields>)}
-                  disabled={form.isLoading}
+                <FormLookup form={form} field="toWarehouse" endpoint="warehouses"
                   extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
             </GroupCol>
@@ -256,7 +248,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   return (
     <FormRequiredScope docType="inventory_transfer" active>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
-        <ModelForm paneId={form.paneId} tabs={tabs}
+        <ModelForm paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs}
           onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
           onReload={form.isEditMode ? form.handleReload : undefined}
           isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}

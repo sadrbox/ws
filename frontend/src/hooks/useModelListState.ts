@@ -10,6 +10,8 @@ import { useModelDelete } from "src/hooks/useModelDelete";
 import {
 	getModelColumns,
 	matchRowBySearch,
+	loadTableView,
+	saveTableView,
 } from "src/components/Table/services";
 import type {
 	TColumn,
@@ -78,15 +80,31 @@ export function useModelListState(opts: UseModelListStateOptions) {
 	const [columns, setColumns] = useState<TColumn[]>(() =>
 		getModelColumns(opts.columnsJson, componentName, columnsVariant),
 	);
+	// Восстанавливаем сохранённый на клиенте вид таблицы (сортировка + период).
+	const persistedView = useMemo(() => loadTableView(componentName), [componentName]);
 	const [sort, setSort] = useQueryParams<Record<string, "asc" | "desc">>(
 		"sort",
 		defaultSort,
-		undefined,
+		persistedView?.sort,
 	);
 	const [search, setSearch] = useQueryParams<string>("search", "");
 	const [filter, setFilter] = useQueryParams<
 		Record<string, { value: unknown; operator: string }> | undefined
-	>("filter", undefined, undefined);
+	>(
+		"filter",
+		undefined,
+		persistedView?.dateRange
+			? { dateRange: persistedView.dateRange as unknown as { value: unknown; operator: string } }
+			: undefined,
+	);
+
+	// Сохраняем сортировку и период (dateRange) на клиенте при изменении.
+	useEffect(() => {
+		saveTableView(componentName, {
+			sort,
+			dateRange: filter?.dateRange as unknown as { startDate?: string; endDate?: string } | undefined,
+		});
+	}, [componentName, sort, filter]);
 
 	const [adaptiveLimit, setAdaptiveLimit] = useState(500);
 	useEffect(() => {

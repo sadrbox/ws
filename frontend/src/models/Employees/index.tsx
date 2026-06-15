@@ -153,7 +153,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <FormRequiredScope requiredKeys={["lastName"]} active>
-      <ModelForm paneId={form.paneId} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
+      <ModelForm paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />
     </FormRequiredScope>

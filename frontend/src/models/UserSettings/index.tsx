@@ -8,6 +8,7 @@ import listColumnsJson from "./listColumns.json";
 import subColumnsJson from "./subColumns.json";
 import { FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
+import { FormLookup } from "src/components/Field/FormLookup";
 import { GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import ModelList from "src/components/ModelList";
@@ -163,26 +164,21 @@ const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <LookupField
-                  label={translate("OrganizationsList")}
-                  name={`${form.formUid}_org`}
+                <FormLookup
+                  form={form}
+                  field="organization"
                   endpoint="organizations"
-                  displayField="name"
-                  value={form.fields.organizationUuid}
-                  displayValue={form.fields.orgShortName}
-                  onSelect={(uuid, dv) => form.setFields({ organizationUuid: uuid, orgShortName: dv })}
-                  onClear={() => form.setFields({ organizationUuid: "", orgShortName: "" })}
+                  nameField="orgShortName"
+                  label="OrganizationsList"
                   disabled={form.isLoading || !canWrite}
                 />
-                <LookupField
-                  label={translate("UsersList")}
-                  name={`${form.formUid}_user`}
+                <FormLookup
+                  form={form}
+                  field="user"
                   endpoint="users"
                   displayField="username"
-                  value={form.fields.userUuid}
-                  displayValue={form.fields.userDisplayName}
-                  onSelect={(uuid, dv) => form.setFields({ userUuid: uuid, userDisplayName: dv })}
-                  onClear={() => form.setFields({ userUuid: "", userDisplayName: "" })}
+                  nameField="userDisplayName"
+                  label="UsersList"
                   disabled={form.isLoading || !canWrite}
                 />
                 <FieldSelect

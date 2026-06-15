@@ -31,6 +31,7 @@ const PurchaseRequisitionsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
     buildLayout: (fields, items, cols) => (
       <PurchaseRequisitionPrint data={{
         documentId: fields.id,
+        documentNumber: fields.number || undefined,
         documentDate: fields.date,
         organizationName: fields.organizationName,
         counterpartyName: fields.counterpartyName,
@@ -46,8 +47,8 @@ const PurchaseRequisitionsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       { key: "vatAmount", label: "Сумма НДС", defaultVisible: true },
     ],
     columnsKey: "purchase_requisition",
-    fileBaseName: (f) => `ЗаявкаЗакупку_${f.id ?? "новый"}`,
-    title: (f) => `Заявка на закупку № ${f.id ?? "—"}`,
+    fileBaseName: (f) => `ЗаявкаЗакупку_${f.number || "новый"}`,
+    title: (f) => `Заявка на закупку № ${f.number || "—"}`,
   },
   createFromBasisTargets: [
     {

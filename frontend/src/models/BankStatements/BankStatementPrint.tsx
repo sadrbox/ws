@@ -8,6 +8,7 @@ import { getFormatDateOnly } from "src/utils/datetime";
 
 export interface BankStatementPrintData {
   documentId?: string | number;
+  documentNumber?: string | number | null;
   documentDate?: string;
   direction?: string; // "in" | "out"
   amount?: number;

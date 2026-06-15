@@ -48,8 +48,8 @@ const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       { key: "vatAmount", label: "Сумма НДС", defaultVisible: true },
     ],
     columnsKey: "payment_invoice",
-    fileBaseName: (f) => `СчётОплата_${f.id ?? "новый"}`,
-    title: (f) => `Счёт на оплату № ${f.id ?? "—"}`,
+    fileBaseName: (f) => `СчётОплата_${f.number || "новый"}`,
+    title: (f) => `Счёт на оплату № ${f.number || "—"}`,
   },
   createFromBasisTargets: [
     {

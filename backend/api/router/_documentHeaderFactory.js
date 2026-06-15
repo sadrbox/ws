@@ -27,9 +27,9 @@ import {
 	validatePosting,
 	respondPostingError,
 } from "../../services/accountingPosting.js";
-import { allocateNumber } from "../../services/documentNumbering.js";
+import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
-import { assertUniqueNumber, respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
+import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 
 const BASIS_FIELDS = ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"];
 
@@ -167,11 +167,9 @@ export function createDocumentHeaderRouter({
 			for (const f of dateFields) data[f] = b[f] ? new Date(b[f]) : null;
 			if (hasBasis) for (const f of BASIS_FIELDS) data[f] = b[f] || null;
 
-			// Номер документа: из payload или автогенерация по виду документа.
+			// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
 			const ndt = numberDocType || posting?.docType || null;
-			if (ndt) data.number = (b.number?.trim?.() || null) || await allocateNumber(ndt, data.organizationUuid, data.date);
-			// Уникальность номера в пределах года.
-			await assertUniqueNumber(MODEL, { number: data.number, date: data.date, organizationUuid: data.organizationUuid });
+			if (ndt) data.number = await ensureDocumentNumber({ docType: ndt, modelName: MODEL, manual: b.number, organizationUuid: data.organizationUuid, date: data.date });
 
 			// Stage D: org-зависимые поля должны принадлежать организации документа.
 			await assertOrgFieldMembership(data, prisma);
@@ -221,9 +219,13 @@ export function createDocumentHeaderRouter({
 				await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
 			}
 
-			// Уникальность номера в пределах года (при изменении номера).
-			if (b.number !== undefined) {
-				await assertUniqueNumber(MODEL, { number: data.number, date: data.date ?? existing.date, organizationUuid: data.organizationUuid ?? existing.organizationUuid, excludeUuid: existing.uuid });
+			// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
+			{
+				const ndt = numberDocType || posting?.docType || null;
+				if (ndt) {
+					const _num = await ensureDocumentNumber({ docType: ndt, modelName: MODEL, manual: b.number !== undefined ? data.number : existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
+					if (_num && _num !== existing.number) data.number = _num;
+				}
 			}
 
 			// Stage D: org-зависимые поля принадлежат организации документа.
@@ -255,8 +257,8 @@ export function createDocumentHeaderRouter({
 			if (afterDelete) await afterDelete(doc);
 		}
 		: undefined;
-	router.delete(`/${ROUTE}/:id`, (req, res) => handleDelete({ req, res, prisma, modelName: MODEL, onDeleted }));
-	router.post(`/${ROUTE}/batch-delete`, (req, res) => handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted }));
+	router.delete(`/${ROUTE}/:id`, (req, res) => handleDelete({ req, res, prisma, modelName: MODEL, onDeleted, numberDocType: numberDocType || posting?.docType || null }));
+	router.post(`/${ROUTE}/batch-delete`, (req, res) => handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted, numberDocType: numberDocType || posting?.docType || null }));
 
 	return router;
 }

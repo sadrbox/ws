@@ -121,7 +121,7 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
 
   return (
     <ModelForm
-      paneId={form.paneId}
+      paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid}
       tabs={tabs}
       onSave={form.handleSave}
       onSaveAndClose={form.handleSaveAndClose}

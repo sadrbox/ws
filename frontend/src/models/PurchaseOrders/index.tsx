@@ -31,7 +31,7 @@ const PurchaseOrdersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   printConfig: {
     buildLayout: (fields, items, cols) => (
       <TradeDocumentPrint title="ЗАКАЗ ПОСТАВЩИКУ" counterpartyLabel="Поставщик" totalLabel="Итого по заказу" data={{
-        documentId: fields.id, documentDate: fields.date,
+        documentId: fields.id, documentNumber: fields.number || undefined, documentDate: fields.date,
         organizationName: fields.organizationName, counterpartyName: fields.counterpartyName, contractName: fields.contractName,
         items: items.map((r, i) => ({ number: i + 1, name: r.name, unit: r.unit, quantity: r.quantity, price: r.price, vatRate: r.vatRate, vatAmount: r.vatAmount, amount: r.amount })),
         totalAmount: items.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
@@ -44,8 +44,8 @@ const PurchaseOrdersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       { key: "vatAmount", label: "Сумма НДС", defaultVisible: true },
     ],
     columnsKey: "purchase_order",
-    fileBaseName: (f) => `ЗаказПоставщику_${f.id ?? "новый"}`,
-    title: (f) => `Заказ поставщику № ${f.id ?? "—"}`,
+    fileBaseName: (f) => `ЗаказПоставщику_${f.number || "новый"}`,
+    title: (f) => `Заказ поставщику № ${f.number || "—"}`,
   },
   basisConfig: {
     allowedTypes: [{ type: "purchase_requisition", endpoint: "purchase-requisitions" }],
