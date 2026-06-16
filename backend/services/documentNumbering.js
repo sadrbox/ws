@@ -78,8 +78,9 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 	const def = NUMBER_CONFIG[docType];
 	if (!def) return null;
 	const settings = await loadSettings(client, organizationUuid);
-	// Номер присваивается ВСЕГДА автоматически при записи документа (требование).
-	// Поля enabled больше нет блокировки — настройки задают только префикс/разрядность.
+	// Нумерация выключена для этого вида (enabled=false) → номер НЕ присваивается:
+	// документ работает без поля «Номер» (вместо него используется ID).
+	if (settings[docType]?.enabled === false) return null;
 	// Префикс опционален: по умолчанию его нет, номер — только дополненный нулями
 	// счётчик («000000001»). Префикс добавляется через «-», только если задан.
 	const prefix = (settings[docType]?.prefix ?? "").trim();

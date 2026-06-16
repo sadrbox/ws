@@ -8,6 +8,7 @@
 // $heightFieldInput: 26px;
 .FieldDate,
 .FieldString,
+.FiledNumber,
 .FieldSelect,
 .FieldPeriod {
 	font-size: $fontsize;
@@ -35,7 +36,8 @@
 	}
 }
 
-.FieldString {
+.FieldString,
+.FieldNumber {
 	// padding: 0px;
 	// margin-left: 3px;
 	text-overflow: ellipsis;
@@ -216,6 +218,7 @@
 		}
 
 		.FieldString,
+		.FieldNumber,
 		.FieldSelect,
 		.FieldDate,
 		.FieldPeriod {
@@ -281,7 +284,8 @@
 	}
 
 	.FieldSelect,
-	.FieldString {
+	.FieldString,
+	.FieldNumber {
 		height: 100%;
 		margin: 0;
 		box-sizing: border-box;
@@ -585,6 +589,7 @@ input[type="number"] {
 	-moz-appearance: textfield;
 	appearance: textfield;
 }
+
 // ── Подпись/примечание под полем (расхождение с основанием, подсказки) ──────
 // Заменяет повторяющийся inline-style примечаний под Field. Слот рендерится
 // ВСЕГДА с зарезервированной высотой строки (min-height), чтобы появление/

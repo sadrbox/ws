@@ -1,3 +1,21 @@
+// Корневой контейнер формы (самостоятельный режим): колонка во всю высоту панели,
+// шапка/пояснения/футер фиксированы, таблица растягивается и скроллится внутри.
+.Root {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	height: 100%;
+}
+
+// Область таблицы: занимает всё оставшееся место; SubTable (flex:1; height:100%)
+// заполняет её и держит собственный вертикальный/горизонтальный скролл.
+.TableArea {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+
 .OrgPicker {
 	max-width: 360px;
 	margin-bottom: 12px;
@@ -77,13 +95,51 @@
 	background: $gray50;
 }
 
-.cOn { width: 110px; text-align: center; }
-.cLabel { color: $gray900; font-weight: 500; }
-.cPrefix { width: 140px; }
-.cPad { width: 90px; }
-.cExample { width: 150px; }
-.cSource { width: 130px; }
-.cReset { width: 40px; text-align: center; }
+.cOn {
+	width: 110px;
+	text-align: center;
+}
+
+.cLabel {
+	color: $gray900;
+	font-weight: 500;
+}
+
+// Чекбокс вкл/выкл нумерации в ячейке.
+.EnabledCheck {
+	width: 16px;
+	height: 16px;
+	cursor: pointer;
+	accent-color: $primary;
+}
+
+// Подсказка в ячейке «Пример», когда нумерация выключена (документ по ID).
+.cDisabledHint {
+	color: $gray400;
+	font-size: 12px;
+	font-style: italic;
+}
+
+.cPrefix {
+	width: 140px;
+}
+
+.cPad {
+	width: 90px;
+}
+
+.cExample {
+	width: 150px;
+}
+
+.cSource {
+	width: 130px;
+}
+
+.cReset {
+	width: 40px;
+	text-align: center;
+}
 
 .cExample code {
 	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -94,26 +150,47 @@
 	white-space: nowrap;
 }
 
-// Бейджи источника значения.
+// Бейджи источника значения — симметричные «пилюли» одинаковых размеров.
 .BadgeOwn,
 .BadgeDefault {
-	display: inline-block;
-	padding: 2px 8px;
-	border-radius: 10px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	// min-width: 78px;
+	height: 22px;
+	padding: 0 10px;
+	margin: 0 6px;
+	border-radius: 11px;
+	border: 1px solid transparent;
 	font-size: 11px;
 	font-weight: 600;
+	line-height: 1;
 	white-space: nowrap;
+	box-sizing: border-box;
+
+	// Маркер-точка слева для визуальной симметрии обоих бейджей.
+	&::before {
+		content: "";
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: currentColor;
+		opacity: 0.65;
+		flex: 0 0 auto;
+	}
 }
 
 .BadgeOwn {
 	background: $accentBlueSoft;
 	color: $primary;
-	border: 1px solid $accentBlueBorder;
+	border-color: $accentBlueBorder;
 }
 
 .BadgeDefault {
-	background: $gray100;
+	background: $gray50;
 	color: $gray500;
+	border-color: $gray200;
 }
 
 // Кнопка сброса к значению по умолчанию.
@@ -135,7 +212,10 @@
 		border-color: $warnSoftBorder;
 	}
 
-	&:disabled { opacity: 0.5; cursor: default; }
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
 }
 
 .Footer {

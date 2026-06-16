@@ -188,6 +188,8 @@ export interface SubTableProps {
    * Если задан — добавляется служебная колонка `__rowActions`. По умолчанию нет.
    */
   rowActions?: (row: TDataItem, ctx: SubTableContext) => ReactNode;
+  /** false — скрыть колонку чекбоксов выбора строк (напр. таблица-настройка). По умолчанию true. */
+  selectable?: boolean;
 }
 
 /** Контекст, передаваемый в кастомные колбэки */
@@ -415,6 +417,7 @@ const SubTable: FC<SubTableProps> = ({
   clientSort = false,
   apiRef,
   rowActions,
+  selectable = true,
 }) => {
   const queryClient = useQueryClient();
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
@@ -1310,6 +1313,7 @@ const SubTable: FC<SubTableProps> = ({
   const combinedLoading = isAnythingLoading || opLoading;
   const tableProps = useMemo(() => ({
     variant: "embedded" as TTableVariant,
+    selectable,
     enableDateRange: false,
     componentName,
     rows: disablePrimaryRowHighlight ? displayRows.map(r => ({ ...r, isPrimary: false })) : displayRows,
@@ -1349,7 +1353,7 @@ const SubTable: FC<SubTableProps> = ({
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
     openModelForm, setColumns, setColumnsForTable, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
     handleCleanRefresh, onRefresh, handleDelete, disabled, extraButtons, inlineEditing, renderCell, getCellMeta, handleInlineAdd, onInlineAddProp, defaultNewRow,
-    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd, disableDelete, disablePrimaryRowHighlight, rowActions,
+    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd, disableDelete, disablePrimaryRowHighlight, rowActions, selectable,
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────

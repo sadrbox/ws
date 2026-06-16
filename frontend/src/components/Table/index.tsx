@@ -82,6 +82,8 @@ export type TTableVariant = 'default' | 'select' | 'embedded';
 
 export interface TableContextProps {
   variant: TTableVariant;
+  /** false — скрыть колонку чекбоксов выбора строк (напр. таблица-настройка). */
+  selectable: boolean;
   onSelectItem?: (item: TDataItem) => void;
   componentName: string;
   rows: TDataItem[];  // Реальные строки для логики подгрузки
@@ -188,6 +190,8 @@ const TableContextProvider: FC<PropsWithChildren<{ value: TableContextProps }>> 
 
 export interface TableProps {
   variant?: TTableVariant;
+  /** false — скрыть колонку чекбоксов выбора строк. По умолчанию true. */
+  selectable?: boolean;
   onSelectItem?: (item: TDataItem) => void;
   enableDateRange?: boolean;
   componentName: string;
@@ -353,6 +357,7 @@ TableControlPanel.displayName = 'TableControlPanel';
 const Table: FC<TableProps> = memo((props) => {
   const {
     variant = 'default',
+    selectable = true,
     onSelectItem,
     enableDateRange = true,
     componentName, rows, columns, total, totalPages,
@@ -515,7 +520,7 @@ const Table: FC<TableProps> = memo((props) => {
 
   const contextValue = useMemo<TableContextProps>(
     () => ({
-      variant, onSelectItem,
+      variant, selectable, onSelectItem,
       componentName, rows, deferredRowsForRender: rows, columns, total, totalPages,
       isLoading, error,
       pagination, sorting, filtering, search,
@@ -536,7 +541,7 @@ const Table: FC<TableProps> = memo((props) => {
       },
     }),
     [
-      variant, onSelectItem,
+      variant, selectable, onSelectItem,
       componentName, rows, columns, total, totalPages,
       isLoading, error,
       pagination, sorting, filtering, search, extendedActions,
@@ -867,14 +872,14 @@ Table.displayName = 'Table';
 // ────────────────────────────────────────────────
 
 const TableArea = memo(() => {
-  const { variant, columns } = useTableContext();
-  const isSelect = variant === 'select';
+  const { variant, selectable, columns } = useTableContext();
+  const showCheckbox = variant !== 'select' && selectable;
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
   return (
     <>
       <table>
         <colgroup>
-          {!isSelect && <col className={styles.CheckboxCol} />}
+          {showCheckbox && <col className={styles.CheckboxCol} />}
           {visibleColumns.map((col, i) => {
             const isLast = i === visibleColumns.length - 1;
             // const explicitWidth = col.width && col.width !== 'auto' ? col.width : undefined;
@@ -960,7 +965,7 @@ function computeFooterValue(col: TColumn, rows: TDataItem[]): string | null {
 
 const TableHeader = memo(() => {
   const {
-    variant,
+    variant, selectable,
     columns, rows, componentName,
     sorting: { sort, onSortChange },
     states: {
@@ -972,6 +977,7 @@ const TableHeader = memo(() => {
   } = useTableContext();
 
   const isSelect = variant === 'select';
+  const showCheckbox = !isSelect && selectable;
 
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
 
@@ -1038,7 +1044,7 @@ const TableHeader = memo(() => {
     if (!th) return;
 
     // Кэшируем все нужные ссылки один раз — onMouseMove не делает никаких DOM-запросов
-    const colOffset = isSelect ? 0 : 1;
+    const colOffset = showCheckbox ? 1 : 0;
     const colEl = (th.closest('table')?.querySelector('colgroup')?.children[colIndex + colOffset] as HTMLElement) ?? null;
     const col = visibleColumns[colIndex];
     const minW = parseInt(col.minWidth ?? '50', 10);
@@ -1081,12 +1087,12 @@ const TableHeader = memo(() => {
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
-  }, [visibleColumns, columns, actions, componentName, isSelect]);
+  }, [visibleColumns, columns, actions, componentName, showCheckbox]);
 
   return (
     <thead>
       <tr>
-        {!isSelect && (
+        {showCheckbox && (
           <th className={styles.HeaderCheckboxCell}>
             <div className={styles.CenterContent}>
               <input
@@ -1143,11 +1149,12 @@ const TableHeader = memo(() => {
 
 const TableBody = memo(() => {
   const {
-    variant,
+    variant, selectable,
     rows, deferredRowsForRender, columns, isLoading, total,
     isFetchingNextPage, hasNextPage,
     actions, scrollRef,
   } = useTableContext();
+  const extraCol = variant !== 'select' && selectable ? 1 : 0; // +1 колонка под чекбокс
 
   // scrollRenderTick используется ТОЛЬКО как триггер ре-рендера при скролле.
   // Реальное значение scrollTop читается синхронно из scrollTopRef.
@@ -1327,10 +1334,10 @@ const TableBody = memo(() => {
     return (
       <tbody>
         {/* <tr>
-          <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
+          <td colSpan={visibleColumns.length + extraCol} />
         </tr> */}
         <tr className={styles.TableFillerRow} aria-hidden="true">
-          <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
+          <td colSpan={visibleColumns.length + extraCol} />
         </tr>
       </tbody>
     );
@@ -1340,7 +1347,7 @@ const TableBody = memo(() => {
     <tbody>
       {topPaddingAll > 0 && (
         <tr className={styles.VirtualPaddingRow} style={{ height: `${topPaddingAll}px` }}>
-          <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
+          <td colSpan={visibleColumns.length + extraCol} />
         </tr>
       )}
 
@@ -1354,7 +1361,7 @@ const TableBody = memo(() => {
 
       {bottomPaddingAll > 0 && (
         <tr className={styles.VirtualPaddingRow} style={{ height: `${bottomPaddingAll}px` }}>
-          <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} >
+          <td colSpan={visibleColumns.length + extraCol} >
 
           </td>
         </tr>
@@ -1364,7 +1371,7 @@ const TableBody = memo(() => {
           к низу TableScrollWrapper, при этом обычные строки tbody
           сохраняют свою фиксированную высоту. */}
       <tr className={styles.TableFillerRow} aria-hidden="true">
-        <td colSpan={visibleColumns.length + (variant !== 'select' ? 1 : 0)} />
+        <td colSpan={visibleColumns.length + extraCol} />
       </tr>
     </tbody>
   );
@@ -1382,7 +1389,7 @@ interface TableBodyRowProps {
 
 const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   const {
-    variant,
+    variant, selectable,
     onSelectItem,
     rows,
     renderCellRef,
@@ -1403,8 +1410,9 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     scrollRef,
   } = useTableContext();
 
+  const showCheckbox = variant !== 'select' && selectable;
   const isActive = activeRow === row.id;
-  const isCheckboxCellActive = variant !== 'select' && isActive && activeCell === CHECKBOX_COL_ID;
+  const isCheckboxCellActive = showCheckbox && isActive && activeCell === CHECKBOX_COL_ID;
 
   // Строка выбрана если:
   // 1. Режим "все" И строка НЕ в исключениях
@@ -1549,7 +1557,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
 
   const rowUuid = row.uuid || String(row.id);
   const isExpanded = expandedRowIds?.has(rowUuid) ?? false;
-  const visibleColCount = columns.filter(c => c.visible).length + (variant !== 'select' ? 1 : 0);
+  const visibleColCount = columns.filter(c => c.visible).length + (showCheckbox ? 1 : 0);
 
   // Класс выравнивания ячейки по типу колонки — вычисляется один раз на колонку
   const cellAlignClass = (col: TColumn) => {
@@ -1584,7 +1592,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         // В общих списках (variant="default") и в селекторах (variant="select") выделять не нужно.
         data-primary={row.isPrimary && variant === 'embedded' ? "true" : undefined}
       >
-        {variant !== 'select' && (
+        {showCheckbox && (
           <td
             className={styles.CellCenter}
             data-col-id={CHECKBOX_COL_ID}

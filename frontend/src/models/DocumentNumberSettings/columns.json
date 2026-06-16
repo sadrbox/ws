@@ -1,5 +1,16 @@
 [
 	{
+		"identifier": "numberingEnabled",
+		"hint": "Нумерация включена",
+		"type": "string",
+		"visible": true,
+		"inlist": true,
+		"width": "110px",
+		"minWidth": "90px",
+		"alignment": "center",
+		"sortable": false
+	},
+	{
 		"identifier": "documentType",
 		"hint": "Вид документа",
 		"type": "string",

@@ -43,11 +43,10 @@ test("заданный префикс → ПРЕФ-<padded>", async () => {
 	assert.equal(await allocateNumber("sale", null, D, client), "РЕАЛ-000042");
 });
 
-test("enabled=false → номер ВСЁ РАВНО присваивается (нумерация безусловна)", async () => {
+test("enabled=false → null (нумерация выключена — документ без номера, по ID)", async () => {
 	invalidateNumberSettingsCache();
-	// Флаг enabled больше не блокирует — номер создаётся автоматически всегда.
-	const client = mockClient({ settings: [{ organizationUuid: "__global__", docType: "sale", prefix: "", padding: 9, enabled: false }], seq: 1 });
-	assert.equal(await allocateNumber("sale", null, D, client), "000000001");
+	const client = mockClient({ settings: [{ organizationUuid: "__global__", docType: "sale", prefix: "", padding: 9, enabled: false }] });
+	assert.equal(await allocateNumber("sale", null, D, client), null);
 });
 
 test("неизвестный вид документа → null", async () => {

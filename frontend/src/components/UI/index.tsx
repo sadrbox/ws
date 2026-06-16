@@ -55,7 +55,7 @@ import { UnitOfMeasuresList } from 'src/models/UnitOfMeasures';
 import { TaxesList } from 'src/models/Taxes';
 import { OrganizationAccountingSettingsList } from 'src/models/OrganizationAccountingSettings';
 import GeneralSettings from 'src/models/GeneralSettings';
-import { DocumentNumberSettings } from 'src/models/DocumentNumberSettings';
+import DocumentNumberSettings from 'src/models/DocumentNumberSettings';
 import { CurrenciesList } from 'src/models/Currencies';
 import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';

@@ -12,7 +12,7 @@ import { showToast } from "src/components/UIToast";
 import { Field, FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { Button } from "src/components/Button";
-import SubTable from "src/components/SubTable";
+import SubTable, { type SubTableContext } from "src/components/SubTable";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import columnsJson from "./columns.json";
 import styles from "./DocumentNumberSettings.module.scss";
@@ -55,49 +55,72 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   });
   const rows = data ?? [];
 
-  type EditVal = { prefix: string; padding: number; enabled: boolean };
-  const [edits, setEdits] = useState<Record<string, EditVal>>({});
   const [busy, setBusy] = useState(false);
 
-  // enabled может отсутствовать у старого бэкенда → по умолчанию true
-  // (иначе FieldToggle получает undefined → uncontrolled→controlled warning).
-  const valOf = (r: Row): EditVal => edits[r.docType] ?? { prefix: r.prefix, padding: r.padding, enabled: r.enabled ?? true };
-  const patch = (r: Row, p: Partial<EditVal>) =>
-    setEdits((prev) => ({ ...prev, [r.docType]: { ...valOf(r), ...p } }));
-  const dirty = Object.keys(edits).length > 0;
+  // Редактирование идёт через ВНУТРЕННЕЕ состояние SubTable (ctx.updateLocalRow),
+  // как в TradeDocumentItemsTable — иначе внешний state ломает фокус ввода.
+  // onAllItemsChange отдаёт актуальные строки сюда (для dirty-проверки и сохранения).
+  const [currentRows, setCurrentRows] = useState<TDataItem[]>([]);
+  const origByType = useMemo(() => new Map(rows.map((r) => [r.docType, r] as const)), [rows]);
+  const changedRows = useMemo(
+    () => currentRows.filter((cr) => {
+      const o = origByType.get((cr as unknown as Row).docType);
+      if (!o) return false;
+      const c = cr as unknown as Row;
+      return String(c.prefix ?? "") !== String(o.prefix ?? "")
+        || Number(c.padding) !== Number(o.padding)
+        || (c.enabled !== false) !== (o.enabled !== false);
+    }),
+    [currentRows, origByType],
+  );
+  const dirty = changedRows.length > 0;
 
-  const example = (v: EditVal) => {
-    // Префикс опционален: без него номер — только дополненный нулями счётчик.
-    const seq = String(1).padStart(Math.min(9, Math.max(1, v.padding || 6)), "0");
-    const pfx = v.prefix.trim();
+  // Пример номера по префиксу/разрядности (1 → дополненный нулями счётчик).
+  const example = (prefix: string, padding: number) => {
+    const seq = String(1).padStart(Math.min(9, Math.max(1, padding || 6)), "0");
+    const pfx = (prefix ?? "").trim();
     return pfx ? `${pfx}-${seq}` : seq;
   };
 
-  // Строки для SubTable (клиентский режим): добавляем числовой id для ключей/выделения.
+  // Строки для SubTable (клиентский режим): плоский список видов документов.
+  // Все помечены как client-create (_pendingAction:"create") — иначе SubTable их
+  // не покажет (mergeServerWithPending). Серверной выборки нет (parentUuid="").
   const tableRows = useMemo<TDataItem[]>(
-    () => rows.map((r, i) => ({ ...r, id: i + 1 } as unknown as TDataItem)),
+    () => rows.map((r, i) => ({ ...r, id: i + 1, _pendingAction: "create" } as unknown as TDataItem)),
     [rows],
   );
+
+  // Поиск в тулбаре SubTable — по названию вида документа (label).
+  const filterRows = (rws: TDataItem[], q: string): TDataItem[] => {
+    const s = q.trim().toLowerCase();
+    if (!s) return rws;
+    return rws.filter((row) => String((row as unknown as Row).label ?? "").toLowerCase().includes(s));
+  };
   // key пересевает SubTable при изменении серверных данных (после сохранения/сброса),
   // т.к. initialPendingRows мержатся однократно. Редактирование (edits) key не меняет.
   const tableKey = useMemo(
-    () => `${orgKey ?? "global"}|${rows.map((r) => `${r.docType}:${r.prefix}:${r.padding}:${r.isOverridden ? 1 : 0}`).join(",")}`,
+    () => `${orgKey ?? "global"}|${rows.map((r) => `${r.docType}:${r.prefix}:${r.padding}:${r.enabled !== false ? 1 : 0}:${r.isOverridden ? 1 : 0}`).join(",")}`,
     [rows, orgKey],
   );
 
-  // Кастомный рендер ячеек: контролы редактирования (живые значения из edits).
-  const renderCell = (row: TDataItem, col: TColumn): ReactNode | undefined => {
+  // Кастомный рендер ячеек: контролы редактируют ВНУТРЕННЮЮ строку SubTable
+  // (ctx.updateLocalRow) — как в TradeDocumentItemsTable, без потери фокуса.
+  // variant="table" + label="" — ячейка как единый элемент (без form-field обёрток).
+  const renderCell = (row: TDataItem, col: TColumn, ctx: SubTableContext): ReactNode | undefined => {
     const r = row as unknown as Row;
-    const v = valOf(r);
+    const on = r.enabled !== false; // нумерация включена для этого вида
     switch (col.identifier) {
+      case "numberingEnabled":
+        // Чекбокс вкл/выкл нумерации. Выкл → документ без поля «Номер» (по ID).
+        return <input type="checkbox" className={styles.EnabledCheck} checked={on} title={translate("numberingEnabled")} onChange={(e) => ctx.updateLocalRow(row, { enabled: e.target.checked })} />;
       case "documentType":
         return <span className={styles.cLabel}>{r.label}</span>;
       case "prefix":
-        return <Field name={`pfx_${r.docType}`} value={v.prefix} onChange={(e) => patch(r, { prefix: e.target.value })} width="120px" placeholder={r.defaultPrefix || translate("optional")} />;
+        return <Field label="" variant="table" actions={[]} disabled={!on} name={`pfx_${r.docType}`} value={r.prefix ?? ""} onChange={(e) => ctx.updateLocalRow(row, { prefix: e.target.value })} placeholder={r.defaultPrefix || translate("optional")} />;
       case "digitsCount":
-        return <FieldNumber name={`pad_${r.docType}`} value={String(v.padding)} onChange={(e) => patch(r, { padding: Math.min(9, Math.max(1, Number(e.target.value) || 6)) })} width="70px" />;
+        return <FieldNumber label="" variant="table" disabled={!on} name={`pad_${r.docType}`} value={String(r.padding ?? 6)} onChange={(e) => ctx.updateLocalRow(row, { padding: Math.min(9, Math.max(1, Number(e.target.value) || 6)) })} />;
       case "exampleNumber":
-        return <code>{example(v)}</code>;
+        return on ? <code>{example(r.prefix, r.padding)}</code> : <span className={styles.cDisabledHint}>{translate("numberingOffUsesId")}</span>;
       case "source":
         return r.isOverridden
           ? <span className={styles.BadgeOwn}>{orgKey ? translate("sourceOrg") : translate("sourceSet")}</span>
@@ -118,12 +141,12 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   const save = async () => {
     setBusy(true);
     try {
-      for (const [docType, v] of Object.entries(edits)) {
+      for (const cr of changedRows) {
+        const c = cr as unknown as Row;
         // Префикс необязателен — пустой допустим (номер без префикса).
-        await api.put(`document-number-settings/${docType}`, { prefix: v.prefix.trim(), padding: v.padding, enabled: true, organizationUuid: orgKey });
+        await api.put(`document-number-settings/${c.docType}`, { prefix: String(c.prefix ?? "").trim(), padding: c.padding, enabled: c.enabled !== false, organizationUuid: orgKey });
       }
       showToast(translate("saved"), "success");
-      setEdits({});
       qc.invalidateQueries({ queryKey: QKEY(orgKey) });
     } catch (e: any) {
       // Явная ошибка сохранения (в т.ч. если бэкенд не обновлён / без миграций).
@@ -139,7 +162,6 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
       await api.delete(`document-number-settings/${docType}`, {
         params: orgKey ? { organizationUuid: orgKey } : undefined,
       });
-      setEdits((prev) => { const n = { ...prev }; delete n[docType]; return n; });
       qc.invalidateQueries({ queryKey: QKEY(orgKey) });
       showToast(translate("resetDone"), "success");
     } catch {
@@ -150,15 +172,15 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   };
 
   return (
-    <div>
+    <div className={embedded ? undefined : styles.Root}>
 
       {!embedded && (
         <div className={styles.OrgPicker}>
           <LookupField label={translate("organization")} name="dns_org" value={selOrgUuid} displayValue={selOrgName}
             endpoint="organizations" displayField="name"
             placeholder={translate("numberingDefaultsForAll")}
-            onSelect={(u, d) => { setSelOrgUuid(u); setSelOrgName(d); setEdits({}); }}
-            onClear={() => { setSelOrgUuid(""); setSelOrgName(""); setEdits({}); }} />
+            onSelect={(u, d) => { setSelOrgUuid(u); setSelOrgName(d); }}
+            onClear={() => { setSelOrgUuid(""); setSelOrgName(""); }} />
         </div>
       )}
 
@@ -175,7 +197,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
           <Button variant="secondary" onClick={() => refetch()}>{translate("retry")}</Button>
         </div>
       ) : (
-        <div className={styles.TableScroll}>
+        <div className={styles.TableArea}>
           <SubTable
             key={tableKey}
             model="document-number-settings"
@@ -185,9 +207,17 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
             parentUuid=""
             deferRemoteChanges
             clientSort
+            defaultSort={{ id: "asc" }}
             initialPendingRows={tableRows}
-            readonly
+            defaultInlineEditing
+            showEditModeToggle={false}
+            selectable={false}
+            disableAdd
+            disableDelete
             emptyMessage=""
+            filterRows={filterRows}
+            onAllItemsChange={setCurrentRows}
+            onRefresh={() => { void refetch(); }}
             renderCell={renderCell}
             rowActions={rowActions}
           />
@@ -205,5 +235,4 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
 };
 
 DocumentNumberSettings.displayName = "DocumentNumberSettings";
-export { DocumentNumberSettings };
 export default DocumentNumberSettings;
