@@ -223,8 +223,8 @@ export function createDocumentHeaderRouter({
 			{
 				const ndt = numberDocType || posting?.docType || null;
 				if (ndt) {
-					const _num = await ensureDocumentNumber({ docType: ndt, modelName: MODEL, manual: b.number !== undefined ? data.number : existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
-					if (_num && _num !== existing.number) data.number = _num;
+					const _num = await ensureDocumentNumber({ docType: ndt, modelName: MODEL, manual: data.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
+					if (_num) data.number = _num; // всегда фиксируем итоговый номер (в т.ч. при очистке поля)
 				}
 			}
 

@@ -37,21 +37,6 @@
 	min-height: 0;
 }
 
-.DelBtn {
-	width: 26px;
-	height: 26px;
-	border: none;
-	background: transparent;
-	color: $gray400;
-	font-size: 20px;
-	line-height: 1;
-	cursor: pointer;
-	border-radius: 6px;
-	transition: background 0.12s, color 0.12s;
-
-	&:hover { background: $warnSoftBg; color: $warnAccent; }
-}
-
 // ── Правая колонка: реквизиты + итог + оплата ──
 .Right {
 	flex: 0 0 340px;

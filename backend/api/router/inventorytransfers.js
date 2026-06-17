@@ -210,6 +210,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.amount !== undefined)
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
+		// Номер из payload (ручной ввод / переприсвоение) — иначе он терялся при PUT
+		// и сохранялся прежний. Пусто → ensureDocumentNumber выдаст авто-номер.
+		if (req.body.number !== undefined) data.number = req.body.number?.trim?.() || null;
 		// Контроль остатка ПЕРЕД фиксацией проведения (расход с fromWarehouse).
 		const existing = await prisma[MODEL].findUnique({
 			where: w,
@@ -222,8 +225,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
 		// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
 		{
-			const _num = await ensureDocumentNumber({ docType: "inventory_transfer", modelName: MODEL, manual: data.number !== undefined ? data.number : existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
-			if (_num && _num !== existing.number) data.number = _num;
+			const _num = await ensureDocumentNumber({ docType: "inventory_transfer", modelName: MODEL, manual: data.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
+			if (_num) data.number = _num; // всегда фиксируем итоговый номер (в т.ч. при очистке поля)
 		}
 		// Stage D: оба склада принадлежат организации документа (мерж с текущими).
 		await assertOrgFieldMembership({

@@ -141,7 +141,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			await assertPeriodOpen(docData.organizationUuid, docData.date);
 			if (willPost) await validatePosting(docType, docData, []);
 			// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
-			docData.number = await ensureDocumentNumber({ docType, modelName: MODEL, manual: req.body.number, organizationUuid: docData.organizationUuid, date: docData.date });
+			docData.number = await ensureDocumentNumber({ docType, modelName: MODEL, manual: req.body.number, organizationUuid: docData.organizationUuid, date: docData.date, uniqueWhere: { direction } });
 			const item = await prisma[MODEL].create({ data: docData, include: INCLUDE });
 			if (item.posted) await reconcileDocumentEntries(docType, item.uuid);
 			return res.status(201).json({ success: true, item });
@@ -168,6 +168,8 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (req.body.date !== undefined) data.date = req.body.date ? new Date(req.body.date) : null;
 			if (req.body.amount !== undefined) data.amount = req.body.amount != null ? parseFloat(req.body.amount) : null;
 			if (req.body.posted !== undefined) data.posted = !!req.body.posted;
+			// Номер из payload (ручной ввод / переприсвоение) — иначе он терялся при PUT.
+			if (req.body.number !== undefined) data.number = req.body.number?.trim?.() || null;
 			// Проверяем существование И принадлежность маршруту (direction).
 			const existing = await prisma[MODEL].findFirst({ where: { ...w, direction }, select: { uuid: true, organizationUuid: true, posted: true, number: true, contractUuid: true, cashboxUuid: true, date: true } });
 			if (!existing || !checkOwnership(existing, req))
@@ -184,8 +186,8 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (willBePosted) await assertPostable(docType, existing.uuid, { ...data, posted: true });
 			// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
 			{
-				const _num = await ensureDocumentNumber({ docType, modelName: MODEL, manual: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
-				if (_num && _num !== existing.number) data.number = _num;
+				const _num = await ensureDocumentNumber({ docType, modelName: MODEL, manual: data.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid, uniqueWhere: { direction } });
+				if (_num) data.number = _num; // всегда фиксируем итоговый номер (в т.ч. при очистке поля)
 			}
 			const item = await prisma[MODEL].update({ where: { uuid: existing.uuid }, data, include: INCLUDE });
 			await reconcileDocumentEntries(docType, item.uuid);
@@ -194,6 +196,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
 			if (respondPostingError(error, res)) return;
+			if (respondDuplicateNumberError(error, res)) return;
 			if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
 			console.error(`PUT /${route}/:id error:`, error);
 			return res.status(500).json({ success: false, message: "Ошибка сервера" });

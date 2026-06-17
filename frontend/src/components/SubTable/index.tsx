@@ -167,6 +167,10 @@ export interface SubTableProps {
   disableAdd?: boolean;
   /** Если true — удаление строк недоступно (onDelete не вызывается), но редактирование разрешено */
   disableDelete?: boolean;
+  /** Если true — скрыть кнопки «Добавить»/«Удалить» в тулбаре (inline-редактирование сохраняется). */
+  hideAddDelete?: boolean;
+  /** Если true — скрыть кнопку «Обновить» в тулбаре. */
+  hideReload?: boolean;
   /** Колбэк при любом обновлении кэша строк (включая загрузку с сервера). Используется для печати. */
   onAllItemsChange?: (rows: TDataItem[]) => void;
   /** Переопределяет кнопку «Обновить» в тулбаре (вместо handleCleanRefresh). */
@@ -411,6 +415,8 @@ const SubTable: FC<SubTableProps> = ({
   computeRow,
   disableAdd = false,
   disableDelete = false,
+  hideAddDelete = false,
+  hideReload = false,
   onAllItemsChange,
   onRefresh,
   disablePrimaryRowHighlight = false,
@@ -1342,6 +1348,8 @@ const SubTable: FC<SubTableProps> = ({
     onInlineAdd: !readonly && inlineEditing && (onInlineAddProp || defaultNewRow) ? handleInlineAdd : undefined,
     readonly,
     disableAdd,
+    hideAddDelete,
+    hideReload,
     expandedRowIds: renderExpandedRowProp ? expandedRowIds : undefined,
     renderExpandedRow: renderExpandedRowProp
       ? (row: TDataItem) => renderExpandedRowProp(row, ctx)
@@ -1353,7 +1361,7 @@ const SubTable: FC<SubTableProps> = ({
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
     openModelForm, setColumns, setColumnsForTable, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
     handleCleanRefresh, onRefresh, handleDelete, disabled, extraButtons, inlineEditing, renderCell, getCellMeta, handleInlineAdd, onInlineAddProp, defaultNewRow,
-    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd, disableDelete, disablePrimaryRowHighlight, rowActions, selectable,
+    renderExpandedRowProp, expandedRowIds, ctx, readonly, disableAdd, disableDelete, hideAddDelete, hideReload, disablePrimaryRowHighlight, rowActions, selectable,
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────

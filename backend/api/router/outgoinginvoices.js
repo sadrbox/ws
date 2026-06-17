@@ -222,8 +222,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		}, prisma);
 		// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
 		{
-			const _num = await ensureDocumentNumber({ docType: "outgoing_invoice", modelName: MODEL, manual: data.number !== undefined ? data.number : _ex?.number, organizationUuid: data.organizationUuid ?? _ex?.organizationUuid, date: data.date ?? _ex?.date, excludeUuid: _ex?.uuid });
-			if (_num && _num !== _ex?.number) data.number = _num;
+			const _num = await ensureDocumentNumber({ docType: "outgoing_invoice", modelName: MODEL, manual: data.number, existingNumber: _ex?.number, organizationUuid: data.organizationUuid ?? _ex?.organizationUuid, date: data.date ?? _ex?.date, excludeUuid: _ex?.uuid });
+			if (_num) data.number = _num; // всегда фиксируем итоговый номер (в т.ч. при очистке поля)
 		}
 		const item = await prisma[MODEL].update({
 			where: w,

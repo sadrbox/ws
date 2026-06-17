@@ -1016,7 +1016,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>{translate("generalSettings")}</h3>
             <ul className={styles.NavList}>
               <li onClick={() => addPane({ component: GeneralSettings, label: translate("generalSettings") })}>{translate("generalSettings")}</li>
-              <li onClick={() => addPane({ component: DocumentNumberSettings, label: translate("documentNumberingSettings") })}>{translate("documentNumberingSettings")}</li>
+              <li onClick={() => addPane({ component: DocumentNumberSettings, label: translate("documentNumberSettings") })}>{translate("documentNumberSettings")}</li>
             </ul>
           </div>
           <div className={styles.NavGroup}>

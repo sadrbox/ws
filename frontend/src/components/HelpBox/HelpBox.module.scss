@@ -1,0 +1,63 @@
+// Единый информационный/справочный блок (подсказки над формами/таблицами).
+// Заменяет дублировавшиеся .help/.helpTitle/.helpSteps и .Intro/.IntroMain.
+.HelpBox {
+	margin-bottom: 12px;
+	padding: 10px 14px;
+	background: $accentBlueSoft;
+	border: 1px solid $accentBlueBorder;
+	border-radius: 8px;
+	color: $gray700;
+	font-size: 13px;
+	line-height: 1.45;
+
+	p {
+		margin: 0;
+	}
+
+	p + p {
+		margin-top: 6px;
+	}
+
+	// Нумерованные/маркированные шаги внутри блока.
+	ol,
+	ul {
+		margin: 6px 0 0;
+		padding-left: 20px;
+		line-height: 1.7;
+	}
+
+	b {
+		font-weight: 600;
+	}
+}
+
+// Заголовок блока (иконка + текст).
+.Title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 600;
+	margin-bottom: 6px;
+}
+
+// Вторичное примечание под основным текстом (приглушено, с разделителем).
+.Footnote {
+	margin: 6px 0 0;
+	padding-top: 6px;
+	border-top: 1px solid $accentBlueBorder;
+	color: $gray500;
+	font-size: 12px;
+}
+
+// Цветные маркеры внутри текста подсказок (вместо inline-styles).
+.Ok {
+	color: $successText;
+}
+
+.Add {
+	color: $primary;
+}
+
+.Warn {
+	color: $attention;
+}

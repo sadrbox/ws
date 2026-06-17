@@ -344,33 +344,17 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                 <GroupRow className={styles.FormHeaderRow}>
                   <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
                     actions={[
-                      { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date) },
+                      { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
                       { type: "clear", onClick: () => form.setField("number", "") },
                     ]} />
                   <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
-                  <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
                 </GroupRow>
                 <GroupRow>
                   <FieldSelect label={translate("operationType")} name={`${form.formUid}_operationType`}
                     value={form.fields.operationType} options={opTypeOptions}
                     onChange={(e) => handleOperationTypeChange(e.target.value)} disabled={form.isLoading} />
                 </GroupRow>
-                {allowedBasisTypes.length > 0 && (
-                  <Group>
-                    <BasisDocumentField
-                      allowedTypes={allowedBasisTypes}
-                      basisDocumentType={form.fields.basisDocumentType}
-                      basisDocumentUuid={form.fields.basisDocumentUuid}
-                      basisDocumentLabel={form.fields.basisDocumentLabel}
-                      formUid={form.formUid}
-                      disabled={form.isLoading}
-                      onSelect={handleBasisSelect}
-                      onClear={handleBasisClear}
-                      mismatch={basisMismatch.mismatch}
-                      mismatchDetails={basisMismatch.differences}
-                    />
-                  </Group>
-                )}
+
                 <Group>
                   <FormLookup form={form} field="organization" endpoint="organizations"
                     onSelect={handleOrganizationSelect} />
@@ -396,6 +380,22 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                   <FormLookup form={form} field="cashbox" endpoint="cashboxes"
                     extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
                 </GroupRow>
+                {allowedBasisTypes.length > 0 && (
+                  <GroupCol>
+                    <BasisDocumentField
+                      allowedTypes={allowedBasisTypes}
+                      basisDocumentType={form.fields.basisDocumentType}
+                      basisDocumentUuid={form.fields.basisDocumentUuid}
+                      basisDocumentLabel={form.fields.basisDocumentLabel}
+                      formUid={form.formUid}
+                      disabled={form.isLoading}
+                      onSelect={handleBasisSelect}
+                      onClear={handleBasisClear}
+                      mismatch={basisMismatch.mismatch}
+                      mismatchDetails={basisMismatch.differences}
+                    />
+                  </GroupCol>
+                )}
               </GroupCol>
             </div>
             {form.isEditMode && <Group className={styles.FormFooterRow}>
@@ -448,8 +448,9 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
     const hasBasis = !!form.fields.basisDocumentUuid;
     const headerActionsPortal = usePaneHeaderActions(
       form.paneId,
-      (isSavedDoc || hasBasis) ? (
+      (
         <>
+          <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
           {isSavedDoc && <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />}
           {isSavedDoc && <DocumentEntriesButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
           {isSavedDoc && <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
@@ -463,7 +464,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
             />
           )}
         </>
-      ) : null,
+      ),
     );
 
     return (

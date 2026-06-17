@@ -227,6 +227,10 @@ export interface TableProps {
   readonly?: boolean;
   /** Если true — кнопка «Добавить» отображается как disabled */
   disableAdd?: boolean;
+  /** Если true — скрыть кнопки «Добавить»/«Удалить», НЕ отключая inline-редактирование. */
+  hideAddDelete?: boolean;
+  /** Если true — скрыть кнопку «Обновить» в тулбаре (когда перезагрузка с сервера не нужна). */
+  hideReload?: boolean;
   /** Раскрытые строки (expand) */
   expandedRowIds?: Set<string>;
   /** Рендер содержимого раскрытой строки */
@@ -280,6 +284,10 @@ interface TableControlPanelProps {
   readonly?: boolean;
   /** Если true — кнопка «Добавить» отображается как disabled */
   disableAdd?: boolean;
+  /** Если true — скрыть кнопки «Добавить»/«Удалить» (inline-редактирование сохраняется). */
+  hideAddDelete?: boolean;
+  /** Если true — скрыть кнопку «Обновить». */
+  hideReload?: boolean;
   /** Если true — скрыть кнопку «Удалить» (удаление недоступно) */
   canDelete?: boolean;
 }
@@ -301,10 +309,12 @@ const TableControlPanel = memo(({
   extraButtons,
   readonly: isReadonly = false,
   disableAdd = false,
+  hideAddDelete = false,
+  hideReload = false,
   canDelete = true,
 }: TableControlPanelProps) => {
   const isSelect = variant === 'select';
-  const hideWrite = isSelect || isReadonly;
+  const hideWrite = isSelect || isReadonly || hideAddDelete;
   return (
     <Toolbar
       right={visibleFastSearch ? <FieldFastSearchInternal value={search.value} onChange={search.onChange} /> : undefined}
@@ -324,7 +334,7 @@ const TableControlPanel = memo(({
         </>
       )}
       {!isSelect && <Toolbar.Divider />}
-      <Toolbar.ReloadButton onClick={onRefresh} disabled={isLoading} />
+      {!hideReload && <Toolbar.ReloadButton onClick={onRefresh} disabled={isLoading} />}
       <Toolbar.SettingsButton onClick={onConfigOpen} />
       <Toolbar.SearchButton onClick={onSearchToggle} active={visibleFastSearch} />
       {/* <Toolbar.Divider /> */}
@@ -344,6 +354,8 @@ const TableControlPanel = memo(({
     prevProps.hasSelection === nextProps.hasSelection &&
     prevProps.readonly === nextProps.readonly &&
     prevProps.disableAdd === nextProps.disableAdd &&
+    prevProps.hideAddDelete === nextProps.hideAddDelete &&
+    prevProps.hideReload === nextProps.hideReload &&
     prevProps.canDelete === nextProps.canDelete
   );
 });
@@ -372,6 +384,8 @@ const Table: FC<TableProps> = memo((props) => {
     getCellMeta,
     readonly: isReadonly = false,
     disableAdd = false,
+    hideAddDelete = false,
+    hideReload = false,
     expandedRowIds,
     renderExpandedRow,
     apiRef,
@@ -835,6 +849,8 @@ const Table: FC<TableProps> = memo((props) => {
           extraButtons={extraButtons}
           readonly={isReadonly}
           disableAdd={disableAdd}
+          hideAddDelete={hideAddDelete}
+          hideReload={hideReload}
           canDelete={!!onDelete}
         />
 

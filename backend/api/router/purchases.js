@@ -241,6 +241,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		for (const f of ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"]) {
 			if (req.body[f] !== undefined) data[f] = req.body[f] || null;
 		}
+		// Номер из payload (ручной ввод / переприсвоение) — иначе он терялся при PUT.
+		if (req.body.number !== undefined) data.number = req.body.number?.trim?.() || null;
 		if (data.warehouseUuid) {
 			const fkError = await checkFkOwnership(req, prisma, [{ model: "warehouse", uuid: data.warehouseUuid }]);
 			if (fkError) return res.status(403).json({ success: false, message: fkError });
@@ -253,8 +255,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
 		// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
 		{
-			const _num = await ensureDocumentNumber({ docType: "purchase", modelName: MODEL, manual: data.number !== undefined ? data.number : existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
-			if (_num && _num !== existing.number) data.number = _num;
+			const _num = await ensureDocumentNumber({ docType: "purchase", modelName: MODEL, manual: data.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
+			if (_num) data.number = _num; // всегда фиксируем итоговый номер (в т.ч. при очистке поля)
 		}
 		// Stage D: склад/договор принадлежат организации документа (мерж с текущими).
 		await assertOrgFieldMembership({

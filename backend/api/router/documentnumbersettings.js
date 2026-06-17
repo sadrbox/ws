@@ -2,7 +2,7 @@
 // Глобально для установки. Экран «Настройки → Нумерация документов».
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { NUMBER_CONFIG, GLOBAL_SETTINGS_KEY, invalidateNumberSettingsCache } from "../../services/documentNumbering.js";
+import { NUMBER_CONFIG, GLOBAL_SETTINGS_KEY, invalidateNumberSettingsCache, renumberDraftDocuments } from "../../services/documentNumbering.js";
 
 const router = express.Router();
 
@@ -45,6 +45,10 @@ router.put("/document-number-settings/:docType", async (req, res) => {
 		const { docType } = req.params;
 		if (!NUMBER_CONFIG[docType]) return res.status(400).json({ success: false, message: "Неизвестный вид документа" });
 		const organizationUuid = req.body.organizationUuid ? String(req.body.organizationUuid) : GLOBAL_SETTINGS_KEY;
+		// Нумерацию «по умолчанию (для всех организаций)» правит только суперадмин.
+		if (organizationUuid === GLOBAL_SETTINGS_KEY && !req.user?.isSuperAdmin) {
+			return res.status(403).json({ success: false, message: "Изменять нумерацию по умолчанию может только суперадминистратор" });
+		}
 		const prefix = String(req.body.prefix ?? "").trim();
 		const p = Number(req.body.padding);
 		const padding = Number.isInteger(p) && p >= 1 && p <= 9 ? p : 6;
@@ -68,11 +72,38 @@ router.delete("/document-number-settings/:docType", async (req, res) => {
 	try {
 		const { docType } = req.params;
 		const organizationUuid = req.query.organizationUuid ? String(req.query.organizationUuid) : GLOBAL_SETTINGS_KEY;
+		// Сброс нумерации «по умолчанию (для всех организаций)» — только суперадмин.
+		if (organizationUuid === GLOBAL_SETTINGS_KEY && !req.user?.isSuperAdmin) {
+			return res.status(403).json({ success: false, message: "Изменять нумерацию по умолчанию может только суперадминистратор" });
+		}
 		await prisma.documentNumberSetting.deleteMany({ where: { organizationUuid, docType } });
 		invalidateNumberSettingsCache();
 		return res.json({ success: true });
 	} catch (err) {
 		console.error("DELETE /document-number-settings error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// POST — перенумеровать ЧЕРНОВИКИ (posted=false) под текущие настройки.
+// Body: organizationUuid (опц.) — без него перенумеровываются черновики всех
+// организаций (каждый под свой действующий формат). Проведённые НЕ затрагиваются.
+router.post("/document-number-settings/renumber-drafts", async (req, res) => {
+	try {
+		const organizationUuid = req.body.organizationUuid ? String(req.body.organizationUuid) : null;
+		// Перенумерация по глобальным настройкам (без выбора организации) — только суперадмин.
+		if (!organizationUuid && !req.user?.isSuperAdmin) {
+			return res.status(403).json({ success: false, message: "Перенумерацию по умолчанию может выполнять только суперадминистратор" });
+		}
+		let updated = 0, skipped = 0;
+		for (const docType of Object.keys(NUMBER_CONFIG)) {
+			const r = await renumberDraftDocuments(docType, organizationUuid);
+			updated += r.updated;
+			skipped += r.skipped;
+		}
+		return res.json({ success: true, updated, skipped });
+	} catch (err) {
+		console.error("POST /document-number-settings/renumber-drafts error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

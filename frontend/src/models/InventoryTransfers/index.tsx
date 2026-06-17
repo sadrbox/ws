@@ -16,6 +16,7 @@ import columnsJson from "./columns.json";
 import { Field, FieldDateTime } from "src/components/Field";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
+import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -186,11 +187,10 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow className={styles.FormHeaderRow}>
                 <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
                   actions={[
-                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date) },
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
                     { type: "clear", onClick: () => form.setField("number", "") },
                   ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} width="180px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
-                <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
               </GroupRow>
               <Group>
                 <FormLookup form={form} field="organization" endpoint="organizations"
@@ -245,6 +245,11 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     },
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items, assignNumber]);
 
+  const headerActionsPortal = usePaneHeaderActions(
+    form.paneId,
+    <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />,
+  );
+
   return (
     <FormRequiredScope docType="inventory_transfer" active>
       <FormDirtyScope dirtyKeys={form.unsavedFields}>
@@ -253,6 +258,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           onReload={form.isEditMode ? form.handleReload : undefined}
           isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
           readonly={!canWrite} />
+        {headerActionsPortal}
       </FormDirtyScope>
     </FormRequiredScope>
   );

@@ -2,6 +2,7 @@ import React, { FC, useMemo, useState } from "react";
 import { translate } from "src/i18";
 import { Field, FieldFile, FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
+import { HelpBox, helpMarker } from "src/components/HelpBox";
 import { Button } from "src/components/Button";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { GroupRow } from "src/components/UI";
@@ -355,18 +356,17 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.help}>
-        <div className={styles.helpTitle}>ℹ️ Импорт / экспорт номенклатуры (.xlsx, .xls)</div>
-        <ol className={styles.helpSteps}>
+      <HelpBox title="ℹ️ Импорт / экспорт номенклатуры (.xlsx, .xls)">
+        <ol>
           <li><b>Выгрузка</b>: «Выгрузить номенклатуру» — все товары одним файлом. Штрих-коды одного товара — в одной ячейке через «;», цены — отдельной колонкой на каждый тип цены.</li>
           <li><b>Загрузка</b>: «Скачать шаблон» → заполнить → выбрать файл → «Заполнить» (предпросмотр, можно править) → «Загрузить».</li>
-          <li>Номенклатура сопоставляется по <b>штрих-коду</b> → <b>артикул + бренд</b> → <b>наименованию</b>: найден — обновляется (<span style={{ color: "#137333" }}>✓</span>), иначе создаётся (<span style={{ color: "#1a73e8" }}>＋</span>). Ячейку «Номенклатура» можно поправить вручную (выбрать товар из справочника или ввести новое наименование).</li>
+          <li>Номенклатура сопоставляется по <b>штрих-коду</b> → <b>артикул + бренд</b> → <b>наименованию</b>: найден — обновляется (<span className={helpMarker.ok}>✓</span>), иначе создаётся (<span className={helpMarker.add}>＋</span>). Ячейку «Номенклатура» можно поправить вручную (выбрать товар из справочника или ввести новое наименование).</li>
           <li>Штрих-коды уникальны: дубль другого товара пропускается. Цены записываются на дату <b>«{translate("priceDate")}»</b> (по умолчанию сегодня), повторы пропускаются. «{translate("hideExisting")}» — показать только новые позиции.</li>
         </ol>
-        <div className={styles.notice} style={{ marginTop: 6 }}>
+        <div className={styles.notice}>
           Колонки: «sku / артикул», «name / наименование», «brand / бренд», «unit / ед. изм.», «isService / услуга», «barcodes / штрих-коды», далее по колонке на каждый тип цены.
         </div>
-      </div>
+      </HelpBox>
 
       <GroupRow className={mainStyles.GroupRowWrap}>
         <FieldFile key={`file-${fillVersion}`} name="pie_file" accept=".xls,.xlsx" disabled={isLoading || !canWrite}

@@ -71,6 +71,16 @@ export function invalidateNumberSettingsCache() {
 }
 
 /**
+ * Ключ счётчика document_sequences: вид документа + префикс. Префиксы ведут
+ * НЕЗАВИСИМЫЕ ряды («sale#РЕАЛ» vs «sale#» без префикса) — без миграции схемы
+ * (хранится в колонке docType). journalMaxForYear (фильтр по префиксу) подхватит
+ * фактический максимум ряда, поэтому смена ключа безопасна (самовосстановление).
+ */
+function sequenceKey(docType, prefix) {
+	return `${docType}#${(prefix ?? "").trim()}`;
+}
+
+/**
  * Выделяет следующий номер документа (атомарно увеличивает счётчик).
  * @returns {Promise<string|null>} номер «ПРЕФИКС-000123» или null (нет конфига).
  */
@@ -78,15 +88,17 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 	const def = NUMBER_CONFIG[docType];
 	if (!def) return null;
 	const settings = await loadSettings(client, organizationUuid);
-	// Нумерация выключена для этого вида (enabled=false) → номер НЕ присваивается:
-	// документ работает без поля «Номер» (вместо него используется ID).
-	if (settings[docType]?.enabled === false) return null;
+	// Нумерация используется для всех документов всегда: настраиваются только
+	// префикс и разрядность. Отключения нумерации нет (поле «Номер» обязательно).
 	// Префикс опционален: по умолчанию его нет, номер — только дополненный нулями
 	// счётчик («000000001»). Префикс добавляется через «-», только если задан.
 	const prefix = (settings[docType]?.prefix ?? "").trim();
 	const padding = settings[docType]?.padding || 6;
 	const year = (date ? new Date(date) : new Date()).getFullYear();
 	const org = organizationUuid || GLOBAL_SETTINGS_KEY;
+	// Префикс — ОТДЕЛЬНАЯ последовательность: «РЕАЛ-…» и «…» (без префикса) ведут
+	// РАЗНЫЕ ряды. Кодируем префикс в ключе счётчика (без миграции схемы).
+	const key = sequenceKey(docType, prefix);
 	try {
 		// Самовосстановление: счётчик не должен отставать от ручного ввода/импорта.
 		const jmax = await journalMaxForYear(docType, organizationUuid, year, prefix, client);
@@ -97,7 +109,7 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 			 ON CONFLICT ("organizationUuid","docType","year")
 			 DO UPDATE SET "lastValue" = GREATEST("document_sequences"."lastValue", $4) + 1, "updatedAt" = now()
 			 RETURNING "lastValue"`,
-			org, docType, year, jmax,
+			org, key, year, jmax,
 		);
 		const seq = String(rows[0].lastValue).padStart(padding, "0");
 		return prefix ? `${prefix}-${seq}` : seq;
@@ -128,6 +140,51 @@ const DOC_JOURNAL = {
 	purchase_requisition: { table: "purchase_requisitions" },
 	month_close: { table: "month_closes" },
 };
+
+/**
+ * Занят ли номер в серии за год другим документом (кроме excludeUuid)? Учитывает
+ * direction (ПКО/РКО — независимые ряды). Для кнопки «Присвоить номер»: если
+ * приведённый к настройкам номер уже занят (напр. после смены префикса старый
+ * «ПКО-000001» → «000001» совпал с новым «000001») — выдать следующий свободный.
+ * @returns {Promise<boolean>}
+ */
+export async function isNumberTaken(docType, number, organizationUuid, date, excludeUuid, client = prisma) {
+	const j = DOC_JOURNAL[docType];
+	const num = String(number ?? "").trim();
+	if (!j || !num) return false;
+	const year = (date ? new Date(date) : new Date()).getFullYear();
+	const params = [num];
+	let where = `"number" = $1 AND "deletedAt" IS NULL`;
+	if (j.direction) where += ` AND "direction" = '${j.direction}'`;
+	if (organizationUuid) { params.push(organizationUuid); where += ` AND "organizationUuid" = $${params.length}`; }
+	params.push(new Date(year, 0, 1)); where += ` AND "date" >= $${params.length}`;
+	params.push(new Date(year + 1, 0, 1)); where += ` AND "date" < $${params.length}`;
+	if (excludeUuid) { params.push(excludeUuid); where += ` AND "uuid" <> $${params.length}`; }
+	try {
+		const rows = await client.$queryRawUnsafe(`SELECT 1 FROM "${j.table}" WHERE ${where} LIMIT 1`, ...params);
+		return rows.length > 0;
+	} catch (err) {
+		console.error(`isNumberTaken(${docType}) error:`, err);
+		return false;
+	}
+}
+
+/**
+ * Возвращает текущий номер документа из БД по uuid (для кнопки «Присвоить номер»:
+ * если поле очищено, надо переиспользовать СВОЙ номер, а не выдать следующий).
+ * @returns {Promise<string|null>}
+ */
+export async function lookupDocumentNumber(docType, uuid, client = prisma) {
+	const j = DOC_JOURNAL[docType];
+	if (!j || !uuid) return null;
+	try {
+		const rows = await client.$queryRawUnsafe(`SELECT "number" FROM "${j.table}" WHERE "uuid" = $1`, uuid);
+		return rows?.[0]?.number ?? null;
+	} catch (err) {
+		console.error(`lookupDocumentNumber(${docType}) error:`, err);
+		return null;
+	}
+}
 
 /**
  * Максимальный ЧИСЛОВОЙ номер в журнале за КАЛЕНДАРНЫЙ ГОД (по полю date) для
@@ -188,7 +245,7 @@ export async function peekNextNumber(docType, organizationUuid, date, client = p
 	let last = 0;
 	try {
 		const row = await client.documentSequence.findUnique({
-			where: { organizationUuid_docType_year: { organizationUuid: org, docType, year } },
+			where: { organizationUuid_docType_year: { organizationUuid: org, docType: sequenceKey(docType, prefix), year } },
 			select: { lastValue: true },
 		});
 		last = row?.lastValue ?? 0;
@@ -224,11 +281,83 @@ export async function resyncSequenceAfterDelete(docType, deletedDoc, client = pr
 			 VALUES ($1,$2,$3,$4)
 			 ON CONFLICT ("organizationUuid","docType","year")
 			 DO UPDATE SET "lastValue" = $4, "updatedAt" = now()`,
-			org, docType, year, jmax,
+			org, sequenceKey(docType, prefix), year, jmax,
 		);
 	} catch (err) {
 		console.error(`resyncSequenceAfterDelete(${docType}) error:`, err);
 	}
+}
+
+/**
+ * Приводит УЖЕ присвоенный номер к текущим настройкам (префикс/разрядность),
+ * СОХРАНЯЯ числовую часть (позицию в последовательности). Напр. после смены
+ * префикса: «ПГРМ-000003» → «000003» (а НЕ следующий «000004»). Используется
+ * кнопкой «Присвоить номер» для существующего документа — чтобы переприсвоение
+ * не «перепрыгивало» вперёд по сквозному счётчику.
+ * @returns {Promise<string|null>} переформатированный номер или null (нет цифр/конфига).
+ */
+export async function reformatNumber(docType, organizationUuid, current, client = prisma) {
+	const fmt = await getNumberFormat(docType, organizationUuid, client);
+	if (!fmt) return null;
+	const m = String(current ?? "").match(/(\d+)\s*$/);
+	if (!m) return null;
+	return formatDocNumber(fmt.prefix, fmt.padding, parseInt(m[1], 10));
+}
+
+/**
+ * Перенумеровывает ТОЛЬКО черновики (posted=false) выбранного вида документа под
+ * ТЕКУЩИЕ настройки нумерации (префикс/разрядность). Числовая часть номера
+ * сохраняется (та же позиция в последовательности) — меняется лишь формат:
+ *   «000001» → «РЕАЛ-000000001» (после смены префикса/разрядности).
+ * Это гарантирует 1:1-соответствие и не создаёт коллизий; проведённые/
+ * распечатанные документы НЕ затрагиваются.
+ *
+ * @param {string} docType
+ * @param {string|null} organizationUuid  null/undefined → все организации (каждый
+ *        документ приводится к своему действующему формату: орг-настройка
+ *        или глобальная).
+ * @returns {Promise<{updated:number, skipped:number}>}
+ */
+export async function renumberDraftDocuments(docType, organizationUuid, client = prisma) {
+	const j = DOC_JOURNAL[docType];
+	if (!j) return { updated: 0, skipped: 0 };
+	const params = [];
+	let where = `"deletedAt" IS NULL AND "posted" = false`;
+	if (j.direction) where += ` AND "direction" = '${j.direction}'`;
+	if (organizationUuid) { params.push(organizationUuid); where += ` AND "organizationUuid" = $${params.length}`; }
+	let rows;
+	try {
+		rows = await client.$queryRawUnsafe(
+			`SELECT "uuid","number","date","organizationUuid" FROM "${j.table}" WHERE ${where}`,
+			...params,
+		);
+	} catch (err) {
+		console.error(`renumberDraftDocuments(${docType}) select error:`, err);
+		return { updated: 0, skipped: 0 };
+	}
+	let updated = 0, skipped = 0;
+	const fmtCache = new Map(); // orgKey → {prefix,padding}
+	for (const r of rows) {
+		const org = r.organizationUuid ?? null;
+		const cacheKey = org || GLOBAL_SETTINGS_KEY;
+		let fmt = fmtCache.get(cacheKey);
+		if (fmt === undefined) { fmt = await getNumberFormat(docType, org, client); fmtCache.set(cacheKey, fmt); }
+		if (!fmt) { skipped++; continue; }
+		// Числовая часть = завершающая группа цифр («РЕАЛ-000123» → 123, «000123» → 123).
+		const m = String(r.number ?? "").match(/(\d+)\s*$/);
+		const newNumber = m
+			? formatDocNumber(fmt.prefix, fmt.padding, parseInt(m[1], 10))
+			: await allocateNumber(docType, org, r.date, client); // номера не было — выдаём свежий
+		if (!newNumber || newNumber === r.number) { skipped++; continue; }
+		try {
+			await client.$queryRawUnsafe(`UPDATE "${j.table}" SET "number" = $1 WHERE "uuid" = $2`, newNumber, r.uuid);
+			updated++;
+		} catch (err) {
+			console.error(`renumberDraftDocuments(${docType}) update ${r.uuid} error:`, err);
+			skipped++;
+		}
+	}
+	return { updated, skipped };
 }
 
 /**

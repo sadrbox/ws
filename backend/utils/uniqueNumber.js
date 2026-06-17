@@ -19,9 +19,11 @@ export class DuplicateNumberError extends Error {
  * Бросает DuplicateNumberError, если номер уже занят в этом году (та же модель,
  * та же организация). Пустой номер — пропускается (автогенерация уникальна).
  * @param {string} modelName  prisma-модель ("sale", "cashOrder", ...)
- * @param {{number?:string, date?:Date|string, organizationUuid?:string|null, excludeUuid?:string}} args
+ * @param {{number?:string, date?:Date|string, organizationUuid?:string|null, excludeUuid?:string, extraWhere?:object}} args
+ *        extraWhere — доп. фильтр серии (напр. {direction} для cashOrder: ПКО и РКО
+ *        ведут НЕЗАВИСИМЫЕ ряды номеров в одной таблице).
  */
-export async function assertUniqueNumber(modelName, { number, date, organizationUuid = null, excludeUuid } = {}, client = prisma) {
+export async function assertUniqueNumber(modelName, { number, date, organizationUuid = null, excludeUuid, extraWhere = {} } = {}, client = prisma) {
 	const num = (number ?? "").trim();
 	if (!num) return;
 	const d = date ? new Date(date) : new Date();
@@ -34,6 +36,7 @@ export async function assertUniqueNumber(modelName, { number, date, organization
 		deletedAt: null,
 		date: { gte: yearStart, lt: yearEnd },
 		organizationUuid: organizationUuid ?? null,
+		...extraWhere,
 		...(excludeUuid ? { uuid: { not: excludeUuid } } : {}),
 	};
 	let existing = null;

@@ -29,6 +29,7 @@
 		"minWidth": "80px",
 		"alignment": "left"
 	},
+	{ "identifier": "posted", "type": "boolean", "width": "90px", "minWidth": "70px", "alignment": "center", "hint": "Документ проведён", "visible": true, "inlist": true },
 	{
 		"identifier": "period",
 		"hint": "Период выплаты (ГГГГ-ММ)",

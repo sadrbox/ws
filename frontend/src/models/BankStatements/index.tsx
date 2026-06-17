@@ -203,7 +203,6 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupRow className={styles.FormHeaderRow}>
               <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
-              <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
             </GroupRow>
             <Group>
               <FormLookup form={form} field="organization" endpoint="organizations"
@@ -298,8 +297,9 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
-    (isSavedDoc || hasBasis) ? (
+    (
       <>
+        <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
         {hasBasis && (
           <RefillFromBasisButton
             mismatch={basisMismatch.mismatch}
@@ -313,7 +313,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
         {isSavedDoc && <DocumentChainButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />}
       </>
-    ) : null,
+    ),
   );
 
   return (

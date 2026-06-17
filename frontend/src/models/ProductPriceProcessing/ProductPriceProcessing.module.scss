@@ -8,35 +8,9 @@
 }
 
 // Поясняющий блок «как пользоваться» — лёгкий info-бокс.
-.help {
-  background: #f4f8ff;
-  border: 1px solid #d6e4ff;
-  border-radius: 6px;
-  padding: 10px 14px;
-  font-size: 13px;
-  color: #2b3a4a;
-}
-
-.helpTitle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.helpSteps {
-  margin: 0;
-  padding-left: 20px;
-  line-height: 1.7;
-}
-
-.helpSteps b {
-  font-weight: 600;
-}
-
 // Подсказка про колонки файла.
 .notice {
+  margin-top: 6px;
   color: #6b7280;
   font-size: 12px;
 }

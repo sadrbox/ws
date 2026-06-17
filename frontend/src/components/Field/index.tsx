@@ -129,7 +129,10 @@ interface TypeFieldStringProps {
   placeholder?: string;
   required?: boolean;
   error?: boolean;
+  /** Явный список действий-кнопок (полностью переопределяет встроенные). */
   actions?: TypeFieldActions;
+  /** Показывать встроенную кнопку «Очистить», если `actions` не задан. По умолчанию true. */
+  clearable?: boolean;
   variant?: FieldVariant;
   autoFocus?: boolean;
   /** Максимальная длина ввода (символов). Напр. 9 для номера документа. */
@@ -199,6 +202,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   required = false,
   error = false,
   actions,
+  clearable = true,
   variant = 'default',
   autoFocus,
   maxLength,
@@ -217,9 +221,9 @@ export const Field: FC<TypeFieldStringProps> = ({
     }
   };
 
-  const defaultActions: TypeFieldActions = actions || [
-    { type: "clear", onClick: handleClear },
-  ];
+  // FieldActions опциональны: явный `actions` переопределяет; иначе встроенная
+  // «Очистить» показывается только при clearable (по умолчанию для Field — да).
+  const defaultActions: TypeFieldActions = actions ?? (clearable ? [{ type: "clear", onClick: handleClear }] : []);
 
   const visibleActions = disabled
     ? []
@@ -548,7 +552,10 @@ interface TypeFieldNumberProps {
   min?: string;
   max?: string;
   textAlign?: 'left' | 'right' | 'center';
+  /** Явный список действий-кнопок (полностью переопределяет встроенные). */
   actions?: TypeFieldActions;
+  /** Показывать встроенную кнопку «Очистить», если `actions` не задан. По умолчанию false. */
+  clearable?: boolean;
   variant?: FieldVariant;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   /** Если true — значение 0 отображается как пустое поле (пока не в фокусе) */
@@ -572,6 +579,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   max,
   textAlign = 'right',
   actions,
+  clearable = false,
   variant = 'default',
   onKeyDown,
   zeroAsEmpty = false,
@@ -705,9 +713,9 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     onKeyDown?.(e);
   }, [onKeyDown]);
 
-  const defaultActions: TypeFieldActions = actions || [
-    { type: "clear", onClick: handleClear },
-  ];
+  // FieldActions опциональны: явный `actions` переопределяет; иначе встроенная
+  // «Очистить» только при clearable (по умолчанию для FieldNumber — нет).
+  const defaultActions: TypeFieldActions = actions ?? (clearable ? [{ type: "clear", onClick: handleClear }] : []);
 
   const visibleActions = disabled
     ? []

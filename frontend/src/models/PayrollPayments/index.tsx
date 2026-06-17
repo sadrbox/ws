@@ -110,7 +110,6 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow className={styles.FormHeaderRow}>
                 <FieldDateTime label={translate("documentDate")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
                 <FieldPeriod label={translate("periodYYYYMM")} name={`${form.formUid}_period`} value={form.fields.period} onChange={e => form.setField("period", e.target.value)} disabled={form.isLoading} />
-                <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
               </GroupRow>
               <Group>
                 <FormLookup form={form} field="organization" endpoint="organizations" />
@@ -134,7 +133,12 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
-    isSavedDoc ? <DocumentEntriesButton documentType="payroll_payment" documentUuid={form.fields.uuid} /> : null,
+    (
+      <>
+        <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
+        {isSavedDoc && <DocumentEntriesButton documentType="payroll_payment" documentUuid={form.fields.uuid} />}
+      </>
+    ),
   );
 
   return (

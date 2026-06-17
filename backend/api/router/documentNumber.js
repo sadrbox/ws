@@ -11,7 +11,8 @@
  * трогается (это только предпросмотр).
  */
 import express from "express";
-import { peekNextNumber } from "../../services/documentNumbering.js";
+import { resolveDocumentNumber } from "../../services/documentNumberAssign.js";
+import { lookupDocumentNumber, isNumberTaken, peekNextNumber } from "../../services/documentNumbering.js";
 
 const router = express.Router();
 
@@ -45,8 +46,20 @@ router.get("/document-number/next", async (req, res) => {
 		// Год берём из даты документа (если передана) — превью соответствует ряду
 		// нужного года; иначе текущий год.
 		const date = req.query.date ? String(req.query.date) : null;
-		const number = await peekNextNumber(docType, organizationUuid, date);
-		// number === null → автонумерация выключена для этого вида: возвращаем пусто.
+		// ТОТ ЖЕ алгоритм, что и при сохранении (resolveDocumentNumber, preview).
+		// uuid задан (существующий документ) → подтягиваем его номер из БД как
+		// existingNumber: если поле очищено — вернём СВОЙ номер (порядок верный),
+		// а не следующий. Новый документ (без uuid, пустое поле) → следующий.
+		const current = req.query.current ? String(req.query.current).trim() : "";
+		const uuid = req.query.uuid ? String(req.query.uuid) : null;
+		const existingNumber = uuid ? await lookupDocumentNumber(docType, uuid) : null;
+		let number = await resolveDocumentNumber({ docType, organizationUuid, date, manual: current, existingNumber }, { preview: true, reformatExisting: true });
+		// Если приведённый к настройкам номер уже занят другим документом (напр. после
+		// смены префикса старый «ПКО-000001» совпал с новым «000001») — следующий свободный.
+		if (number && await isNumberTaken(docType, number, organizationUuid, date, uuid)) {
+			number = await peekNextNumber(docType, organizationUuid, date);
+		}
+		// number === null → нет конфига: возвращаем пусто.
 		return res.json({ success: true, number: number ?? "" });
 	} catch (err) {
 		console.error("GET /document-number/next error:", err);

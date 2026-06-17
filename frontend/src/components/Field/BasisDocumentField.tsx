@@ -200,7 +200,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     const valueType = basisDocumentType || activeType?.type || "";
     const typeName = nameForType(valueType, activeType);
     return (
-      <>
+      <div className={styles.BasisFieldWrapper}>
         <LookupField
           label={hasMultipleTypes ? typeSelectLabel : `${translate("basisDocument")} (${typeName})`}
           name={`${formUid}_basisDocument`}
@@ -219,7 +219,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           searchTransform={extractBasisSearch}
         />
         {note}
-      </>
+      </div>
     );
   }
 
@@ -231,7 +231,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     ? typeSelectLabel
     : `${translate("basisDocument")}${newTypeName ? ` (${newTypeName})` : ""}`;
   return (
-    <>
+    <div className={styles.BasisFieldWrapper}>
       <LookupField
         label={labelNode}
         name={`${formUid}_basisDocument`}
@@ -247,7 +247,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
         searchTransform={extractBasisSearch}
       />
       {note}
-    </>
+    </div>
   );
 };
 

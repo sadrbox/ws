@@ -11,7 +11,10 @@ import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { Field, FieldNumber } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
+import FieldActionButton from "src/components/Field/FieldActionButton";
+import { HelpBox } from "src/components/HelpBox";
 import { Button } from "src/components/Button";
+import { useAppContext } from "src/app/context";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import columnsJson from "./columns.json";
@@ -23,27 +26,26 @@ interface Row {
   defaultPrefix: string;
   prefix: string;
   padding: number;
-  enabled: boolean;
   isOverridden: boolean;
-}
-
-interface Props {
-  /** Настройки префиксов конкретной организации (иначе — общие по умолчанию). */
-  organizationUuid?: string;
-  /** Встроенный режим (внутри формы организации) — без крупного заголовка. */
-  embedded?: boolean;
 }
 
 const QKEY = (org?: string) => ["document-number-settings", org ?? "__global__"];
 
-const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
+const DocumentNumberSettings: FC = () => {
   const qc = useQueryClient();
 
-  // В самостоятельном экране можно выбрать организацию (пусто = значения по
-  // умолчанию для всех). Во встроенном режиме организация задана пропом.
+  // Организация выбирается в поле «Организация» (пусто = значения по умолчанию
+  // для всех). Без выбора правятся общесистемные значения (только суперадмин).
   const [selOrgUuid, setSelOrgUuid] = useState("");
   const [selOrgName, setSelOrgName] = useState("");
-  const orgKey = embedded ? organizationUuid : (selOrgUuid || undefined);
+  const orgKey = selOrgUuid || undefined;
+
+  // Нумерацию «по умолчанию (для всех организаций)» (orgKey пуст) может править
+  // только суперадмин — это общесистемная настройка. Настройки конкретной
+  // организации (orgKey задан) доступны обычным пользователям с правами.
+  const { auth, actions } = useAppContext();
+  const isSuperAdmin = !!auth.user?.isSuperAdmin;
+  const canEdit = isSuperAdmin || !!orgKey;
 
   const { data, isLoading, isError, refetch } = useQuery<Row[]>({
     queryKey: QKEY(orgKey),
@@ -67,9 +69,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
       const o = origByType.get((cr as unknown as Row).docType);
       if (!o) return false;
       const c = cr as unknown as Row;
-      return String(c.prefix ?? "") !== String(o.prefix ?? "")
-        || Number(c.padding) !== Number(o.padding)
-        || (c.enabled !== false) !== (o.enabled !== false);
+      return String(c.prefix ?? "") !== String(o.prefix ?? "") || Number(c.padding) !== Number(o.padding);
     }),
     [currentRows, origByType],
   );
@@ -99,7 +99,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   // key пересевает SubTable при изменении серверных данных (после сохранения/сброса),
   // т.к. initialPendingRows мержатся однократно. Редактирование (edits) key не меняет.
   const tableKey = useMemo(
-    () => `${orgKey ?? "global"}|${rows.map((r) => `${r.docType}:${r.prefix}:${r.padding}:${r.enabled !== false ? 1 : 0}:${r.isOverridden ? 1 : 0}`).join(",")}`,
+    () => `${orgKey ?? "global"}|${rows.map((r) => `${r.docType}:${r.prefix}:${r.padding}:${r.isOverridden ? 1 : 0}`).join(",")}`,
     [rows, orgKey],
   );
 
@@ -108,19 +108,15 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   // variant="table" + label="" — ячейка как единый элемент (без form-field обёрток).
   const renderCell = (row: TDataItem, col: TColumn, ctx: SubTableContext): ReactNode | undefined => {
     const r = row as unknown as Row;
-    const on = r.enabled !== false; // нумерация включена для этого вида
     switch (col.identifier) {
-      case "numberingEnabled":
-        // Чекбокс вкл/выкл нумерации. Выкл → документ без поля «Номер» (по ID).
-        return <input type="checkbox" className={styles.EnabledCheck} checked={on} title={translate("numberingEnabled")} onChange={(e) => ctx.updateLocalRow(row, { enabled: e.target.checked })} />;
       case "documentType":
         return <span className={styles.cLabel}>{r.label}</span>;
       case "prefix":
-        return <Field label="" variant="table" actions={[]} disabled={!on} name={`pfx_${r.docType}`} value={r.prefix ?? ""} onChange={(e) => ctx.updateLocalRow(row, { prefix: e.target.value })} placeholder={r.defaultPrefix || translate("optional")} />;
+        return <Field label="" variant="table" actions={[]} disabled={!canEdit} name={`pfx_${r.docType}`} value={r.prefix ?? ""} onChange={(e) => ctx.updateLocalRow(row, { prefix: e.target.value })} placeholder={r.defaultPrefix || translate("optional")} />;
       case "digitsCount":
-        return <FieldNumber label="" variant="table" disabled={!on} name={`pad_${r.docType}`} value={String(r.padding ?? 6)} onChange={(e) => ctx.updateLocalRow(row, { padding: Math.min(9, Math.max(1, Number(e.target.value) || 6)) })} />;
+        return <FieldNumber label="" variant="table" actions={[]} disabled={!canEdit} name={`pad_${r.docType}`} value={String(r.padding ?? 6)} onChange={(e) => ctx.updateLocalRow(row, { padding: Math.min(9, Math.max(1, Number(e.target.value) || 6)) })} />;
       case "exampleNumber":
-        return on ? <code>{example(r.prefix, r.padding)}</code> : <span className={styles.cDisabledHint}>{translate("numberingOffUsesId")}</span>;
+        return <code>{example(r.prefix, r.padding)}</code>;
       case "source":
         return r.isOverridden
           ? <span className={styles.BadgeOwn}>{orgKey ? translate("sourceOrg") : translate("sourceSet")}</span>
@@ -133,8 +129,8 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
   // Замыкающая колонка действий: сброс переопределения к значению по умолчанию.
   const rowActions = (row: TDataItem): ReactNode => {
     const r = row as unknown as Row;
-    return r.isOverridden
-      ? <button type="button" className={styles.ResetBtn} disabled={busy} title={translate("resetToDefault")} onClick={() => reset(r.docType)}>↺</button>
+    return r.isOverridden && canEdit
+      ? <FieldActionButton icon="restore" label={translate("resetToDefault")} disabled={busy} onClick={() => reset(r.docType)} />
       : null;
   };
 
@@ -144,7 +140,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
       for (const cr of changedRows) {
         const c = cr as unknown as Row;
         // Префикс необязателен — пустой допустим (номер без префикса).
-        await api.put(`document-number-settings/${c.docType}`, { prefix: String(c.prefix ?? "").trim(), padding: c.padding, enabled: c.enabled !== false, organizationUuid: orgKey });
+        await api.put(`document-number-settings/${c.docType}`, { prefix: String(c.prefix ?? "").trim(), padding: c.padding, enabled: true, organizationUuid: orgKey });
       }
       showToast(translate("saved"), "success");
       qc.invalidateQueries({ queryKey: QKEY(orgKey) });
@@ -171,23 +167,59 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
     }
   };
 
+  // Сбросить к значению по умолчанию ВСЮ таблицу (все переопределённые виды) —
+  // кнопка в тулбаре. Удаляет свои настройки всех видов для выбранной организации.
+  const overriddenCount = rows.filter((r) => r.isOverridden).length;
+  const resetAll = async () => {
+    if (!overriddenCount) return;
+    if (!(await actions.confirm(translate("resetAllConfirm")))) return;
+    setBusy(true);
+    try {
+      for (const r of rows) {
+        if (!r.isOverridden) continue;
+        await api.delete(`document-number-settings/${r.docType}`, { params: orgKey ? { organizationUuid: orgKey } : undefined });
+      }
+      qc.invalidateQueries({ queryKey: QKEY(orgKey) });
+      showToast(translate("resetDone"), "success");
+    } catch (e: any) {
+      showToast(e?.response?.data?.message || translate("numberingSaveError"), "error", 7000);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Перенумеровать ЧЕРНОВИКИ (posted=false) под текущие СОХРАНЁННЫЕ настройки:
+  // числовая часть номера сохраняется, меняется только формат (префикс/разрядность).
+  // Проведённые/распечатанные документы не затрагиваются. Действие необратимо.
+  const renumberDrafts = async () => {
+    if (!(await actions.confirm(translate("renumberDraftsConfirm")))) return;
+    setBusy(true);
+    try {
+      const res = await api.post<{ updated?: number }>("document-number-settings/renumber-drafts", { organizationUuid: orgKey });
+      const n = res?.updated ?? 0;
+      showToast(n > 0 ? `${translate("renumberDraftsDone")}: ${n}` : translate("renumberDraftsNone"), "success");
+    } catch (e: any) {
+      showToast(e?.response?.data?.message || translate("numberingSaveError"), "error", 7000);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className={embedded ? undefined : styles.Root}>
+    <div className={styles.Root}>
 
-      {!embedded && (
-        <div className={styles.OrgPicker}>
-          <LookupField label={translate("organization")} name="dns_org" value={selOrgUuid} displayValue={selOrgName}
-            endpoint="organizations" displayField="name"
-            placeholder={translate("numberingDefaultsForAll")}
-            onSelect={(u, d) => { setSelOrgUuid(u); setSelOrgName(d); }}
-            onClear={() => { setSelOrgUuid(""); setSelOrgName(""); }} />
-        </div>
-      )}
-
-      <div className={styles.Intro}>
-        {orgKey ? translate("numberingHintOrg") : translate("numberingHintGlobal")}
+      <div className={styles.OrgPicker}>
+        <LookupField label={translate("organization")} name="dns_org" value={selOrgUuid} displayValue={selOrgName}
+          endpoint="organizations" displayField="name"
+          placeholder={translate("numberingDefaultsForAll")}
+          onSelect={(u, d) => { setSelOrgUuid(u); setSelOrgName(d); }}
+          onClear={() => { setSelOrgUuid(""); setSelOrgName(""); }} />
       </div>
-      <div className={styles.Intro}>{translate("numberingUniqueNote")}</div>
+
+      <HelpBox footnote={translate("numberingUniqueNote")}>
+        <p>{orgKey ? translate("numberingHintOrg") : translate("numberingHintGlobal")}</p>
+      </HelpBox>
+      {!canEdit && <div className={styles.WarnNote}>{translate("numberingDefaultsSuperadminOnly")}</div>}
 
       {isLoading ? (
         <div className={styles.Loading}>{translate("loading")}</div>
@@ -201,7 +233,7 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
           <SubTable
             key={tableKey}
             model="document-number-settings"
-            componentName="DocumentNumberSettingsList"
+            componentName="DocumentNumberSettings"
             columnsJson={columnsJson as TColumn[]}
             parentKey="docType"
             parentUuid=""
@@ -212,10 +244,16 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
             defaultInlineEditing
             showEditModeToggle={false}
             selectable={false}
-            disableAdd
-            disableDelete
+            hideAddDelete
+            hideReload
             emptyMessage=""
             filterRows={filterRows}
+            extraButtons={canEdit ? (
+              <Button variant="secondary" onClick={resetAll} disabled={busy || overriddenCount === 0}
+                title={translate("resetToDefault")}>
+                {translate("resetToDefault")}
+              </Button>
+            ) : undefined}
             onAllItemsChange={setCurrentRows}
             onRefresh={() => { void refetch(); }}
             renderCell={renderCell}
@@ -225,8 +263,12 @@ const DocumentNumberSettings: FC<Props> = ({ organizationUuid, embedded }) => {
       )}
 
       <div className={styles.Footer}>
-        <Button variant="primary" onClick={save} disabled={!dirty || busy}>
+        <Button variant="primary" onClick={save} disabled={!dirty || busy || !canEdit}>
           {busy ? translate("loading") : translate("saveNumbering")}
+        </Button>
+        <Button variant="secondary" onClick={renumberDrafts} disabled={busy || dirty || !canEdit}
+          title={dirty ? translate("renumberDraftsSaveFirst") : translate("renumberDraftsHint")}>
+          {translate("renumberDrafts")}
         </Button>
         {dirty && <span className={styles.UnsavedNote}>{translate("unsavedChanges")}</span>}
       </div>

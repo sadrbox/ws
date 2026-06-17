@@ -39,6 +39,7 @@
 		"visible": true,
 		"inlist": true
 	},
+	{ "identifier": "posted", "type": "boolean", "width": "90px", "minWidth": "70px", "alignment": "center", "hint": "Документ проведён", "visible": true, "inlist": true },
 	{
 		"identifier": "comment",
 		"type": "string",

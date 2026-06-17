@@ -2,6 +2,7 @@ import React, { FC, useEffect, useMemo, useRef, useState } from "react";
 import { translate } from "src/i18";
 import { FieldDate, FieldNumber, FieldSelect, FieldFile } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
+import { HelpBox, helpMarker } from "src/components/HelpBox";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { Button } from "src/components/Button";
 import Tabs from "src/components/Tabs";
@@ -334,15 +335,14 @@ const PriceCorrectionTab: FC<{
 
   return (
     <div className={styles.tab}>
-      <div className={styles.help}>
-        <div className={styles.helpTitle}>ℹ️ Корректировка действующих цен номенклатуры</div>
-        <ol className={styles.helpSteps}>
+      <HelpBox title="ℹ️ Корректировка действующих цен номенклатуры">
+        <ol>
           <li>Условия отбора необязательны: <b>{translate("priceType")}</b>, <b>{translate("nomenclature")}</b>, <b>{translate("date")}</b>. Без фильтров загрузятся все цены; выбор номенклатуры покажет историю её цен.</li>
           <li>Нажмите <b>«{translate("fill")}»</b> — в таблицу подгрузятся существующие цены (колонка «{translate("oldPrice")}» хранит исходное значение).</li>
           <li>Измените цены вручную или массово (панель ниже): «{translate("changePercent")}», «{translate("multiplyFactor")}», «{translate("roundTo")}», «{translate("fromPriceType")}». Колонка «{translate("priceDelta")}» покажет отклонение.</li>
           <li>Выберите <b>{translate("writeMode")}</b> и нажмите <b>«{translate("writePrices")}»</b>. Перед записью покажем сводку и предупреждения.</li>
         </ol>
-      </div>
+      </HelpBox>
 
       <GroupRow className={mainStyles.GroupRowWrap}>
         <LookupField
@@ -690,19 +690,18 @@ const PriceImportTab: FC<{ canWrite: boolean }> = ({ canWrite }) => {
 
   return (
     <div className={styles.tab}>
-      <div className={styles.help}>
-        <div className={styles.helpTitle}>ℹ️ Загрузка цен из файла Excel (.xlsx, .xls)</div>
-        <ol className={styles.helpSteps}>
+      <HelpBox title="ℹ️ Загрузка цен из файла Excel (.xlsx, .xls)">
+        <ol>
           <li>Укажите <b>{translate("priceType")}</b> и <b>{translate("date")}</b> — значения по умолчанию для строк без этих колонок.</li>
           <li>Выберите файл (кнопка <b>«{translate("downloadTemplate")}»</b> — шаблон; <b>«{translate("downloadBackup")}»</b> — выгрузка всех цен для бэкапа/восстановления).</li>
           <li>Нажмите <b>«{translate("fill")}»</b> — строки попадут в таблицу, номенклатура сопоставится по артикулу / штрих-коду / наименованию.</li>
-          <li>Строки без товара помечаются <span style={{ color: "#c5221f" }}>⚠</span>. Опцией <b>«{translate("hideExisting")}»</b> можно скрыть уже существующие цены.</li>
+          <li>Строки без товара помечаются <span className={helpMarker.warn}>⚠</span>. Опцией <b>«{translate("hideExisting")}»</b> можно скрыть уже существующие цены.</li>
           <li>Нажмите <b>«{translate("upload")}»</b> — цены создадутся (повторы и строки без товара пропускаются).</li>
         </ol>
-        <div className={styles.notice} style={{ marginTop: 6 }}>
+        <div className={styles.notice}>
           Колонки файла: «sku / артикул», «barcode / штрих-код», «name / наименование», «price / цена». Необязательные: «priceType / тип цены», «date / дата» (для восстановления из бэкапа).
         </div>
-      </div>
+      </HelpBox>
 
       <GroupRow className={mainStyles.GroupRowWrap}>
         <LookupField

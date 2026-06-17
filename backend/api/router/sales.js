@@ -303,8 +303,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
 		// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
 		{
-			const _num = await ensureDocumentNumber({ docType: "sale", modelName: MODEL, manual: data.number !== undefined ? data.number : existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
-			if (_num && _num !== existing.number) data.number = _num;
+			const _num = await ensureDocumentNumber({ docType: "sale", modelName: MODEL, manual: data.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
+			if (_num) data.number = _num; // всегда фиксируем итоговый номер (в т.ч. при очистке поля)
 		}
 		// Stage D: склад/договор принадлежат организации документа (мерж с текущими).
 		await assertOrgFieldMembership({

@@ -382,8 +382,9 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
-    (isSavedDoc || hasBasis) ? (
+    (
       <>
+        <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
         {isSavedDoc && <DocumentChainButton documentType="purchase_return" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType="purchase_return" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <ShowInJournalButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} paneId={form.paneId} />}
@@ -405,7 +406,7 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
           />
         )}
       </>
-    ) : null,
+    ),
   );
 
   const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
@@ -485,11 +486,10 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow className={styles.FormHeaderRow}>
                 <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
                   actions={[
-                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date) },
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
                     { type: "clear", onClick: () => form.setField("number", "") },
                   ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
-                <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
               </GroupRow>
               <Group>
                 <FormLookup form={form} field="organization" endpoint="organizations" onSelect={handleOrganizationSelect} />

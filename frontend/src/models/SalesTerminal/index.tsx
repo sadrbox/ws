@@ -13,6 +13,7 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import LookupField from "src/components/Field/LookupField";
+import FieldActionButton from "src/components/Field/FieldActionButton";
 import { Button } from "src/components/Button";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import type { SubTableApi } from "src/components/SubTable";
@@ -292,7 +293,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
             onTotalChange={handleTableTotal}
             emptyMessage={translate("terminalEmptyHint")}
             rowActions={(row, ctx) => (
-              <button type="button" className={styles.DelBtn} onClick={() => void ctx.removeRow(row)} title={translate("delete")}>×</button>
+              <FieldActionButton icon="trash" label={translate("delete")} onClick={() => void ctx.removeRow(row)} />
             )}
           />
         </div>
