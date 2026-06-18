@@ -421,9 +421,10 @@ const App: React.FC = () => {
       } else {
         // Первый визит / пустая сессия — открываем список по умолчанию.
         // openListByRef("Sales", addPane);
-        addPane({
-          component: DocumentNumberSettings,
-        });
+        openFormByRef({ endpoint: "Sales", uuid: "213" }, addPane);
+        // addPane({
+        //   component: DocumentNumberSettings,
+        // });
       }
       restoreDoneRef.current = true;
     })();

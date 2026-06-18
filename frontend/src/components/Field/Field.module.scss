@@ -11,14 +11,16 @@
 .FieldNumber,
 .FieldSelect,
 .FieldPeriod {
+	font-family: "PT Sans", sans-serif;
 	font-size: $fontsize;
 	width: 100%;
 	border: none;
 	height: $heightFieldInput;
-	padding: 0px 0px;
+	// padding: 0px 0px;
 	margin: 1px;
 	box-sizing: content-box;
 	padding: 0px 6px;
+	text-overflow: ellipsis;
 
 	option {
 		padding: 0px;
@@ -36,22 +38,10 @@
 	}
 }
 
-.FieldString,
-.FieldNumber {
-	// padding: 0px;
-	// margin-left: 3px;
-	text-overflow: ellipsis;
-	// padding: px;
-	// padding-right: 52px; // Перенесено из инлайн-стиля
-	// border-radius: $radius2;
-	font-family: "PT Sans", sans-serif;
-	// font-size: 40px;
-	// height: $heightFieldInput;
-	// padding: 0px 6px !important;
-}
+
 
 .FieldSelect {
-	padding: 0px;
+	padding: 0px 2px;
 	// margin:0px;
 	// margin-left: 2px;
 }

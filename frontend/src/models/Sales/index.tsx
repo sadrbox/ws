@@ -599,7 +599,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   // иначе React не выполнит createPortal и кнопка не появится.
   const hasDirtyItems = (saleItems.pending?.length ?? 0) > 0;
   const handleCreateFromBasis = useCallback(async (
-    FormComponent: typeof OutgoingInvoicesForm  ,
+    FormComponent: typeof OutgoingInvoicesForm,
     docLabel: string,
     basisType: string,
     itemsEndpoint: string,
@@ -679,38 +679,43 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       id: "tab-details", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
+            {/* ── Левая колонка: поля ── */}
+            {/* Строка 1: Дата · Проведён · Статус */}
+            <GroupRow className={styles.FormHeaderRow}>
+              <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
+              <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9} placeholder={translate("autoOnSave")}
+                actions={[
+                  { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
+                  { type: "clear", onClick: () => form.setField("number", "") },
+                ]} />
+            </GroupRow>
 
-            <GroupCol>
-              {/* ── Левая колонка: поля ── */}
-              {/* Строка 1: Дата · Проведён · Статус */}
-              <GroupRow className={styles.FormHeaderRow}>
-                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
-                  actions={[
-                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
-                    { type: "clear", onClick: () => form.setField("number", "") },
-                  ]} />
-                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
-              </GroupRow>
+            <Group>
+              {/* Организация — во всю ширину */}
+              <FormLookup form={form} field="organization" endpoint="organizations" onSelect={handleOrganizationSelect} />
 
-              <Group>
-                {/* Организация — во всю ширину */}
-                <FormLookup form={form} field="organization" endpoint="organizations" onSelect={handleOrganizationSelect} />
+              <FormLookup form={form} field="warehouse" endpoint="warehouses" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+            </Group>
 
-                <FormLookup form={form} field="warehouse" endpoint="warehouses" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-              </Group>
+            <Group>
+              {/* Контрагент — во всю ширину */}
+              <FormLookup form={form} field="counterparty" endpoint="counterparties" />
+              <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect} extraParams={contractExtraParams} />
+            </Group>
 
-              <Group>
-                {/* Контрагент — во всю ширину */}
-                <FormLookup form={form} field="counterparty" endpoint="counterparties" />
-
-                <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect} extraParams={contractExtraParams} />
-
+            <GroupRow>
+              <Group className={styles.w1of2}>
                 {/* Менеджер реализации — аналитика учёта движения продаж по менеджеру (НК РК) */}
                 <FormLookup form={form} field="manager" endpoint="employees" displayField="fullName" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+              </Group>
+            </GroupRow>
+
+            <GroupRow>
+              <Group className={styles.w1of2}>
                 <FormLookup form={form} field="priceType" endpoint="price-types" />
               </Group>
+            </GroupRow>
 
-            </GroupCol>
             <GroupCol>
               <BasisDocumentField
                 allowedTypes={[
@@ -731,17 +736,19 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 hint={getDocumentFillHint("sale", form.fields as unknown as Record<string, unknown>)}
               />
             </GroupCol>
-            <Group>
-              <DocumentTotals
-                amount={form.fields.amount}
-                vatAmount={form.fields.vatAmount}
-                discountAmount={form.fields.discountAmount}
-                amountWithoutVat={form.fields.amountWithoutVat}
-                isVatEnabled={isVatEnabled}
-                useDiscount={useDiscount}
-              />
-            </Group>
+
           </div>
+
+          <Group>
+            <DocumentTotals
+              amount={form.fields.amount}
+              vatAmount={form.fields.vatAmount}
+              discountAmount={form.fields.discountAmount}
+              amountWithoutVat={form.fields.amountWithoutVat}
+              isVatEnabled={isVatEnabled}
+              useDiscount={useDiscount}
+            />
+          </Group>
           {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
             <GroupRow className={styles.FormHeaderRow}>
               <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />

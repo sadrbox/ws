@@ -2,6 +2,9 @@
 // @import url("https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap");
 // @import url("https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,100..900;1,100..900&display=swap");
 // Глобальный класс размытия фона (добавляется на Screen при открытии модального окна)
+@import "./adaptivity.scss";
+
+
 :focus-visible {
 	outline: none;
 }
@@ -1246,7 +1249,8 @@ body {
 	// max-width: 600px;
 }
 
-.FormWrapper {
+.FormWrapper,
+.FormWrapperInline {
 	// container: form-wrapper / inline-size;
 	container-type: size;
 	display: flex;
@@ -1261,68 +1265,14 @@ body {
 .Form {
 	display: flex;
 	// flex-direction: column;
-	gap: 12px;
 	padding: 0;
+	// padding-top: 12px;
+	gap: 12px;
 	max-width: 600px;
 	flex: 1;
 
 }
 
-@media (max-width: 500px) {
-	.ReportPane {
-		flex-direction: column;
-	}
-
-	.FormWrapper {
-		flex-direction: column;
-
-		.Form {
-			flex-direction: column;
-
-			.Group {
-				flex-direction: column;
-			}
-		}
-	}
-}
-
-@media (min-width: 501px) and (max-width: 600px) {
-	.FormWrapper {
-		flex-direction: column;
-
-		.Form {
-			flex-direction: column;
-		}
-	}
-}
-
-@media (min-width: 601px) and (max-width: 900px) {
-	.FormWrapper {
-		flex-direction: column;
-
-		.Form {
-			flex-direction: column;
-		}
-	}
-
-	.Group {
-		flex-direction: row;
-	}
-}
-
-@media (min-width: 901px) {
-	.FormWrapper {
-		flex-direction: column;
-
-		.Form {
-			flex-direction: column;
-		}
-	}
-
-	.Group {
-		flex-direction: row;
-	}
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Утилиты разметки форм — замена повторяющихся inline-стилей.

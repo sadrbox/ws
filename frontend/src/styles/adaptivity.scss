@@ -1,0 +1,147 @@
+@function col-width($count, $gap: 0px) {
+  @return calc((100% - (#{$count - 1} * #{$gap})) / #{$count});
+}
+
+@media (max-width: 500px) {
+  .ReportPane {
+    flex-direction: column;
+  }
+
+  .FormWrapper {
+    flex-direction: column;
+
+    .Form {
+      flex-direction: column;
+
+      .Group {
+        flex-direction: column;
+      }
+    }
+  }
+
+  .w1of1 {
+    width: col-width(1, 6px);
+  }
+
+  .w1of2 {
+    width: col-width(1, 6px);
+  }
+
+  .w1of3 {
+    width: col-width(1, 6px);
+  }
+
+  .w1of4 {
+    width: col-width(1, 6px);
+  }
+}
+
+@media (min-width: 501px) and (max-width: 600px) {
+  .FormWrapper {
+    flex-direction: column;
+
+    .Offset {
+      display: none;
+      flex: 1;
+    }
+
+    .Form {
+      flex-direction: column;
+    }
+  }
+
+  .w1of1 {
+    width: col-width(1, 6px);
+  }
+
+  .w1of2 {
+    width: col-width(2, 6px);
+  }
+
+  .w1of3 {
+    width: col-width(3, 6px);
+  }
+
+  .w1of4 {
+    width: col-width(4, 6px);
+  }
+}
+
+@media (min-width: 601px) and (max-width: 900px) {
+  .FormWrapper {
+    flex-direction: column;
+
+    .Form {
+      flex-direction: column;
+    }
+  }
+
+  .Group {
+    flex-direction: row;
+  }
+
+  .w1of1 {
+    width: col-width(1, 6px);
+  }
+
+  .w1of2 {
+    width: col-width(2, 6px);
+  }
+
+  .w1of3 {
+    width: col-width(3, 6px);
+  }
+
+  .w1of4 {
+    width: col-width(4, 6px);
+  }
+}
+
+@media (min-width: 901px) {
+  .FormWrapper {
+    flex-direction: column;
+
+    .Form {
+      flex-direction: column;
+    }
+  }
+
+  .Group {
+    flex-direction: row;
+  }
+
+  .w1of1 {
+    width: col-width(1, 6px);
+  }
+
+  .w1of2 {
+    width: col-width(2, 6px);
+  }
+
+  .w1of3 {
+    width: col-width(3, 6px);
+  }
+
+  .w1of4 {
+    width: col-width(4, 6px);
+  }
+
+}
+
+
+
+// .w1of1 {
+//   width: col-width(1, 6px);
+// }
+
+// .w1of2 {
+//   width: col-width(2, 6px);
+// }
+
+// .w1of3 {
+//   width: col-width(3, 6px);
+// }
+
+// .w1of4 {
+//   width: col-width(4, 6px);
+// }
