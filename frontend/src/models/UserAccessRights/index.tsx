@@ -7,7 +7,7 @@ import type { TPane } from "src/app/types";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
 import { FieldSelect } from "src/components/Field";
-import { GroupCol } from "src/components/UI";
+import { Group, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import ModelList from "src/components/ModelList";
@@ -134,22 +134,12 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <FieldSelect
-                label={translate("model")}
-                name={`${form.formUid}_modelName`}
-                options={MODEL_NAME_OPTIONS}
-                value={form.fields.modelName}
-                onChange={e => form.setField("modelName", e.target.value)}
-                disabled={form.isLoading || form.isEditMode}
-              />
-              <FieldSelect
-                label={translate("accessLevel")}
-                name={`${form.formUid}_accessLevel`}
-                options={ACCESS_LEVEL_OPTIONS}
-                value={form.fields.accessLevel}
-                onChange={e => form.setField("accessLevel", e.target.value)}
-                disabled={form.isLoading}
-              />
+              <Group>
+                <FieldSelect label={translate("model")} name={`${form.formUid}_modelName`} options={MODEL_NAME_OPTIONS}
+                  value={form.fields.modelName} onChange={e => form.setField("modelName", e.target.value)} disabled={form.isLoading || form.isEditMode} />
+                <FieldSelect label={translate("accessLevel")} name={`${form.formUid}_accessLevel`} options={ACCESS_LEVEL_OPTIONS}
+                  value={form.fields.accessLevel} onChange={e => form.setField("accessLevel", e.target.value)} disabled={form.isLoading} />
+              </Group>
             </GroupCol>
           </div>
         </div>

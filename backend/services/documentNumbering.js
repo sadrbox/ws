@@ -1,11 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Нумерация документов. Человекочитаемый номер вида «<ПРЕФИКС>-<NNNNNN>» со
-// сквозным счётчиком по организации + виду документа + году (сброс с начала
-// года). Номер можно задать вручную в payload (тогда автогенерация не нужна) —
-// напр. при импорте из старой системы.
+// Нумерация документов. Человекочитаемый номер вида «<ПРЕФИКС>-<N>» (без ведущих
+// нулей) по организации + виду документа + году (сброс с начала года).
 //
-// Префиксы видов документов заданы в коде (NUMBER_CONFIG) — отдельного UI
-// настроек не требуется.
+// ИСТОЧНИК ИСТИНЫ — ФАКТИЧЕСКИЕ номера в журнале: следующий номер = max(числовых
+// частей существующих номеров ряда за год) + 1. Никакого отдельного хранимого
+// счётчика — поэтому удаление документов и ручная правка номеров СРАЗУ влияют на
+// следующий номер (нет «дрейфа» счётчика выше реального максимума). Уникальность
+// в пределах года гарантирует assertUniqueNumber (см. documentNumberAssign.js).
+//
+// Номер можно задать вручную в payload (тогда автогенерация не нужна). Префиксы
+// видов документов заданы в коде (NUMBER_CONFIG) + переопределение в настройках.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
 
@@ -71,48 +75,22 @@ export function invalidateNumberSettingsCache() {
 }
 
 /**
- * Ключ счётчика document_sequences: вид документа + префикс. Префиксы ведут
- * НЕЗАВИСИМЫЕ ряды («sale#РЕАЛ» vs «sale#» без префикса) — без миграции схемы
- * (хранится в колонке docType). journalMaxForYear (фильтр по префиксу) подхватит
- * фактический максимум ряда, поэтому смена ключа безопасна (самовосстановление).
- */
-function sequenceKey(docType, prefix) {
-	return `${docType}#${(prefix ?? "").trim()}`;
-}
-
-/**
- * Выделяет следующий номер документа (атомарно увеличивает счётчик).
- * @returns {Promise<string|null>} номер «ПРЕФИКС-000123» или null (нет конфига).
+ * Следующий номер документа = max(числовых частей ФАКТИЧЕСКИХ номеров ряда за
+ * год) + 1. Источник истины — журнал (а не отдельный счётчик): удаление и ручная
+ * правка номеров сразу учитываются. Префикс ведёт ОТДЕЛЬНЫЙ ряд (journalMaxForYear
+ * фильтрует по префиксу). Гонки безопасны: уникальность номера проверяет
+ * assertUniqueNumber при записи (ensureDocumentNumber).
+ * @returns {Promise<string|null>} номер «ПРЕФИКС-123» или null (нет конфига).
  */
 export async function allocateNumber(docType, organizationUuid, date, client = prisma) {
 	const def = NUMBER_CONFIG[docType];
 	if (!def) return null;
 	const settings = await loadSettings(client, organizationUuid);
-	// Нумерация используется для всех документов всегда: настраиваются только
-	// префикс и разрядность. Отключения нумерации нет (поле «Номер» обязательно).
-	// Префикс опционален: по умолчанию его нет, номер — только дополненный нулями
-	// счётчик («000000001»). Префикс добавляется через «-», только если задан.
 	const prefix = (settings[docType]?.prefix ?? "").trim();
 	const year = (date ? new Date(date) : new Date()).getFullYear();
-	const org = organizationUuid || GLOBAL_SETTINGS_KEY;
-	// Префикс — ОТДЕЛЬНАЯ последовательность: «РЕАЛ-…» и «…» (без префикса) ведут
-	// РАЗНЫЕ ряды. Кодируем префикс в ключе счётчика (без миграции схемы).
-	const key = sequenceKey(docType, prefix);
 	try {
-		// Самовосстановление: счётчик не должен отставать от ручного ввода/импорта.
 		const jmax = await journalMaxForYear(docType, organizationUuid, year, prefix, client);
-		// Атомарно одним SQL: lastValue = GREATEST(текущий, journalMax) + 1 (без гонок).
-		const rows = await client.$queryRawUnsafe(
-			`INSERT INTO "document_sequences" ("organizationUuid","docType","year","lastValue")
-			 VALUES ($1,$2,$3,$4 + 1)
-			 ON CONFLICT ("organizationUuid","docType","year")
-			 DO UPDATE SET "lastValue" = GREATEST("document_sequences"."lastValue", $4) + 1, "updatedAt" = now()
-			 RETURNING "lastValue"`,
-			org, key, year, jmax,
-		);
-		// ХРАНЕНИЕ и ОТОБРАЖЕНИЕ без ведущих нулей: числовая часть как есть.
-		const seq = String(rows[0].lastValue);
-		return prefix ? `${prefix}-${seq}` : seq;
+		return formatDocNumber(prefix, jmax + 1);
 	} catch (err) {
 		console.error(`allocateNumber(${docType}) error:`, err);
 		return null;
@@ -226,66 +204,21 @@ export async function journalMaxForYear(docType, organizationUuid, year, prefix,
 }
 
 /**
- * Предпросмотр следующего номера БЕЗ изменения счётчика (для кнопки «Присвоить
- * номер»). Использует ТОТ ЖЕ источник, что и allocateNumber: max(счётчик,
- * максимум журнала за год) + 1 — поэтому превью совпадает с тем, что реально
- * присвоится при сохранении.
- * @returns {Promise<string|null>} номер или null (нет конфига/нумерация выключена).
+ * Предпросмотр следующего номера (для кнопки «Присвоить номер»). Тот же источник,
+ * что и allocateNumber: max(числовых частей фактических номеров за год) + 1.
+ * Поэтому превью всегда совпадает с тем, что реально присвоится при сохранении.
+ * @returns {Promise<string|null>} номер или null (нет конфига).
  */
 export async function peekNextNumber(docType, organizationUuid, date, client = prisma) {
 	const def = NUMBER_CONFIG[docType];
 	if (!def) return null;
 	const settings = await loadSettings(client, organizationUuid);
-	// ВАЖНО: enabled здесь НЕ проверяем. enabled управляет АВТОприсвоением при
-	// сохранении (allocateNumber), а кнопка «Присвоить номер» — явное действие
-	// пользователя: предлагаем следующий номер даже при выключенной автонумерации.
+	// ВАЖНО: enabled здесь НЕ проверяем — кнопка «Присвоить номер» это явное
+	// действие пользователя (даём номер даже при выключенной автонумерации).
 	const prefix = (settings[docType]?.prefix ?? "").trim();
 	const year = (date ? new Date(date) : new Date()).getFullYear();
-	const org = organizationUuid || GLOBAL_SETTINGS_KEY;
-	let last = 0;
-	try {
-		const row = await client.documentSequence.findUnique({
-			where: { organizationUuid_docType_year: { organizationUuid: org, docType: sequenceKey(docType, prefix), year } },
-			select: { lastValue: true },
-		});
-		last = row?.lastValue ?? 0;
-	} catch { /* нет строки/таблицы — стартуем с максимума журнала */ }
 	const jmax = await journalMaxForYear(docType, organizationUuid, year, prefix, client);
-	return formatDocNumber(prefix, Math.max(last, jmax) + 1);
-}
-
-/**
- * Откатывает счётчик последовательности к фактическому максимуму ОСТАВШИХСЯ
- * документов за год — вызывать ПОСЛЕ удаления документа. Освобождает номер
- * удалённого «верхнего» документа: следующий номер переиспользует его, счётчик
- * не уходит вперёд. (Удаление документа из середины ряда оставляет пропуск —
- * это неизбежно; переиспользуется только освободившийся максимум.)
- *
- * @param {string} docType   вид удалённого документа
- * @param {{organizationUuid?:string|null, date?:Date|string|null, number?:string|null}} deletedDoc
- */
-export async function resyncSequenceAfterDelete(docType, deletedDoc, client = prisma) {
-	if (!NUMBER_CONFIG[docType] || !deletedDoc) return;
-	// У документа не было номера — освобождать нечего.
-	if (!String(deletedDoc.number ?? "").trim()) return;
-	const settings = await loadSettings(client, deletedDoc.organizationUuid ?? null);
-	const prefix = (settings[docType]?.prefix ?? "").trim();
-	const year = (deletedDoc.date ? new Date(deletedDoc.date) : new Date()).getFullYear();
-	const org = deletedDoc.organizationUuid || GLOBAL_SETTINGS_KEY;
-	try {
-		// Максимум среди ОСТАВШИХСЯ (удалённый документ уже физически удалён).
-		const jmax = await journalMaxForYear(docType, deletedDoc.organizationUuid ?? null, year, prefix, client);
-		// Счётчик = текущий максимум журнала → следующий allocate даст jmax+1.
-		await client.$queryRawUnsafe(
-			`INSERT INTO "document_sequences" ("organizationUuid","docType","year","lastValue")
-			 VALUES ($1,$2,$3,$4)
-			 ON CONFLICT ("organizationUuid","docType","year")
-			 DO UPDATE SET "lastValue" = $4, "updatedAt" = now()`,
-			org, sequenceKey(docType, prefix), year, jmax,
-		);
-	} catch (err) {
-		console.error(`resyncSequenceAfterDelete(${docType}) error:`, err);
-	}
+	return formatDocNumber(prefix, jmax + 1);
 }
 
 /**

@@ -434,16 +434,45 @@ const Table: FC<TableProps> = memo((props) => {
     });
   }, [onSelectItem, rows]);
 
-  // Прокрутка к активной строке при изменении activeRow
-  useEffect(() => {
-    if (activeRow === null || !scrollRef.current) return;
-    const el = scrollRef.current.querySelector<HTMLElement>('[data-active="true"]');
-    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [activeRow]);
+  // Центрирование активной строки по вертикали скролла таблицы. Ждём, пока
+  // контейнер реально виден (clientHeight>0) — иначе при открытии из СКРЫТОЙ
+  // (неактивной) панели scroll не применился бы. Несколько кадров попыток.
+  const centerActiveRow = useCallback(() => {
+    let tries = 0;
+    const tick = () => {
+      const c = scrollRef.current;
+      const el = c?.querySelector<HTMLElement>('[data-active="true"]');
+      if (c && el && c.clientHeight > 0 && el.clientHeight > 0) {
+        const cRect = c.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+        const delta = (eRect.top - cRect.top) - (c.clientHeight - el.clientHeight) / 2;
+        c.scrollTo({ top: Math.max(0, c.scrollTop + delta), behavior: 'smooth' });
+        return;
+      }
+      if (tries++ < 30) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, []);
 
-  // Подсветка + ЦЕНТРИРОВАНИЕ строки документа по uuid («Показать в журнале»):
-  // ставим activeRow и скроллим строку в центр. Если строки ещё нет (пагинация) —
-  // догружаем следующие страницы, пока не найдём (с разумным лимитом попыток).
+  // Прокрутка к активной строке при изменении activeRow.
+  //  • обычная навигация (стрелки) — минимальный сдвиг (block: nearest);
+  //  • подсветка (highlight) — ЦЕНТРИРОВАНИЕ (флаг centerNextScrollRef).
+  const centerNextScrollRef = useRef(false);
+  useEffect(() => {
+    const c = scrollRef.current;
+    if (activeRow === null || !c) return;
+    if (centerNextScrollRef.current) {
+      centerNextScrollRef.current = false;
+      centerActiveRow();
+      return;
+    }
+    const el = c.querySelector<HTMLElement>('[data-active="true"]');
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [activeRow, centerActiveRow]);
+
+  // Подсветка строки документа по uuid («Показать в списке» / после «Сохранить
+  // и закрыть»): ВСЕГДА выставляем activeRow на найденную строку и центрируем.
+  // Если строки ещё нет (пагинация) — догружаем страницы, пока не найдём.
   const highlightDoneRef = useRef(false);
   const highlightTriesRef = useRef(0);
   useEffect(() => { highlightDoneRef.current = false; highlightTriesRef.current = 0; }, [highlightUuid]);
@@ -452,11 +481,13 @@ const Table: FC<TableProps> = memo((props) => {
     const row = rows.find(r => r.uuid === highlightUuid);
     if (row) {
       highlightDoneRef.current = true;
-      setActiveRow(row.id);
-      requestAnimationFrame(() => {
-        scrollRef.current?.querySelector<HTMLElement>('[data-active="true"]')
-          ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      });
+      if (activeRowRef.current === row.id) {
+        // Строка уже активна (setActiveRow не вызовет ре-рендер) — центрируем явно.
+        centerActiveRow();
+      } else {
+        centerNextScrollRef.current = true; // отцентрировать после установки activeRow
+        setActiveRow(row.id);
+      }
     } else if (hasNextPage && !isFetchingNextPage && highlightTriesRef.current < 50) {
       highlightTriesRef.current += 1;
       actions.fetchNextPage?.();

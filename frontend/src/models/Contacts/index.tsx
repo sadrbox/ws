@@ -6,7 +6,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldSelect } from "src/components/Field";
-import { GroupCol } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import { useAppContext } from "src/app";
@@ -113,15 +113,21 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label={`${translate("value")}`} name={`${form.formUid}_value`} minWidth={FIELD_WIDTH.lg} value={form.fields.value} onChange={e => form.setField("value", e.target.value)} disabled={form.isLoading} />
-              <FieldSelect
-                label={`${translate("contactType")}`} name={`${form.formUid}_contactType`}
-                value={form.fields.contactType}
-                options={CONTACT_TYPE_OPTIONS}
-                onChange={e => form.setField("contactType", e.target.value)}
-                disabled={form.isLoading}
-                required
-              />
+              <Group>
+                <Field label={`${translate("value")}`} name={`${form.formUid}_value`} minWidth={FIELD_WIDTH.lg} value={form.fields.value} onChange={e => form.setField("value", e.target.value)} disabled={form.isLoading} />
+              </Group>
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  <FieldSelect
+                    label={`${translate("contactType")}`} name={`${form.formUid}_contactType`}
+                    value={form.fields.contactType}
+                    options={CONTACT_TYPE_OPTIONS}
+                    onChange={e => form.setField("contactType", e.target.value)}
+                    disabled={form.isLoading}
+                    required
+                  />
+                </Group>
+              </GroupRow>
               <OwnerLookupField
                 ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
                 name={`${form.formUid}_owner`}

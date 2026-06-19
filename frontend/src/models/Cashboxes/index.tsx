@@ -7,7 +7,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
-import { GroupCol } from "src/components/UI";
+import { Group, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
@@ -61,8 +61,10 @@ const CashboxesForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
-              <FormLookup form={form} field="organization" endpoint="organizations" minWidth={FIELD_WIDTH.lg} />
+              <Group>
+                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+                <FormLookup form={form} field="organization" endpoint="organizations" minWidth={FIELD_WIDTH.lg} />
+              </Group>
             </GroupCol>
           </div>
         </div>

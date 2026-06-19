@@ -5,7 +5,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldSelect } from "src/components/Field";
-import { GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
@@ -70,49 +70,23 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
       component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            <GroupRow>
-              <Field
-                label={translate("name")}
-                name={`${form.formUid}_name`}
-                minWidth="280px"
-                value={form.fields.name}
-                onChange={(e) => form.setField("name", e.target.value)}
-                disabled={form.isLoading}
-              />
-              <Field
-                label={translate("code")}
-                name={`${form.formUid}_code`}
-                minWidth="160px"
-                value={form.fields.code}
-                onChange={(e) => form.setField("code", e.target.value)}
-                disabled={form.isLoading}
-              />
-              <Field
-                label={translate("rate")}
-                name={`${form.formUid}_rate`}
-                minWidth="150px"
-                value={form.fields.rate}
-                onChange={(e) => form.setField("rate", e.target.value)}
-                disabled={form.isLoading}
-              />
-              <FieldSelect
-                label={translate("taxMethod")}
-                name={`${form.formUid}_method`}
-                value={form.fields.calculationMethod}
-                options={[
-                  { value: "INCLUDED", label: "В сумме (в т.ч.)" },
-                  { value: "ADDED", label: "Сверху (начисляется к стоимости)" },
-                ]}
-                onChange={(e) =>
-                  form.setField(
-                    "calculationMethod",
-                    e.target.value === "ADDED" ? "ADDED" : "INCLUDED",
-                  )
-                }
-                disabled={form.isLoading || !canWrite}
-                style={{ minWidth: 240 }}
-              />
-            </GroupRow>
+            <GroupCol>
+              <Group>
+                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="280px" value={form.fields.name} onChange={(e) => form.setField("name", e.target.value)} disabled={form.isLoading} />
+              </Group>
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  <Field label={translate("code")} name={`${form.formUid}_code`} minWidth="160px" value={form.fields.code} onChange={(e) => form.setField("code", e.target.value)} disabled={form.isLoading} />
+                  <Field label={translate("rate")} name={`${form.formUid}_rate`} minWidth="150px" value={form.fields.rate} onChange={(e) => form.setField("rate", e.target.value)} disabled={form.isLoading} />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <FieldSelect label={translate("taxMethod")} name={`${form.formUid}_method`} value={form.fields.calculationMethod}
+                    options={[{ value: "INCLUDED", label: "В сумме (в т.ч.)" }, { value: "ADDED", label: "Сверху (начисляется к стоимости)" }]}
+                    onChange={(e) => form.setField("calculationMethod", e.target.value === "ADDED" ? "ADDED" : "INCLUDED")}
+                    disabled={form.isLoading || !canWrite} style={{ minWidth: 240 }} />
+                </Group>
+              </GroupRow>
+            </GroupCol>
           </div>
         </div>
       ),

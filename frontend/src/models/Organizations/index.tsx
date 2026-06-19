@@ -7,7 +7,7 @@ import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { Field } from "src/components/Field";
-import { GroupCol } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { BankAccountsTable } from "../BankAccounts";
 import { ContractsTable } from "../Contracts";
@@ -133,9 +133,17 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} onBlur={e => { if (!form.isEditMode && !form.fields.legalName && e.target.value) form.setField("legalName", e.target.value); }} disabled={form.isLoading} />
-                <Field label={translate("legalName")} name={`${form.formUid}_legalName`} value={form.fields.legalName} onChange={e => form.setField("legalName", e.target.value)} disabled={form.isLoading} />
-                <Field label={translate("binIin")} name={`${form.formUid}_bin`} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading} required />
+                <Group>
+                  <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} onBlur={e => { if (!form.isEditMode && !form.fields.legalName && e.target.value) form.setField("legalName", e.target.value); }} disabled={form.isLoading} />
+                </Group>
+                <Group>
+                  <Field label={translate("legalName")} name={`${form.formUid}_legalName`} value={form.fields.legalName} onChange={e => form.setField("legalName", e.target.value)} disabled={form.isLoading} />
+                </Group>
+                <GroupRow>
+                  <Group className={styles.w1of2}>
+                    <Field label={translate("binIin")} name={`${form.formUid}_bin`} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading} required />
+                  </Group>
+                </GroupRow>
               </GroupCol>
             </div>
           </div>

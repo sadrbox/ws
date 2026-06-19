@@ -391,6 +391,12 @@ export async function getActiveRecords(
 			if (va == null && vb == null) return 0;
 			if (va == null) return 1;
 			if (vb == null) return -1;
+			if (typeof va === "string" && typeof vb === "string") {
+				return va.localeCompare(vb, undefined, {
+					numeric: true,
+					sensitivity: "base",
+				}) * dir;
+			}
 			if (va < vb) return -dir;
 			if (va > vb) return dir;
 			return 0;

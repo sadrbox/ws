@@ -1,6 +1,6 @@
 // 1. React
-import { FC, ComponentType, useMemo, useCallback, useState } from "react";
-import { consumePendingHighlight } from "src/utils/listHighlight";
+import { FC, ComponentType, useMemo, useCallback, useState, useEffect } from "react";
+import { consumePendingHighlight, subscribeHighlight } from "src/utils/listHighlight";
 import type { ReactNode } from "react";
 
 // 2. Контекст приложения
@@ -133,9 +133,16 @@ const ModelList: FC<ModelListProps> = ({
 
   const { addPane } = useAppContext().windows;
 
-  // Забираем «подсветить документ» (если список открыт из формы кнопкой
-  // «Показать в журнале»). Одноразово — только при монтировании этого списка.
-  const [highlightUuid] = useState(() => (isPartOf ? undefined : consumePendingHighlight(endpoint)));
+  // Подсветка строки документа («Показать в списке» / после «Сохранить и закрыть»):
+  // при монтировании забираем отложенное значение, а пока список открыт —
+  // подписываемся, чтобы переносить activeRow и для УЖЕ открытого Pane.
+  const [highlightUuid, setHighlightUuid] = useState<string | undefined>(
+    () => (isPartOf ? undefined : consumePendingHighlight(endpoint)),
+  );
+  useEffect(() => {
+    if (isPartOf) return;
+    return subscribeHighlight(endpoint, (uuid) => setHighlightUuid(uuid));
+  }, [isPartOf, endpoint]);
 
   const ownerFilter = useMemo(() => {
     const f: Record<string, { value: unknown; operator: string }> = {};

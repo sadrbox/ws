@@ -113,12 +113,20 @@ const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.Form}>
           <GroupCol>
             <GroupRow>
-              <Field label={translate("code")} name={`${form.formUid}_code`} value={form.fields.code} onChange={e => form.setField("code", e.target.value)} disabled={form.isLoading} width="120px" />
-              <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} minWidth="320px" />
+              <Group className={styles.w1of2}>
+                <Field label={translate("code")} name={`${form.formUid}_code`} value={form.fields.code} onChange={e => form.setField("code", e.target.value)} disabled={form.isLoading} width="120px" />
+              </Group>
+              <Group className={styles.w1of2}>
+                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} minWidth="320px" />
+              </Group>
             </GroupRow>
             <GroupRow>
-              <FieldSelect label={translate("accountType")} name={`${form.formUid}_accountType`} options={accountTypeOptions} value={form.fields.accountType} onChange={e => form.setField("accountType", e.target.value)} disabled={form.isLoading} />
-              <FormLookup form={form} field="parent" endpoint="chart-of-accounts" label="parentAccount" />
+              <Group className={styles.w1of2}>
+                <FieldSelect label={translate("accountType")} name={`${form.formUid}_accountType`} options={accountTypeOptions} value={form.fields.accountType} onChange={e => form.setField("accountType", e.target.value)} disabled={form.isLoading} />
+              </Group>
+              <Group className={styles.w1of2}>
+                <FormLookup form={form} field="parent" endpoint="chart-of-accounts" label="parentAccount" />
+              </Group>
             </GroupRow>
             <Group>
               <FieldSelect label={translate("subkonto1")} name={`${form.formUid}_sub1`} options={subkontoOptions} value={form.fields.subkonto1Type} onChange={e => form.setField("subkonto1Type", e.target.value)} disabled={form.isLoading} />

@@ -7,7 +7,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldTextarea } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
-import { GroupCol } from "src/components/UI";
+import { Group, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
@@ -47,10 +47,16 @@ const WarehousesForm: FC<Partial<TPane>> = (paneProps) => {
       <div className={styles.FormWrapper}>
         <div className={styles.Form}>
           <GroupCol>
-            <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
-            <Field label={translate("address")} name={`${form.formUid}_address`} value={form.fields.address} onChange={e => form.setField("address", e.target.value)} disabled={form.isLoading} />
-            <FormLookup form={form} field="organization" endpoint="organizations" minWidth={FIELD_WIDTH.lg} />
-            <FieldTextarea label={translate("description")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} minWidth={FIELD_WIDTH.lg} minHeight="80px" rows={4} />
+            <Group>
+              <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("address")} name={`${form.formUid}_address`} value={form.fields.address} onChange={e => form.setField("address", e.target.value)} disabled={form.isLoading} />
+            </Group>
+            <Group>
+              <FormLookup form={form} field="organization" endpoint="organizations" minWidth={FIELD_WIDTH.lg} />
+            </Group>
+            <Group>
+              <FieldTextarea label={translate("description")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} minWidth={FIELD_WIDTH.lg} minHeight="80px" rows={4} />
+            </Group>
           </GroupCol>
         </div>
       </div>

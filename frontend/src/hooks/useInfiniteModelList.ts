@@ -258,13 +258,20 @@ export function useInfiniteModelList<TData = unknown>({
 								if (currentParams.search) {
 									items = await searchRecords(model, currentParams.search);
 									total = items.length;
-									items.sort((a: any, b: any) => {
-										const va = a[sortField],
-											vb = b[sortField];
-										if (va == null && vb == null) return 0;
-										if (va == null) return 1;
-										if (vb == null) return -1;
-										return sortDir === "desc"
+								items.sort((a: any, b: any) => {
+									const va = a[sortField],
+										vb = b[sortField];
+									if (va == null && vb == null) return 0;
+									if (va == null) return 1;
+									if (vb == null) return -1;
+									if (typeof va === "string" && typeof vb === "string") {
+										const comparison = va.localeCompare(vb, undefined, {
+											numeric: true,
+											sensitivity: "base",
+										});
+										return sortDir === "desc" ? -comparison : comparison;
+									}
+									return sortDir === "desc"
 											? vb > va
 												? 1
 												: -1

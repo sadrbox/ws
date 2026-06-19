@@ -5,7 +5,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import { getFormatDate } from "src/utils/datetime";
 import styles from "src/styles/main.module.scss";
 
@@ -85,24 +85,28 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow>
-                <Field label={translate("actionType")} name={`${form.formUid}_actionType`} minWidth="200px" value={form.fields.actionType} disabled />
-                <Field label={translate("actionDate")} name={`${form.formUid}_actionDate`} minWidth="200px" value={getFormatDate(form.fields.actionDate)} disabled />
+                <Group className={styles.w1of2}>
+                  <Field label={translate("actionType")} name={`${form.formUid}_actionType`} minWidth="200px" value={form.fields.actionType} disabled />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <Field label={translate("actionDate")} name={`${form.formUid}_actionDate`} minWidth="200px" value={getFormatDate(form.fields.actionDate)} disabled />
+                </Group>
               </GroupRow>
-              <GroupRow>
+              <Group>
                 <Field label={translate("objectType")} name={`${form.formUid}_objectType`} minWidth="200px" value={form.fields.objectType} disabled />
                 <Field label={translate("objectName")} name={`${form.formUid}_objectName`} minWidth="200px" value={form.fields.objectName} disabled />
                 <Field label={translate("objectId")} name={`${form.formUid}_objectId`} minWidth="120px" value={form.fields.objectId} disabled />
-              </GroupRow>
-              <GroupRow>
+              </Group>
+              <Group>
                 <Field label={translate("organization")} name={`${form.formUid}_organizationShortName`} minWidth="200px" value={form.fields.organizationShortName} disabled />
                 <Field label={translate("bin")} name={`${form.formUid}_bin`} minWidth="150px" value={form.fields.bin} disabled />
-              </GroupRow>
-              <GroupRow>
+              </Group>
+              <Group>
                 <Field label={translate("user")} name={`${form.formUid}_userName`} minWidth="200px" value={form.fields.userName} disabled />
                 <Field label={translate("host")} name={`${form.formUid}_host`} minWidth="200px" value={form.fields.host} disabled />
                 <Field label={translate("ip")} name={`${form.formUid}_ip`} minWidth="120px" value={form.fields.ip || ""} disabled />
                 <Field label={translate("city")} name={`${form.formUid}_city`} minWidth="120px" value={form.fields.city || ""} disabled />
-              </GroupRow>
+              </Group>
             </GroupCol>
 
             {form.fields.props && (

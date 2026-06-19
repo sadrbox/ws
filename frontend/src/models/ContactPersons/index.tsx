@@ -8,7 +8,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { ContactsTable } from "../Contacts";
 import AvatarUpload from "src/components/AvatarUpload";
@@ -83,15 +83,23 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
             <div className={styles.Form}>
               <GroupCol>
                 <GroupRow>
-                  <Field label={translate("fullName")} name={`${form.formUid}_fullName`} value={form.fields.fullName} onChange={e => form.setField("fullName", e.target.value)} disabled={form.isLoading} />
+                  <Group className={styles.w1of2}>
+                    <Field label={translate("fullName")} name={`${form.formUid}_fullName`} value={form.fields.fullName} onChange={e => form.setField("fullName", e.target.value)} disabled={form.isLoading} />
+                  </Group>
                   {form.isEditMode && form.fields.uuid && (
-                    <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
+                    <Group className={styles.w1of2}>
+                      <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
+                    </Group>
                   )}
                 </GroupRow>
-                <OwnerLookupField name={`${form.formUid}_owner`} ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
-                  onOwnerChange={({ ownerType, ownerUuid, ownerName }) => form.setFields({ ownerType, ownerUuid, ownerName } as Partial<TFields>)}
-                  disabled={form.isLoading} typeLocked={!form.uuid && !!paneProps.data?.ownerType} allowedTypes={["organization", "counterparty"]} />
-                <Field label={translate("comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+                <Group>
+                  <OwnerLookupField name={`${form.formUid}_owner`} ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
+                    onOwnerChange={({ ownerType, ownerUuid, ownerName }) => form.setFields({ ownerType, ownerUuid, ownerName } as Partial<TFields>)}
+                    disabled={form.isLoading} typeLocked={!form.uuid && !!paneProps.data?.ownerType} allowedTypes={["organization", "counterparty"]} />
+                </Group>
+                <Group>
+                  <Field label={translate("comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+                </Group>
               </GroupCol>
             </div>
           </div>

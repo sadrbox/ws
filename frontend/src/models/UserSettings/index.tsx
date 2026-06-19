@@ -9,7 +9,7 @@ import subColumnsJson from "./subColumns.json";
 import { FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { FormLookup } from "src/components/Field/FormLookup";
-import { GroupCol } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
@@ -164,31 +164,18 @@ const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <FormLookup
-                  form={form}
-                  field="organization"
-                  endpoint="organizations"
-                  nameField="orgShortName"
-                  label="OrganizationsList"
-                  disabled={form.isLoading || !canWrite}
-                />
-                <FormLookup
-                  form={form}
-                  field="user"
-                  endpoint="users"
-                  displayField="username"
-                  nameField="userDisplayName"
-                  label="UsersList"
-                  disabled={form.isLoading || !canWrite}
-                />
-                <FieldSelect
-                  label={translate("role")}
-                  name={`${form.formUid}_role`}
-                  options={ROLE_OPTIONS}
-                  value={form.fields.role}
-                  onChange={e => form.setField("role", e.target.value)}
-                  disabled={form.isLoading}
-                />
+                <Group>
+                  <FormLookup form={form} field="organization" endpoint="organizations" nameField="orgShortName"
+                    label="OrganizationsList" disabled={form.isLoading || !canWrite} />
+                  <FormLookup form={form} field="user" endpoint="users" displayField="username" nameField="userDisplayName"
+                    label="UsersList" disabled={form.isLoading || !canWrite} />
+                </Group>
+                <GroupRow>
+                  <Group className={styles.w1of2}>
+                    <FieldSelect label={translate("role")} name={`${form.formUid}_role`} options={ROLE_OPTIONS}
+                      value={form.fields.role} onChange={e => form.setField("role", e.target.value)} disabled={form.isLoading} />
+                  </Group>
+                </GroupRow>
               </GroupCol>
             </div>
           </div>

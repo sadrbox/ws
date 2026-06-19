@@ -8,7 +8,7 @@ import historyColumnsJson from "./historyColumns.json";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { Field, FieldNumber, FieldSelect, FieldDate } from "src/components/Field";
-import { GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useAppContext } from "src/app";
 import { getFormatDateOnly } from "src/utils/datetime";
@@ -110,24 +110,30 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
         id: "tab-details", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
-              <div className={styles.FormColumns}>
-                <div className={styles.FormColumnMain}>
-                  <GroupRow>
+              <GroupCol>
+                <GroupRow>
+                  <Group className={styles.w1of2}>
                     <Field label={translate("lastName")} name={`${form.formUid}_lastName`} minWidth="200px" value={form.fields.lastName} onChange={e => handleNameFieldChange("lastName", e.target.value)} disabled={form.isLoading} required />
                     <Field label={translate("firstName")} name={`${form.formUid}_firstName`} minWidth="180px" value={form.fields.firstName} onChange={e => handleNameFieldChange("firstName", e.target.value)} disabled={form.isLoading} />
+                  </Group>
+                  <Group className={styles.w1of2}>
                     <Field label={translate("middleName")} name={`${form.formUid}_middleName`} minWidth="180px" value={form.fields.middleName} onChange={e => handleNameFieldChange("middleName", e.target.value)} disabled={form.isLoading} />
-                  </GroupRow>
-                  <GroupRow>
+                  </Group>
+                </GroupRow>
+                <Group>
                     <Field label={translate("fullName")} name={`${form.formUid}_fullName`} minWidth="400px" value={form.fields.fullName} disabled />
-                  </GroupRow>
-                  <GroupRow>
+                </Group>
+                <GroupRow>
+                  <Group className={styles.w1of2}>
                     <Field label={translate("iin")} name={`${form.formUid}_iin`} minWidth="200px" value={form.fields.iin} onChange={e => form.setField("iin", e.target.value)} disabled={form.isLoading} />
-                  </GroupRow>
-                </div>
-                {form.isEditMode && form.fields.uuid && (
-                  <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
-                )}
-              </div>
+                  </Group>
+                  {form.isEditMode && form.fields.uuid && (
+                    <Group className={styles.w1of2}>
+                      <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
+                    </Group>
+                  )}
+                </GroupRow>
+              </GroupCol>
             </div>
 
           </div>

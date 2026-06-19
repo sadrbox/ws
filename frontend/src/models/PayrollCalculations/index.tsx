@@ -174,28 +174,42 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
               <Divider />
               <h3 className={styles.FormSectionTitle}>{translate("payrollCalcTitle")}</h3>
               <GroupRow>
-                <Field label={translate("baseSalaryCharged")} name={`${form.formUid}_baseSalary`} value={form.fields.baseSalary} onChange={e => handleSalaryChange(e.target.value)} disabled={form.isLoading} width="160px" />
-                <Field label={translate("opv")} name={`${form.formUid}_opv`} value={form.fields.opv} disabled width="130px" />
-                <Field label={translate("vosms")} name={`${form.formUid}_vosms`} value={form.fields.vosms} disabled width="130px" />
-                <Field label={translate("ipn")} name={`${form.formUid}_ipn`} value={form.fields.ipn} disabled width="130px" />
+                <Group className={styles.w1of2}>
+                  <Field label={translate("baseSalaryCharged")} name={`${form.formUid}_baseSalary`} value={form.fields.baseSalary} onChange={e => handleSalaryChange(e.target.value)} disabled={form.isLoading} width="160px" />
+                  <Field label={translate("opv")} name={`${form.formUid}_opv`} value={form.fields.opv} disabled width="130px" />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <Field label={translate("vosms")} name={`${form.formUid}_vosms`} value={form.fields.vosms} disabled width="130px" />
+                  <Field label={translate("ipn")} name={`${form.formUid}_ipn`} value={form.fields.ipn} disabled width="130px" />
+                </Group>
               </GroupRow>
               <GroupRow>
-                <Field label={translate("socialContrib")} name={`${form.formUid}_socialContrib`} value={form.fields.socialContrib} disabled width="130px" />
-                <Field label={translate("socialTax")} name={`${form.formUid}_socialTax`} value={form.fields.socialTax} disabled width="160px" />
-                <Field label={translate("oosms")} name={`${form.formUid}_oosms`} value={form.fields.oosms} disabled width="130px" />
+                <Group className={styles.w1of2}>
+                  <Field label={translate("socialContrib")} name={`${form.formUid}_socialContrib`} value={form.fields.socialContrib} disabled width="130px" />
+                  <Field label={translate("socialTax")} name={`${form.formUid}_socialTax`} value={form.fields.socialTax} disabled width="160px" />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <Field label={translate("oosms")} name={`${form.formUid}_oosms`} value={form.fields.oosms} disabled width="130px" />
+                </Group>
               </GroupRow>
               <Divider />
               <GroupRow>
-                <Field label={translate("netSalaryHands")} name={`${form.formUid}_netSalary`} value={form.fields.netSalary} disabled width="180px" />
-                <Field label={translate("totalExpenseLabel")} name={`${form.formUid}_totalExpense`} value={form.fields.totalExpense} disabled width="180px" />
+                <Group className={styles.w1of2}>
+                  <Field label={translate("netSalaryHands")} name={`${form.formUid}_netSalary`} value={form.fields.netSalary} disabled width="180px" />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <Field label={translate("totalExpenseLabel")} name={`${form.formUid}_totalExpense`} value={form.fields.totalExpense} disabled width="180px" />
+                </Group>
               </GroupRow>
             </GroupCol>
 
           </div>
-          {form.isEditMode && <Group className={styles.FormFooterRow}>
-            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-          </Group>}
+          {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
+            <GroupRow className={styles.FormHeaderRow}>
+              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+            </GroupRow>
+          </GroupCol>}
         </div>
       )
     },

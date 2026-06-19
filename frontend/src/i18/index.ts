@@ -85,6 +85,8 @@ export function translateError(message: string): string {
 export function getTranslateColumn(column: TColumn): string | undefined {
 	if (column.identifier) {
 		const id = column.identifier.toString();
+		// Служебные колонки («__rowActions» и пр.) — без заголовка.
+		if (id.startsWith("__")) return "";
 		const translated = getTranslation(id);
 		if (translated && translated !== id) return translated;
 		return id;

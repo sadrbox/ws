@@ -19,7 +19,6 @@ import { Prisma } from "@prisma/client";
 import { prisma, pool } from "../prisma/prisma-client.js";
 import { checkOwnership } from "./auth.js";
 import { PERIOD_LOCKED_MODELS, assertPeriodOpen, respondPeriodLockError, PeriodLockedError } from "../services/periodLock.js";
-import { resyncSequenceAfterDelete } from "../services/documentNumbering.js";
 
 /**
  * Кэш карты FK: { [referencedTable]: Array<{ table, column, refColumn }> }
@@ -436,8 +435,8 @@ export async function handleDelete({
 				console.error(`handleDelete onDeleted(${modelName}) error:`, hookErr);
 			}
 		}
-		// Нумерация: освобождаем номер удалённого документа (откат счётчика к максимуму оставшихся).
-		if (numberDocType) await resyncSequenceAfterDelete(numberDocType, existing, prisma);
+		// Нумерация: номер удалённого документа освобождается автоматически —
+		// следующий номер считается от ФАКТИЧЕСКИХ номеров журнала (allocateNumber).
 		return res.status(200).json({ success: true, message: "Удалено" });
 	} catch (error) {
 		if (respondPeriodLockError(error, res)) return;
@@ -529,7 +528,6 @@ export async function handleBatchDelete({
 					console.error(`handleBatchDelete onDeleted(${modelName}) error:`, hookErr);
 				}
 			}
-			if (numberDocType) await resyncSequenceAfterDelete(numberDocType, existing, prisma);
 			deleted++;
 		} catch (err) {
 			const msg = err.code === "P2003"

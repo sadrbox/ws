@@ -10,7 +10,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { Field, FieldNumber } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
@@ -73,16 +73,28 @@ const SubkontoTypesForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.Form}>
           <GroupCol>
             <GroupRow>
-              <Field label={translate("code")} name={`${form.formUid}_code`} value={form.fields.code} onChange={e => form.setField("code", e.target.value)} disabled={form.isLoading} width="180px" />
-              <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} minWidth="260px" />
+              <Group className={styles.w1of2}>
+                <Field label={translate("code")} name={`${form.formUid}_code`} value={form.fields.code} onChange={e => form.setField("code", e.target.value)} disabled={form.isLoading} width="180px" />
+              </Group>
+              <Group className={styles.w1of2}>
+                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} minWidth="260px" />
+              </Group>
             </GroupRow>
             <GroupRow>
-              <Field label={translate("subkontoReferenceEndpoint")} name={`${form.formUid}_refEndpoint`} value={form.fields.referenceEndpoint} onChange={e => form.setField("referenceEndpoint", e.target.value)} disabled={form.isLoading} width="200px" placeholder="products" />
-              <Field label={translate("subkontoReferenceModel")} name={`${form.formUid}_refModel`} value={form.fields.referenceModel} onChange={e => form.setField("referenceModel", e.target.value)} disabled={form.isLoading} width="200px" placeholder="product" />
+              <Group className={styles.w1of2}>
+                <Field label={translate("subkontoReferenceEndpoint")} name={`${form.formUid}_refEndpoint`} value={form.fields.referenceEndpoint} onChange={e => form.setField("referenceEndpoint", e.target.value)} disabled={form.isLoading} width="200px" placeholder="products" />
+              </Group>
+              <Group className={styles.w1of2}>
+                <Field label={translate("subkontoReferenceModel")} name={`${form.formUid}_refModel`} value={form.fields.referenceModel} onChange={e => form.setField("referenceModel", e.target.value)} disabled={form.isLoading} width="200px" placeholder="product" />
+              </Group>
             </GroupRow>
             <GroupRow>
-              <FieldNumber label={translate("sortOrder")} name={`${form.formUid}_sortOrder`} value={form.fields.sortOrder} onChange={e => form.setField("sortOrder", e.target.value)} disabled={form.isLoading} width="120px" />
-              <FieldToggle name={`${form.formUid}_isActive`} label={translate("isActive")} value={form.fields.isActive === true} onChange={(v) => form.setField("isActive", v)} disabled={form.isLoading || !canWrite} variant="success" />
+              <Group className={styles.w1of2}>
+                <FieldNumber label={translate("sortOrder")} name={`${form.formUid}_sortOrder`} value={form.fields.sortOrder} onChange={e => form.setField("sortOrder", e.target.value)} disabled={form.isLoading} width="120px" />
+              </Group>
+              <Group className={styles.w1of2}>
+                <FieldToggle name={`${form.formUid}_isActive`} label={translate("isActive")} value={form.fields.isActive === true} onChange={(v) => form.setField("isActive", v)} disabled={form.isLoading || !canWrite} variant="success" />
+              </Group>
             </GroupRow>
           </GroupCol>
         </div>

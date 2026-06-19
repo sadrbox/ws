@@ -179,15 +179,17 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow className={styles.FormHeaderRow}>
-                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9}
+                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
+                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
                   actions={[
                     { type: "assignNumber", onClick: () => void assignNumber(ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
                   ]} />
-                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
               </GroupRow>
-              <Group>
-                <FieldPeriod label={translate("monthClosePeriod")} name={`${form.formUid}_period`} value={form.fields.period} onChange={handlePeriodChange} disabled={form.isLoading} width="200px" />
-              </Group>
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  <FieldPeriod label={translate("monthClosePeriod")} name={`${form.formUid}_period`} value={form.fields.period} onChange={handlePeriodChange} disabled={form.isLoading} width="200px" />
+                </Group>
+              </GroupRow>
               <Group>
                 <FormLookup form={form} field="organization" endpoint="organizations" />
               </Group>
@@ -207,10 +209,12 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
               )}
             </GroupCol>
           </div>
-          {form.isEditMode && <GroupRow className={styles.FormFooterRow}>
-            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-          </GroupRow>}
+          {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
+            <GroupRow className={styles.FormHeaderRow}>
+              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+            </GroupRow>
+          </GroupCol>}
         </div>
       ),
     },

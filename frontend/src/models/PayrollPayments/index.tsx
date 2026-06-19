@@ -116,15 +116,21 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
                 <FormLookup form={form} field="employee" endpoint="employees" displayField="fullName" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
               <GroupRow>
-                <Field label={translate("paymentAmount")} name={`${form.formUid}_amount`} value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} width="180px" />
-                <FieldSelect label={translate("paymentMethod")} name={`${form.formUid}_paymentMethod`} value={form.fields.paymentMethod} options={PAYMENT_METHOD_OPTIONS} onChange={e => form.setField("paymentMethod", e.target.value)} disabled={form.isLoading} />
+                <Group className={styles.w1of2}>
+                  <Field label={translate("paymentAmount")} name={`${form.formUid}_amount`} value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} width="180px" />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <FieldSelect label={translate("paymentMethod")} name={`${form.formUid}_paymentMethod`} value={form.fields.paymentMethod} options={PAYMENT_METHOD_OPTIONS} onChange={e => form.setField("paymentMethod", e.target.value)} disabled={form.isLoading} />
+                </Group>
               </GroupRow>
             </GroupCol>
           </div>
-          {form.isEditMode && <Group className={styles.FormFooterRow}>
-            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-          </Group>}
+          {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
+            <GroupRow className={styles.FormHeaderRow}>
+              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+            </GroupRow>
+          </GroupCol>}
         </div>
       )
     },

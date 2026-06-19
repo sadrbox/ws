@@ -8,7 +8,7 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
-import { GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import AvatarUpload from "src/components/AvatarUpload";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
@@ -83,22 +83,26 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
         id: "tab-details", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
-              <div style={{ display: "flex", flexDirection: "row", gap: "24px" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: 640 }}>
+              <GroupCol>
+                <GroupRow>
+                  <Group className={styles.w1of2}>
+                    <Field label={translate("loginLabel")} name={`${form.formUid}_username`} minWidth="150px" value={form.fields.username} onChange={e => form.setField("username", e.target.value)} disabled={form.isLoading} required />
+                  </Group>
+                  <Group className={styles.w1of2}>
+                    <Field label={form.isEditMode ? translate("newPassword") : translate("password")} name={`${form.formUid}_password`} minWidth="150px" value={form.fields.password} onChange={e => form.setField("password", e.target.value)} disabled={form.isLoading} />
+                  </Group>
+                </GroupRow>
+                <Group>
+                  <FormLookup form={form} field="employee" endpoint="employees" displayField="fullName" minWidth={FIELD_WIDTH.xl} />
+                </Group>
+                {form.isEditMode && form.fields.uuid && (
                   <GroupRow>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      <GroupRow>
-                        <Field label={translate("loginLabel")} name={`${form.formUid}_username`} minWidth="150px" value={form.fields.username} onChange={e => form.setField("username", e.target.value)} disabled={form.isLoading} required />
-                        <Field label={form.isEditMode ? translate("newPassword") : translate("password")} name={`${form.formUid}_password`} minWidth="150px" value={form.fields.password} onChange={e => form.setField("password", e.target.value)} disabled={form.isLoading} />
-                      </GroupRow>
-                      {form.isEditMode && form.fields.uuid && (
-                        <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
-                      )}
-                    </div>
-                    <FormLookup form={form} field="employee" endpoint="employees" displayField="fullName" minWidth={FIELD_WIDTH.xl} />
+                    <Group className={styles.w1of2}>
+                      <AvatarUpload endpoint={MODEL_ENDPOINT} entityUuid={form.fields.uuid} hasAvatar={!!form.fields.avatarPath} disabled={form.isLoading} />
+                    </Group>
                   </GroupRow>
-                </div>
-              </div>
+                )}
+              </GroupCol>
             </div>
 
           </div>

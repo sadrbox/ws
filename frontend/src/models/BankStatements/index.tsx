@@ -17,7 +17,7 @@ import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { mapCommonTradeFields, resolveOrgChangeFields, refillFromBasisSource } from "src/utils/createFromBasis";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
-import { Group, GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -202,7 +202,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupRow className={styles.FormHeaderRow}>
-              <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
+              <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
             </GroupRow>
             <Group>
               <FormLookup form={form} field="organization" endpoint="organizations"
@@ -221,43 +221,50 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
               <FormLookup form={form} field="bankAccount" endpoint="bankaccounts" label="BankAccountsList"
                 extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
             </Group>
-            <Group>
-              <FieldSelect
-                label={translate("bankStatementDirection")}
-                name={`${form.formUid}_direction`}
-                value={form.fields.direction}
-                options={[
-                  { value: "bankStatementIn", label: translate("bankStatementIn") },
-                  { value: "bankStatementOut", label: translate("bankStatementOut") },
+            <GroupRow>
+              <Group className={styles.w1of2}>
+                <FieldSelect
+                  label={translate("bankStatementDirection")}
+                  name={`${form.formUid}_direction`}
+                  value={form.fields.direction}
+                  options={[
+                    { value: "bankStatementIn", label: translate("bankStatementIn") },
+                    { value: "bankStatementOut", label: translate("bankStatementOut") },
+                  ]}
+                  onChange={e => form.setField("direction", e.target.value)}
+                  disabled={form.isLoading || !canWrite}
+                />
+              </Group>
+              <Group className={styles.w1of2}>
+                <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
+              </Group>
+            </GroupRow>
+            <GroupCol>
+              <BasisDocumentField
+                allowedTypes={[
+                  { type: "payment_invoice", endpoint: "payment-invoices" },
+                  { type: "incoming_invoice", endpoint: "incoming-invoices" },
+                  { type: "outgoing_invoice", endpoint: "outgoing-invoices" },
                 ]}
-                onChange={e => form.setField("direction", e.target.value)}
-                disabled={form.isLoading || !canWrite}
+                basisDocumentType={form.fields.basisDocumentType}
+                basisDocumentUuid={form.fields.basisDocumentUuid}
+                basisDocumentLabel={form.fields.basisDocumentLabel}
+                formUid={form.formUid}
+                disabled={form.isLoading}
+                onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
+                onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+                mismatch={basisMismatch.mismatch}
+                mismatchDetails={basisMismatch.differences}
+                hint={getDocumentFillHint(DOC_TYPE, form.fields as unknown as Record<string, unknown>)}
               />
-              <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
-
-            </Group>
-            <BasisDocumentField
-              allowedTypes={[
-                { type: "payment_invoice", endpoint: "payment-invoices" },
-                { type: "incoming_invoice", endpoint: "incoming-invoices" },
-                { type: "outgoing_invoice", endpoint: "outgoing-invoices" },
-              ]}
-              basisDocumentType={form.fields.basisDocumentType}
-              basisDocumentUuid={form.fields.basisDocumentUuid}
-              basisDocumentLabel={form.fields.basisDocumentLabel}
-              formUid={form.formUid}
-              disabled={form.isLoading}
-              onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
-              onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
-              mismatch={basisMismatch.mismatch}
-              mismatchDetails={basisMismatch.differences}
-              hint={getDocumentFillHint(DOC_TYPE, form.fields as unknown as Record<string, unknown>)}
-            />
+            </GroupCol>
           </div>
-          {form.isEditMode && <GroupRow className={styles.FormFooterRow}>
-            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-          </GroupRow>}
+          {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
+            <GroupRow className={styles.FormHeaderRow}>
+              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+            </GroupRow>
+          </GroupCol>}
         </div>
       ),
     },

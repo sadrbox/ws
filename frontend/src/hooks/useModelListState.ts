@@ -106,6 +106,9 @@ export function useModelListState(opts: UseModelListStateOptions) {
 	);
 
 	// search не передаётся на бэкенд — фильтрация только client-side (см. rows ниже)
+	// Сортировка по «Номер» естественно-числовая на уровне БД: колонки `number`
+	// имеют ICU-коллацию `app_natural_numeric` (миграция natural_document_number_sort),
+	// поэтому ORDER BY number даёт «1,2,…,10» / «РЕАЛ-1…РЕАЛ-10» — спец-обработка не нужна.
 	const params = useMemo(
 		() => ({
 			sort,

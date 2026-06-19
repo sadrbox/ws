@@ -11,7 +11,7 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { isoToLocalInput, getFormatDateOnly } from "src/utils/datetime";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
@@ -82,15 +82,25 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+              <Group>
+                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+              </Group>
               <GroupRow>
-                <Field label={translate("sku")} name={`${form.formUid}_sku`} value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
-                <FormLookup form={form} field="brand" endpoint="brands" />
+                <Group className={styles.w1of2}>
+                  <Field label={translate("sku")} name={`${form.formUid}_sku`} value={form.fields.sku} onChange={e => form.setField("sku", e.target.value)} disabled={form.isLoading} />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <FormLookup form={form} field="brand" endpoint="brands" />
+                </Group>
               </GroupRow>
               <GroupRow>
-                <FormLookup form={form} field="unitOfMeasure" endpoint="unit-of-measures" maxWidth="160px" />
-                <FieldNumber label={translate("price")} name={`${form.formUid}_price`} value={form.fields.price} onChange={e => form.setField("price", e.target.value)} disabled={form.isLoading} width="160px" />
-                <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
+                <Group className={styles.w1of2}>
+                  <FormLookup form={form} field="unitOfMeasure" endpoint="unit-of-measures" maxWidth="160px" />
+                  <FieldNumber label={translate("price")} name={`${form.formUid}_price`} value={form.fields.price} onChange={e => form.setField("price", e.target.value)} disabled={form.isLoading} width="160px" />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
+                </Group>
               </GroupRow>
             </GroupCol>
           </div>

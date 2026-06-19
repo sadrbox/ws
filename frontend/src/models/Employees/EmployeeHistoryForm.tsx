@@ -5,7 +5,7 @@ import { FieldDate, FieldNumber, FieldSelect } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
 import styles from "src/styles/main.module.scss";
 import { translate } from "src/i18";
-import { GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
@@ -97,23 +97,31 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
       id: "tab-details", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            <div style={{ display: "flex", flexDirection: "row", gap: "12px" }}>
-              <FieldDate label={translate("eventDate")} name={`${form.formUid}_eventDate`} width="180px"
-                value={form.fields.eventDate} onChange={e => form.setField("eventDate", e.target.value)}
-                disabled={form.isLoading} required />
-              <FieldSelect label={translate("eventType")} name={`${form.formUid}_eventType`}
-                value={form.fields.eventType} onChange={e => form.setField("eventType", e.target.value)}
-                disabled={form.isLoading} options={EVENT_TYPE_OPTIONS} style={{ width: "180px" }} required />
-            </div>
-            <FormLookup form={form} field="organization" endpoint="organizations" width={FIELD_WIDTH.lg} />
-            <FormLookup form={form} field="position" endpoint="positions" label="position.name" width={FIELD_WIDTH.lg} />
-            <FieldNumber label={translate("salary")} name={`${form.formUid}_salary`} width="180px"
-              value={form.fields.salary} onChange={e => form.setField("salary", e.target.value)}
-              disabled={form.isLoading} step="0.1" textAlign="right" />
+            <GroupCol>
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  <FieldDate label={translate("eventDate")} name={`${form.formUid}_eventDate`} width="180px"
+                    value={form.fields.eventDate} onChange={e => form.setField("eventDate", e.target.value)} disabled={form.isLoading} required />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <FieldSelect label={translate("eventType")} name={`${form.formUid}_eventType`}
+                    value={form.fields.eventType} onChange={e => form.setField("eventType", e.target.value)}
+                    disabled={form.isLoading} options={EVENT_TYPE_OPTIONS} style={{ width: "180px" }} required />
+                </Group>
+              </GroupRow>
+              <Group>
+                <FormLookup form={form} field="organization" endpoint="organizations" width={FIELD_WIDTH.lg} />
+                <FormLookup form={form} field="position" endpoint="positions" label="position.name" width={FIELD_WIDTH.lg} />
+              </Group>
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  <FieldNumber label={translate("salary")} name={`${form.formUid}_salary`} width="180px"
+                    value={form.fields.salary} onChange={e => form.setField("salary", e.target.value)}
+                    disabled={form.isLoading} step="0.1" textAlign="right" />
+                </Group>
+              </GroupRow>
+            </GroupCol>
           </div>
-          <GroupRow style={{ justifyContent: "left" }}>
-
-          </GroupRow>
         </div>
       ),
     },

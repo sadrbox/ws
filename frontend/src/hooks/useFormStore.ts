@@ -23,6 +23,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import useUID from "./useUID";
 import { stableStringify } from "src/utils/normalize";
+import { setPendingHighlight } from "src/utils/listHighlight";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -1962,6 +1963,11 @@ export function useFormStore<F extends object>(
 		// чтобы поля формы не «прыгали» из disabled в enabled между окончанием
 		// сохранения и анмаунтом панели.
 		if (await submit({ keepLoadingOnSuccess: true })) {
+			// Перенести активную строку списка на сохранённый документ. Список —
+			// следующий активируемый Pane после закрытия формы; подсветка сработает
+			// и если он уже был открыт (subscribeHighlight, см. utils/listHighlight).
+			const snap = store.getSnapshot();
+			if (snap.meta.uuid) setPendingHighlight(snap.meta.endpoint, snap.meta.uuid);
 			const currentKey = store.getStorageKey();
 			store.clearStorage();
 			storeCache.delete(currentKey);

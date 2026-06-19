@@ -11,7 +11,7 @@ import { Field, FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { FormLookup } from "src/components/Field/FormLookup";
 import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
-import { GroupCol } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app";
@@ -119,12 +119,26 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
               <GroupCol>
-                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth={FIELD_WIDTH.lg} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
-                <Field label={translate("contractNumber")} name={`${form.formUid}_contractNumber`} minWidth={FIELD_WIDTH.lg} value={form.fields.contractNumber} onChange={e => form.setField("contractNumber", e.target.value)} disabled={form.isLoading} />
-                <FieldDate label={translate("startDate")} name={`${form.formUid}_startDate`} minWidth="200px" value={form.fields.startDate} onChange={e => form.setField("startDate", e.target.value)} disabled={form.isLoading} />
-                <FieldDate label={translate("endDate")} name={`${form.formUid}_endDate`} minWidth="200px" value={form.fields.endDate} onChange={e => form.setField("endDate", e.target.value)} disabled={form.isLoading} />
-                <FormLookup form={form} field="organization" endpoint="organizations" label="organizationOwner" minWidth={FIELD_WIDTH.lg} />
-                <FormLookup form={form} field="counterparty" endpoint="counterparties" minWidth={FIELD_WIDTH.lg} />
+                <Group>
+                  <Field label={translate("name")} name={`${form.formUid}_name`} minWidth={FIELD_WIDTH.lg} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+                </Group>
+                <GroupRow>
+                  <Group className={styles.w1of2}>
+                    <Field label={translate("contractNumber")} name={`${form.formUid}_contractNumber`} minWidth={FIELD_WIDTH.lg} value={form.fields.contractNumber} onChange={e => form.setField("contractNumber", e.target.value)} disabled={form.isLoading} />
+                  </Group>
+                </GroupRow>
+                <GroupRow>
+                  <Group className={styles.w1of2}>
+                    <FieldDate label={translate("startDate")} name={`${form.formUid}_startDate`} minWidth="200px" value={form.fields.startDate} onChange={e => form.setField("startDate", e.target.value)} disabled={form.isLoading} />
+                  </Group>
+                  <Group className={styles.w1of2}>
+                    <FieldDate label={translate("endDate")} name={`${form.formUid}_endDate`} minWidth="200px" value={form.fields.endDate} onChange={e => form.setField("endDate", e.target.value)} disabled={form.isLoading} />
+                  </Group>
+                </GroupRow>
+                <Group>
+                  <FormLookup form={form} field="organization" endpoint="organizations" label="organizationOwner" minWidth={FIELD_WIDTH.lg} />
+                  <FormLookup form={form} field="counterparty" endpoint="counterparties" minWidth={FIELD_WIDTH.lg} />
+                </Group>
               </GroupCol>
             </div>
 

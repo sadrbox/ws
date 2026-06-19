@@ -217,7 +217,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                         : undefined
                     }
                   />
-                  <span className={styles.SettingLabelStrong}>Использовать НДС</span>
+                  <span className={styles.SettingLabelStrong}>{translate("useVat")}</span>
                 </label>
                 <FieldNumber
                   label={translate("vatRate")}
@@ -295,7 +295,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                         : undefined
                     }
                   />
-                  <span className={styles.SettingLabelStrong}>Использовать скидки</span>
+                  <span className={styles.SettingLabelStrong}>{translate("useDiscount")}</span>
                 </label>
                 <span className={styles.SettingHint}>
                   При включении в строках документов продажи отображаются колонки
@@ -318,7 +318,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                         : undefined
                     }
                   />
-                  <span className={styles.SettingLabelStrong}>Использовать акциз</span>
+                  <span className={styles.SettingLabelStrong}>{translate("useExcise")}</span>
                 </label>
                 <span className={styles.SettingHint}>
                   При включении в строках документов продажи отображаются колонки

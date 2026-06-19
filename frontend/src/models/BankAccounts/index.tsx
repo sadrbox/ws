@@ -9,7 +9,7 @@ import { Field } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
-import { GroupCol } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app";
@@ -115,29 +115,27 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             <GroupCol>
-              <Field label={translate("name")} name={`${form.formUid}_name`} minWidth={FIELD_WIDTH.lg} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("iban")} name={`${form.formUid}_iban`} minWidth={FIELD_WIDTH.lg} value={form.fields.iban} onChange={e => form.setField("iban", e.target.value)} disabled={form.isLoading} required />
-              <Field label={translate("bik")} name={`${form.formUid}_bik`} minWidth="200px" value={form.fields.bik} onChange={e => form.setField("bik", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("bankName")} name={`${form.formUid}_bankName`} minWidth={FIELD_WIDTH.lg} value={form.fields.bankName} onChange={e => form.setField("bankName", e.target.value)} disabled={form.isLoading} />
-              <FormLookup
-                form={form}
-                field="currency"
-                endpoint="currencies"
-                displayField="code"
-                minWidth="250px"
-                onSelect={(uuid, _display, item) =>
-                  form.setFields({ currencyUuid: uuid, currencyName: uuid ? `${item.code} — ${item.name}` : "" } as any)
-                }
-              />
-              <OwnerLookupField
-                ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
-                name={`${form.formUid}_owner`}
-                onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
-                  form.setFields({ ownerType, ownerUuid, ownerName } as any)}
-                typeLocked={!form.uuid && !!data?.ownerType}
-                allowedTypes={["organization", "counterparty"]}
-                disabled={form.isLoading}
-              />
+              <Group>
+                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth={FIELD_WIDTH.lg} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("iban")} name={`${form.formUid}_iban`} minWidth={FIELD_WIDTH.lg} value={form.fields.iban} onChange={e => form.setField("iban", e.target.value)} disabled={form.isLoading} required />
+              </Group>
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  <Field label={translate("bik")} name={`${form.formUid}_bik`} minWidth="200px" value={form.fields.bik} onChange={e => form.setField("bik", e.target.value)} disabled={form.isLoading} />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <FormLookup form={form} field="currency" endpoint="currencies" displayField="code" minWidth="250px"
+                    onSelect={(uuid, _display, item) => form.setFields({ currencyUuid: uuid, currencyName: uuid ? `${item.code} — ${item.name}` : "" } as any)} />
+                </Group>
+              </GroupRow>
+              <Group>
+                <Field label={translate("bankName")} name={`${form.formUid}_bankName`} minWidth={FIELD_WIDTH.lg} value={form.fields.bankName} onChange={e => form.setField("bankName", e.target.value)} disabled={form.isLoading} />
+              </Group>
+              <Group>
+                <OwnerLookupField ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
+                  name={`${form.formUid}_owner`} onOwnerChange={({ ownerType, ownerUuid, ownerName }) => form.setFields({ ownerType, ownerUuid, ownerName } as any)}
+                  typeLocked={!form.uuid && !!data?.ownerType} allowedTypes={["organization", "counterparty"]} disabled={form.isLoading} />
+              </Group>
             </GroupCol>
           </div>
         </div>

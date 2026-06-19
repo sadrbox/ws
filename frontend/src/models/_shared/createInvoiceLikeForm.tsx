@@ -13,6 +13,7 @@ import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
+import { HelpBox } from "src/components/HelpBox";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
@@ -509,38 +510,48 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
         id: "tab-details", label: translate("general"), component: (
           <div className={styles.FormWrapper}>
             <div className={styles.Form}>
-              <GroupCol>
-                <GroupRow className={styles.FormHeaderRow}>
-                  <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9}
-                    actions={[
-                      { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
-                    ]} />
-                  <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
-                </GroupRow>
-                <Group>
-                  <FormLookup form={form} field="organization" endpoint="organizations"
-                    onSelect={handleOrganizationSelect}
-                    disabled={form.isLoading || basisLock} />
-                </Group>
-                <Group>
-                  <FormLookup form={form} field="counterparty" endpoint="counterparties"
-                    disabled={form.isLoading || basisLock} />
-                  <FormLookup form={form} field="contract" endpoint="contracts"
-                    onSelect={handleContractSelect}
-                    disabled={form.isLoading || basisLock}
-                    extraParams={{
-                      ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
-                      ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
-                    }} />
-                </Group>
+              {basisLock && (
+                <HelpBox title="🔒 Поля заблокированы — документ заполнен по основанию">
+                  <p>
+                    Поля и позиции этого документа недоступны для ручного
+                    редактирования, потому что он создан <b>на основании</b> документа
+                    {form.fields.basisDocumentLabel ? <>: «{form.fields.basisDocumentLabel}»</> : null}.
+                    Значения берутся из документа-основания и синхронизируются с ним.
+                  </p>
+                  <p>
+                    Чтобы редактировать вручную — <b>очистите поле «Основание»</b> внизу
+                    формы (кнопка очистки в этом поле). После очистки поля разблокируются.
+                  </p>
+                </HelpBox>
+              )}
+              <GroupRow className={styles.FormHeaderRow}>
+                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
+                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
+                  actions={[
+                    { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
+                  ]} />
+              </GroupRow>
+              <Group>
+                <FormLookup form={form} field="organization" endpoint="organizations"
+                  onSelect={handleOrganizationSelect}
+                  disabled={form.isLoading || basisLock} />
                 {cfg.hasWarehouse && (
-                  <Group>
-                    <FormLookup form={form} field="warehouse" endpoint="warehouses"
-                      disabled={form.isLoading || basisLock}
-                      extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-                  </Group>
+                  <FormLookup form={form} field="warehouse" endpoint="warehouses"
+                    disabled={form.isLoading || basisLock}
+                    extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
                 )}
-              </GroupCol>
+              </Group>
+              <Group>
+                <FormLookup form={form} field="counterparty" endpoint="counterparties"
+                  disabled={form.isLoading || basisLock} />
+                <FormLookup form={form} field="contract" endpoint="contracts"
+                  onSelect={handleContractSelect}
+                  disabled={form.isLoading || basisLock}
+                  extraParams={{
+                    ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
+                    ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
+                  }} />
+              </Group>
               {cfg.basisConfig && (
                 <GroupCol>
                   <BasisDocumentField

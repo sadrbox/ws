@@ -2141,20 +2141,6 @@ model BankStatement {
   @@map("bank_statements")
 }
 
-/// Счётчики нумерации документов: следующий номер по организации, виду
-/// документа и году (сброс с начала года). См. services/documentNumbering.js.
-model DocumentSequence {
-  id               Int      @id @default(autoincrement())
-  organizationUuid String
-  docType          String
-  year             Int
-  lastValue        Int      @default(0)
-  updatedAt        DateTime @default(now()) @updatedAt
-
-  @@unique([organizationUuid, docType, year])
-  @@map("document_sequences")
-}
-
 /// Настройки нумерации документов (переопределение префикса по виду документа).
 /// Глобально для установки. Отсутствие строки → дефолт из
 /// services/documentNumbering.js (NUMBER_CONFIG). Номер хранится и отображается
