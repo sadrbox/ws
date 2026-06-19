@@ -265,7 +265,15 @@ export function matchRowBySearch(
 			// Примитивное поле — используем форматированное значение
 			const formatted = getFormatColumnValue(row, col);
 			if (formatted !== "" && formatted != null) {
-				parts.push(String(formatted).toLowerCase());
+				const s = String(formatted).toLowerCase();
+				parts.push(s);
+				// Поиск «Номера» с учётом префикса: помимо исходного «реал-4572»
+				// добавляем вариант без разделителей — «реал4572». Тогда документ
+				// находится и при вводе «реал4572», и «реал 4572», и «4572».
+				if (col.identifier === "number") {
+					const compact = s.replace(/[^\p{L}\p{N}]+/gu, "");
+					if (compact && compact !== s) parts.push(compact);
+				}
 			}
 		}
 	}

@@ -14,7 +14,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDateTime, FieldPeriod } from "src/components/Field";
-import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
+import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
 import ShowInJournalButton from "src/components/ShowInJournalButton";
 import DeleteDocumentButton from "src/components/DeleteDocumentButton";
@@ -179,10 +179,9 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <GroupRow className={styles.FormHeaderRow}>
-                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9} placeholder={translate("autoOnSave")}
+                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="150px" maxLength={9}
                   actions={[
                     { type: "assignNumber", onClick: () => void assignNumber(ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
-                    { type: "clear", onClick: () => form.setField("number", "") },
                   ]} />
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="180px" />
               </GroupRow>
@@ -221,7 +220,7 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (
       <>
-        <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
+        <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
         {isSavedDoc && <><ShowInJournalButton endpoint={ENDPOINT} uuid={form.fields.uuid} /> <DeleteDocumentButton endpoint={ENDPOINT} uuid={form.fields.uuid} paneId={form.paneId} />
         <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} /></>}
       </>

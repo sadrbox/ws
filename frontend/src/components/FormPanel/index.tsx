@@ -44,6 +44,11 @@ const FormPanel: FC<FormPanelProps> = ({
           <span>{translate("save")}</span>
         </Button>
       )}
+      {onReload && (
+        <Button onClick={onReload} disabled={isLoading}>
+          <span>{translate("refresh")}</span>
+        </Button>
+      )}
       {onClose && (
         <Button onClick={onClose} disabled={isLoading}>
           <span>{translate("close")}</span>

@@ -247,7 +247,17 @@ router.put("/organizations/:id", async (req, res) => {
 		const { bin, name, legalName } = req.body;
 		const data = {};
 
-		if (bin !== undefined) data.bin = bin.trim();
+		if (bin !== undefined) {
+			// БИН редактируем — валидируем формат (12 цифр) и при записи; уникальность
+			// обеспечивает БД-ограничение (P2002 → 409 ниже).
+			if (typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
+				return res.status(400).json({
+					success: false,
+					message: "БИН должен состоять ровно из 12 цифр",
+				});
+			}
+			data.bin = bin.trim();
+		}
 		if (name !== undefined) data.name = name?.trim() ?? null;
 		if (legalName !== undefined)
 			data.legalName = legalName?.trim() ?? null;
@@ -259,6 +269,12 @@ router.put("/organizations/:id", async (req, res) => {
 
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (error.code === "P2002") {
+			return res.status(409).json({
+				success: false,
+				message: "Организация с таким БИН уже существует",
+			});
+		}
 		if (error.code === "P2025") {
 			return res
 				.status(404)

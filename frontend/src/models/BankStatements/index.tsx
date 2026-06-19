@@ -11,13 +11,13 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDateTime, FieldSelect } from "src/components/Field";
-import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
+import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { mapCommonTradeFields, resolveOrgChangeFields, refillFromBasisSource } from "src/utils/createFromBasis";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
-import { Group, GroupCol, GroupRow } from "src/components/UI";
+import { Group, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -299,7 +299,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (
       <>
-        <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
+        <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
         {hasBasis && (
           <RefillFromBasisButton
             mismatch={basisMismatch.mismatch}

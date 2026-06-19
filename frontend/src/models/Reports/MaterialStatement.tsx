@@ -10,17 +10,15 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { Group, GroupRow } from "src/components/UI";
+import { GroupRow, GroupCol } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { useAppContext } from "src/app";
 import { openReport } from "src/utils/openReport";
 import { openFormByEndpoint } from "src/registry/formRegistry";
-import mainStyles from "src/styles/main.module.scss";
 import styles from "./report.module.scss";
 import reportCss from "./report.module.scss?inline";
-import { GroupCol } from "src/components/UI";
 
 interface ProductMovement {
   productUuid: string;

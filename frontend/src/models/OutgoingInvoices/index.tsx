@@ -7,7 +7,6 @@ import { getFormatDateOnly } from "src/utils/datetime";
 import ModelList from "src/components/ModelList";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { createInvoiceLikeForm } from "src/models/_shared/createInvoiceLikeForm";
-import { translate } from "src/i18";
 import OutgoingInvoicePrint from "./OutgoingInvoicePrint";
 import type { SaleInvoicePrintColumns } from "src/models/Sales/SaleInvoicePrint";
 

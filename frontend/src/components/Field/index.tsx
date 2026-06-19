@@ -1005,10 +1005,6 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
     setOpen(false);
   }, [dropYear, emit]);
 
-  const displayText = value
-    ? `${MONTHS_RU[selMonth - 1]} ${selYear}`
-    : '—';
-
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({
     name, variant, required, error, value,
   });

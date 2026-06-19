@@ -14,8 +14,11 @@
 // Уникальность номера проверяется в пределах календарного года.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
-import { allocateNumber, peekNextNumber, reformatNumber } from "./documentNumbering.js";
-import { assertUniqueNumber } from "../utils/uniqueNumber.js";
+import { allocateNumber, peekNextNumber, reformatNumber, normalizeDocNumber, docNumberDigitLength } from "./documentNumbering.js";
+import { assertUniqueNumber, DuplicateNumberError } from "../utils/uniqueNumber.js";
+
+// Лимит числовой части номера документа (символов без ведущих нулей).
+const MAX_NUMBER_DIGITS = 9;
 
 /**
  * ЕДИНЫЙ алгоритм определения номера документа (для кнопки-превью и сохранения).
@@ -34,9 +37,10 @@ export async function resolveDocumentNumber(
 	{ preview = false, reformatExisting = false } = {},
 	client = prisma,
 ) {
-	const m = manual == null ? "" : String(manual).trim();
-	const ex = existingNumber == null ? "" : String(existingNumber).trim();
-	// 1) Ручной ввод (поле отличается от сохранённого) — принимаем как есть.
+	// Нормализуем (срезаем ведущие нули у числовой части): «00074» → «74».
+	const m = manual == null ? "" : normalizeDocNumber(manual);
+	const ex = existingNumber == null ? "" : normalizeDocNumber(existingNumber);
+	// 1) Ручной ввод (поле отличается от сохранённого) — принимаем нормализованным.
 	if (m && m !== ex) return m;
 	// 2) Существующий номер: при сохранении НЕ меняем (только проверка корректности
 	//    выше по стеку); кнопкой (reformatExisting) — приводим к текущим настройкам.
@@ -68,7 +72,15 @@ export async function ensureDocumentNumber(
 	client = prisma,
 ) {
 	const number = await resolveDocumentNumber({ docType, organizationUuid, date, manual, existingNumber }, { preview: false }, client);
-	if (number) await assertUniqueNumber(modelName, { number, date, organizationUuid, excludeUuid, extraWhere: uniqueWhere }, client);
+	if (number) {
+		// Лимит числовой части — 9 символов (без ведущих нулей). Переиспользуем
+		// 409-канал DuplicateNumberError (его ловят все doc-роутеры) — отдельной
+		// обработки ошибки в каждом роутере не требуется.
+		if (docNumberDigitLength(number) > MAX_NUMBER_DIGITS) {
+			throw new DuplicateNumberError(`Номер документа: числовая часть не должна превышать ${MAX_NUMBER_DIGITS} цифр.`);
+		}
+		await assertUniqueNumber(modelName, { number, date, organizationUuid, excludeUuid, extraWhere: uniqueWhere }, client);
+	}
 	return number;
 }
 

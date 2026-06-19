@@ -5,7 +5,6 @@ import { getFormatDateOnly } from "src/utils/datetime";
 import { docTypeLabel, docTypeToEndpoint } from "src/utils/accountingDocTypes";
 import { api } from "src/services/api/client";
 import styles from "./Field.module.scss";
-import { GroupCol } from "../UI";
 
 export interface BasisTypeConfig {
   type: string;

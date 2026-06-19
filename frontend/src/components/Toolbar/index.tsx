@@ -20,7 +20,7 @@ import {
 import IconButton, {
   type IconButtonProps,
 } from "src/components/IconButton/IconButton";
-import { Icon, type IconName, CloseIcon, ClearIcon } from "src/components/IconButton/icons";
+import { Icon, type IconName, ClearIcon } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
 import styles from "./Toolbar.module.scss";
 

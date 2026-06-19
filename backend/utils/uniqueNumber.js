@@ -6,6 +6,7 @@
 // организацией и тем же годом (по полю date). Защищает от ручного ввода дубля.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
+import { normalizeDocNumber } from "../services/documentNumbering.js";
 
 export class DuplicateNumberError extends Error {
 	constructor(message) {
@@ -24,7 +25,8 @@ export class DuplicateNumberError extends Error {
  *        ведут НЕЗАВИСИМЫЕ ряды номеров в одной таблице).
  */
 export async function assertUniqueNumber(modelName, { number, date, organizationUuid = null, excludeUuid, extraWhere = {} } = {}, client = prisma) {
-	const num = (number ?? "").trim();
+	// Сравнение по нормализованному значению (без ведущих нулей): «00074» == «74».
+	const num = normalizeDocNumber(number);
 	if (!num) return;
 	const d = date ? new Date(date) : new Date();
 	if (isNaN(d.getTime())) return;
@@ -41,6 +43,8 @@ export async function assertUniqueNumber(modelName, { number, date, organization
 	};
 	let existing = null;
 	try {
+		// Новые записи хранятся нормализованными → точный матч по нормализованному
+		// номеру корректен. (Легаси-строки с нулями сходятся к норме при пересохранении.)
 		existing = await client[modelName].findFirst({ where, select: { id: true } });
 	} catch (err) {
 		// Нет таблицы/поля — не блокируем по инфраструктурной ошибке.

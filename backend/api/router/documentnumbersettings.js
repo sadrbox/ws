@@ -1,4 +1,4 @@
-// API настроек нумерации документов: префикс и разрядность по виду документа.
+// API настроек нумерации документов: префикс по виду документа.
 // Глобально для установки. Экран «Настройки → Нумерация документов».
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
@@ -26,7 +26,6 @@ router.get("/document-number-settings", async (req, res) => {
 				// Подсказка-префикс вида документа (опционально, не подставляется автоматически).
 				defaultPrefix: def.prefix,
 				prefix: eff?.prefix ?? "",
-				padding: eff?.padding ?? 6,
 				enabled: eff?.enabled ?? true,
 				// Задано ли значение на уровне ЭТОЙ организации (а не глобально/дефолт).
 				isOverridden: !!own,
@@ -39,7 +38,7 @@ router.get("/document-number-settings", async (req, res) => {
 	}
 });
 
-// PUT — задать префикс/разрядность вида документа для организации (или глобально).
+// PUT — задать префикс вида документа для организации (или глобально).
 router.put("/document-number-settings/:docType", async (req, res) => {
 	try {
 		const { docType } = req.params;
@@ -50,13 +49,11 @@ router.put("/document-number-settings/:docType", async (req, res) => {
 			return res.status(403).json({ success: false, message: "Изменять нумерацию по умолчанию может только суперадминистратор" });
 		}
 		const prefix = String(req.body.prefix ?? "").trim();
-		const p = Number(req.body.padding);
-		const padding = Number.isInteger(p) && p >= 1 && p <= 9 ? p : 6;
 		const enabled = req.body.enabled === undefined ? true : !!req.body.enabled;
 		const row = await prisma.documentNumberSetting.upsert({
 			where: { organizationUuid_docType: { organizationUuid, docType } },
-			create: { organizationUuid, docType, prefix, padding, enabled },
-			update: { prefix, padding, enabled },
+			create: { organizationUuid, docType, prefix, enabled },
+			update: { prefix, enabled },
 		});
 		invalidateNumberSettingsCache();
 		return res.json({ success: true, item: row });

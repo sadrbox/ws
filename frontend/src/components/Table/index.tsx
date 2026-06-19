@@ -1168,7 +1168,7 @@ const TableBody = memo(() => {
     variant, selectable,
     rows, deferredRowsForRender, columns, isLoading, total,
     isFetchingNextPage, hasNextPage,
-    actions, scrollRef,
+    actions, scrollRef, search,
   } = useTableContext();
   const extraCol = variant !== 'select' && selectable ? 1 : 0; // +1 колонка под чекбокс
 
@@ -1186,6 +1186,15 @@ const TableBody = memo(() => {
   const lastRequestedCursorRef = useRef<number>(-1);
 
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
+
+  const normalizedSearch = search.value.trim();
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    scrollTopRef.current = 0;
+    if (el.scrollTop !== 0) el.scrollTop = 0;
+  }, [normalizedSearch, scrollRef]);
 
   // ── Подписка на скролл и resize ──
   useEffect(() => {
@@ -1318,6 +1327,7 @@ const TableBody = memo(() => {
   // ── Расчёт виртуализации ──
   const loadedCount = deferredRowsForRender.length;
   const effectiveContainerHeight = containerHeight > 0 ? containerHeight : 600;
+  const virtualRowsCount = normalizedSearch ? loadedCount : total;
 
   // Используем ref для расчёта padding — он всегда актуален, без задержки state.
   // Это предотвращает скачок полосы прокрутки при добавлении новых строк.
@@ -1337,7 +1347,7 @@ const TableBody = memo(() => {
 
   // bottomPadding вычисляется так, чтобы СУММА всегда равнялась total * ROW_HEIGHT.
   // Это гарантирует стабильную высоту таблицы и неподвижный ползунок скролла.
-  const totalTableHeight = total * ROW_HEIGHT;
+  const totalTableHeight = virtualRowsCount * ROW_HEIGHT;
   const bottomPaddingAll = Math.max(0, totalTableHeight - topPaddingAll - renderedRowsCount * ROW_HEIGHT);
 
   const visibleRows = useMemo(
@@ -1362,7 +1372,7 @@ const TableBody = memo(() => {
   return (
     <tbody>
       {topPaddingAll > 0 && (
-        <tr className={styles.VirtualPaddingRow} style={{ height: `${topPaddingAll}px` }}>
+        <tr className={styles.VirtualPaddingRow} style={{ height: `${topPaddingAll}px` }} aria-hidden="true" role="presentation">
           <td colSpan={visibleColumns.length + extraCol} />
         </tr>
       )}
@@ -1376,7 +1386,7 @@ const TableBody = memo(() => {
       ))}
 
       {bottomPaddingAll > 0 && (
-        <tr className={styles.VirtualPaddingRow} style={{ height: `${bottomPaddingAll}px` }}>
+        <tr className={styles.VirtualPaddingRow} style={{ height: `${bottomPaddingAll}px` }} aria-hidden="true" role="presentation">
           <td colSpan={visibleColumns.length + extraCol} >
 
           </td>

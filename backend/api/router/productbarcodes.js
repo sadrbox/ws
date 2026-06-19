@@ -62,13 +62,16 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		const { productUuid, barcode, comment } = req.body;
 		if (!productUuid)
 			return res.status(400).json({ success: false, message: "productUuid обязателен" });
-		const owner = await findBarcodeOwner(barcode, productUuid);
+		const bc = (barcode ?? "").trim();
+		if (!bc)
+			return res.status(400).json({ success: false, message: "Штрих-код обязателен и не может быть пустым" });
+		const owner = await findBarcodeOwner(bc, productUuid);
 		if (owner)
-			return res.status(409).json({ success: false, message: `Штрих-код «${String(barcode).trim()}» уже используется другим товаром` });
+			return res.status(409).json({ success: false, message: `Штрих-код «${bc}» уже используется другим товаром` });
 		const item = await prisma[MODEL].create({
 			data: {
 				productUuid,
-				barcode: (barcode ?? "").trim(),
+				barcode: bc,
 				comment: comment?.trim() || null,
 			},
 		});
@@ -86,7 +89,12 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const n = Number(p);
 		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
-		if (req.body.barcode !== undefined) data.barcode = (req.body.barcode ?? "").trim();
+		if (req.body.barcode !== undefined) {
+			const bc = (req.body.barcode ?? "").trim();
+			if (!bc)
+				return res.status(400).json({ success: false, message: "Штрих-код не может быть пустым" });
+			data.barcode = bc;
+		}
 		if (req.body.comment !== undefined) data.comment = req.body.comment?.trim() || null;
 		if (data.barcode) {
 			const existing = await prisma[MODEL].findUnique({ where: w, select: { productUuid: true } });
@@ -119,13 +127,16 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 			for (const { action, uuid, data } of operations) {
 				if (action === "create" && data?.productUuid) {
 					const bc = (data.barcode ?? "").trim();
-					if (bc) {
-						const owner = await findBarcodeOwner(bc, data.productUuid, tx);
-						if (owner) {
-							const e = new Error(`Штрих-код «${bc}» уже используется другим товаром`);
-							e.code = "BARCODE_DUPLICATE";
-							throw e;
-						}
+					if (!bc) {
+						const e = new Error("Штрих-код обязателен и не может быть пустым");
+						e.code = "BARCODE_INVALID";
+						throw e;
+					}
+					const owner = await findBarcodeOwner(bc, data.productUuid, tx);
+					if (owner) {
+						const e = new Error(`Штрих-код «${bc}» уже используется другим товаром`);
+						e.code = "BARCODE_DUPLICATE";
+						throw e;
 					}
 					await tx[MODEL].create({
 						data: {
@@ -136,7 +147,15 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 					});
 				} else if (action === "update" && uuid && data) {
 					const updateData = {};
-					if (data.barcode !== undefined) updateData.barcode = (data.barcode ?? "").trim();
+					if (data.barcode !== undefined) {
+						const bc = (data.barcode ?? "").trim();
+						if (!bc) {
+							const e = new Error("Штрих-код не может быть пустым");
+							e.code = "BARCODE_INVALID";
+							throw e;
+						}
+						updateData.barcode = bc;
+					}
 					if (data.comment !== undefined) updateData.comment = data.comment?.trim() || null;
 					if (updateData.barcode) {
 						const cur = await tx[MODEL].findUnique({ where: { uuid }, select: { productUuid: true } });
@@ -156,6 +175,8 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 		});
 		return res.status(200).json({ success: true });
 	} catch (error) {
+		if (error?.code === "BARCODE_INVALID")
+			return res.status(400).json({ success: false, message: error.message });
 		if (error?.code === "BARCODE_DUPLICATE")
 			return res.status(409).json({ success: false, message: error.message });
 		console.error(`POST /${ROUTE}/batch error:`, error);

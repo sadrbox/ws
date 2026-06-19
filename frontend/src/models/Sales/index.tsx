@@ -8,7 +8,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field, FieldDateTime } from "src/components/Field";
-import FieldTogglePostedDocument from "src/components/Field/FieldTogglePostedDocument";
+import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { Group, GroupRow, GroupCol } from "src/components/UI";
@@ -175,6 +175,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     if (data?.organizationUuid) { init.organizationUuid = data.organizationUuid; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
     if (data?.counterpartyUuid) { init.counterpartyUuid = data.counterpartyUuid; }
+    // «Менеджер» нового документа по умолчанию — сотрудник текущего пользователя
+    // (если у пользователя есть связанный Сотрудник). Без сотрудника — оставляем пусто.
+    const emp = (currentUser as { employee?: { uuid?: string; fullName?: string } } | undefined)?.employee;
+    if (emp?.uuid) { init.managerUuid = emp.uuid; init.managerName = emp.fullName ?? ""; }
     return init;
   })();
 
@@ -631,7 +635,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (
       <>
-        <FieldTogglePostedDocument name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
+        <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
         {isSavedDoc && <DocumentChainButton documentType="sale" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType="sale" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <ShowInJournalButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} paneId={form.paneId} />}
@@ -646,7 +650,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         )}
         {isSavedDoc && (
           <ActionsDropdownButton
-            icon="fromBasis"
+            // icon="fromBasis"
             label="На основании"
             options={[
               { id: "outgoing", label: formatDependentOption(translate("outgoingInvoice"), existingDeps["outgoing-invoices"]) },
@@ -683,10 +687,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             {/* Строка 1: Дата · Проведён · Статус */}
             <GroupRow className={styles.FormHeaderRow}>
               <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
-              <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9} placeholder={translate("autoOnSave")}
+              <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
                 actions={[
                   { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
-                  { type: "clear", onClick: () => form.setField("number", "") },
                 ]} />
             </GroupRow>
 

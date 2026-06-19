@@ -4,7 +4,11 @@ import type { TColumn } from "src/components/Table/types.tsx";
 import { Icon } from "src/components/IconButton/icons";
 import styles from "./renderPostedCell.module.scss";
 
-/** Стандартный рендер ячейки колонки "posted" в списках документов. */
+/**
+ * Стандартный рендер ячейки колонки "posted" в списках документов.
+ * (Номер документа рендерится как ОБЫЧНАЯ колонка через getFormatColumnValue,
+ * паддинг применяется там же — см. src/components/Table/services.ts.)
+ */
 export function renderPostedCell(row: TDataItem, col: TColumn): ReactNode | undefined {
   if (col.identifier !== "posted") return undefined;
   const isPosted = row.posted === true;

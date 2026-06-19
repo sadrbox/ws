@@ -1,8 +1,9 @@
 import { FC, useId } from "react";
 import { translate, getTranslation } from "src/i18";
-import styles from "./FieldTogglePostedDocument.module.scss";
+import { Icon } from "src/components/IconButton/icons";
+import styles from "./HeaderTogglePosted.module.scss";
 
-export interface FieldTogglePostedDocumentProps {
+export interface HeaderTogglePostedProps {
   /** Текущее состояние (проведён/не проведён). */
   value: boolean;
   /** Обработчик изменения. */
@@ -18,20 +19,21 @@ export interface FieldTogglePostedDocumentProps {
 }
 
 /**
- * Статусный переключатель «Проведён» — пилюля с круглым зелёным бейджем и
- * галочкой. Выделенный компонент специально для флага проведения документа
- * (визуально заметнее обычного FieldToggle). Кликабелен целиком, доступен
- * с клавиатуры.
+ * Переключатель «Проведён» для ШАПКИ панели (PaneItemHeaderToolbar). Это НЕ
+ * Field-элемент, а тулбар-тоггл в стиле IconButton: иконка статуса (posted/
+ * notPosted) + подпись, с подсветкой активного состояния (мягкий зелёный), без
+ * «пилюли». Кликабелен целиком, доступен с клавиатуры. Контракт props совпадает
+ * с прежним FieldTogglePostedDocument — замена в вызовах механическая.
  *
  * ```tsx
- * <FieldTogglePostedDocument
+ * <HeaderTogglePosted
  *   value={form.fields.posted}
  *   onChange={(v) => form.setField("posted", v)}
  *   disabled={!canWrite}
  * />
  * ```
  */
-const FieldTogglePostedDocument: FC<FieldTogglePostedDocumentProps> = ({
+const HeaderTogglePosted: FC<HeaderTogglePostedProps> = ({
   value,
   onChange,
   disabled,
@@ -63,25 +65,12 @@ const FieldTogglePostedDocument: FC<FieldTogglePostedDocumentProps> = ({
         onChange={() => { if (!disabled) onChange?.(!value); }}
         className={styles.input}
       />
-      <span className={styles.badge} aria-hidden>
-        <svg
-          className={styles.checkIcon}
-          viewBox="0 0 16 16"
-          width="13"
-          height="13"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden
-        >
-          <path d="M3 8.5l3 3 7-7" />
-        </svg>
+      <span className={styles.icon} aria-hidden>
+        <Icon name={value ? "posted" : "notPosted"} width={16} height={16} />
       </span>
       <span className={styles.label}>{text}</span>
     </label>
   );
 };
 
-export default FieldTogglePostedDocument;
+export default HeaderTogglePosted;

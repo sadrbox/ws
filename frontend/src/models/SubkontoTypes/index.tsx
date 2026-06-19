@@ -10,7 +10,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { Field, FieldNumber } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
-import { Group, GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";

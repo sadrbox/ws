@@ -1,15 +1,15 @@
 /**
- * DocumentNumberSettings — настройка нумерации документов: префикс и количество
- * цифр в номере по каждому виду документа. Серверные настройки
- * (GET/PUT/DELETE /document-number-settings). organizationUuid → настройки
- * конкретной организации (иначе — значения по умолчанию для всех).
+ * DocumentNumberSettings — настройка нумерации документов: префикс по каждому
+ * виду документа (номер хранится и отображается без ведущих нулей). Серверные
+ * настройки (GET/PUT/DELETE /document-number-settings). organizationUuid →
+ * настройки конкретной организации (иначе — значения по умолчанию для всех).
  */
 import { FC, useState, useMemo, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
-import { Field, FieldNumber } from "src/components/Field";
+import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import FieldActionButton from "src/components/Field/FieldActionButton";
 import { HelpBox } from "src/components/HelpBox";
@@ -25,7 +25,6 @@ interface Row {
   label: string;
   defaultPrefix: string;
   prefix: string;
-  padding: number;
   isOverridden: boolean;
 }
 
@@ -69,17 +68,16 @@ const DocumentNumberSettings: FC = () => {
       const o = origByType.get((cr as unknown as Row).docType);
       if (!o) return false;
       const c = cr as unknown as Row;
-      return String(c.prefix ?? "") !== String(o.prefix ?? "") || Number(c.padding) !== Number(o.padding);
+      return String(c.prefix ?? "") !== String(o.prefix ?? "");
     }),
     [currentRows, origByType],
   );
   const dirty = changedRows.length > 0;
 
-  // Пример номера по префиксу/разрядности (1 → дополненный нулями счётчик).
-  const example = (prefix: string, padding: number) => {
-    const seq = String(1).padStart(Math.min(9, Math.max(1, padding || 6)), "0");
+  // Пример номера по префиксу (номер без ведущих нулей: 1, 2, …).
+  const example = (prefix: string) => {
     const pfx = (prefix ?? "").trim();
-    return pfx ? `${pfx}-${seq}` : seq;
+    return pfx ? `${pfx}-1` : "1";
   };
 
   // Строки для SubTable (клиентский режим): плоский список видов документов.
@@ -99,7 +97,7 @@ const DocumentNumberSettings: FC = () => {
   // key пересевает SubTable при изменении серверных данных (после сохранения/сброса),
   // т.к. initialPendingRows мержатся однократно. Редактирование (edits) key не меняет.
   const tableKey = useMemo(
-    () => `${orgKey ?? "global"}|${rows.map((r) => `${r.docType}:${r.prefix}:${r.padding}:${r.isOverridden ? 1 : 0}`).join(",")}`,
+    () => `${orgKey ?? "global"}|${rows.map((r) => `${r.docType}:${r.prefix}:${r.isOverridden ? 1 : 0}`).join(",")}`,
     [rows, orgKey],
   );
 
@@ -113,10 +111,8 @@ const DocumentNumberSettings: FC = () => {
         return <span className={styles.cLabel}>{r.label}</span>;
       case "prefix":
         return <Field label="" variant="table" actions={[]} disabled={!canEdit} name={`pfx_${r.docType}`} value={r.prefix ?? ""} onChange={(e) => ctx.updateLocalRow(row, { prefix: e.target.value })} placeholder={r.defaultPrefix || translate("optional")} />;
-      case "digitsCount":
-        return <FieldNumber label="" variant="table" actions={[]} disabled={!canEdit} name={`pad_${r.docType}`} value={String(r.padding ?? 6)} onChange={(e) => ctx.updateLocalRow(row, { padding: Math.min(9, Math.max(1, Number(e.target.value) || 6)) })} />;
       case "exampleNumber":
-        return <code>{example(r.prefix, r.padding)}</code>;
+        return <code>{example(r.prefix)}</code>;
       case "source":
         return r.isOverridden
           ? <span className={styles.BadgeOwn}>{orgKey ? translate("sourceOrg") : translate("sourceSet")}</span>
@@ -140,7 +136,7 @@ const DocumentNumberSettings: FC = () => {
       for (const cr of changedRows) {
         const c = cr as unknown as Row;
         // Префикс необязателен — пустой допустим (номер без префикса).
-        await api.put(`document-number-settings/${c.docType}`, { prefix: String(c.prefix ?? "").trim(), padding: c.padding, enabled: true, organizationUuid: orgKey });
+        await api.put(`document-number-settings/${c.docType}`, { prefix: String(c.prefix ?? "").trim(), enabled: true, organizationUuid: orgKey });
       }
       showToast(translate("saved"), "success");
       qc.invalidateQueries({ queryKey: QKEY(orgKey) });

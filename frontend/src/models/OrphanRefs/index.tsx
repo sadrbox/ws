@@ -7,7 +7,7 @@
  */
 import { FC, useState, useCallback } from "react";
 import { Button } from "src/components/Button";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol } from "src/components/UI";
 import { useAppContext } from "src/app";
 import apiClient from "src/services/api/client";
 import mainStyles from "src/styles/main.module.scss";

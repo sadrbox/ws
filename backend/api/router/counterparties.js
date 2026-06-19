@@ -426,6 +426,13 @@ router.put("/counterparties/:uuid", async (req, res) => {
 			}
 		}
 
+		// БИН редактируем — валидируем формат (12 цифр); уникальность обеспечивает
+		// БД-ограничение (P2002 → 409 в catch).
+		if (bin !== undefined) {
+			const binValidation = validateBIN(bin);
+			if (!binValidation.valid) errors.push(binValidation.error);
+		}
+
 		if (errors.length > 0) {
 			return res.status(400).json({
 				message: "Ошибка валидации",
@@ -442,7 +449,7 @@ router.put("/counterparties/:uuid", async (req, res) => {
 			updateData.legalName = legalName?.trim() || null;
 		}
 		if (bin !== undefined) {
-			updateData.bin = bin?.trim() || null;
+			updateData.bin = bin.trim();
 		}
 
 		// Обновление контрагента
@@ -453,6 +460,11 @@ router.put("/counterparties/:uuid", async (req, res) => {
 
 		res.status(200).json(updatedCounterparty);
 	} catch (error) {
+		if (error.code === "P2002") {
+			return res.status(409).json({
+				message: "Контрагент с таким БИН уже существует",
+			});
+		}
 		console.error("Error updating counterparty:", error);
 		res.status(500).json({
 			message: "Не удалось обновить контрагента",

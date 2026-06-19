@@ -22,17 +22,6 @@
 		"sortable": false
 	},
 	{
-		"identifier": "digitsCount",
-		"hint": "Цифр в номере",
-		"type": "number",
-		"visible": true,
-		"inlist": true,
-		"width": "130px",
-		"minWidth": "90px",
-		"alignment": "left",
-		"sortable": false
-	},
-	{
 		"identifier": "exampleNumber",
 		"hint": "Пример номера",
 		"type": "string",

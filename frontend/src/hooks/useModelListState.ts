@@ -22,16 +22,6 @@ import type { TTableVariant } from "src/components/Table";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { ENDPOINT_TO_MODEL } from "src/utils/userAccessRightsMap";
 
-const stringifyJson = (v: any): string => {
-	if (v == null) return "";
-	try {
-		const s = JSON.stringify(v);
-		return s === "{}" || s === "[]" ? "" : s;
-	} catch {
-		return "";
-	}
-};
-
 export interface UseModelListStateOptions {
 	/** API endpoint (например "organizations") */
 	model: string;

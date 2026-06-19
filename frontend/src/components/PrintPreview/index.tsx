@@ -3,9 +3,8 @@ import { translate } from "src/i18";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
 import apiClient from "src/services/api/client";
-import { Button } from "src/components/Button";
 import { FieldSelect } from "src/components/Field";
-import { Group, GroupCol, GroupRow, LoadingSpinner } from "src/components/UI";
+import { GroupRow } from "src/components/UI";
 import styles from "./PrintPreview.module.scss";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -76,7 +75,6 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selected, setSelected] = useState("");
   const [src, setSrc] = useState("");           // blob URL для iframe
-  const [isPdf, setIsPdf] = useState(false);    // PDF отображается иначе (нативный viewer)
   const [loading, setLoading] = useState(false);
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +113,7 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
     const file = filesRef.current.find(f => f.uuid === uuid);
     if (!file) return;
     const gen = ++genRef.current;
-    setConverting(true); setError(null); setIsPdf(false); revoke();
+    setConverting(true); setError(null); revoke();
 
     try {
       const e = ext(file.fileName);
@@ -125,7 +123,6 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
       if (PDF_EXT.test(file.fileName)) {
         const r = await dl("blob"); if (stale()) return;
         setSrc(URL.createObjectURL(r.data as Blob));
-        setIsPdf(true);
 
       } else if (IMAGE_EXT.test(file.fileName)) {
         const r = await dl("blob"); if (stale()) return;
@@ -184,14 +181,7 @@ const PrintPreview: FC<PrintPreviewProps> = ({ ownerUuid, ownerType = "contract"
 
   useEffect(() => { if (selected) void convert(selected); else revoke(); }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Печать ─────────────────────────────────────────────────────────────
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-
-  const print = useCallback(() => {
-    const frame = iframeRef.current;
-    if (!frame || !srcRef.current) return;
-    try { frame.contentWindow?.print(); } catch { window.print(); }
-  }, []);
 
   // ── Рендер ─────────────────────────────────────────────────────────────
   const busy = loading || converting;

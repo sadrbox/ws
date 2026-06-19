@@ -42,7 +42,7 @@ const _cache = new Map(); // orgKey → { map, at }
 const SETTINGS_TTL = 15_000;
 
 /**
- * Карта docType → {prefix, padding} для организации: глобальные значения
+ * Карта docType → {prefix, enabled} для организации: глобальные значения
  * («__global__») переопределяются настройками самой организации.
  */
 async function loadSettings(client, orgUuid) {
@@ -55,9 +55,9 @@ async function loadSettings(client, orgUuid) {
 		const orgs = orgKey === GLOBAL_SETTINGS_KEY ? [GLOBAL_SETTINGS_KEY] : [GLOBAL_SETTINGS_KEY, orgKey];
 		const rows = await client.documentNumberSetting.findMany({ where: { organizationUuid: { in: orgs } } });
 		// Сначала глобальные, затем — настройки организации (имеют приоритет).
-		for (const r of rows) if (r.organizationUuid === GLOBAL_SETTINGS_KEY) map[r.docType] = { prefix: r.prefix, padding: r.padding, enabled: r.enabled };
+		for (const r of rows) if (r.organizationUuid === GLOBAL_SETTINGS_KEY) map[r.docType] = { prefix: r.prefix, enabled: r.enabled };
 		if (orgKey !== GLOBAL_SETTINGS_KEY)
-			for (const r of rows) if (r.organizationUuid === orgKey) map[r.docType] = { prefix: r.prefix, padding: r.padding, enabled: r.enabled };
+			for (const r of rows) if (r.organizationUuid === orgKey) map[r.docType] = { prefix: r.prefix, enabled: r.enabled };
 	} catch {
 		/* нет таблицы/ошибка — используем дефолты из NUMBER_CONFIG */
 	}
@@ -93,7 +93,6 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 	// Префикс опционален: по умолчанию его нет, номер — только дополненный нулями
 	// счётчик («000000001»). Префикс добавляется через «-», только если задан.
 	const prefix = (settings[docType]?.prefix ?? "").trim();
-	const padding = settings[docType]?.padding || 6;
 	const year = (date ? new Date(date) : new Date()).getFullYear();
 	const org = organizationUuid || GLOBAL_SETTINGS_KEY;
 	// Префикс — ОТДЕЛЬНАЯ последовательность: «РЕАЛ-…» и «…» (без префикса) ведут
@@ -111,7 +110,8 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 			 RETURNING "lastValue"`,
 			org, key, year, jmax,
 		);
-		const seq = String(rows[0].lastValue).padStart(padding, "0");
+		// ХРАНЕНИЕ и ОТОБРАЖЕНИЕ без ведущих нулей: числовая часть как есть.
+		const seq = String(rows[0].lastValue);
 		return prefix ? `${prefix}-${seq}` : seq;
 	} catch (err) {
 		console.error(`allocateNumber(${docType}) error:`, err);
@@ -150,7 +150,8 @@ const DOC_JOURNAL = {
  */
 export async function isNumberTaken(docType, number, organizationUuid, date, excludeUuid, client = prisma) {
 	const j = DOC_JOURNAL[docType];
-	const num = String(number ?? "").trim();
+	// Сравнение по нормализованному значению (без ведущих нулей): «00074» == «74».
+	const num = normalizeDocNumber(number);
 	if (!j || !num) return false;
 	const year = (date ? new Date(date) : new Date()).getFullYear();
 	const params = [num];
@@ -239,7 +240,6 @@ export async function peekNextNumber(docType, organizationUuid, date, client = p
 	// сохранении (allocateNumber), а кнопка «Присвоить номер» — явное действие
 	// пользователя: предлагаем следующий номер даже при выключенной автонумерации.
 	const prefix = (settings[docType]?.prefix ?? "").trim();
-	const padding = settings[docType]?.padding || 6;
 	const year = (date ? new Date(date) : new Date()).getFullYear();
 	const org = organizationUuid || GLOBAL_SETTINGS_KEY;
 	let last = 0;
@@ -251,7 +251,7 @@ export async function peekNextNumber(docType, organizationUuid, date, client = p
 		last = row?.lastValue ?? 0;
 	} catch { /* нет строки/таблицы — стартуем с максимума журнала */ }
 	const jmax = await journalMaxForYear(docType, organizationUuid, year, prefix, client);
-	return formatDocNumber(prefix, padding, Math.max(last, jmax) + 1);
+	return formatDocNumber(prefix, Math.max(last, jmax) + 1);
 }
 
 /**
@@ -289,11 +289,11 @@ export async function resyncSequenceAfterDelete(docType, deletedDoc, client = pr
 }
 
 /**
- * Приводит УЖЕ присвоенный номер к текущим настройкам (префикс/разрядность),
- * СОХРАНЯЯ числовую часть (позицию в последовательности). Напр. после смены
- * префикса: «ПГРМ-000003» → «000003» (а НЕ следующий «000004»). Используется
- * кнопкой «Присвоить номер» для существующего документа — чтобы переприсвоение
- * не «перепрыгивало» вперёд по сквозному счётчику.
+ * Приводит УЖЕ присвоенный номер к текущим настройкам (префикс), СОХРАНЯЯ
+ * числовую часть (позицию в последовательности). Напр. после смены префикса:
+ * «ПГРМ-3» → «3» (а НЕ следующий «4»). Используется кнопкой «Присвоить номер»
+ * для существующего документа — чтобы переприсвоение не «перепрыгивало» вперёд
+ * по сквозному счётчику.
  * @returns {Promise<string|null>} переформатированный номер или null (нет цифр/конфига).
  */
 export async function reformatNumber(docType, organizationUuid, current, client = prisma) {
@@ -301,14 +301,14 @@ export async function reformatNumber(docType, organizationUuid, current, client 
 	if (!fmt) return null;
 	const m = String(current ?? "").match(/(\d+)\s*$/);
 	if (!m) return null;
-	return formatDocNumber(fmt.prefix, fmt.padding, parseInt(m[1], 10));
+	return formatDocNumber(fmt.prefix, parseInt(m[1], 10));
 }
 
 /**
  * Перенумеровывает ТОЛЬКО черновики (posted=false) выбранного вида документа под
- * ТЕКУЩИЕ настройки нумерации (префикс/разрядность). Числовая часть номера
- * сохраняется (та же позиция в последовательности) — меняется лишь формат:
- *   «000001» → «РЕАЛ-000000001» (после смены префикса/разрядности).
+ * ТЕКУЩИЕ настройки нумерации (префикс). Числовая часть номера сохраняется (та же
+ * позиция в последовательности) — меняется лишь префикс и нормализуются нули:
+ *   «000001» → «РЕАЛ-1» (после смены префикса).
  * Это гарантирует 1:1-соответствие и не создаёт коллизий; проведённые/
  * распечатанные документы НЕ затрагиваются.
  *
@@ -336,7 +336,7 @@ export async function renumberDraftDocuments(docType, organizationUuid, client =
 		return { updated: 0, skipped: 0 };
 	}
 	let updated = 0, skipped = 0;
-	const fmtCache = new Map(); // orgKey → {prefix,padding}
+	const fmtCache = new Map(); // orgKey → {prefix,enabled}
 	for (const r of rows) {
 		const org = r.organizationUuid ?? null;
 		const cacheKey = org || GLOBAL_SETTINGS_KEY;
@@ -346,7 +346,7 @@ export async function renumberDraftDocuments(docType, organizationUuid, client =
 		// Числовая часть = завершающая группа цифр («РЕАЛ-000123» → 123, «000123» → 123).
 		const m = String(r.number ?? "").match(/(\d+)\s*$/);
 		const newNumber = m
-			? formatDocNumber(fmt.prefix, fmt.padding, parseInt(m[1], 10))
+			? formatDocNumber(fmt.prefix, parseInt(m[1], 10))
 			: await allocateNumber(docType, org, r.date, client); // номера не было — выдаём свежий
 		if (!newNumber || newNumber === r.number) { skipped++; continue; }
 		try {
@@ -361,29 +361,52 @@ export async function renumberDraftDocuments(docType, organizationUuid, client =
 }
 
 /**
- * Текущий формат нумерации документа: префикс/ширина/включена. Префикс и ширина —
- * из настроек организации (с глобальным дефолтом). По умолчанию префикса нет.
- * @returns {Promise<{prefix:string, padding:number, enabled:boolean}|null>}
+ * Текущий формат нумерации документа: префикс/включена. Префикс — из настроек
+ * организации (с глобальным дефолтом). По умолчанию префикса нет.
+ * @returns {Promise<{prefix:string, enabled:boolean}|null>}
  */
 export async function getNumberFormat(docType, organizationUuid, client = prisma) {
 	if (!NUMBER_CONFIG[docType]) return null;
 	const settings = await loadSettings(client, organizationUuid);
 	return {
 		prefix: (settings[docType]?.prefix ?? "").trim(),
-		padding: settings[docType]?.padding || 6,
 		enabled: settings[docType]?.enabled !== false,
 	};
 }
 
 /**
- * Форматирует числовое значение номера: «{ПРЕФИКС}-{NNNN}» или «{NNNN}» (без
- * префикса), с дополнением нулями до padding. Best practice: номера группируются
- * по ПРЕФИКСУ — это отдельные последовательности («ыва34234» с префиксом «ыва» и
- * «000034235» без префикса — РАЗНЫЕ ряды).
+ * Форматирует числовое значение для ХРАНЕНИЯ: «{ПРЕФИКС}-{N}» или «{N}» (без
+ * префикса), БЕЗ ведущих нулей. Номера группируются по ПРЕФИКСУ — это отдельные
+ * последовательности («ыва34234» с префиксом «ыва» и «34235» без — РАЗНЫЕ ряды).
  */
-export function formatDocNumber(prefix, padding, value) {
-	const seq = String(Number(value) || 0).padStart(padding, "0");
+export function formatDocNumber(prefix, value) {
+	const seq = String(Number(value) || 0);
 	return prefix ? `${prefix}-${seq}` : seq;
+}
+
+/**
+ * Нормализует номер для ХРАНЕНИЯ и СРАВНЕНИЯ: префикс остаётся инлайн, у числовой
+ * части срезаются ведущие нули. «РЕАЛ-000042» → «РЕАЛ-42», «00074» → «74»,
+ * «000» → «0». Строки без завершающих цифр возвращаются как есть (с триммингом).
+ * Благодаря нормализации «74», «00074» и «000000074» считаются ОДНИМ номером.
+ */
+export function normalizeDocNumber(raw) {
+	const s = String(raw ?? "").trim();
+	if (!s) return "";
+	const m = s.match(/^(.*?)(\d+)\s*$/);
+	if (!m) return s;
+	const digits = m[2].replace(/^0+/, "") || "0";
+	return m[1] + digits;
+}
+
+/**
+ * Длина нормализованной числовой части (для валидации лимита 9 символов).
+ * «РЕАЛ-000042» → 2. Строки без цифр → 0.
+ */
+export function docNumberDigitLength(raw) {
+	const m = String(raw ?? "").trim().match(/(\d+)\s*$/);
+	if (!m) return 0;
+	return (m[1].replace(/^0+/, "") || "0").length;
 }
 
 /**
