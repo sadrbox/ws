@@ -286,6 +286,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
             endpoint="saleitems"
             componentName="TerminalCart"
             organizationUuid={orgUuid}
+            priceTypeUuid={priceTypeUuid}
             deferRemoteChanges
             initialPendingRows={EMPTY_ROWS}
             apiRef={cartApiRef}

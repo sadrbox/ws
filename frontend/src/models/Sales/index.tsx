@@ -770,6 +770,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           componentName="SaleItemsList_part"
           organizationUuid={form.fields.organizationUuid}
           documentDate={form.fields.date || null}
+          priceTypeUuid={form.fields.priceTypeUuid}
           disabled={form.isLoading}
           deferRemoteChanges
           onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}

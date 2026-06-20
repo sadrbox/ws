@@ -237,10 +237,12 @@ export function useModelListState(opts: UseModelListStateOptions) {
 			enableDateRange?: boolean;
 			renderCell?: (row: TDataItem, col: TColumn) => ReactNode | undefined;
 			highlightUuid?: string;
+			highlightToken?: number;
 		}) => ({
 			variant: extra.variant,
 			onSelectItem: extra.onSelectItem,
 			highlightUuid: extra.highlightUuid,
+			highlightToken: extra.highlightToken,
 			enableDateRange: extra.enableDateRange ?? false,
 			componentName,
 			rows,

@@ -16,14 +16,13 @@ const listeners = new Map<string, Set<Listener>>();
 
 export function setPendingHighlight(endpoint: string, uuid?: string): void {
   if (!endpoint || !uuid) return;
-  const subs = listeners.get(endpoint);
-  if (subs && subs.size > 0) {
-    // Список уже смонтирован — обновляем активную строку сразу (live).
-    subs.forEach((fn) => fn(uuid));
-  } else {
-    // Списка ещё нет — запомним до его монтирования.
-    pending.set(endpoint, uuid);
-  }
+  // Всегда кладём в pending — это «страховка» на случай, если список ещё не
+  // смонтирован / будет перемонтирован: новый ModelList заберёт значение при
+  // монтировании (consumePendingHighlight).
+  pending.set(endpoint, uuid);
+  // И одновременно доставляем уже открытому списку — чтобы activeRow перешёл
+  // даже если Pane был открыт ранее (без перемонтирования).
+  listeners.get(endpoint)?.forEach((fn) => fn(uuid));
 }
 
 export function consumePendingHighlight(endpoint: string): string | undefined {

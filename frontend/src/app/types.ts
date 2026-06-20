@@ -96,7 +96,8 @@ export type TPane = {
 export type TPaneRestore =
 	| { kind: "list"; ref: string }
 	| { kind: "form"; endpoint: string; uuid?: string }
-	| { kind: "report"; key: string; data?: Record<string, any> };
+	| { kind: "report"; key: string; data?: Record<string, any> }
+	| { kind: "file"; uuid: string; fileName?: string; mimeType?: string | null };
 
 export type TComponentNode =
 	| FC<any>

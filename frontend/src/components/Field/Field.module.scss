@@ -287,50 +287,24 @@
 
 .FieldActions {
 	box-sizing: content-box;
-	display: flex;
+	margin-right: 4px;
+	// Скрываем действия поля по умолчанию — показываем только когда поле в фокусе
+	// (фокус на input/select или на самих кнопках действий внутри обёртки).
+	display: none;
 	flex-direction: row;
 	align-items: center;
 	gap: 3px;
-	// Поле НЕ в фокусе: блок действий лежит СЛОЕМ ПОД значением поля (значение
-	// перекрывает его сверху), прижат к правому краю обёртки и приглушён до 0.6.
-	// pointer-events:none — пока поле неактивно, клики уходят полю (его фокус
-	// поднимает действия наверх и делает их кликабельными — см. правило ниже).
-	position: absolute;
-	right: 4px;
-	top: 50%;
-	transform: translateY(-50%);
-	z-index: 0;
-	opacity: 0.6;
-	pointer-events: none;
 	// кнопки внутри — общий компонент IconButton (size="sm");
 	// все стили (hover/focus/active/disabled) определены в
 	// src/components/icons/IconButton.module.scss
 }
 
-// Значение/контрол поля рисуется ПОВЕРХ слоя действий (z-index выше абсолютного
-// блока действий) — поэтому представление поля перекрывает FieldActions.
-.FieldInputWrapper > .FieldString,
-.FieldInputWrapper > .FieldNumber,
-.FieldInputWrapper > .FieldDate,
-.FieldSelectWrapper > .FieldSelect,
-.FieldTextareaInputWrapper > .FieldTextarea,
-.FieldPeriodWrapper > .FieldPeriod {
-	position: relative;
-	z-index: 1;
-}
-
-// Поле В ФОКУСЕ: действия возвращаются в поток, поверх значения, полностью видимы
-// и кликабельны (как было до слоёв).
+// Показываем FieldActions только при фокусе внутри обёртки поля (любой вариант).
 .FieldInputWrapper:focus-within .FieldActions,
 .FieldSelectWrapper:focus-within .FieldActions,
 .FieldTextareaInputWrapper:focus-within .FieldActions,
 .FieldPeriodWrapper:focus-within .FieldActions {
-	position: static;
-	transform: none;
-	z-index: 2;
-	opacity: 1;
-	pointer-events: auto;
-	margin-right: 4px;
+	display: flex;
 }
 
 // ── FieldFile (выбор файла в стиле Field + Button) ──────────────────────────

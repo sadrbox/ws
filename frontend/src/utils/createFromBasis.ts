@@ -295,6 +295,12 @@ export interface OrgDependentField {
  * форме — сюда передаются сеттеры/ref, чтобы не ломать порядок объявления
  * (allItemsRef нужен в onBeforeSave ДО useFormStore).
  */
+// uuid основания, по которому в последний раз перезаполнялась таблица данной формы.
+// Ключ — стабильный store формы. Нужен, чтобы при СМЕНЕ основания делать ЧИСТОЕ
+// перезаполнение из нового основания, не завися от устаревшего allItemsRef
+// (из-за чего «Перезаполнить» иногда срабатывало только со второго клика).
+const lastRefillBasis = new WeakMap<object, string>();
+
 export async function runBasisRefill(opts: {
 	form: any;
 	skipFields: boolean;
@@ -333,15 +339,42 @@ export async function runBasisRefill(opts: {
 		}
 	}
 
+	// Сменилось ли основание С ПРОШЛОГО перезаполнения этой формы. На ПЕРВОМ
+	// перезаполнении (записи ещё нет) basisChanged=false — чтобы для сохранённого
+	// документа сработал идемпотентный merge (а не delete+create серверных строк).
+	const storeKey = opts.form.store as object;
+	const basisChanged = lastRefillBasis.has(storeKey) && lastRefillBasis.get(storeKey) !== basisUuid;
+	lastRefillBasis.set(storeKey, basisUuid);
+
 	// Текущее отображаемое состояние таблицы (сервер + pending, без delete).
-	// Если вкладка ещё не открывалась — дозагружаем строки с сервера.
-	let displayed = opts.allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
-	if (displayed.length === 0 && snap.uuid) {
-		displayed = await fetchDocumentItems(opts.itemsEndpoint, opts.itemsParentField, snap.uuid);
+	const live = opts.allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+
+	let merged: any[];
+	if (basisChanged) {
+		// ОСНОВАНИЕ СМЕНИЛОСЬ → ЧИСТОЕ перезаполнение из НОВОГО основания: не мержим
+		// со старыми строками (которые в allItemsRef могут быть устаревшими на 1 рендер
+		// после remount — отсюда «нужен второй клик»). Старые серверные строки помечаем
+		// на удаление, черновики заменяются строками нового основания.
+		let serverRows = live.filter((r: any) => isServerRow(r));
+		if (serverRows.length === 0 && snap.uuid) {
+			const fetched = await fetchDocumentItems(opts.itemsEndpoint, opts.itemsParentField, snap.uuid);
+			serverRows = fetched.filter((r: any) => isServerRow(r));
+		}
+		merged = [...result.items, ...serverRows.map((r: any) => ({ ...r, _pendingAction: "delete" }))];
+	} else {
+		// То же основание → идемпотентный merge по sourceRowId (без дублей, серверные
+		// строки и ручные правки сохраняются). Если вкладка ещё не открывалась —
+		// дозагружаем строки с сервера.
+		let displayed = live;
+		if (displayed.length === 0 && snap.uuid) {
+			displayed = await fetchDocumentItems(opts.itemsEndpoint, opts.itemsParentField, snap.uuid);
+		}
+		merged = buildRefillBasisItems(displayed, result.items);
 	}
-	// Идемпотентный merge по sourceRowId (без дублей, ручные строки сохраняются).
-	const merged = buildRefillBasisItems(displayed, result.items);
-	if (merged.length) {
+
+	// При смене основания обновляем таблицу всегда (даже если merged пуст — основание
+	// без позиций → очистить); при том же основании — только если есть изменения.
+	if (merged.length || basisChanged) {
 		opts.setBasisItems(merged);
 		opts.bumpItemsTableKey();
 	}

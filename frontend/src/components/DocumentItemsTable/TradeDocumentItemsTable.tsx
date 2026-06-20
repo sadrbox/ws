@@ -13,7 +13,7 @@
 //   • НК РК ст. 372 п.2 пп.3 — внутренние перемещения ТМЗ не являются
 //                              облагаемым оборотом (hasTaxes=false)
 // ─────────────────────────────────────────────────────────────────────────────
-import { FC, useCallback, useMemo, useState } from "react";
+import { FC, useCallback, useMemo, useState, useRef } from "react";
 import type { MutableRefObject, ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -107,6 +107,9 @@ export interface TradeDocumentItemsTableProps {
   rowActions?: (row: TDataItem, ctx: SubTableContext) => ReactNode;
   /** Кнопки −/+ вокруг поля «Количество» (быстрое изменение, для терминала/кассы). */
   quantityStepper?: boolean;
+  /** Тип цены документа («Тип цены» в шапке). При выборе номенклатуры в строке
+   *  поле «Цена» автозаполняется из истории цен товара по этому типу. */
+  priceTypeUuid?: string | null;
 }
 
 const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
@@ -133,8 +136,13 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   apiRef,
   rowActions,
   quantityStepper = false,
+  priceTypeUuid,
 }) => {
   const queryClient = useQueryClient();
+  // Тип цены документа в ref — чтобы асинхронный автоподбор цены при выборе
+  // номенклатуры читал актуальное значение, а не захваченное в замыкании.
+  const priceTypeUuidRef = useRef<string | null | undefined>(priceTypeUuid);
+  priceTypeUuidRef.current = priceTypeUuid;
   const settings = useOrgAccountingSettings(organizationUuid ?? null, documentDate ?? null);
   // Если hasTaxes=false — принудительно отключаем все косвенные налоги.
   const useDiscount = settings.useDiscount;
@@ -272,6 +280,30 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     },
     [isVatEnabled, useDiscount, useExcise, vatCalculationMethod, orgVatRate, orgExciseRate, hasTaxes],
   );
+
+  // Автоподбор цены при выборе номенклатуры в строке — ТОЛЬКО по выбранному в
+  // шапке «Тип цены»: берём последнюю цену товара этого типа из истории цен.
+  // Если «Тип цены» НЕ выбран или цены по типу нет — поле «Цена» не трогаем.
+  const autofillRowPrice = useCallback(async (
+    ctx: SubTableContext,
+    row: TDataItem,
+    productUuid: string,
+  ) => {
+    const typeUuid = (priceTypeUuidRef.current || "").trim();
+    if (!typeUuid) return; // тип цены не задан → не подставляем цену
+    let price: number | null = null;
+    try {
+      const resp = await apiClient.get<{ items?: Array<{ price?: number | string | null }> }>(
+        "product-prices",
+        { params: { productUuid, priceTypeUuid: typeUuid, limit: 1 } },
+      );
+      const p = resp.data?.items?.[0]?.price;
+      if (p != null && p !== "") price = Number(p);
+    } catch { /* нет цены/ошибка → не трогаем поле */ }
+    if (price == null || Number.isNaN(price)) return;
+    if (ctx.deferRemoteChanges) ctx.updateLocalRow(row, recalcWithFlags(row as any, { price }));
+    else ctx.handleInlineChange(row, "price", String(price));
+  }, [recalcWithFlags]);
 
   const allRequiredFields = useMemo(() => ["product.name", "quantity", "price", "unitOfMeasure.name"], []);
   const requiredFields = showRequiredHighlight ? allRequiredFields : undefined;
@@ -412,6 +444,8 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
               extra.unitOfMeasure = um ? { uuid: um.uuid ?? umUuid, name: um.name ?? "" } : { uuid: umUuid, name: "" };
             }
             ctx.handleLookupChange(row, "productUuid", uuid, extra);
+            // Автозаполнение цены из истории цен товара по типу цены документа.
+            if (uuid) void autofillRowPrice(ctx, row, uuid);
           }}
           onClear={() => ctx.handleLookupChange(row, "productUuid", null, { product: null })}
           onEnterKey={() => focusNextInRow(document.activeElement)}

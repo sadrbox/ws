@@ -281,9 +281,29 @@ export const TrashIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+/** Ссылка (цепочка) — копировать ссылку на текущую панель. */
+export const LinkIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M6.5 9.5l3-3" />
+    <path d="M8 4.5l.8-.8a2.5 2.5 0 0 1 3.5 3.5l-.8.8" />
+    <path d="M8 11.5l-.8.8a2.5 2.5 0 0 1-3.5-3.5l.8-.8" />
+  </svg>
+);
+
+/** Скачать (стрелка вниз в лоток). */
+export const DownloadIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M8 2.5v7" />
+    <path d="M5 7l3 3 3-3" />
+    <path d="M3 12.5h10" />
+  </svg>
+);
+
 export const ICONS = {
   recalc: RecalcIcon,
   trash: TrashIcon,
+  link: LinkIcon,
+  download: DownloadIcon,
   ledger: LedgerIcon,
   settings: SettingsIcon,
   reload: ReloadIcon,

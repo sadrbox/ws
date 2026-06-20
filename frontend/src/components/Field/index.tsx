@@ -131,7 +131,8 @@ interface TypeFieldStringProps {
   error?: boolean;
   /** Явный список действий-кнопок (полностью переопределяет встроенные). */
   actions?: TypeFieldActions;
-  /** Показывать встроенную кнопку «Очистить», если `actions` не задан. По умолчанию true. */
+  /** Показывать встроенную кнопку «Очистить», если `actions` не задан. По умолчанию
+   *  false — без явных `actions`/`clearable` поле не показывает FieldActions при фокусе. */
   clearable?: boolean;
   variant?: FieldVariant;
   autoFocus?: boolean;
@@ -202,7 +203,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   required = false,
   error = false,
   actions,
-  clearable = true,
+  clearable = false,
   variant = 'default',
   autoFocus,
   maxLength,
@@ -221,8 +222,9 @@ export const Field: FC<TypeFieldStringProps> = ({
     }
   };
 
-  // FieldActions опциональны: явный `actions` переопределяет; иначе встроенная
-  // «Очистить» показывается только при clearable (по умолчанию для Field — да).
+  // FieldActions опциональны: явный `actions` переопределяет; встроенная «Очистить»
+  // показывается ТОЛЬКО при clearable (по умолчанию false — без actions/clearable
+  // поле не показывает FieldActions при фокусе).
   const defaultActions: TypeFieldActions = actions ?? (clearable ? [{ type: "clear", onClick: handleClear }] : []);
 
   const visibleActions = disabled

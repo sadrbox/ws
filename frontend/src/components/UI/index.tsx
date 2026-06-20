@@ -10,6 +10,7 @@ import { ActivityHistoriesList } from 'src/models/ActivityHistories';
 // import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app/context';
 import { ReloadButton, ClearButton, IconButton } from 'src/components/Toolbar';
+import { copyPaneLink } from 'src/utils/paneLink';
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
@@ -56,6 +57,7 @@ import { TaxesList } from 'src/models/Taxes';
 import { OrganizationAccountingSettingsList } from 'src/models/OrganizationAccountingSettings';
 import GeneralSettings from 'src/models/GeneralSettings';
 import DocumentNumberSettings from 'src/models/DocumentNumberSettings';
+import { FilesList } from 'src/models/Files';
 import { CurrenciesList } from 'src/models/Currencies';
 import { EmployeesList } from 'src/models/Employees';
 import { PositionsList } from 'src/models/Positions';
@@ -461,6 +463,14 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
           {/* Слот для дополнительных кнопок от конкретной формы (напр. «Печать»).
               Регистрируются через usePaneHeaderActions(paneId, <…/>). */}
           <div ref={headerSlot} className={styles.PaneItemHeaderActionsSlot} />
+          {p.restore && (
+            <IconButton
+              icon="link"
+              title="Копировать ссылку на эту форму"
+              aria-label="Копировать ссылку"
+              onClick={() => void copyPaneLink(p.restore!)}
+            />
+          )}
           {hasToolbar && <ReloadButton onClick={onReload} disabled={!isEditMode} />}
           <ClearButton onClick={onClose} />
         </div>
@@ -1027,6 +1037,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("UserSettings") && <li onClick={async () => { const m = await import("src/models/UserSettings"); addPane({ component: m.UserSettingsModuleList, label: translate("UserSettings") }); }}>{translate("UserSettings")}</li>}
               {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList, label: translate("ActivityHistoriesList") })}>{translate("ActivityHistoriesList")}</li>}
               {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</li>}
+              <li onClick={() => addPane({ component: FilesList, label: translate("files") })}>{translate("files")}</li>
               <li onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</li>
               <li onClick={() => addPane({ component: OrphanRefsForm, label: translate("deletedReferenceControl") })}>{translate("deletedReferenceControl")}</li>
               <li onClick={() => addPane({ component: SearchReplaceRefsForm, label: translate("searchReplaceReferences") })}>{translate("searchReplaceReferences")}</li>

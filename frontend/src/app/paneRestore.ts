@@ -76,5 +76,15 @@ export async function restorePane(p: PersistedPane, addPane: AddPane): Promise<v
 			await openReport(r.key, addPane, p.label, r.data);
 			return;
 		}
+		case "file": {
+			const { FileViewerPane } = await import("src/models/Files/FileViewerPane");
+			addPane({
+				component: FileViewerPane,
+				label: p.label || r.fileName || "Файл",
+				data: { uuid: r.uuid, file: { uuid: r.uuid, fileName: r.fileName, mimeType: r.mimeType } },
+				restore: r,
+			});
+			return;
+		}
 	}
 }

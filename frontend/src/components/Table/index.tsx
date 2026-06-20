@@ -239,6 +239,9 @@ export interface TableProps {
   apiRef?: Ref<TableApi>;
   /** uuid строки для подсветки + центрирования («Показать в журнале»). */
   highlightUuid?: string;
+  /** Нонс запроса подсветки: меняется при КАЖДОМ запросе, даже если uuid тот же
+   *  (чтобы повторное «Показать в списке» снова центрировало строку). */
+  highlightToken?: number;
 }
 
 /**
@@ -390,6 +393,7 @@ const Table: FC<TableProps> = memo((props) => {
     renderExpandedRow,
     apiRef,
     highlightUuid,
+    highlightToken,
   } = props;
 
 
@@ -417,6 +421,10 @@ const Table: FC<TableProps> = memo((props) => {
   // Stable refs для использования в эффектах без лишних пересозданий
   const activeRowRef = useRef(activeRow);
   activeRowRef.current = activeRow;
+  // Текущие строки в ref — чтобы центрирование по индексу не зависело от
+  // виртуализации (искомая строка может быть НЕ отрисована в DOM).
+  const rowsForCenterRef = useRef(rows);
+  rowsForCenterRef.current = rows;
   const activeCellRef = useRef(activeCell);
   activeCellRef.current = activeCell;
   const rowsRef = useRef(rows);
@@ -434,19 +442,22 @@ const Table: FC<TableProps> = memo((props) => {
     });
   }, [onSelectItem, rows]);
 
-  // Центрирование активной строки по вертикали скролла таблицы. Ждём, пока
-  // контейнер реально виден (clientHeight>0) — иначе при открытии из СКРЫТОЙ
-  // (неактивной) панели scroll не применился бы. Несколько кадров попыток.
+  // Центрирование активной строки по вертикали скролла таблицы. Таблица
+  // ВИРТУАЛИЗИРОВАНА — строка вне видимой области не отрисована в DOM, поэтому
+  // считаем позицию по ИНДЕКСУ строки (index × ROW_HEIGHT), а не по DOM-элементу.
+  // Ждём, пока контейнер видим (clientHeight>0): при открытии из скрытой панели
+  // высота появляется не сразу — делаем несколько кадров попыток.
   const centerActiveRow = useCallback(() => {
+    const id = activeRowRef.current;
+    if (id === null) return;
+    const idx = rowsForCenterRef.current.findIndex((r) => r.id === id);
+    if (idx < 0) return;
     let tries = 0;
     const tick = () => {
       const c = scrollRef.current;
-      const el = c?.querySelector<HTMLElement>('[data-active="true"]');
-      if (c && el && c.clientHeight > 0 && el.clientHeight > 0) {
-        const cRect = c.getBoundingClientRect();
-        const eRect = el.getBoundingClientRect();
-        const delta = (eRect.top - cRect.top) - (c.clientHeight - el.clientHeight) / 2;
-        c.scrollTo({ top: Math.max(0, c.scrollTop + delta), behavior: 'smooth' });
+      if (c && c.clientHeight > 0) {
+        const target = idx * ROW_HEIGHT - (c.clientHeight - ROW_HEIGHT) / 2;
+        c.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
         return;
       }
       if (tries++ < 30) requestAnimationFrame(tick);
@@ -475,7 +486,7 @@ const Table: FC<TableProps> = memo((props) => {
   // Если строки ещё нет (пагинация) — догружаем страницы, пока не найдём.
   const highlightDoneRef = useRef(false);
   const highlightTriesRef = useRef(0);
-  useEffect(() => { highlightDoneRef.current = false; highlightTriesRef.current = 0; }, [highlightUuid]);
+  useEffect(() => { highlightDoneRef.current = false; highlightTriesRef.current = 0; }, [highlightUuid, highlightToken]);
   useEffect(() => {
     if (!highlightUuid || highlightDoneRef.current) return;
     const row = rows.find(r => r.uuid === highlightUuid);
@@ -492,7 +503,7 @@ const Table: FC<TableProps> = memo((props) => {
       highlightTriesRef.current += 1;
       actions.fetchNextPage?.();
     }
-  }, [highlightUuid, rows, hasNextPage, isFetchingNextPage, actions]);
+  }, [highlightUuid, highlightToken, rows, hasNextPage, isFetchingNextPage, actions, centerActiveRow]);
 
   // Сбрасываем activeCell, когда снимается activeRow (нет смысла подсвечивать
   // ячейку без активной строки).

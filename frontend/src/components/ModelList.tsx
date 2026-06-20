@@ -136,12 +136,19 @@ const ModelList: FC<ModelListProps> = ({
   // Подсветка строки документа («Показать в списке» / после «Сохранить и закрыть»):
   // при монтировании забираем отложенное значение, а пока список открыт —
   // подписываемся, чтобы переносить activeRow и для УЖЕ открытого Pane.
-  const [highlightUuid, setHighlightUuid] = useState<string | undefined>(
-    () => (isPartOf ? undefined : consumePendingHighlight(endpoint)),
+  const [highlight, setHighlight] = useState<{ uuid?: string; token: number }>(
+    () => ({ uuid: isPartOf ? undefined : consumePendingHighlight(endpoint), token: 0 }),
   );
   useEffect(() => {
     if (isPartOf) return;
-    return subscribeHighlight(endpoint, (uuid) => setHighlightUuid(uuid));
+    return subscribeHighlight(endpoint, (uuid) => {
+      // token++ при каждом запросе — повторное «Показать в списке» того же
+      // документа снова сработает (центрирование), даже если uuid не изменился.
+      setHighlight((h) => ({ uuid, token: h.token + 1 }));
+      // Применили вживую — снимаем «страховочное» значение, чтобы будущее
+      // повторное открытие списка не «прыгало» на этот документ.
+      consumePendingHighlight(endpoint);
+    });
   }, [isPartOf, endpoint]);
 
   const ownerFilter = useMemo(() => {
@@ -196,11 +203,14 @@ const ModelList: FC<ModelListProps> = ({
         label,
         component: FormComponent,
         data: newData,
+        // Рецепт восстановления/ссылки: только для сохранённой записи (есть uuid).
+        // Новые формы не линкуются/не восстанавливаются (нечего открывать).
+        restore: isEdit && d?.uuid ? { kind: "form", endpoint, uuid: String(d.uuid) } : undefined,
         onSave: async () => { await refetch(); },
         onClose: async () => { await refetch(); },
       });
     },
-    [addPane, refetch, componentName, ownerUuid, ownerField, FormComponent, getLabel],
+    [addPane, refetch, componentName, ownerUuid, ownerField, FormComponent, getLabel, endpoint],
   );
 
   if (error) {
@@ -214,7 +224,7 @@ const ModelList: FC<ModelListProps> = ({
 
   return (
     <Table
-      {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange, renderCell, highlightUuid })}
+      {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange, renderCell, highlightUuid: highlight.uuid, highlightToken: highlight.token })}
     />
   );
 };

@@ -54,6 +54,23 @@ router.get("/files", async (req, res) => {
 });
 
 // ============================================
+// GET /files/all — ВСЕ прикреплённые файлы (для общего списка «Файлы» в меню).
+// Объявлен ДО "/files/download/:uuid", чтобы "all" не принялся за :uuid.
+// ============================================
+router.get("/files/all", async (_req, res) => {
+	try {
+		const items = await prisma.attachedFile.findMany({
+			where: { deletedAt: null },
+			orderBy: { uploadedAt: "desc" },
+		});
+		return res.status(200).json({ success: true, items, total: items.length });
+	} catch (error) {
+		console.error("GET /files/all error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ============================================
 // POST /files — загрузка файла
 // ============================================
 router.post("/files", upload.single("file"), async (req, res) => {

@@ -6,7 +6,6 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import FilesPanel from "src/components/FilesPanel";
-import PrintPreview from "src/components/PrintPreview";
 import { Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
@@ -130,7 +129,6 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
     ];
     if (form.isEditMode && form.fields.uuid) {
       t.push({ id: "files", label: translate("files"), component: <FilesPanel ownerType="todo" ownerUuid={form.fields.uuid} /> });
-      t.push({ id: "print", label: "Печать", component: <PrintPreview ownerUuid={form.fields.uuid} ownerType="todo" /> });
     }
     return t;
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleDeadlineDaysChange]);

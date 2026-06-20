@@ -6,7 +6,6 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import FilesPanel from "src/components/FilesPanel";
-import PrintPreview from "src/components/PrintPreview";
 import { Field, FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { FormLookup } from "src/components/Field/FormLookup";
@@ -56,8 +55,6 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useUserAccessRight("Contract");
   const data = paneProps.data;
   const defaultOrg = useDefaultOrganization();
-  const [filesRevision, setFilesRevision] = useState(0);
-  const handleFilesChange = useCallback(() => setFilesRevision(r => r + 1), []);
 
   const initialFields: TFields | undefined = (() => {
     if (data?.uuid) return undefined;
@@ -147,11 +144,10 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
       },
     ];
     if (form.isEditMode && form.fields.uuid) {
-      t.push({ id: "files", label: translate("files"), component: <FilesPanel ownerType="contract" ownerUuid={form.fields.uuid} onFilesChange={handleFilesChange} /> });
-      t.push({ id: "print", label: "Просмотр файла", component: <PrintPreview ownerUuid={form.fields.uuid} filesRevision={filesRevision} /> });
+      t.push({ id: "files", label: translate("files"), component: <FilesPanel ownerType="contract" ownerUuid={form.fields.uuid} /> });
     }
     return t;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, filesRevision, handleFilesChange]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields]);
 
   return (
     <FormRequiredScope requiredKeys={["name"]} active>

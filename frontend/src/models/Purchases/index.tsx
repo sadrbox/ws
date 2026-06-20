@@ -432,6 +432,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
           parentUuid={form.fields.uuid ?? ""} parentField="purchaseUuid"
           endpoint="purchaseitems" componentName="PurchaseItemsList_part"
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
+          priceTypeUuid={form.fields.priceTypeUuid}
           disabled={form.isLoading} deferRemoteChanges
           onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
           parentLabel={`${translate("PurchasesList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}

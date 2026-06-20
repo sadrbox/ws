@@ -11,7 +11,7 @@ const { Form: PriceTypesForm, List: PriceTypesList } = createSimpleModel({
   userAccessRight: "Product",
   fields: [
     { key: "name", label: "Наименование типа цены *", required: true, requiredMessage: "Наименование обязательно" },
-    { key: "isDefault", label: "По умолчанию" },
+    { key: "isDefault", label: "По умолчанию", type: "toggle" },
     { key: "sortOrder", label: "Порядок сортировки" },
   ],
   buildPaneLabel: (saved) =>

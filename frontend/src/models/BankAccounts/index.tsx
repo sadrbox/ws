@@ -6,6 +6,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { Field } from "src/components/Field";
+import LookupField from "src/components/Field/LookupField";
 import { FormLookup } from "src/components/Field/FormLookup";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
 import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
@@ -237,6 +238,28 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
     if (col.identifier === "bik") {
       if (ctx.inlineEditing) return <Field label="" name={`ba_bik_${row.id}`} value={(row.bik as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "bik", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
       return <span>{(row.bik as string) ?? ""}</span>;
+    }
+    if (col.identifier === "currency.name") {
+      const cur = row.currency as { code?: string; name?: string } | null | undefined;
+      const display = cur ? [cur.code, cur.name].filter(Boolean).join(" — ") : "";
+      if (ctx.inlineEditing) return (
+        <LookupField
+          label=""
+          name={`ba_currency_${row.id}`}
+          value={(row.currencyUuid as string) ?? ""}
+          displayValue={display}
+          endpoint="currencies"
+          displayField="code"
+          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "currencyUuid", uuid, {
+            currency: uuid && item ? { uuid, code: item.code ?? "", name: item.name ?? "" } : null,
+          })}
+          onClear={() => ctx.handleLookupChange(row, "currencyUuid", null, { currency: null })}
+          disabled={ctx.disabled}
+          width="100%"
+          variant="table"
+        />
+      );
+      return <span>{display}</span>;
     }
     return undefined;
   }, []);

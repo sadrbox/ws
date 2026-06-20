@@ -19,6 +19,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { Field } from "src/components/Field";
+import FieldToggle from "src/components/Field/FieldToggle";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
@@ -44,6 +45,8 @@ export interface SimpleFieldDef {
   requiredMessage?: string;
   /** Минимальная ширина инпута */
   minWidth?: string;
+  /** Тип поля: текст (по умолчанию) или булев тумблер (FieldToggle). */
+  type?: "text" | "toggle";
 }
 
 export interface CreateSimpleModelOptions {
@@ -88,7 +91,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
   // Формируем defaultFields и TFields-тип динамически
   type TFields = Record<string, any> & { id?: number; uuid?: string };
   const DEFAULT_FIELDS: TFields = {};
-  for (const f of fields) DEFAULT_FIELDS[f.key] = "";
+  for (const f of fields) DEFAULT_FIELDS[f.key] = f.type === "toggle" ? false : "";
 
   // buildPaneLabel по умолчанию
   const buildPaneLabel = opts.buildPaneLabel ?? ((saved: Record<string, any>) => makePaneLabel(listName, formLabel, saved));
@@ -116,21 +119,30 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
       paneProps,
       mapServerToForm: (d, prev) => {
         const result: TFields = { ...(prev ?? DEFAULT_FIELDS), ...d };
-        for (const f of fields) result[f.key] = d[f.key] ?? "";
+        for (const f of fields) result[f.key] = d[f.key] ?? (f.type === "toggle" ? false : "");
         return result;
       },
       buildPayload: (fd) => {
-        // Валидация обязательных полей
+        // Валидация обязательных полей (строковые — по trim, прочие — по null).
         for (const rf of requiredFields) {
-          if (!fd[rf.key]?.trim()) {
+          const v = fd[rf.key];
+          const empty = v == null || (typeof v === "string" && !v.trim());
+          if (empty) {
             return rf.requiredMessage || `${rf.label.replace(" *", "")} обязательно`;
           }
         }
-        // Собираем payload
+        // Собираем payload. Значения с сервера могут быть НЕ строками (boolean
+        // isDefault, number sortOrder) — нельзя звать .trim() на них (иначе
+        // ошибка при сохранении). Строки тримим, остальное передаём как есть.
         const payload: Record<string, any> = {};
         for (const f of fields) {
-          const val = fd[f.key]?.trim();
-          payload[f.key] = val || null;
+          const raw = fd[f.key];
+          if (typeof raw === "string") {
+            const val = raw.trim();
+            payload[f.key] = val || null;
+          } else {
+            payload[f.key] = raw ?? null;
+          }
         }
         return payload;
       },
@@ -146,15 +158,26 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
             <div className={styles.Form}>
               <Group>
                 {fields.map((f) => (
-                  <Field
-                    key={f.key}
-                    label={f.label}
-                    name={`${form.formUid}_${f.key}`}
-                    minWidth={f.minWidth ?? "339px"}
-                    value={form.fields[f.key] ?? ""}
-                    onChange={(e) => form.setField(f.key, e.target.value)}
-                    disabled={form.isLoading}
-                  />
+                  f.type === "toggle" ? (
+                    <FieldToggle
+                      key={f.key}
+                      name={`${form.formUid}_${f.key}`}
+                      label={f.label}
+                      value={form.fields[f.key] === true}
+                      onChange={(checked) => form.setField(f.key, checked)}
+                      disabled={form.isLoading}
+                    />
+                  ) : (
+                    <Field
+                      key={f.key}
+                      label={f.label}
+                      name={`${form.formUid}_${f.key}`}
+                      minWidth={f.minWidth ?? "339px"}
+                      value={form.fields[f.key] ?? ""}
+                      onChange={(e) => form.setField(f.key, e.target.value)}
+                      disabled={form.isLoading}
+                    />
+                  )
                 ))}
               </Group>
             </div>

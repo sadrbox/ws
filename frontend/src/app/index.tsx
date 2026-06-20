@@ -31,6 +31,7 @@ import { clearAllFormStores } from "src/hooks/useFormSessionStore";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { useAppContext, AppContextProvider } from "src/app/context";
 import { loadPersistedSession, savePersistedSession, restorePane, type PersistedSession } from "src/app/paneRestore";
+import { readPaneLink, clearPaneLinkParam } from "src/utils/paneLink";
 import { openFormByRef } from "src/utils/openFormByRef";
 export { useAppContext, AppContextProvider };
 
@@ -397,6 +398,8 @@ const App: React.FC = () => {
     let cancelled = false;
     (async () => {
       const session = persistedSessionRef.current;
+      // Ссылка на панель (?open=…) — открыть конкретную форму/справочник/файл.
+      const linked = readPaneLink(window.location.search);
       if (session && session.panes.length > 0) {
         // Восстанавливаем панели прошлой сессии по сериализованным рецептам.
         for (const p of session.panes) {
@@ -408,9 +411,15 @@ const App: React.FC = () => {
         if (activeId && session.panes.some((p) => p.uniqId === activeId)) {
           setTimeout(() => setActivePaneId(activeId), 0);
         }
-      } else {
-        // Первый визит / пустая сессия — открываем список по умолчанию.
+      } else if (!linked) {
+        // Первый визит / пустая сессия (и нет ссылки) — открываем список по умолчанию.
         openFormByRef({ endpoint: "Sales", uuid: "213" }, addPane);
+      }
+      // Открыть панель по ссылке (поверх восстановленной сессии) и очистить URL.
+      if (linked && !cancelled) {
+        try { await restorePane({ uniqId: "", label: "", restore: linked }, addPane); }
+        catch { /* битая ссылка — игнорируем */ }
+        clearPaneLinkParam();
       }
       restoreDoneRef.current = true;
     })();

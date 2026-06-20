@@ -1,0 +1,51 @@
+.UploadProgress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  margin: 0 0 6px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+// Имя файла — занимает свободное место, обрезается многоточием.
+.Name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Размер — НЕ сжимается, всегда виден целиком («271.87 МБ»).
+.Size {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: #4b5563;
+  font-variant-numeric: tabular-nums;
+}
+
+.Track {
+  flex: 1 1 140px;
+  min-width: 80px;
+  height: 6px;
+  background: #dbeafe;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.Fill {
+  width: var(--percent, 0%);
+  height: 100%;
+  background: #3b82f6;
+  transition: width 0.15s ease;
+}
+
+.Percent {
+  flex: 0 0 auto;
+  min-width: 38px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
