@@ -31,6 +31,9 @@ const FIELD_ACTION_META: Record<LookupActionType, { icon: IconName; label: strin
 export interface LookupFieldProps {
   /** Заголовок поля */
   label?: React.ReactNode;
+  /** Префикс-адорнмент внутри поля (слева от input). Напр. индикатор сопоставления
+   *  номенклатуры ✓/＋ — позволяет не оборачивать поле во внешний div в ячейке. */
+  prefix?: React.ReactNode;
   /** Имя поля для id/name */
   name: string;
   /** Явный id для input (для ассоциации с внешним label) */
@@ -58,7 +61,7 @@ export interface LookupFieldProps {
    *  (поле «Основание»). Если у элемента нет `posted` — точка не рисуется. */
   postedIndicator?: boolean;
   /** Преобразует введённый пользователем текст перед отправкой на бэкенд (search-параметр).
-   *  Полезно когда displayValue имеет составной формат (напр. "Тип: ID 5 · дата"),
+   *  Полезно когда displayValue имеет составной формат (напр. "Тип: ID 5 - дата"),
    *  а бэкенд ожидает только числовой id или другой простой ключ. */
   searchTransform?: (input: string) => string;
   /** Ширина поля */
@@ -129,6 +132,17 @@ const defaultSecondaryFieldsMap: Record<string, string[]> = {
 // ── Ленивая загрузка Form-компонента по endpoint (через единый реестр) ──
 import { getByEndpoint } from "src/registry/modelRegistry";
 
+// Нормализация для клиентского поиска по метке: нижний регистр + ё→е.
+const normForSearch = (s: string): string => s.toLowerCase().replace(/ё/g, "е");
+// Слово-ориентированный матч: ВСЕ слова запроса должны входить в метку (AND),
+// порядок и пунктуация между ними не важны. Тогда «Счёт оплату 133», «133 08.03»,
+// «оплата 133» одинаково находят «Счёт на оплату: №133 - 08.03.2026».
+const matchesAllWords = (label: string, query: string): boolean => {
+  const hay = normForSearch(label);
+  const words = normForSearch(query).split(/\s+/).filter(Boolean);
+  return words.every((w) => hay.includes(w));
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // LOOKUP FIELD — поле с кнопками "выбор" и "очистить"
 // Форма выбора открывается как отдельная PaneItem-вкладка через SelectPaneWrapper
@@ -136,6 +150,7 @@ import { getByEndpoint } from "src/registry/modelRegistry";
 
 const LookupField: FC<LookupFieldProps> = ({
   label,
+  prefix,
   name,
   id,
   value = "",
@@ -187,6 +202,12 @@ const LookupField: FC<LookupFieldProps> = ({
     !effectiveError && effectiveRequired && isEmpty ? styles.FieldRequired : '',
     effectiveError ? styles.FieldError : '',
   ].filter(Boolean).join(' ');
+
+  // Инлайн-стиль только для ЯВНО переданных размеров; дефолты (width:100%) — в CSS
+  // (.FieldWrapper / .tableVariant), чтобы в табличных ячейках не было лишних inline-styles.
+  const wrapperStyle = (width || maxWidth || minWidth)
+    ? { ...(width ? { width } : {}), ...(maxWidth ? { maxWidth } : {}), ...(minWidth ? { minWidth } : {}) }
+    : undefined;
 
   // ── Autocomplete state ──────────────────────────────────────────────────
   const [inputText, setInputText] = useState(displayValue || "");
@@ -245,7 +266,6 @@ const LookupField: FC<LookupFieldProps> = ({
     if (!searchText && searchTransform) {
       // Transform вернул "" — загружаем все записи и фильтруем на клиенте
       // по getSuggestionLabel (или displayField), чтобы поиск по лейблу работал.
-      const lc = debouncedText.toLowerCase();
       fetchList(endpoint, undefined, { limit: 200, ...extraParams })
         .then((result) => {
           if (cancelled) return;
@@ -254,7 +274,8 @@ const LookupField: FC<LookupFieldProps> = ({
             const label = getSuggestionLabel
               ? getSuggestionLabel(item)
               : String(item[displayField] ?? "");
-            return label.toLowerCase().includes(lc);
+            // Слово-ориентированный матч по видимой метке (см. matchesAllWords).
+            return matchesAllWords(label, debouncedText);
           });
           setSuggestions(filtered);
           setIsDropdownOpen(true);
@@ -550,7 +571,7 @@ const LookupField: FC<LookupFieldProps> = ({
   }, [debouncedText, searchTransform]);
 
   // Получить вторичную строку для элемента автокомплита.
-  // Формат: "ШК · sku · бренд" (через разделитель) — только непустые значения.
+  // Формат: "ШК - sku - бренд" (через разделитель) — только непустые значения.
   // Совпавший штрих-код (если искали по ШК) показываем первым — рядом с названием.
   const getItemSecondary = useCallback((item: Record<string, any>) => {
     const parts: string[] = [];
@@ -560,18 +581,14 @@ const LookupField: FC<LookupFieldProps> = ({
       const v = getNestedValue(item, field);
       if (v) parts.push(v);
     }
-    return parts.join(" · ");
+    return parts.join(" - ");
   }, [resolvedSecondaryFields, getNestedValue, getMatchedBarcode]);
 
   return (
     <>
       <div
         className={wrapperClass}
-        style={{
-          width: width ?? "100%",
-          maxWidth: maxWidth ?? "none",
-          minWidth: minWidth ?? "none",
-        }}
+        style={wrapperStyle}
         ref={wrapperRef}
       >
         {!isTable && label && (
@@ -582,6 +599,7 @@ const LookupField: FC<LookupFieldProps> = ({
         )}
 
         <div className={[styles.FieldInputWrapper, disabled ? styles.FieldDisabled : ''].filter(Boolean).join(' ')}>
+          {prefix != null && prefix !== false && <span className={styles.FieldPrefix}>{prefix}</span>}
           <input
             ref={inputRef}
             type="text"

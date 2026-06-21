@@ -299,7 +299,7 @@ const QueueTab: FC<{
                 {ACTION_LABELS[c.action] ?? c.action}: {getTableLabel(c.table)}
               </div>
               <div className={styles.SyncQueueItemMeta}>
-                {timeAgo(c.createdAt)} · {c.uuid?.slice(0, 8)}…
+                {timeAgo(c.createdAt)} - {c.uuid?.slice(0, 8)}…
               </div>
             </div>
             <button className={styles.SyncQueueItemDel} onClick={() => c.id != null && removePending(c.id)} title="Удалить">✕</button>

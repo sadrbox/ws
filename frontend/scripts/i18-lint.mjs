@@ -31,12 +31,16 @@ function walk(dir, exts) {
 	});
 }
 
-const codeFiles = walk("src", [".ts", ".tsx"]).filter((f) => !f.endsWith(".d.ts"));
+const codeFiles = walk("src", [".ts", ".tsx"]).filter(
+	(f) => !f.endsWith(".d.ts"),
+);
 const allSource = codeFiles.map((f) => fs.readFileSync(f, "utf8")).join("\n");
 
 // ── Используемые ключи: translate("X") / getTranslation("X") ───────────────
 const usedKeys = new Set();
-for (const m of allSource.matchAll(/\b(?:translate|getTranslation)\(\s*["'`]([\w.-]+)["'`]/g)) {
+for (const m of allSource.matchAll(
+	/\b(?:translate|getTranslation)\(\s*["'`]([\w.-]+)["'`]/g,
+)) {
 	usedKeys.add(m[1]);
 }
 // Идентификаторы колонок (*Columns.json / columns.json) тоже переводятся.
@@ -45,7 +49,9 @@ for (const jf of walk("src/models", ["olumns.json"])) {
 		for (const c of JSON.parse(fs.readFileSync(jf, "utf8"))) {
 			if (c && c.identifier) usedKeys.add(String(c.identifier));
 		}
-	} catch { /* пропускаем битый json */ }
+	} catch {
+		/* пропускаем битый json */
+	}
 }
 
 // ── 1. Паритет RU ↔ KK ─────────────────────────────────────────────────────
@@ -57,27 +63,52 @@ const missing = [...usedKeys].filter((k) => !ruKeys.has(k)).sort();
 
 // ── 3. Возможно неиспользуемые (нет как литерал в исходниках) ──────────────
 const literalSet = new Set();
-for (const m of allSource.matchAll(/["'`]([\w.-]+)["'`]/g)) literalSet.add(m[1]);
+for (const m of allSource.matchAll(/["'`]([\w.-]+)["'`]/g))
+	literalSet.add(m[1]);
 const maybeUnused = [...ruKeys].filter((k) => !literalSet.has(k)).sort();
 
 // ── Отчёт ──────────────────────────────────────────────────────────────────
 const log = (t) => console.log(t);
 log("── i18-lint ──────────────────────────────────────────────");
-log(`RU: ${ruKeys.size} ключей · KK: ${kkKeys.size} ключей · использовано в коде: ${usedKeys.size}`);
+log(
+	`RU: ${ruKeys.size} ключей - KK: ${kkKeys.size} ключей - использовано в коде: ${usedKeys.size}`,
+);
 
 log(`\n[1] Паритет RU↔KK`);
 log(`  нет в KK (есть в RU): ${ruNotKk.length}`);
-if (ruNotKk.length) log("    " + ruNotKk.slice(0, 40).join(", ") + (ruNotKk.length > 40 ? " …" : ""));
+if (ruNotKk.length)
+	log(
+		"    " +
+			ruNotKk.slice(0, 40).join(", ") +
+			(ruNotKk.length > 40 ? " …" : ""),
+	);
 log(`  нет в RU (есть в KK): ${kkNotRu.length}`);
-if (kkNotRu.length) log("    " + kkNotRu.slice(0, 40).join(", ") + (kkNotRu.length > 40 ? " …" : ""));
+if (kkNotRu.length)
+	log(
+		"    " +
+			kkNotRu.slice(0, 40).join(", ") +
+			(kkNotRu.length > 40 ? " …" : ""),
+	);
 
 log(`\n[2] Используются в коде, но НЕТ в RU: ${missing.length}`);
 if (missing.length) log("    " + missing.join(", "));
 
-log(`\n[3] Возможно неиспользуемые ключи RU (мягко, без динамических): ${maybeUnused.length}`);
-if (maybeUnused.length) log("    " + maybeUnused.slice(0, 60).join(", ") + (maybeUnused.length > 60 ? " …" : ""));
+log(
+	`\n[3] Возможно неиспользуемые ключи RU (мягко, без динамических): ${maybeUnused.length}`,
+);
+if (maybeUnused.length)
+	log(
+		"    " +
+			maybeUnused.slice(0, 60).join(", ") +
+			(maybeUnused.length > 60 ? " …" : ""),
+	);
 
 // Жёсткие ошибки → код выхода 1.
 const hardErrors = ruNotKk.length + kkNotRu.length + missing.length;
-log("\n" + (hardErrors === 0 ? "✓ Паритет соблюдён, отсутствующих ключей нет." : `✗ Проблем (паритет+отсутствующие): ${hardErrors}`));
+log(
+	"\n" +
+		(hardErrors === 0
+			? "✓ Паритет соблюдён, отсутствующих ключей нет."
+			: `✗ Проблем (паритет+отсутствующие): ${hardErrors}`),
+);
 process.exit(hardErrors === 0 ? 0 : 1);

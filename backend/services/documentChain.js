@@ -198,6 +198,10 @@ export async function buildDocumentChain(type, uuid) {
 				message: `Основание не найдено: ${root.typeLabel} → ${root.basisDocumentType} (${root.basisDocumentUuid})`,
 				type: root.basisDocumentType,
 				uuid: root.basisDocumentUuid,
+				// Документ-РЕБЁНОК с висячей ссылкой — его и нужно чинить (очистить основание).
+				childType: root.type,
+				childUuid: root.uuid,
+				childLabel: root.typeLabel,
 			});
 			break;
 		}

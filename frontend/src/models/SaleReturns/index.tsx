@@ -307,19 +307,19 @@ const SaleReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     const rows = allItemsRef.current.map((raw, i) => {
       const r = raw as SaleReturnItemRow;
       return {
-      number: i + 1,
-      name: r.product?.name ?? r.productName ?? "",
-      unit: r.unitOfMeasure?.name ?? r.unitName ?? "",
-      quantity: Number(r.quantity ?? 0),
-      price: Number(r.price ?? 0),
-      amount: Number(r.amount ?? 0),
-      amountWithoutVat: Number(r.amountWithoutVat ?? 0),
-      vatRate: Number(r.vatRate ?? 0),
-      vatAmount: Number(r.vatAmount ?? 0),
-      exciseRate: Number(r.exciseRate ?? 0),
-      exciseAmount: Number(r.exciseAmount ?? 0),
-      discountPercent: Number(r.discountPercent ?? 0),
-      discountAmount: Number(r.discountAmount ?? 0),
+        number: i + 1,
+        name: r.product?.name ?? r.productName ?? "",
+        unit: r.unitOfMeasure?.name ?? r.unitName ?? "",
+        quantity: Number(r.quantity ?? 0),
+        price: Number(r.price ?? 0),
+        amount: Number(r.amount ?? 0),
+        amountWithoutVat: Number(r.amountWithoutVat ?? 0),
+        vatRate: Number(r.vatRate ?? 0),
+        vatAmount: Number(r.vatAmount ?? 0),
+        exciseRate: Number(r.exciseRate ?? 0),
+        exciseAmount: Number(r.exciseAmount ?? 0),
+        discountPercent: Number(r.discountPercent ?? 0),
+        discountAmount: Number(r.discountAmount ?? 0),
       };
     });
     const titleStr = `Возврат от покупателя № ${form.fields.id ?? "—"}`;
@@ -520,7 +520,7 @@ const SaleReturnsForm: FC<Partial<TPane>> = (paneProps) => {
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
           onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
-          parentLabel={`${translate("SaleReturnsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
+          parentLabel={`${translate("SaleReturnsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           key={itemsTableKey}
           initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
           onTotalChange={handleTotalChange}

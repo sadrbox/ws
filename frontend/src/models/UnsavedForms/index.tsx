@@ -76,7 +76,7 @@ function getDescription(data: Record<string, unknown>): string {
       if (parts.length >= 2) break;
     }
   }
-  if (parts.length > 0) return parts.join(" · ");
+  if (parts.length > 0) return parts.join(" - ");
   // Fallback — количество заполненных полей
   const filled = Object.entries(fields).filter(
     ([k, v]) => v !== "" && v !== null && v !== undefined && k !== "id" && k !== "uuid"

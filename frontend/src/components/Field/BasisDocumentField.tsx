@@ -32,7 +32,7 @@ export interface BasisDocumentFieldProps {
 }
 
 /**
- * Поле «Основание» фильтруется по ВИДИМОЙ метке («{Тип}: ID {n} · {дата}»)
+ * Поле «Основание» фильтруется по ВИДИМОЙ метке («{Тип}: ID {n} - {дата}»)
  * на клиенте. Серверный поиск тут не годится:
  *   • бэкенд не ищет по переведённому названию типа («Коммерческое предложение»);
  *   • числовой поиск делает `id EQUALS`, поэтому «ID 1» не находит id 113/115/…
@@ -43,14 +43,14 @@ export interface BasisDocumentFieldProps {
 const extractBasisSearch = (): string => "";
 
 /**
- * Метка документа-основания: «{Тип}: №{number} · {дата}». Если номер документа
+ * Метка документа-основания: «{Тип}: №{number} - {дата}». Если номер документа
  * не задан — фолбэк на «ID {id}». Независимо от типа/вида документа.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const basisItemLabel = (name: string, item: Record<string, any>): string => {
   const num = item.number ?? item.documentNumber;
   const ref = num != null && String(num).trim() !== "" ? `№${num}` : `ID ${item.id}`;
-  return `${name}: ${ref} · ${getFormatDateOnly(item.date) ?? ""}`;
+  return `${name}: ${ref} - ${getFormatDateOnly(item.date) ?? ""}`;
 };
 
 const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
@@ -97,7 +97,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   );
 
   // Нормализация отображения основания. Если сохранённая метка не в каноническом
-  // виде «{Тип}: ID {n} · {дата}» (напр. данные генератора «payment_invoice #165»),
+  // виде «{Тип}: ID {n} - {дата}» (напр. данные генератора «payment_invoice #165»),
   // подтягиваем документ-основание по uuid и собираем корректную метку.
   const [resolvedLabel, setResolvedLabel] = useState<string | undefined>(undefined);
   useEffect(() => {

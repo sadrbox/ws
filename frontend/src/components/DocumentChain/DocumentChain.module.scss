@@ -24,7 +24,37 @@
 }
 
 .IntegrityItem {
-	display: block;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+
+	&:not(:last-child) {
+		margin-bottom: 4px;
+	}
+}
+
+// Кнопка «Очистить основание» для висячей ссылки (integrity.dangling).
+.IntegrityFix {
+	flex-shrink: 0;
+	margin-left: auto;
+	padding: 2px 8px;
+	font-family: inherit;
+	font-size: 11px;
+	color: $warnSoftText;
+	background: rgba(#fff, 0.6);
+	border: 1px solid $warnSoftBorder;
+	border-radius: 4px;
+	cursor: pointer;
+	white-space: nowrap;
+
+	&:hover {
+		background: #fff;
+	}
+
+	&:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
 }
 
 // Узел дерева (строка).

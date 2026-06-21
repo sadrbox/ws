@@ -28,8 +28,7 @@
 		outline: 0px;
 	}
 
-	&:not(:last-child) {
-	}
+	&:not(:last-child) {}
 }
 
 
@@ -135,12 +134,21 @@
 }
 
 .FieldWrapper {
+	display: flex;
+	flex-direction: column;
+	// gap: 6px;
 	position: relative;
+	// Дефолтная ширина (была inline style={{ width: width ?? "100%" }}). Явная ширина,
+	// если передана пропом, по-прежнему задаётся инлайном и перебивает это правило.
+	width: 100%;
+	height: stretch;
 
 	// ── Table variant: no label, no border, stretch to fill td ──
 	&.tableVariant {
 		width: 100%;
-		height: 100%;
+		// min-height: $heightFieldInput;
+		// height: 100%;
+		align-items: stretch;
 		flex: 1;
 
 		.FieldLabel {
@@ -154,6 +162,7 @@
 			border: none;
 			border-radius: 0;
 			height: 100%;
+			align-items: stretch;
 			background: transparent !important;
 
 			&:focus-within {
@@ -243,6 +252,15 @@
 
 
 
+// Префикс-адорнмент внутри поля (слева от input), напр. индикатор ✓/＋ в ячейке.
+.FieldPrefix {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	padding-left: 4px;
+	user-select: none;
+}
+
 .FieldActions {
 	box-sizing: content-box;
 	margin-right: 4px;
@@ -265,44 +283,132 @@
 	display: flex;
 }
 
-// ── FieldFile (выбор файла в стиле Field + Button) ──────────────────────────
+// ── FieldFile — поле выбора файла (кнопка + имя + прогресс-бар) ──────────────
+// Контрол фиксированной высоты с бордером (как у инпута). Прогресс-бар — снизу,
+// позиционирован абсолютно → его появление НЕ меняет высоту (разметка не прыгает).
 .FieldFileControl {
+	align-self: flex-end;
+	position: relative;
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 6px;
-	min-width: 0;
+	gap: 8px;
+	min-width: 240px;
+	height: $heightFieldInput + 4px;
+	padding: 0 6px 0 4px;
+	background: $color60;
+	border: 1px solid $color5;
+	border-radius: $radius2;
+	overflow: hidden;
+	box-sizing: border-box;
+
+	&:focus-within {
+		border-color: $color3;
+	}
+}
+
+// Компактная кнопка выбора внутри контрола.
+.FieldFileButton {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 22px;
+	padding: 0 10px;
+	font-family: inherit;
+	font-size: $fontsize - 1px;
+	color: $color6;
+	background: linear-gradient(180deg, #fff, $color30);
+	border: 1px solid $color10;
+	border-radius: $radius2;
+	cursor: pointer;
+	user-select: none;
+	white-space: nowrap;
+	transition: background 0.15s ease;
+
+	&:hover:not(:disabled) {
+		background: $color30;
+	}
+
+	&:active:not(:disabled) {
+		background: $color31;
+	}
+
+	&:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
 }
 
 .FieldFileName {
+	flex: 1 1 auto;
+	min-width: 0;
 	font-size: $fontsize;
-	color: #6b7280;
+	color: $color6;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	min-width: 0;
-	flex: 1 1 auto;
+}
+
+// Имя-плейсхолдер (файл не выбран) — приглушённый.
+.FieldFilePlaceholder {
+	color: $color5;
+}
+
+// Процент загрузки рядом с именем (когда есть определённый прогресс).
+.FieldFilePct {
+	flex-shrink: 0;
+	font-size: $fontsize - 1px;
+	color: $color3;
+	font-variant-numeric: tabular-nums;
+}
+
+// Слот «очистить» фиксированной ширины — место зарезервировано всегда.
+.FieldFileClear {
+	flex-shrink: 0;
+	width: 20px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .FieldFileHiddenInput {
 	display: none;
 }
 
-// Индикатор загрузки рядом с выбранным файлом.
-.FieldFileSpinner {
-	display: inline-block;
-	width: 14px;
-	height: 14px;
-	flex-shrink: 0;
-	border: 2px solid rgba($color3, 0.25);
-	border-top-color: $color3;
-	border-radius: 50%;
-	animation: fieldFileSpin 0.7s linear infinite;
+// ── Прогресс-бар (снизу контрола) ───────────────────────────────────────────
+.FieldFileProgress {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 3px;
+	background: rgba($color3, 0.12);
+	overflow: hidden;
+	pointer-events: none;
 }
 
-@keyframes fieldFileSpin {
-	to {
-		transform: rotate(360deg);
+.FieldFileProgressBar {
+	height: 100%;
+	width: 0;
+	background: $color3;
+	transition: width 0.2s ease;
+
+	// «Бегущая» полоса (loading без процента).
+	&.indeterminate {
+		width: 35%;
+		border-radius: 2px;
+		animation: fieldFileIndeterminate 1.1s ease-in-out infinite;
+	}
+}
+
+@keyframes fieldFileIndeterminate {
+	0% {
+		transform: translateX(-110%);
+	}
+
+	100% {
+		transform: translateX(400%);
 	}
 }
 

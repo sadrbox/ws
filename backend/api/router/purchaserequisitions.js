@@ -4,6 +4,7 @@ import { tenantFilter } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
+import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 const router = express.Router();
 const MODEL = "purchaseRequisition";
@@ -157,6 +158,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		// Stage D: договор принадлежит организации документа.
 		await assertOrgFieldMembership({ organizationUuid, contractUuid }, prisma);
 		// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
+		// Запрещаем ссылку «в никуда»: основание (если указано) должно существовать.
+		if (basisDocumentUuid) await assertBasisExists(basisDocumentType, basisDocumentUuid);
 		const docNumber = await ensureDocumentNumber({ docType: "purchase_requisition", modelName: MODEL, manual: req.body.number, organizationUuid, date });
 		const item = await prisma[MODEL].create({
 			data: {
@@ -182,6 +185,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
@@ -215,6 +219,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			if (req.body[f] !== undefined) data[f] = req.body[f] || null;
 		}
 		// Stage D: договор принадлежит организации документа (мерж с текущими).
+		// Запрещаем ссылку «в никуда»: проверяем только при ЗАДАНИИ нового основания.
+		if (data.basisDocumentUuid) await assertBasisExists(data.basisDocumentType, data.basisDocumentUuid);
 		const _ex = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true, number: true, contractUuid: true, date: true } });
 		await assertOrgFieldMembership({
 			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : _ex?.organizationUuid,
@@ -237,6 +243,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025")

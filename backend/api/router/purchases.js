@@ -7,6 +7,7 @@ import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
+import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 
@@ -177,6 +178,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		// Блокировка закрытого периода: нельзя создавать документ в закрытом месяце.
 		await assertPeriodOpen(organizationUuid, date);
 		// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
+		// Запрещаем ссылку «в никуда»: основание (если указано) должно существовать.
+		if (basisDocumentUuid) await assertBasisExists(basisDocumentType, basisDocumentUuid);
 		const docNumber = await ensureDocumentNumber({ docType: "purchase", modelName: MODEL, manual: req.body.number, organizationUuid, date });
 		const item = await prisma[MODEL].create({
 			data: {
@@ -206,6 +209,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
@@ -247,6 +251,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			const fkError = await checkFkOwnership(req, prisma, [{ model: "warehouse", uuid: data.warehouseUuid }]);
 			if (fkError) return res.status(403).json({ success: false, message: fkError });
 		}
+		// Запрещаем ссылку «в никуда»: проверяем только при ЗАДАНИИ нового основания.
+		if (data.basisDocumentUuid) await assertBasisExists(data.basisDocumentType, data.basisDocumentUuid);
 		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true, posted: true, number: true, warehouseUuid: true, contractUuid: true, date: true } });
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
@@ -286,6 +292,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await reconcileDocumentEntries("purchase", item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;

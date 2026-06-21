@@ -26,7 +26,7 @@ import { WarehousesList } from 'src/models/Warehouses';
 import { CashboxesList } from 'src/models/Cashboxes';
 import { PriceTypesList } from 'src/models/PriceTypes';
 import { SalesList } from 'src/models/Sales';
-import { ProductPriceProcessing } from 'src/models/ProductPriceProcessing';
+import { ProductPriceCorrection, ProductPriceImport } from 'src/models/ProductPriceProcessing';
 import { ProductImportExport } from 'src/models/ProductImportExport';
 import { SaleReturnsList } from 'src/models/SaleReturns';
 import { PurchasesList } from 'src/models/Purchases';
@@ -918,7 +918,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>{translate("directories")}</h3>
             <ul className={styles.NavList}>
               {can("Product") && <li onClick={() => addPane({ component: ProductsList, label: translate("ProductsList") })}>{translate("ProductsList")}</li>}
-              {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceProcessing, label: translate("ProductPriceProcessing") })}>{translate("ProductPriceProcessing")}</li>}
+              {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceCorrection, label: translate("ProductPriceProcessing") })}>{translate("ProductPriceProcessing")}</li>}
+              {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceImport, label: translate("priceImportForm") })}>{translate("priceImportForm")}</li>}
               {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceTypesList, label: translate("PriceTypesList") })}>{translate("PriceTypesList")}</li>}
               {can("Product") && <li onClick={() => addPane({ component: ProductImportExport, label: translate("ProductImportExport") })}>{translate("ProductImportExport")}</li>}
               {can("Brand") && <li onClick={() => addPane({ component: BrandsList, label: translate("BrandsList") })}>{translate("BrandsList")}</li>}

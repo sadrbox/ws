@@ -24,7 +24,7 @@ import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "src/components/Button";
 import { useAppContext } from "src/app";
-import { ProductPriceProcessing } from "src/models/ProductPriceProcessing";
+import { ProductPriceCorrection } from "src/models/ProductPriceProcessing";
 
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
@@ -219,7 +219,7 @@ const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, productN
     if (!productUuid) return;
     addPane({
       label: translate("priceCorrectionTab"),
-      component: ProductPriceProcessing,
+      component: ProductPriceCorrection,
       data: { productUuid, productName },
     });
   }, [addPane, productUuid, productName]);

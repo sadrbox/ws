@@ -196,7 +196,10 @@ function basisRowValues(b: any): Record<string, any> {
  * @param displayed  текущие отображаемые строки (сервер + pending, без delete)
  * @param basisRows  строки основания после mapItemsForBasis (несут sourceRowId)
  */
-export function buildRefillBasisItems(displayed: any[], basisRows: any[]): any[] {
+export function buildRefillBasisItems(
+	displayed: any[],
+	basisRows: any[],
+): any[] {
 	// Пулы для сопоставления. Усыновление по товару — только строки без sourceRowId.
 	const bySource = new Map<string, any>();
 	const legacyByProduct = new Map<string, any[]>();
@@ -206,7 +209,10 @@ export function buildRefillBasisItems(displayed: any[], basisRows: any[]): any[]
 			if (!bySource.has(srcId)) bySource.set(srcId, r);
 		} else {
 			const pk = String(r?.productUuid ?? "");
-			if (pk) (legacyByProduct.get(pk) ?? legacyByProduct.set(pk, []).get(pk)!).push(r);
+			if (pk)
+				(legacyByProduct.get(pk) ?? legacyByProduct.set(pk, []).get(pk)!).push(
+					r,
+				);
 		}
 	}
 
@@ -225,7 +231,10 @@ export function buildRefillBasisItems(displayed: any[], basisRows: any[]): any[]
 			const pool = legacyByProduct.get(String(b.productUuid ?? ""));
 			while (pool && pool.length) {
 				const cand = pool.shift();
-				if (!consumed.has(cand)) { existing = cand; break; }
+				if (!consumed.has(cand)) {
+					existing = cand;
+					break;
+				}
 			}
 		}
 
@@ -249,12 +258,22 @@ export function buildRefillBasisItems(displayed: any[], basisRows: any[]): any[]
 			// sourceRowId при этом тоже проставляем (идемпотентность будущих refill),
 			// но не ради него одного. Если значения совпали — строку не трогаем.
 			if (valuesChanged) {
-				result.push({ ...existing, ...newValues, sourceRowId: srcId || null, _pendingAction: "update" });
+				result.push({
+					...existing,
+					...newValues,
+					sourceRowId: srcId || null,
+					_pendingAction: "update",
+				});
 				changed = true;
 			}
 		} else {
 			// Черновик: переинъектируем (create с тем же uuid) — переживёт remount.
-			result.push({ ...existing, ...newValues, sourceRowId: srcId || null, _pendingAction: "create" });
+			result.push({
+				...existing,
+				...newValues,
+				sourceRowId: srcId || null,
+				_pendingAction: "create",
+			});
 			if (valuesChanged) changed = true;
 		}
 	}
@@ -318,7 +337,11 @@ export async function runBasisRefill(opts: {
 	const basisUuid = snap.basisDocumentUuid;
 	if (!basisUuid || !basisType) return;
 
-	const result = await refillFromBasisSource(basisType, basisUuid, mapCommonTradeFields);
+	const result = await refillFromBasisSource(
+		basisType,
+		basisUuid,
+		mapCommonTradeFields,
+	);
 	if (!result) return;
 
 	if (!opts.skipFields) {
@@ -326,15 +349,23 @@ export async function runBasisRefill(opts: {
 		// Org-зависимые поля (склад/договор), которых нет у основания: при смене
 		// организации — дефолт пользователя для новой орг, иначе очистка.
 		const orgPatch = await resolveOrgDependentRefill(
-			result.fields, cur, opts.currentUserUuid, opts.permDefaults, opts.orgFields,
+			result.fields,
+			cur,
+			opts.currentUserUuid,
+			opts.permDefaults,
+			opts.orgFields,
 		);
 		const rawPatch = { ...result.fields, ...orgPatch };
 		// Только поля, существующие в форме (иначе лишние поля → ложный Dirty).
 		const patch = Object.fromEntries(
-			Object.keys(rawPatch).filter((k) => k in cur).map((k) => [k, rawPatch[k]]),
+			Object.keys(rawPatch)
+				.filter((k) => k in cur)
+				.map((k) => [k, rawPatch[k]]),
 		);
 		// Применяем только при реальном изменении — иначе ложный Dirty.
-		if (Object.keys(patch).some((k) => !isEquivalent(cur[k], (patch as any)[k]))) {
+		if (
+			Object.keys(patch).some((k) => !isEquivalent(cur[k], (patch as any)[k]))
+		) {
 			opts.form.setFields(patch);
 		}
 	}
@@ -343,11 +374,15 @@ export async function runBasisRefill(opts: {
 	// перезаполнении (записи ещё нет) basisChanged=false — чтобы для сохранённого
 	// документа сработал идемпотентный merge (а не delete+create серверных строк).
 	const storeKey = opts.form.store as object;
-	const basisChanged = lastRefillBasis.has(storeKey) && lastRefillBasis.get(storeKey) !== basisUuid;
+	const basisChanged =
+		lastRefillBasis.has(storeKey) &&
+		lastRefillBasis.get(storeKey) !== basisUuid;
 	lastRefillBasis.set(storeKey, basisUuid);
 
 	// Текущее отображаемое состояние таблицы (сервер + pending, без delete).
-	const live = opts.allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+	const live = opts.allItemsRef.current.filter(
+		(r: any) => r._pendingAction !== "delete",
+	);
 
 	let merged: any[];
 	if (basisChanged) {
@@ -357,17 +392,28 @@ export async function runBasisRefill(opts: {
 		// на удаление, черновики заменяются строками нового основания.
 		let serverRows = live.filter((r: any) => isServerRow(r));
 		if (serverRows.length === 0 && snap.uuid) {
-			const fetched = await fetchDocumentItems(opts.itemsEndpoint, opts.itemsParentField, snap.uuid);
+			const fetched = await fetchDocumentItems(
+				opts.itemsEndpoint,
+				opts.itemsParentField,
+				snap.uuid,
+			);
 			serverRows = fetched.filter((r: any) => isServerRow(r));
 		}
-		merged = [...result.items, ...serverRows.map((r: any) => ({ ...r, _pendingAction: "delete" }))];
+		merged = [
+			...result.items,
+			...serverRows.map((r: any) => ({ ...r, _pendingAction: "delete" })),
+		];
 	} else {
 		// То же основание → идемпотентный merge по sourceRowId (без дублей, серверные
 		// строки и ручные правки сохраняются). Если вкладка ещё не открывалась —
 		// дозагружаем строки с сервера.
 		let displayed = live;
 		if (displayed.length === 0 && snap.uuid) {
-			displayed = await fetchDocumentItems(opts.itemsEndpoint, opts.itemsParentField, snap.uuid);
+			displayed = await fetchDocumentItems(
+				opts.itemsEndpoint,
+				opts.itemsParentField,
+				snap.uuid,
+			);
 		}
 		merged = buildRefillBasisItems(displayed, result.items);
 	}
@@ -393,7 +439,9 @@ export async function refillFromBasisSource(
 	if (!config) {
 		// Тип основания не настроен в BASIS_SOURCE_CONFIGS → refill невозможен.
 		// Логируем, чтобы не было «тихого» отсутствия перезаполнения.
-		console.warn(`[refill] нет конфигурации источника для типа основания "${basisType}"`);
+		console.warn(
+			`[refill] нет конфигурации источника для типа основания "${basisType}"`,
+		);
 		return null;
 	}
 	if (!basisUuid) return null;
@@ -454,7 +502,7 @@ export async function openDocumentFromBasis(
 			if (existing.length > 0) {
 				const existingDoc = existing[0];
 				const existingDate = existingDoc.date
-					? " · " + getFormatDateOnly(String(existingDoc.date))
+					? " - " + getFormatDateOnly(String(existingDoc.date))
 					: "";
 				addPane({
 					component: target.FormComponent,
@@ -464,7 +512,10 @@ export async function openDocumentFromBasis(
 				return;
 			}
 		} catch (e) {
-			console.error("[createFromBasis] не удалось проверить существующий документ", e);
+			console.error(
+				"[createFromBasis] не удалось проверить существующий документ",
+				e,
+			);
 		}
 	}
 
@@ -485,7 +536,7 @@ export async function openDocumentFromBasis(
 
 	const dateStr = sourceFields.date ? getFormatDateOnly(sourceFields.date) : "";
 	const basisLabel = dateStr
-		? `${sourceTypeLabel}: ID ${sourceFields.id ?? "?"} · ${dateStr}`
+		? `${sourceTypeLabel}: ID ${sourceFields.id ?? "?"} - ${dateStr}`
 		: `${sourceTypeLabel}: ID ${sourceFields.id ?? "?"}`;
 
 	const initialFields = {
@@ -521,7 +572,10 @@ async function fetchOrgUserDefaults(
 		const map: UserDefaultsMap = {};
 		for (const it of items) {
 			if (it.valueType && it.valueUuid) {
-				(map as any)[it.valueType] = { uuid: it.valueUuid, name: it.valueName ?? "" };
+				(map as any)[it.valueType] = {
+					uuid: it.valueUuid,
+					name: it.valueName ?? "",
+				};
 			}
 		}
 		return map;
@@ -547,10 +601,17 @@ export async function resolveOrgDependentRefill(
 	currentFields: Record<string, any>,
 	userUuid: string,
 	currentOrgDefaults: UserDefaultsMap,
-	orgFields: Array<{ valueType: keyof UserDefaultsMap; uuidKey: string; nameKey: string }>,
+	orgFields: Array<{
+		valueType: keyof UserDefaultsMap;
+		uuidKey: string;
+		nameKey: string;
+	}>,
 ): Promise<Record<string, any>> {
-	const targetOrg = basisFields.organizationUuid ?? currentFields.organizationUuid ?? "";
-	const orgChanged = !!basisFields.organizationUuid && basisFields.organizationUuid !== currentFields.organizationUuid;
+	const targetOrg =
+		basisFields.organizationUuid ?? currentFields.organizationUuid ?? "";
+	const orgChanged =
+		!!basisFields.organizationUuid &&
+		basisFields.organizationUuid !== currentFields.organizationUuid;
 
 	// Поля, зависящие от орг, которые основание НЕ предоставило.
 	const missing = orgFields.filter((f) => !basisFields[f.uuidKey]);
@@ -586,9 +647,15 @@ export async function resolveOrgDependentRefill(
 export async function resolveOrgChangeFields(
 	newOrgUuid: string,
 	userUuid: string,
-	orgFields: Array<{ valueType: keyof UserDefaultsMap; uuidKey: string; nameKey: string }>,
+	orgFields: Array<{
+		valueType: keyof UserDefaultsMap;
+		uuidKey: string;
+		nameKey: string;
+	}>,
 ): Promise<Record<string, any>> {
-	const defaults = newOrgUuid ? await fetchOrgUserDefaults(userUuid, newOrgUuid) : {};
+	const defaults = newOrgUuid
+		? await fetchOrgUserDefaults(userUuid, newOrgUuid)
+		: {};
 	const patch: Record<string, any> = {};
 	for (const f of orgFields) {
 		const def = defaults[f.valueType];

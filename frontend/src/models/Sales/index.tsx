@@ -678,7 +678,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
             {/* ── Левая колонка: поля ── */}
-            {/* Строка 1: Дата · Проведён · Статус */}
+            {/* Строка 1: Дата - Проведён - Статус */}
             <GroupRow className={styles.FormHeaderRow}>
               <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
               <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
@@ -768,7 +768,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           disabled={form.isLoading}
           deferRemoteChanges
           onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
-          parentLabel={`${translate("SalesList")}: ID${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
+          parentLabel={`${translate("SalesList")}: ID${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           key={itemsTableKey}
           initialPendingRows={itemsTableKey > 0 ? basisItems : (saleItems.pending.length > 0 ? saleItems.pending : basisItems)}
           onTotalChange={handleTotalChange}

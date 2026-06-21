@@ -9,7 +9,7 @@ import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FileViewPane, type FileMeta } from "./FileViewPane";
 
 // Владелец файла → как загрузить запись и как назвать (для заголовка панели,
-// в формате *Form: «Договор: ID 2 · Наименование», «Задача: ID 2»).
+// в формате *Form: «Договор: ID 2 - Наименование», «Задача: ID 2»).
 const OWNER_META: Record<string, { endpoint: string; listName: string; fallback: string }> = {
   contract: { endpoint: "contracts", listName: "ContractsList", fallback: "Договор" },
   todo: { endpoint: "todos", listName: "TodosList", fallback: "Задача" },
@@ -84,13 +84,13 @@ const FileViewerPane: FC<Record<string, unknown>> = (props) => {
     return f ? { uuid: f.uuid, fileName: f.fileName, mimeType: f.mimeType } : (data.file ?? undefined);
   }, [files, selected, data.file]);
 
-  // Заголовок панели = ВЛАДЕЛЕЦ + ИМЯ ФАЙЛА. Напр.: «Договор: ID 2 · Наименование · файл.pdf».
+  // Заголовок панели = ВЛАДЕЛЕЦ + ИМЯ ФАЙЛА. Напр.: «Договор: ID 2 - Наименование - файл.pdf».
   // Без владельца (общие файлы) — только имя файла.
   useEffect(() => {
     if (!paneId) return;
     const fileName = selectedFile?.fileName ?? "";
     const label = ownerLabel
-      ? (fileName ? `${ownerLabel} · ${fileName}` : ownerLabel)
+      ? (fileName ? `${ownerLabel} - ${fileName}` : ownerLabel)
       : (fileName || "Файл");
     updatePaneLabel(paneId, label);
   }, [paneId, ownerLabel, selectedFile, updatePaneLabel]);

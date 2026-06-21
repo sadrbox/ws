@@ -121,11 +121,18 @@ const DocumentEntriesButton: FC<Props> = ({ documentType, documentUuid, disabled
                   renderCell={entryCellRenderer}
                   emptyMessage={translate("documentEntriesEmpty")}
                   maxHeight="60vh"
+                  footerRender={(col, frows) => {
+                    // Итоги в футере: количество проводок (слева) + сумма (справа).
+                    if (col.identifier === "accountDebit") {
+                      return <span>{translate("documentEntriesCount")}: {data?.count ?? frows.length}</span>;
+                    }
+                    if (col.identifier === "amount") {
+                      const sum = frows.reduce((s, r) => s + (Number((r as unknown as EntryRow).amount) || 0), 0);
+                      return <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(sum)}</span>;
+                    }
+                    return undefined;
+                  }}
                 />
-                <div style={{ padding: "8px 4px", fontWeight: 600, display: "flex", justifyContent: "space-between" }}>
-                  <span>{translate("documentEntriesCount")}: {data?.count ?? rows.length}</span>
-                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(data?.total ?? 0)}</span>
-                </div>
               </>
             )}
           </div>

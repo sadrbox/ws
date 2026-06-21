@@ -8,6 +8,7 @@ import { FC, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
+import { showToast } from "src/components/UIToast";
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import Modal from "src/components/Modal";
@@ -32,10 +33,19 @@ interface ChainNode {
   children: ChainNode[];
 }
 
+interface IntegrityIssue {
+  kind: string;
+  message: string;
+  /** Для kind="dangling" — документ-ребёнок с висячей ссылкой (его и чиним). */
+  childType?: string;
+  childUuid?: string;
+  childLabel?: string;
+}
+
 interface ChainResponse {
   root: ChainNode;
   target: { type: string; uuid: string };
-  integrity: Array<{ kind: string; message: string }>;
+  integrity: IntegrityIssue[];
 }
 
 interface Props {
@@ -75,7 +85,7 @@ const NodeRow: FC<{
           </span>
         )}
         <span className={styles.NodeMeta}>
-          {node.number ? `№ ${node.number}` : `ID ${node.id ?? "?"}`}{date ? ` · ${date}` : ""}{node.organizationName ? ` · ${node.organizationName}` : ""}
+          {node.number ? `№ ${node.number}` : `ID ${node.id ?? "?"}`}{date ? ` - ${date}` : ""}{node.organizationName ? ` - ${node.organizationName}` : ""}
         </span>
         {node.amount != null && <span className={styles.NodeAmount}>{fmtAmt(node.amount)}</span>}
       </div>
@@ -121,6 +131,17 @@ const DocumentChainButton: FC<Props> = ({ documentType, documentUuid, disabled }
     void openDocumentByType(type, uuid, addPane);
   }, [addPane]);
 
+  // Очистить «висячее» основание у документа-ребёнка и перестроить цепочку.
+  const handleClearBasis = useCallback(async (childType: string, childUuid: string) => {
+    try {
+      await api.post(`documents/${childType}/${childUuid}/clear-basis`, {});
+      showToast(translate("basisCleared"), "success");
+      void refetch();
+    } catch {
+      showToast(translate("basisClearFailed"), "error");
+    }
+  }, [refetch]);
+
   return (
     <>
       <IconButton
@@ -150,7 +171,19 @@ const DocumentChainButton: FC<Props> = ({ documentType, documentUuid, disabled }
                 {data.integrity.length > 0 && (
                   <div className={styles.Integrity}>
                     {data.integrity.map((it, i) => (
-                      <span key={i} className={styles.IntegrityItem}>⚠️ {it.message}</span>
+                      <div key={i} className={styles.IntegrityItem}>
+                        <span>⚠️ {it.message}</span>
+                        {it.kind === "dangling" && it.childType && it.childUuid && (
+                          <button
+                            type="button"
+                            className={styles.IntegrityFix}
+                            title={translate("clearBasisHint")}
+                            onClick={() => void handleClearBasis(it.childType!, it.childUuid!)}
+                          >
+                            {translate("clearBasis")}
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}

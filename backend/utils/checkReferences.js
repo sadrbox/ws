@@ -321,8 +321,12 @@ export async function findBasisDependents(uuid) {
 					label: REFERENCE_LABELS[table] ?? table,
 				});
 			}
-		} catch {
-			// Таблица без колонки basisDocumentUuid — пропускаем.
+		} catch (err) {
+			// Легитимно пропускаем только «нет такой колонки» (42703) или «нет таблицы»
+			// (42P01). Любую другую ошибку ПРОБРАСЫВАЕМ: молча «потерять» зависимость =
+			// разрешить опасное удаление документа-основания (висячая ссылка у ребёнка).
+			if (err && (err.code === "42703" || err.code === "42P01")) continue;
+			throw err;
 		}
 	}
 	return found;

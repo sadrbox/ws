@@ -5,9 +5,8 @@ import LookupField from "src/components/Field/LookupField";
 import { HelpBox, helpMarker } from "src/components/HelpBox";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { Button } from "src/components/Button";
-import Tabs from "src/components/Tabs";
 import priceColumns from "../Products/priceColumns.json";
-import { GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
 import mainStyles from "src/styles/main.module.scss";
 import styles from "./ProductPriceProcessing.module.scss";
 import apiClient from "src/services/api/client";
@@ -50,21 +49,19 @@ const priceCellRenderer = (
     const warn = isImportRow && !r.productUuid;
     if (ctx.inlineEditing)
       return (
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          {warn && <span title={translate("notMatched")} style={{ color: "#c5221f" }}>⚠</span>}
-          <LookupField
-            label="" name={`ppp_product_${r.id}`} value={r.productUuid ?? ""}
-            displayValue={String(r.product?.name ?? "")}
-            endpoint="products" displayField="name" disabled={ctx.disabled} variant="table"
-            onSelect={(u, display) => ctx.handleLookupChange(r, "productUuid", u, { product: { name: display }, _matched: !!u })}
-            onClear={() => ctx.handleLookupChange(r, "productUuid", null, { product: null, _matched: false })}
-          />
-        </div>
+        <LookupField
+          label="" name={`ppp_product_${r.id}`} value={r.productUuid ?? ""}
+          displayValue={String(r.product?.name ?? "")}
+          endpoint="products" displayField="name" disabled={ctx.disabled} variant="table"
+          prefix={warn ? <span title={translate("notMatched")} className={styles.warn}>⚠</span> : undefined}
+          onSelect={(u, display) => ctx.handleLookupChange(r, "productUuid", u, { product: { name: display }, _matched: !!u })}
+          onClear={() => ctx.handleLookupChange(r, "productUuid", null, { product: null, _matched: false })}
+        />
       );
-    return <span style={warn ? { color: "#c5221f" } : undefined}>{warn ? "⚠ " : ""}{String(r.product?.name ?? "")}</span>;
+    return <span className={warn ? styles.warn : undefined}>{warn ? "⚠ " : ""}{String(r.product?.name ?? "")}</span>;
   }
   if (col.identifier === "oldPrice") {
-    return <span style={{ color: "#888" }}>{r._origPrice != null ? String(r._origPrice) : ""}</span>;
+    return <span className={styles.oldPrice}>{r._origPrice != null ? String(r._origPrice) : ""}</span>;
   }
   if (col.identifier === "priceDelta") {
     const orig = toNum(r._origPrice);
@@ -72,8 +69,8 @@ const priceCellRenderer = (
     if (orig == null || orig === 0 || cur == null) return <span />;
     const d = ((cur - orig) / orig) * 100;
     if (!Number.isFinite(d)) return <span />;
-    const color = d > 0 ? "#137333" : d < 0 ? "#c5221f" : "#666";
-    return <span style={{ color, fontWeight: 600 }}>{d > 0 ? "+" : ""}{d.toFixed(1)}</span>;
+    const deltaClass = d > 0 ? styles.deltaUp : d < 0 ? styles.deltaDown : styles.deltaZero;
+    return <span className={deltaClass}>{d > 0 ? "+" : ""}{d.toFixed(1)}</span>;
   }
   if (col.identifier === "priceType.name") {
     if (ctx.inlineEditing)
@@ -107,7 +104,7 @@ const priceCellRenderer = (
           onChange={(e) => ctx.handleInlineChange(r, "price", e.target.value)}
         />
       );
-    return <span style={changed ? { fontWeight: 700, color: "#137333" } : undefined}>{r.price != null ? String(r.price) : ""}</span>;
+    return <span className={changed ? styles.priceChanged : undefined}>{r.price != null ? String(r.price) : ""}</span>;
   }
   return undefined;
 };
@@ -334,7 +331,7 @@ const PriceCorrectionTab: FC<{
   };
 
   return (
-    <div className={styles.tab}>
+    <>
       <HelpBox title="ℹ️ Корректировка действующих цен номенклатуры">
         <ol>
           <li>Условия отбора необязательны: <b>{translate("priceType")}</b>, <b>{translate("nomenclature")}</b>, <b>{translate("date")}</b>. Без фильтров загрузятся все цены; выбор номенклатуры покажет историю её цен.</li>
@@ -344,7 +341,7 @@ const PriceCorrectionTab: FC<{
         </ol>
       </HelpBox>
 
-      <GroupRow className={mainStyles.GroupRowWrap}>
+      <GroupRow>
         <LookupField
           label={translate("priceType")} name="corr_priceType" value={priceTypeUuid} displayValue={priceTypeName}
           endpoint="price-types" displayField="name" disabled={isLoading}
@@ -359,6 +356,9 @@ const PriceCorrectionTab: FC<{
         />
         <FieldDate label={translate("date")} name="corr_date" value={date} onChange={(e) => setDate(e.target.value)} disabled={isLoading} />
         <Button variant="primary" onClick={handleFill} disabled={isLoading}>{translate("fill")}</Button>
+
+      </GroupRow>
+      <GroupRow>
         <FieldSelect
           label={translate("writeMode")} name="corr_writeMode" value={writeMode}
           options={[{ value: "update", label: translate("modeUpdate") }, { value: "newDate", label: translate("modeNewDate") }]}
@@ -413,7 +413,7 @@ const PriceCorrectionTab: FC<{
           }}
         />
       </div>
-    </div>
+    </>
   );
 };
 PriceCorrectionTab.displayName = "PriceCorrectionTab";
@@ -689,7 +689,7 @@ const PriceImportTab: FC<{ canWrite: boolean }> = ({ canWrite }) => {
   };
 
   return (
-    <div className={styles.tab}>
+    <>
       <HelpBox title="ℹ️ Загрузка цен из файла Excel (.xlsx, .xls)">
         <ol>
           <li>Укажите <b>{translate("priceType")}</b> и <b>{translate("date")}</b> — значения по умолчанию для строк без этих колонок.</li>
@@ -702,28 +702,31 @@ const PriceImportTab: FC<{ canWrite: boolean }> = ({ canWrite }) => {
           Колонки файла: «sku / артикул», «barcode / штрих-код», «name / наименование», «price / цена». Необязательные: «priceType / тип цены», «date / дата» (для восстановления из бэкапа).
         </div>
       </HelpBox>
+      <GroupRow>
+        <GroupRow>
+          {/* «Тип цены» формы убран как излишний: тип берётся из колонки файла
+            или задаётся по строкам в таблице (колонка «Тип цены»). */}
+          <FieldDate label={translate("date")} name="imp_date" value={date} onChange={(e) => setDate(e.target.value)} disabled={isLoading} />
+          <FieldFile
+            key={`file-${fillVersion}`} name="imp_file" accept=".xls,.xlsx" disabled={isLoading || !canWrite}
+            loading={isLoading} onSelect={(f) => { setFile(f); setParsed(false); }}
+          />
+          <Button onClick={handleFill} disabled={isLoading || !file}>{translate("fill")}</Button>
 
-      <GroupRow className={mainStyles.GroupRowWrap}>
-        <LookupField
-          label={translate("priceType")} name="imp_priceType" value={priceTypeUuid} displayValue={priceTypeName}
-          endpoint="price-types" displayField="name" disabled={isLoading}
-          onSelect={(u, d) => { setPriceTypeUuid(u); setPriceTypeName(d ?? ""); }}
-          onClear={() => { setPriceTypeUuid(""); setPriceTypeName(""); }}
-        />
-        <FieldDate label={translate("date")} name="imp_date" value={date} onChange={(e) => setDate(e.target.value)} disabled={isLoading} />
-        <FieldFile
-          key={`file-${fillVersion}`} name="imp_file" accept=".xls,.xlsx" disabled={isLoading || !canWrite}
-          loading={isLoading} onSelect={(f) => { setFile(f); setParsed(false); }}
-        />
-        <Button variant="primary" onClick={handleFill} disabled={isLoading || !file}>{translate("fill")}</Button>
-        <Button onClick={handleUpload} disabled={isLoading || !canWrite || !parsed}>{translate("upload")}</Button>
-        <Button onClick={handleDownloadTemplate} type="button">{translate("downloadTemplate")}</Button>
-        <Button onClick={handleDownloadBackup} type="button" disabled={isLoading}>{translate("downloadBackup")}</Button>
-        <label className={styles.checkbox}>
-          <input type="checkbox" checked={hideExisting} onChange={(e) => applyHideExisting(e.target.checked)} disabled={isLoading} />
-          {translate("hideExisting")}
-        </label>
+
+          <label className={styles.checkbox}>
+            <input type="checkbox" checked={hideExisting} onChange={(e) => applyHideExisting(e.target.checked)} disabled={isLoading} />
+            {translate("hideExisting")}
+          </label>
+        </GroupRow>
+        <GroupRow style={{ marginLeft: "auto", gap: "6px" }}>
+          <Button onClick={handleDownloadTemplate} type="button">{translate("downloadTemplate")}</Button>
+          <Button onClick={handleDownloadBackup} type="button" disabled={isLoading}>{translate("downloadBackup")}</Button>
+          <Button variant="primary" onClick={handleUpload} disabled={isLoading || !canWrite || !parsed}>{translate("upload")}</Button>
+        </GroupRow>
       </GroupRow>
+
+
 
       {parsed && (
         <div className={styles.summary}>
@@ -751,44 +754,48 @@ const PriceImportTab: FC<{ canWrite: boolean }> = ({ canWrite }) => {
           renderCell={priceCellRenderer}
         />
       </div>
-    </div>
+    </>
   );
 };
 PriceImportTab.displayName = "PriceImportTab";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Форма «Корректировка цен номенклатуры» — две вкладки.
-// ═══════════════════════════════════════════════════════════════════════════
-export const ProductPriceProcessing: FC<Partial<TPane>> = (paneProps) => {
-  // Отдельное право на массовое изменение цен; при отсутствии — откат на «Product».
+// Право на массовое изменение цен; при отсутствии — откат на «Product».
+const usePriceCanWrite = () => {
   const priceRight = useUserAccessRight("ProductPrice");
   const productRight = useUserAccessRight("Product");
-  const canWrite = priceRight.accessLevel !== "none" ? priceRight.canWrite : productRight.canWrite;
+  return priceRight.accessLevel !== "none" ? priceRight.canWrite : productRight.canWrite;
+};
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Отдельная форма «Корректировка цен номенклатуры» (без вкладок).
+// ═══════════════════════════════════════════════════════════════════════════
+export const ProductPriceCorrection: FC<Partial<TPane>> = (paneProps) => {
+  const canWrite = usePriceCanWrite();
   // Если форму открыли из карточки товара — приходит productUuid/productName.
   const data = paneProps.data as { productUuid?: string; productName?: string } | undefined;
-  const initialProductUuid = data?.productUuid ?? "";
-  const initialProductName = data?.productName ?? "";
-
-  const tabs = useMemo(
-    () => [
-      {
-        id: "correction", label: translate("priceCorrectionTab"),
-        component: <PriceCorrectionTab canWrite={canWrite} initialProductUuid={initialProductUuid} initialProductName={initialProductName} />,
-      },
-      { id: "import", label: translate("priceImportTab"), component: <PriceImportTab canWrite={canWrite} /> },
-    ],
-    [canWrite, initialProductUuid, initialProductName],
-  );
-
   return (
     <div className={mainStyles.FormWrapper}>
       <div className={mainStyles.FormBody}>
-        <Tabs tabs={tabs} />
+        <PriceCorrectionTab canWrite={canWrite} initialProductUuid={data?.productUuid ?? ""} initialProductName={data?.productName ?? ""} />
       </div>
     </div>
   );
 };
-ProductPriceProcessing.displayName = "ProductPriceProcessing";
+ProductPriceCorrection.displayName = "ProductPriceCorrection";
 
-export default ProductPriceProcessing;
+// ═══════════════════════════════════════════════════════════════════════════
+// Отдельная форма «Импорт/экспорт цен номенклатуры» (импорт из Excel, без вкладок).
+// ═══════════════════════════════════════════════════════════════════════════
+export const ProductPriceImport: FC<Partial<TPane>> = () => {
+  const canWrite = usePriceCanWrite();
+  return (
+    <div className={mainStyles.FormWrapper}>
+      <div className={mainStyles.FormBody}>
+        <PriceImportTab canWrite={canWrite} />
+      </div>
+    </div>
+  );
+};
+ProductPriceImport.displayName = "ProductPriceImport";
+
+export default ProductPriceCorrection;

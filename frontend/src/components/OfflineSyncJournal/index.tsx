@@ -103,7 +103,7 @@ const OfflineSyncJournal: FC = () => {
                 <div className={styles.SyncEntryBody}>
                   <div className={styles.SyncEntryLabel}>{entry.table}</div>
                   <div className={styles.SyncEntryMeta}>
-                    {entry.action} · {entry.uuid} · {formatDate(entry.createdAt)}
+                    {entry.action} - {entry.uuid} - {formatDate(entry.createdAt)}
                   </div>
                 </div>
                 <div className={styles.SyncEntryActions}>

@@ -15,6 +15,7 @@ import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, valida
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
+import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 
 const MODEL = "cashOrder";
 const TEXT_FIELDS = ["comment"];
@@ -136,6 +137,8 @@ export function createCashOrderRouter({ direction, route, docType }) {
 				posted: willPost,
 				authorUuid: req.user.uuid,
 			};
+			// Запрещаем ссылку «в никуда»: основание (если указано) должно существовать.
+			if (docData.basisDocumentUuid) await assertBasisExists(docData.basisDocumentType, docData.basisDocumentUuid);
 			await assertOrgFieldMembership(docData, prisma);
 			// Блокировка закрытого периода: нельзя создавать кассовый ордер в закрытом месяце.
 			await assertPeriodOpen(docData.organizationUuid, docData.date);
@@ -146,6 +149,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (item.posted) await reconcileDocumentEntries(docType, item.uuid);
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
+			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
 			if (respondDuplicateNumberError(error, res)) return;
@@ -171,9 +175,11 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			// Номер из payload (ручной ввод / переприсвоение) — иначе он терялся при PUT.
 			if (req.body.number !== undefined) data.number = req.body.number?.trim?.() || null;
 			// Проверяем существование И принадлежность маршруту (direction).
-			const existing = await prisma[MODEL].findFirst({ where: { ...w, direction }, select: { uuid: true, organizationUuid: true, posted: true, number: true, contractUuid: true, cashboxUuid: true, date: true } });
+			const existing = await prisma[MODEL].findFirst({ where: { ...w, direction }, select: { uuid: true, organizationUuid: true, posted: true, number: true, contractUuid: true, cashboxUuid: true, date: true, basisDocumentType: true } });
 			if (!existing || !checkOwnership(existing, req))
 				return res.status(404).json({ success: false, message: "Не найдено" });
+			// Запрещаем ссылку «в никуда»: проверяем только при ЗАДАНИИ нового основания.
+			if (data.basisDocumentUuid) await assertBasisExists(data.basisDocumentType ?? existing.basisDocumentType, data.basisDocumentUuid);
 			// Блокировка закрытого периода: нельзя трогать закрытый ордер и переносить в закрытый период.
 			await assertPeriodOpen(existing.organizationUuid, existing.date);
 			await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
@@ -193,6 +199,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			await reconcileDocumentEntries(docType, item.uuid);
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
+			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
 			if (respondPostingError(error, res)) return;

@@ -271,13 +271,15 @@
 				.TableBodyCell {
 					display: flex;
 					align-items: center;
-					height: $heightFieldInput;
+					min-height: $heightFieldInput;
+					height: stretch;
 					padding: 0;
 					white-space: nowrap;
 					text-overflow: ellipsis;
 					overflow: hidden;
 					user-select: none;
 					border: 1px solid #fff;
+					place-items: center;
 					// position: relative нужен для абсолютно-позиционированных
 					// потомков (CellErrorTooltip из SubTable, который теперь
 					// рендерится прямо внутри .TableBodyCell, без промежуточного
@@ -318,6 +320,8 @@
 						overflow: hidden;
 						white-space: nowrap;
 						text-overflow: ellipsis;
+						// align-items: center;
+						align-content: center;
 					}
 				}
 
@@ -424,8 +428,7 @@
 				border-bottom: 0;
 				border-right: 1px solid $color34;
 
-				&::after {
-				}
+				&::after {}
 
 				&:first-child {
 					border-left: 0;

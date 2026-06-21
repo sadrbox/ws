@@ -429,7 +429,7 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
           priceTypeUuid={form.fields.priceTypeUuid}
           disabled={form.isLoading} deferRemoteChanges
           onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
-          parentLabel={`${translate("PurchasesList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
+          parentLabel={`${translate("PurchasesList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           key={itemsTableKey}
           initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
           onTotalChange={handleTotalChange}

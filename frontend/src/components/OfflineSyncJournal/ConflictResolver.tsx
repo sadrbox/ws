@@ -83,7 +83,7 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ conflict, onClose }) => {
     <div className={styles.ConflictResolver}>
       {/* Header */}
       <div className={styles.ConflictHeader}>
-        ⚠️ {translate("conflictResolverTitle")} {conflict.table} · {conflict.uuid}
+        ⚠️ {translate("conflictResolverTitle")} {conflict.table} - {conflict.uuid}
       </div>
       <div className={styles.ConflictDescription}>
         {translate("conflictResolverDescriptionLine1")}

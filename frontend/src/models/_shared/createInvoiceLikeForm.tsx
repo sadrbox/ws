@@ -351,19 +351,19 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
         const rows = allItemsRef.current.map((raw, i) => {
           const r = raw as InvoiceItemRow;
           return {
-          number: i + 1,
-          name: r.product?.name ?? r.productName ?? "",
-          unit: r.unitOfMeasure?.name ?? r.unitName ?? "",
-          quantity: Number(r.quantity ?? 0),
-          price: Number(r.price ?? 0),
-          amount: Number(r.amount ?? 0),
-          amountWithoutVat: Number(r.amountWithoutVat ?? 0),
-          vatRate: Number(r.vatRate ?? 0),
-          vatAmount: Number(r.vatAmount ?? 0),
-          exciseRate: Number(r.exciseRate ?? 0),
-          exciseAmount: Number(r.exciseAmount ?? 0),
-          discountPercent: Number(r.discountPercent ?? 0),
-          discountAmount: Number(r.discountAmount ?? 0),
+            number: i + 1,
+            name: r.product?.name ?? r.productName ?? "",
+            unit: r.unitOfMeasure?.name ?? r.unitName ?? "",
+            quantity: Number(r.quantity ?? 0),
+            price: Number(r.price ?? 0),
+            amount: Number(r.amount ?? 0),
+            amountWithoutVat: Number(r.amountWithoutVat ?? 0),
+            vatRate: Number(r.vatRate ?? 0),
+            vatAmount: Number(r.vatAmount ?? 0),
+            exciseRate: Number(r.exciseRate ?? 0),
+            exciseAmount: Number(r.exciseAmount ?? 0),
+            discountPercent: Number(r.discountPercent ?? 0),
+            discountAmount: Number(r.discountAmount ?? 0),
           };
         });
         const titleStr = cfg.printConfig.title(form.fields);
@@ -406,11 +406,11 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
               icon="fromBasis"
               label="На основании"
               options={cfg.createFromBasisTargets.map((t, i) => ({
-                  // id — индекс цели: basisType одинаков у всех целей одного источника,
-                  // поэтому по нему нельзя различить цели (открывалась бы первая).
-                  id: String(i),
-                  label: formatDependentOption(t.docLabel, t.existingCheckEndpoint ? existingDeps[t.existingCheckEndpoint] : null),
-                }))}
+                // id — индекс цели: basisType одинаков у всех целей одного источника,
+                // поэтому по нему нельзя различить цели (открывалась бы первая).
+                id: String(i),
+                label: formatDependentOption(t.docLabel, t.existingCheckEndpoint ? existingDeps[t.existingCheckEndpoint] : null),
+              }))}
               onSelect={(id) => {
                 const target = cfg.createFromBasisTargets![Number(id)];
                 if (target) void handleCreateFromBasis(target);
@@ -419,25 +419,25 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           )}
           {!cfg.hidePosted && <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />}
           {showHeaderActions && (<>
-          {isSavedDoc && <DocumentChainButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
-          {isSavedDoc && <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
-          {hasBasis && (
-            <RefillFromBasisButton
-              mismatch={basisMismatch.mismatch}
-              mismatchDetails={basisMismatch.differences}
-              disabled={form.isLoading || isRefilling}
-              loading={isRefilling}
-              onClick={() => void handleRefillFromBasis()}
-            />
-          )}
-          {isSavedDoc && cfg.printConfig && (
-            <PrintDropdownButton
-              disabled={printDisabled}
-              title={printDisabled ? "Сохраните изменения перед печатью" : "Печать"}
-              options={[{ id: "print", label: "Печать" }]}
-              onSelect={handlePrint}
-            />
-          )}
+            {isSavedDoc && <DocumentChainButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
+            {isSavedDoc && <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
+            {hasBasis && (
+              <RefillFromBasisButton
+                mismatch={basisMismatch.mismatch}
+                mismatchDetails={basisMismatch.differences}
+                disabled={form.isLoading || isRefilling}
+                loading={isRefilling}
+                onClick={() => void handleRefillFromBasis()}
+              />
+            )}
+            {isSavedDoc && cfg.printConfig && (
+              <PrintDropdownButton
+                disabled={printDisabled}
+                title={printDisabled ? "Сохраните изменения перед печатью" : "Печать"}
+                options={[{ id: "print", label: "Печать" }]}
+                onSelect={handlePrint}
+              />
+            )}
           </>)}
         </>
       ),
@@ -602,7 +602,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             fieldsReadOnly={basisLock}
             deferRemoteChanges
             onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
-            parentLabel={`${cfg.formLabel}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
+            parentLabel={`${cfg.formLabel}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
             key={itemsTableKey}
             initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
             onTotalChange={handleTotalChange}

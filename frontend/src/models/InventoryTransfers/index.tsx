@@ -233,7 +233,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           hasTaxes={false}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
-          parentLabel={`${translate("InventoryTransfersList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " · " + getFormatDateOnly(String(form.fields.date)) : ""}`}
+          parentLabel={`${translate("InventoryTransfersList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           initialPendingRows={items.pending}
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}

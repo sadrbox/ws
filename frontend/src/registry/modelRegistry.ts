@@ -38,8 +38,8 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 	{
 		endpoint: "product-prices",
 		module: () => import("src/models/ProductPriceProcessing"),
-		formName: "ProductPriceProcessing",
-		listName: "ProductPriceProcessing",
+		formName: "ProductPriceCorrection",
+		listName: "ProductPriceCorrection",
 		storageKey: "price-processing-form",
 		label: "Корректировка цен номенклатуры",
 	},

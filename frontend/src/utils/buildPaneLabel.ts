@@ -38,7 +38,7 @@ function resolveFormName(listOrFormName: string, fallback: string): string {
 }
 
 /**
- * Метка для СПРАВОЧНИКОВ: "Организация: ID 5" или "Организация: ID 5 · Рога и Копыта"
+ * Метка для СПРАВОЧНИКОВ: "Организация: ID 5" или "Организация: ID 5 - Рога и Копыта"
  */
 export function makePaneLabel(
 	listName: string,
@@ -50,11 +50,11 @@ export function makePaneLabel(
 	const id = saved.id;
 	if (!id) return `${name}: ${translate("new")}`;
 	const detail = displayValue ?? saved.name;
-	return detail ? `${name}: ID ${id} · ${detail}` : `${name}: ID ${id}`;
+	return detail ? `${name}: ID ${id} - ${detail}` : `${name}: ID ${id}`;
 }
 
 /**
- * Метка для ДОКУМЕНТОВ: "Реализация товара и услуг: ID 4 · 21.04.2026"
+ * Метка для ДОКУМЕНТОВ: "Реализация товара и услуг: ID 4 - 21.04.2026"
  * dateField — имя поля даты в saved (по умолчанию "date")
  */
 export function makeDocLabel(
@@ -69,15 +69,18 @@ export function makeDocLabel(
 	// Показываем человекочитаемый номер документа, если он есть; иначе — ID.
 	const ref = saved.number ? `№ ${saved.number}` : `ID ${id}`;
 	const rawDate = saved[dateField];
-	const date = (typeof rawDate === "string" || typeof rawDate === "number" || rawDate instanceof Date)
-		? getFormatDateOnly(String(rawDate))
-		: undefined;
-	return date ? `${name}: ${ref} · ${date}` : `${name}: ${ref}`;
+	const date =
+		typeof rawDate === "string" ||
+		typeof rawDate === "number" ||
+		rawDate instanceof Date
+			? getFormatDateOnly(String(rawDate))
+			: undefined;
+	return date ? `${name}: ${ref} - ${date}` : `${name}: ${ref}`;
 }
 
 /**
  * Метка при открытии панели из списка/таблицы (до загрузки данных).
- * Единый паттерн: "Label: ID id · detail" / "Label: ID id" / "Label: Новый"
+ * Единый паттерн: "Label: ID id - detail" / "Label: ID id" / "Label: Новый"
  */
 export function makePaneLabelFromData(
 	listName: string,
@@ -89,5 +92,5 @@ export function makePaneLabelFromData(
 	if (!data?.uuid && !data?.id) return `${name}: ${translate("new")}`;
 	const id = data.id ?? "?";
 	const detail = displayValue ?? data.name;
-	return detail ? `${name}: ID ${id} · ${detail}` : `${name}: ID ${id}`;
+	return detail ? `${name}: ID ${id} - ${detail}` : `${name}: ID ${id}`;
 }

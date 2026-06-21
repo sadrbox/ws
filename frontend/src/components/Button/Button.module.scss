@@ -1,5 +1,5 @@
 .Button {
-
+	align-self: flex-end;
 	user-select: none;
 	display: flex;
 	align-items: center;
@@ -31,8 +31,7 @@
 		border: 1px solid #3d3400;
 	}
 
-	&:not(:last-child) {
-	}
+	&:not(:last-child) {}
 
 	// Оформление для текста в кнопке
 	span {

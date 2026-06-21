@@ -1,3 +1,5 @@
+@import "src/styles/main.module.scss";
+
 // Тело вкладки: пояснение → строка параметров/кнопок → таблица.
 .tab {
   display: flex;
@@ -81,9 +83,39 @@
   color: #c5221f;
 }
 
+// ── Ячейки таблицы цен (вместо inline-styles в priceCellRenderer) ──────────
+.warn {
+  color: #c5221f;
+}
+
+.oldPrice {
+  color: #888;
+}
+
+.deltaUp {
+  color: #137333;
+  font-weight: 600;
+}
+
+.deltaDown {
+  color: #c5221f;
+  font-weight: 600;
+}
+
+.deltaZero {
+  color: #666;
+  font-weight: 600;
+}
+
+.priceChanged {
+  font-weight: 700;
+  color: #137333;
+}
+
 // Чекбокс в строке параметров (выравнивание по нижнему краю как у полей).
 .checkbox {
   display: inline-flex;
+  align-self: flex-end;
   align-items: center;
   gap: 5px;
   font-size: 13px;

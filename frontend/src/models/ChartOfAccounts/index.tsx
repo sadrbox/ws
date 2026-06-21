@@ -133,7 +133,7 @@ const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
               <FieldSelect label={translate("subkonto2")} name={`${form.formUid}_sub2`} options={subkontoOptions} value={form.fields.subkonto2Type} onChange={e => form.setField("subkonto2Type", e.target.value)} disabled={form.isLoading} />
               <FieldSelect label={translate("subkonto3")} name={`${form.formUid}_sub3`} options={subkontoOptions} value={form.fields.subkonto3Type} onChange={e => form.setField("subkonto3Type", e.target.value)} disabled={form.isLoading} />
             </Group>
-            <GroupRow className={styles.GroupRowWrap}>
+            <GroupRow>
               <FieldToggle name={`${form.formUid}_isActive`} label={translate("isActive")} value={form.fields.isActive === true} onChange={(v) => form.setField("isActive", v)} disabled={form.isLoading || !canWrite} variant="success" />
               <FieldToggle name={`${form.formUid}_isCurrency`} label={translate("accountIsCurrency")} value={form.fields.isCurrency === true} onChange={(v) => form.setField("isCurrency", v)} disabled={form.isLoading || !canWrite} variant="primary" />
               <FieldToggle name={`${form.formUid}_isQuantitative`} label={translate("accountIsQuantitative")} value={form.fields.isQuantitative === true} onChange={(v) => form.setField("isQuantitative", v)} disabled={form.isLoading || !canWrite} variant="primary" />

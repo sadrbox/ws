@@ -68,7 +68,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         retailRef.current = { counterpartyUuid: r.counterparty.uuid, counterpartyName: r.counterparty.name, contractUuid: r.contract?.uuid ?? "" };
         setRetailName(r.counterparty.name);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => { cancelled = true; };
   }, []);
 
@@ -314,7 +314,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         {/* Реквизиты — свёрнуты по умолчанию (лёгкий вид). Сводка → раскрытие. */}
         <button type="button" className={styles.PayMethod} style={{ width: "100%", justifyContent: "space-between", display: "flex" }} onClick={() => setReqOpen((v) => !v)}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {orgName || translate("organization")} · {warehouseName || translate("warehouse")} · {buyerLabel}{priceTypeName ? ` · ${priceTypeName}` : ""}
+            {orgName || translate("organization")} - {warehouseName || translate("warehouse")} - {buyerLabel}{priceTypeName ? ` - ${priceTypeName}` : ""}
           </span>
           <span>{reqOpen ? "▲" : "▼"}</span>
         </button>

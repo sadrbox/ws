@@ -40,16 +40,22 @@ export function useModelDelete(
 			const items = tableRows.filter((r) => selectedRowIds.has(Number(r.id)));
 			if (items.length === 0) return { deletedIds: new Set<number>() };
 
-			// Понятный текст подтверждения: имя сущности + № документа·дата (или ID·имя),
+			// Понятный текст подтверждения: имя сущности + № документа-дата (или ID-имя),
 			// списком при множественном выборе. confirm рендерит как HTML → экранируем.
-			const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+			const esc = (s: string) =>
+				s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 			const MAX_LIST = 12;
 			const message =
 				items.length === 1
 					? `Удалить ${esc(describeRow(model, items[0]))}?`
 					: `Удалить выбранные (${items.length}):\n` +
-						items.slice(0, MAX_LIST).map((r) => `• ${esc(describeRow(model, r))}`).join("\n") +
-						(items.length > MAX_LIST ? `\n… и ещё ${items.length - MAX_LIST}` : "");
+						items
+							.slice(0, MAX_LIST)
+							.map((r) => `• ${esc(describeRow(model, r))}`)
+							.join("\n") +
+						(items.length > MAX_LIST
+							? `\n… и ещё ${items.length - MAX_LIST}`
+							: "");
 
 			const confirmed = await confirm(message);
 			// Отмена — ничего не удалено; возвращаем пустой набор (таблица не двигает activeRow).
@@ -165,7 +171,9 @@ export function useModelDelete(
 				);
 			} else if (deletedCount > 0) {
 				showToast(
-					deletedCount === 1 ? "Запись удалена" : `Удалено записей: ${deletedCount}`,
+					deletedCount === 1
+						? "Запись удалена"
+						: `Удалено записей: ${deletedCount}`,
 					"success",
 					3000,
 				);

@@ -24,7 +24,7 @@ const pct = (n: number) => `${(Number(n) || 0).toLocaleString("ru-KZ", { minimum
 interface SrcRow { productUuid: string | null; productName: string; amountNet: number; qtyNet: number }
 interface Row { productUuid: string | null; productName: string; amount: number; share: number; cum: number; abc: "A" | "B" | "C" }
 
-interface Props { uniqId?: string; [key: string]: unknown }
+interface Props { uniqId?: string;[key: string]: unknown }
 
 const classOf = (cum: number): "A" | "B" | "C" => (cum <= 80 ? "A" : cum <= 95 ? "B" : "C");
 
@@ -89,7 +89,7 @@ const ABCReport: FC<Props> = ({ uniqId }) => {
       <div className={styles.SortLine}>
         {(["A", "B", "C"] as const).map((c) => (
           <span key={c} style={{ marginRight: 16 }}>
-            <b>{c}</b>: {classTotals[c].n} {translate("abcPositions")} · {fmtZ(classTotals[c].amount)} ({pct(total > 0 ? (classTotals[c].amount / total) * 100 : 0)})
+            <b>{c}</b>: {classTotals[c].n} {translate("abcPositions")} - {fmtZ(classTotals[c].amount)} ({pct(total > 0 ? (classTotals[c].amount / total) * 100 : 0)})
           </span>
         ))}
       </div>

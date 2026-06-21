@@ -11,7 +11,7 @@ import {
 } from './types';
 
 import { getTranslateColumn, translate } from 'src/i18';
-import { getFormatColumnValue } from './services';
+import { getFormatColumnValue, computeFooterValue } from './services';
 import {
   CHECKBOX_COL_ID,
   computeNextActiveColId,
@@ -993,28 +993,6 @@ const TableFooter = memo(() => {
 });
 
 TableFooter.displayName = 'TableFooter';
-
-// Вычисляет итоговое значение колонки по загруженным строкам
-function computeFooterValue(col: TColumn, rows: TDataItem[]): string | null {
-  if (!col.footer || col.footer === 'none') return null;
-  const vals = rows
-    .map(r => {
-      const v = r[col.identifier];
-      return typeof v === 'number' ? v : parseFloat(String(v));
-    })
-    .filter(v => !isNaN(v));
-
-  if (vals.length === 0) return null;
-
-  switch (col.footer) {
-    case 'sum': return vals.reduce((a, b) => a + b, 0).toLocaleString('ru-RU');
-    case 'avg': return (vals.reduce((a, b) => a + b, 0) / vals.length).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
-    case 'min': return Math.min(...vals).toLocaleString('ru-RU');
-    case 'max': return Math.max(...vals).toLocaleString('ru-RU');
-    case 'count': return vals.length.toLocaleString('ru-RU');
-    default: return null;
-  }
-}
 
 // ────────────────────────────────────────────────
 // TableHeader

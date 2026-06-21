@@ -3,7 +3,6 @@ import { getTranslation } from "src/i18"
 
 import styles from "./Field.module.scss"
 import FieldActionButton from "./FieldActionButton"
-import { Button } from "src/components/Button"
 import type { IconName } from "src/components/IconButton/icons"
 import { useCellFieldState } from "src/hooks/useDirtyHighlight"
 import { useFormRequiredScope, useFormDirtyScope } from "src/hooks/useFormRequired"
@@ -408,13 +407,15 @@ interface TypeFieldFileProps {
   maxWidth?: string;
   /** Подпись кнопки выбора (по умолчанию «Выбрать файл»). */
   buttonLabel?: string;
-  buttonVariant?: 'primary' | 'secondary' | 'danger';
   /** Плейсхолдер, когда файл не выбран. */
   placeholder?: string;
   /** Имя выбранного файла (controlled). Если не задано — компонент хранит сам. */
   fileName?: string;
-  /** Показать индикатор загрузки (спиннер) — напр. пока файл обрабатывается. */
+  /** Показать индикатор загрузки — напр. пока файл обрабатывается. Без `progress`
+   *  рисуется «бегущая» (indeterminate) полоса, с `progress` — определённая. */
   loading?: boolean;
+  /** Процент загрузки 0–100 (определённый прогресс-бар вместо «бегущего»). */
+  progress?: number;
   /** Колбэк выбора файла (основной). */
   onSelect?: (file: File | null) => void;
   /** Сырой onChange (если нужен доступ к FileList/event). */
@@ -424,8 +425,8 @@ interface TypeFieldFileProps {
 export const FieldFile: FC<TypeFieldFileProps> = ({
   label, name, accept, disabled = false, required = false, error = false,
   variant = 'default', width, minWidth, maxWidth,
-  buttonLabel = 'Выбрать файл', buttonVariant = 'secondary',
-  placeholder = 'Файл не выбран', fileName, loading = false, onSelect, onChange,
+  buttonLabel = 'Выбрать файл',
+  placeholder = 'Файл не выбран', fileName, loading = false, progress, onSelect, onChange,
 }) => {
   const uid = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -446,20 +447,31 @@ export const FieldFile: FC<TypeFieldFileProps> = ({
     onSelect?.(null);
   };
 
+  const hasProgress = typeof progress === 'number' && Number.isFinite(progress);
+  const showBar = loading || hasProgress;
+  const pct = hasProgress ? Math.max(0, Math.min(100, progress as number)) : 0;
+  const canClear = !!displayName && !disabled && !loading;
+
   return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
+    <>
       <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
-      <div className={styles.FieldFileControl}>
-        <Button variant={buttonVariant} onClick={openPicker} disabled={disabled} title={label || buttonLabel}>
+      {/* Контрол фиксированной высоты: кнопка + имя (ellipsis) + слот «очистить» +
+          абсолютный прогресс-бар снизу — разметка не «прыгает» при выборе/загрузке. */}
+      <div className={styles.FieldFileControl} data-loading={loading || undefined}>
+        <button type="button" className={styles.FieldFileButton} onClick={openPicker} disabled={disabled} title={label || buttonLabel}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M8 10.5V2.5" /><path d="M5.5 5L8 2.5 10.5 5" /><path d="M3 10.5V13h10v-2.5" />
+          </svg>
           {buttonLabel}
-        </Button>
-        <span className={styles.FieldFileName} title={displayName || placeholder}>
+        </button>
+        <span className={[styles.FieldFileName, displayName ? '' : styles.FieldFilePlaceholder].filter(Boolean).join(' ')} title={displayName || placeholder}>
           {displayName || placeholder}
         </span>
-        {loading && <span className={styles.FieldFileSpinner} role="status" aria-label="Загрузка" />}
-        {!!displayName && !disabled && !loading && (
-          <FieldActionButton icon="clear" label="Очистить" onClick={handleClear} />
-        )}
+        {hasProgress && loading && <span className={styles.FieldFilePct}>{Math.round(pct)}%</span>}
+        {/* Слот фиксированной ширины — место под «очистить» зарезервировано всегда. */}
+        <span className={styles.FieldFileClear}>
+          {canClear && <FieldActionButton icon="clear" label="Очистить" onClick={handleClear} />}
+        </span>
         <input
           ref={inputRef}
           id={uid}
@@ -470,8 +482,16 @@ export const FieldFile: FC<TypeFieldFileProps> = ({
           onChange={handleChange}
           className={styles.FieldFileHiddenInput}
         />
+        {showBar && (
+          <div className={styles.FieldFileProgress} role="progressbar" aria-valuenow={hasProgress ? Math.round(pct) : undefined}>
+            <div
+              className={[styles.FieldFileProgressBar, hasProgress ? '' : styles.indeterminate].filter(Boolean).join(' ')}
+              style={hasProgress ? { width: `${pct}%` } : undefined}
+            />
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 };
 FieldFile.displayName = 'FieldFile';

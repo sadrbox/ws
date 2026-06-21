@@ -92,26 +92,26 @@ const makeCellRenderer = (priceDate: string) =>
     if (col.identifier === "name") {
       if (ctx.inlineEditing)
         return (
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span title={r.productUuid ? "Сопоставлено с существующим" : "Новый товар (будет создан)"}
-              style={{ color: r.productUuid ? "#137333" : "#1a73e8", fontSize: 12 }}>
-              {r.productUuid ? "✓" : "＋"}
-            </span>
-            <LookupField
-              label="" name={`pie_name_${r.id}`} value={String(r.productUuid ?? "")} displayValue={String(r.name ?? "")}
-              endpoint="products" displayField="name" variant="table" disabled={ctx.disabled}
-              allowFreeText
-              onTextChange={(text) => ctx.updateLocalRow(r, { name: text, productUuid: "", _matched: false })}
-              onSelect={(u, dv, item) => ctx.handleLookupChange(r, "productUuid", u, {
-                name: item?.name ?? dv,
-                _matched: !!u,
-                ...(item?.sku !== undefined ? { sku: item.sku ?? "" } : {}),
-                ...(item ? { brand: item.brand?.name ?? "", brandUuid: item.brandUuid ?? "" } : {}),
-                ...(item ? { unit: item.unitOfMeasure?.name ?? "", unitUuid: item.unitOfMeasureUuid ?? "" } : {}),
-              })}
-              onClear={() => ctx.handleLookupChange(r, "productUuid", null, { _matched: false })}
-            />
-          </div>
+          <LookupField
+            label="" name={`pie_name_${r.id}`} value={String(r.productUuid ?? "")} displayValue={String(r.name ?? "")}
+            endpoint="products" displayField="name" variant="table" disabled={ctx.disabled}
+            allowFreeText
+            prefix={
+              <span title={r.productUuid ? "Сопоставлено с существующим" : "Новый товар (будет создан)"}
+                className={r.productUuid ? styles.matchOk : styles.matchNew}>
+                {r.productUuid ? "✓" : "＋"}
+              </span>
+            }
+            onTextChange={(text) => ctx.updateLocalRow(r, { name: text, productUuid: "", _matched: false })}
+            onSelect={(u, dv, item) => ctx.handleLookupChange(r, "productUuid", u, {
+              name: item?.name ?? dv,
+              _matched: !!u,
+              ...(item?.sku !== undefined ? { sku: item.sku ?? "" } : {}),
+              ...(item ? { brand: item.brand?.name ?? "", brandUuid: item.brandUuid ?? "" } : {}),
+              ...(item ? { unit: item.unitOfMeasure?.name ?? "", unitUuid: item.unitOfMeasureUuid ?? "" } : {}),
+            })}
+            onClear={() => ctx.handleLookupChange(r, "productUuid", null, { _matched: false })}
+          />
         );
       return <span>{r.productUuid ? "" : "＋ "}{String(r.name ?? "")}</span>;
     }
@@ -146,8 +146,8 @@ const makeCellRenderer = (priceDate: string) =>
     }
     if (col.identifier === "prices") {
       const txt = pricesSummary(r);
-      return <span style={{ color: "#555" }} title={txt && priceDate ? `Цены будут записаны на ${priceDate}` : undefined}>
-        {txt}{txt && priceDate ? `  ·  ${priceDate}` : ""}
+      return <span className={styles.pricesCell} title={txt && priceDate ? `Цены будут записаны на ${priceDate}` : undefined}>
+        {txt}{txt && priceDate ? `  -  ${priceDate}` : ""}
       </span>;
     }
     return undefined;
@@ -321,7 +321,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
           if (!(n in latest)) latest[n] = pp.price;
         }
         return [p.sku ?? "", p.name ?? "", p.brand?.name ?? "", p.unitOfMeasure?.name ?? "", p.isService ? 1 : 0, bcs.join(";"),
-          ...typeNames.map((n) => (latest[n] != null ? latest[n] : ""))];
+        ...typeNames.map((n) => (latest[n] != null ? latest[n] : ""))];
       })];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "products");
@@ -368,7 +368,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
         </div>
       </HelpBox>
 
-      <GroupRow className={mainStyles.GroupRowWrap}>
+      <GroupRow>
         <FieldFile key={`file-${fillVersion}`} name="pie_file" accept=".xls,.xlsx" disabled={isLoading || !canWrite}
           buttonLabel="Выбрать файл" loading={isLoading} onSelect={(f) => { setFile(f); setParsed(false); }} />
         <FieldDate label={translate("priceDate")} name="pie_priceDate" value={priceDate} onChange={(e) => setPriceDate(e.target.value)} disabled={isLoading} />

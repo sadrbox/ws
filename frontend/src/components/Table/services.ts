@@ -308,3 +308,26 @@ export function parseNumericInput(value: string): number | null {
 	const n = Number(normalized);
 	return isNaN(n) ? null : n;
 }
+
+// \u0418\u0442\u043E\u0433 \u043A\u043E\u043B\u043E\u043D\u043A\u0438 \u0434\u043B\u044F tfoot (sum/avg/min/max/count) \u043F\u043E \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u043D\u044B\u043C \u0441\u0442\u0440\u043E\u043A\u0430\u043C.
+// \u0411\u0435\u0440\u0451\u0442 \u0441\u044B\u0440\u043E\u0435 \u0447\u0438\u0441\u043B\u043E\u0432\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 r[col.identifier]. \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442\u0441\u044F \u0432 Table \u0438 SubTableSheets.
+export function computeFooterValue(col: TColumn, rows: TDataItem[]): string | null {
+	if (!col.footer || col.footer === "none") return null;
+	const vals = rows
+		.map((r) => {
+			const v = r[col.identifier];
+			return typeof v === "number" ? v : parseFloat(String(v));
+		})
+		.filter((v) => !isNaN(v));
+
+	if (vals.length === 0) return null;
+
+	switch (col.footer) {
+		case "sum": return vals.reduce((a, b) => a + b, 0).toLocaleString("ru-RU");
+		case "avg": return (vals.reduce((a, b) => a + b, 0) / vals.length).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+		case "min": return Math.min(...vals).toLocaleString("ru-RU");
+		case "max": return Math.max(...vals).toLocaleString("ru-RU");
+		case "count": return vals.length.toLocaleString("ru-RU");
+		default: return null;
+	}
+}

@@ -30,6 +30,7 @@ import {
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
+import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 
 const BASIS_FIELDS = ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"];
 
@@ -166,6 +167,8 @@ export function createDocumentHeaderRouter({
 			for (const f of numberFields) data[f] = b[f] != null ? parseFloat(b[f]) : null;
 			for (const f of dateFields) data[f] = b[f] ? new Date(b[f]) : null;
 			if (hasBasis) for (const f of BASIS_FIELDS) data[f] = b[f] || null;
+			// Запрещаем ссылку «в никуда»: основание (если указано) должно существовать.
+			if (hasBasis && data.basisDocumentUuid) await assertBasisExists(data.basisDocumentType, data.basisDocumentUuid);
 
 			// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
 			const ndt = numberDocType || posting?.docType || null;
@@ -181,6 +184,7 @@ export function createDocumentHeaderRouter({
 			if (afterSave) await afterSave(item.uuid);
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
+			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
 			if (respondDuplicateNumberError(error, res)) return;
@@ -212,6 +216,10 @@ export function createDocumentHeaderRouter({
 			const existing = await prisma[MODEL].findUnique({ where: w });
 			if (!existing) return res.status(404).json({ success: false, message: "Не найдено" });
 
+			// Запрещаем ссылку «в никуда»: проверяем только при ЗАДАНИИ нового основания
+			// (очистку и нетронутое основание пропускаем — чтобы можно было чинить старое).
+			if (hasBasis && data.basisDocumentUuid) await assertBasisExists(data.basisDocumentType ?? existing.basisDocumentType, data.basisDocumentUuid);
+
 			// Блокировка закрытого периода: нельзя трогать закрытый документ и переносить
 			// его в закрытый период (кроме документов с periodExempt — month_close).
 			if (!periodExempt) {
@@ -240,6 +248,7 @@ export function createDocumentHeaderRouter({
 			if (afterSave) await afterSave(item.uuid);
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
+			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
 			if (respondDuplicateNumberError(error, res)) return;
