@@ -36,10 +36,10 @@ $toastShadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5), 0 4px 8px -2px rgba(0, 0, 0, 
 .Toast {
 	position: relative;
 	display: flex;
-	align-items: flex-start;
-	gap: 12px;
-	padding: 12px 14px;
-	border-radius: 10px;
+	align-items: stretch;
+	gap: 6px;
+	padding: 12px;
+	border-radius: 6px;
 	font-size: 13px;
 	line-height: 1.45;
 	color: $toastText;
@@ -140,6 +140,7 @@ $toastShadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5), 0 4px 8px -2px rgba(0, 0, 0, 
 	flex: 1;
 	min-width: 0;
 	word-break: break-word;
+	align-items: center;
 }
 
 .Title {
@@ -155,8 +156,10 @@ $toastShadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5), 0 4px 8px -2px rgba(0, 0, 0, 
 }
 
 .Message {
+	min-height: 22px;
 	font-size: 13px;
 	word-break: break-word;
+	// align-items: ;
 }
 
 .Lines {
@@ -195,7 +198,7 @@ $toastShadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5), 0 4px 8px -2px rgba(0, 0, 0, 
 	margin: -2px -4px 0 0;
 	background: transparent;
 	border: none;
-	border-radius: 6px;
+	border-radius: 3px;
 	color: rgba(255, 255, 255, 0.55);
 	font-size: 16px;
 	line-height: 1;

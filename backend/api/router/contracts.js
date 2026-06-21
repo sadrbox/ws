@@ -1,7 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
-import { checkOwnership } from "../../utils/auth.js";
+import { checkOwnership, tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -147,6 +147,8 @@ router.get("/contracts", async (req, res) => {
 			...dateRangeFilter,
 			...filterWhereClause,
 			...fkFilter,
+			// Изоляция по организации (без неё список возвращал договоры всех орг).
+			...tenantFilter(req),
 		};
 		const queryOptions = {
 			take: limitNumber,

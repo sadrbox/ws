@@ -1,11 +1,27 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { checkOwnership } from "../../utils/auth.js";
 
 const router = express.Router();
 
 const MODEL = "employeeHistory";
 const ROUTE = "employee-histories";
+
+// Изоляция: история сотрудника доступна только если сам сотрудник принадлежит
+// организации пользователя. Возвращает true, либо отправляет 404.
+async function assertEmployeeOwned(employeeUuid, req, res) {
+	if (!employeeUuid) {
+		res.status(404).json({ success: false, message: "Сотрудник не найден" });
+		return false;
+	}
+	const emp = await prisma.employee.findUnique({ where: { uuid: employeeUuid }, select: { organizationUuid: true } });
+	if (!emp || !checkOwnership(emp, req)) {
+		res.status(404).json({ success: false, message: "Сотрудник не найден" });
+		return false;
+	}
+	return true;
+}
 
 // ── GET list (filtered by employeeUuid) ─────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -16,6 +32,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				success: false,
 				message: "Параметр employeeUuid обязателен",
 			});
+
+		// Изоляция: историю чужого сотрудника не отдаём.
+		if (!(await assertEmployeeOwned(employeeUuid, req, res))) return;
 
 		const rawLimit = req.query.limit;
 		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
@@ -67,6 +86,8 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Изоляция: запись доступна только если её сотрудник принадлежит юзеру.
+		if (!(await assertEmployeeOwned(item.employeeUuid, req, res))) return;
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		console.error(`GET /${ROUTE}/:id error:`, error);

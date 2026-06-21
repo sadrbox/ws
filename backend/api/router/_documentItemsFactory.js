@@ -24,6 +24,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { checkOwnership } from "../../utils/auth.js";
 import {
 	reconcileByParentModel,
 	assertStockAvailable,
@@ -208,6 +209,25 @@ export function createDocumentItemsRouter({
 }) {
 	const router = express.Router();
 
+	// Изоляция: строки документа доступны только если РОДИТЕЛЬСКИЙ документ
+	// принадлежит организации пользователя (строки сами по себе фильтра не имеют).
+	// Возвращает true если доступ есть; иначе уже отправлен ответ 404.
+	async function assertParentOwned(parentUuid, req, res) {
+		if (!parentUuid) {
+			res.status(404).json({ success: false, message: "Документ не найден" });
+			return false;
+		}
+		const parent = await prisma[PARENT_MODEL].findUnique({
+			where: { uuid: parentUuid },
+			select: { organizationUuid: true },
+		});
+		if (!parent || !checkOwnership(parent, req)) {
+			res.status(404).json({ success: false, message: "Документ не найден" });
+			return false;
+		}
+		return true;
+	}
+
 	// ── Пересчёт суммы родительского документа ───────────────────────────
 	async function recalcParentAmount(parentUuid) {
 		try {
@@ -296,6 +316,8 @@ export function createDocumentItemsRouter({
 				return res
 					.status(400)
 					.json({ success: false, message: `${PARENT_FIELD} обязателен` });
+			// Изоляция: строки чужого документа не отдаём.
+			if (!(await assertParentOwned(parentUuid, req, res))) return;
 
 			const orderBy = [];
 			const sortParam =
@@ -362,6 +384,8 @@ export function createDocumentItemsRouter({
 			});
 			if (!item)
 				return res.status(404).json({ success: false, message: "Не найдено" });
+			// Изоляция: строка доступна только если её документ принадлежит юзеру.
+			if (!(await assertParentOwned(item[PARENT_FIELD], req, res))) return;
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
 			console.error(`GET /${ROUTE}/:id error:`, error);

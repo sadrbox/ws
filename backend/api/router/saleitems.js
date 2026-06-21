@@ -2,11 +2,27 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { reconcileDocumentRegister } from "../../services/productRegister.js";
 import { reconcileDocumentEntries } from "../../services/accountingPosting.js";
+import { checkOwnership } from "../../utils/auth.js";
 
 const router = express.Router();
 
 const MODEL = "saleItem";
 const ROUTE = "saleitems";
+
+// Изоляция: строки реализации доступны только если документ-родитель (sale)
+// принадлежит организации пользователя. Возвращает true, либо шлёт 404.
+async function assertSaleOwned(saleUuid, req, res) {
+	if (!saleUuid) {
+		res.status(404).json({ success: false, message: "Документ не найден" });
+		return false;
+	}
+	const sale = await prisma.sale.findUnique({ where: { uuid: saleUuid }, select: { organizationUuid: true } });
+	if (!sale || !checkOwnership(sale, req)) {
+		res.status(404).json({ success: false, message: "Документ не найден" });
+		return false;
+	}
+	return true;
+}
 
 /**
  * Пересчёт массива налогов с учётом calculationMethod каждого:
@@ -178,6 +194,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			return res
 				.status(400)
 				.json({ success: false, message: "saleUuid обязателен" });
+		// Изоляция: строки чужой реализации не отдаём.
+		if (!(await assertSaleOwned(saleUuid, req, res))) return;
 
 		// Поля, которые требуют nested-сортировки Prisma
 		const NESTED_SORT_FIELDS = {
@@ -246,6 +264,8 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Изоляция: строка доступна только если её реализация принадлежит юзеру.
+		if (!(await assertSaleOwned(item.saleUuid, req, res))) return;
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		console.error(`GET /${ROUTE}/:id error:`, error);
