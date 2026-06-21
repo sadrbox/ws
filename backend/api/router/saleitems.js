@@ -291,6 +291,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			return res
 				.status(400)
 				.json({ success: false, message: "saleUuid обязателен" });
+		// Изоляция: создавать строку можно только в своей реализации.
+		if (!(await assertSaleOwned(saleUuid, req, res))) return;
 
 		const qty = quantity != null ? parseFloat(quantity) : 0;
 		const prc = price != null ? parseFloat(price) : 0;
@@ -350,6 +352,12 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const n = Number(p);
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+
+		// Изоляция: править строку может только владелец реализации.
+		const _owned = await prisma[MODEL].findUnique({ where: w, select: { saleUuid: true } });
+		if (!_owned)
+			return res.status(404).json({ success: false, message: "Не найдено" });
+		if (!(await assertSaleOwned(_owned.saleUuid, req, res))) return;
 
 		const data = {};
 		// Prisma 7+ запрещает прямую запись скалярных FK (productUuid,
@@ -480,6 +488,8 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 		const item = await prisma[MODEL].findUnique({ where: w });
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Изоляция: удалять строку может только владелец реализации.
+		if (!(await assertSaleOwned(item.saleUuid, req, res))) return;
 
 		await prisma[MODEL].delete({ where: w });
 
@@ -545,6 +555,23 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 			if (uuidOp?.uuid) {
 				const ex = await prisma[MODEL].findFirst({ where: { uuid: uuidOp.uuid }, select: { saleUuid: true } });
 				saleUuid = ex?.saleUuid ?? null;
+			}
+		}
+
+		// Изоляция: ВСЕ реализации, затронутые батчем, должны принадлежать юзеру.
+		{
+			const sales = new Set();
+			const refItemUuids = [];
+			for (const op of operations) {
+				if (op.action === "create" && op.data?.saleUuid) sales.add(op.data.saleUuid);
+				else if ((op.action === "update" || op.action === "delete") && op.uuid) refItemUuids.push(op.uuid);
+			}
+			if (refItemUuids.length) {
+				const refItems = await prisma[MODEL].findMany({ where: { uuid: { in: refItemUuids } }, select: { saleUuid: true } });
+				for (const it of refItems) if (it.saleUuid) sales.add(it.saleUuid);
+			}
+			for (const sUuid of sales) {
+				if (!(await assertSaleOwned(sUuid, req, res))) return;
 			}
 		}
 

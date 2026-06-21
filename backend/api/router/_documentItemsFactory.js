@@ -413,6 +413,8 @@ export function createDocumentItemsRouter({
 				return res
 					.status(400)
 					.json({ success: false, message: `${PARENT_FIELD} обязателен` });
+			// Изоляция: создавать строку можно только в своём документе.
+			if (!(await assertParentOwned(parentUuid, req, res))) return;
 			const qty = quantity != null ? parseFloat(quantity) : 0;
 			const prc = price != null ? parseFloat(price) : 0;
 			const denorm = await loadParentDenormFields(PARENT_MODEL, parentUuid);
@@ -493,6 +495,12 @@ export function createDocumentItemsRouter({
 			const n = Number(p);
 			const w =
 				!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+
+			// Изоляция: править строку может только владелец документа-родителя.
+			const _owned = await prisma[MODEL].findUnique({ where: w, select: { [PARENT_FIELD]: true } });
+			if (!_owned)
+				return res.status(404).json({ success: false, message: "Не найдено" });
+			if (!(await assertParentOwned(_owned[PARENT_FIELD], req, res))) return;
 
 			const data = {};
 			if (req.body.productUuid !== undefined) {
@@ -631,6 +639,8 @@ export function createDocumentItemsRouter({
 			const item = await prisma[MODEL].findUnique({ where: w });
 			if (!item)
 				return res.status(404).json({ success: false, message: "Не найдено" });
+			// Изоляция: удалять строку может только владелец документа-родителя.
+			if (!(await assertParentOwned(item[PARENT_FIELD], req, res))) return;
 			await prisma[MODEL].delete({ where: w });
 			await recalcParentAmount(item[PARENT_FIELD]);
 			return res.status(200).json({ success: true, message: "Удалено" });
@@ -664,6 +674,28 @@ export function createDocumentItemsRouter({
 						select: { [PARENT_FIELD]: true },
 					});
 					parentUuid = ex?.[PARENT_FIELD] ?? null;
+				}
+			}
+
+			// Изоляция: ВСЕ документы-родители, затронутые батчем (create по data,
+			// update/delete по строке), должны принадлежать организации пользователя.
+			// Любая чужая ссылка → отказ для всего батча (ничего не пишем).
+			{
+				const parents = new Set();
+				const refItemUuids = [];
+				for (const op of operations) {
+					if (op.action === "create" && op.data?.[PARENT_FIELD]) parents.add(op.data[PARENT_FIELD]);
+					else if ((op.action === "update" || op.action === "delete") && op.uuid) refItemUuids.push(op.uuid);
+				}
+				if (refItemUuids.length) {
+					const refItems = await prisma[MODEL].findMany({ where: { uuid: { in: refItemUuids } }, select: { [PARENT_FIELD]: true } });
+					for (const it of refItems) if (it[PARENT_FIELD]) parents.add(it[PARENT_FIELD]);
+				}
+				for (const pUuid of parents) {
+					const parent = await prisma[PARENT_MODEL].findUnique({ where: { uuid: pUuid }, select: { organizationUuid: true } });
+					if (!parent || !checkOwnership(parent, req)) {
+						return res.status(404).json({ success: false, message: "Документ не найден" });
+					}
 				}
 			}
 

@@ -116,6 +116,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				success: false,
 				message: "eventType обязателен (hire, fire, transfer)",
 			});
+		// Изоляция: создавать историю можно только своему сотруднику.
+		if (!(await assertEmployeeOwned(employeeUuid, req, res))) return;
 		const item = await prisma[MODEL].create({
 			data: {
 				eventDate: eventDate ? new Date(eventDate) : new Date(),
@@ -141,6 +143,11 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const n = Number(p);
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		// Изоляция: править историю может только владелец сотрудника.
+		const _ownedH = await prisma[MODEL].findUnique({ where: w, select: { employeeUuid: true } });
+		if (!_ownedH)
+			return res.status(404).json({ success: false, message: "Не найдено" });
+		if (!(await assertEmployeeOwned(_ownedH.employeeUuid, req, res))) return;
 		const data = {};
 		if (req.body.eventDate !== undefined)
 			data.eventDate = req.body.eventDate ? new Date(req.body.eventDate) : null;
