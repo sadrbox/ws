@@ -97,7 +97,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			take: limitNumber,
 			where: baseWhere,
 			orderBy,
-			include: { brand: true, unitOfMeasure: true },
+			// barcodes — для подсказки в LookupField (показать совпавший штрих-код
+			// рядом с наименованием при поиске товара по штрих-коду).
+			include: { brand: true, unitOfMeasure: true, barcodes: { select: { barcode: true }, orderBy: { id: "asc" } } },
 		};
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };

@@ -7,34 +7,10 @@ import { Button } from "src/components/Button"
 import type { IconName } from "src/components/IconButton/icons"
 import { useCellFieldState } from "src/hooks/useDirtyHighlight"
 import { useFormRequiredScope, useFormDirtyScope } from "src/hooks/useFormRequired"
-// import { TypeDateRange } from '../Table/types'
 
 import { getFormatNumerical, parseNumericInput } from 'src/components/Table/services.ts'
-// type TypeFieldStringProps = {
-//   label: string
-//   name: string
-//   value?: string
-//   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void
-//   width?: string | number
-//   maxWidth?: string | number
-// }
-// export type TypeFieldActions = {
-//   img?: string;
-//   alt?: string;
-//   type: 'clear' | 'list' | 'open';
-//   onClick: () => void;
-// }[];
 
 
-// type TypeFieldGroupProps = {
-//   name: string;
-//   label: string;
-//   value?: string;
-//   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-//   inputRef?: React.RefObject<HTMLInputElement | null>;
-//   actions?: TypeFieldActions;
-//   style?: CSSProperties;
-// }
 
 // Карта тип-действия → иконка из общего реестра + подпись.
 // fieldActions описывают только тип, обработчик и (опц.) состояние —

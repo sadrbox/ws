@@ -4,6 +4,7 @@ import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
+import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 const DOC_TYPE = "payroll_calculation";
 
 const router = express.Router();
@@ -161,8 +162,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		} = req.body;
 		// Блокировка закрытого периода: нельзя создавать документ в закрытом месяце.
 		await assertPeriodOpen(organizationUuid, date);
+		const docNumber = await ensureDocumentNumber({ docType: DOC_TYPE, modelName: MODEL, manual: req.body.number, organizationUuid, date });
 		const willPost = posted === undefined ? true : !!posted;
 		const docData = {
+			number: docNumber,
 			date: date ? new Date(date) : new Date(),
 			comment: comment?.trim() ?? null,
 			period: period?.trim() ?? null,
@@ -229,11 +232,13 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				data[f] = req.body[f] != null ? parseFloat(req.body[f]) : 0;
 		}
 		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, posted: true, organizationUuid: true, date: true } });
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, posted: true, organizationUuid: true, date: true, number: true } });
 		if (!existing) return res.status(404).json({ success: false, message: "Не найдено" });
 		// Блокировка закрытого периода: нельзя трогать закрытый документ и переносить в закрытый период.
 		await assertPeriodOpen(existing.organizationUuid, existing.date);
 		await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
+		// Номер: ручной ввод принимаем, иначе сохраняем существующий (без переприсвоения).
+		data.number = await ensureDocumentNumber({ docType: DOC_TYPE, modelName: MODEL, manual: req.body.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
 		const item = await prisma[MODEL].update({

@@ -13,11 +13,8 @@
 
 .ModalWrapper {
 	background: $color30;
-	// padding: 6px;
 	border-radius: $radius2;
 	box-shadow: 0 32px 32px rgba($color6, 0.5);
-	// width: 100%;
-	// max-width: 500px;
 	animation: fadeIn 0.3s ease;
 	overflow: auto;
 }
@@ -36,36 +33,23 @@
 .ModalBody {
 	overflow: auto; // margin: 12px;
 	padding: 12px;
-	// border: 1px solid $color5;
 	border-bottom: 0px;
 	background-color: $color30;
 	border-radius: $radius2;
 }
 
 .ModalTitle {
-	// padding:  12px 12px 6px 12px;
-	// border: 1px solid $color5;
-	// margin: 3px 18px;
 	font-size: $fontsize + 2px;
-	// font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 	display: flex;
 	justify-content: left;
-	// background-color: $color3;
-	// border-radius: 3px 3px 0 0;
-	// padding: 12px;
-	// color: $color60;
 	font-weight: normal;
-	// font-size: 16px;
-	// text-decoration: underline;
 }
 
 .ModalButtons {
 	background-color: $color33;
-	// border-bottom: 1px solid $color10;
 	border-radius: 3px 3px 0 0;
 	display: flex;
 	align-items: center;
-	// padding: 12px;
 	gap: 6px;
 	justify-content: end;
 }

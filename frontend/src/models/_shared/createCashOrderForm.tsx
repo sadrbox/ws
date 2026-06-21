@@ -455,8 +455,9 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
       form.paneId,
       (
         <>
+          {/* Единый порядок шапки: Проведён → Цепочка → Проводки → Показать в списке
+              → Удалить → Перезаполнить → На основании → Печать. */}
           <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
-          {isSavedDoc && <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />}
           {isSavedDoc && <DocumentEntriesButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
           {isSavedDoc && <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
           {hasBasis && (
@@ -468,6 +469,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
               onClick={() => void handleRefillFromBasis()}
             />
           )}
+          {isSavedDoc && <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />}
         </>
       ),
     );

@@ -24,6 +24,7 @@ const ENDPOINT_DOCTYPE = {
 	"sale-returns": "sale_return",
 	"purchase-returns": "purchase_return",
 	"inventory-transfers": "inventory_transfer",
+	"bank-statements": "bank_statement",
 	"cash-receipt-orders": "cash_receipt_order",
 	"cash-expense-orders": "cash_expense_order",
 	"outgoing-invoices": "outgoing_invoice",
@@ -34,6 +35,8 @@ const ENDPOINT_DOCTYPE = {
 	"commercial-offers": "commercial_offer",
 	"reservations": "reservation",
 	"purchase-requisitions": "purchase_requisition",
+	"payroll-calculations": "payroll_calculation",
+	"payroll-payments": "payroll_payment",
 	"month-closes": "month_close",
 };
 

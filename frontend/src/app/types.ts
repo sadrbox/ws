@@ -1,7 +1,6 @@
 import { SetStateAction, Dispatch, FC } from "react";
 import { TDataItem } from "src/components/Table/types";
 import type { OrgEntry } from "src/services/auth";
-// import { OverlayProps } from ".";
 
 export type TypeAppContextProps = {
 	screenRef: React.RefObject<HTMLDivElement | null>;
@@ -131,4 +130,3 @@ export type TComponentNode =
 // };
 export type TOpenModelFormProps = Partial<TPane>;
 
-// export type TOpenFormProps = Partial<TPane>;

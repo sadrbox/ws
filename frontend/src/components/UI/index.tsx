@@ -5,9 +5,7 @@ import { createPortal } from 'react-dom';
 import { ContractsList } from 'src/models/Contracts';
 // Divider is imported in components that use it; not used here
 import { translate, getLanguage, setLanguage } from 'src/i18';
-// import { CounterpartiesList } from 'src/models/Organizations';
 import { ActivityHistoriesList } from 'src/models/ActivityHistories';
-// import { TComponentNode, TPane } from 'src/app/types';
 import { useAppContext } from 'src/app/context';
 import { ReloadButton, ClearButton, IconButton } from 'src/components/Toolbar';
 import { copyPaneLink } from 'src/utils/paneLink';
@@ -30,7 +28,6 @@ import { PriceTypesList } from 'src/models/PriceTypes';
 import { SalesList } from 'src/models/Sales';
 import { ProductPriceProcessing } from 'src/models/ProductPriceProcessing';
 import { ProductImportExport } from 'src/models/ProductImportExport';
-// import { SalesBoardForm } from 'src/models/Sales/SalesBoardForm';
 import { SaleReturnsList } from 'src/models/SaleReturns';
 import { PurchasesList } from 'src/models/Purchases';
 import { PurchaseReturnsList } from 'src/models/PurchaseReturns';

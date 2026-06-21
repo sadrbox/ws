@@ -18,8 +18,6 @@ import { Navbar, NavList, ErrorBoundary, Screen, LoadingSpinner, Container } fro
 import { TComponentNode, TPane, TypeAppContextProps, TypeNavbarProps } from "./types";
 import useUID from "src/hooks/useUID";
 import { TDataItem } from "src/components/Table/types";
-// import { OrganizationsList } from "src/models/Organizations";
-// import { CounterpartiesList } from 'src/models/Counterparties';
 
 
 import LoginForm from "src/components/LoginForm";

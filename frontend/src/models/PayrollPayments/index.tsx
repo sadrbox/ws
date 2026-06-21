@@ -14,6 +14,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAssignNumber } from "src/hooks/useAssignNumber";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
@@ -33,6 +34,7 @@ const PAYMENT_METHOD_OPTIONS = [
 
 interface TFields {
   id?: number; uuid?: string;
+  number: string;
   date: string; comment: string;
   period: string;
   employeeUuid: string; employeeName: string;
@@ -44,6 +46,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
+  number: "",
   date: "", comment: "",
   period: "",
   employeeUuid: "", employeeName: "",
@@ -57,6 +60,7 @@ const DEFAULT_FIELDS: TFields = {
 const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const { canWrite } = useUserAccessRight("PayrollPayment");
+  const assignNumber = useAssignNumber();
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;
@@ -74,6 +78,7 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
     endpoint: MODEL_ENDPOINT, storageKey: "payroll-payments-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
     mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
+      number: d.number ?? "",
       date: isoToLocalInput(d.date),
       comment: d.comment ?? "", period: d.period ?? "",
       employeeUuid: d.employeeUuid ?? "",
@@ -90,6 +95,7 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
       const validation = validateDocumentFields("payroll_payment", fd as unknown as Record<string, unknown>);
       if (!validation.isValid) return formatValidationErrors(validation.errors);
       return {
+        number: fd.number?.trim() || null,
         date: localInputToIso(fd.date),
         comment: fd.comment?.trim() || null, period: fd.period?.trim() || null,
         employeeUuid: fd.employeeUuid || null, organizationUuid: fd.organizationUuid || null,
@@ -109,6 +115,10 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
             <GroupCol>
               <GroupRow className={styles.FormHeaderRow}>
                 <FieldDateTime label={translate("documentDate")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
+                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
+                  actions={[
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
+                  ]} />
                 <FieldPeriod label={translate("periodYYYYMM")} name={`${form.formUid}_period`} value={form.fields.period} onChange={e => form.setField("period", e.target.value)} disabled={form.isLoading} />
               </GroupRow>
               <Group>
@@ -134,7 +144,7 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
         </div>
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, canWrite]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, assignNumber, canWrite]);
 
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
   const headerActionsPortal = usePaneHeaderActions(

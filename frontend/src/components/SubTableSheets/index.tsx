@@ -1,14 +1,18 @@
 /**
  * SubTableSheets — облегчённая «табличная простыня» (sheet) для чтения данных.
  *
- * Подобие SubTable, но:
- *   • высота ячеек автоматическая (строка растёт под содержимое);
- *   • текст переносится и уважает \n (white-space: pre-wrap);
- *   • НЕТ колонки-чекбокса и выделения строк (только чтение);
- *   • без серверного запроса / редактирования / pending — отображает переданные
- *     `rows` как есть.
+ * Визуально ИДЕНТИЧНА SubTable: переиспользует классы Table.module.scss
+ * (TableScrollContainer / TableScrollWrapper / TableHeaderCell / TableBodyCell /
+ * Justify*) и повторяет ту же DOM-структуру (colgroup + thead/tbody + filler-row),
+ * что и компонент Table, через который рендерится SubTable.
  *
- * Клиентская сортировка по клику на заголовок (если у колонки sortable !== false).
+ * Отличия от SubTable (природа «простыни», только чтение):
+ *   • высота строки тянется под содержимое, текст переносится и уважает \n
+ *     (опция wrap, по умолчанию вкл.) — класс-модификатор .wrapCell;
+ *   • НЕТ колонки-чекбокса, выделения строк, редактирования и серверных запросов —
+ *     отображает переданные `rows` как есть;
+ *   • клиентская сортировка по клику на заголовок (если sortable !== false).
+ *
  * Значение ячейки берётся из renderCell; если он вернул undefined — из
  * getFormatColumnValue (как в обычной таблице).
  */
@@ -16,6 +20,7 @@ import { FC, ReactNode, useMemo, useState } from "react";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { sortTableRows, getFormatColumnValue, getColumnAlignment } from "src/components/Table/services";
 import { getTranslateColumn } from "src/i18";
+import tableStyles from "src/components/Table/Table.module.scss";
 import styles from "./SubTableSheets.module.scss";
 
 export type SheetCellRenderer = (row: TDataItem, col: TColumn) => ReactNode | undefined;
@@ -33,6 +38,8 @@ export interface SubTableSheetsProps {
   defaultSort?: Record<string, "asc" | "desc">;
   /** Переносить текст и тянуть высоту ячеек (по умолчанию true). */
   wrap?: boolean;
+  /** Ограничение высоты области прокрутки (тогда шапка «прилипает» при скролле). */
+  maxHeight?: string | number;
   className?: string;
 }
 
@@ -47,6 +54,7 @@ const SubTableSheets: FC<SubTableSheetsProps> = ({
   emptyMessage = "Нет данных",
   defaultSort,
   wrap = true,
+  maxHeight,
   className,
 }) => {
   const visibleColumns = useMemo(
@@ -70,57 +78,85 @@ const SubTableSheets: FC<SubTableSheetsProps> = ({
     });
   };
 
+  // Justify-класс по выравниванию колонки — те же классы, что у Table.
+  const alignClass = (col: TColumn) => {
+    const a = getColumnAlignment(col);
+    return a === "right" ? tableStyles.JustifyRight : a === "center" ? tableStyles.JustifyCenter : tableStyles.JustifyLeft;
+  };
+
   if (!rows.length) {
     return <div className={styles.empty}>{emptyMessage}</div>;
   }
 
   return (
-    <div className={[styles.wrap, className].filter(Boolean).join(" ")}>
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            {visibleColumns.map((col) => {
-              const sortable = col.sortable !== false;
-              const dir = sort[col.identifier];
+    <div className={[tableStyles.TableScrollContainer, className].filter(Boolean).join(" ")}>
+      <div className={tableStyles.TableScrollWrapper} style={maxHeight != null ? { maxHeight } : undefined}>
+        <table>
+          <colgroup>
+            {visibleColumns.map((col, i) => {
+              const isLast = i === visibleColumns.length - 1;
               return (
-                <th
-                  key={col.identifier}
-                  className={styles.th}
-                  style={{
-                    textAlign: getColumnAlignment(col),
-                    width: col.width,
-                    minWidth: col.minWidth,
-                    cursor: sortable ? "pointer" : "default",
-                  }}
-                  title={col.hint || undefined}
-                  onClick={sortable ? () => toggleSort(col) : undefined}
-                >
-                  {getTranslateColumn(col)}
-                  {dir && <span className={styles.sortArrow}>{dir === "asc" ? "▲" : "▼"}</span>}
-                </th>
+                <col
+                  key={col.identifier + (isLast ? "-last" : "")}
+                  style={{ width: isLast ? "auto" : col.width, minWidth: col.minWidth ?? "150px" }}
+                />
               );
             })}
-          </tr>
-        </thead>
-        <tbody>
-          {sortedRows.map((row, i) => (
-            <tr key={rowKey(row, i)}>
+          </colgroup>
+          <thead>
+            <tr>
               {visibleColumns.map((col) => {
-                const content = renderCell?.(row, col);
+                const sortable = col.sortable !== false;
+                const dir = sort[col.identifier];
                 return (
-                  <td
+                  <th
                     key={col.identifier}
-                    className={wrap ? styles.tdWrap : styles.td}
-                    style={{ textAlign: getColumnAlignment(col) }}
+                    title={col.hint || undefined}
+                    style={{ cursor: sortable ? "pointer" : "default" }}
+                    onClick={sortable ? () => toggleSort(col) : undefined}
                   >
-                    {content !== undefined ? content : String(getFormatColumnValue(row, col) ?? "")}
-                  </td>
+                    <div className={tableStyles.TableHeaderCell}>
+                      <span>{getTranslateColumn(col)}</span>
+                      {dir && (
+                        <svg
+                          className={`${tableStyles.SortArrow} ${dir === "desc" ? tableStyles.desc : ""}`}
+                          width="24px" height="24px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <g><path fill="none" d="M0 0h24v24H0z" /><path d="M12 14l-4-4h8z" /></g>
+                        </svg>
+                      )}
+                    </div>
+                  </th>
                 );
               })}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sortedRows.map((row, i) => (
+              <tr key={rowKey(row, i)}>
+                {visibleColumns.map((col) => {
+                  const content = renderCell?.(row, col);
+                  const value = content !== undefined ? content : String(getFormatColumnValue(row, col) ?? "");
+                  const cellClass = [tableStyles.TableBodyCell, alignClass(col), wrap ? styles.wrapCell : null]
+                    .filter(Boolean).join(" ");
+                  return (
+                    <td key={col.identifier}>
+                      <div className={cellClass}>
+                        <span>{value}</span>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {/* Filler-row — забирает остаток высоты, чтобы строки не растягивались
+                (table { height:100% } в Table.module.scss). Как .TableFillerRow в Table. */}
+            <tr className={tableStyles.TableFillerRow} aria-hidden="true">
+              <td colSpan={visibleColumns.length} />
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

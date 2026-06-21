@@ -38,7 +38,8 @@ import DocumentChainButton from "src/components/DocumentChain/DocumentChainButto
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app";
-import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { PurchaseReturnsForm } from "src/models/PurchaseReturns";
 import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
@@ -147,7 +148,6 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
       ? data.fromBasisItems : [];
   });
   const [itemsTableKey, setItemsTableKey] = useState(0);
-  const [isRefilling, setIsRefilling] = useState(false);
 
   const invalidateSubTables = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ["purchaseitems"], refetchType: "active" });
@@ -265,26 +265,20 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     mapFields: mapCommonTradeFields,
   });
 
-  const handleRefillFromBasis = useCallback(async (skipFields = false) => {
-    setIsRefilling(true);
-    try {
-      await runBasisRefill({
-        form, skipFields,
-        currentUserUuid: currentUser?.uuid ?? "",
-        permDefaults: permDefaultsRef.current,
-        itemsEndpoint: "purchaseitems", itemsParentField: "purchaseUuid",
-        orgFields: [
-          { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-          { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-        ],
-        allItemsRef, setBasisItems, bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
-      });
-    } catch (e) {
-      console.error("[refill] failed", e);
-    } finally {
-      setIsRefilling(false);
-    }
-  }, [form, currentUser?.uuid]);
+  const { isRefilling, handleRefillFromBasis } = useRefillFromBasis({
+    form,
+    currentUserUuid: currentUser?.uuid ?? "",
+    permDefaultsRef,
+    itemsEndpoint: "purchaseitems",
+    itemsParentField: "purchaseUuid",
+    orgFields: [
+      { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+    ],
+    allItemsRef,
+    setBasisItems,
+    bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
+  });
 
   const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
     form.fields.organizationUuid || null,
@@ -471,6 +465,15 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (
       <>
+        {/* «На основании» — первым в ряду шапки (по требованию). */}
+        {isSavedDoc && (
+          <ActionsDropdownButton
+            icon="fromBasis"
+            label="На основании"
+            options={[{ id: "purchaseReturn", label: formatDependentOption(translate("PurchaseReturnsList"), existingDeps["purchase-returns"]) }]}
+            onSelect={() => void handleCreatePurchaseReturn()}
+          />
+        )}
         <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
         {isSavedDoc && <DocumentChainButton documentType="purchase" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType="purchase" documentUuid={form.fields.uuid} />}
@@ -482,14 +485,6 @@ const PurchasesForm: FC<Partial<TPane>> = (paneProps) => {
             disabled={form.isLoading || isRefilling}
             loading={isRefilling}
             onClick={() => void handleRefillFromBasis()}
-          />
-        )}
-        {isSavedDoc && (
-          <ActionsDropdownButton
-            icon="fromBasis"
-            label="На основании"
-            options={[{ id: "purchaseReturn", label: formatDependentOption(translate("PurchaseReturnsList"), existingDeps["purchase-returns"]) }]}
-            onSelect={() => void handleCreatePurchaseReturn()}
           />
         )}
       </>

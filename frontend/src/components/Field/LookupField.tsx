@@ -529,17 +529,39 @@ const LookupField: FC<LookupFieldProps> = ({
     return defaultSecondaryFieldsMap[endpoint] ?? [];
   }, [secondaryFields, endpoint]);
 
+  // Штрих-код элемента, совпавший с введённым запросом (если искали по ШК).
+  // Источники: скалярное поле `barcode` + связанные `barcodes: [{ barcode }]`.
+  // Точное совпадение приоритетнее частичного. Для не-товаров вернёт "".
+  const getMatchedBarcode = useCallback((item: Record<string, any>) => {
+    const q = (searchTransform ? searchTransform(debouncedText) : debouncedText).trim().toLowerCase();
+    if (!q) return "";
+    const candidates: string[] = [];
+    if (item.barcode) candidates.push(String(item.barcode));
+    if (Array.isArray(item.barcodes)) {
+      for (const b of item.barcodes) {
+        const code = typeof b === "string" ? b : b?.barcode;
+        if (code) candidates.push(String(code));
+      }
+    }
+    if (candidates.length === 0) return "";
+    const exact = candidates.find((c) => c.toLowerCase() === q);
+    if (exact) return exact;
+    return candidates.find((c) => c.toLowerCase().includes(q)) ?? "";
+  }, [debouncedText, searchTransform]);
+
   // Получить вторичную строку для элемента автокомплита.
-  // Формат: "БИН · Код" (через разделитель) — только непустые значения
+  // Формат: "ШК · sku · бренд" (через разделитель) — только непустые значения.
+  // Совпавший штрих-код (если искали по ШК) показываем первым — рядом с названием.
   const getItemSecondary = useCallback((item: Record<string, any>) => {
-    if (resolvedSecondaryFields.length === 0) return "";
     const parts: string[] = [];
+    const barcode = getMatchedBarcode(item);
+    if (barcode) parts.push(barcode);
     for (const field of resolvedSecondaryFields) {
       const v = getNestedValue(item, field);
       if (v) parts.push(v);
     }
     return parts.join(" · ");
-  }, [resolvedSecondaryFields, getNestedValue]);
+  }, [resolvedSecondaryFields, getNestedValue, getMatchedBarcode]);
 
   return (
     <>

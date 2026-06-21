@@ -42,9 +42,6 @@
 // ── Форма параметров (единый стиль с отчётами: GroupRow/GroupCol) ───────────
 .PrintParamForm {
   flex-shrink: 0;
-  // padding: 12px 16px;
-  // border-bottom: 1px solid #e5e7eb;
-  // background: #fff;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -57,7 +54,6 @@
   justify-content: center;
   align-items: center;
   gap: 6px;
-  // box-shadow: 0 0 10px 1px rgba(0, 0, 0, 1);
 }
 
 // ── Тулбар ────────────────────────────────────────────────────────────────
@@ -103,7 +99,6 @@
 // PDF — нативный viewer: растягиваем на всю область
 .PrintIframe {
   border-radius: $radius3;
-  // box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   text-align: center;
   align-content: center;
   color: #FFF;

@@ -4,7 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
-import { mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -166,7 +167,6 @@ const SaleReturnsForm: FC<Partial<TPane>> = (paneProps) => {
       ? data.fromBasisItems : [];
   });
   const [itemsTableKey, setItemsTableKey] = useState(0);
-  const [isRefilling, setIsRefilling] = useState(false);
 
   const allItemsRef = useRef<TDataItem[]>([]);
   const permDefaultsRef = useRef<UserDefaultsMap>({});
@@ -282,26 +282,20 @@ const SaleReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     mapFields: mapCommonTradeFields,
   });
 
-  const handleRefillFromBasis = useCallback(async (skipFields = false) => {
-    setIsRefilling(true);
-    try {
-      await runBasisRefill({
-        form, skipFields,
-        currentUserUuid: currentUser?.uuid ?? "",
-        permDefaults: permDefaultsRef.current,
-        itemsEndpoint: "sale-return-items", itemsParentField: "saleReturnUuid",
-        orgFields: [
-          { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-          { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-        ],
-        allItemsRef, setBasisItems, bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
-      });
-    } catch (e) {
-      console.error("[refill] failed", e);
-    } finally {
-      setIsRefilling(false);
-    }
-  }, [form, currentUser?.uuid]);
+  const { isRefilling, handleRefillFromBasis } = useRefillFromBasis({
+    form,
+    currentUserUuid: currentUser?.uuid ?? "",
+    permDefaultsRef,
+    itemsEndpoint: "sale-return-items",
+    itemsParentField: "saleReturnUuid",
+    orgFields: [
+      { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+    ],
+    allItemsRef,
+    setBasisItems,
+    bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
+  });
 
   const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
     form.fields.organizationUuid || null,

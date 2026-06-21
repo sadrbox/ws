@@ -108,7 +108,7 @@ const DocumentEntriesButton: FC<Props> = ({ documentType, documentUuid, disabled
           buttons={[{ label: translate("close"), onClick: () => setOpen(false), variant: "secondary" }]}
           style={{ minWidth: 720, maxWidth: "90vw" }}
         >
-          <div style={{ maxHeight: "60vh", overflow: "auto" }}>
+          <div>
             {isFetching ? (
               <div style={{ padding: 16 }}>{translate("loading")}</div>
             ) : rows.length === 0 ? (
@@ -120,6 +120,7 @@ const DocumentEntriesButton: FC<Props> = ({ documentType, documentUuid, disabled
                   rows={rows}
                   renderCell={entryCellRenderer}
                   emptyMessage={translate("documentEntriesEmpty")}
+                  maxHeight="60vh"
                 />
                 <div style={{ padding: "8px 4px", fontWeight: 600, display: "flex", justifyContent: "space-between" }}>
                   <span>{translate("documentEntriesCount")}: {data?.count ?? rows.length}</span>

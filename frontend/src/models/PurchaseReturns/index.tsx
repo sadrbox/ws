@@ -39,7 +39,8 @@ import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import PurchaseReturnPrint from "./PurchaseReturnPrint";
 import DocumentTotals from "src/components/DocumentTotals";
-import { mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 
@@ -169,7 +170,6 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
       ? data.fromBasisItems : [];
   });
   const [itemsTableKey, setItemsTableKey] = useState(0);
-  const [isRefilling, setIsRefilling] = useState(false);
 
   const allItemsRef = useRef<TDataItem[]>([]);
   const permDefaultsRef = useRef<UserDefaultsMap>({});
@@ -299,26 +299,20 @@ const PurchaseReturnsForm: FC<Partial<TPane>> = (paneProps) => {
     mapFields: mapCommonTradeFields,
   });
 
-  const handleRefillFromBasis = useCallback(async (skipFields = false) => {
-    setIsRefilling(true);
-    try {
-      await runBasisRefill({
-        form, skipFields,
-        currentUserUuid: currentUser?.uuid ?? "",
-        permDefaults: permDefaultsRef.current,
-        itemsEndpoint: "purchase-return-items", itemsParentField: "purchaseReturnUuid",
-        orgFields: [
-          { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-          { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-        ],
-        allItemsRef, setBasisItems, bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
-      });
-    } catch (e) {
-      console.error("[refill] failed", e);
-    } finally {
-      setIsRefilling(false);
-    }
-  }, [form, currentUser?.uuid]);
+  const { isRefilling, handleRefillFromBasis } = useRefillFromBasis({
+    form,
+    currentUserUuid: currentUser?.uuid ?? "",
+    permDefaultsRef,
+    itemsEndpoint: "purchase-return-items",
+    itemsParentField: "purchaseReturnUuid",
+    orgFields: [
+      { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+    ],
+    allItemsRef,
+    setBasisItems,
+    bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
+  });
 
   const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
     form.fields.organizationUuid || null,

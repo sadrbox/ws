@@ -12,6 +12,16 @@ import UploadProgress, { formatFileSize } from "./UploadProgress";
 const MODEL_ENDPOINT = "files";
 const COMPONENT_NAME = "FilesList_part";
 
+// Человекочитаемый тип владельца файла (для колонки «Владелец» в общем списке).
+const OWNER_TYPE_LABELS: Record<string, string> = {
+  contract: "Договор",
+  todo: "Задача",
+  counterparty: "Контрагент",
+  organization: "Организация",
+  employee: "Сотрудник",
+  global: "Общие",
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // FILES PANEL  (встраиваемая таблица файлов — единый компонент для всех форм)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -67,10 +77,13 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
 
   const [columns, setColumns] = useState<TColumn[]>(() => {
     const base = getModelColumns(columnsJson, COMPONENT_NAME, "part");
-    // В общем списке показываем колонку «Тип владельца» (к чему прикреплён файл).
-    if (allFiles && !base.some((c) => c.identifier === "ownerType")) {
+    // В общем списке показываем колонку «Владелец» (тип сущности, к которой
+    // прикреплён файл). Идентификатор "owner" переводится как «Владелец» (i18n),
+    // значение — человекочитаемая метка (см. displayRows). Сырой ownerType
+    // остаётся в строке для открытия просмотрщика.
+    if (allFiles && !base.some((c) => c.identifier === "owner")) {
       base.splice(base.length - 1, 0, {
-        identifier: "ownerType", type: "string", width: "160px", minWidth: "120px",
+        identifier: "owner", type: "string", width: "160px", minWidth: "120px",
         alignment: "left", hint: "Владелец", visible: true, inlist: true,
       } as TColumn);
     }
@@ -104,6 +117,8 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
       fileSize: row.fileSize != null
         ? formatFileSize(Number(row.fileSize))
         : "",
+      // Метка владельца для колонки (сырой ownerType сохраняется для просмотрщика).
+      owner: OWNER_TYPE_LABELS[String(row.ownerType ?? "")] ?? (row.ownerType ?? ""),
     } as TDataItem));
 
     // Клиентская фильтрация
@@ -193,7 +208,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
         .map((r) => String(r.fileName ?? ""))
         .filter(Boolean);
       const msg = uuids.length === 1
-        ? `Удалить файл «${names[0] ?? ""}»? Действие необратимо.`
+        ? `Удалить файл «${names[0] ?? ""}»? \nДействие необратимо.`
         : `Удалить выбранные файлы (${uuids.length} шт.)? Действие необратимо.`;
       if (!(await actions.confirm(msg))) return;
       for (const uuid of uuids) {

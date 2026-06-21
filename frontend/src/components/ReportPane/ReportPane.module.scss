@@ -2,12 +2,10 @@
 // ReportPane — контейнер отчётов.
 //
 // Структура на экране:
-//   .ReportPane
 //     .ReportForm   — фильтры (flex-shrink: 0, не прокручивается)
 //     .ReportViewport — тёмный фон, overflow:auto
 //       .ReportSheet  — белый «лист» A4 с тенью, содержит layout
 //
-// @media print:
 //   .ReportForm скрывается, .ReportViewport/Sheet — нет стилей
 //   (печать идёт через usePrintDocument в изолированный iframe,
 //   эти правила — запасной вариант для прямого window.print()).
@@ -29,9 +27,6 @@
 // ── Область фильтров ────────────────────────────────────────────────────────
 .ReportForm {
   flex-shrink: 0;
-  // padding: 12px 16px;
-  // border-bottom: 1px solid #e5e7eb;
-  // background: #fff;
   display: flex;
   flex-direction: column;
   gap: 6px;

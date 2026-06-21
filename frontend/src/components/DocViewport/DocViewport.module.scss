@@ -114,7 +114,6 @@
 
 
 
-  // border-radius: 2px;
   padding: 12mm;
   box-sizing: border-box;
   overflow: hidden;
@@ -125,7 +124,6 @@
   font-size: 10pt;
   color: #000;
 
-  // Landscape: 297 × 210 mm
   &[data-orientation="landscape"] {
     width: 297mm;
     min-height: 210mm;

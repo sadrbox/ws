@@ -400,19 +400,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       form.paneId,
       (
         <>
-          {!cfg.hidePosted && <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />}
-          {showHeaderActions && (<>
-          {isSavedDoc && <DocumentChainButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
-          {isSavedDoc && <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
-          {hasBasis && (
-            <RefillFromBasisButton
-              mismatch={basisMismatch.mismatch}
-              mismatchDetails={basisMismatch.differences}
-              disabled={form.isLoading || isRefilling}
-              loading={isRefilling}
-              onClick={() => void handleRefillFromBasis()}
-            />
-          )}
+          {/* «На основании» — первым в ряду шапки (по требованию). */}
           {isSavedDoc && cfg.createFromBasisTargets && cfg.createFromBasisTargets.length > 0 && (
             <ActionsDropdownButton
               icon="fromBasis"
@@ -427,6 +415,19 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                 const target = cfg.createFromBasisTargets![Number(id)];
                 if (target) void handleCreateFromBasis(target);
               }}
+            />
+          )}
+          {!cfg.hidePosted && <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />}
+          {showHeaderActions && (<>
+          {isSavedDoc && <DocumentChainButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
+          {isSavedDoc && <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} />} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
+          {hasBasis && (
+            <RefillFromBasisButton
+              mismatch={basisMismatch.mismatch}
+              mismatchDetails={basisMismatch.differences}
+              disabled={form.isLoading || isRefilling}
+              loading={isRefilling}
+              onClick={() => void handleRefillFromBasis()}
             />
           )}
           {isSavedDoc && cfg.printConfig && (

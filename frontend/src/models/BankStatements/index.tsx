@@ -28,6 +28,7 @@ import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/d
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
+import { useAssignNumber } from "src/hooks/useAssignNumber";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
@@ -121,6 +122,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
       const validation = validateDocumentFields(DOC_TYPE, fd as unknown as Record<string, unknown>);
       if (!validation.isValid) return formatValidationErrors(validation.errors);
       return {
+        number: fd.number?.trim() || null,
         date: localInputToIso(fd.date),
         comment: fd.comment?.trim() || null,
         amount: fd.amount ? parseFloat(fd.amount) : null,
@@ -194,6 +196,8 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     }
   }, [form]);
 
+  const assignNumber = useAssignNumber();
+
   const tabs = useMemo(() => [
     {
       id: "tab-details",
@@ -203,6 +207,10 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupRow className={styles.FormHeaderRow}>
               <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
+              <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
+                actions={[
+                  { type: "assignNumber", onClick: () => void assignNumber(ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
+                ]} />
             </GroupRow>
             <Group>
               <FormLookup form={form} field="organization" endpoint="organizations"
@@ -306,7 +314,10 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (
       <>
+        {/* Единый порядок шапки: Проведён → Цепочка → Проводки → Перезаполнить → Печать. */}
         <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
+        {isSavedDoc && <DocumentChainButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />}
+        {isSavedDoc && <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />}
         {hasBasis && (
           <RefillFromBasisButton
             mismatch={basisMismatch.mismatch}
@@ -317,8 +328,6 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
           />
         )}
         {isSavedDoc && <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />}
-        {isSavedDoc && <DocumentChainButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />}
-        {isSavedDoc && <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />}
       </>
     ),
   );

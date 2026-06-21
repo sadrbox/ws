@@ -1,5 +1,4 @@
 .FieldDisabled {
-	// border: 0px solid $color31 !important;
 	background-color: $color31;
 }
 
@@ -16,7 +15,6 @@
 	width: 100%;
 	border: none;
 	height: $heightFieldInput;
-	// padding: 0px 0px;
 	margin: 1px;
 	box-sizing: content-box;
 	padding: 0px 6px;
@@ -27,14 +25,10 @@
 	}
 
 	&:focus {
-		// border: 1px solid transparent;
-		// outline: 1px solid $color2;
 		outline: 0px;
-		// box-shadow: 0px 0px 3px 3px red;
 	}
 
 	&:not(:last-child) {
-		// margin-right: 6px;
 	}
 }
 
@@ -42,24 +36,19 @@
 
 .FieldSelect {
 	padding: 0px 2px;
-	// margin:0px;
-	// margin-left: 2px;
 }
 
 .FieldPeriod {
 
-	// width: 60px;
 	justify-content: end;
 	display: flex;
 	justify-content: space-between;
 
-	// height: 28px;
 
 	span {
 		display: flex;
 		padding: 0px 3px;
 		align-items: center;
-		// justify-content: end;
 	}
 
 	&:focus {
@@ -73,42 +62,19 @@
 	}
 }
 
-// .FieldDateWrapper {
-// 	position: relative;
-// 	display: flex;
-// 	flex-direction: row;
-// 	align-items: center;
-// 	flex: 1 1 100%;
-// 	max-width: 360px;
 // 	// justify-content: space-around;
-// 	border: 1px solid $color5;
-// 	border-radius: $radius2;
-// 	background-color: $color60;
-// 	gap: 10px;
 
-// 	&:focus-within {
-// 		border: 1px solid $color3;
 // 		// box-shadow: 0px 0px 2px 0px rgba($color3, 0.3);
-// 	}
-// }
 
 .FieldLabel {
-	// height: 28px;
 	user-select: none;
 	width: min-content;
-	// padding: 0 6px 0 0;
-	// flex: 0 0 1;
 	display: flex;
 	align-items: end;
 	box-sizing: content-box;
 	text-wrap: nowrap;
 	font-size: $fontsize;
 	margin-bottom: 3px;
-	// justify-content: center;
-	// align-self: center;
-	// text-align: center;
-	// vertical-align: middle;
-	// background-color: red;
 }
 
 // ── Unsaved changes highlight — поле открыто через "Несохранённые записи" ──
@@ -135,7 +101,6 @@
 	.FieldSelectWrapper,
 	.FieldTextareaInputWrapper {
 		border-color: $attentionBorder;
-		// background-color: rgba($attention, 0.08);
 	}
 }
 
@@ -145,7 +110,6 @@
 	.FieldSelectWrapper,
 	.FieldTextareaInputWrapper {
 		border-color: $attentionBorder;
-		// background-color: rgba($attention, 0.04);
 	}
 }
 
@@ -171,11 +135,7 @@
 }
 
 .FieldWrapper {
-	// display: flex;
-	// flex-direction: column;
 	position: relative;
-	// align-items: center;
-	// flex: 1;
 
 	// ── Table variant: no label, no border, stretch to fill td ──
 	&.tableVariant {
@@ -221,7 +181,6 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 			overflow: hidden;
-			// padding: 0px 6px 0px 6px;
 
 			margin: 0px;
 
@@ -245,7 +204,6 @@
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	// gap: 3px;
 	background-color: $color60;
 	border-radius: $radius2;
 	border: 1px solid $color5;
@@ -455,20 +413,7 @@
 	}
 }
 
-// .FieldTextareaInputWrapper {
-// 	position: relative;
-// 	display: flex;
-// 	flex-direction: column;
-// 	border-radius: $radius2;
-// 	border: 1px solid $color5;
-// 	background-color: $color60;
-// 	outline: none;
-// 	flex: 1 1 100%;
 
-// 	&:focus-within {
-// 		border: 1px solid $color3;
-// 	}
-// }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FIELD PERIOD PICKER
@@ -569,7 +514,6 @@
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
 	-webkit-appearance: none;
-	// margin: 0;
 }
 
 /* Firefox */
@@ -585,9 +529,6 @@ input[type="number"] {
 .FieldNote {
 	color: var(--color-danger, #c0392b);
 	font-size: 12px;
-	// margin-top: 2px;
-	// line-height: 1.3;
-	// min-height: 1.3em;
 }
 
 // То же место, но янтарная подсказка (напр. «что ещё заполнить в документе»),
@@ -595,18 +536,12 @@ input[type="number"] {
 .FieldNoteHint {
 	color: $warningText;
 	font-size: 12px;
-	// margin-top: 2px;
-	// line-height: 1.3;
-	// min-height: 1.3em;
 }
 
 // Нейтральная/положительная подсказка («Обязательные поля заполнены»).
 .FieldNoteOk {
 	color: $color5;
 	font-size: 12px;
-	// margin-top: 2px;
-	// line-height: 1.3;
-	// min-height: 1.3em;
 }
 
 .BasisFieldWrapper {

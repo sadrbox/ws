@@ -6,7 +6,6 @@
 	flex: 1 0 auto;
 	flex-direction: column;
 	gap: 6px;
-	// font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
 	// Ubuntu, sans-serif;
 }
 
@@ -14,10 +13,7 @@
 	position: relative;
 	display: flex;
 	gap: 6px;
-	// height: $heightFieldInput + 12px;
 	margin: 0px 0px;
-	// margin-bottom: 6px;
-	// border-bottom: 1px dotted $color51;
 	background-color: $color30;
 	overflow-x: auto;
 	scrollbar-width: none;
@@ -33,22 +29,15 @@
 
 .TabsLabel {
 	user-select: none;
-	// padding: 12px 24px;
 	font-size: $fontsize;
 	color: #6b7280;
-	// text-decoration: underline;
 	cursor: pointer;
 	border: none;
 	background: transparent;
-	// position: relative;
-	// transition: all 0.2s ease;
 	white-space: nowrap;
 	justify-content: center;
-	// border-bottom: 3px solid transparent;
 	outline: none;
 	color: $color3;
-	// border-top-right-radius: $radius3;
-	// border-top-left-radius: $radius3;
 	height: $heightFieldInput + 6px;
 	border-radius: $radius3;
 	font-weight: 500;
@@ -61,7 +50,6 @@
 }
 
 .TabsLabel:hover {
-	// color: #374151;
 	background-color: rgba($color3, 0.1);
 }
 
@@ -88,16 +76,10 @@
 /* Индикатор для скринридеров */
 
 .TabsBody {
-	// padding-top: 6px;
 	display: flex;
 	flex: 1;
 	flex-direction: column;
-	// padding: 24px;
 	background-color: $color30;
-	// min-height: 200px;
-	// border: 1px solid #e5e7eb;
-	// border-top: none;
-	// border-radius: 0 0 8px 8px;
 }
 
 /* Стили для контента табов */

@@ -26,9 +26,12 @@ export function sortTableRows<T>(
 		return [...arr];
 	}
 
+	// Ключи сортировки вычисляем ОДИН раз, а не на каждое сравнение в компараторе.
+	const sortKeys = Object.entries(sort);
+
 	return [...arr].sort((a, b) => {
 		// Проходим по всем полям сортировки по порядку (multi-sort)
-		for (const [columnID, direction] of Object.entries(sort)) {
+		for (const [columnID, direction] of sortKeys) {
 			const aValue = getNestedValue(a, columnID);
 			const bValue = getNestedValue(b, columnID);
 
@@ -224,7 +227,6 @@ export function getColumnAlignment(column: TColumn): THorizontalAlign {
 
 // Формат числовой идентификатор /////////////////////////////////////////////////////////////////////////
 function getFormatNumericalID(n: number): string {
-	// return n.toString().padStart(5, "0");
 	return n.toString();
 }
 

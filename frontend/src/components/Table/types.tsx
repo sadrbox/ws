@@ -1,5 +1,4 @@
 import { Dispatch, SetStateAction } from "react";
-// import { TypeOpenForm } from 'src/components/Table/types';
 import { TOpenModelFormProps } from "src/app/types";
 
 export type TOrder = {
@@ -70,10 +69,6 @@ export type TypeFormMethod = {
   set: Dispatch<SetStateAction<TypeFormAction>>;
 };
 
-// export type TypeTableSort = {
-//   columnID: string;
-//   direction: TypeTableSortDirection;
-// };
 export type TSortDirectionTable = 'asc' | 'desc';
 export type TSortTable = {
   [key: string]: TSortDirectionTable,

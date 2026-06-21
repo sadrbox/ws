@@ -44,9 +44,7 @@ waitForFonts().then(() => {
   rootEl.style.opacity = '0';
 
   root.render(
-    // <StrictMode>
     <App />
-    // </StrictMode>,
   );
 
   // Ждём 2 кадра — React отрендерил, CSS применён, layout стабилен

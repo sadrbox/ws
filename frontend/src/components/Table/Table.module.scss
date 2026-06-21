@@ -54,7 +54,6 @@
 	flex-direction: column;
 	flex: 1;
 	gap: 6px;
-	// padding:6px;
 	height: 100%;
 	overflow: hidden;
 	min-height: 296px;
@@ -160,21 +159,8 @@
 				user-select: none;
 				position: relative;
 				border: 0;
-				// border-bottom: 1px solid $color34;
 				border-right: 1px solid $color34;
 
-				// &:not(:last-child) {
-				// 	border-right: 1px solid transparent !important;
-				// }
-				// &::after {
-				// 	content: "";
-				// 	position: absolute;
-				// 	right: -1px;
-				// 	bottom: 0;
-				// 	height: 100%;
-				// 	width: 1px;
-				// 	border-right: 1px solid $color34;
-				// }
 				&:first-child {
 					border-left: 0;
 				}
@@ -189,7 +175,6 @@
 				align-items: center;
 				height: $heightFieldInput;
 				padding: 1px;
-				// margin: 1px;
 				overflow: hidden;
 				white-space: nowrap;
 				text-overflow: ellipsis;
@@ -221,15 +206,6 @@
 		}
 
 
-		// &::after {
-		// 	content: "";
-		// 	position: absolute;
-		// 	left: 0;
-		// 	right: 0;
-		// 	bottom: 0;
-		// 	height: 1px;
-		// 	background: $color34;
-		// }
 	}
 
 	tr:has(+ tr.activeRow) {
@@ -268,19 +244,13 @@
 	}
 
 	tbody {
-		// outline: none;
-		// margin-top: 10px;
-		// position: relative;
 		// Оптимизация для производительности при виртуализации
 		will-change: transform;
 		transform: translate3d(0, 0, 0);
 		contain: layout style paint;
-		// will-change: contents;
-		// contain: content;
 		position: relative;
 
 		tr {
-			// cursor: pointer;
 			// Оптимизация для каждой строки
 			will-change: auto;
 			transform: translate3d(0, 0, 0);
@@ -288,7 +258,6 @@
 			&:first-child {
 				td {
 					border-top: 1px solid $color34;
-					// border: 0px !important;
 				}
 			}
 
@@ -296,10 +265,8 @@
 
 
 				padding: 0;
-				// border-top: 1px solid $color34;
 				border-bottom: 1px solid $color34;
 				border-right: 1px solid $color34;
-				// border-left: 0px solid $color34;
 
 				.TableBodyCell {
 					display: flex;
@@ -321,7 +288,6 @@
 					// при получении фокуса — cursor меняется на text мгновенно через :focus
 					&>input[type="checkbox"] {
 						margin: 0 6px;
-						// accent-color: $colorPrimaryDark;
 					}
 
 					input:not([type="checkbox"]),
@@ -365,7 +331,6 @@
 			}
 
 			&.activeRow {
-				// position: static;
 				z-index: 5;
 				// Оптимизируем активную строку
 				will-change: background-color, box-shadow;
@@ -384,7 +349,6 @@
 						// Здесь оставлены только структурные/контентные правила.
 						&>input[type="checkbox"] {
 							margin: 0 6px;
-							// accent-color: $colorPrimaryDark;
 						}
 
 						&>input[type="text"] {
@@ -411,11 +375,9 @@
 						}
 					}
 
-					// border-top: 1px solid $color1;
 					border-bottom: 1px solid $color1;
 					border-right: 1px solid $color1;
 
-					// border-left: 0px solid $color1;
 					&:last-child {
 						border-right: 0px;
 					}
@@ -451,9 +413,6 @@
 		background: $color31;
 		position: sticky;
 		bottom: 0;
-		// z-index: 9992;
-		// box-shadow: 0 0 -3px 0px $color6;
-		// box-shadow: 0 0px 6px 0px rgba($color6, 0.3);
 
 		tr {
 			td {
@@ -464,17 +423,8 @@
 				border-top: 1px solid $color34;
 				border-bottom: 0;
 				border-right: 1px solid $color34;
-				// border-right: 1px solid transparent !important;
 
 				&::after {
-					// content: "";
-					// position: absolute;
-					// top: 0;
-					// right: -1px;
-					// bottom: 0;
-					// height: 100%;
-					// width: 1px;
-					// border-right: 1px solid $color34;
 				}
 
 				&:first-child {
@@ -490,7 +440,6 @@
 					align-items: center;
 					height: $heightFieldInput;
 					padding: 1px;
-					// margin: 0px 3px;
 					overflow: hidden;
 					white-space: nowrap;
 					text-overflow: ellipsis;
@@ -518,16 +467,6 @@
 	flex-shrink: 0;
 	position: relative;
 
-	// &::before {
-	// 	content: "";
-	// 	position: absolute;
-	// 	left: 0;
-	// 	right: 0;
-	// 	top: 0;
-	// 	height: 1px;
-	// 	background: $color5;
-	// 	box-shadow: 0 -1px 3px 1px rgba($color6, 0.3);
-	// }
 }
 
 .TableStatusCell {
@@ -627,7 +566,6 @@ input[type="checkbox"] {
 	background: #fff;
 	border: 1px solid $color10;
 	border-radius: $radius2;
-	// box-shadow: inset 0 0 3px $color30;
 	overflow: auto;
 	scroll-behavior: smooth;
 }
@@ -704,7 +642,6 @@ input[type="checkbox"] {
 	display: flex;
 	align-items: center;
 	flex: 1;
-	// width: 100%;
 	margin: 6px 0;
 	padding: 2px 0;
 	background: $color30;
@@ -836,7 +773,6 @@ input[type="checkbox"] {
 	align-items: center;
 	gap: 6px;
 	flex: 1;
-	// padding: 0 12px;
 
 	label {
 		font-weight: 500;
@@ -858,7 +794,6 @@ input[type="checkbox"] {
 	padding: 6px 10px;
 	border: 1px solid #ddd;
 	border-radius: $radius2;
-	// font-size: 13px;
 	background: #fff;
 	transition: border-color 0.2s ease;
 
@@ -889,33 +824,15 @@ input[type="checkbox"] {
 	flex: 1;
 	gap: 3px;
 	padding: 0 3px;
-	// margin: 3px;
-	// height: 22px;
 
 	&:focus-within {
 		border-color: $color3;
 	}
 }
 
-// .SearchInput {
-// 	flex: 1;
-// 	border: none;
-// 	outline: none;
-// 	background: transparent;
-// 	padding: 0px;
 // 	// font-size: 12px;
 // 	// line-height: 1;
-// 	min-width: 120px;
-// 	height: $heightFieldInput;
-// 	text-overflow: ellipsis;
-// 	white-space: nowrap;
-// 	overflow: hidden;
 
-// 	&::placeholder {
-// 		color: #aaa;
-// 		font-size: $fontsize;
-// 	}
-// }
 
 // ────────────────────────────────────────────────
 // DateRangeBar — строка активного периода между панелью и таблицей
@@ -928,8 +845,6 @@ input[type="checkbox"] {
 	padding: 3px;
 	background: rgba($color3, 0.06);
 	width: min-content;
-	// font-size: 12px;
-	// min-height: 22px;
 }
 
 .DateRangeBarLabel {

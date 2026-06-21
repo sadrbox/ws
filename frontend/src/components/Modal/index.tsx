@@ -1,12 +1,10 @@
 import React, { FC, useRef, useEffect, useLayoutEffect, createContext, useState, ReactNode, CSSProperties, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './Modal.module.scss';
-// import Button from '../Button';
 import { useAppContext } from 'src/app/context';
 import { TypeFormMethod } from '../Table/types';
 import { Button } from '../Button';
 import { translate } from 'src/i18';
-// import { useAppContext } from 'src/app/AppContextProvider';
 
 type ModalButton = {
   label: string;
@@ -136,7 +134,6 @@ const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, classNa
 
 
 
-  // if (method?.get === 'close') return null;
 
   return ReactDOM.createPortal(
     <div className={styles.ModalBackground} onClick={handleOutsideClick}>

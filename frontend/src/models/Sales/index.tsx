@@ -38,7 +38,8 @@ import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton"
 import { useAppContext } from "src/app";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
-import { openDocumentFromBasis, mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
@@ -188,7 +189,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       ? data.fromBasisItems : [];
   });
   const [itemsTableKey, setItemsTableKey] = useState(0);
-  const [isRefilling, setIsRefilling] = useState(false);
 
   const invalidateSubTables = useCallback(async () => {
     await queryClient.invalidateQueries({
@@ -345,26 +345,20 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     mapFields: mapCommonTradeFields,
   });
 
-  const handleRefillFromBasis = useCallback(async (skipFields = false) => {
-    setIsRefilling(true);
-    try {
-      await runBasisRefill({
-        form, skipFields,
-        currentUserUuid: currentUser?.uuid ?? "",
-        permDefaults: permDefaultsRef.current,
-        itemsEndpoint: "saleitems", itemsParentField: "saleUuid",
-        orgFields: [
-          { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-          { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-        ],
-        allItemsRef, setBasisItems, bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
-      });
-    } catch (e) {
-      console.error("[refill] failed", e);
-    } finally {
-      setIsRefilling(false);
-    }
-  }, [form, currentUser?.uuid]);
+  const { isRefilling, handleRefillFromBasis } = useRefillFromBasis({
+    form,
+    currentUserUuid: currentUser?.uuid ?? "",
+    permDefaultsRef,
+    itemsEndpoint: "saleitems",
+    itemsParentField: "saleUuid",
+    orgFields: [
+      { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+    ],
+    allItemsRef,
+    setBasisItems,
+    bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
+  });
 
   // ── Историчные настройки учёта организации ─────────────────────────────
   // Передаём дату документа в хук — так колонки/блоки НДС/скидок отображаются
@@ -635,6 +629,20 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (
       <>
+        {/* «На основании» — первым в ряду шапки (по требованию). */}
+        {isSavedDoc && (
+          <ActionsDropdownButton
+            label="На основании"
+            options={[
+              { id: "outgoing", label: formatDependentOption(translate("outgoingInvoice"), existingDeps["outgoing-invoices"]) },
+              { id: "saleReturn", label: formatDependentOption(translate("SaleReturnsList"), existingDeps["sale-returns"]) },
+            ]}
+            onSelect={(id) => {
+              if (id === "outgoing") void handleCreateFromBasis(OutgoingInvoicesForm, translate("outgoingInvoice"), "sale", "saleitems", "outgoing-invoices");
+              if (id === "saleReturn") void handleCreateFromBasis(SaleReturnsForm, translate("SaleReturnsList"), "sale", "saleitems", "sale-returns");
+            }}
+          />
+        )}
         <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
         {isSavedDoc && <DocumentChainButton documentType="sale" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType="sale" documentUuid={form.fields.uuid} />}
@@ -646,20 +654,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             disabled={form.isLoading || isRefilling}
             loading={isRefilling}
             onClick={() => void handleRefillFromBasis()}
-          />
-        )}
-        {isSavedDoc && (
-          <ActionsDropdownButton
-            // icon="fromBasis"
-            label="На основании"
-            options={[
-              { id: "outgoing", label: formatDependentOption(translate("outgoingInvoice"), existingDeps["outgoing-invoices"]) },
-              { id: "saleReturn", label: formatDependentOption(translate("SaleReturnsList"), existingDeps["sale-returns"]) },
-            ]}
-            onSelect={(id) => {
-              if (id === "outgoing") void handleCreateFromBasis(OutgoingInvoicesForm, translate("outgoingInvoice"), "sale", "saleitems", "outgoing-invoices");
-              if (id === "saleReturn") void handleCreateFromBasis(SaleReturnsForm, translate("SaleReturnsList"), "sale", "saleitems", "sale-returns");
-            }}
           />
         )}
         {isSavedDoc && (

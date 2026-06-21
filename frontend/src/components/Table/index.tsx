@@ -940,7 +940,6 @@ const TableArea = memo(() => {
           {showCheckbox && <col className={styles.CheckboxCol} />}
           {visibleColumns.map((col, i) => {
             const isLast = i === visibleColumns.length - 1;
-            // const explicitWidth = col.width && col.width !== 'auto' ? col.width : undefined;
             return (
               <col
                 key={col.identifier + (isLast ? '-last' : '')}

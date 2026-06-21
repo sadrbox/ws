@@ -224,9 +224,9 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (
       <>
+        {/* Единый порядок шапки: Проведён → Проводки → Показать в списке → Удалить. */}
         <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
-        {isSavedDoc && <><ShowInJournalButton endpoint={ENDPOINT} uuid={form.fields.uuid} /> <DeleteDocumentButton endpoint={ENDPOINT} uuid={form.fields.uuid} paneId={form.paneId} />
-        <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} /></>}
+        {isSavedDoc && <><DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} /> <ShowInJournalButton endpoint={ENDPOINT} uuid={form.fields.uuid} /> <DeleteDocumentButton endpoint={ENDPOINT} uuid={form.fields.uuid} paneId={form.paneId} /></>}
       </>
     ),
   );

@@ -19,6 +19,7 @@
 		"minWidth": "0px",
 		"alignment": "left"
 	},
+	{ "identifier": "number", "type": "string", "width": "130px", "minWidth": "90px", "alignment": "left", "hint": "Номер документа", "visible": true, "inlist": true },
 	{
 		"identifier": "date",
 		"hint": "Дата документа",

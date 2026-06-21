@@ -13,7 +13,7 @@ import { Toolbar } from "src/components/Toolbar";
 import SaveDropdownButton, { type SaveDropdownOption } from "src/components/Toolbar/SaveDropdownButton";
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
-import { FieldSelect } from "src/components/Field";
+import PaneHeaderSelect from "src/components/Toolbar/PaneHeaderSelect";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import { usePrintDocument } from "src/components/PrintLayout/usePrintDocument";
 import { DocViewport, DocSheet } from "src/components/DocViewport";
@@ -252,8 +252,7 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
     uniqId,
     data ? (
       <>
-        <FieldSelect
-          size="sm"
+        <PaneHeaderSelect
           name="print_orientation"
           value={orientation}
           options={[
@@ -261,7 +260,7 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
             { value: "landscape", label: translate("landscape") },
           ]}
           onChange={(e) => handleOrientationChange(e.target.value as PageOrientation)}
-          style={{ width: "140px" }}
+          width={140}
         />
         {hasColumnDefs && (
           <>

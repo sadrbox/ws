@@ -106,6 +106,7 @@ const DOC_JOURNAL = {
 	sale_return: { table: "sale_returns" },
 	purchase_return: { table: "purchase_returns" },
 	inventory_transfer: { table: "inventory_transfers" },
+	bank_statement: { table: "bank_statements" },
 	cash_receipt_order: { table: "cash_orders", direction: "receipt" },
 	cash_expense_order: { table: "cash_orders", direction: "expense" },
 	outgoing_invoice: { table: "outgoing_invoices" },
@@ -116,6 +117,8 @@ const DOC_JOURNAL = {
 	commercial_offer: { table: "commercial_offers" },
 	reservation: { table: "reservations" },
 	purchase_requisition: { table: "purchase_requisitions" },
+	payroll_calculation: { table: "payroll_calculations" },
+	payroll_payment: { table: "payroll_payments" },
 	month_close: { table: "month_closes" },
 };
 
