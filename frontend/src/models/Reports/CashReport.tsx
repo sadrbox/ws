@@ -1,23 +1,23 @@
 /**
  * Кассовый отчёт (Кассовая книга, аналог КО-4 РК) — обороты по счёту 1010 «Касса»
- * за период с нарастающим остатком. Источник — регистр счёта 1010 (карточка счёта),
- * поэтому в отчёт попадают ВСЕ движения наличных: ПКО, РКО, выплата зарплаты
- * наличными, переводы банк↔касса. Колонка «Документ» кликабельна.
+ * за период с нарастающим остатком. Источник — карточка счёта 1010 (все движения
+ * наличных). ДВОЙНОЙ клик по документу открывает его.
  */
-import { FC, useState, useCallback } from "react";
-import { usePersistentState } from "src/hooks/usePersistentState";
+import { FC } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
-import { getFormatDateOnly } from "src/utils/datetime";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useAppContext } from "src/app";
-import { docTypeLabel, openDocumentByType } from "src/utils/accountingDocTypes";
+import { docTypeLabel } from "src/utils/accountingDocTypes";
 import ReportPane from "src/components/ReportPane";
-import styles from "./report.module.scss";
+import { ReportSheet, ReportTable, Th, Td, SubtotalRow, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportDrill, DrillLink } from "./_shared/reportDrill";
+import { useReportFilters } from "./_shared/useReportFilters";
+import { firstOfMonth, today } from "./_shared/reportDates";
+import { fmtDate, fmtPeriod } from "./_shared/reportFormat";
 import reportCss from "./report.module.scss?inline";
 
 const CASH_ACCOUNT = "1010";
@@ -33,39 +33,17 @@ interface AccountCardResponse {
   opening: number; turnDebit: number; turnCredit: number; closing: number;
   items: CardRow[];
 }
-
-const fmt = (n: number) =>
-  Number(n || 0) !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-const fmtZ = (n: number) => Number(n || 0).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-function formatPeriod(from: string, to: string): string {
-  if (!from) return "";
-  const f = getFormatDateOnly(from) || from;
-  const t = to ? getFormatDateOnly(to) || to : "";
-  return t ? `${f} — ${t}` : f;
-}
-
-interface CashReportProps {
-  uniqId?: string;
-  [key: string]: unknown;
-}
+interface Filters extends Record<string, unknown> { dateFrom: string; dateTo: string; orgUuid: string; orgName: string }
+interface CashReportProps { uniqId?: string;[key: string]: unknown }
 
 const CashReport: FC<CashReportProps> = ({ uniqId }) => {
-  const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } = useDefaultOrganization();
-  const { windows: { addPane } } = useAppContext();
+  const def = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = usePersistentState("report.cash-report.dateFrom", () => {
-    const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
+  const { fields, setField, patch, applied, handleGenerate } = useReportFilters<Filters>({
+    persistKey: "report.cash-report",
+    defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "" },
   });
-  const [dateTo, setDateTo] = usePersistentState("report.cash-report.dateTo", () => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = usePersistentState("report.cash-report.orgUuid", defaultOrgUuid || "");
-  const [orgName, setOrgName] = usePersistentState("report.cash-report.orgName", defaultOrgName || "");
-
-  const [applied, setApplied] = useState<null | { dateFrom: string; dateTo: string; orgUuid: string }>(null);
-
-  const handleGenerate = useCallback(() => {
-    setApplied({ dateFrom, dateTo, orgUuid });
-  }, [dateFrom, dateTo, orgUuid]);
+  const drill = useReportDrill({ orgName: fields.orgName });
 
   const { data, isLoading } = useQuery<AccountCardResponse>({
     queryKey: ["report-cash-1010", applied],
@@ -81,88 +59,83 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
 
   const rows: CardRow[] = data?.items ?? [];
   const opening = data?.opening ?? 0;
-  const turnDebit = data?.turnDebit ?? 0;   // итого приход в кассу
-  const turnCredit = data?.turnCredit ?? 0; // итого расход из кассы
+  const turnDebit = data?.turnDebit ?? 0;
+  const turnCredit = data?.turnCredit ?? 0;
   const closing = data?.closing ?? 0;
-
-  const period = formatPeriod(dateFrom, dateTo);
+  const period = fmtPeriod(fields.dateFrom, fields.dateTo);
 
   const form = (
     <>
       <GroupRow>
-        <FieldDate label={translate("reportPeriodFrom")} name="cr_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
-        <FieldDate label={translate("reportPeriodTo")} name="cr_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodFrom")} name="cr_from" value={fields.dateFrom} onChange={e => setField("dateFrom", e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodTo")} name="cr_to" value={fields.dateTo} onChange={e => setField("dateTo", e.target.value)} width="150px" />
       </GroupRow>
       <GroupCol>
-        <LookupField label={translate("organization")} name="cr_org" value={orgUuid} displayValue={orgName}
+        <LookupField label={translate("organization")} name="cr_org" value={fields.orgUuid} displayValue={fields.orgName}
           endpoint="organizations" displayField="name"
-          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
-          onClear={() => { setOrgUuid(""); setOrgName(""); }} />
+          onSelect={(u, d) => patch({ orgUuid: u, orgName: d })} onClear={() => patch({ orgUuid: "", orgName: "" })} />
       </GroupCol>
     </>
   );
 
   const layout = (
-    <div className={styles.Report}>
-      {orgName && <div className={styles.OrgName}>{orgName}</div>}
-      <div className={styles.Title}>{translate("CashReportList")} ({CASH_ACCOUNT})</div>
-      {period && <div className={styles.SubTitle}>{translate("reportPeriodLabel")} {period}</div>}
-
-      <div className={styles.Summary}>
-        <span>{translate("reportTotalReceipts")}: <strong>{fmtZ(turnDebit)}</strong></span>
-        <span>{translate("reportTotalExpenses")}: <strong>{fmtZ(turnCredit)}</strong></span>
-        <span>
-          {translate("reportCashBalance")}:{" "}
-          <strong className={closing < 0 ? styles.Negative : undefined}>{fmtZ(closing)}</strong>
-        </span>
-      </div>
-
-      <table className={styles.Table}>
+    <ReportSheet
+      org={fields.orgName || undefined}
+      title={`${translate("CashReportList")} (${CASH_ACCOUNT})`}
+      subTitle={period ? `${translate("reportPeriodLabel")} ${period}` : undefined}
+      summary={
+        <>
+          <span>{translate("reportTotalReceipts")}: <strong><Money value={turnDebit} as="zeroMoney" /></strong></span>
+          <span>{translate("reportTotalExpenses")}: <strong><Money value={turnCredit} as="zeroMoney" /></strong></span>
+          <span>{translate("reportCashBalance")}: <strong><Money value={closing} as="zeroMoney" autoNeg /></strong></span>
+        </>
+      }
+    >
+      <ReportTable>
         <thead>
           <tr>
-            <th className={styles.ColN}>№</th>
-            <th className={styles.ColDate}>{translate("reportDate")}</th>
-            <th className={styles.ColName}>{translate("document")}</th>
-            <th className={styles.ColUom}>{translate("accountCorr")}</th>
-            <th className={styles.ColName}>{translate("reportCounterparty")}</th>
-            <th className={styles.ColNum}>{translate("reportIncoming")}</th>
-            <th className={styles.ColNum}>{translate("reportOutgoing")}</th>
-            <th className={styles.ColNum}>{translate("reportBalance")}</th>
+            <Th col="n">№</Th>
+            <Th col="date">{translate("reportDate")}</Th>
+            <Th col="name">{translate("document")}</Th>
+            <Th col="uom">{translate("accountCorr")}</Th>
+            <Th col="name">{translate("reportCounterparty")}</Th>
+            <Th col="num">{translate("reportIncoming")}</Th>
+            <Th col="num">{translate("reportOutgoing")}</Th>
+            <Th col="num">{translate("reportBalance")}</Th>
           </tr>
         </thead>
         <tbody>
-          <tr className={styles.SubtotalRow}>
-            <td colSpan={7}>{translate("openingBalance")}</td>
-            <td className={styles.ColNum}>{fmtZ(opening)}</td>
-          </tr>
+          <SubtotalRow>
+            <Td colSpan={7}>{translate("openingBalance")}</Td>
+            <Td col="num"><Money value={opening} as="zeroMoney" /></Td>
+          </SubtotalRow>
           {rows.map((row, idx) => (
             <tr key={row.uuid}>
-              <td className={styles.ColN}>{idx + 1}</td>
-              <td className={styles.ColDate}>{getFormatDateOnly(row.date)}</td>
-              <td className={styles.ColName}>
-                <span className={styles.ClickableLink}
-                  onClick={() => openDocumentByType(row.documentType, row.documentUuid, addPane)}>
+              <Td col="n">{idx + 1}</Td>
+              <Td col="date">{fmtDate(row.date)}</Td>
+              <Td col="name">
+                <DrillLink onOpen={() => drill.toDocument(row.documentType, row.documentUuid)}>
                   {docTypeLabel(row.documentType)}{row.documentId ? ` №${row.documentId}` : ""}
-                </span>
-              </td>
-              <td className={styles.ColUom}>{row.corrAccountCode}</td>
-              <td className={styles.ColName}>{row.analytics || row.description}</td>
-              <td className={styles.ColNum}>{fmt(row.debit)}</td>
-              <td className={styles.ColNum}>{fmt(row.credit)}</td>
-              <td className={`${styles.ColNum}${row.balance < 0 ? ` ${styles.Negative}` : ""}`}>{fmtZ(row.balance)}</td>
+                </DrillLink>
+              </Td>
+              <Td col="uom">{row.corrAccountCode}</Td>
+              <Td col="name">{row.analytics || row.description}</Td>
+              <Td col="num"><Money value={row.debit} /></Td>
+              <Td col="num"><Money value={row.credit} /></Td>
+              <Td col="num"><Money value={row.balance} as="zeroMoney" autoNeg /></Td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr className={styles.TotalRow}>
-            <td colSpan={5}>{translate("total")}</td>
-            <td className={styles.ColNum}>{fmtZ(turnDebit)}</td>
-            <td className={styles.ColNum}>{fmtZ(turnCredit)}</td>
-            <td className={`${styles.ColNum}${closing < 0 ? ` ${styles.Negative}` : ""}`}>{fmtZ(closing)}</td>
-          </tr>
+          <TotalRow>
+            <Td colSpan={5}>{translate("total")}</Td>
+            <Td col="num"><Money value={turnDebit} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={turnCredit} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={closing} as="zeroMoney" autoNeg /></Td>
+          </TotalRow>
         </tfoot>
-      </table>
-    </div>
+      </ReportTable>
+    </ReportSheet>
   );
 
   return (

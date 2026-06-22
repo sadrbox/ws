@@ -15,8 +15,13 @@
 // Только очистка:    node prisma/test-multitenancy.js --cleanup
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "./prisma-client.js";
+import "dotenv/config";
+import express from "express";
 import bcrypt from "bcryptjs";
-import { tenantMiddleware, tenantFilter, checkOwnership } from "../utils/auth.js";
+import { tenantMiddleware, tenantFilter, checkOwnership, authMiddleware, generateToken } from "../utils/auth.js";
+import saleitemsRouter from "../api/router/saleitems.js";
+import purchaseitemsRouter from "../api/router/purchaseitems.js";
+import contractsRouter from "../api/router/contracts.js";
 
 const ORG_BIN_PREFIX = "9995";
 const CP_BIN_PREFIX = "9996";
@@ -39,6 +44,11 @@ async function cleanup() {
 
 	if (userUuids.length) await prisma.userSetting.deleteMany({ where: { userUuid: { in: userUuids } } });
 	if (orgUuids.length) await prisma.userSetting.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
+	// Документы — ДО пользователей (sale/purchase.authorUuid → user). Позиции каскадом.
+	if (orgUuids.length) {
+		await prisma.sale.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
+		await prisma.purchase.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
+	}
 	await prisma.user.deleteMany({ where: { username: { startsWith: USER_PREFIX } } });
 	if (orgUuids.length) await prisma.contract.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
 	await prisma.counterparty.deleteMany({ where: { bin: { startsWith: CP_BIN_PREFIX } } });
@@ -126,7 +136,25 @@ async function createData() {
 	// Суперадмин: видит всё.
 	special.super = await mkUser(`${USER_PREFIX}super`, null, [], true);
 
-	return { orgs, baseUsers, special };
+	// Документы для HTTP-проверки write-гардов: реализация + поступление с 1 строкой
+	// в орг1 и орг2 (автор — admin-юзер своей орг).
+	const adminOf = (oi) => baseUsers.find((b) => b.orgIndex === oi && b.username.endsWith("_u1")).user;
+	async function mkSale(oi) {
+		const sale = await prisma.sale.create({ data: { organizationUuid: orgs[oi].uuid, authorUuid: adminOf(oi).uuid } });
+		const item = await prisma.saleItem.create({ data: { saleUuid: sale.uuid, quantity: 1, price: 100, amount: 100 } });
+		return { sale, item };
+	}
+	async function mkPurchase(oi) {
+		const purchase = await prisma.purchase.create({ data: { organizationUuid: orgs[oi].uuid, authorUuid: adminOf(oi).uuid } });
+		const item = await prisma.purchaseItem.create({ data: { purchaseUuid: purchase.uuid, quantity: 1, price: 100, amount: 100 } });
+		return { purchase, item };
+	}
+	const docs = {
+		sale1: await mkSale(0), sale2: await mkSale(1),
+		purchase1: await mkPurchase(0), purchase2: await mkPurchase(1),
+	};
+
+	return { orgs, baseUsers, special, docs };
 }
 
 // ─── Хелперы теста ────────────────────────────────────────────────────────────
@@ -280,6 +308,74 @@ async function runTests(orgs) {
 	}
 }
 
+// ─── HTTP end-to-end проверка write-гардов ──────────────────────────────────────
+// Поднимает мини-express с РЕАЛЬНОЙ цепочкой middleware (auth → tenant) + роутерами
+// строк, и от лица юзера орг1 пытается читать/писать документы орг2 → ждём 404.
+async function runHttpTests(docs) {
+	const app = express();
+	app.use(express.json());
+	app.use(authMiddleware);
+	app.use(tenantMiddleware);
+	app.use(saleitemsRouter);
+	app.use(purchaseitemsRouter);
+	app.use(contractsRouter);
+	const server = app.listen(0);
+	await new Promise((r) => server.once("listening", r));
+	const base = `http://127.0.0.1:${server.address().port}`;
+
+	try {
+		const u1 = await prisma.user.findFirst({ where: { username: `${USER_PREFIX}o1_u1` } });
+		const t1 = generateToken(u1); // юзер орг1 — «атакующий»
+		const call = async (method, path, body) => {
+			const r = await fetch(`${base}${path}`, {
+				method,
+				headers: { Authorization: `Bearer ${t1}`, "Content-Type": "application/json" },
+				body: body ? JSON.stringify(body) : undefined,
+			});
+			return { status: r.status, json: await r.json().catch(() => null) };
+		};
+
+		const own = docs.sale1, foreign = docs.sale2;        // реализации орг1 / орг2
+		const ownP = docs.purchase1, foreignP = docs.purchase2; // поступления орг1 / орг2
+
+		// ── READ-гард: чужой документ → 404, свой → 200 ──
+		check("HTTP saleitems READ чужой → 404", (await call("GET", `/saleitems?saleUuid=${foreign.sale.uuid}`)).status === 404);
+		check("HTTP saleitems READ свой → 200", (await call("GET", `/saleitems?saleUuid=${own.sale.uuid}`)).status === 200);
+		check("HTTP purchaseitems READ чужой → 404 (фабрика)", (await call("GET", `/purchaseitems?purchaseUuid=${foreignP.purchase.uuid}`)).status === 404);
+
+		// ── WRITE-гарды saleitems (рукописный): create/update/delete/batch чужого → 404 ──
+		check("HTTP saleitems POST в чужой → 404", (await call("POST", `/saleitems`, { saleUuid: foreign.sale.uuid, quantity: 1, price: 1 })).status === 404);
+		check("HTTP saleitems PUT чужой → 404", (await call("PUT", `/saleitems/${foreign.item.uuid}`, { price: 999 })).status === 404);
+		check("HTTP saleitems DELETE чужой → 404", (await call("DELETE", `/saleitems/${foreign.item.uuid}`)).status === 404);
+		check("HTTP saleitems BATCH в чужой → 404", (await call("POST", `/saleitems/batch`, { operations: [{ action: "create", data: { saleUuid: foreign.sale.uuid, quantity: 1, price: 1 } }] })).status === 404);
+
+		// ── WRITE-гарды purchaseitems (фабрика _documentItemsFactory) ──
+		check("HTTP purchaseitems POST в чужой → 404 (фабрика)", (await call("POST", `/purchaseitems`, { purchaseUuid: foreignP.purchase.uuid, quantity: 1, price: 1 })).status === 404);
+		check("HTTP purchaseitems PUT чужой → 404 (фабрика)", (await call("PUT", `/purchaseitems/${foreignP.item.uuid}`, { price: 999 })).status === 404);
+		check("HTTP purchaseitems DELETE чужой → 404 (фабрика)", (await call("DELETE", `/purchaseitems/${foreignP.item.uuid}`)).status === 404);
+		check("HTTP purchaseitems BATCH в чужой → 404 (фабрика)", (await call("POST", `/purchaseitems/batch`, { operations: [{ action: "create", data: { purchaseUuid: foreignP.purchase.uuid, quantity: 1, price: 1 } }] })).status === 404);
+
+		// ── Позитив: запись в СВОЙ документ работает (create → delete) ──
+		const created = await call("POST", `/saleitems`, { saleUuid: own.sale.uuid, quantity: 2, price: 50 });
+		check("HTTP saleitems POST в свой → 201", created.status === 201);
+		if (created.json?.item?.uuid) {
+			check("HTTP saleitems DELETE свой → 200", (await call("DELETE", `/saleitems/${created.json.item.uuid}`)).status === 200);
+		}
+
+		// ── Фактическая защита данных: чужая строка НЕ изменилась и НЕ удалена ──
+		const stillThere = await prisma.saleItem.findUnique({ where: { uuid: foreign.item.uuid }, select: { price: true } });
+		check("HTTP: чужая строка цела (не удалена, цена не изменена)", !!stillThere && Number(stillThere.price) === 100, `price=${stillThere ? stillThere.price : "нет"}`);
+
+		// ── Fix 1 по HTTP: список договоров изолирован ──
+		const contracts = await call("GET", `/contracts?limit=1000`);
+		const rows = (contracts.json?.items ?? []).filter((c) => String(c.name || "").startsWith("MT Договор"));
+		const foreignContracts = rows.filter((c) => c.organizationUuid !== docs.sale1.sale.organizationUuid);
+		check("HTTP GET /contracts (Fix 1): только своя орг, без чужих", contracts.status === 200 && rows.length === 2 && foreignContracts.length === 0, `всего MT=${rows.length}, чужих=${foreignContracts.length}`);
+	} finally {
+		await new Promise((r) => server.close(r));
+	}
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 async function main() {
 	const cleanupOnly = process.argv.includes("--cleanup");
@@ -292,9 +388,11 @@ async function main() {
 	console.log("Очистка прежнего тест-набора…");
 	await cleanup();
 	console.log("Создание мок-данных (10 орг × 5 юзеров/сотрудников + спец-юзеры)…");
-	const { orgs } = await createData();
+	const { orgs, docs } = await createData();
 	console.log("Прогон проверок изоляции (продакшн tenantFilter/checkOwnership)…\n");
 	await runTests(orgs);
+	console.log("Прогон HTTP-проверок write-гардов (мини-сервер + JWT)…");
+	await runHttpTests(docs);
 
 	// Отчёт.
 	const passed = results.filter((r) => r.ok).length;

@@ -1,5 +1,8 @@
-import { FC, useState, useCallback, useMemo } from "react";
-import { usePersistentState } from "src/hooks/usePersistentState";
+/**
+ * Отчёт о продажах по номенклатуре за период. ДВОЙНОЙ клик по строке открывает
+ * «Движение товара» (период/орг переносятся).
+ */
+import { FC, useMemo, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -7,51 +10,25 @@ import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useAppContext } from "src/app";
 import ReportPane from "src/components/ReportPane";
-import { ProductDetailReport } from "./ProductDetailReport";
-import styles from "./report.module.scss";
+import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportDrill, DrillRow } from "./_shared/reportDrill";
+import { useReportFilters } from "./_shared/useReportFilters";
+import { firstOfMonth, today } from "./_shared/reportDates";
+import { fmtQty, fmtQtyZero } from "./_shared/reportFormat";
 import reportCss from "./report.module.scss?inline";
 
-// ─── number formatter ────────────────────────────────────────────────────────
-
-const fmtQty = (n: number) =>
-  n !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : "—";
-
-const fmtAmt = (n: number) =>
-  n !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-
-const fmtAmtZ = (n: number) =>
-  Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const fmtQtyZ = (n: number) =>
-  Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 0, maximumFractionDigits: 4 });
-
-// ─── types ────────────────────────────────────────────────────────────────────
-
 interface ProductRow {
-  productUuid: string | null;
-  productName: string;
-  uom: string;
-  qtySale: number;
-  qtyReturn: number;
-  qtyNet: number;
-  amountSale: number;
-  amountReturn: number;
-  amountNet: number;
-  exciseAmountSale: number;
-  vatAmountSale: number;
-  amountNoTaxSale: number;
-  costNoVat: number;
-  profit: number;
+  productUuid: string | null; productName: string; uom: string;
+  qtySale: number; qtyReturn: number; qtyNet: number;
+  amountSale: number; amountReturn: number; amountNet: number;
+  exciseAmountSale: number; vatAmountSale: number; amountNoTaxSale: number;
+  costNoVat: number; profit: number;
 }
-
-interface SalesReportProps {
-  uniqId?: string;
-  [key: string]: unknown;
+interface Filters extends Record<string, unknown> {
+  dateFrom: string; dateTo: string; orgUuid: string; orgName: string; cptyUuid: string; cptyName: string;
 }
-
-// ─── helper: month label ─────────────────────────────────────────────────────
+interface SalesReportProps { uniqId?: string;[key: string]: unknown }
 
 function monthLabel(dateFrom: string, dateTo: string): string {
   if (!dateFrom) return "";
@@ -64,43 +41,24 @@ function monthLabel(dateFrom: string, dateTo: string): string {
   }
 }
 
-// ─── component ───────────────────────────────────────────────────────────────
-
 const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
-  const { windows: { addPane } } = useAppContext();
-  const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } =
-    useDefaultOrganization();
+  const def = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = usePersistentState("report.sales-report.dateFrom", () => {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().slice(0, 10);
+  const { fields, setField, patch, applied, handleGenerate } = useReportFilters<Filters>({
+    persistKey: "report.sales-report",
+    defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "", cptyUuid: "", cptyName: "" },
   });
-  const [dateTo, setDateTo] = usePersistentState("report.sales-report.dateTo", () => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = usePersistentState("report.sales-report.orgUuid", defaultOrgUuid || "");
-  const [orgName, setOrgName] = usePersistentState("report.sales-report.orgName", defaultOrgName || "");
-  const [cptyUuid, setCptyUuid] = useState("");
-  const [cptyName, setCptyName] = useState("");
-
-  // Отчёт формируется только по кнопке «Сформировать» (snapshot параметров).
-  const [applied, setApplied] = useState<null | {
-    dateFrom: string; dateTo: string; orgUuid: string; cptyUuid: string;
-  }>(null);
-
-  // Даты и фильтры необязательны: пустая дата → период не ограничивается
-  // с этой стороны; пустой фильтр (Организация/Контрагент) → без учёта фильтра.
-  const handleGenerate = useCallback(() => {
-    setApplied({ dateFrom, dateTo, orgUuid, cptyUuid });
-  }, [dateFrom, dateTo, orgUuid, cptyUuid]);
+  const drill = useReportDrill({ applied, orgName: fields.orgName });
 
   const { data, isLoading, isError } = useQuery<{ items: ProductRow[]; orgName: string }>({
     queryKey: ["report-sales-by-product", applied],
     queryFn: async () => {
       const p: Record<string, string> = {};
-      if (applied!.dateFrom) p.dateFrom = applied!.dateFrom;
-      if (applied!.dateTo) p.dateTo = applied!.dateTo;
-      if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
-      if (applied!.cptyUuid) p.counterpartyUuid = applied!.cptyUuid;
+      const f = applied!;
+      if (f.dateFrom) p.dateFrom = f.dateFrom;
+      if (f.dateTo) p.dateTo = f.dateTo;
+      if (f.orgUuid) p.organizationUuid = f.orgUuid;
+      if (f.cptyUuid) p.counterpartyUuid = f.cptyUuid;
       const resp = await api.get<any>("reports/sales-by-product", { params: p });
       return { items: resp?.items ?? [], orgName: resp?.orgName ?? "" };
     },
@@ -109,139 +67,107 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
   });
 
   const rows: ProductRow[] = data?.items ?? [];
-  const reportOrgName = data?.orgName || orgName;
+  const reportOrgName = data?.orgName || fields.orgName;
 
   const totals = useMemo(
-    () =>
-      rows.reduce(
-        (acc, r) => ({
-          qtySale: acc.qtySale + r.qtySale,
-          qtyReturn: acc.qtyReturn + r.qtyReturn,
-          qtyNet: acc.qtyNet + r.qtyNet,
-          amountSale: acc.amountSale + r.amountSale,
-          amountReturn: acc.amountReturn + r.amountReturn,
-          amountNet: acc.amountNet + r.amountNet,
-          exciseAmountSale: acc.exciseAmountSale + r.exciseAmountSale,
-          vatAmountSale: acc.vatAmountSale + r.vatAmountSale,
-          amountNoTaxSale: acc.amountNoTaxSale + r.amountNoTaxSale,
-          costNoVat: acc.costNoVat + r.costNoVat,
-          profit: acc.profit + r.profit,
-        }),
-        {
-          qtySale: 0, qtyReturn: 0, qtyNet: 0,
-          amountSale: 0, amountReturn: 0, amountNet: 0,
-          exciseAmountSale: 0, vatAmountSale: 0, amountNoTaxSale: 0,
-          costNoVat: 0, profit: 0,
-        },
-      ),
+    () => rows.reduce((acc, r) => ({
+      qtySale: acc.qtySale + r.qtySale, qtyReturn: acc.qtyReturn + r.qtyReturn, qtyNet: acc.qtyNet + r.qtyNet,
+      amountSale: acc.amountSale + r.amountSale, amountReturn: acc.amountReturn + r.amountReturn, amountNet: acc.amountNet + r.amountNet,
+      exciseAmountSale: acc.exciseAmountSale + r.exciseAmountSale, vatAmountSale: acc.vatAmountSale + r.vatAmountSale,
+      amountNoTaxSale: acc.amountNoTaxSale + r.amountNoTaxSale, costNoVat: acc.costNoVat + r.costNoVat, profit: acc.profit + r.profit,
+    }), { qtySale: 0, qtyReturn: 0, qtyNet: 0, amountSale: 0, amountReturn: 0, amountNet: 0, exciseAmountSale: 0, vatAmountSale: 0, amountNoTaxSale: 0, costNoVat: 0, profit: 0 }),
     [rows],
   );
 
-  const period = monthLabel(dateFrom, dateTo);
+  const period = monthLabel(fields.dateFrom, fields.dateTo);
 
-  const openDetail = useCallback((row: ProductRow) => {
-    if (!row.productUuid) return;
-    addPane({
-      component: ProductDetailReport,
-      label: `${translate("reportProductMovements")}: ${row.productName}`,
-      data: {
-        productUuid: row.productUuid,
-        productName: row.productName,
-        initialDateFrom: dateFrom,
-        initialDateTo: dateTo,
-        initialOrgUuid: orgUuid,
-        initialOrgName: orgName,
-      },
-    });
-  }, [addPane, dateFrom, dateTo, orgUuid, orgName]);
+  const cells = (row: ProductRow, idx: number): ReactNode => (
+    <>
+      <Td col="n">{idx + 1}</Td>
+      <Td col="name">{row.productName}</Td>
+      <Td col="num">{fmtQty(row.qtySale)}</Td>
+      <Td col="num">{fmtQty(row.qtyReturn)}</Td>
+      <Td col="num">{fmtQty(row.qtyNet)}</Td>
+      <Td col="num"><Money value={row.amountSale} /></Td>
+      <Td col="num"><Money value={row.amountReturn} /></Td>
+      <Td col="num"><Money value={row.amountNet} /></Td>
+      <Td col="num"><Money value={row.exciseAmountSale} /></Td>
+      <Td col="num"><Money value={row.vatAmountSale} /></Td>
+      <Td col="num"><Money value={row.amountNoTaxSale} /></Td>
+      <Td col="num"><Money value={row.costNoVat} /></Td>
+      <Td col="num"><Money value={row.profit} /></Td>
+    </>
+  );
 
   const form = (
     <>
       <GroupRow>
-        <FieldDate label={translate("reportPeriodFrom")} name="sf_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
-        <FieldDate label={translate("reportPeriodTo")} name="sf_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodFrom")} name="sf_from" value={fields.dateFrom} onChange={e => setField("dateFrom", e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodTo")} name="sf_to" value={fields.dateTo} onChange={e => setField("dateTo", e.target.value)} width="150px" />
       </GroupRow>
       <GroupCol>
-        <LookupField label={translate("organization")} name="sf_org" value={orgUuid} displayValue={orgName}
+        <LookupField label={translate("organization")} name="sf_org" value={fields.orgUuid} displayValue={fields.orgName}
           endpoint="organizations" displayField="name"
-          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
-          onClear={() => { setOrgUuid(""); setOrgName(""); }} />
-        <LookupField label={translate("counterparty")} name="sf_cpty" value={cptyUuid} displayValue={cptyName}
+          onSelect={(u, d) => patch({ orgUuid: u, orgName: d })} onClear={() => patch({ orgUuid: "", orgName: "" })} />
+        <LookupField label={translate("counterparty")} name="sf_cpty" value={fields.cptyUuid} displayValue={fields.cptyName}
           endpoint="counterparties" displayField="name"
-          onSelect={(u, d) => { setCptyUuid(u); setCptyName(d); }}
-          onClear={() => { setCptyUuid(""); setCptyName(""); }} />
+          onSelect={(u, d) => patch({ cptyUuid: u, cptyName: d })} onClear={() => patch({ cptyUuid: "", cptyName: "" })} />
       </GroupCol>
     </>
   );
 
   const layout = (
-    <div className={styles.Report}>
-      {reportOrgName && <div className={styles.OrgName}>{reportOrgName}</div>}
-      <div className={styles.Title}>
-        {translate("reportSalesTitle")}
-        {period && <> за {period}</>}
-      </div>
-      {orgName && (
-        <div className={styles.SortLine}>
-          {translate("reportSortBy")} {translate("organization")} — {orgName}
-        </div>
-      )}
-
-      <table className={styles.Table}>
+    <ReportSheet
+      org={reportOrgName || undefined}
+      title={<>{translate("reportSalesTitle")}{period && <> за {period}</>}</>}
+      sortLine={fields.orgName ? `${translate("reportSortBy")} ${translate("organization")} — ${fields.orgName}` : undefined}
+    >
+      <ReportTable>
         <thead>
           <tr>
-            <th className={styles.ColN}>№</th>
-            <th className={styles.ColName}>{translate("reportProduct")}</th>
-            <th className={styles.ColNum}>{translate("reportQtySale")}</th>
-            <th className={styles.ColNum}>{translate("reportQtyReturn")}</th>
-            <th className={styles.ColNum}>{translate("reportQtyNet")}</th>
-            <th className={styles.ColNum}>{translate("reportAmountSale")}</th>
-            <th className={styles.ColNum}>{translate("reportAmountReturn")}</th>
-            <th className={styles.ColNum}>{translate("reportAmountNet")}</th>
-            <th className={styles.ColNum}>{translate("reportAmountExcise")}</th>
-            <th className={styles.ColNum}>{translate("reportVatAmount")}</th>
-            <th className={styles.ColNum}>{translate("reportAmountNoTax")}</th>
-            <th className={styles.ColNum}>{translate("reportCostNoVat")}</th>
-            <th className={styles.ColNum}>{translate("reportProfit")}</th>
+            <Th col="n">№</Th>
+            <Th col="name">{translate("reportProduct")}</Th>
+            <Th col="num">{translate("reportQtySale")}</Th>
+            <Th col="num">{translate("reportQtyReturn")}</Th>
+            <Th col="num">{translate("reportQtyNet")}</Th>
+            <Th col="num">{translate("reportAmountSale")}</Th>
+            <Th col="num">{translate("reportAmountReturn")}</Th>
+            <Th col="num">{translate("reportAmountNet")}</Th>
+            <Th col="num">{translate("reportAmountExcise")}</Th>
+            <Th col="num">{translate("reportVatAmount")}</Th>
+            <Th col="num">{translate("reportAmountNoTax")}</Th>
+            <Th col="num">{translate("reportCostNoVat")}</Th>
+            <Th col="num">{translate("reportProfit")}</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, idx) => (
-            <tr key={row.productUuid ?? idx} className={row.productUuid ? styles.ClickableRow : undefined} onClick={() => openDetail(row)} title={row.productUuid ? translate("reportProductMovements") : undefined}>
-              <td className={styles.ColN}>{idx + 1}</td>
-              <td className={styles.ColName}>{row.productName}</td>
-              <td className={styles.ColNum}>{fmtQty(row.qtySale)}</td>
-              <td className={styles.ColNum}>{fmtQty(row.qtyReturn)}</td>
-              <td className={styles.ColNum}>{fmtQty(row.qtyNet)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.amountSale)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.amountReturn)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.amountNet)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.exciseAmountSale)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.vatAmountSale)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.amountNoTaxSale)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.costNoVat)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.profit)}</td>
-            </tr>
+            row.productUuid
+              ? <DrillRow key={row.productUuid} title={translate("reportProductMovements")}
+                  onOpen={() => drill.toReport("product-detail", { productUuid: row.productUuid, productName: row.productName })}>
+                  {cells(row, idx)}
+                </DrillRow>
+              : <tr key={idx}>{cells(row, idx)}</tr>
           ))}
         </tbody>
         <tfoot>
-          <tr className={styles.TotalRow}>
-            <td colSpan={2}>{translate("total")}</td>
-            <td className={styles.ColNum}>{fmtQtyZ(totals.qtySale)}</td>
-            <td className={styles.ColNum}>{fmtQtyZ(totals.qtyReturn)}</td>
-            <td className={styles.ColNum}>{fmtQtyZ(totals.qtyNet)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.amountSale)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.amountReturn)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.amountNet)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.exciseAmountSale)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.vatAmountSale)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.amountNoTaxSale)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.costNoVat)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.profit)}</td>
-          </tr>
+          <TotalRow>
+            <Td colSpan={2}>{translate("total")}</Td>
+            <Td col="num">{fmtQtyZero(totals.qtySale)}</Td>
+            <Td col="num">{fmtQtyZero(totals.qtyReturn)}</Td>
+            <Td col="num">{fmtQtyZero(totals.qtyNet)}</Td>
+            <Td col="num"><Money value={totals.amountSale} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.amountReturn} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.amountNet} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.exciseAmountSale} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.vatAmountSale} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.amountNoTaxSale} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.costNoVat} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.profit} as="zeroMoney" /></Td>
+          </TotalRow>
         </tfoot>
-      </table>
-    </div>
+      </ReportTable>
+    </ReportSheet>
   );
 
   return (

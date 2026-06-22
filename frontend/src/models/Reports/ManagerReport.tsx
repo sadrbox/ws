@@ -1,12 +1,8 @@
 /**
- * ManagerReport — отчёт «Продажи по менеджерам».
- *
- * Аналитика учёта по менеджеру реализации (НК РК): по каждому менеджеру —
- * количество и сумма реализаций, возвратов и чистая сумма продаж. Считается
- * только по ПРОВЕДЁННЫМ документам (бэкенд /reports/sales-by-manager).
+ * ManagerReport — отчёт «Продажи по менеджерам». По каждому менеджеру: кол-во и
+ * сумма реализаций/возвратов, нетто, себестоимость, валовая прибыль (проведённые).
  */
-import { FC, useState, useCallback, useMemo } from "react";
-import { usePersistentState } from "src/hooks/usePersistentState";
+import { FC, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -15,38 +11,24 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
-import styles from "./report.module.scss";
+import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportFilters } from "./_shared/useReportFilters";
+import { firstOfMonth, today } from "./_shared/reportDates";
 import reportCss from "./report.module.scss?inline";
 
-const fmtAmt = (n: number) =>
-  n !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-const fmtAmtZ = (n: number) =>
-  Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtInt = (n: number) => (n ? Number(n).toLocaleString("ru-KZ") : "—");
 
 interface ManagerRow {
-  managerUuid: string | null;
-  managerName: string;
-  salesCount: number;
-  salesAmount: number;
-  returnsCount: number;
-  returnsAmount: number;
-  netAmount: number;
-  cogs: number;
-  netRevenue: number;
-  grossProfit: number;
+  managerUuid: string | null; managerName: string;
+  salesCount: number; salesAmount: number; returnsCount: number; returnsAmount: number;
+  netAmount: number; cogs: number; netRevenue: number; grossProfit: number;
 }
-
 interface Totals {
-  salesCount: number; salesAmount: number;
-  returnsCount: number; returnsAmount: number; netAmount: number;
-  cogs: number; netRevenue: number; grossProfit: number;
+  salesCount: number; salesAmount: number; returnsCount: number; returnsAmount: number;
+  netAmount: number; cogs: number; netRevenue: number; grossProfit: number;
 }
-
-interface ManagerReportProps {
-  uniqId?: string;
-  [key: string]: unknown;
-}
+interface Filters extends Record<string, unknown> { dateFrom: string; dateTo: string; orgUuid: string; orgName: string }
+interface ManagerReportProps { uniqId?: string;[key: string]: unknown }
 
 function monthLabel(dateFrom: string, dateTo: string): string {
   if (!dateFrom) return "";
@@ -54,23 +36,16 @@ function monthLabel(dateFrom: string, dateTo: string): string {
     const d = new Date(dateFrom + "T00:00:00");
     const month = d.toLocaleString("ru-RU", { month: "long" });
     return `${month.charAt(0).toUpperCase()}${month.slice(1)} ${d.getFullYear()} г.`;
-  } catch {
-    return `${dateFrom} — ${dateTo}`;
-  }
+  } catch { return `${dateFrom} — ${dateTo}`; }
 }
 
 const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
-  const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } = useDefaultOrganization();
+  const def = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = usePersistentState("report.manager-report.dateFrom", () => {
-    const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
+  const { fields, setField, patch, applied, handleGenerate } = useReportFilters<Filters>({
+    persistKey: "report.manager-report",
+    defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "" },
   });
-  const [dateTo, setDateTo] = usePersistentState("report.manager-report.dateTo", () => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = usePersistentState("report.manager-report.orgUuid", defaultOrgUuid || "");
-  const [orgName, setOrgName] = usePersistentState("report.manager-report.orgName", defaultOrgName || "");
-
-  const [applied, setApplied] = useState<null | { dateFrom: string; dateTo: string; orgUuid: string }>(null);
-  const handleGenerate = useCallback(() => setApplied({ dateFrom, dateTo, orgUuid }), [dateFrom, dateTo, orgUuid]);
 
   const { data, isLoading, isError } = useQuery<{ items: ManagerRow[]; totals: Totals }>({
     queryKey: ["report-sales-by-manager", applied],
@@ -88,92 +63,75 @@ const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
 
   const rows: ManagerRow[] = data?.items ?? [];
   const totals = useMemo<Totals>(
-    () =>
-      data?.totals ??
-      rows.reduce(
-        (a, r) => ({
-          salesCount: a.salesCount + r.salesCount,
-          salesAmount: a.salesAmount + r.salesAmount,
-          returnsCount: a.returnsCount + r.returnsCount,
-          returnsAmount: a.returnsAmount + r.returnsAmount,
-          netAmount: a.netAmount + r.netAmount,
-          cogs: a.cogs + r.cogs,
-          netRevenue: a.netRevenue + r.netRevenue,
-          grossProfit: a.grossProfit + r.grossProfit,
-        }),
-        { salesCount: 0, salesAmount: 0, returnsCount: 0, returnsAmount: 0, netAmount: 0, cogs: 0, netRevenue: 0, grossProfit: 0 },
-      ),
+    () => data?.totals ?? rows.reduce((a, r) => ({
+      salesCount: a.salesCount + r.salesCount, salesAmount: a.salesAmount + r.salesAmount,
+      returnsCount: a.returnsCount + r.returnsCount, returnsAmount: a.returnsAmount + r.returnsAmount,
+      netAmount: a.netAmount + r.netAmount, cogs: a.cogs + r.cogs, netRevenue: a.netRevenue + r.netRevenue, grossProfit: a.grossProfit + r.grossProfit,
+    }), { salesCount: 0, salesAmount: 0, returnsCount: 0, returnsAmount: 0, netAmount: 0, cogs: 0, netRevenue: 0, grossProfit: 0 }),
     [data, rows],
   );
 
-  const period = monthLabel(dateFrom, dateTo);
+  const period = monthLabel(fields.dateFrom, fields.dateTo);
 
   const form = (
     <>
       <GroupRow>
-        <FieldDate label={translate("reportPeriodFrom")} name="mr_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
-        <FieldDate label={translate("reportPeriodTo")} name="mr_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodFrom")} name="mr_from" value={fields.dateFrom} onChange={e => setField("dateFrom", e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodTo")} name="mr_to" value={fields.dateTo} onChange={e => setField("dateTo", e.target.value)} width="150px" />
       </GroupRow>
       <GroupCol>
-        <LookupField label={translate("organization")} name="mr_org" value={orgUuid} displayValue={orgName}
+        <LookupField label={translate("organization")} name="mr_org" value={fields.orgUuid} displayValue={fields.orgName}
           endpoint="organizations" displayField="name"
-          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
-          onClear={() => { setOrgUuid(""); setOrgName(""); }} />
+          onSelect={(u, d) => patch({ orgUuid: u, orgName: d })} onClear={() => patch({ orgUuid: "", orgName: "" })} />
       </GroupCol>
     </>
   );
 
   const layout = (
-    <div className={styles.Report}>
-      {orgName && <div className={styles.OrgName}>{orgName}</div>}
-      <div className={styles.Title}>
-        {translate("managerReportTitle")}
-        {period && <> за {period}</>}
-      </div>
-
-      <table className={styles.Table}>
+    <ReportSheet org={fields.orgName || undefined} title={<>{translate("managerReportTitle")}{period && <> за {period}</>}</>}>
+      <ReportTable>
         <thead>
           <tr>
-            <th className={styles.ColN}>№</th>
-            <th className={styles.ColName}>{translate("manager")}</th>
-            <th className={styles.ColNum}>{translate("reportSalesCount")}</th>
-            <th className={styles.ColNum}>{translate("reportAmountSale")}</th>
-            <th className={styles.ColNum}>{translate("reportReturnsCount")}</th>
-            <th className={styles.ColNum}>{translate("reportAmountReturn")}</th>
-            <th className={styles.ColNum}>{translate("reportAmountNet")}</th>
-            <th className={styles.ColNum}>{translate("reportCogs")}</th>
-            <th className={styles.ColNum}>{translate("reportGrossProfit")}</th>
+            <Th col="n">№</Th>
+            <Th col="name">{translate("manager")}</Th>
+            <Th col="num">{translate("reportSalesCount")}</Th>
+            <Th col="num">{translate("reportAmountSale")}</Th>
+            <Th col="num">{translate("reportReturnsCount")}</Th>
+            <Th col="num">{translate("reportAmountReturn")}</Th>
+            <Th col="num">{translate("reportAmountNet")}</Th>
+            <Th col="num">{translate("reportCogs")}</Th>
+            <Th col="num">{translate("reportGrossProfit")}</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, idx) => (
             <tr key={row.managerUuid ?? idx}>
-              <td className={styles.ColN}>{idx + 1}</td>
-              <td className={styles.ColName}>{row.managerName}</td>
-              <td className={styles.ColNum}>{fmtInt(row.salesCount)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.salesAmount)}</td>
-              <td className={styles.ColNum}>{fmtInt(row.returnsCount)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.returnsAmount)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.netAmount)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.cogs)}</td>
-              <td className={styles.ColNum}>{fmtAmt(row.grossProfit)}</td>
+              <Td col="n">{idx + 1}</Td>
+              <Td col="name">{row.managerName}</Td>
+              <Td col="num">{fmtInt(row.salesCount)}</Td>
+              <Td col="num"><Money value={row.salesAmount} /></Td>
+              <Td col="num">{fmtInt(row.returnsCount)}</Td>
+              <Td col="num"><Money value={row.returnsAmount} /></Td>
+              <Td col="num"><Money value={row.netAmount} /></Td>
+              <Td col="num"><Money value={row.cogs} /></Td>
+              <Td col="num"><Money value={row.grossProfit} /></Td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr className={styles.TotalRow}>
-            <td colSpan={2}>{translate("total")}</td>
-            <td className={styles.ColNum}>{fmtInt(totals.salesCount)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.salesAmount)}</td>
-            <td className={styles.ColNum}>{fmtInt(totals.returnsCount)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.returnsAmount)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.netAmount)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.cogs)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totals.grossProfit)}</td>
-          </tr>
+          <TotalRow>
+            <Td colSpan={2}>{translate("total")}</Td>
+            <Td col="num">{fmtInt(totals.salesCount)}</Td>
+            <Td col="num"><Money value={totals.salesAmount} as="zeroMoney" /></Td>
+            <Td col="num">{fmtInt(totals.returnsCount)}</Td>
+            <Td col="num"><Money value={totals.returnsAmount} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.netAmount} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.cogs} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.grossProfit} as="zeroMoney" /></Td>
+          </TotalRow>
         </tfoot>
-      </table>
-    </div>
+      </ReportTable>
+    </ReportSheet>
   );
 
   return (

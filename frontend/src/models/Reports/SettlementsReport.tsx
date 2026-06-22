@@ -1,11 +1,9 @@
 /**
  * SettlementsReport — взаиморасчёты с контрагентами (дебиторка 1210 / кредиторка
- * 3310): входящее сальдо, обороты Дт/Кт, исходящее сальдо и старение долга
- * (aging) по бакетам 0–30 / 31–60 / 61–90 / >90 дней. Только проведённые
- * документы (бэкенд /accounting/settlements).
+ * 3310): сальдо, обороты Дт/Кт, старение долга (aging). Только проведённые
+ * (бэкенд /accounting/settlements).
  */
-import { FC, useState, useCallback } from "react";
-import { usePersistentState } from "src/hooks/usePersistentState";
+import { FC } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -14,38 +12,29 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
-import styles from "./report.module.scss";
+import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportFilters } from "./_shared/useReportFilters";
+import { firstOfMonth, today } from "./_shared/reportDates";
 import reportCss from "./report.module.scss?inline";
-
-const fmt = (n: number) =>
-  n !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-const fmtZ = (n: number) =>
-  Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 interface Aging { d0_30: number; d31_60: number; d61_90: number; d90: number }
 interface Row {
-  counterpartyUuid: string | null;
-  counterpartyName: string;
-  opening: number; turnDebit: number; turnCredit: number; closing: number;
-  aging: Aging;
+  counterpartyUuid: string | null; counterpartyName: string;
+  opening: number; turnDebit: number; turnCredit: number; closing: number; aging: Aging;
 }
 interface Totals { opening: number; turnDebit: number; turnCredit: number; closing: number; d0_30: number; d31_60: number; d61_90: number; d90: number }
-
-interface Props { uniqId?: string; [key: string]: unknown }
+interface Filters extends Record<string, unknown> {
+  dateFrom: string; dateTo: string; orgUuid: string; orgName: string; accountCode: string; cptyUuid: string; cptyName: string;
+}
+interface Props { uniqId?: string;[key: string]: unknown }
 
 const SettlementsReport: FC<Props> = ({ uniqId }) => {
-  const { organizationUuid: defOrg, organizationName: defOrgName } = useDefaultOrganization();
+  const def = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = usePersistentState("report.settlements.dateFrom", () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
-  const [dateTo, setDateTo] = usePersistentState("report.settlements.dateTo", () => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = usePersistentState("report.settlements.orgUuid", defOrg || "");
-  const [orgName, setOrgName] = usePersistentState("report.settlements.orgName", defOrgName || "");
-  const [accountCode, setAccountCode] = usePersistentState("report.settlements.account", "1210");
-  const [cptyUuid, setCptyUuid] = useState("");
-  const [cptyName, setCptyName] = useState("");
-
-  const [applied, setApplied] = useState<null | { dateFrom: string; dateTo: string; orgUuid: string; accountCode: string; cptyUuid: string }>(null);
-  const handleGenerate = useCallback(() => setApplied({ dateFrom, dateTo, orgUuid, accountCode, cptyUuid }), [dateFrom, dateTo, orgUuid, accountCode, cptyUuid]);
+  const { fields, setField, patch, applied, handleGenerate } = useReportFilters<Filters>({
+    persistKey: "report.settlements",
+    defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "", accountCode: "1210", cptyUuid: "", cptyName: "" },
+  });
 
   const { data, isLoading, isError } = useQuery<{ items: Row[]; totals: Totals; accountName: string }>({
     queryKey: ["report-settlements", applied],
@@ -64,83 +53,81 @@ const SettlementsReport: FC<Props> = ({ uniqId }) => {
 
   const rows = data?.items ?? [];
   const totals = data?.totals;
-  const isReceivable = accountCode === "1210";
+  const isReceivable = fields.accountCode === "1210";
 
   const form = (
     <>
       <GroupRow>
-        <FieldDate label={translate("reportPeriodFrom")} name="st_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
-        <FieldDate label={translate("reportPeriodTo")} name="st_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodFrom")} name="st_from" value={fields.dateFrom} onChange={e => setField("dateFrom", e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodTo")} name="st_to" value={fields.dateTo} onChange={e => setField("dateTo", e.target.value)} width="150px" />
       </GroupRow>
       <GroupCol>
-        <FieldSelect label={translate("settlementsKind")} name="st_kind" value={accountCode}
-          onChange={e => setAccountCode(e.target.value)}
+        <FieldSelect label={translate("settlementsKind")} name="st_kind" value={fields.accountCode}
+          onChange={e => setField("accountCode", e.target.value)}
           options={[{ value: "1210", label: translate("receivable") }, { value: "3310", label: translate("payable") }]} />
-        <LookupField label={translate("organization")} name="st_org" value={orgUuid} displayValue={orgName}
+        <LookupField label={translate("organization")} name="st_org" value={fields.orgUuid} displayValue={fields.orgName}
           endpoint="organizations" displayField="name"
-          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }} onClear={() => { setOrgUuid(""); setOrgName(""); }} />
-        <LookupField label={translate("counterparty")} name="st_cpty" value={cptyUuid} displayValue={cptyName}
+          onSelect={(u, d) => patch({ orgUuid: u, orgName: d })} onClear={() => patch({ orgUuid: "", orgName: "" })} />
+        <LookupField label={translate("counterparty")} name="st_cpty" value={fields.cptyUuid} displayValue={fields.cptyName}
           endpoint="counterparties" displayField="name"
-          onSelect={(u, d) => { setCptyUuid(u); setCptyName(d); }} onClear={() => { setCptyUuid(""); setCptyName(""); }} />
+          onSelect={(u, d) => patch({ cptyUuid: u, cptyName: d })} onClear={() => patch({ cptyUuid: "", cptyName: "" })} />
       </GroupCol>
     </>
   );
 
   const layout = (
-    <div className={styles.Report}>
-      {orgName && <div className={styles.OrgName}>{orgName}</div>}
-      <div className={styles.Title}>
-        {isReceivable ? translate("settlementsReceivableTitle") : translate("settlementsPayableTitle")}
-      </div>
-
-      <table className={styles.Table}>
+    <ReportSheet
+      org={fields.orgName || undefined}
+      title={isReceivable ? translate("settlementsReceivableTitle") : translate("settlementsPayableTitle")}
+    >
+      <ReportTable>
         <thead>
           <tr>
-            <th className={styles.ColN}>№</th>
-            <th className={styles.ColName}>{translate("counterparty")}</th>
-            <th className={styles.ColNum}>{translate("openingBalance")}</th>
-            <th className={styles.ColNum}>{translate("turnoverDebit")}</th>
-            <th className={styles.ColNum}>{translate("turnoverCredit")}</th>
-            <th className={styles.ColNum}>{translate("closingBalance")}</th>
-            <th className={styles.ColNum}>0–30</th>
-            <th className={styles.ColNum}>31–60</th>
-            <th className={styles.ColNum}>61–90</th>
-            <th className={styles.ColNum}>&gt;90</th>
+            <Th col="n">№</Th>
+            <Th col="name">{translate("counterparty")}</Th>
+            <Th col="num">{translate("openingBalance")}</Th>
+            <Th col="num">{translate("turnoverDebit")}</Th>
+            <Th col="num">{translate("turnoverCredit")}</Th>
+            <Th col="num">{translate("closingBalance")}</Th>
+            <Th col="num">0–30</Th>
+            <Th col="num">31–60</Th>
+            <Th col="num">61–90</Th>
+            <Th col="num">&gt;90</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, idx) => (
             <tr key={r.counterpartyUuid ?? idx}>
-              <td className={styles.ColN}>{idx + 1}</td>
-              <td className={styles.ColName}>{r.counterpartyName}</td>
-              <td className={styles.ColNum}>{fmt(r.opening)}</td>
-              <td className={styles.ColNum}>{fmt(r.turnDebit)}</td>
-              <td className={styles.ColNum}>{fmt(r.turnCredit)}</td>
-              <td className={styles.ColNum}>{fmt(r.closing)}</td>
-              <td className={styles.ColNum}>{fmt(r.aging.d0_30)}</td>
-              <td className={styles.ColNum}>{fmt(r.aging.d31_60)}</td>
-              <td className={styles.ColNum}>{fmt(r.aging.d61_90)}</td>
-              <td className={styles.ColNum}>{fmt(r.aging.d90)}</td>
+              <Td col="n">{idx + 1}</Td>
+              <Td col="name">{r.counterpartyName}</Td>
+              <Td col="num"><Money value={r.opening} /></Td>
+              <Td col="num"><Money value={r.turnDebit} /></Td>
+              <Td col="num"><Money value={r.turnCredit} /></Td>
+              <Td col="num"><Money value={r.closing} /></Td>
+              <Td col="num"><Money value={r.aging.d0_30} /></Td>
+              <Td col="num"><Money value={r.aging.d31_60} /></Td>
+              <Td col="num"><Money value={r.aging.d61_90} /></Td>
+              <Td col="num"><Money value={r.aging.d90} /></Td>
             </tr>
           ))}
         </tbody>
         {totals && (
           <tfoot>
-            <tr className={styles.TotalRow}>
-              <td colSpan={2}>{translate("total")}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.opening)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.turnDebit)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.turnCredit)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.closing)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.d0_30)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.d31_60)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.d61_90)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.d90)}</td>
-            </tr>
+            <TotalRow>
+              <Td colSpan={2}>{translate("total")}</Td>
+              <Td col="num"><Money value={totals.opening} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.turnDebit} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.turnCredit} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.closing} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.d0_30} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.d31_60} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.d61_90} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.d90} as="zeroMoney" /></Td>
+            </TotalRow>
           </tfoot>
         )}
-      </table>
-    </div>
+      </ReportTable>
+    </ReportSheet>
   );
 
   return (

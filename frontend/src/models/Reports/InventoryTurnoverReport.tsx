@@ -1,13 +1,9 @@
 /**
  * InventoryTurnoverReport — оборачиваемость склада по товарам.
- * Источник — /reports/material-statement (остатки + себестоимость списания по
- * скользящей средней). Метрики:
- *   средний остаток = (остаток нач. + остаток кон.) / 2
- *   оборачиваемость (раз) = себестоимость списания / средний остаток
- *   дней запаса = дней в периоде / оборачиваемость
+ * Источник — /reports/material-statement. Оборачиваемость = COGS / средний остаток;
+ * дней запаса = дней в периоде / оборачиваемость.
  */
-import { FC, useState, useCallback, useMemo } from "react";
-import { usePersistentState } from "src/hooks/usePersistentState";
+import { FC, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -16,31 +12,27 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
-import styles from "./report.module.scss";
+import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportFilters } from "./_shared/useReportFilters";
+import { firstOfMonth, today } from "./_shared/reportDates";
 import reportCss from "./report.module.scss?inline";
 
-const fmt = (n: number) => n !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-const fmtZ = (n: number) => Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Локальные: коэффициент оборачиваемости (раз) и дни запаса (целое).
 const fmtR = (n: number) => n > 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
 const fmtD = (n: number) => Number.isFinite(n) && n > 0 ? Math.round(n).toLocaleString("ru-KZ") : "—";
 
 interface MsRow { productUuid: string | null; productName: string; openAmount: number; closeAmount: number; cogsOut: number }
 interface Row { productUuid: string | null; productName: string; openAmount: number; closeAmount: number; avg: number; cogs: number; ratio: number; days: number }
-
-interface Props { uniqId?: string; [key: string]: unknown }
+interface Filters extends Record<string, unknown> { dateFrom: string; dateTo: string; orgUuid: string; orgName: string; whUuid: string; whName: string }
+interface Props { uniqId?: string;[key: string]: unknown }
 
 const InventoryTurnoverReport: FC<Props> = ({ uniqId }) => {
-  const { organizationUuid: defOrg, organizationName: defOrgName } = useDefaultOrganization();
+  const def = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = usePersistentState("report.turnover.dateFrom", () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
-  const [dateTo, setDateTo] = usePersistentState("report.turnover.dateTo", () => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = usePersistentState("report.turnover.orgUuid", defOrg || "");
-  const [orgName, setOrgName] = usePersistentState("report.turnover.orgName", defOrgName || "");
-  const [whUuid, setWhUuid] = useState("");
-  const [whName, setWhName] = useState("");
-
-  const [applied, setApplied] = useState<null | { dateFrom: string; dateTo: string; orgUuid: string; whUuid: string }>(null);
-  const handleGenerate = useCallback(() => setApplied({ dateFrom, dateTo, orgUuid, whUuid }), [dateFrom, dateTo, orgUuid, whUuid]);
+  const { fields, setField, patch, applied, handleGenerate } = useReportFilters<Filters>({
+    persistKey: "report.turnover",
+    defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "", whUuid: "", whName: "" },
+  });
 
   const periodDays = useMemo(() => {
     if (!applied?.dateFrom || !applied?.dateTo) return 30;
@@ -52,10 +44,11 @@ const InventoryTurnoverReport: FC<Props> = ({ uniqId }) => {
     queryKey: ["report-turnover", applied],
     queryFn: async () => {
       const p: Record<string, string> = {};
-      if (applied!.dateFrom) p.dateFrom = applied!.dateFrom;
-      if (applied!.dateTo) p.dateTo = applied!.dateTo;
-      if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
-      if (applied!.whUuid) p.warehouseUuid = applied!.whUuid;
+      const f = applied!;
+      if (f.dateFrom) p.dateFrom = f.dateFrom;
+      if (f.dateTo) p.dateTo = f.dateTo;
+      if (f.orgUuid) p.organizationUuid = f.orgUuid;
+      if (f.whUuid) p.warehouseUuid = f.whUuid;
       const resp = await api.get<any>("reports/material-statement", { params: p });
       return resp?.items ?? [];
     },
@@ -77,63 +70,61 @@ const InventoryTurnoverReport: FC<Props> = ({ uniqId }) => {
   const form = (
     <>
       <GroupRow>
-        <FieldDate label={translate("reportPeriodFrom")} name="tn_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
-        <FieldDate label={translate("reportPeriodTo")} name="tn_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodFrom")} name="tn_from" value={fields.dateFrom} onChange={e => setField("dateFrom", e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodTo")} name="tn_to" value={fields.dateTo} onChange={e => setField("dateTo", e.target.value)} width="150px" />
       </GroupRow>
       <GroupCol>
-        <LookupField label={translate("organization")} name="tn_org" value={orgUuid} displayValue={orgName} endpoint="organizations" displayField="name"
-          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }} onClear={() => { setOrgUuid(""); setOrgName(""); }} />
-        <LookupField label={translate("warehouse")} name="tn_wh" value={whUuid} displayValue={whName} endpoint="warehouses" displayField="name"
-          extraParams={orgUuid ? { organizationUuid: orgUuid } : undefined}
-          onSelect={(u, d) => { setWhUuid(u); setWhName(d); }} onClear={() => { setWhUuid(""); setWhName(""); }} />
+        <LookupField label={translate("organization")} name="tn_org" value={fields.orgUuid} displayValue={fields.orgName} endpoint="organizations" displayField="name"
+          onSelect={(u, d) => patch({ orgUuid: u, orgName: d })} onClear={() => patch({ orgUuid: "", orgName: "" })} />
+        <LookupField label={translate("warehouse")} name="tn_wh" value={fields.whUuid} displayValue={fields.whName} endpoint="warehouses" displayField="name"
+          extraParams={fields.orgUuid ? { organizationUuid: fields.orgUuid } : undefined}
+          onSelect={(u, d) => patch({ whUuid: u, whName: d })} onClear={() => patch({ whUuid: "", whName: "" })} />
       </GroupCol>
     </>
   );
 
   const layout = (
-    <div className={styles.Report}>
-      {orgName && <div className={styles.OrgName}>{orgName}</div>}
-      <div className={styles.Title}>{translate("inventoryTurnover")}</div>
-      <table className={styles.Table}>
+    <ReportSheet org={fields.orgName || undefined} title={translate("inventoryTurnover")}>
+      <ReportTable>
         <thead>
           <tr>
-            <th className={styles.ColN}>№</th>
-            <th className={styles.ColName}>{translate("reportProduct")}</th>
-            <th className={styles.ColNum}>{translate("openingBalance")}</th>
-            <th className={styles.ColNum}>{translate("closingBalance")}</th>
-            <th className={styles.ColNum}>{translate("avgStock")}</th>
-            <th className={styles.ColNum}>{translate("reportCogs")}</th>
-            <th className={styles.ColNum}>{translate("turnoverTimes")}</th>
-            <th className={styles.ColNum}>{translate("daysOfStock")}</th>
+            <Th col="n">№</Th>
+            <Th col="name">{translate("reportProduct")}</Th>
+            <Th col="num">{translate("openingBalance")}</Th>
+            <Th col="num">{translate("closingBalance")}</Th>
+            <Th col="num">{translate("avgStock")}</Th>
+            <Th col="num">{translate("reportCogs")}</Th>
+            <Th col="num">{translate("turnoverTimes")}</Th>
+            <Th col="num">{translate("daysOfStock")}</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, idx) => (
             <tr key={r.productUuid ?? idx}>
-              <td className={styles.ColN}>{idx + 1}</td>
-              <td className={styles.ColName}>{r.productName}</td>
-              <td className={styles.ColNum}>{fmt(r.openAmount)}</td>
-              <td className={styles.ColNum}>{fmt(r.closeAmount)}</td>
-              <td className={styles.ColNum}>{fmt(r.avg)}</td>
-              <td className={styles.ColNum}>{fmt(r.cogs)}</td>
-              <td className={styles.ColNum}>{fmtR(r.ratio)}</td>
-              <td className={styles.ColNum}>{fmtD(r.days)}</td>
+              <Td col="n">{idx + 1}</Td>
+              <Td col="name">{r.productName}</Td>
+              <Td col="num"><Money value={r.openAmount} /></Td>
+              <Td col="num"><Money value={r.closeAmount} /></Td>
+              <Td col="num"><Money value={r.avg} /></Td>
+              <Td col="num"><Money value={r.cogs} /></Td>
+              <Td col="num">{fmtR(r.ratio)}</Td>
+              <Td col="num">{fmtD(r.days)}</Td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr className={styles.TotalRow}>
-            <td colSpan={2}>{translate("total")}</td>
-            <td className={styles.ColNum}>{fmtZ(totals.openAmount)}</td>
-            <td className={styles.ColNum}>{fmtZ(totals.closeAmount)}</td>
-            <td className={styles.ColNum}>{fmtZ(totals.avg)}</td>
-            <td className={styles.ColNum}>{fmtZ(totals.cogs)}</td>
-            <td className={styles.ColNum}>{fmtR(totalRatio)}</td>
-            <td className={styles.ColNum}>{fmtD(totalRatio > 0 ? periodDays / totalRatio : 0)}</td>
-          </tr>
+          <TotalRow>
+            <Td colSpan={2}>{translate("total")}</Td>
+            <Td col="num"><Money value={totals.openAmount} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.closeAmount} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.avg} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={totals.cogs} as="zeroMoney" /></Td>
+            <Td col="num">{fmtR(totalRatio)}</Td>
+            <Td col="num">{fmtD(totalRatio > 0 ? periodDays / totalRatio : 0)}</Td>
+          </TotalRow>
         </tfoot>
-      </table>
-    </div>
+      </ReportTable>
+    </ReportSheet>
   );
 
   return (

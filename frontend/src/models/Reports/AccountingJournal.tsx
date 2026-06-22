@@ -1,9 +1,8 @@
 /**
  * Журнал проводок — список всех бухгалтерских проводок за период с фильтрами.
- * Колонка «Документ» кликабельна — открывает форму документа-регистратора.
+ * ДВОЙНОЙ клик по документу открывает форму документа-регистратора.
  */
-import { FC, useState, useCallback } from "react";
-import { usePersistentState } from "src/hooks/usePersistentState";
+import { FC } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -11,63 +10,56 @@ import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
-import { useAppContext } from "src/app";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { docTypeLabel, openDocumentByType } from "src/utils/accountingDocTypes";
-import styles from "./report.module.scss";
+import { docTypeLabel } from "src/utils/accountingDocTypes";
+import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportDrill, DrillLink } from "./_shared/reportDrill";
+import { useReportFilters } from "./_shared/useReportFilters";
+import { firstOfMonth, today } from "./_shared/reportDates";
 import reportCss from "./report.module.scss?inline";
 
 interface JournalRow {
-  uuid: string;
-  date: string;
-  documentType: string;
-  documentTypeLabel: string;
-  documentId: number | null;
-  documentUuid: string;
-  debitAccountCode: string;
-  debitAccountName: string;
-  creditAccountCode: string;
-  creditAccountName: string;
-  amount: number;
-  description: string;
-  debitAnalytics: string;
-  creditAnalytics: string;
+  uuid: string; date: string;
+  documentType: string; documentTypeLabel: string; documentId: number | null; documentUuid: string;
+  debitAccountCode: string; debitAccountName: string;
+  creditAccountCode: string; creditAccountName: string;
+  amount: number; description: string;
+  debitAnalytics: string; creditAnalytics: string;
 }
 
-const fmtAmt = (n: number) =>
-  Number(n || 0).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+interface Filters extends Record<string, unknown> {
+  dateFrom: string; dateTo: string; orgUuid: string; orgName: string;
+  accountCode: string; accountName: string;
+  cpUuid: string; cpName: string; productUuid: string; productName: string;
+}
 
-interface Props { uniqId?: string; [key: string]: unknown }
+interface Props { uniqId?: string;[key: string]: unknown }
 
 const AccountingJournal: FC<Props> = ({ uniqId }) => {
-  const { windows: { addPane } } = useAppContext();
-  const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } = useDefaultOrganization();
+  const def = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = usePersistentState("report.accounting-journal.dateFrom", () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
-  const [dateTo, setDateTo] = usePersistentState("report.accounting-journal.dateTo", () => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = usePersistentState("report.accounting-journal.orgUuid", defaultOrgUuid || "");
-  const [orgName, setOrgName] = usePersistentState("report.accounting-journal.orgName", defaultOrgName || "");
-  const [accountCode, setAccountCode] = usePersistentState("report.accounting-journal.accountCode", "");
-  const [accountName, setAccountName] = usePersistentState("report.accounting-journal.accountName", "");
-  const [cpUuid, setCpUuid] = usePersistentState("report.accounting-journal.cpUuid", ""); const [cpName, setCpName] = usePersistentState("report.accounting-journal.cpName", "");
-  const [productUuid, setProductUuid] = usePersistentState("report.accounting-journal.productUuid", ""); const [productName, setProductName] = usePersistentState("report.accounting-journal.productName", "");
-
-  const [applied, setApplied] = useState<null | Record<string, string>>(null);
-  const handleGenerate = useCallback(() => {
-    const p: Record<string, string> = {};
-    if (dateFrom) p.dateFrom = dateFrom;
-    if (dateTo) p.dateTo = dateTo;
-    if (orgUuid) p.organizationUuid = orgUuid;
-    if (accountCode) p.accountCode = accountCode;
-    if (cpUuid) p.counterpartyUuid = cpUuid;
-    if (productUuid) p.productUuid = productUuid;
-    setApplied(p);
-  }, [dateFrom, dateTo, orgUuid, accountCode, cpUuid, productUuid]);
+  const { fields, setField, patch, applied, handleGenerate } = useReportFilters<Filters>({
+    persistKey: "report.accounting-journal",
+    defaults: {
+      dateFrom: firstOfMonth(), dateTo: today(),
+      orgUuid: def.organizationUuid || "", orgName: def.organizationName || "",
+      accountCode: "", accountName: "", cpUuid: "", cpName: "", productUuid: "", productName: "",
+    },
+  });
+  const drill = useReportDrill({ orgName: fields.orgName });
 
   const { data, isLoading } = useQuery<{ items: JournalRow[]; total: number }>({
     queryKey: ["accounting-journal", applied],
     queryFn: async () => {
-      const resp = await api.get<any>("accounting/journal", { params: applied! });
+      const p: Record<string, string> = {};
+      const f = applied!;
+      if (f.dateFrom) p.dateFrom = f.dateFrom;
+      if (f.dateTo) p.dateTo = f.dateTo;
+      if (f.orgUuid) p.organizationUuid = f.orgUuid;
+      if (f.accountCode) p.accountCode = f.accountCode;
+      if (f.cpUuid) p.counterpartyUuid = f.cpUuid;
+      if (f.productUuid) p.productUuid = f.productUuid;
+      const resp = await api.get<any>("accounting/journal", { params: p });
       return { items: resp?.items ?? [], total: resp?.total ?? 0 };
     },
     enabled: !!applied,
@@ -79,73 +71,71 @@ const AccountingJournal: FC<Props> = ({ uniqId }) => {
   const form = (
     <>
       <GroupRow>
-        <FieldDate label={translate("reportPeriodFrom")} name="aj_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
-        <FieldDate label={translate("reportPeriodTo")} name="aj_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodFrom")} name="aj_from" value={fields.dateFrom} onChange={e => setField("dateFrom", e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodTo")} name="aj_to" value={fields.dateTo} onChange={e => setField("dateTo", e.target.value)} width="150px" />
       </GroupRow>
       <GroupCol>
-        <LookupField label={translate("organization")} name="aj_org" value={orgUuid} displayValue={orgName}
+        <LookupField label={translate("organization")} name="aj_org" value={fields.orgUuid} displayValue={fields.orgName}
           endpoint="organizations" displayField="name"
-          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }} onClear={() => { setOrgUuid(""); setOrgName(""); }} />
-        <LookupField label={translate("account")} name="aj_acc" value={accountCode} displayValue={accountName}
+          onSelect={(u, d) => patch({ orgUuid: u, orgName: d })} onClear={() => patch({ orgUuid: "", orgName: "" })} />
+        <LookupField label={translate("account")} name="aj_acc" value={fields.accountCode} displayValue={fields.accountName}
           endpoint="chart-of-accounts" displayField="name"
-          onSelect={(_u, d, item) => { setAccountCode(item.code); setAccountName(`${item.code} ${d}`); }}
-          onClear={() => { setAccountCode(""); setAccountName(""); }} />
-        <LookupField label={translate("counterparty")} name="aj_cp" value={cpUuid} displayValue={cpName}
+          onSelect={(_u, d, item) => patch({ accountCode: item.code, accountName: `${item.code} ${d}` })}
+          onClear={() => patch({ accountCode: "", accountName: "" })} />
+        <LookupField label={translate("counterparty")} name="aj_cp" value={fields.cpUuid} displayValue={fields.cpName}
           endpoint="counterparties" displayField="name"
-          onSelect={(u, d) => { setCpUuid(u); setCpName(d); }} onClear={() => { setCpUuid(""); setCpName(""); }} />
-        <LookupField label={translate("product")} name="aj_prod" value={productUuid} displayValue={productName}
+          onSelect={(u, d) => patch({ cpUuid: u, cpName: d })} onClear={() => patch({ cpUuid: "", cpName: "" })} />
+        <LookupField label={translate("product")} name="aj_prod" value={fields.productUuid} displayValue={fields.productName}
           endpoint="products" displayField="name"
-          onSelect={(u, d) => { setProductUuid(u); setProductName(d); }} onClear={() => { setProductUuid(""); setProductName(""); }} />
+          onSelect={(u, d) => patch({ productUuid: u, productName: d })} onClear={() => patch({ productUuid: "", productName: "" })} />
       </GroupCol>
     </>
   );
 
   const layout = (
-    <div className={styles.Report}>
-      <div className={styles.Title}>{translate("accountingJournalTitle")}</div>
-      <table className={styles.Table}>
+    <ReportSheet title={translate("accountingJournalTitle")}>
+      <ReportTable>
         <thead>
           <tr>
-            <th className={styles.ColN}>№</th>
-            <th className={styles.ColDate}>{translate("date")}</th>
-            <th className={styles.ColName}>{translate("document")}</th>
-            <th className={styles.ColUom}>{translate("accountDebit")}</th>
-            <th className={styles.ColName}>{translate("accountDebitName")}</th>
-            <th className={styles.ColUom}>{translate("accountCredit")}</th>
-            <th className={styles.ColName}>{translate("accountCreditName")}</th>
-            <th className={styles.ColNum}>{translate("amount")}</th>
-            <th className={styles.ColName}>{translate("description")}</th>
+            <Th col="n">№</Th>
+            <Th col="date">{translate("date")}</Th>
+            <Th col="name">{translate("document")}</Th>
+            <Th col="uom">{translate("accountDebit")}</Th>
+            <Th col="name">{translate("accountDebitName")}</Th>
+            <Th col="uom">{translate("accountCredit")}</Th>
+            <Th col="name">{translate("accountCreditName")}</Th>
+            <Th col="num">{translate("amount")}</Th>
+            <Th col="name">{translate("description")}</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, idx) => (
             <tr key={r.uuid}>
-              <td className={styles.ColN}>{idx + 1}</td>
-              <td className={styles.ColDate}>{r.date}</td>
-              <td className={styles.ColName}>
-                <span className={styles.ClickableLink}
-                  onClick={() => openDocumentByType(r.documentType, r.documentUuid, addPane)}>
+              <Td col="n">{idx + 1}</Td>
+              <Td col="date">{r.date}</Td>
+              <Td col="name">
+                <DrillLink onOpen={() => drill.toDocument(r.documentType, r.documentUuid)}>
                   {docTypeLabel(r.documentType)}{r.documentId ? ` №${r.documentId}` : ""}
-                </span>
-              </td>
-              <td className={styles.ColUom}>{r.debitAccountCode}</td>
-              <td className={styles.ColName}>{r.debitAccountName}{r.debitAnalytics ? ` (${r.debitAnalytics})` : ""}</td>
-              <td className={styles.ColUom}>{r.creditAccountCode}</td>
-              <td className={styles.ColName}>{r.creditAccountName}{r.creditAnalytics ? ` (${r.creditAnalytics})` : ""}</td>
-              <td className={styles.ColNum}>{fmtAmt(r.amount)}</td>
-              <td className={styles.ColName}>{r.description}</td>
+                </DrillLink>
+              </Td>
+              <Td col="uom">{r.debitAccountCode}</Td>
+              <Td col="name">{r.debitAccountName}{r.debitAnalytics ? ` (${r.debitAnalytics})` : ""}</Td>
+              <Td col="uom">{r.creditAccountCode}</Td>
+              <Td col="name">{r.creditAccountName}{r.creditAnalytics ? ` (${r.creditAnalytics})` : ""}</Td>
+              <Td col="num"><Money value={r.amount} as="zeroMoney" /></Td>
+              <Td col="name">{r.description}</Td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr className={styles.TotalRow}>
-            <td colSpan={7}>{translate("total")} ({rows.length})</td>
-            <td className={styles.ColNum}>{fmtAmt(total)}</td>
-            <td />
-          </tr>
+          <TotalRow>
+            <Td colSpan={7}>{translate("total")} ({rows.length})</Td>
+            <Td col="num"><Money value={total} as="zeroMoney" /></Td>
+            <Td />
+          </TotalRow>
         </tfoot>
-      </table>
-    </div>
+      </ReportTable>
+    </ReportSheet>
   );
 
   return (

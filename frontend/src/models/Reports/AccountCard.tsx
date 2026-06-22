@@ -1,9 +1,9 @@
 /**
  * Карточка счёта — обороты по счёту за период с нарастающим остатком.
- * Открывается из ОСВ (передаётся счёт+период) или вручную. Колонка «Документ»
- * кликабельна. Параметры: Организация, Счёт, Период.
+ * Открывается из ОСВ (передаётся счёт+период) или вручную. ДВОЙНОЙ клик по
+ * документу открывает его. Параметры: Организация, Счёт, Период.
  */
-import { FC, useState, useCallback, useEffect } from "react";
+import { FC } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -11,10 +11,12 @@ import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
-import { useAppContext } from "src/app";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { docTypeLabel, openDocumentByType } from "src/utils/accountingDocTypes";
-import styles from "./report.module.scss";
+import { docTypeLabel } from "src/utils/accountingDocTypes";
+import { ReportSheet, ReportTable, Th, Td, SubtotalRow, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportDrill, DrillLink } from "./_shared/reportDrill";
+import { useReportFilters } from "./_shared/useReportFilters";
+import { firstOfMonth, today } from "./_shared/reportDates";
 import reportCss from "./report.module.scss?inline";
 
 interface CardRow {
@@ -25,9 +27,10 @@ interface CardRow {
   description: string; analytics: string;
 }
 
-const fmt = (n: number) =>
-  Number(n || 0) !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-const fmtZ = (n: number) => Number(n || 0).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+interface Filters extends Record<string, unknown> {
+  dateFrom: string; dateTo: string; orgUuid: string; orgName: string;
+  accountCode: string; accountName: string;
+}
 
 interface Props {
   uniqId?: string;
@@ -42,42 +45,34 @@ interface Props {
 
 const AccountCard: FC<Props> = ({
   uniqId, accountCode: initCode = "", accountName: initName = "",
-  initialDateFrom, initialDateTo, initialOrgUuid = "", initialOrgName = "",
+  initialDateFrom, initialDateTo, initialOrgUuid, initialOrgName,
 }) => {
-  const { windows: { addPane } } = useAppContext();
   const def = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = useState(initialDateFrom ?? (() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); })());
-  const [dateTo, setDateTo] = useState(initialDateTo ?? new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = useState(initialOrgUuid || def.organizationUuid || "");
-  const [orgName, setOrgName] = useState(initialOrgName || def.organizationName || "");
-  const [accountCode, setAccountCode] = useState(initCode);
-  const [accountName, setAccountName] = useState(initName ? `${initCode} ${initName}`.trim() : "");
+  // initial — только при открытии «по ссылке» из ОСВ (с параметрами).
+  const initial: Partial<Filters> = {};
+  if (initialDateFrom !== undefined) initial.dateFrom = initialDateFrom;
+  if (initialDateTo !== undefined) initial.dateTo = initialDateTo;
+  if (initialOrgUuid !== undefined) initial.orgUuid = initialOrgUuid;
+  if (initialOrgName !== undefined) initial.orgName = initialOrgName;
+  if (initCode) { initial.accountCode = initCode; initial.accountName = `${initCode} ${initName}`.trim(); }
 
-  const [applied, setApplied] = useState<null | Record<string, string>>(
-    initCode ? { accountCode: initCode, dateFrom: initialDateFrom ?? "", dateTo: initialDateTo ?? "", organizationUuid: initialOrgUuid } : null
-  );
-
-  const handleGenerate = useCallback(() => {
-    if (!accountCode) return;
-    const p: Record<string, string> = { accountCode };
-    if (dateFrom) p.dateFrom = dateFrom;
-    if (dateTo) p.dateTo = dateTo;
-    if (orgUuid) p.organizationUuid = orgUuid;
-    setApplied(p);
-  }, [accountCode, dateFrom, dateTo, orgUuid]);
-
-  // Автоформирование при открытии из ОСВ (счёт уже передан).
-  useEffect(() => {
-    if (initCode && !applied) handleGenerate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { fields, setField, patch, applied, handleGenerate, generateDisabled } = useReportFilters<Filters>({
+    persistKey: "report.account-card",
+    defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "", accountCode: "", accountName: "" },
+    initial,
+    canApply: (f) => !!f.accountCode,
+  });
+  const drill = useReportDrill({ orgName: fields.orgName });
 
   const { data, isLoading } = useQuery<any>({
     queryKey: ["accounting-account-card", applied],
     queryFn: async () => {
-      const resp = await api.get<any>("accounting/account-card", { params: applied! });
-      return resp;
+      const p: Record<string, string> = { accountCode: applied!.accountCode };
+      if (applied!.dateFrom) p.dateFrom = applied!.dateFrom;
+      if (applied!.dateTo) p.dateTo = applied!.dateTo;
+      if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
+      return await api.get<any>("accounting/account-card", { params: p });
     },
     enabled: !!applied && !!applied.accountCode,
   });
@@ -87,78 +82,78 @@ const AccountCard: FC<Props> = ({
   const turnDebit = data?.turnDebit ?? 0;
   const turnCredit = data?.turnCredit ?? 0;
   const closing = data?.closing ?? 0;
-  const resolvedName = data?.accountName || accountName;
+  const resolvedName = data?.accountName || fields.accountName;
 
   const form = (
     <>
       <GroupRow>
-        <FieldDate label={translate("reportPeriodFrom")} name="ac_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
-        <FieldDate label={translate("reportPeriodTo")} name="ac_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodFrom")} name="ac_from" value={fields.dateFrom} onChange={e => setField("dateFrom", e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodTo")} name="ac_to" value={fields.dateTo} onChange={e => setField("dateTo", e.target.value)} width="150px" />
       </GroupRow>
       <GroupCol>
-        <LookupField label={translate("organization")} name="ac_org" value={orgUuid} displayValue={orgName}
+        <LookupField label={translate("organization")} name="ac_org" value={fields.orgUuid} displayValue={fields.orgName}
           endpoint="organizations" displayField="name"
-          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }} onClear={() => { setOrgUuid(""); setOrgName(""); }} />
-        <LookupField label={translate("account")} name="ac_acc" value={accountCode} displayValue={accountName}
+          onSelect={(u, d) => patch({ orgUuid: u, orgName: d })} onClear={() => patch({ orgUuid: "", orgName: "" })} />
+        <LookupField label={translate("account")} name="ac_acc" value={fields.accountCode} displayValue={fields.accountName}
           endpoint="chart-of-accounts" displayField="name"
-          onSelect={(_u, d, item) => { setAccountCode(item.code); setAccountName(`${item.code} ${d}`); }}
-          onClear={() => { setAccountCode(""); setAccountName(""); }} />
+          onSelect={(_u, d, item) => patch({ accountCode: item.code, accountName: `${item.code} ${d}` })}
+          onClear={() => patch({ accountCode: "", accountName: "" })} />
       </GroupCol>
     </>
   );
 
   const layout = (
-    <div className={styles.Report}>
-      {orgName && <div className={styles.OrgName}>{orgName}</div>}
-      <div className={styles.Title}>{translate("accountCardTitle")}: {accountCode} {resolvedName && !resolvedName.startsWith(accountCode) ? resolvedName : ""}</div>
-      <table className={styles.Table}>
+    <ReportSheet
+      org={fields.orgName || undefined}
+      title={`${translate("accountCardTitle")}: ${fields.accountCode} ${resolvedName && !resolvedName.startsWith(fields.accountCode) ? resolvedName : ""}`}
+    >
+      <ReportTable>
         <thead>
           <tr>
-            <th className={styles.ColDate}>{translate("date")}</th>
-            <th className={styles.ColName}>{translate("document")}</th>
-            <th className={styles.ColUom}>{translate("accountCorr")}</th>
-            <th className={styles.ColName}>{translate("subkonto")}</th>
-            <th className={styles.ColNum}>{translate("debit")}</th>
-            <th className={styles.ColNum}>{translate("credit")}</th>
-            <th className={styles.ColNum}>{translate("balance")}</th>
+            <Th col="date">{translate("date")}</Th>
+            <Th col="name">{translate("document")}</Th>
+            <Th col="uom">{translate("accountCorr")}</Th>
+            <Th col="name">{translate("subkonto")}</Th>
+            <Th col="num">{translate("debit")}</Th>
+            <Th col="num">{translate("credit")}</Th>
+            <Th col="num">{translate("balance")}</Th>
           </tr>
         </thead>
         <tbody>
-          <tr className={styles.SubtotalRow}>
-            <td colSpan={6}>{translate("openingBalance")}</td>
-            <td className={styles.ColNum}>{fmtZ(opening)}</td>
-          </tr>
+          <SubtotalRow>
+            <Td colSpan={6}>{translate("openingBalance")}</Td>
+            <Td col="num"><Money value={opening} as="zeroMoney" /></Td>
+          </SubtotalRow>
           {rows.map((r) => (
             <tr key={r.uuid}>
-              <td className={styles.ColDate}>{r.date}</td>
-              <td className={styles.ColName}>
-                <span className={styles.ClickableLink}
-                  onClick={() => openDocumentByType(r.documentType, r.documentUuid, addPane)}>
+              <Td col="date">{r.date}</Td>
+              <Td col="name">
+                <DrillLink onOpen={() => drill.toDocument(r.documentType, r.documentUuid)}>
                   {docTypeLabel(r.documentType)}{r.documentId ? ` №${r.documentId}` : ""}
-                </span>
-              </td>
-              <td className={styles.ColUom}>{r.corrAccountCode}</td>
-              <td className={styles.ColName}>{r.analytics}</td>
-              <td className={styles.ColNum}>{fmt(r.debit)}</td>
-              <td className={styles.ColNum}>{fmt(r.credit)}</td>
-              <td className={styles.ColNum}>{fmtZ(r.balance)}</td>
+                </DrillLink>
+              </Td>
+              <Td col="uom">{r.corrAccountCode}</Td>
+              <Td col="name">{r.analytics}</Td>
+              <Td col="num"><Money value={r.debit} /></Td>
+              <Td col="num"><Money value={r.credit} /></Td>
+              <Td col="num"><Money value={r.balance} as="zeroMoney" /></Td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr className={styles.SubtotalRow}>
-            <td colSpan={4}>{translate("turnover")}</td>
-            <td className={styles.ColNum}>{fmtZ(turnDebit)}</td>
-            <td className={styles.ColNum}>{fmtZ(turnCredit)}</td>
-            <td />
-          </tr>
-          <tr className={styles.TotalRow}>
-            <td colSpan={6}>{translate("closingBalance")}</td>
-            <td className={styles.ColNum}>{fmtZ(closing)}</td>
-          </tr>
+          <SubtotalRow>
+            <Td colSpan={4}>{translate("turnover")}</Td>
+            <Td col="num"><Money value={turnDebit} as="zeroMoney" /></Td>
+            <Td col="num"><Money value={turnCredit} as="zeroMoney" /></Td>
+            <Td />
+          </SubtotalRow>
+          <TotalRow>
+            <Td colSpan={6}>{translate("closingBalance")}</Td>
+            <Td col="num"><Money value={closing} as="zeroMoney" /></Td>
+          </TotalRow>
         </tfoot>
-      </table>
-    </div>
+      </ReportTable>
+    </ReportSheet>
   );
 
   return (
@@ -168,10 +163,10 @@ const AccountCard: FC<Props> = ({
       layout={layout}
       layoutStyles={reportCss}
       isLoading={isLoading}
-      isEmpty={!isLoading && (!applied || !accountCode)}
-      emptyMessage={!accountCode ? translate("selectAccount") : (!applied ? translate("reportPressGenerate") : undefined)}
+      isEmpty={!isLoading && (!applied || !fields.accountCode)}
+      emptyMessage={!fields.accountCode ? translate("selectAccount") : (!applied ? translate("reportPressGenerate") : undefined)}
       onGenerate={handleGenerate}
-      generateDisabled={!accountCode}
+      generateDisabled={generateDisabled}
       fileBaseName={translate("accountCardTitle")}
       title={translate("accountCardTitle")}
       orientation="landscape"

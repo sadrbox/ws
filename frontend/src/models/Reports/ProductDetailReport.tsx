@@ -1,4 +1,9 @@
-import { FC, useState, useCallback, useEffect } from "react";
+/**
+ * Движение товара — приход/расход по номенклатуре за период с подытогами.
+ * Открывается из «Материальной ведомости» (товар+период) или вручную.
+ * ДВОЙНОЙ клик по документу открывает его.
+ */
+import { FC } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -6,40 +11,26 @@ import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
-import { useAppContext } from "src/app";
-import { openDocumentByType } from "src/utils/accountingDocTypes";
-import styles from "./report.module.scss";
+import { ReportSheet, ReportTable, Th, Td, SectionHeader, SubtotalRow, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportDrill, DrillLink } from "./_shared/reportDrill";
+import { useReportFilters } from "./_shared/useReportFilters";
+import { firstOfMonth, today } from "./_shared/reportDates";
+import { fmtQty, fmtQtyZero } from "./_shared/reportFormat";
 import reportCss from "./report.module.scss?inline";
 
-const fmtQty = (n: number) =>
-  n !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : "—";
-const fmtAmt = (n: number) =>
-  n !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-const fmtAmtZ = (n: number) =>
-  Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtQtyZ = (n: number) =>
-  Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 0, maximumFractionDigits: 4 });
-
 interface MovementRow {
-  date: string;
-  direction: "in" | "out";
-  docType: string;
-  docId: number;
-  docUuid: string;
-  counterpartyName: string;
-  quantity: number;
-  price: number;
-  amount: number;
+  date: string; direction: "in" | "out";
+  docType: string; docId: number; docUuid: string;
+  counterpartyName: string; quantity: number; price: number; amount: number;
 }
-
+interface Filters extends Record<string, unknown> {
+  dateFrom: string; dateTo: string; orgUuid: string; orgName: string;
+  productUuid: string; productName: string;
+}
 interface ProductDetailReportProps {
   uniqId?: string;
-  productUuid?: string;
-  productName?: string;
-  initialDateFrom?: string;
-  initialDateTo?: string;
-  initialOrgUuid?: string;
-  initialOrgName?: string;
+  productUuid?: string; productName?: string;
+  initialDateFrom?: string; initialDateTo?: string; initialOrgUuid?: string; initialOrgName?: string;
   [key: string]: unknown;
 }
 
@@ -51,61 +42,41 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 };
 
 const ProductDetailReport: FC<ProductDetailReportProps> = ({
-  uniqId,
-  productUuid: initProductUuid = "",
-  productName: initProductName = "",
-  initialDateFrom,
-  initialDateTo,
-  initialOrgUuid = "",
-  initialOrgName = "",
+  uniqId, productUuid: initProductUuid = "", productName: initProductName = "",
+  initialDateFrom, initialDateTo, initialOrgUuid, initialOrgName,
 }) => {
-  const [dateFrom, setDateFrom] = useState(
-    () => initialDateFrom ?? (() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); })(),
-  );
-  const [dateTo, setDateTo] = useState(
-    () => initialDateTo ?? new Date().toISOString().slice(0, 10),
-  );
-  const [orgUuid, setOrgUuid] = useState(initialOrgUuid);
-  const [orgName, setOrgName] = useState(initialOrgName);
-  const [productUuid, setProductUuid] = useState(initProductUuid);
-  const [productName, setProductName] = useState(initProductName);
+  const initial: Partial<Filters> = {};
+  if (initialDateFrom !== undefined) initial.dateFrom = initialDateFrom;
+  if (initialDateTo !== undefined) initial.dateTo = initialDateTo;
+  if (initialOrgUuid !== undefined) initial.orgUuid = initialOrgUuid;
+  if (initialOrgName !== undefined) initial.orgName = initialOrgName;
+  if (initProductUuid) { initial.productUuid = initProductUuid; initial.productName = initProductName; }
 
-  // Отчёт формируется только по кнопке «Сформировать» (snapshot параметров).
-  const [applied, setApplied] = useState<null | {
-    productUuid: string; dateFrom: string; dateTo: string; orgUuid: string;
-  }>(null);
-
-  // Товар обязателен (отчёт по конкретной номенклатуре). Даты и Организация —
-  // необязательны: пустая дата → период не ограничивается с этой стороны.
-  const { windows: { addPane } } = useAppContext();
-
-  const handleGenerate = useCallback(() => {
-    if (!productUuid) return;
-    setApplied({ productUuid, dateFrom, dateTo, orgUuid });
-  }, [productUuid, dateFrom, dateTo, orgUuid]);
-
-  // Автоформирование при открытии из «Материальной ведомости» (товар уже передан).
-  useEffect(() => {
-    if (initProductUuid && !applied) setApplied({ productUuid: initProductUuid, dateFrom, dateTo, orgUuid });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { fields, setField, patch, applied, handleGenerate, generateDisabled } = useReportFilters<Filters>({
+    persistKey: "report.product-detail",
+    defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: "", orgName: "", productUuid: "", productName: "" },
+    initial,
+    canApply: (f) => !!f.productUuid,
+  });
+  const drill = useReportDrill({ orgName: fields.orgName });
 
   const { data, isLoading, isError } = useQuery<{ items: MovementRow[]; productName: string }>({
     queryKey: ["report-product-movements", applied],
     queryFn: async () => {
       const p: Record<string, string> = {};
-      if (applied!.productUuid) p.productUuid = applied!.productUuid;
-      if (applied!.dateFrom) p.dateFrom = applied!.dateFrom;
-      if (applied!.dateTo) p.dateTo = applied!.dateTo;
-      if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
+      const f = applied!;
+      if (f.productUuid) p.productUuid = f.productUuid;
+      if (f.dateFrom) p.dateFrom = f.dateFrom;
+      if (f.dateTo) p.dateTo = f.dateTo;
+      if (f.orgUuid) p.organizationUuid = f.orgUuid;
       const resp = await api.get<any>("reports/product-movements", { params: p });
-      return { items: resp?.items ?? [], productName: resp?.productName ?? productName };
+      return { items: resp?.items ?? [], productName: resp?.productName ?? f.productName };
     },
     enabled: !!applied,
   });
 
   const rows: MovementRow[] = data?.items ?? [];
-  const resolvedProductName = data?.productName || productName;
+  const resolvedProductName = data?.productName || fields.productName;
 
   const inRows = rows.filter((r) => r.direction === "in");
   const outRows = rows.filter((r) => r.direction === "out");
@@ -117,64 +88,56 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
   const form = (
     <>
       <GroupRow>
-        <FieldDate label={translate("reportPeriodFrom")} name="pd_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
-        <FieldDate label={translate("reportPeriodTo")} name="pd_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodFrom")} name="pd_from" value={fields.dateFrom} onChange={e => setField("dateFrom", e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodTo")} name="pd_to" value={fields.dateTo} onChange={e => setField("dateTo", e.target.value)} width="150px" />
       </GroupRow>
       <GroupCol>
-        <LookupField label={translate("organization")} name="pd_org" value={orgUuid} displayValue={orgName}
+        <LookupField label={translate("organization")} name="pd_org" value={fields.orgUuid} displayValue={fields.orgName}
           endpoint="organizations" displayField="name"
-          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }}
-          onClear={() => { setOrgUuid(""); setOrgName(""); }} />
-        <LookupField label={translate("product")} name="pd_product" value={productUuid} displayValue={productName}
+          onSelect={(u, d) => patch({ orgUuid: u, orgName: d })} onClear={() => patch({ orgUuid: "", orgName: "" })} />
+        <LookupField label={translate("product")} name="pd_product" value={fields.productUuid} displayValue={fields.productName}
           endpoint="products" displayField="name"
-          onSelect={(u, d) => { setProductUuid(u); setProductName(d); }}
-          onClear={() => { setProductUuid(""); setProductName(""); }} />
+          onSelect={(u, d) => patch({ productUuid: u, productName: d })} onClear={() => patch({ productUuid: "", productName: "" })} />
       </GroupCol>
     </>
   );
 
   const renderSection = (sectionRows: MovementRow[], label: string, totalQty: number, totalAmt: number) => (
     <>
-      <tr className={styles.SectionHeader}>
-        <td colSpan={6}>{label}</td>
-      </tr>
+      <SectionHeader><Td colSpan={6}>{label}</Td></SectionHeader>
       {sectionRows.map((row, idx) => (
         <tr key={`${row.docUuid}-${idx}`}>
-          <td className={styles.ColN}>{idx + 1}</td>
-          <td className={styles.ColDate}>{row.date}</td>
-          <td className={styles.ColName}>
-            <span className={styles.ClickableLink}
-              onClick={() => openDocumentByType(row.docType, row.docUuid, addPane)}>
+          <Td col="n">{idx + 1}</Td>
+          <Td col="date">{row.date}</Td>
+          <Td col="name">
+            <DrillLink onOpen={() => drill.toDocument(row.docType, row.docUuid)}>
               {DOC_TYPE_LABELS[row.docType] ?? row.docType} №{row.docId}
-            </span>
-          </td>
-          <td className={styles.ColName}>{row.counterpartyName}</td>
-          <td className={styles.ColNum}>{fmtQty(row.quantity)}</td>
-          <td className={styles.ColNum}>{fmtAmt(row.amount)}</td>
+            </DrillLink>
+          </Td>
+          <Td col="name">{row.counterpartyName}</Td>
+          <Td col="num">{fmtQty(row.quantity)}</Td>
+          <Td col="num"><Money value={row.amount} /></Td>
         </tr>
       ))}
-      <tr className={styles.SubtotalRow}>
-        <td colSpan={4}>{translate("total")} {label.toLowerCase()}</td>
-        <td className={styles.ColNum}>{fmtQtyZ(totalQty)}</td>
-        <td className={styles.ColNum}>{fmtAmtZ(totalAmt)}</td>
-      </tr>
+      <SubtotalRow>
+        <Td colSpan={4}>{translate("total")} {label.toLowerCase()}</Td>
+        <Td col="num">{fmtQtyZero(totalQty)}</Td>
+        <Td col="num"><Money value={totalAmt} as="zeroMoney" /></Td>
+      </SubtotalRow>
     </>
   );
 
   const layout = (
-    <div className={styles.Report}>
-      {orgName && <div className={styles.OrgName}>{orgName}</div>}
-      <div className={styles.Title}>{translate("reportProductMovements")}: {resolvedProductName}</div>
-
-      <table className={styles.Table}>
+    <ReportSheet org={fields.orgName || undefined} title={`${translate("reportProductMovements")}: ${resolvedProductName}`}>
+      <ReportTable>
         <thead>
           <tr>
-            <th className={styles.ColN}>№</th>
-            <th className={styles.ColDate}>{translate("date")}</th>
-            <th className={styles.ColName}>{translate("document")}</th>
-            <th className={styles.ColName}>{translate("counterparty")}</th>
-            <th className={styles.ColNum}>{translate("quantity")}</th>
-            <th className={styles.ColNum}>{translate("amount")}</th>
+            <Th col="n">№</Th>
+            <Th col="date">{translate("date")}</Th>
+            <Th col="name">{translate("document")}</Th>
+            <Th col="name">{translate("counterparty")}</Th>
+            <Th col="num">{translate("quantity")}</Th>
+            <Th col="num">{translate("amount")}</Th>
           </tr>
         </thead>
         <tbody>
@@ -182,14 +145,14 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
           {renderSection(outRows, translate("reportDirectionOut"), totalQtyOut, totalOut)}
         </tbody>
         <tfoot>
-          <tr className={styles.TotalRow}>
-            <td colSpan={4}>{translate("reportBalance")}</td>
-            <td className={styles.ColNum}>{fmtQtyZ(totalQtyIn - totalQtyOut)}</td>
-            <td className={styles.ColNum}>{fmtAmtZ(totalIn - totalOut)}</td>
-          </tr>
+          <TotalRow>
+            <Td colSpan={4}>{translate("reportBalance")}</Td>
+            <Td col="num">{fmtQtyZero(totalQtyIn - totalQtyOut)}</Td>
+            <Td col="num"><Money value={totalIn - totalOut} as="zeroMoney" /></Td>
+          </TotalRow>
         </tfoot>
-      </table>
-    </div>
+      </ReportTable>
+    </ReportSheet>
   );
 
   return (
@@ -199,18 +162,14 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
       layout={layout}
       layoutStyles={reportCss}
       isLoading={isLoading}
-      isEmpty={!isLoading && (!productUuid || !applied || isError || rows.length === 0)}
+      isEmpty={!isLoading && (!fields.productUuid || !applied || isError || rows.length === 0)}
       emptyMessage={
-        !productUuid
-          ? translate("selectProduct")
-          : !applied
-            ? translate("reportPressGenerate")
-            : isError
-              ? translate("serverError")
-              : undefined
+        !fields.productUuid ? translate("selectProduct")
+          : !applied ? translate("reportPressGenerate")
+            : isError ? translate("serverError") : undefined
       }
       onGenerate={handleGenerate}
-      generateDisabled={!productUuid}
+      generateDisabled={generateDisabled}
       fileBaseName={resolvedProductName || translate("reportProductMovements")}
       title={translate("reportProductMovements")}
       orientation="portrait"

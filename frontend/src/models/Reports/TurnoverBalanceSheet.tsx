@@ -1,9 +1,8 @@
 /**
  * Оборотно-сальдовая ведомость (ОСВ). Сальдо/обороты по счетам за период.
- * Клик по счёту открывает «Карточку счёта» с передачей счёта и периода.
+ * ДВОЙНОЙ клик по счёту открывает «Карточку счёта» (период/орг переносятся).
  */
-import { FC, useState, useCallback } from "react";
-import { usePersistentState } from "src/hooks/usePersistentState";
+import { FC } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -11,10 +10,11 @@ import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
-import { useAppContext } from "src/app";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { openReport } from "src/utils/openReport";
-import styles from "./report.module.scss";
+import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportDrill, DrillLink } from "./_shared/reportDrill";
+import { useReportFilters } from "./_shared/useReportFilters";
+import { firstOfMonth, today } from "./_shared/reportDates";
 import reportCss from "./report.module.scss?inline";
 
 interface OsvRow {
@@ -24,23 +24,16 @@ interface OsvRow {
   closeDebit: number; closeCredit: number;
 }
 
-const fmt = (n: number) =>
-  Number(n || 0) !== 0 ? Number(n).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-const fmtZ = (n: number) => Number(n || 0).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-interface Props { uniqId?: string; [key: string]: unknown }
+interface Props { uniqId?: string;[key: string]: unknown }
 
 const TurnoverBalanceSheet: FC<Props> = ({ uniqId }) => {
-  const { windows: { addPane } } = useAppContext();
-  const { organizationUuid: defaultOrgUuid, organizationName: defaultOrgName } = useDefaultOrganization();
+  const def = useDefaultOrganization();
 
-  const [dateFrom, setDateFrom] = usePersistentState("report.accounting-osv.dateFrom", () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
-  const [dateTo, setDateTo] = usePersistentState("report.accounting-osv.dateTo", () => new Date().toISOString().slice(0, 10));
-  const [orgUuid, setOrgUuid] = usePersistentState("report.accounting-osv.orgUuid", defaultOrgUuid || "");
-  const [orgName, setOrgName] = usePersistentState("report.accounting-osv.orgName", defaultOrgName || "");
-
-  const [applied, setApplied] = useState<null | { dateFrom: string; dateTo: string; orgUuid: string }>(null);
-  const handleGenerate = useCallback(() => setApplied({ dateFrom, dateTo, orgUuid }), [dateFrom, dateTo, orgUuid]);
+  const { fields, setField, applied, handleGenerate } = useReportFilters({
+    persistKey: "report.accounting-osv",
+    defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "" },
+  });
+  const drill = useReportDrill({ applied, orgName: fields.orgName });
 
   const { data, isLoading } = useQuery<{ items: OsvRow[]; totals: OsvRow }>({
     queryKey: ["accounting-osv", applied],
@@ -58,81 +51,71 @@ const TurnoverBalanceSheet: FC<Props> = ({ uniqId }) => {
   const rows = data?.items ?? [];
   const totals = data?.totals;
 
-  const openCard = (code: string, name: string) =>
-    openReport("account-card", addPane, undefined, {
-      accountCode: code, accountName: name,
-      initialDateFrom: applied?.dateFrom, initialDateTo: applied?.dateTo,
-      initialOrgUuid: applied?.orgUuid, initialOrgName: orgName,
-    } as any);
-
   const form = (
     <>
       <GroupRow>
-        <FieldDate label={translate("reportPeriodFrom")} name="osv_from" value={dateFrom} onChange={e => setDateFrom(e.target.value)} width="150px" />
-        <FieldDate label={translate("reportPeriodTo")} name="osv_to" value={dateTo} onChange={e => setDateTo(e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodFrom")} name="osv_from" value={fields.dateFrom} onChange={e => setField("dateFrom", e.target.value)} width="150px" />
+        <FieldDate label={translate("reportPeriodTo")} name="osv_to" value={fields.dateTo} onChange={e => setField("dateTo", e.target.value)} width="150px" />
       </GroupRow>
       <GroupCol>
-        <LookupField label={translate("organization")} name="osv_org" value={orgUuid} displayValue={orgName}
+        <LookupField label={translate("organization")} name="osv_org" value={fields.orgUuid} displayValue={fields.orgName}
           endpoint="organizations" displayField="name"
-          onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }} onClear={() => { setOrgUuid(""); setOrgName(""); }} />
+          onSelect={(u, d) => { setField("orgUuid", u); setField("orgName", d); }} onClear={() => { setField("orgUuid", ""); setField("orgName", ""); }} />
       </GroupCol>
     </>
   );
 
   const layout = (
-    <div className={styles.Report}>
-      {orgName && <div className={styles.OrgName}>{orgName}</div>}
-      <div className={styles.Title}>{translate("osvTitle")}</div>
-      <table className={styles.Table}>
+    <ReportSheet org={fields.orgName || undefined} title={translate("osvTitle")}>
+      <ReportTable>
         <thead>
           <tr>
-            <th rowSpan={2} className={styles.ColUom}>{translate("account")}</th>
-            <th rowSpan={2} className={styles.ColName}>{translate("name")}</th>
-            <th colSpan={2} className={styles.ColNum}>{translate("osvOpening")}</th>
-            <th colSpan={2} className={styles.ColNum}>{translate("osvTurnover")}</th>
-            <th colSpan={2} className={styles.ColNum}>{translate("osvClosing")}</th>
+            <Th col="uom" rowSpan={2}>{translate("account")}</Th>
+            <Th col="name" rowSpan={2}>{translate("name")}</Th>
+            <Th col="num" colSpan={2}>{translate("osvOpening")}</Th>
+            <Th col="num" colSpan={2}>{translate("osvTurnover")}</Th>
+            <Th col="num" colSpan={2}>{translate("osvClosing")}</Th>
           </tr>
           <tr>
-            <th className={styles.ColNum}>{translate("debit")}</th>
-            <th className={styles.ColNum}>{translate("credit")}</th>
-            <th className={styles.ColNum}>{translate("debit")}</th>
-            <th className={styles.ColNum}>{translate("credit")}</th>
-            <th className={styles.ColNum}>{translate("debit")}</th>
-            <th className={styles.ColNum}>{translate("credit")}</th>
+            <Th col="num">{translate("debit")}</Th>
+            <Th col="num">{translate("credit")}</Th>
+            <Th col="num">{translate("debit")}</Th>
+            <Th col="num">{translate("credit")}</Th>
+            <Th col="num">{translate("debit")}</Th>
+            <Th col="num">{translate("credit")}</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.code}>
-              <td className={styles.ColUom}>
-                <span className={styles.ClickableLink}
-                  onClick={() => openCard(r.code, r.name)}>{r.code}</span>
-              </td>
-              <td className={styles.ColName}>{r.name}</td>
-              <td className={styles.ColNum}>{fmt(r.openDebit)}</td>
-              <td className={styles.ColNum}>{fmt(r.openCredit)}</td>
-              <td className={styles.ColNum}>{fmt(r.turnDebit)}</td>
-              <td className={styles.ColNum}>{fmt(r.turnCredit)}</td>
-              <td className={styles.ColNum}>{fmt(r.closeDebit)}</td>
-              <td className={styles.ColNum}>{fmt(r.closeCredit)}</td>
+              <Td col="uom">
+                <DrillLink onOpen={() => drill.toReport("account-card", { accountCode: r.code, accountName: r.name })}>{r.code}</DrillLink>
+              </Td>
+              <Td col="name">{r.name}</Td>
+              <Td col="num"><Money value={r.openDebit} /></Td>
+              <Td col="num"><Money value={r.openCredit} /></Td>
+              <Td col="num"><Money value={r.turnDebit} /></Td>
+              <Td col="num"><Money value={r.turnCredit} /></Td>
+              <Td col="num"><Money value={r.closeDebit} /></Td>
+              <Td col="num"><Money value={r.closeCredit} /></Td>
             </tr>
           ))}
         </tbody>
         {totals && (
           <tfoot>
-            <tr className={styles.TotalRow}>
-              <td colSpan={2}>{translate("total")}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.openDebit)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.openCredit)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.turnDebit)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.turnCredit)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.closeDebit)}</td>
-              <td className={styles.ColNum}>{fmtZ(totals.closeCredit)}</td>
-            </tr>
+            <TotalRow>
+              <Td colSpan={2}>{translate("total")}</Td>
+              <Td col="num"><Money value={totals.openDebit} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.openCredit} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.turnDebit} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.turnCredit} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.closeDebit} as="zeroMoney" /></Td>
+              <Td col="num"><Money value={totals.closeCredit} as="zeroMoney" /></Td>
+            </TotalRow>
           </tfoot>
         )}
-      </table>
-    </div>
+      </ReportTable>
+    </ReportSheet>
   );
 
   return (

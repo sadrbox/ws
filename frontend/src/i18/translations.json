@@ -710,6 +710,7 @@
 	"noData": "Нет данных",
 	"reportGenerate": "Сформировать",
 	"reportPressGenerate": "Задайте параметры и нажмите «Сформировать»",
+	"reportDblClickOpen": "Двойной клик — открыть",
 	"reportCounterparty": "Контрагент",
 	"reportDate": "Дата",
 	"reportDocNum": "Номер",
