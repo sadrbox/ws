@@ -54,6 +54,22 @@ export function docTypeToEndpoint(type: string): string | undefined {
 	return DOC_TYPE_TO_ENDPOINT[type];
 }
 
+/**
+ * Типы документов БЕЗ признака «Проведён» (операционные/плановые: КП, заказы,
+ * резерв, счёт на оплату). У их форм нет тоггла проведения
+ * (createInvoiceLikeForm `hidePosted`), поэтому индикатор проведения для них
+ * избыточен — напр. в дропдауне поля «Основание».
+ */
+const DOC_TYPES_WITHOUT_POSTING = new Set<string>([
+	"commercial_offer", "sales_order", "reservation", "purchase_order", "payment_invoice",
+]);
+
+/** Использует ли тип документа признак «Проведён». Дефолт — да (как и тоггл
+ *  проведения по умолчанию), кроме явно перечисленных операционных типов. */
+export function docTypeUsesPosted(type: string): boolean {
+	return !!type && !DOC_TYPES_WITHOUT_POSTING.has(type);
+}
+
 /** Открыть форму документа-регистратора по типу+uuid (если endpoint известен). */
 export async function openDocumentByType(
 	documentType: string,

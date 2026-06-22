@@ -10,7 +10,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDateTime, FieldSelect } from "src/components/Field";
+import { Field, FieldNumber, FieldDateTime, FieldSelect } from "src/components/Field";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
@@ -244,7 +244,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
                 />
               </Group>
               <Group className={styles.w1of2}>
-                <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
+                <FieldNumber label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} decimals={2} />
               </Group>
             </GroupRow>
             <GroupCol>

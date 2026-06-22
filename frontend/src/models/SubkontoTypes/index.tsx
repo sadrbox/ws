@@ -90,7 +90,7 @@ const SubkontoTypesForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupRow>
             <GroupRow>
               <Group className={styles.w1of2}>
-                <FieldNumber label={translate("sortOrder")} name={`${form.formUid}_sortOrder`} value={form.fields.sortOrder} onChange={e => form.setField("sortOrder", e.target.value)} disabled={form.isLoading} width="120px" />
+                <FieldNumber label={translate("sortOrder")} name={`${form.formUid}_sortOrder`} value={form.fields.sortOrder} onChange={e => form.setField("sortOrder", e.target.value)} disabled={form.isLoading} decimals={0} width="120px" />
               </Group>
               <Group className={styles.w1of2}>
                 <FieldToggle name={`${form.formUid}_isActive`} label={translate("isActive")} value={form.fields.isActive === true} onChange={(v) => form.setField("isActive", v)} disabled={form.isLoading || !canWrite} variant="success" />

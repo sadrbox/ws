@@ -228,6 +228,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   step="0.01"
                   min="0"
                   max="100"
+                  decimals={2}
                   width="140px"
                 />
                 <label
@@ -335,6 +336,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   disabled={form.isLoading || !canWrite || !form.fields.useExcise || lockExcise}
                   step="0.01"
                   min="0"
+                  decimals={4}
                   width="200px"
                 />
                 <span className={styles.SettingHint}>

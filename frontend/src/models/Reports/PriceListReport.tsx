@@ -11,6 +11,7 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
 import { ReportSheet, ReportTable, Th, Td, Money } from "./_shared/reportLayout";
+import { useReportDrill, DrillLink } from "./_shared/reportDrill";
 import { useReportFilters } from "./_shared/useReportFilters";
 import { fmtDate } from "./_shared/reportFormat";
 import reportCss from "./report.module.scss?inline";
@@ -31,6 +32,7 @@ const PriceListReport: FC<PriceListReportProps> = ({ uniqId }) => {
     persistKey: "report.price-list",
     defaults: { priceTypeUuid: "", priceTypeName: "", brandUuid: "", brandName: "", search: "" },
   });
+  const drill = useReportDrill({});
 
   const { data, isLoading } = useQuery<PriceListResponse>({
     queryKey: ["price-list", applied],
@@ -84,7 +86,11 @@ const PriceListReport: FC<PriceListReportProps> = ({ uniqId }) => {
           {rows.map((r, idx) => (
             <tr key={r.productUuid}>
               <Td col="n">{idx + 1}</Td>
-              <Td col="name">{r.name}</Td>
+              <Td col="name">
+                {r.productUuid
+                  ? <DrillLink onOpen={() => drill.toEntity("products", r.productUuid)}>{r.name}</DrillLink>
+                  : r.name}
+              </Td>
               <Td col="tag">{r.sku ?? ""}</Td>
               <Td col="tag">{r.barcode ?? ""}</Td>
               <Td col="uom">{r.unitName ?? ""}</Td>

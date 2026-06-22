@@ -242,7 +242,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
       return <span>{(row.position as any)?.name ?? ""}</span>;
     }
     if (col.identifier === "salary") {
-      if (ctx.inlineEditing) return <FieldNumber name={`hist_salary_${row.id}`} value={row.salary != null ? String(row.salary) : ""} onChange={e => ctx.handleInlineChange(row, "salary", e.target.value)} disabled={ctx.disabled} step="0.1" textAlign="right" width="100%" actions={[]} variant="table" />;
+      if (ctx.inlineEditing) return <FieldNumber name={`hist_salary_${row.id}`} value={row.salary != null ? String(row.salary) : ""} onChange={e => ctx.handleInlineChange(row, "salary", e.target.value)} disabled={ctx.disabled} step="0.1" decimals={2} textAlign="right" width="100%" actions={[]} variant="table" />;
       return <span>{row.salary != null ? String(Number(row.salary)) : ""}</span>;
     }
     return undefined;

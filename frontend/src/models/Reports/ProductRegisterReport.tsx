@@ -13,6 +13,7 @@ import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import { ReportSheet, ReportTable, Th, Td, TotalRow, Money, DirectionTag } from "./_shared/reportLayout";
+import { useReportDrill, DrillLink } from "./_shared/reportDrill";
 import { useReportFilters } from "./_shared/useReportFilters";
 import { firstOfMonth, today } from "./_shared/reportDates";
 import { fmtQty, fmtQtyZero, fmtDate, fmtPeriod } from "./_shared/reportFormat";
@@ -30,7 +31,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 interface MovementRow {
   id: number; date: string; movementType: "in" | "out";
   quantity: number | string; amount: number | string;
-  documentType: string; documentId: number | null;
+  documentType: string; documentUuid: string | null; documentId: number | null;
   product?: { name?: string } | null; warehouse?: { name?: string } | null; unitOfMeasure?: { name?: string } | null;
 }
 interface BalanceRow { productUuid: string | null; productName: string; warehouseName: string; unitName: string; quantity: number; amount: number }
@@ -53,6 +54,7 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
     persistKey: "report.product-register",
     defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "", warehouseUuid: "", warehouseName: "", productUuid: "", productName: "" },
   });
+  const drill = useReportDrill({ applied, orgName: fields.orgName });
 
   const buildAppliedParams = useCallback(() => {
     const p: Record<string, string> = {};
@@ -151,7 +153,11 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
             <tr key={r.id}>
               <Td col="n">{idx + 1}</Td>
               <Td col="date">{fmtDate(r.date)}</Td>
-              <Td col="name">{docLabel}</Td>
+              <Td col="name">
+                {r.documentUuid
+                  ? <DrillLink onOpen={() => drill.toDocument(r.documentType, r.documentUuid!)}>{docLabel}</DrillLink>
+                  : docLabel}
+              </Td>
               <Td col="tag">
                 <DirectionTag dir={isIn ? "receipt" : "expense"}>
                   {isIn ? translate("registerReceipt") : translate("registerExpense")}
@@ -194,7 +200,11 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
         {balances.map((r, idx) => (
           <tr key={`${r.productUuid}-${idx}`}>
             <Td col="n">{idx + 1}</Td>
-            <Td col="name">{r.productName}</Td>
+            <Td col="name">
+              {r.productUuid
+                ? <DrillLink onOpen={() => drill.toReport("product-detail", { productUuid: r.productUuid, productName: r.productName })}>{r.productName}</DrillLink>
+                : r.productName}
+            </Td>
             <Td col="name">{r.warehouseName}</Td>
             <Td col="uom">{r.unitName}</Td>
             <Td col="num" variant={r.quantity < 0 ? "neg" : undefined}>{fmtQtyZero(r.quantity)}</Td>

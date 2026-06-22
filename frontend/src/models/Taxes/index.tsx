@@ -4,7 +4,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldSelect } from "src/components/Field";
+import { Field, FieldNumber, FieldSelect } from "src/components/Field";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -77,7 +77,7 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow>
                 <Group className={styles.w1of2}>
                   <Field label={translate("code")} name={`${form.formUid}_code`} minWidth="160px" value={form.fields.code} onChange={(e) => form.setField("code", e.target.value)} disabled={form.isLoading} />
-                  <Field label={translate("rate")} name={`${form.formUid}_rate`} minWidth="150px" value={form.fields.rate} onChange={(e) => form.setField("rate", e.target.value)} disabled={form.isLoading} />
+                  <FieldNumber label={translate("rate")} name={`${form.formUid}_rate`} minWidth="150px" value={form.fields.rate} onChange={(e) => form.setField("rate", e.target.value)} disabled={form.isLoading} decimals={2} />
                 </Group>
                 <Group className={styles.w1of2}>
                   <FieldSelect label={translate("taxMethod")} name={`${form.formUid}_method`} value={form.fields.calculationMethod}

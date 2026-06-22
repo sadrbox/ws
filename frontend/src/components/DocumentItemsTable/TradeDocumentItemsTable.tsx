@@ -410,6 +410,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           disabled={ctx.disabled}
           step="0.01"
           min="0"
+          decimals={2}
           textAlign="right"
           width="100%"
           actions={[]}
@@ -467,6 +468,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           }}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
           disabled={ctx.disabled}
+          decimals={4}
           textAlign={quantityStepper ? "center" : "right"}
           width="100%"
           actions={[]}
@@ -501,6 +503,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
           disabled={ctx.disabled}
           step="0.1"
+          decimals={2}
           textAlign="right"
           width="100%"
           actions={[]}
@@ -545,7 +548,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           }}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
           disabled={ctx.disabled}
-          step="0.1" min="0" max="100"
+          step="0.1" min="0" max="100" decimals={4}
           textAlign="right" width="100%" actions={[]} variant="table"
         />
       );
@@ -561,7 +564,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           }}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
           disabled={ctx.disabled}
-          step="0.01" min="0"
+          step="0.01" min="0" decimals={4}
           textAlign="right" width="100%" actions={[]} variant="table"
         />
       );
@@ -577,7 +580,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           }}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); focusNextInRow(e.currentTarget); } }}
           disabled={ctx.disabled}
-          step="0.01" min="0" max="100"
+          step="0.01" min="0" max="100" decimals={2}
           textAlign="right" width="100%" actions={[]} variant="table"
         />
       );

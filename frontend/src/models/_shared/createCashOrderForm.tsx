@@ -8,7 +8,7 @@ import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
-import { Field, FieldDateTime, FieldSelect } from "src/components/Field";
+import { Field, FieldNumber, FieldDateTime, FieldSelect } from "src/components/Field";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
@@ -377,7 +377,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
               )}
               <GroupRow>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} />
+                  <FieldNumber label={translate("amount")} name={`${form.formUid}_amount`} width="200px" value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} decimals={2} />
                 </Group>
                 <Group className={styles.w1of2}>
                   <FormLookup form={form} field="cashbox" endpoint="cashboxes"

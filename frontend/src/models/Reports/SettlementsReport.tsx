@@ -13,6 +13,7 @@ import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportDrill, DrillLink } from "./_shared/reportDrill";
 import { useReportFilters } from "./_shared/useReportFilters";
 import { firstOfMonth, today } from "./_shared/reportDates";
 import reportCss from "./report.module.scss?inline";
@@ -35,6 +36,7 @@ const SettlementsReport: FC<Props> = ({ uniqId }) => {
     persistKey: "report.settlements",
     defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "", accountCode: "1210", cptyUuid: "", cptyName: "" },
   });
+  const drill = useReportDrill({ applied, orgName: fields.orgName });
 
   const { data, isLoading, isError } = useQuery<{ items: Row[]; totals: Totals; accountName: string }>({
     queryKey: ["report-settlements", applied],
@@ -99,7 +101,11 @@ const SettlementsReport: FC<Props> = ({ uniqId }) => {
           {rows.map((r, idx) => (
             <tr key={r.counterpartyUuid ?? idx}>
               <Td col="n">{idx + 1}</Td>
-              <Td col="name">{r.counterpartyName}</Td>
+              <Td col="name">
+                {r.counterpartyUuid
+                  ? <DrillLink onOpen={() => drill.toEntity("counterparties", r.counterpartyUuid!)}>{r.counterpartyName}</DrillLink>
+                  : r.counterpartyName}
+              </Td>
               <Td col="num"><Money value={r.opening} /></Td>
               <Td col="num"><Money value={r.turnDebit} /></Td>
               <Td col="num"><Money value={r.turnCredit} /></Td>

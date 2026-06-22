@@ -558,6 +558,12 @@ interface TypeFieldNumberProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   /** Если true — значение 0 отображается как пустое поле (пока не в фокусе) */
   zeroAsEmpty?: boolean;
+  /**
+   * Максимум знаков после запятой — должен совпадать с точностью поля в БД
+   * (напр. price=2, quantity=4). Ограничивает ввод дробной части, округляет
+   * при потере фокуса и форматирует отображение. По умолчанию — без ограничения.
+   */
+  decimals?: number;
 }
 
 export const FieldNumber: FC<TypeFieldNumberProps> = ({
@@ -581,6 +587,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   variant = 'default',
   onKeyDown,
   zeroAsEmpty = false,
+  decimals,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -616,8 +623,8 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     if (rawValue === '') return '';
     const n = parseNumericInput(rawValue);
     if (zeroAsEmpty && n === 0) return '';
-    return n != null ? getFormatNumerical(n) : rawValue;
-  }, [isFocused, editText, rawValue, zeroAsEmpty]);
+    return n != null ? getFormatNumerical(n, decimals) : rawValue;
+  }, [isFocused, editText, rawValue, zeroAsEmpty, decimals]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -647,6 +654,9 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     let clamped = n;
     if (mn !== null && n < mn) clamped = mn;
     if (mx !== null && n > mx) clamped = mx;
+    // Округляем до точности поля (как хранится в БД) — чтобы значение не
+    // «менялось само» после сохранения: что видно в поле, то и сохранится.
+    if (decimals !== undefined && decimals >= 0) clamped = Number(clamped.toFixed(decimals));
     prevRawRef.current = String(clamped);
     // Вызываем onChange только если значение реально изменилось
     if (String(clamped) === valueAtFocusRef.current) return;
@@ -655,7 +665,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
       currentTarget: e.currentTarget,
     } as React.ChangeEvent<HTMLInputElement>;
     onChange(fakeEvent);
-  }, [onChange, min, max, name]);
+  }, [onChange, min, max, name, decimals]);
 
   const handleClear = useCallback(() => {
     if (inputRef.current) {
@@ -680,9 +690,22 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     const withComma = withMinus.replace('.', ',');
     // Не допускаем две запятых
     const commaParts = withComma.split(',');
-    const displayNorm = commaParts.length > 2
+    let displayNorm = commaParts.length > 2
       ? commaParts[0] + ',' + commaParts.slice(1).join('')
       : withComma;
+    // Ограничиваем дробную часть точностью поля (как в БД): лишние знаки просто
+    // не вводятся. Целая часть и знак минус не трогаются.
+    if (decimals !== undefined && decimals >= 0) {
+      const ci = displayNorm.indexOf(',');
+      if (ci >= 0) {
+        const frac = displayNorm.slice(ci + 1);
+        if (frac.length > decimals) {
+          displayNorm = decimals === 0
+            ? displayNorm.slice(0, ci)
+            : displayNorm.slice(0, ci + 1 + decimals);
+        }
+      }
+    }
     // Внутреннее значение (для onChange и prevRawRef) — с точкой
     const dotNorm = displayNorm.replace(',', '.');
     // Обновляем буфер редактирования (с запятой — для отображения)
@@ -695,7 +718,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     } else if (onChange && dotNorm === '') {
       onChange({ ...e, target: { ...e.target, value: '', name } } as React.ChangeEvent<HTMLInputElement>);
     }
-  }, [onChange, name]);
+  }, [onChange, name, decimals]);
 
   const handleNumberKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     // Блокируем ввод букв и спецсимволов (кроме навигационных и управляющих клавиш)

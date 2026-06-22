@@ -74,6 +74,19 @@
   tbody tr:nth-child(even) {
     background: #fafafa;
   }
+
+  // Единый hover-эффект подсветки строки данных — во ВСЕХ отчётах (а не только
+  // у строк-ссылок). Итоговые/подытоговые/секционные строки исключены: у них
+  // собственный фон. Плавный переход на td (анимируется и вход, и выход).
+  tbody tr:not(.TotalRow):not(.SubtotalRow):not(.SectionHeader) {
+    td {
+      transition: background-color 0.15s ease;
+    }
+
+    &:hover td {
+      background: #eef5ff !important;
+    }
+  }
 }
 
 // ── Колонки ───────────────────────────────────────────────────────────────────
@@ -144,19 +157,38 @@
   }
 }
 
+// Строка-ссылка (drill по двойному клику). Плавный hover-эффект + лёгкий сдвиг.
 .ClickableRow {
   cursor: pointer;
 
+  td {
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
   &:hover td {
-    background: #f0f7ff !important;
+    background: #eef5ff !important;
+  }
+  // тонкий акцент слева на первой ячейке при наведении
+  &:hover td:first-child {
+    box-shadow: inset 2px 0 0 0 #2563eb;
   }
 }
 
-// Текстовая ссылка-детализация внутри ячейки отчёта (drill-down).
-// Заменяет повторяющийся inline { cursor: pointer; text-decoration: underline }.
+// Текстовая ссылка-детализация внутри ячейки отчёта (drill-down). Цвет НЕ
+// форсируем — наследуется от ячейки (сохраняет акценты Cost/SalePrice и т.п.).
+// Эффект: пунктирное подчёркивание → сплошное + лёгкое затемнение при наведении.
 .ClickableLink {
   cursor: pointer;
   text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
+  transition: opacity 0.12s ease, text-decoration-color 0.12s ease;
+
+  &:hover {
+    text-decoration-style: solid;
+    opacity: 0.7;
+  }
 }
 
 // ── Утилиты ───────────────────────────────────────────────────────────────────

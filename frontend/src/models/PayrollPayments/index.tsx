@@ -4,7 +4,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDateTime, FieldSelect, FieldPeriod } from "src/components/Field";
+import { Field, FieldNumber, FieldDateTime, FieldSelect, FieldPeriod } from "src/components/Field";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { GroupRow, Group, GroupCol } from "src/components/UI";
@@ -127,7 +127,7 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
               </Group>
               <GroupRow>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("paymentAmount")} name={`${form.formUid}_amount`} value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} width="180px" />
+                  <FieldNumber label={translate("paymentAmount")} name={`${form.formUid}_amount`} value={form.fields.amount} onChange={e => form.setField("amount", e.target.value)} disabled={form.isLoading} width="180px" decimals={2} />
                 </Group>
                 <Group className={styles.w1of2}>
                   <FieldSelect label={translate("paymentMethod")} name={`${form.formUid}_paymentMethod`} value={form.fields.paymentMethod} options={PAYMENT_METHOD_OPTIONS} onChange={e => form.setField("paymentMethod", e.target.value)} disabled={form.isLoading} />

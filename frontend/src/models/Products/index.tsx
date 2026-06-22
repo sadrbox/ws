@@ -96,7 +96,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow>
                 <Group className={styles.w1of2}>
                   <FormLookup form={form} field="unitOfMeasure" endpoint="unit-of-measures" maxWidth="160px" />
-                  <FieldNumber label={translate("price")} name={`${form.formUid}_price`} value={form.fields.price} onChange={e => form.setField("price", e.target.value)} disabled={form.isLoading} width="160px" />
+                  <FieldNumber label={translate("price")} name={`${form.formUid}_price`} value={form.fields.price} onChange={e => form.setField("price", e.target.value)} disabled={form.isLoading} decimals={2} width="160px" />
                 </Group>
                 <Group className={styles.w1of2}>
                   <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
@@ -242,7 +242,7 @@ const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, productN
     }
     if (col.identifier === "price") {
       if (!ctx.inlineEditing) return <span>{row.price != null ? String(row.price) : ""}</span>;
-      return <FieldNumber name={`pp_price_${row.id}`} value={row.price != null ? String(row.price) : ""} onChange={e => ctx.handleInlineChange(row, "price", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <FieldNumber name={`pp_price_${row.id}`} value={row.price != null ? String(row.price) : ""} onChange={e => ctx.handleInlineChange(row, "price", e.target.value)} disabled={ctx.disabled} decimals={2} width="100%" variant="table" />;
     }
     return undefined;
   }, []);

@@ -6,7 +6,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import FilesPanel from "src/components/FilesPanel";
-import { Field, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
+import { Field, FieldNumber, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -111,7 +111,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                 <GroupRow>
                   <Group className={styles.w1of2}>
                     <FieldDate label={translate("createdAt")} name={`${form.formUid}_createdAt`} width="200px" value={form.fields.createdAt} disabled />
-                    <Field label={translate("days")} name={`${form.formUid}_deadlineDays`} width="100px" value={form.fields.deadlineDays} onChange={e => handleDeadlineDaysChange(e.target.value)} disabled={form.isLoading} />
+                    <FieldNumber label={translate("days")} name={`${form.formUid}_deadlineDays`} width="100px" value={form.fields.deadlineDays} onChange={e => handleDeadlineDaysChange(e.target.value)} disabled={form.isLoading} decimals={0} />
                   </Group>
                   <Group className={styles.w1of2}>
                     <FieldDate label={translate("deadline")} name={`${form.formUid}_deadline`} width="200px" value={form.fields.deadline} onChange={e => form.setField("deadline", e.target.value)} disabled={form.isLoading} />

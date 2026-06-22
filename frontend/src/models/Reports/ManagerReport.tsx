@@ -12,6 +12,7 @@ import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportDrill, DrillLink } from "./_shared/reportDrill";
 import { useReportFilters } from "./_shared/useReportFilters";
 import { firstOfMonth, today } from "./_shared/reportDates";
 import reportCss from "./report.module.scss?inline";
@@ -46,6 +47,7 @@ const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
     persistKey: "report.manager-report",
     defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "" },
   });
+  const drill = useReportDrill({ applied, orgName: fields.orgName });
 
   const { data, isLoading, isError } = useQuery<{ items: ManagerRow[]; totals: Totals }>({
     queryKey: ["report-sales-by-manager", applied],
@@ -107,7 +109,11 @@ const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
           {rows.map((row, idx) => (
             <tr key={row.managerUuid ?? idx}>
               <Td col="n">{idx + 1}</Td>
-              <Td col="name">{row.managerName}</Td>
+              <Td col="name">
+                {row.managerUuid
+                  ? <DrillLink onOpen={() => drill.toEntity("employees", row.managerUuid!)}>{row.managerName}</DrillLink>
+                  : row.managerName}
+              </Td>
               <Td col="num">{fmtInt(row.salesCount)}</Td>
               <Td col="num"><Money value={row.salesAmount} /></Td>
               <Td col="num">{fmtInt(row.returnsCount)}</Td>

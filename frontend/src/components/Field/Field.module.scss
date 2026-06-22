@@ -141,13 +141,13 @@
 	// Дефолтная ширина (была inline style={{ width: width ?? "100%" }}). Явная ширина,
 	// если передана пропом, по-прежнему задаётся инлайном и перебивает это правило.
 	width: 100%;
-	height: stretch;
+	// height: stretch;
 
 	// ── Table variant: no label, no border, stretch to fill td ──
 	&.tableVariant {
 		width: 100%;
 		// min-height: $heightFieldInput;
-		// height: 100%;
+		height: stretch;
 		align-items: stretch;
 		flex: 1;
 

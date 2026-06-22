@@ -117,7 +117,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
                 <Group className={styles.w1of2}>
                   <FieldNumber label={translate("salary")} name={`${form.formUid}_salary`} width="180px"
                     value={form.fields.salary} onChange={e => form.setField("salary", e.target.value)}
-                    disabled={form.isLoading} step="0.1" textAlign="right" />
+                    disabled={form.isLoading} step="0.1" decimals={2} textAlign="right" />
                 </Group>
               </GroupRow>
             </GroupCol>

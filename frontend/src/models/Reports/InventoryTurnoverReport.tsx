@@ -13,6 +13,7 @@ import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
 import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
+import { useReportDrill, DrillLink } from "./_shared/reportDrill";
 import { useReportFilters } from "./_shared/useReportFilters";
 import { firstOfMonth, today } from "./_shared/reportDates";
 import reportCss from "./report.module.scss?inline";
@@ -33,6 +34,7 @@ const InventoryTurnoverReport: FC<Props> = ({ uniqId }) => {
     persistKey: "report.turnover",
     defaults: { dateFrom: firstOfMonth(), dateTo: today(), orgUuid: def.organizationUuid || "", orgName: def.organizationName || "", whUuid: "", whName: "" },
   });
+  const drill = useReportDrill({ applied, orgName: fields.orgName });
 
   const periodDays = useMemo(() => {
     if (!applied?.dateFrom || !applied?.dateTo) return 30;
@@ -102,7 +104,11 @@ const InventoryTurnoverReport: FC<Props> = ({ uniqId }) => {
           {rows.map((r, idx) => (
             <tr key={r.productUuid ?? idx}>
               <Td col="n">{idx + 1}</Td>
-              <Td col="name">{r.productName}</Td>
+              <Td col="name">
+                {r.productUuid
+                  ? <DrillLink onOpen={() => drill.toReport("product-detail", { productUuid: r.productUuid, productName: r.productName })}>{r.productName}</DrillLink>
+                  : r.productName}
+              </Td>
               <Td col="num"><Money value={r.openAmount} /></Td>
               <Td col="num"><Money value={r.closeAmount} /></Td>
               <Td col="num"><Money value={r.avg} /></Td>

@@ -28,9 +28,21 @@
 .ReportForm {
   flex-shrink: 0;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  // Компактно: фильтры текут в строку и переносятся, а не стопкой по вертикали.
+  flex-flow: row wrap;
+  align-items: flex-end;
+  gap: 6px 10px;
   min-width: 0;
+
+  // Вложенные группы фильтров (GroupRow дат / GroupCol лукапов) внутри формы
+  // отчёта тоже выстраиваем горизонтально с переносом — единый компактный вид
+  // во всех отчётах без правки JSX каждого.
+  :global(.GroupRow),
+  :global(.GroupCol) {
+    flex-flow: row wrap;
+    align-items: flex-end;
+    gap: 6px 10px;
+  }
 }
 
 // ── Адаптив: узкая панель → фильтры сверху, отчёт снизу ──────────────────────

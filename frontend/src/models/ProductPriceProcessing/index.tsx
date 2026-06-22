@@ -100,7 +100,7 @@ const priceCellRenderer = (
     if (ctx.inlineEditing)
       return (
         <FieldNumber
-          label="" name={`ppp_price_${r.id}`} value={String(r.price ?? "")} width="140px" variant="table" disabled={ctx.disabled}
+          label="" name={`ppp_price_${r.id}`} value={String(r.price ?? "")} width="140px" variant="table" disabled={ctx.disabled} decimals={2}
           onChange={(e) => ctx.handleInlineChange(r, "price", e.target.value)}
         />
       );

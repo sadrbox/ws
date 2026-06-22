@@ -4,7 +4,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDateTime, FieldPeriod, Divider } from "src/components/Field";
+import { Field, FieldNumber, FieldDateTime, FieldPeriod, Divider } from "src/components/Field";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { GroupRow, Group, GroupCol } from "src/components/UI";
@@ -185,30 +185,30 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
               <h3 className={styles.FormSectionTitle}>{translate("payrollCalcTitle")}</h3>
               <GroupRow>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("baseSalaryCharged")} name={`${form.formUid}_baseSalary`} value={form.fields.baseSalary} onChange={e => handleSalaryChange(e.target.value)} disabled={form.isLoading} width="160px" />
-                  <Field label={translate("opv")} name={`${form.formUid}_opv`} value={form.fields.opv} disabled width="130px" />
+                  <FieldNumber label={translate("baseSalaryCharged")} name={`${form.formUid}_baseSalary`} value={form.fields.baseSalary} onChange={e => handleSalaryChange(e.target.value)} disabled={form.isLoading} width="160px" decimals={2} />
+                  <FieldNumber label={translate("opv")} name={`${form.formUid}_opv`} value={form.fields.opv} disabled width="130px" decimals={2} />
                 </Group>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("vosms")} name={`${form.formUid}_vosms`} value={form.fields.vosms} disabled width="130px" />
-                  <Field label={translate("ipn")} name={`${form.formUid}_ipn`} value={form.fields.ipn} disabled width="130px" />
+                  <FieldNumber label={translate("vosms")} name={`${form.formUid}_vosms`} value={form.fields.vosms} disabled width="130px" decimals={2} />
+                  <FieldNumber label={translate("ipn")} name={`${form.formUid}_ipn`} value={form.fields.ipn} disabled width="130px" decimals={2} />
                 </Group>
               </GroupRow>
               <GroupRow>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("socialContrib")} name={`${form.formUid}_socialContrib`} value={form.fields.socialContrib} disabled width="130px" />
-                  <Field label={translate("socialTax")} name={`${form.formUid}_socialTax`} value={form.fields.socialTax} disabled width="160px" />
+                  <FieldNumber label={translate("socialContrib")} name={`${form.formUid}_socialContrib`} value={form.fields.socialContrib} disabled width="130px" decimals={2} />
+                  <FieldNumber label={translate("socialTax")} name={`${form.formUid}_socialTax`} value={form.fields.socialTax} disabled width="160px" decimals={2} />
                 </Group>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("oosms")} name={`${form.formUid}_oosms`} value={form.fields.oosms} disabled width="130px" />
+                  <FieldNumber label={translate("oosms")} name={`${form.formUid}_oosms`} value={form.fields.oosms} disabled width="130px" decimals={2} />
                 </Group>
               </GroupRow>
               <Divider />
               <GroupRow>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("netSalaryHands")} name={`${form.formUid}_netSalary`} value={form.fields.netSalary} disabled width="180px" />
+                  <FieldNumber label={translate("netSalaryHands")} name={`${form.formUid}_netSalary`} value={form.fields.netSalary} disabled width="180px" decimals={2} />
                 </Group>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("totalExpenseLabel")} name={`${form.formUid}_totalExpense`} value={form.fields.totalExpense} disabled width="180px" />
+                  <FieldNumber label={translate("totalExpenseLabel")} name={`${form.formUid}_totalExpense`} value={form.fields.totalExpense} disabled width="180px" decimals={2} />
                 </Group>
               </GroupRow>
             </GroupCol>

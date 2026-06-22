@@ -2,7 +2,7 @@ import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import LookupField from "./LookupField";
 import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
-import { docTypeLabel, docTypeToEndpoint } from "src/utils/accountingDocTypes";
+import { docTypeLabel, docTypeToEndpoint, docTypeUsesPosted } from "src/utils/accountingDocTypes";
 import { api } from "src/services/api/client";
 import styles from "./Field.module.scss";
 
@@ -210,7 +210,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           getSuggestionLabel={(item) => basisItemLabel(typeName, item)}
           columns={columns}
           secondaryFields={["name", "counterparty.name", "documentNumber"]}
-          postedIndicator
+          postedIndicator={docTypeUsesPosted(valueType)}
           onSelect={handleSelect}
           onClear={onClear}
           disabled={disabled || !activeType}
