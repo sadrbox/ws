@@ -1,10 +1,14 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosError } from "axios";
+import axios, {
+	type AxiosInstance,
+	type AxiosRequestConfig,
+	type AxiosError,
+} from "axios";
 import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from "../auth";
 import { isNetworkError as isNetworkLikeError } from "../networkUtils";
 import { showToast } from "src/components/UIToast";
 
 const LOCAL_API_URL = "http://192.168.1.112:3000/api/v1";
-const REMOTE_API_URL = "https://api.gidra.kz/api/v1";
+const REMOTE_API_URL = "https://api.aleppo.kz/api/v1";
 
 function getApiUrl(): string {
 	const { hostname } = window.location;
@@ -53,7 +57,9 @@ apiClient.interceptors.request.use((config) => {
 				config.headers["X-Organization-ID"] = user.organizationUuid;
 			}
 		}
-	} catch { /* localStorage недоступен (private browsing и т.д.) */ }
+	} catch {
+		/* localStorage недоступен (private browsing и т.д.) */
+	}
 
 	return config;
 });
@@ -71,7 +77,9 @@ apiClient.interceptors.response.use(
 				try {
 					localStorage.removeItem(AUTH_TOKEN_KEY);
 					localStorage.removeItem(AUTH_USER_KEY);
-				} catch { /* ignore */ }
+				} catch {
+					/* ignore */
+				}
 				// Диспатчим событие чтобы App перерисовался
 				window.dispatchEvent(new Event("auth_logout"));
 			}
@@ -79,13 +87,16 @@ apiClient.interceptors.response.use(
 
 		if (status === 403) {
 			const serverMessage: string | undefined = error.response?.data?.message;
-			const message = serverMessage && serverMessage.length < 200
-				? serverMessage
-				: "У вас недостаточно прав для выполнения этого действия";
+			const message =
+				serverMessage && serverMessage.length < 200
+					? serverMessage
+					: "У вас недостаточно прав для выполнения этого действия";
 			showToast(message, "error", 6000);
 		}
 
-		return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+		return Promise.reject(
+			error instanceof Error ? error : new Error(String(error)),
+		);
 	},
 );
 
@@ -165,7 +176,8 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 	return {
 		data: {
 			_offline: true,
-			message: "Данные сохранены локально. Синхронизация произойдёт при восстановлении связи.",
+			message:
+				"Данные сохранены локально. Синхронизация произойдёт при восстановлении связи.",
 		},
 		status: 202,
 		statusText: "Accepted (Offline)",

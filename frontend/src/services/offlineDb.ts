@@ -9,6 +9,7 @@
  */
 
 import Dexie, { type EntityTable } from "dexie";
+import { logger } from "src/utils/logger";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Типы
@@ -457,7 +458,7 @@ export async function searchRecords(
 export async function clearOfflineDb(): Promise<void> {
 	const tables = offlineDb.tables;
 	await Promise.all(tables.map((t) => t.clear()));
-	console.info("[OfflineDB] Все таблицы очищены");
+	logger.info("[OfflineDB] Все таблицы очищены");
 }
 
 /**

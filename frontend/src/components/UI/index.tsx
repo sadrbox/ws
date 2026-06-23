@@ -773,8 +773,8 @@ export const Navbar: React.FC = () => {
 
         {/* Логотип приложения */}
         <div className={styles.NavbarLogo}>
-          <div className={styles.NavbarLogoIcon}>G</div>
-          {/* <span className={styles.NavbarLogoText}>Gidra</span> */}
+          <div className={styles.NavbarLogoIcon}>A</div>
+          {/* <span className={styles.NavbarLogoText}>Aleppo</span> */}
         </div>
 
         {/* Десктопные навигационные ссылки (скрыты на мобильных через CSS) */}

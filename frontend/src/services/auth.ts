@@ -1,4 +1,5 @@
 import apiClient from "./api/client";
+import { logger } from "src/utils/logger";
 import { isNetworkError } from "./networkUtils";
 
 export interface OrgEntry {
@@ -261,7 +262,7 @@ export async function verifyToken(): Promise<AuthUser | null> {
 		if (isNetworkError(err)) {
 			const cached = getCurrentUser();
 			if (cached) {
-				console.info("[Auth] Offline mode — using cached user");
+				logger.info("[Auth] Offline mode — using cached user");
 				return cached;
 			}
 		}

@@ -13,7 +13,7 @@ for (const key of requiredEnv) {
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { getLocalIP } from "./utils/module.js";
 import {
 	authMiddleware,
@@ -97,6 +97,33 @@ import priceTypesRouter from "./api/router/pricetypes.js";
 import productPricesRouter from "./api/router/productprices.js";
 
 const app = express();
+
+// За cloudflared (отдельный хост 192.168.1.113) доверяем X-Forwarded-For, иначе все
+// клиенты идут под одним IP и rate-limit/аудит ломаются. БЕЗОПАСНОСТЬ: порт 3000
+// должен приниматься ТОЛЬКО с 192.168.1.113 (firewall) — иначе заголовок подделать.
+app.set("trust proxy", "192.168.1.113");
+
+// Сетевой гард уровня приложения — замена OS-файрвола (на этом хосте его нет).
+// req.socket.remoteAddress = реальный TCP-источник, его НЕЛЬЗЯ подделать (в отличие
+// от X-Forwarded-For). Допускаем только хосты из TRUSTED_PROXY_IPS (cloudflared) +
+// loopback. Если переменная не задана — гард выключен (локальная разработка цела).
+const trustedPeers = new Set(
+	(process.env.TRUSTED_PROXY_IPS || "")
+		.split(",").map((x) => x.trim()).filter(Boolean)
+		.concat(["127.0.0.1", "::1"]),
+);
+const peerGuardEnabled = !!process.env.TRUSTED_PROXY_IPS;
+const seenRejected = new Set(); // лог отклонённого источника — один раз на IP
+app.use((req, res, next) => {
+	if (!peerGuardEnabled) return next();
+	const peer = (req.socket.remoteAddress || "").replace(/^::ffff:/, "");
+	if (trustedPeers.has(peer)) return next();
+	if (!seenRejected.has(peer)) {
+		seenRejected.add(peer);
+		console.warn(`[peer-guard] отклонён источник: ${peer} (нет в TRUSTED_PROXY_IPS)`);
+	}
+	return res.status(403).json({ success: false, message: "Доступ запрещён" });
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. БЕЗОПАСНОСТЬ
@@ -182,7 +209,7 @@ const orgLimiter = rateLimit({
 		// Ключ: organizationUuid из middleware (если доступен) или нормализованный IP
 		if (req.user?.organizationUuid) return `org:${req.user.organizationUuid}`;
 		// Нормализуем IPv6 mapped IPv4 (::ffff:x.x.x.x → x.x.x.x)
-		const ip = (req.ip || "").replace(/^::ffff:/, "");
+		const ip = ipKeyGenerator(req.ip || ""); // нормализует IPv6 (подсеть) и IPv4-mapped
 		return `ip:${ip}`;
 	},
 	skip: (req) => !req.user, // пропускаем неаутентифицированные запросы

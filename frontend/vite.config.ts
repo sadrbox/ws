@@ -7,7 +7,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
 	server: {
 		// host: true,
-		allowedHosts: ["sau.gidra.kz"],
+		allowedHosts: ["aleppo.kz"],
 		// watch: {
 		// 	usePolling: true,
 		// 	// interval: 10,

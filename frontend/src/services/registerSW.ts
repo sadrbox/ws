@@ -4,6 +4,7 @@
  * Вызывается из main.tsx или App при старте приложения.
  * SW файл находится в public/sw.js — Vite копирует его в root при сборке.
  */
+import { logger } from "src/utils/logger";
 
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) {
@@ -22,7 +23,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
       newWorker.addEventListener("statechange", () => {
         if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
           // Новая версия SW установлена — уведомляем пользователя
-          console.info("[SW] Доступна новая версия приложения");
+          logger.info("[SW] Доступна новая версия приложения");
           // Автоматически активируем новую версию
           newWorker.postMessage({ type: "SKIP_WAITING" });
         }
@@ -38,7 +39,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
       }
     });
 
-    console.info("[SW] Service Worker зарегистрирован:", registration.scope);
+    logger.info("[SW] Service Worker зарегистрирован:", registration.scope);
     return registration;
   } catch (err) {
     console.error("[SW] Ошибка регистрации Service Worker:", err);
@@ -64,5 +65,5 @@ export async function unregisterServiceWorker(): Promise<void> {
   for (const reg of registrations) {
     await reg.unregister();
   }
-  console.info("[SW] Все Service Workers удалены");
+  logger.info("[SW] Все Service Workers удалены");
 }

@@ -13,6 +13,7 @@
  */
 
 import apiClient from "src/services/api/client";
+import { logger } from "src/utils/logger";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ONLINE / OFFLINE STATE
@@ -47,7 +48,7 @@ function handleOnline(): void {
 	_isOnline = true;
 	_consecutiveFailures = 0;
 	notifyNetwork();
-	console.info("[Network] 🟢 Онлайн — запуск синхронизации");
+	logger.info("[Network] 🟢 Онлайн — запуск синхронизации");
 	// Автоматический запуск синхронизации через syncManager
 	triggerSync().catch(() => {});
 }
@@ -55,7 +56,7 @@ function handleOffline(): void {
 	if (!_isOnline) return;
 	_isOnline = false;
 	notifyNetwork();
-	console.info("[Network] 🔴 Оффлайн — работаем локально");
+	logger.info("[Network] 🔴 Оффлайн — работаем локально");
 }
 
 window.addEventListener("online", handleOnline);

@@ -9,6 +9,7 @@
  */
 
 import type { QueryClient } from "@tanstack/react-query";
+import { logger } from "src/utils/logger";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // IndexedDB
@@ -147,7 +148,7 @@ export async function restoreQueryCache(client: QueryClient): Promise<void> {
     // Проверяем возраст всего снимка
     if (Date.now() - persisted.timestamp > MAX_AGE_MS) return;
     hydrateClient(client, persisted);
-    console.info(`[QueryPersist] Restored ${persisted.clientState.queries.length} queries from cache`);
+    logger.info(`[QueryPersist] Restored ${persisted.clientState.queries.length} queries from cache`);
   } catch (err) {
     console.warn("[QueryPersist] Failed to restore cache:", err);
   }
@@ -204,7 +205,7 @@ export function persistQueryCache(client: QueryClient): () => void {
 export async function clearPersistedCache(): Promise<void> {
   try {
     await idbDelete(CACHE_KEY);
-    console.info("[QueryPersist] Persisted cache cleared");
+    logger.info("[QueryPersist] Persisted cache cleared");
   } catch (err) {
     console.warn("[QueryPersist] Failed to clear persisted cache:", err);
   }

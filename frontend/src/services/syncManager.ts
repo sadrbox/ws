@@ -16,6 +16,7 @@
  */
 
 import apiClient from "src/services/api/client";
+import { logger } from "src/utils/logger";
 import { isNetworkError } from "./networkUtils";
 import {
   ensureOfflineDb,
@@ -198,7 +199,7 @@ export async function fullSync(
       lastSyncAt: lastSync,
     });
 
-    console.info(
+    logger.info(
       `[SyncManager] Завершено за ${result.durationMs}ms: pulled=${result.pulled}, pushed=${result.pushed}, conflicts=${result.conflicts.length}`,
     );
 
@@ -450,11 +451,11 @@ export async function initialSync(): Promise<SyncResult> {
   const metas = await db._syncMeta.count();
   if (metas > 0) {
     // Уже синхронизировались — инкрементальный sync (lastSyncAt подхватится автоматически)
-    console.info("[SyncManager] Инкрементальная синхронизация...");
+    logger.info("[SyncManager] Инкрементальная синхронизация...");
     return fullSync();
   }
   // Первый раз — полная загрузка
-  console.info("[SyncManager] Начальная синхронизация (первый запуск)...");
+  logger.info("[SyncManager] Начальная синхронизация (первый запуск)...");
   return fullSync();
 }
 
@@ -476,7 +477,7 @@ export function startPeriodicSync(intervalMs = 5 * 60 * 1000): void {
       fullSync().catch(() => {});
     }
   }, intervalMs);
-  console.info(`[SyncManager] Периодическая синхронизация: каждые ${intervalMs / 1000}с`);
+  logger.info(`[SyncManager] Периодическая синхронизация: каждые ${intervalMs / 1000}с`);
 }
 
 export function stopPeriodicSync(): void {
