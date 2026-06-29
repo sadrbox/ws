@@ -1671,6 +1671,11 @@ export function useFormStore<F extends object>(
 	}, [uniqId, store]);
 
 	// ── Гранулярный useField ──
+	// ⚠️ ИНВАРИАНТ (rules-of-hooks): useField/useTable — это ХУКИ (внутри зовут
+	// useSyncExternalStore/useState). Потребитель ОБЯЗАН вызывать их безусловно и в
+	// стабильном порядке на верхнем уровне компонента — НЕ в if/тернарнике/.map/цикле.
+	// Иначе поедет порядок хуков React → краш/порча состояния. Набор полей формы
+	// фиксирован конфигом, поэтому порядок стабилен (проверено: условных вызовов нет).
 	const useField = useCallback(
 		<K extends keyof F>(field: K): [F[K], (value: F[K]) => void] => {
 			// eslint-disable-next-line react-hooks/rules-of-hooks

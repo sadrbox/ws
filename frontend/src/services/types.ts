@@ -74,42 +74,8 @@ export interface Address {
 	isDefault: boolean;
 }
 
-// 6. ПАРАМЕТРЫ ЗАПРОСА
-export interface PaginationParams {
-	page: number;
-	limit: number;
-	offset?: number;
-}
-
-export interface FilterParams {
-	[key: string]: any;
-}
-
-export interface SortParams {
-	field: string;
-	direction: "asc" | "desc";
-}
-
-export interface SearchParams {
-	query: string;
-	fields?: string[];
-	operator?: "and" | "or";
-}
-
-// 7. ОТВЕТ С ПАГИНАЦИЕЙ
-export interface PaginatedResponse<T> {
-	data: T[];
-	meta: {
-		total: number;
-		page: number;
-		limit: number;
-		totalPages: number;
-		hasNextPage: boolean;
-		hasPrevPage: boolean;
-		nextPage: number | null;
-		prevPage: number | null;
-	};
-}
+// (Удалены неиспользуемые типы PaginationParams/FilterParams/SortParams/
+//  SearchParams/PaginatedResponse — 0 использований, ts-prune.)
 
 // 8. ОТВЕТ С ОШИБКОЙ
 export interface ApiErrorResponse {

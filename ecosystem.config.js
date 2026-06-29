@@ -1,12 +1,12 @@
 // ecosystem.config.js
 module.exports = {
 	apps: [
-		// 1. Vite dev-сервер в ./frontend
+		// 1. Прод-сборка фронта (статика из ./frontend/dist, SPA-fallback)
 		{
-			name: "frontend-vite",
+			name: "frontend",
 			cwd: "./frontend", // Рабочая директория
-			script: "npx", // Используем npx, чтобы найти локальный vite
-			args: "vite --host",
+			script: "npx", // локальный serve через npx
+			args: "serve -s dist -l tcp://0.0.0.0:5173", // -s = SPA history-fallback на index.html
 			watch: false, // Перезапуск при изменении файлов
 			ignore_watch: ["node_modules", "dist", "logs"], // Игнорируем эти папки
 			env: {
@@ -22,8 +22,9 @@ module.exports = {
 			name: "backend-node",
 			cwd: "./backend", // Рабочая директория
 			//script: "server.js", // Прямой запуск server.js
-			script: "node",
-			args: "server.js",
+			script: "server.js", // ESM-вход; PM2 cluster с ESM проверен — работает
+			exec_mode: "cluster",
+			instances: 4, // многоядерность: 4 воркера. DB-пул: 4 × дефолт Prisma(17) = 68 < max_connections 100
 			// watch: ["server.js", "routes", "controllers"], // Опционально: слежение за файлами
 			env: {
 				NODE_ENV: "development",
