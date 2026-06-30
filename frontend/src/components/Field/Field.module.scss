@@ -632,9 +632,18 @@ input[type="number"] {
 // Заменяет повторяющийся inline-style примечаний под Field. Слот рендерится
 // ВСЕГДА с зарезервированной высотой строки (min-height), чтобы появление/
 // скрытие предупреждения или подсказки не сдвигало разметку.
+// Заметка о расхождении документа с основанием. Это НЕ ошибка (расхождение
+// «условное» — напр. частичный возврат), поэтому оформлена как блок HelpBox
+// в янтарной (warn) палитре, а не красным текстом ошибки.
 .FieldNote {
-	color: var(--color-danger, #c0392b);
+	margin-top: 4px;
+	padding: 8px 12px;
+	background: $warnSoftBg;
+	border: 1px solid $warnSoftBorder;
+	border-radius: 3px;
+	color: $warnSoftText;
 	font-size: 12px;
+	line-height: 1.45;
 }
 
 // То же место, но янтарная подсказка (напр. «что ещё заполнить в документе»),
@@ -644,10 +653,17 @@ input[type="number"] {
 	font-size: 12px;
 }
 
-// Нейтральная/положительная подсказка («Обязательные поля заполнены»).
+// Нейтральная/положительная подсказка («Обязательные поля заполнены») —
+// тот же блок HelpBox, что и .FieldNote, но в зелёной (success) палитре.
 .FieldNoteOk {
-	color: $color5;
+	margin-top: 4px;
+	padding: 8px 12px;
+	background: $successSoftBg;
+	border: 1px solid $successSoftBorder;
+	border-radius: 3px;
+	color: $successText;
 	font-size: 12px;
+	line-height: 1.45;
 }
 
 .BasisFieldWrapper {

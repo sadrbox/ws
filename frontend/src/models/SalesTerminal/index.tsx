@@ -133,7 +133,8 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
       cart.updateRow(existing, { quantity: q, ...calc });
       return;
     }
-    const price = priceMapRef.current.get(uuid) ?? (Number(item?.price) || 0);
+    // Цена берётся из «Цен» (priceMap = product-prices/price-list по типу); нет цены → 0.
+    const price = priceMapRef.current.get(uuid) ?? 0;
     const calc = recalcSaleItemAmounts(1, price, vatRate, 0, vatMethod, 0);
     const umUuid = (item?.unitOfMeasureUuid as string) ?? null;
     const um = item?.unitOfMeasure as { name?: string } | undefined;

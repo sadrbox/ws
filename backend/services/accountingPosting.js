@@ -565,24 +565,47 @@ function makeContext(client, orgUuid) {
 		return name;
 	}
 
-	// Скользящая средняя себестоимость единицы из регистра товаров (приходы до даты).
+	// Скользящая (перпетуальная) средняя себестоимость единицы.
+	// Воспроизводим историю движений товара ДО текущего документа в хронологическом
+	// порядке, ведя остаток (кол-во + стоимость):
+	//   приход → +qty, +amount (стоимость прихода из регистра);
+	//   расход → списываем qty × ТЕКУЩАЯ средняя (COGS считаем на лету — в регистре
+	//            out.amount хранит ВЫРУЧКУ строки, а не себестоимость, поэтому его не
+	//            используем; средняя при расходе не меняется).
+	// Возвращаем среднюю на момент непосредственно перед текущим документом.
 	async function avgCost(productUuid, warehouseUuid, dateUpTo) {
 		if (!productUuid) return 0;
-		const where = { productUuid, movementType: "in" };
-		if (warehouseUuid) where.warehouseUuid = warehouseUuid;
-		if (orgUuid) where.organizationUuid = orgUuid;
-		if (dateUpTo) where.date = { lte: dateUpTo };
+		const base = { productUuid };
+		if (warehouseUuid) base.warehouseUuid = warehouseUuid;
+		if (orgUuid) base.organizationUuid = orgUuid;
+		const dateCond = dateUpTo ? { lte: dateUpTo } : undefined;
 		const rows = await client.productRegister.findMany({
-			where,
-			select: { quantity: true, amount: true },
+			where: { ...base, ...(dateCond ? { date: dateCond } : {}), documentUuid: { not: docUuid ?? undefined } },
+			select: { quantity: true, amount: true, movementType: true, date: true, documentId: true },
+			orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
 		});
+		const upTo = dateUpTo ? (dateUpTo instanceof Date ? dateUpTo.getTime() : new Date(dateUpTo).getTime()) : null;
 		let qty = 0;
-		let amt = 0;
-		for (const row of rows) {
-			qty += Number(row.quantity) || 0;
-			amt += Number(row.amount) || 0;
+		let value = 0;
+		for (const r of rows) {
+			// Строго ДО текущего документа: по дате, при равной дате — по documentId.
+			const rt = r.date instanceof Date ? r.date.getTime() : new Date(r.date).getTime();
+			const before = upTo == null || rt < upTo
+				|| (rt === upTo && (docId == null || r.documentId == null || r.documentId < docId));
+			if (!before) continue;
+			const q = Number(r.quantity) || 0;
+			if (r.movementType === "out") {
+				const avg = qty > 0 ? value / qty : 0;
+				qty -= q;
+				value -= avg * q;
+				if (qty < 0) qty = 0;
+				if (value < 0) value = 0;
+			} else {
+				qty += q;
+				value += Number(r.amount) || 0;
+			}
 		}
-		return qty > 0 ? amt / qty : 0;
+		return qty > 0 ? value / qty : 0;
 	}
 
 	// ФИФО-себестоимость: эффективная удельная цена = (полная стоимость списания

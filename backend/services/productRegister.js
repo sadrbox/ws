@@ -123,6 +123,19 @@ export async function reconcileDocumentRegister(
 					.catch(() => false)
 			: false;
 
+		// Дата для оценки себестоимости возврата от покупателя: на момент ИСХОДНОЙ
+		// продажи (документ-основание), а не возврата. Иначе при исчерпании проданной
+		// партии возврат переоценится по чужому (старейшему оставшемуся) слою и
+		// исказит стоимость. Фолбэк на дату возврата, если основания-продажи нет.
+		let saleReturnCostDate = doc.date ?? new Date();
+		if (documentType === "sale_return" && doc.basisDocumentType === "sale" && doc.basisDocumentUuid) {
+			const basisSale = await client.sale.findUnique({
+				where: { uuid: doc.basisDocumentUuid },
+				select: { date: true },
+			});
+			if (basisSale?.date) saleReturnCostDate = basisSale.date;
+		}
+
 		// 4. Формируем движения (приход/расход) по каждой строке-товару.
 		const records = [];
 		for (const it of items) {
@@ -136,11 +149,12 @@ export async function reconcileDocumentRegister(
 			const net = Number(it.amountWithoutVat);
 			let value = useVat && Number.isFinite(net) && net > 0 ? net : amt;
 			// Возврат от покупателя приходует товар на склад: в регистр (и в ФИФО-слои)
-			// он должен входить по СЕБЕСТОИМОСТИ остатка, а не по цене строки возврата
-			// (иначе слой переоценён ≈ ценой продажи и завышает будущий COGS). Фолбэк на
-			// сумму строки, если себестоимость не определена (нет приходов).
+			// он должен входить по СЕБЕСТОИМОСТИ, по которой товар выбыл при продаже
+			// (на дату документа-основания), а не по цене строки возврата и не по
+			// текущему остатку. Фолбэк на сумму строки, если себестоимость не
+			// определена (нет приходов до даты продажи).
 			if (documentType === "sale_return" && qty > 0) {
-				const unit = await resolveUnitCost(doc.organizationUuid ?? null, it.productUuid, doc.warehouseUuid ?? null, doc.date ?? new Date(), qty, client);
+				const unit = await resolveUnitCost(doc.organizationUuid ?? null, it.productUuid, doc.warehouseUuid ?? null, saleReturnCostDate, qty, client);
 				const costValue = Math.round((Number(unit) || 0) * qty * 100) / 100;
 				if (costValue > 0) value = costValue;
 			}

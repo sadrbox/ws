@@ -20,6 +20,7 @@ import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
+import ProductImagesField from "./ProductImagesField";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "src/components/Button";
@@ -29,8 +30,8 @@ import { ProductPriceCorrection } from "src/models/ProductPriceProcessing";
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
 
-interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; price: string; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; }
-const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, price: "", brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "" };
+interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; }
+const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "" };
 
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useUserAccessRight("Product");
@@ -57,13 +58,15 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       ...(prev ?? DEFAULT_FIELDS), ...d,
       name: d.name ?? "", sku: d.sku ?? "", barcode: d.barcode ?? "",
       isService: d.isService === true,
-      price: d.price != null ? String(d.price) : "",
       brandUuid: d.brandUuid ?? "", brandName: d.brand?.name ?? "",
       unitOfMeasureUuid: d.unitOfMeasureUuid ?? "", unitOfMeasureName: d.unitOfMeasure?.name ?? "",
     }),
     buildPayload: (fd) => {
       if (!fd.name?.trim()) return "Наименование обязательно";
-      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, price: fd.price ? parseFloat(fd.price) : null, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null };
+      // price НЕ отправляем: Product.price — денормализованная цена, автоматически
+      // пересчитывается из вкладки «Цены» (services/productPricing.js). Источник
+      // истины — «Цены», ручной ввод убран как избыточный.
+      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
     afterSave: async (saved) => {
@@ -96,12 +99,12 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow>
                 <Group className={styles.w1of2}>
                   <FormLookup form={form} field="unitOfMeasure" endpoint="unit-of-measures" maxWidth="160px" />
-                  <FieldNumber label={translate("price")} name={`${form.formUid}_price`} value={form.fields.price} onChange={e => form.setField("price", e.target.value)} disabled={form.isLoading} decimals={2} width="160px" />
                 </Group>
                 <Group className={styles.w1of2}>
                   <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
                 </Group>
               </GroupRow>
+              <ProductImagesField productUuid={form.fields.uuid} disabled={form.isLoading || !canWrite} />
             </GroupCol>
           </div>
         </div>

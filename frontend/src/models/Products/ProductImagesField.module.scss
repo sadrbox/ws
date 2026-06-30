@@ -1,0 +1,278 @@
+// Блок «Изображения товара» — 4 квадратных слота. Все состояния слота:
+// пустой / hover / загрузка / заполненный / заполненный+hover / ошибка.
+// Без inline-стилей: всё через классы; прогресс — нативный <progress value>.
+
+$accent: #2563eb;
+$accent-soft: #eff6ff;
+$border: #e5e7eb;
+$border-dash: #cbd5e1;
+$muted: #9ca3af;
+$danger: #dc2626;
+$danger-border: #fca5a5;
+$danger-soft: #fef2f2;
+$slot: 120px;
+
+.Block {
+  margin-top: 14px;
+}
+
+// Лейбл блока — как у остальных полей формы (серый текст сверху).
+.Label {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+.Row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+// ── Базовый слот ──────────────────────────────────────────────────────────────
+.Slot {
+  position: relative;
+  width: $slot;
+  height: $slot;
+  border-radius: 12px;
+  border: 1px solid $border;
+  background: #fafafa;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  user-select: none;
+}
+
+// ── Пустой слот (добавить) ──────────────────────────────────────────────────
+.Add {
+  border: 1.5px dashed $border-dash;
+  color: $muted;
+  cursor: pointer;
+  gap: 4px;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    border-color: $accent;
+    color: $accent;
+    background: $accent-soft;
+  }
+}
+
+.Plus {
+  width: 26px;
+  height: 26px;
+}
+
+.AddHint {
+  font-size: 11.5px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+// Подсветка при перетаскивании файла над слотом.
+.DragOver {
+  border-color: $accent;
+  background: $accent-soft;
+  color: $accent;
+}
+
+.Disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+// ── Заполненный слот ─────────────────────────────────────────────────────────
+.Filled {
+  border: 1px solid $border;
+  cursor: default;
+}
+
+.Img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+// Оверлей при наведении на заполненный слот.
+.Overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.Filled:hover .Overlay {
+  opacity: 1;
+}
+
+.OverlayBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.9);
+  color: #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+
+  &:hover {
+    background: #fff;
+    color: $accent;
+  }
+}
+
+.OverlayBtnDanger:hover {
+  color: $danger;
+}
+
+.OverlayIcon {
+  width: 16px;
+  height: 16px;
+}
+
+// Бейдж «Главное фото».
+.MainBadge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  background: $accent;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+// Радио «сделать главным» (на неглавных заполненных слотах).
+.MainToggle {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  z-index: 2;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    border-color: $accent;
+    background: #fff;
+  }
+}
+
+.MainToggleOn {
+  background: $accent;
+  border-color: #fff;
+}
+
+.MainDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+// ── Загрузка ─────────────────────────────────────────────────────────────────
+.Loading {
+  border: 1px solid $border;
+}
+
+.ProgressWrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0 14px;
+}
+
+// ── Ошибка ───────────────────────────────────────────────────────────────────
+.ErrorSlot {
+  border: 1.5px dashed $danger-border;
+  background: $danger-soft;
+  color: $danger;
+  gap: 4px;
+  padding: 8px;
+  text-align: center;
+}
+
+.ErrorIcon {
+  width: 22px;
+  height: 22px;
+}
+
+.ErrorTitle {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ErrorSub {
+  font-size: 11px;
+  color: $muted;
+}
+
+// Кнопка-крестик (закрыть ошибку / отменить).
+.CloseBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.85);
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    color: $danger;
+    background: #fff;
+  }
+}
+
+.CloseIcon {
+  width: 13px;
+  height: 13px;
+}
+
+// ── Подсказка под блоком ─────────────────────────────────────────────────────
+.Hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: $muted;
+}
+
+.HiddenInput {
+  display: none;
+}

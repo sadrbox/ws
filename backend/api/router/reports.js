@@ -231,6 +231,95 @@ router.get("/reports/material-statement", async (req, res) => {
 	}
 });
 
+// ─── GET /reports/inventory-batches ──────────────────────────────────────────
+// Остатки по ПАРТИЯМ (ФИФО-слои) на дату. По каждому товару (на складе) —
+// непогашенные слои прихода: дата прихода, остаток кол-ва, цена прихода
+// (себестоимость единицы), сумма. Слои потребляются строго oldest→newest —
+// в точности как fifoCost (services/accountingPosting.js), поэтому разбивка
+// согласована с ФИФО-себестоимостью списания.
+// Params: organizationUuid, warehouseUuid, productUuid, dateTo.
+router.get("/reports/inventory-batches", async (req, res) => {
+	try {
+		const { organizationUuid, warehouseUuid, productUuid, dateTo } = req.query;
+		const where = { ...tenantFilter(req) };
+		if (organizationUuid) where.organizationUuid = organizationUuid;
+		if (warehouseUuid) where.warehouseUuid = warehouseUuid;
+		if (productUuid) where.productUuid = productUuid;
+		if (dateTo) where.date = { lte: new Date(dateTo + "T23:59:59.999Z") };
+
+		const movements = await prisma.productRegister.findMany({
+			where,
+			include: {
+				product: { select: { uuid: true, name: true, sku: true } },
+				unitOfMeasure: { select: { name: true } },
+				warehouse: { select: { name: true } },
+			},
+			orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
+		});
+
+		// Партии физически привязаны к складу → группируем по товар+склад.
+		const byKey = new Map();
+		for (const mv of movements) {
+			const key = `${mv.productUuid ?? ""}|${mv.warehouseUuid ?? ""}`;
+			if (!byKey.has(key)) byKey.set(key, []);
+			byKey.get(key).push(mv);
+		}
+
+		const items = [];
+		for (const mvs of byKey.values()) {
+			const layers = []; // FIFO-очередь { date, qty, unitCost }
+			let product = null, uom = "", warehouseName = "";
+			for (const mv of mvs) {
+				if (!product && mv.product) product = mv.product;
+				if (!uom && mv.unitOfMeasure?.name) uom = mv.unitOfMeasure.name;
+				if (!warehouseName && mv.warehouse?.name) warehouseName = mv.warehouse.name;
+				const q = Number(mv.quantity) || 0;
+				if (q <= 0) continue;
+				if (mv.movementType === "in") {
+					const amt = Number(mv.amount) || 0;
+					layers.push({ date: mv.date, qty: q, unitCost: q > 0 ? amt / q : 0 });
+				} else {
+					// Расход: списываем из самых старых слоёв (FIFO).
+					let need = q;
+					for (const L of layers) {
+						if (need <= 0) break;
+						if (L.qty <= 0) continue;
+						const take = Math.min(need, L.qty);
+						L.qty -= take;
+						need -= take;
+					}
+					// need>0 (расход сверх остатка) игнорируем — отрицательный остаток не формируем.
+				}
+			}
+			const open = layers.filter((L) => L.qty > 1e-9);
+			if (!open.length) continue;
+			let totalQty = 0, totalAmount = 0;
+			const batches = open.map((L) => {
+				const amount = L.qty * L.unitCost;
+				totalQty += L.qty;
+				totalAmount += amount;
+				return { date: L.date, qty: r3(L.qty), unitCost: r2(L.unitCost), amount: r2(amount) };
+			});
+			items.push({
+				productUuid: product?.uuid ?? null,
+				productName: product?.name ?? "—",
+				sku: product?.sku ?? "",
+				warehouseName,
+				uom,
+				batches,
+				totalQty: r3(totalQty),
+				totalAmount: r2(totalAmount),
+			});
+		}
+
+		items.sort((a, b) => a.productName.localeCompare(b.productName, "ru") || a.warehouseName.localeCompare(b.warehouseName, "ru"));
+		return res.json({ success: true, items });
+	} catch (err) {
+		console.error("GET /reports/inventory-batches error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 // ─── GET /reports/product-movements ──────────────────────────────────────────
 // Детализация приход/расход по конкретному товару (только проведённые).
 // Params: productUuid, dateFrom, dateTo, organizationUuid

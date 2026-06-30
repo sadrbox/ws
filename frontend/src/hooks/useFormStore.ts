@@ -525,9 +525,19 @@ function createFormStore<F extends object>(
 	): void {
 		if (msg && _paneUniqId) {
 			const entityUuid = state.meta.uuid || (state.fields as any)?.uuid;
+			// Человекочитаемый идентификатор источника: «№ X от ДД.ММ.ГГГГ»,
+			// иначе наименование, иначе ничего (ссылка покажет короткий uuid).
+			const f = state.fields as any;
+			const parts: string[] = [];
+			if (f?.number) parts.push(`№ ${f.number}`);
+			if (f?.date) {
+				const d = new Date(f.date);
+				if (!Number.isNaN(d.getTime())) parts.push(`от ${d.toLocaleDateString("ru-KZ")}`);
+			}
+			const label = parts.length ? parts.join(" ") : (f?.name ? String(f.name) : undefined);
 			addPaneNotification(_paneUniqId, noteType ?? "error", msg, {
 				paneLabel: _paneLabel,
-				ref: entityUuid ? { endpoint, uuid: String(entityUuid) } : undefined,
+				ref: entityUuid ? { endpoint, uuid: String(entityUuid), label } : undefined,
 			});
 		}
 		setMeta({
@@ -1090,8 +1100,9 @@ export interface PaneNotification {
 	actions?: PaneNotificationAction[];
 	/** Уведомление неактуально (форма сохранена/обновлена) — действия заблокированы */
 	resolved?: boolean;
-	/** Ссылка на объект-источник уведомления — для перехода к форме документа */
-	ref?: { endpoint: string; uuid: string };
+	/** Ссылка на объект-источник уведомления — для перехода к форме документа.
+	 *  label — человекочитаемый идентификатор (№/дата или наименование) для ссылки. */
+	ref?: { endpoint: string; uuid: string; label?: string };
 }
 
 /** Запись в локальном журнале уведомлений (localStorage) */
@@ -1102,8 +1113,8 @@ export interface NotificationJournalEntry {
 	timestamp: number;
 	/** Заголовок панели (например «Организации: ТОО Строй-Снаб №1») */
 	paneLabel?: string;
-	/** Ссылка на объект: endpoint + uuid, чтобы можно было переоткрыть */
-	ref?: { endpoint: string; uuid: string };
+	/** Ссылка на объект: endpoint + uuid (+ человекочитаемый label), чтобы можно было переоткрыть */
+	ref?: { endpoint: string; uuid: string; label?: string };
 }
 
 const JOURNAL_KEY = "notification-journal";
@@ -1174,7 +1185,7 @@ export function addPaneNotification(
 	type: PaneNotification["type"],
 	text: string,
 	/** Контекст для журнала: заголовок панели и ссылка на объект */
-	context?: { paneLabel?: string; ref?: { endpoint: string; uuid: string } },
+	context?: { paneLabel?: string; ref?: { endpoint: string; uuid: string; label?: string } },
 	/** Кнопки-действия внутри уведомления */
 	actions?: PaneNotificationAction[],
 ): void {
@@ -1792,6 +1803,12 @@ export function useFormStore<F extends object>(
 			// Черновик документа (Проведён = false) можно сохранять с незаполненными
 			// строками — проверяем только при проведении (posted=true) либо для
 			// не-документов (без поля posted).
+			// Контроль состояния запроса: гарантируем, что форма НЕ останется
+			// заблокированной (isLoading=true) при любом исходе — ранний выход по
+			// валидации, исключение в пост-обработке, либо зависший/отменённый
+			// запрос (HTTP отклоняется client-timeout 15s). Сброс — в finally.
+			let succeeded = false;
+			try {
 			const isDraftDoc = (store.getSnapshot().fields as { posted?: unknown } | undefined)?.posted === false;
 			if (!isDraftDoc) for (const [tableKey, def] of Object.entries(tableDefs)) {
 				if (!def.requiredItemFields?.length) continue;
@@ -1950,7 +1967,21 @@ export function useFormStore<F extends object>(
 			// оставляем disabled до анмаунта панели.
 			if (!keepLoading) store.setMeta({ isLoading: false });
 
+			succeeded = true;
 			return true;
+			} catch (err: unknown) {
+				// Непредвиденный сбой вне внутренних обработчиков (зависший/отменённый
+				// или отклонённый по таймауту запрос, ошибка пост-обработки и т.п.).
+				// Не оставляем форму заблокированной — показываем ошибку, сброс в finally.
+				const m = (err as { message?: string })?.message;
+				store.setError(m ? translateError(m) : "Непредвиденная ошибка при сохранении");
+				return false;
+			} finally {
+				// Гарантированный сброс блокировки. Исключение — успешное сохранение с
+				// keepLoadingOnSuccess (handleSaveAndClose): форма намеренно остаётся
+				// disabled до анмаунта панели, чтобы поля не «прыгали».
+				if (!(succeeded && keepLoading)) store.setMeta({ isLoading: false });
+			}
 		},
 		[store, tableDefs, updatePaneLabel, uniqId, storageKey, queryClient, endpoint],
 	);

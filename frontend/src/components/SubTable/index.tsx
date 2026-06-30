@@ -696,13 +696,19 @@ const SubTable: FC<SubTableProps> = ({
     newRowFocusRef.current = null;
     requestAnimationFrame(() => {
       if (!containerRef.current) return;
-      const allTrs = containerRef.current.querySelectorAll<HTMLElement>('tbody tr');
+      const allTrs = Array.from(containerRef.current.querySelectorAll<HTMLElement>('tbody tr'));
       if (allTrs.length === 0) return;
-      const tr = position === 'first' ? allTrs[0] : allTrs[allTrs.length - 1];
-      const input = tr.querySelector<HTMLInputElement>('input:not([disabled]):not([type="checkbox"])');
-      if (input) {
-        input.focus();
-        try { input.select(); } catch { /* ignore */ }
+      // Ищем строку с РЕДАКТИРУЕМЫМ полем (с нужного конца), пропуская строки без
+      // input — например строку итогов в tbody. Первый input такой строки — это
+      // первая редактируемая ячейка (для торговых документов — «Номенклатура»).
+      const ordered = position === 'first' ? allTrs : allTrs.reverse();
+      for (const tr of ordered) {
+        const input = tr.querySelector<HTMLInputElement>('input:not([disabled]):not([type="checkbox"])');
+        if (input) {
+          input.focus();
+          try { input.select(); } catch { /* ignore */ }
+          break;
+        }
       }
     });
   }, [cacheVersion]);

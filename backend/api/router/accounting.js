@@ -8,6 +8,7 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { getDocumentEntries, filterPostedEntries } from "../../services/accountingPosting.js";
 import { getClosedBoundary } from "../../services/periodLock.js";
+import { recomputeCosting } from "../../services/recomputeCosting.js";
 
 const router = express.Router();
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -444,6 +445,37 @@ router.get("/accounting/closed-period", async (req, res) => {
 		return res.json({ success: true, boundary: boundary ? boundary.toISOString() : null });
 	} catch (err) {
 		console.error("GET /accounting/closed-period error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ─── POST /accounting/recompute-costing ──────────────────────────────────────
+// Ретроактивный пересчёт себестоимости/проводок по запросу (после ввода
+// документа задним числом). Две фазы (регистр → проводки), идемпотентно.
+// Закрытые периоды не затрагиваются: нижняя граница строго ПОСЛЕ границы закрытия.
+// Body: { organizationUuid (обяз.), fromDate? }. Доступ: суперадмин или
+// админ активной организации (только своей орг).
+router.post("/accounting/recompute-costing", async (req, res) => {
+	try {
+		const organizationUuid = typeof req.body?.organizationUuid === "string" ? req.body.organizationUuid : null;
+		if (!organizationUuid) return res.status(400).json({ success: false, message: "organizationUuid обязателен" });
+
+		const allowed = req.user?.isSuperAdmin
+			|| (req.user?.isOrgAdmin && organizationUuid === req.user?.organizationUuid);
+		if (!allowed) return res.status(403).json({ success: false, message: "Недостаточно прав" });
+
+		const fromDate = typeof req.body?.fromDate === "string" && req.body.fromDate ? new Date(req.body.fromDate) : null;
+		const boundary = await getClosedBoundary(organizationUuid);
+
+		// Нижняя граница диапазона: не трогаем закрытые периоды (≤ boundary).
+		let dateFilter = null;
+		if (fromDate && (!boundary || fromDate > boundary)) dateFilter = { gte: fromDate };
+		else if (boundary) dateFilter = { gt: boundary };
+
+		const result = await recomputeCosting({ organizationUuid, dateFilter });
+		return res.json({ success: true, ...result, boundary: boundary ? boundary.toISOString() : null });
+	} catch (err) {
+		console.error("POST /accounting/recompute-costing error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

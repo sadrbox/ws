@@ -217,6 +217,9 @@ const LookupField: FC<LookupFieldProps> = ({
   const [activeIndex, setActiveIndex] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // Enter нажат раньше, чем поиск вернул подсказки (быстрая вставка наименования).
+  // Откладываем переход фокуса до результата — затем выбираем точное совпадение.
+  const pendingEnterRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedText = useDebounceValue(inputText, 300);
 
@@ -458,10 +461,16 @@ const LookupField: FC<LookupFieldProps> = ({
           handleQuickSelect();
         }
       } else if (e.key === "Enter") {
-        // Enter без дропдауна — перейти на следующее поле
         e.preventDefault();
         e.stopPropagation();
-        onEnterKey?.();
+        // Если поиск ещё не завершён для текущего текста (debounce/запрос в полёте) —
+        // НЕ уходим сразу, а ждём подсказки и выбираем совпадение (см. эффект ниже).
+        const searchSettled = !isLoading && debouncedText === inputText;
+        if (inputText.trim() !== "" && inputText !== displayValue && !searchSettled) {
+          pendingEnterRef.current = true;
+        } else {
+          onEnterKey?.();
+        }
       }
       return;
     }
@@ -489,7 +498,25 @@ const LookupField: FC<LookupFieldProps> = ({
       e.stopPropagation();
       setIsDropdownOpen(false);
     }
-  }, [isDropdownOpen, suggestions, activeIndex, inputText, disabled, handleOpenModal, handleSuggestionClick, handleQuickSelect, onEnterKey]);
+  }, [isDropdownOpen, suggestions, activeIndex, inputText, displayValue, isLoading, debouncedText, disabled, handleOpenModal, handleSuggestionClick, handleQuickSelect, onEnterKey]);
+
+  // Разрешение отложенного Enter: как только поиск завершился — выбираем точное
+  // совпадение по тексту (иначе первое), либо переходим дальше, если совпадений нет.
+  useEffect(() => {
+    if (!pendingEnterRef.current || isLoading) return;
+    pendingEnterRef.current = false;
+    if (suggestions.length > 0) {
+      const norm = inputText.trim().toLowerCase();
+      const exact = suggestions.find((s) => {
+        const label = getSuggestionLabel ? getSuggestionLabel(s) : String(s[displayField] ?? "");
+        return label.trim().toLowerCase() === norm;
+      });
+      handleSuggestionClick(exact ?? suggestions[0]);
+    } else {
+      onEnterKey?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, suggestions]);
 
   // Скроллинг активного элемента в видимую область dropdown
   useEffect(() => {

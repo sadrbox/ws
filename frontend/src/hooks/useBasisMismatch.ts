@@ -38,6 +38,12 @@ export interface UseBasisMismatchArgs {
 	fieldLabels?: Record<string, string>;
 	/** Поля строк для сравнения (по умолчанию товар/кол-во/цена/ставки). */
 	itemKeys?: readonly string[];
+	/** Режим сравнения строк:
+	 *  - "exact" (по умолчанию): полное совпадение набора строк по itemKeys;
+	 *  - "productsSubset": для ВОЗВРАТОВ — частичный возврат допустим, поэтому
+	 *    кол-во/суммы НЕ сравниваем; расхождение — только если в зависимом документе
+	 *    есть номенклатура, которой НЕТ в основании. */
+	itemMatchMode?: "exact" | "productsSubset";
 	/** Не сравнивать строки (для header-документов без табличной части, напр. банк-выписка). */
 	ignoreItems?: boolean;
 	/** Ключи шапки, которых НЕТ в дочернем документе (напр. у счёта-фактуры нет
@@ -66,6 +72,7 @@ export function useBasisMismatch({
 	mapFields,
 	fieldLabels,
 	itemKeys = DEFAULT_ITEM_KEYS,
+	itemMatchMode = "exact",
 	ignoreItems = false,
 	ignoreFields,
 }: UseBasisMismatchArgs): BasisMismatchResult {
@@ -104,6 +111,24 @@ export function useBasisMismatch({
 		const cur = (currentItems ?? []).filter(
 			(r: any) => r._pendingAction !== "delete",
 		);
+
+		// ВОЗВРАТЫ: частичный возврат допустим → не сверяем кол-во/суммы, а только
+		// что каждая номенклатура зависимого документа присутствует в основании.
+		if (!ignoreItems && itemMatchMode === "productsSubset") {
+			const basisProducts = new Set(
+				basisItems.map((r: any) => r?.productUuid).filter(Boolean),
+			);
+			const hasExtraneous = cur.some(
+				(r: any) => r?.productUuid && !basisProducts.has(r.productUuid),
+			);
+			if (hasExtraneous) {
+				differences.push(
+					translate("basisMismatchExtraProduct") || "номенклатура отсутствует в основании",
+				);
+			}
+			return { mismatch: differences.length > 0, differences };
+		}
+
 		const serializeRow = (r: any) =>
 			itemKeys
 				.map((k) => {
@@ -127,7 +152,7 @@ export function useBasisMismatch({
 		}
 
 		return { mismatch: differences.length > 0, differences };
-	}, [enabled, data, currentFields, currentItems, fieldLabels, itemKeys, ignoreItems, ignoreFields]);
+	}, [enabled, data, currentFields, currentItems, fieldLabels, itemKeys, itemMatchMode, ignoreItems, ignoreFields]);
 }
 
 export default useBasisMismatch;

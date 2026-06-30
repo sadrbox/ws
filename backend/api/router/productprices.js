@@ -7,7 +7,6 @@ import {
 	handleDelete,
 	handleBatchDelete,
 } from "../../utils/checkReferences.js";
-import { reconcileProductPrice } from "../../services/productPricing.js";
 import { tenantFilter } from "../../utils/auth.js";
 
 const router = express.Router();
@@ -236,7 +235,6 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				price: num(price),
 			},
 		});
-		await reconcileProductPrice([productUuid]);
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
 		console.error(`POST /${ROUTE} error:`, error);
@@ -256,7 +254,6 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.date !== undefined) data.date = toDate(req.body.date);
 		if (req.body.price !== undefined) data.price = num(req.body.price);
 		const item = await prisma[MODEL].update({ where: w, data });
-		await reconcileProductPrice([item.productUuid]);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (error.code === "P2025")
@@ -272,7 +269,6 @@ router.delete(`/${ROUTE}/:id`, (req, res) =>
 		res,
 		prisma,
 		modelName: MODEL,
-		onDeleted: (doc) => reconcileProductPrice([doc.productUuid]),
 	}),
 );
 
@@ -421,7 +417,6 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 				}
 			}
 		});
-		await reconcileProductPrice([...affected]);
 		return res.status(200).json({ success: true, summary });
 	} catch (error) {
 		console.error(`POST /${ROUTE}/batch error:`, error);

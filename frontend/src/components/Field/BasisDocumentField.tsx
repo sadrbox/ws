@@ -13,6 +13,8 @@ export interface BasisTypeConfig {
   label?: string;
 }
 
+
+
 export interface BasisDocumentFieldProps {
   allowedTypes: BasisTypeConfig[];
   basisDocumentType?: string;
@@ -175,7 +177,8 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
 
   // Примечание под полем. Слот рендерится ВСЕГДА (с зарезервированной высотой —
   // см. .FieldNote*), чтобы появление/скрытие не сдвигало разметку. Приоритет:
-  //   1) «предупреждение» о расхождении документа с основанием (красное);
+  //   1) «предупреждение» о расхождении документа с основанием (янтарное —
+  //      это не ошибка: расхождение условное, напр. частичный возврат);
   //   2) подсказка о незаполненных обязательных полях (янтарная), если передана;
   //   3) когда всё заполнено (hint === "") — нейтральное «Обязательные поля
   //      заполнены»; если подсказка не передана (hint === undefined) — пустой
@@ -241,6 +244,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
         getSuggestionLabel={(item) => basisItemLabel(newTypeName, item)}
         columns={columns}
         secondaryFields={["name", "counterparty.name", "documentNumber"]}
+        postedIndicator={docTypeUsesPosted(activeType?.type ?? selectedType)}
         onSelect={handleSelect}
         disabled={disabled || !activeType}
         searchTransform={extractBasisSearch}

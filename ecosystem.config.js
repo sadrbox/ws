@@ -1,14 +1,14 @@
 // ecosystem.config.js
 module.exports = {
 	apps: [
-		// 1. Прод-сборка фронта (статика из ./frontend/dist, SPA-fallback)
+		// 1. Dev-сервер Vite в ./frontend (HMR через cloudflared, см. vite.config.ts)
 		{
 			name: "frontend",
 			cwd: "./frontend", // Рабочая директория
-			script: "npx", // локальный serve через npx
-			args: "serve -s dist -l tcp://0.0.0.0:5173", // -s = SPA history-fallback на index.html
-			watch: false, // Перезапуск при изменении файлов
-			ignore_watch: ["node_modules", "dist", "logs"], // Игнорируем эти папки
+			script: "npx",
+			args: "vite --host", // dev-сервер на 0.0.0.0:5173 с HMR
+			watch: false,
+			ignore_watch: ["node_modules", "dist", "logs"],
 			env: {
 				NODE_ENV: "development",
 			},

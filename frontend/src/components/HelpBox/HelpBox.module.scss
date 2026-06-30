@@ -5,7 +5,7 @@
 	padding: 10px 14px;
 	background: $accentBlueSoft;
 	border: 1px solid $accentBlueBorder;
-	border-radius: 8px;
+	border-radius: 3px;
 	color: $gray700;
 	font-size: 13px;
 	line-height: 1.45;
@@ -14,7 +14,7 @@
 		margin: 0;
 	}
 
-	p + p {
+	p+p {
 		margin-top: 6px;
 	}
 

@@ -188,4 +188,45 @@ router.delete("/files/:uuid", async (req, res) => {
 	}
 });
 
+// ============================================
+// PATCH /files/:uuid — обновление метаданных файла.
+// Body { isMain: true } — пометить главным (comment="main"), сняв пометку с
+// остальных файлов того же владельца. Либо { comment } — произвольный комментарий.
+// (Используется блоком «Изображения товара»: главное фото хранится в comment.)
+// ============================================
+router.patch("/files/:uuid", async (req, res) => {
+	try {
+		const file = await prisma.attachedFile.findUnique({
+			where: { uuid: req.params.uuid },
+		});
+		if (!file) {
+			return res.status(404).json({ success: false, message: "Файл не найден" });
+		}
+
+		const { isMain, comment } = req.body ?? {};
+
+		if (isMain === true) {
+			// Снимаем «main» с остальных файлов того же владельца и ставим этому.
+			await prisma.attachedFile.updateMany({
+				where: { ownerType: file.ownerType, ownerUuid: file.ownerUuid, comment: "main" },
+				data: { comment: null },
+			});
+			const item = await prisma.attachedFile.update({
+				where: { uuid: file.uuid },
+				data: { comment: "main" },
+			});
+			return res.status(200).json({ success: true, item });
+		}
+
+		const item = await prisma.attachedFile.update({
+			where: { uuid: file.uuid },
+			data: { comment: comment ?? file.comment },
+		});
+		return res.status(200).json({ success: true, item });
+	} catch (error) {
+		console.error("PATCH /files error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 export default router;

@@ -810,10 +810,9 @@ model Product {
   sku                      String?
   barcode                  String?
   isService                Boolean                   @default(false)
-  /// Цены (прайс-лист). Текущие значения денормализуются из последнего
-  /// проведённого документа «Установка цен номенклатуры» (по дате). price —
-  /// цена продажи (автоподстановка в продажи/терминал).
-  price                    Decimal?                  @db.Decimal(18, 2)
+  /// Продажная цена в Product НЕ хранится — источник истины таблица «Цены»
+  /// (ProductPrice, тип «по умолчанию»); автоподстановка через product-prices/price-list.
+  /// Ниже — денормализованные цены закупки/опта (по дате документа «Установка цен»).
   purchasePrice            Decimal?                  @db.Decimal(18, 2)
   wholesalePrice           Decimal?                  @db.Decimal(18, 2)
   brandUuid                String?

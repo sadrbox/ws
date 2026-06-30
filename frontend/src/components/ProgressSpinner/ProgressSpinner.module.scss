@@ -1,0 +1,33 @@
+// Кольцевой прогресс с процентами в центре. Старт дуги — сверху (поворот −90°
+// задаётся классом, не inline). Цвета — акцентный синий + серый трек.
+$accent: #2563eb;
+$track: #e5e7eb;
+
+.Wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.Svg {
+  display: block;
+}
+
+.Track {
+  stroke: $track;
+}
+
+.Arc {
+  stroke: $accent;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.2s ease;
+}
+
+.Pct {
+  position: absolute;
+  font-size: 13px;
+  font-weight: 700;
+  color: $accent;
+}

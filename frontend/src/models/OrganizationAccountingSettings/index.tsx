@@ -1,4 +1,6 @@
-import { FC, useEffect, useMemo } from "react";
+import { FC, useEffect, useMemo, useState } from "react";
+import { api } from "src/services/api/client";
+import { Button } from "src/components/Button";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -70,6 +72,7 @@ const DEFAULT_FIELDS: TFields = {
 // ─────────────────────────────────────────────────────────────────────────
 const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useUserAccessRight("OrganizationAccountingSetting");
+  const [recomputing, setRecomputing] = useState(false);
   const queryClient = useQueryClient();
 
   const form = useFormStore<TFields>({
@@ -278,6 +281,38 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   Способ списания себестоимости ТМЗ: средняя или ФИФО (первая партия
                   прихода списывается первой). Применяется к реализации, перемещению и
                   возврату от покупателя.
+                </span>
+              </GroupRow>
+
+              <GroupRow className={styles.SectionGap}>
+                <Button
+                  variant="secondary"
+                  disabled={recomputing || form.isLoading || !canWrite || !form.fields.organizationUuid}
+                  onClick={async () => {
+                    const org = form.fields.organizationUuid;
+                    if (!org) { alert("Сначала выберите организацию"); return; }
+                    if (!confirm("Пересчитать себестоимость и проводки по открытому периоду этой организации? Закрытые периоды не затрагиваются. Операция идемпотентна.")) return;
+                    setRecomputing(true);
+                    try {
+                      const resp = await api.post<{ registers?: number; entries?: number }>(
+                        "accounting/recompute-costing", { organizationUuid: org },
+                      );
+                      await queryClient.invalidateQueries();
+                      alert(`Готово. Пересчитано документов: регистр — ${resp?.registers ?? 0}, проводки — ${resp?.entries ?? 0}.`);
+                    } catch (e) {
+                      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+                      alert(msg || "Ошибка пересчёта");
+                    } finally {
+                      setRecomputing(false);
+                    }
+                  }}
+                >
+                  {recomputing ? "Пересчёт…" : "Пересчитать себестоимость"}
+                </Button>
+                <span className={styles.SettingHint}>
+                  Ретроактивный пересчёт после ввода документов задним числом: заново
+                  строит регистр и проводки (COGS) по открытому периоду. Закрытые
+                  периоды не затрагиваются. Безопасно запускать повторно.
                 </span>
               </GroupRow>
 
