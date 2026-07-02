@@ -676,66 +676,66 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     {
       id: "tab-details", label: translate("general"), component: (
         <div className={styles.FormWrapper}>
-          <div className={styles.Form}>
-            {/* ── Левая колонка: поля ── */}
-            {/* Строка 1: Дата - Проведён - Статус */}
-            <GroupRow className={styles.FormHeaderRow}>
-              <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
-              <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
-                actions={[
-                  { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
-                ]} />
-            </GroupRow>
+          <GroupRow>
+            <div className={styles.Form}>
+              {/* ── Левая колонка: поля ── */}
+              {/* Строка 1: Дата - Проведён - Статус */}
+              <GroupRow className={styles.FormHeaderRow}>
+                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
+                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
+                  actions={[
+                    { type: "assignNumber", onClick: () => void assignNumber(MODEL_ENDPOINT, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
+                  ]} />
+              </GroupRow>
 
-            <Group>
-              {/* Организация — во всю ширину */}
-              <FormLookup form={form} field="organization" endpoint="organizations" onSelect={handleOrganizationSelect} />
+              <Group>
+                {/* Организация — во всю ширину */}
+                <FormLookup form={form} field="organization" endpoint="organizations" onSelect={handleOrganizationSelect} />
 
-              <FormLookup form={form} field="warehouse" endpoint="warehouses" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-            </Group>
-
-            <Group>
-              {/* Контрагент — во всю ширину */}
-              <FormLookup form={form} field="counterparty" endpoint="counterparties" />
-              <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect} extraParams={contractExtraParams} />
-            </Group>
-
-            <GroupRow>
-              <Group className={styles.w1of2}>
-                {/* Менеджер реализации — аналитика учёта движения продаж по менеджеру (НК РК) */}
-                <FormLookup form={form} field="manager" endpoint="employees" displayField="fullName" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                <FormLookup form={form} field="warehouse" endpoint="warehouses" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
-            </GroupRow>
 
-            <GroupRow>
-              <Group className={styles.w1of2}>
-                <FormLookup form={form} field="priceType" endpoint="price-types" />
+              <Group>
+                {/* Контрагент — во всю ширину */}
+                <FormLookup form={form} field="counterparty" endpoint="counterparties" />
+                <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect} extraParams={contractExtraParams} />
               </Group>
-            </GroupRow>
 
-            <GroupCol>
-              <BasisDocumentField
-                allowedTypes={[
-                  { type: "sales_order", endpoint: "sales-orders" },
-                  { type: "reservation", endpoint: "reservations" },
-                  { type: "commercial_offer", endpoint: "commercial-offers" },
-                  { type: "payment_invoice", endpoint: "payment-invoices" },
-                ]}
-                basisDocumentType={form.fields.basisDocumentType}
-                basisDocumentUuid={form.fields.basisDocumentUuid}
-                basisDocumentLabel={form.fields.basisDocumentLabel}
-                formUid={form.formUid}
-                disabled={form.isLoading}
-                onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
-                onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
-                mismatch={basisMismatch.mismatch}
-                mismatchDetails={basisMismatch.differences}
-                hint={getDocumentFillHint("sale", form.fields as unknown as Record<string, unknown>)}
-              />
-            </GroupCol>
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  {/* Менеджер реализации — аналитика учёта движения продаж по менеджеру (НК РК) */}
+                  <FormLookup form={form} field="manager" endpoint="employees" displayField="fullName" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                </Group>
+              </GroupRow>
 
-          </div>
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  <FormLookup form={form} field="priceType" endpoint="price-types" />
+                </Group>
+              </GroupRow>
 
+              <GroupCol>
+                <BasisDocumentField
+                  allowedTypes={[
+                    { type: "sales_order", endpoint: "sales-orders" },
+                    { type: "reservation", endpoint: "reservations" },
+                    { type: "commercial_offer", endpoint: "commercial-offers" },
+                    { type: "payment_invoice", endpoint: "payment-invoices" },
+                  ]}
+                  basisDocumentType={form.fields.basisDocumentType}
+                  basisDocumentUuid={form.fields.basisDocumentUuid}
+                  basisDocumentLabel={form.fields.basisDocumentLabel}
+                  formUid={form.formUid}
+                  disabled={form.isLoading}
+                  onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
+                  onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+                  mismatch={basisMismatch.mismatch}
+                  mismatchDetails={basisMismatch.differences}
+                  hint={getDocumentFillHint("sale", form.fields as unknown as Record<string, unknown>)}
+                />
+              </GroupCol>
+            </div>
+          </GroupRow>
           <Group>
             <DocumentTotals
               amount={form.fields.amount}
@@ -746,12 +746,12 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               useDiscount={useDiscount}
             />
           </Group>
-          {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
-            <GroupRow className={styles.FormHeaderRow}>
-              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-            </GroupRow>
-          </GroupCol>}
+          {/* {form.isEditMode && <GroupCol className={styles.FormFooterCol}> */}
+          <GroupRow>
+            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+          </GroupRow>
+          {/* </GroupCol>} */}
         </div>
       )
     },
