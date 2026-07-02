@@ -1,5 +1,6 @@
 import { FC, useCallback, useEffect, useState } from "react";
 import { useAppContext } from "src/app";
+import { LoadingSpinner } from "src/components/UI";
 import type { TPane } from "src/app/types";
 
 /**
@@ -81,7 +82,10 @@ const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId })
   }
 
   if (!ResolvedList) {
-    return <div style={{ padding: "24px", textAlign: "center", color: "#888" }}>Загрузка...</div>;
+    // Пока лениво грузится компонент списка — только спиннер, без слова
+    // «Загрузка...» (спиннер сам по себе сообщает о загрузке; после монтирования
+    // список показывает собственный LoadingSpinner при загрузке данных).
+    return <LoadingSpinner />;
   }
 
   // Передаём extraParams как extraQueryParams — ModelList / Table понимают именно это имя

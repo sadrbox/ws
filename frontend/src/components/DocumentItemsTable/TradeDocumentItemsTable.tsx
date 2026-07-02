@@ -18,7 +18,9 @@ import type { MutableRefObject, ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { FieldNumber } from "src/components/Field";
+import FieldActionButton from "src/components/Field/FieldActionButton";
 import LookupField from "src/components/Field/LookupField";
+import styles from "./TradeDocumentItemsTable.module.scss";
 import apiClient from "src/services/api/client";
 import columnsJson from "./documentItemsColumns.json";
 import SubTable, { ReadOnlyCell, type SubTableContext, type SubTableApi, type TCellValidator, useSubTableContext } from "src/components/SubTable";
@@ -482,12 +484,11 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
         ctx.handleInlineChange(row, "quantity", String(q));
       };
       const cur = Number(row.quantity) || 0;
-      const btn: React.CSSProperties = { width: 24, height: 24, flex: "0 0 auto", border: "1px solid #d1d5db", background: "#fff", borderRadius: 6, fontSize: 16, lineHeight: 1, cursor: "pointer", color: "#374151" };
       return (
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <button type="button" style={btn} disabled={ctx.disabled} onClick={() => setQty(cur - 1)} title="−1">−</button>
-          <div style={{ flex: "1 1 auto", minWidth: 0 }}>{field}</div>
-          <button type="button" style={btn} disabled={ctx.disabled} onClick={() => setQty(cur + 1)} title="+1">+</button>
+        <div className={styles.QtyStepper}>
+          <FieldActionButton icon="minus" label="−1" disabled={ctx.disabled} onClick={() => setQty(cur - 1)} />
+          <div className={styles.QtyStepperField}>{field}</div>
+          <FieldActionButton icon="plus" label="+1" disabled={ctx.disabled} onClick={() => setQty(cur + 1)} />
         </div>
       );
     }

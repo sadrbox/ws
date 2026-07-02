@@ -20,6 +20,7 @@ import type { SubTableApi } from "src/components/SubTable";
 import type { TDataItem } from "src/components/Table/types";
 import { usePersistentState } from "src/hooks/usePersistentState";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
+import { resolveOrgChangeFields } from "src/utils/createFromBasis";
 import { useOrgAccountingSettings } from "src/hooks/useOrgAccountingSettings";
 import { useAppContext } from "src/app";
 import { recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
@@ -86,9 +87,12 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
   const acct = useOrgAccountingSettings(orgUuid);
   const vatRate = acct.vatRate;
   const vatMethod = acct.vatCalculationMethod;
+  const userUuid = (user as { uuid?: string })?.uuid ?? "";
 
   // Императивный API корзины (SubTable) — скан/лукап добавляют строки сюда.
   const cartApiRef = useRef<SubTableApi | null>(null);
+  // Обёртка поля поиска — для возврата фокуса после успешной продажи.
+  const searchWrapRef = useRef<HTMLDivElement>(null);
 
   // ── Автоподстановка цен по выбранному типу цены ──────────────────────────
   const priceMapRef = useRef<Map<string, number>>(new Map());
@@ -120,6 +124,29 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
   }, [orgUuid, vatRate, vatMethod, setPriceTypeUuid, setPriceTypeName]);
 
   useEffect(() => { void loadPriceMap(priceTypeUuidRef.current, false); }, [loadPriceMap]);
+
+  // ── Смена организации: подставляем орг-зависимые реквизиты (склад, касса, тип
+  // цены) из «Предопределённых значений» новой организации, а при отсутствии
+  // дефолта — ОЧИЩАЕМ поле (значение прежней орг не должно «протекать»). Тот же
+  // механизм resolveOrgChangeFields, что и в формах документов. Менеджера,
+  // именного покупателя и договор также сбрасываем (org-зависимы). ───────────
+  const handleOrgChange = useCallback(async (u: string, d: string) => {
+    setOrgUuid(u);
+    setOrgName(d);
+    // Сбрасываем org-зависимые поля, не покрытые дефолтами.
+    setManagerUuid(""); setManagerName("");
+    setBuyerUuid(""); setBuyerName("");
+    setContractUuid(""); setContractName("");
+    const patch = await resolveOrgChangeFields(u, userUuid, [
+      { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+      { valueType: "cashbox", uuidKey: "cashboxUuid", nameKey: "cashboxName" },
+      { valueType: "salePriceType", uuidKey: "priceTypeUuid", nameKey: "priceTypeName" },
+    ]);
+    setWarehouseUuid(patch.warehouseUuid ?? ""); setWarehouseName(patch.warehouseName ?? "");
+    setCashboxUuid(patch.cashboxUuid ?? ""); setCashboxName(patch.cashboxName ?? "");
+    setPriceTypeUuid(patch.priceTypeUuid ?? ""); setPriceTypeName(patch.priceTypeName ?? "");
+    void loadPriceMap(patch.priceTypeUuid ?? "", true);
+  }, [userUuid, loadPriceMap, setWarehouseUuid, setWarehouseName, setCashboxUuid, setCashboxName, setPriceTypeUuid, setPriceTypeName]);
 
   // ── Добавление товара (скан/лукап). Повтор — увеличивает количество. ──────
   const addProduct = useCallback((uuid: string, name: string, item: Record<string, unknown>) => {
@@ -176,7 +203,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
 
     setSubmitting(true);
     try {
-      const resp = await api.post<{ item?: { uuid?: string } }>(docEndpoint, {
+      const resp = await api.post<{ item?: { uuid?: string; number?: string } }>(docEndpoint, {
         date: new Date().toISOString(),
         organizationUuid: orgUuid,
         counterpartyUuid: cpUuid,
@@ -203,7 +230,8 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         })),
       });
 
-      await api.put(`${docEndpoint}/${docUuid}`, { posted: true });
+      const posted = await api.put<{ item?: { number?: string } }>(`${docEndpoint}/${docUuid}`, { posted: true });
+      const docNumber = posted?.item?.number ?? resp?.item?.number ?? "";
 
       // Нал при ПРОДАЖЕ → проведённый ПКО (Дт1010 Кт1210).
       if (!isReturn && payment === "cash" && total > 0) {
@@ -242,8 +270,16 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         } catch { /* перехватчик api покажет ошибку */ }
       }
 
-      showToast(`${translate(isReturn ? "terminalReturnDone" : "terminalDone")} — ${fmt(total)}`, "success", 4000);
+      const doneLabel = translate(isReturn ? "terminalReturnDone" : "terminalDone");
+      showToast(
+        `✓ ${doneLabel}${docNumber ? ` № ${docNumber}` : ""} — ${fmt(total)} ₸`,
+        "success",
+        5000,
+      );
+      // Готово — очищаем корзину и возвращаем фокус в поиск товара, чтобы кассир
+      // сразу мог начать следующую продажу (терминал остаётся открытым).
       cartApiRef.current?.clear();
+      requestAnimationFrame(() => searchWrapRef.current?.querySelector("input")?.focus());
     } catch {
       // Тосты ошибок (422/409/500) показывает перехватчик api-клиента.
     } finally {
@@ -268,17 +304,19 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
     <div className={styles.Terminal}>
       {/* ЛЕВО: поиск (он же скан) + корзина (SubTable) */}
       <div className={styles.Left}>
-        <LookupField
-          label={translate("terminalAddProduct")}
-          name="terminal_product"
-          value=""
-          displayValue=""
-          endpoint="products"
-          displayField="name"
-          autoFocus
-          onSelect={(u, d, item) => addProduct(u, d, (item as Record<string, unknown>) ?? {})}
-          extraParams={orgParams}
-        />
+        <div ref={searchWrapRef}>
+          <LookupField
+            label={translate("terminalAddProduct")}
+            name="terminal_product"
+            value=""
+            displayValue=""
+            endpoint="products"
+            displayField="name"
+            autoFocus
+            onSelect={(u, d, item) => addProduct(u, d, (item as Record<string, unknown>) ?? {})}
+            extraParams={orgParams}
+          />
+        </div>
         {/* Структурный контейнер (flex-размер для таблицы); своя рамка у SubTable. */}
         <div className={styles.CartWrap}>
           <TradeDocumentItemsTable
@@ -313,8 +351,8 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         </div>
 
         {/* Реквизиты — свёрнуты по умолчанию (лёгкий вид). Сводка → раскрытие. */}
-        <button type="button" className={styles.PayMethod} style={{ width: "100%", justifyContent: "space-between", display: "flex" }} onClick={() => setReqOpen((v) => !v)}>
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <button type="button" className={[styles.PayMethod, styles.ReqToggle].join(" ")} onClick={() => setReqOpen((v) => !v)}>
+          <span className={styles.ReqToggleText}>
             {orgName || translate("organization")} - {warehouseName || translate("warehouse")} - {buyerLabel}{priceTypeName ? ` - ${priceTypeName}` : ""}
           </span>
           <span>{reqOpen ? "▲" : "▼"}</span>
@@ -323,7 +361,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
           <div className={styles.Fields}>
             <LookupField label={translate("organization")} name="t_org" value={orgUuid} displayValue={orgName}
               endpoint="organizations" displayField="name"
-              onSelect={(u, d) => { setOrgUuid(u); setOrgName(d); }} onClear={() => { setOrgUuid(""); setOrgName(""); }} />
+              onSelect={(u, d) => { void handleOrgChange(u, d); }} onClear={() => { void handleOrgChange("", ""); }} />
             <LookupField label={translate("warehouse")} name="t_wh" value={warehouseUuid} displayValue={warehouseName}
               endpoint="warehouses" displayField="name" extraParams={orgParams}
               onSelect={(u, d) => { setWarehouseUuid(u); setWarehouseName(d); }} onClear={() => { setWarehouseUuid(""); setWarehouseName(""); }} />

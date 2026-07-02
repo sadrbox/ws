@@ -138,6 +138,21 @@ export const ClearIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+/** Плюс — увеличение количества (степпер строки). */
+export const PlusIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M8 3.5v9" />
+    <path d="M3.5 8h9" />
+  </svg>
+);
+
+/** Минус — уменьшение количества (степпер строки). */
+export const MinusIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M3.5 8h9" />
+  </svg>
+);
+
 /** Документ проведён — заполненный кружок с галочкой.
  *  Используется в списках для индикации проведённого документа
  *  вместо ранее использовавшейся точки <span> с inline-стилями. */
@@ -313,6 +328,8 @@ export const ICONS = {
   makePrimary: MakePrimaryIcon,
   close: CloseIcon,
   clear: ClearIcon,
+  plus: PlusIcon,
+  minus: MinusIcon,
   quickselect: QuickSelectIcon,
   list: ListIcon,
   open: OpenIcon,

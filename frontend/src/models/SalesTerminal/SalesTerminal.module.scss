@@ -5,9 +5,9 @@
 	gap: 12px;
 	height: 100%;
 	min-height: 0;
-	padding: 12px;
+	// padding: 12px;
 	box-sizing: border-box;
-	background: $gray50;
+	// background: $gray50;
 }
 
 // ── Левая колонка: поиск + корзина ──
@@ -97,6 +97,20 @@
 	color: $primary;
 }
 
+// Свёрнутый переключатель блока «Реквизиты» (сводка + стрелка).
+.ReqToggle {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.ReqToggleText {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .Summary {
 	margin-top: auto;
 	border-top: 1px dashed $gray300;
@@ -149,7 +163,16 @@
 	box-shadow: 0 4px 12px rgba(#000, 0.12);
 	transition: filter 0.12s, transform 0.05s;
 
-	&:hover:not(:disabled) { filter: brightness(1.05); }
-	&:active:not(:disabled) { transform: translateY(1px); }
-	&:disabled { opacity: 0.5; cursor: not-allowed; }
+	&:hover:not(:disabled) {
+		filter: brightness(1.05);
+	}
+
+	&:active:not(:disabled) {
+		transform: translateY(1px);
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
 }

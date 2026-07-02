@@ -1,0 +1,12 @@
+// Степпер количества в ячейке (−/поле/+). Кнопки — FieldActionButton (стиль
+// как у действий поля), без inline-стилей.
+.QtyStepper {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.QtyStepperField {
+	flex: 1 1 auto;
+	min-width: 0;
+}
