@@ -8,7 +8,7 @@
 import { FC, useState, useCallback } from "react";
 import { Button } from "src/components/Button";
 import { GroupCol } from "src/components/UI";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import apiClient from "src/services/api/client";
 import mainStyles from "src/styles/main.module.scss";
 import type { TPane } from "src/app/types";

@@ -4,7 +4,7 @@ import { consumePendingHighlight, subscribeHighlight } from "src/utils/listHighl
 import type { ReactNode } from "react";
 
 // 2. Контекст приложения
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 
 // 3. Хуки
 import { useModelListState } from "src/hooks/useModelListState";

@@ -7,7 +7,7 @@
  */
 import { FC } from "react";
 import IconButton from "src/components/IconButton/IconButton";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { setPendingHighlight } from "src/utils/listHighlight";
 import { openListByRef } from "src/registry/formRegistry";
 

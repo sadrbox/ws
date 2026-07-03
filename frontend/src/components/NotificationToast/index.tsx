@@ -1,5 +1,5 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { translate } from "src/i18";
 import {
   useNotificationJournal,

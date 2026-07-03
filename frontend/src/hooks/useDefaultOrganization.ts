@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 
 /**
  * Возвращает организацию текущего пользователя (из user.organizationUuid).

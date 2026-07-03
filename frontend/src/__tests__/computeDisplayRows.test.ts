@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeDisplayRows } from "src/components/SubTable";
+import { computeDisplayRows } from "src/components/SubTable/rowModel";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 
 // ── Хелперы ────────────────────────────────────────────────────────────────

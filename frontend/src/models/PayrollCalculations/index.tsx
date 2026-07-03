@@ -17,6 +17,8 @@ import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
+import Notice from "src/components/Notice";
+import { useDocumentNotices } from "src/hooks/useDocumentNotices";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
@@ -148,6 +150,8 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
   });
 
+  const notices = useDocumentNotices({ docType: "payroll_calculation", fields: form.fields as unknown as Record<string, unknown> });
+
   const handleSalaryChange = useCallback((value: string) => {
     const salary = parseFloat(value) || 0;
     const d = calcDeductions(salary);
@@ -163,9 +167,9 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
-        <div className={styles.FormWrapper}>
-          <div className={styles.Form}>
-            <GroupCol>
+        <div className={styles.FormContainer}>
+          <div className={styles.FormWrapper}>
+            <GroupCol className={styles.Form}>
               <GroupRow className={styles.FormHeaderRow}>
                 <FieldDateTime label={translate("documentDate")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
                 <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
@@ -212,18 +216,18 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
                 </Group>
               </GroupRow>
             </GroupCol>
-
+            <GroupCol className={styles.FormNotice}>
+              <Notice items={notices} />
+            </GroupCol>
           </div>
-          {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
-            <GroupRow className={styles.FormHeaderRow}>
-              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-            </GroupRow>
-          </GroupCol>}
+          <GroupRow>
+            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+          </GroupRow>
         </div>
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleSalaryChange, assignNumber, canWrite]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleSalaryChange, assignNumber, canWrite, notices]);
 
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
   const headerActionsPortal = usePaneHeaderActions(

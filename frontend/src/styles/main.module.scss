@@ -1170,32 +1170,46 @@ body {
 
 
 
-.FormBody {
-	gap: 6px;
-	flex-direction: column;
+.FormContainer {
 	display: flex;
-	container-type: size;
-	flex: 1;
+	flex-direction: column;
+	height: 100%;
+	gap: 24px;
 }
 
 .FormWrapper,
 .FormWrapperInline {
 	container-type: size;
 	display: flex;
-	flex: 1;
-	gap: 12px;
+	gap: 24px;
 	overflow: clip;
 	overflow: auto;
+	height: 100%;
+	// flex: 1;
 }
 
 .Form {
 	display: flex;
+	// flex-direction: row;
 	padding: 0;
 	gap: 12px;
-	height: 100%;
+	// height: 100%;
 	max-width: 600px;
 	// flex: 1;
 
+}
+
+// Колонка итогов документа (DocumentTotals / сводка) — по ширине содержимого.
+.FormTotals {
+	flex: 0 0 auto;
+}
+
+// Колонка блока предупреждений формы (Notice) — занимает остаток ширины,
+// содержимое прижато вниз. Замена inline-стиля в *Form.
+.FormNotice {
+	flex: 1 1 auto;
+	place-content: flex-end;
+	flex-wrap: wrap;
 }
 
 

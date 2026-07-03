@@ -113,6 +113,8 @@
 	"monthCloseFinResult": "Финансовый результат",
 	"monthCloseRegulatory": "Регламентные операции",
 	"basisMismatch": "Документ не соответствует основанию",
+	"contractCounterpartyMismatch": "Договор не соответствует выбранному контрагенту",
+	"documentFilledCorrectly": "Документ заполнен корректно",
 	"basisMismatchExtraProduct": "номенклатура отсутствует в основании",
 	"basisMismatchItems": "строки отличаются от основания",
 	"basisChainMismatch": "Расходится с основанием (строки отличаются)",

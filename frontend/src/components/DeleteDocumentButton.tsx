@@ -9,7 +9,7 @@
 import { FC } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import IconButton from "src/components/IconButton/IconButton";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import apiClient from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { isSyncableEndpoint } from "src/services/offlineDataService";

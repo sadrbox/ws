@@ -60,6 +60,24 @@ export async function assertOrgFieldMembership(doc, client = prisma) {
 			errors.push(`«${ref.label}» принадлежит другой организации`);
 		}
 	}
+
+	// Договор должен принадлежать выбранному контрагенту (договор связан с
+	// контрагентом). Проверяем, только когда заданы ОБА поля. Договор без
+	// контрагента (общий) не считаем несоответствием.
+	if (doc.contractUuid && doc.counterpartyUuid) {
+		try {
+			const contract = await client.contract.findUnique({
+				where: { uuid: doc.contractUuid },
+				select: { counterpartyUuid: true },
+			});
+			if (contract && contract.counterpartyUuid && contract.counterpartyUuid !== doc.counterpartyUuid) {
+				errors.push("«Договор» не соответствует выбранному контрагенту");
+			}
+		} catch {
+			/* модель/поле отсутствует — пропускаем */
+		}
+	}
+
 	if (errors.length) throw new OrgFieldValidationError(errors);
 }
 

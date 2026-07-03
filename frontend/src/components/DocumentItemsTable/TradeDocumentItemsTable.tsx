@@ -23,7 +23,8 @@ import LookupField from "src/components/Field/LookupField";
 import styles from "./TradeDocumentItemsTable.module.scss";
 import apiClient from "src/services/api/client";
 import columnsJson from "./documentItemsColumns.json";
-import SubTable, { ReadOnlyCell, type SubTableContext, type SubTableApi, type TCellValidator, useSubTableContext } from "src/components/SubTable";
+import SubTable, { ReadOnlyCell, type SubTableContext, type SubTableApi, type TCellValidator } from "src/components/SubTable";
+import { useSubTableContext } from "src/components/SubTable/context";
 import { withSaleItemRecalc, withSaleItemRecalcFromDiscountAmount, recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
 import { parseNumericInput } from "src/components/Table/services";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
@@ -35,6 +36,9 @@ const VAT_COLUMN_IDS = new Set(["vatRate", "vatAmount"]);
 const DISCOUNT_COLUMN_IDS = new Set(["discountPercent", "discountAmount"]);
 const EXCISE_COLUMN_IDS = new Set(["exciseRate", "exciseAmount"]);
 const AMOUNT_WITHOUT_VAT_IDS = new Set(["amountWithoutVat", "amountNetOfIndirectTaxes"]);
+// Ценовые колонки — не нужны для документов без стоимостной части (напр.
+// Перемещение ТМЗ только двигает товар: ни цены, ни скидки, ни суммы продажи).
+const PRICING_COLUMN_IDS = new Set(["price", "amount", "discountPercent", "discountAmount"]);
 
 const focusNextInRow = (currentTarget: EventTarget | null) => {
   if (!(currentTarget instanceof HTMLElement)) return;
@@ -82,6 +86,9 @@ export interface TradeDocumentItemsTableProps {
   initialPendingRows?: TDataItem[];
   /** Если false (ТМЗ) — НДС/акциз/Сумма скидки отключаются принудительно. */
   hasTaxes?: boolean;
+  /** Если false — документ без стоимостной части (напр. Перемещение ТМЗ только
+   *  двигает товар): скрываются колонки Цена / Сумма / Процент скидки / Сумма скидки. */
+  hasPricing?: boolean;
   /** Сообщение, когда у документа нет строк. */
   emptyMessage?: string;
   /** Показывать подсветку обязательных полей (только после неудачной попытки сохранения). */
@@ -127,6 +134,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   onItemsChange,
   initialPendingRows,
   hasTaxes = true,
+  hasPricing = true,
   emptyMessage = "Сохраните документ для добавления позиций.",
   showRequiredHighlight = false,
   onAllItemsChange,
@@ -168,6 +176,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   const dynamicColumns = useMemo(() => {
     let base = (columnsJson as unknown as TColumn[]).filter((c) => {
       const id = c.identifier;
+      if (!hasPricing && PRICING_COLUMN_IDS.has(id)) return false;
       if (!isVatEnabled && VAT_COLUMN_IDS.has(id)) return false;
       if (!useDiscount && DISCOUNT_COLUMN_IDS.has(id)) return false;
       if (!useExcise && EXCISE_COLUMN_IDS.has(id)) return false;
@@ -256,7 +265,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       base = base.map((c) => hidden.has(c.identifier) ? { ...c, visible: false } : c);
     }
     return base;
-  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns]);
+  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing]);
 
   const taxSig = useMemo(
     () => "vat:" + (isVatEnabled ? "1" : "0") + "|disc:" + (useDiscount ? "1" : "0") + "|exc:" + (useExcise ? "1" : "0") + "|m:" + vatCalculationMethod + "|r:" + String(orgVatRate ?? ""),
@@ -307,7 +316,11 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     else ctx.handleInlineChange(row, "price", String(price));
   }, [recalcWithFlags]);
 
-  const allRequiredFields = useMemo(() => ["product.name", "quantity", "price", "unitOfMeasure.name"], []);
+  const allRequiredFields = useMemo(() => (
+    hasPricing
+      ? ["product.name", "quantity", "price", "unitOfMeasure.name"]
+      : ["product.name", "quantity", "unitOfMeasure.name"]
+  ), [hasPricing]);
   const requiredFields = showRequiredHighlight ? allRequiredFields : undefined;
 
   const handleItemsChange = useCallback((items: TDataItem[]) => {

@@ -25,6 +25,8 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
+import Notice from "src/components/Notice";
+import { useDocumentNotices } from "src/hooks/useDocumentNotices";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
@@ -178,12 +180,13 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.setFields, form.store]);
 
   const assignNumber = useAssignNumber();
+  const notices = useDocumentNotices({ docType: "inventory_transfer", fields: form.fields as unknown as Record<string, unknown> });
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
-        <div className={styles.FormWrapper}>
-          <div className={styles.Form}>
-            <GroupCol>
+        <div className={styles.FormContainer}>
+          <div className={styles.FormWrapper}>
+            <GroupCol className={styles.Form}>
               <GroupRow className={styles.FormHeaderRow}>
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} width="200px" value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} />
                 <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
@@ -202,35 +205,30 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
                   extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
             </GroupCol>
-            <Group>
+            <GroupCol className={styles.FormTotals}>
               <div className={styles.SummaryCard}>
-                <div className={styles.SummaryRow}>
-                  <span>{translate("total")}</span>
-                  <span className={styles.TabularNums}>{form.fields.amount || "0"}</span>
-                </div>
                 <div className={styles.SummaryNote}>
                   НК РК ст. 372 п.2 пп.3: внутреннее перемещение — не облагаемый оборот
                 </div>
               </div>
-            </Group>
-          </div>
-          {form.isEditMode && (
-            <GroupCol className={styles.FormFooterCol}>
-              <GroupRow className={styles.FormHeaderRow}>
-                <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-                <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-              </GroupRow>
             </GroupCol>
-          )}
+            <GroupCol className={styles.FormNotice}>
+              <Notice items={notices} />
+            </GroupCol>
+          </div>
+          <GroupRow>
+            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+          </GroupRow>
         </div>
       )
     },
     {
-      id: "tab-items", label: translate("tabTMZ"), component: form.isEditMode && form.fields.uuid ? (
+      id: "tab-items", label: translate("tabTMZ"), component: (
         <TradeDocumentItemsTable
-          parentUuid={form.fields.uuid} parentField="inventoryTransferUuid"
+          parentUuid={form.fields.uuid ?? ""} parentField="inventoryTransferUuid"
           endpoint="inventorytransferitems" componentName="InventoryTransferItemsList_part"
-          hasTaxes={false}
+          hasTaxes={false} hasPricing={false}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
           parentLabel={`${translate("InventoryTransfersList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
@@ -240,13 +238,9 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
           showRequiredHighlight
         />
-      ) : (
-        <div className={styles.CenteredPlaceholder}>
-          {translate("saveDocumentFirst")}
-        </div>
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items, assignNumber]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items, notices, assignNumber]);
 
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,

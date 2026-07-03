@@ -1,5 +1,5 @@
 import { FC, useMemo, useCallback } from "react";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TTableVariant } from "src/components/Table";

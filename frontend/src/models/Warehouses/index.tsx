@@ -15,7 +15,7 @@ import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 

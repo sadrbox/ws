@@ -9,8 +9,9 @@
  */
 import {
   FC, useMemo, useCallback, useState, useEffect, useRef, ReactNode,
-  createContext, useContext, type KeyboardEvent as ReactKeyboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { SubTableInternalContext } from "./context";
 import { getModelColumns, getFormatColumnValue, getColumnAlignment } from "src/components/Table/services";
 import {
   CHECKBOX_COL_ID,
@@ -24,7 +25,7 @@ import Table, { TOpenModelFormProps, type TableApi } from "src/components/Table"
 import type { TTableVariant } from "src/components/Table";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import { useModelDelete } from "src/hooks/useModelDelete";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import Toolbar from "src/components/Toolbar";
 import { useQueryClient } from "@tanstack/react-query";
 import styles from "./SubTable.module.scss";
@@ -33,9 +34,6 @@ import {
 } from "./rowModel";
 import { useSubTableRows } from "./useSubTableRows";
 
-// Реэкспорт чистых примитивов модели строк — тесты и потребители импортируют
-// их из "src/components/SubTable" (публичная точка входа компонента).
-export { applyEditMarker, computeDisplayRows };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Типы
@@ -268,19 +266,10 @@ function getRowId(row: TDataItem): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// React Context для доступа к SubTableContext из дочерних элементов
-// (например — из кнопок, переданных через extraButtons).
+// React-контекст SubTable (SubTableInternalContext) и хук useSubTableContext
+// вынесены в ./context — чтобы этот модуль экспортировал только компоненты
+// (Fast Refresh / HMR без полной перезагрузки). См. context.ts.
 // ═══════════════════════════════════════════════════════════════════════════
-
-const SubTableInternalContext = createContext<SubTableContext | null>(null);
-
-/**
- * Хук для доступа к SubTableContext из любого компонента, отрендеренного
- * внутри SubTable (включая extraButtons). Возвращает null, если вызван
- * вне SubTable.
- */
-export const useSubTableContext = (): SubTableContext | null =>
-  useContext(SubTableInternalContext);
 
 // ─── ReadOnlyCell ───────────────────────────────────────────────────────
 // Универсальная ячейка «только чтение» для табличных частей. Используется:

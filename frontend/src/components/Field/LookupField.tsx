@@ -5,7 +5,7 @@ import { fetchList } from "src/services/offlineDataService";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
 import { useCellFieldState } from "src/hooks/useDirtyHighlight";
 import { useFormRequiredScope } from "src/hooks/useFormRequired";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import SelectPaneWrapper from "./SelectPaneWrapper";
 import FieldActionButton from "./FieldActionButton";
 import type { IconName } from "src/components/IconButton/icons";

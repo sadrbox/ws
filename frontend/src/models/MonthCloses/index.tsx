@@ -33,6 +33,8 @@ import {
   isoToMonthPeriod,
 } from "src/utils/datetime";
 import { api } from "src/services/api/client";
+import Notice from "src/components/Notice";
+import { useDocumentNotices } from "src/hooks/useDocumentNotices";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
@@ -170,14 +172,16 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
     return () => { cancelled = true; };
   }, [isSavedDoc, form.fields.posted, form.fields.periodStart, form.fields.periodEnd, form.fields.organizationUuid, form.fields.uuid]);
 
+  const notices = useDocumentNotices({ docType: DOC_TYPE, fields: form.fields as unknown as Record<string, unknown> });
+
   const tabs = useMemo(() => [
     {
       id: "tab-details",
       label: translate("general"),
       component: (
-        <div className={styles.FormWrapper}>
-          <div className={styles.Form}>
-            <GroupCol>
+        <div className={styles.FormContainer}>
+          <div className={styles.FormWrapper}>
+            <GroupCol className={styles.Form}>
               <GroupRow className={styles.FormHeaderRow}>
                 <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
                 <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
@@ -193,9 +197,6 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
               <Group>
                 <FormLookup form={form} field="organization" endpoint="organizations" />
               </Group>
-              {!form.fields.organizationUuid && (
-                <div className={styles.SettingHint}>{getDocumentFillHint(DOC_TYPE, form.fields as unknown as Record<string, unknown>)}</div>
-              )}
               {finResult !== null && (
                 <Group>
                   <Field
@@ -208,17 +209,18 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
                 </Group>
               )}
             </GroupCol>
+            <GroupCol className={styles.FormNotice}>
+              <Notice items={notices} />
+            </GroupCol>
           </div>
-          {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
-            <GroupRow className={styles.FormHeaderRow}>
-              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-            </GroupRow>
-          </GroupCol>}
+          <GroupRow>
+            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+          </GroupRow>
         </div>
       ),
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handlePeriodChange, assignNumber, canWrite, finResult]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handlePeriodChange, assignNumber, canWrite, finResult, notices]);
 
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,

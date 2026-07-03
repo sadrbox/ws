@@ -1,6 +1,4 @@
 import React, {
-  isValidElement,
-  ReactElement,
   useCallback,
   useEffect,
   useMemo,
@@ -27,40 +25,15 @@ import ConfirmModal from "src/components/ConfirmModal";
 import { startHealthCheck, stopHealthCheck } from "src/services/networkStatus";
 import { clearAllFormStores } from "src/hooks/useFormSessionStore";
 import { formStoreAPI } from "src/hooks/useFormStore";
-import { useAppContext, AppContextProvider } from "src/app/context";
+import { AppContextProvider } from "src/app/context";
 import { loadPersistedSession, savePersistedSession, restorePane, type PersistedSession } from "src/app/paneRestore";
 import { readPaneLink, clearPaneLinkParam } from "src/utils/paneLink";
 import { openFormByRef } from "src/utils/openFormByRef";
-export { useAppContext, AppContextProvider };
+import { getComponentName } from "./getComponentName";
 
-export const getComponentName = (node: TComponentNode): string => {
-  if (node == null) return "Unknown";
-
-  if (isValidElement(node)) {
-    const type = (node as ReactElement).type;
-    if (typeof type === "string") return type;
-    if (typeof type === "function") {
-      return (type as any).displayName || (type as any).name || "AnonymousComponent";
-    }
-    return "UnknownElement";
-  }
-
-  if (typeof node === "function") {
-    return (node as any).displayName || (node as any).name || "AnonymousComponent";
-  }
-
-  if (typeof node === "object") {
-    const anyNode = node as any;
-    // React.lazy / memo / forwardRef: имя берётся из заданного displayName.
-    // (lazy — это объект, а не функция, поэтому ветки выше его не ловят; без
-    // этого все ленивые панели получали бы одно имя и схлопывались в одну.)
-    if (anyNode.displayName) return anyNode.displayName;
-    if (anyNode.type && anyNode.type.displayName) return anyNode.type.displayName;
-  }
-  return "NonComponent";
-};
-
-export const getUniqId = (component: TComponentNode, data?: Partial<TDataItem>): string => {
+// getUniqId — внутренняя утилита (не экспортируется, чтобы модуль оставался
+// Fast-Refresh-совместимым: единственный value-export здесь — компонент App).
+const getUniqId = (component: TComponentNode, data?: Partial<TDataItem>): string => {
   const name = getComponentName(component);
   // Синглтоны: *List
   if (name.endsWith("List")) return name;

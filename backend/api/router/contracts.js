@@ -130,16 +130,11 @@ router.get("/contracts", async (req, res) => {
 			req.query.counterpartyUuid.trim()
 		) {
 			const cptyVal = req.query.counterpartyUuid.trim();
-			if (cptyVal === "null") {
-				// только договора без контрагента
-				fkFilter.counterpartyUuid = null;
-			} else {
-				// договора этого контрагента ИЛИ общие (без контрагента)
-				fkFilter.OR = [
-					{ counterpartyUuid: cptyVal },
-					{ counterpartyUuid: null },
-				];
-			}
+			// СТРОГО договора выбранного контрагента: «общие» (counterpartyUuid=null)
+			// не показываем — они не связаны с контрагентом и при выбранном
+			// контрагенте не должны попадать в подбор (список/быстрый выбор/автокомплит).
+			// (Скаляр, а не OR — иначе перезаписал бы OR из поиска.)
+			fkFilter.counterpartyUuid = cptyVal === "null" ? null : cptyVal;
 		}
 
 		const baseWhere = {

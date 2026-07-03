@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyEditMarker } from "src/components/SubTable";
+import { applyEditMarker } from "src/components/SubTable/rowModel";
 
 // Чистая серверная строка документа (без _pendingAction).
 function serverRow(over: Record<string, unknown> = {}) {

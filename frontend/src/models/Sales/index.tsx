@@ -10,6 +10,9 @@ import columnsJson from "./columns.json";
 import { Field, FieldDateTime } from "src/components/Field";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
+import Notice from "src/components/Notice";
+import { useDocumentNotices } from "src/hooks/useDocumentNotices";
+import { useContractCounterpartyMismatch } from "src/hooks/useContractCounterpartyMismatch";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { Group, GroupRow, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -35,7 +38,7 @@ import { buildSaleInvoiceWorkbook } from "./saleInvoiceWorkbook";
 import PrintDocumentPane, { type PrintColumnDef } from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
 import { openDocumentFromBasis, mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields } from "src/utils/createFromBasis";
@@ -345,6 +348,14 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     mapFields: mapCommonTradeFields,
   });
 
+  const contractMismatch = useContractCounterpartyMismatch(form.fields.contractUuid, form.fields.counterpartyUuid);
+  const notices = useDocumentNotices({
+    docType: "sale",
+    fields: form.fields as unknown as Record<string, unknown>,
+    basisMismatch,
+    contractMismatch,
+  });
+
   const { isRefilling, handleRefillFromBasis } = useRefillFromBasis({
     form,
     currentUserUuid: currentUser?.uuid ?? "",
@@ -432,21 +443,13 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
    * - Контрагент НЕ выбран → только договора без контрагента (counterpartyUuid=null)
    */
   const contractExtraParams = useMemo(() => {
-    const hasOrg = !!form.fields.organizationUuid;
-    const hasCpty = !!form.fields.counterpartyUuid;
+    // Контрагент НЕ выбран → фильтр только по организации (показываем ВСЕ договоры
+    // выбранной организации, независимо от контрагента). Контрагент выбран →
+    // добавляем строгий фильтр по нему (только его договоры). Пустые параметры не
+    // передаём — бэкенд без counterpartyUuid не ограничивает по контрагенту.
     const p: Record<string, string> = {};
-    if (hasOrg) {
-      p.organizationUuid = form.fields.organizationUuid;
-    } else if (!hasCpty) {
-      // нет ни орг, ни контрагента → только общие договора без организации
-      p.organizationUuid = "null";
-    }
-    // hasCpty && !hasOrg → не передаём organizationUuid (договора контрагента из любой орг)
-    if (hasCpty) {
-      p.counterpartyUuid = form.fields.counterpartyUuid;
-    } else {
-      p.counterpartyUuid = "null";
-    }
+    if (form.fields.organizationUuid) p.organizationUuid = form.fields.organizationUuid;
+    if (form.fields.counterpartyUuid) p.counterpartyUuid = form.fields.counterpartyUuid;
     return p;
   }, [form.fields.organizationUuid, form.fields.counterpartyUuid]);
   const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
@@ -675,9 +678,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
-        <div className={styles.FormWrapper}>
-          <GroupRow>
-            <div className={styles.Form}>
+        <div className={styles.FormContainer}>
+          <div className={styles.FormWrapper}>
+            <GroupCol className={styles.Form}>
               {/* ── Левая колонка: поля ── */}
               {/* Строка 1: Дата - Проведён - Статус */}
               <GroupRow className={styles.FormHeaderRow}>
@@ -734,24 +737,26 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                   hint={getDocumentFillHint("sale", form.fields as unknown as Record<string, unknown>)}
                 />
               </GroupCol>
-            </div>
-          </GroupRow>
-          <Group>
-            <DocumentTotals
-              amount={form.fields.amount}
-              vatAmount={form.fields.vatAmount}
-              discountAmount={form.fields.discountAmount}
-              amountWithoutVat={form.fields.amountWithoutVat}
-              isVatEnabled={isVatEnabled}
-              useDiscount={useDiscount}
-            />
-          </Group>
-          {/* {form.isEditMode && <GroupCol className={styles.FormFooterCol}> */}
+            </GroupCol>
+
+            <GroupCol className={styles.FormTotals}>
+              <DocumentTotals
+                amount={form.fields.amount}
+                vatAmount={form.fields.vatAmount}
+                discountAmount={form.fields.discountAmount}
+                amountWithoutVat={form.fields.amountWithoutVat}
+                isVatEnabled={isVatEnabled}
+                useDiscount={useDiscount}
+              />
+            </GroupCol>
+            <GroupCol className={styles.FormNotice}>
+              <Notice items={notices} />
+            </GroupCol>
+          </div>
           <GroupRow>
             <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
             <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
           </GroupRow>
-          {/* </GroupCol>} */}
         </div>
       )
     },
@@ -779,7 +784,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, handleOrganizationSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, assignNumber]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, handleOrganizationSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber]);
 
   return (
     <FormRequiredScope docType="sale" active>

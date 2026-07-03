@@ -174,27 +174,8 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     { key: "name", label: translate("document") },
     { key: "date", label: translate("date") },
   ];
-
-  // Примечание под полем. Слот рендерится ВСЕГДА (с зарезервированной высотой —
-  // см. .FieldNote*), чтобы появление/скрытие не сдвигало разметку. Приоритет:
-  //   1) «предупреждение» о расхождении документа с основанием (янтарное —
-  //      это не ошибка: расхождение условное, напр. частичный возврат);
-  //   2) подсказка о незаполненных обязательных полях (янтарная), если передана;
-  //   3) когда всё заполнено (hint === "") — нейтральное «Обязательные поля
-  //      заполнены»; если подсказка не передана (hint === undefined) — пустой
-  //      зарезервированный слот.
-  const note = mismatch ? (
-    <div className={styles.FieldNote} title={(mismatchDetails ?? []).join(", ")}>
-      ⚠ {translate("basisMismatch")}
-      {mismatchDetails && mismatchDetails.length > 0 ? `: ${mismatchDetails.join(", ")}` : ""}
-    </div>
-  ) : hint ? (
-    <div className={styles.FieldNoteHint}>{hint}</div>
-  ) : (
-    <div className={styles.FieldNoteOk}>
-      {hint === "" ? `✓ ${translate("requiredFieldsFilled")}` : " "}
-    </div>
-  );
+  // Расхождение с основанием (mismatch/mismatchDetails) выводится на уровне формы
+  // в компоненте <Notice /> и индикатором на кнопке «Перезаполнить по основанию».
 
   // Когда значение уже выбрано — отдаём управление LookupField (он сам рисует FieldWrapper + label).
   // Тип документа берём из basisDocumentType (надёжно даже вне allowedTypes).
@@ -220,7 +201,6 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           variant="default"
           searchTransform={extractBasisSearch}
         />
-        {note}
       </div>
     );
   }
@@ -249,7 +229,6 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
         disabled={disabled || !activeType}
         searchTransform={extractBasisSearch}
       />
-      {note}
     </div>
   );
 };

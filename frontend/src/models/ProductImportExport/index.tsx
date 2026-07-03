@@ -10,7 +10,7 @@ import mainStyles from "src/styles/main.module.scss";
 import styles from "./ProductImportExport.module.scss";
 import apiClient from "src/services/api/client";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { showToast } from "src/components/UIToast";
 import type { TPane } from "src/app/types";
 import type { TColumn, TDataItem } from "src/components/Table/types";

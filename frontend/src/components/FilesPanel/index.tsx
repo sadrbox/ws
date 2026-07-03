@@ -5,7 +5,7 @@ import Table from "src/components/Table";
 import columnsJson from "./columns.json";
 import apiClient from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { FileViewerPane } from "src/models/Files/FileViewerPane";
 import UploadProgress, { formatFileSize } from "./UploadProgress";
 

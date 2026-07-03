@@ -1,7 +1,12 @@
 // ecosystem.config.js
 module.exports = {
 	apps: [
-		// 1. Dev-сервер Vite в ./frontend (HMR через cloudflared, см. vite.config.ts)
+		// 1. Dev-сервер Vite в ./frontend (см. vite.config.ts).
+		// HMR настроен на ПРЯМОЙ доступ по LAN http://192.168.1.112:5173 (ws, порт 5173).
+		// Чтобы вернуть HMR через туннель aleppo.kz — задать VITE_HMR_HOST=aleppo.kz,
+		// VITE_HMR_PROTOCOL=wss, VITE_HMR_CLIENT_PORT=443 (или убрать эти env — дефолт
+		// в vite.config.ts = aleppo.kz). HMR-сокет работает только для того хоста,
+		// которым открываешь страницу.
 		{
 			name: "frontend",
 			cwd: "./frontend", // Рабочая директория
@@ -11,6 +16,9 @@ module.exports = {
 			ignore_watch: ["node_modules", "dist", "logs"],
 			env: {
 				NODE_ENV: "development",
+				VITE_HMR_HOST: "192.168.1.112",
+				VITE_HMR_PROTOCOL: "ws",
+				VITE_HMR_CLIENT_PORT: "5173",
 			},
 			error_file: "./logs/frontend-err.log",
 			out_file: "./logs/frontend-out.log",

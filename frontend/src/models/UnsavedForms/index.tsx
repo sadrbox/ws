@@ -1,5 +1,5 @@
 import { FC, useMemo, useCallback, useState, useRef, useEffect } from "react";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { getModelColumns } from "src/components/Table/services";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";

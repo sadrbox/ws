@@ -1,5 +1,5 @@
 import { FC, useCallback, useEffect, useState } from "react";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { LoadingSpinner } from "src/components/UI";
 import type { TPane } from "src/app/types";
 

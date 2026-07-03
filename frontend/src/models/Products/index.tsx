@@ -24,7 +24,7 @@ import ProductImagesField from "./ProductImagesField";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "src/components/Button";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { ProductPriceCorrection } from "src/models/ProductPriceProcessing";
 
 const MODEL_ENDPOINT = "products";

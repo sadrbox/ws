@@ -22,7 +22,7 @@ import { usePersistentState } from "src/hooks/usePersistentState";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { resolveOrgChangeFields } from "src/utils/createFromBasis";
 import { useOrgAccountingSettings } from "src/hooks/useOrgAccountingSettings";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
 import FiscalReceiptPane from "src/models/FiscalReceipts/FiscalReceiptPane";
 import type { TPane } from "src/app/types";

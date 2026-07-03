@@ -1,5 +1,5 @@
 import React, { useRef, type PropsWithChildren } from 'react';
-import { AppContextProvider } from 'src/app/index';
+import { AppContextProvider } from 'src/app/context';
 import type { TypeAppContextProps } from 'src/app/types';
 
 /** Минимальный мок AppContext для использования в тестах */

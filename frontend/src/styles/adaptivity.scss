@@ -72,7 +72,7 @@
     flex-direction: column;
 
     .Form {
-      flex-direction: column;
+      // flex-direction: column;
     }
   }
 
@@ -99,10 +99,11 @@
 
 @media (min-width: 901px) {
   .FormWrapper {
-    flex-direction: column;
+    flex-direction: row;
 
     .Form {
       flex-direction: column;
+      width: 600px;
     }
   }
 

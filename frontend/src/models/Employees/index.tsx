@@ -10,7 +10,7 @@ import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { Field, FieldNumber, FieldSelect, FieldDate } from "src/components/Field";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { getFormatDateOnly } from "src/utils/datetime";
 import LookupField from "src/components/Field/LookupField";
 import { ContactsTable } from "../Contacts";

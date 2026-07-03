@@ -18,6 +18,9 @@ import type { TTableVariant } from "src/components/Table";
 import { Field, FieldDateTime } from "src/components/Field";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
+import Notice from "src/components/Notice";
+import { useDocumentNotices } from "src/hooks/useDocumentNotices";
+import { useContractCounterpartyMismatch } from "src/hooks/useContractCounterpartyMismatch";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -40,7 +43,7 @@ import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntr
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, fetchDocumentItems, type BasisFromTarget } from "src/utils/createFromBasis";
 import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
@@ -345,6 +348,14 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
       itemMatchMode: cfg.docType?.endsWith("_return") ? "productsSubset" : "exact",
     });
 
+    const contractMismatch = useContractCounterpartyMismatch(form.fields.contractUuid, form.fields.counterpartyUuid);
+    const notices = useDocumentNotices({
+      docType: cfg.docType,
+      fields: form.fields as unknown as Record<string, unknown>,
+      basisMismatch,
+      contractMismatch,
+    });
+
     const { isRefilling, handleRefillFromBasis } = useRefillFromBasis({
       form,
       currentUserUuid: currentUser?.uuid ?? "",
@@ -434,51 +445,58 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
     const tabs = useMemo(() => [
       {
         id: "tab-details", label: translate("general"), component: (
-          <div className={styles.FormWrapper}>
-            <div className={styles.Form}>
-              <GroupRow className={styles.FormHeaderRow}>
-                <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
-                <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
-                  actions={[
-                    { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
-                  ]} />
-              </GroupRow>
-              <Group>
-                <FormLookup form={form} field="organization" endpoint="organizations" onSelect={handleOrganizationSelect} />
-                <FormLookup form={form} field="warehouse" endpoint="warehouses"
-                  extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
-              </Group>
-              <Group>
-                <FormLookup form={form} field="counterparty" endpoint="counterparties" />
-                <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect}
-                  extraParams={{
-                    ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
-                    ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
-                  }} />
-              </Group>
-              {hasPriceType && (
-                <GroupRow>
-                  <Group className={styles.w1of2}>
-                    <FormLookup form={form} field="priceType" endpoint="price-types" />
-                  </Group>
+          <div className={styles.FormContainer}>
+            <div className={styles.FormWrapper}>
+              <GroupCol className={styles.Form}>
+                {/* ── Левая колонка: поля ── */}
+                <GroupRow className={styles.FormHeaderRow}>
+                  <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
+                  <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
+                    actions={[
+                      { type: "assignNumber", onClick: () => void assignNumber(cfg.endpoint, form.fields.organizationUuid, form.fields.number, (n) => form.setField("number", n), form.fields.date, form.fields.uuid) },
+                    ]} />
                 </GroupRow>
-              )}
-              <GroupCol>
-                <BasisDocumentField
-                  allowedTypes={cfg.basisAllowedTypes}
-                  basisDocumentType={form.fields.basisDocumentType}
-                  basisDocumentUuid={form.fields.basisDocumentUuid}
-                  basisDocumentLabel={form.fields.basisDocumentLabel}
-                  formUid={form.formUid}
-                  disabled={form.isLoading}
-                  onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
-                  onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
-                  mismatch={basisMismatch.mismatch}
-                  mismatchDetails={basisMismatch.differences}
-                  hint={getDocumentFillHint(cfg.docType, form.fields as unknown as Record<string, unknown>)}
-                />
+
+                <Group>
+                  <FormLookup form={form} field="organization" endpoint="organizations" onSelect={handleOrganizationSelect} />
+                  <FormLookup form={form} field="warehouse" endpoint="warehouses"
+                    extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                </Group>
+
+                <Group>
+                  <FormLookup form={form} field="counterparty" endpoint="counterparties" />
+                  <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect}
+                    extraParams={{
+                      ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
+                      ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
+                    }} />
+                </Group>
+
+                {hasPriceType && (
+                  <GroupRow>
+                    <Group className={styles.w1of2}>
+                      <FormLookup form={form} field="priceType" endpoint="price-types" />
+                    </Group>
+                  </GroupRow>
+                )}
+
+                <GroupCol>
+                  <BasisDocumentField
+                    allowedTypes={cfg.basisAllowedTypes}
+                    basisDocumentType={form.fields.basisDocumentType}
+                    basisDocumentUuid={form.fields.basisDocumentUuid}
+                    basisDocumentLabel={form.fields.basisDocumentLabel}
+                    formUid={form.formUid}
+                    disabled={form.isLoading}
+                    onSelect={(type, uuid, label) => form.setFields({ basisDocumentType: type, basisDocumentUuid: uuid, basisDocumentLabel: label } as Partial<TFields>)}
+                    onClear={() => form.setFields({ basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "" } as Partial<TFields>)}
+                    mismatch={basisMismatch.mismatch}
+                    mismatchDetails={basisMismatch.differences}
+                    hint={getDocumentFillHint(cfg.docType, form.fields as unknown as Record<string, unknown>)}
+                  />
+                </GroupCol>
               </GroupCol>
-              <Group>
+              <GroupCol className={styles.FormTotals}>
                 <DocumentTotals
                   amount={form.fields.amount}
                   vatAmount={form.fields.vatAmount}
@@ -487,14 +505,15 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
                   isVatEnabled={isVatEnabled}
                   useDiscount={useDiscount}
                 />
-              </Group>
+              </GroupCol>
+              <GroupCol className={styles.FormNotice}>
+                <Notice items={notices} />
+              </GroupCol>
             </div>
-            {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
-              <GroupRow className={styles.FormHeaderRow}>
-                <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-                <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-              </GroupRow>
-            </GroupCol>}
+            <GroupRow>
+              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+            </GroupRow>
           </div>
         )
       },
@@ -518,7 +537,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           />
         )
       },
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, assignNumber, hasBasis, handleRefillFromBasis]);
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, hasBasis, handleRefillFromBasis]);
 
     const runCreateTarget = useCallback(async (t: TradeCreateTarget) => {
       const srcLabel = cfg.basisSourceLabelKey ? translate(cfg.basisSourceLabelKey) : cfg.formLabel;

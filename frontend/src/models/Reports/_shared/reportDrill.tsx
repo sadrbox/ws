@@ -1,7 +1,7 @@
 // Единая drill-навигация отчётов. ВАЖНО: переход по ссылке — по ДВОЙНОМУ клику
 // (одиночный клик не навигирует, чтобы не уводить случайно при выделении/чтении).
 import { FC, ReactNode } from "react";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { translate } from "src/i18";
 import { openReport } from "src/utils/openReport";
 import { openDocumentByType } from "src/utils/accountingDocTypes";

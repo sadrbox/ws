@@ -13,7 +13,7 @@ import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import Modal from "src/components/Modal";
 import toolbarStyles from "src/components/Toolbar/Toolbar.module.scss";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { openDocumentByType } from "src/utils/accountingDocTypes";
 import { getFormatDateOnly } from "src/utils/datetime";
 import styles from "./DocumentChain.module.scss";

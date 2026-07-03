@@ -87,6 +87,8 @@
 	"monthCloseFinResult": "Қаржылық нәтиже",
 	"monthCloseRegulatory": "Регламенттік операциялар",
 	"basisMismatch": "Құжат негізге сәйкес келмейді",
+	"contractCounterpartyMismatch": "Шарт таңдалған контрагентке сәйкес келмейді",
+	"documentFilledCorrectly": "Құжат дұрыс толтырылған",
 	"basisMismatchExtraProduct": "номенклатура негізде жоқ",
 	"basisMismatchItems": "жолдар негізден ерекшеленеді",
 	"basisChainMismatch": "Негізден ерекшеленеді (жолдар басқа)",

@@ -1,7 +1,8 @@
 import { useCallback } from "react";
 import apiClient from "src/services/api/client";
 import type { TDataItem } from "src/components/Table/types";
-import { useAppContext, getComponentName } from "src/app";
+import { useAppContext } from "src/app/context";
+import { getComponentName } from "src/app/getComponentName";
 import { showToast } from "src/components/UIToast";
 import { isSyncableEndpoint } from "src/services/offlineDataService";
 import { upsertRecords, getRecordByUuid } from "src/services/offlineDb";

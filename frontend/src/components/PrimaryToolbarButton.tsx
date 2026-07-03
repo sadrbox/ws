@@ -1,7 +1,7 @@
 import { FC, useCallback, useState } from "react";
 import { Toolbar } from "src/components/Toolbar";
 import { useTableContext } from "src/components/Table";
-import { useSubTableContext } from "src/components/SubTable";
+import { useSubTableContext } from "src/components/SubTable/context";
 import { api } from "src/services/api/client";
 import { useQueryClient } from "@tanstack/react-query";
 

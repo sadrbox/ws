@@ -10,7 +10,7 @@
 
 import { FC, useCallback } from "react";
 import { useNetworkStatus } from "src/hooks/useOfflineSync";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import OfflineSyncJournal from "src/components/OfflineSyncJournal";
 import styles from "./OfflineIndicator.module.scss";
 

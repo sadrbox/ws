@@ -1,5 +1,5 @@
 import { FC, useCallback } from "react";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import {
   useNotificationJournal,
   clearNotificationJournal,

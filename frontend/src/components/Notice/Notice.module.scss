@@ -1,0 +1,77 @@
+// Notice — блок предупреждений/статуса формы документа. Три палитры:
+// success (зелёный), warning (янтарный), attention (красный).
+.Notice {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	width: 300px;
+}
+
+.Item {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 8px 10px;
+	border: 1px solid transparent;
+	border-left-width: 3px;
+	border-radius: 3px;
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.Icon {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	font-size: 11px;
+	line-height: 1;
+	color: #fff;
+	margin-top: 1px;
+}
+
+.Text {
+	flex: 1;
+	min-width: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+// ── success ──
+.success {
+	background: $successSoftBg;
+	border-color: $successSoftBorder;
+	border-left-color: $successText;
+	color: $successText;
+
+	.Icon {
+		background: $successText;
+	}
+}
+
+// ── warning ──
+.warning {
+	background: $warnSoftBg;
+	border-color: $warnSoftBorder;
+	border-left-color: $warnAccent;
+	color: $warnSoftText;
+
+	.Icon {
+		background: $warnAccent;
+	}
+}
+
+// ── attention (ошибка) ──
+.attention {
+	background: $attentionBg;
+	border-color: $attentionBorder;
+	border-left-color: $attention;
+	color: $attentionText;
+
+	.Icon {
+		background: $attention;
+	}
+}

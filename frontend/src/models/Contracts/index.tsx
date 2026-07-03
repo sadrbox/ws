@@ -13,7 +13,7 @@ import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { getFormatDateOnly } from "src/utils/datetime";

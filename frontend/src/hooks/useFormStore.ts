@@ -7,7 +7,7 @@ import {
 	useState,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { isNetworkError } from "src/services/networkUtils";
 import { getIsOnline } from "src/services/networkStatus";
 import { commitPendingRows } from "src/services/commitPendingRows";

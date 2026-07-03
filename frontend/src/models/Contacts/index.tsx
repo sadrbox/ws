@@ -9,7 +9,7 @@ import { Field, FieldSelect } from "src/components/Field";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";

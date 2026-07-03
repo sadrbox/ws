@@ -13,6 +13,9 @@ import columnsJson from "./columns.json";
 import { Field, FieldNumber, FieldDateTime, FieldSelect } from "src/components/Field";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
+import Notice from "src/components/Notice";
+import { useDocumentNotices } from "src/hooks/useDocumentNotices";
+import { useContractCounterpartyMismatch } from "src/hooks/useContractCounterpartyMismatch";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { mapCommonTradeFields, resolveOrgChangeFields, refillFromBasisSource } from "src/utils/createFromBasis";
@@ -22,7 +25,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
@@ -169,6 +172,14 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     ignoreItems: true, // банк-выписка без табличной части — сверяем только шапку
   });
 
+  const contractMismatch = useContractCounterpartyMismatch(form.fields.contractUuid, form.fields.counterpartyUuid);
+  const notices = useDocumentNotices({
+    docType: DOC_TYPE,
+    fields: form.fields as unknown as Record<string, unknown>,
+    basisMismatch,
+    contractMismatch,
+  });
+
   const hasBasis = !!form.fields.basisDocumentUuid;
   const [isRefilling, setIsRefilling] = useState(false);
 
@@ -203,8 +214,9 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
       id: "tab-details",
       label: translate("general"),
       component: (
-        <div className={styles.FormWrapper}>
-          <div className={styles.Form}>
+        <div className={styles.FormContainer}>
+          <div className={styles.FormWrapper}>
+            <GroupCol className={styles.Form}>
             <GroupRow className={styles.FormHeaderRow}>
               <FieldDateTime label={translate("date")} name={`${form.formUid}_date`} value={form.fields.date} onChange={e => form.setField("date", e.target.value)} disabled={form.isLoading} width="200px" />
               <Field label={translate("documentNumber")} name={`${form.formUid}_number`} value={form.fields.number} onChange={e => form.setField("number", e.target.value)} disabled={form.isLoading} width="200px" maxLength={9}
@@ -266,17 +278,19 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
                 hint={getDocumentFillHint(DOC_TYPE, form.fields as unknown as Record<string, unknown>)}
               />
             </GroupCol>
+          </GroupCol>
+          <GroupCol className={styles.FormNotice}>
+            <Notice items={notices} />
+          </GroupCol>
           </div>
-          {form.isEditMode && <GroupCol className={styles.FormFooterCol}>
-            <GroupRow className={styles.FormHeaderRow}>
-              <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
-              <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
-            </GroupRow>
-          </GroupCol>}
+          <GroupRow>
+            <Field label={translate("Comment")} name={`${form.formUid}_comment`} value={form.fields.comment} onChange={e => form.setField("comment", e.target.value)} disabled={form.isLoading} />
+            <Field label={translate("Author")} name={`${form.formUid}_author`} value={form.fields.authorName || ""} disabled width="auto" />
+          </GroupRow>
         </div>
       ),
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, canWrite, basisMismatch.mismatch, basisMismatch.differences]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, canWrite, basisMismatch.mismatch, basisMismatch.differences, notices]);
 
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
 

@@ -4,7 +4,7 @@ import PaneHeaderSelect from "src/components/Toolbar/PaneHeaderSelect";
 import IconButton from "src/components/IconButton/IconButton";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import { showToast } from "src/components/UIToast";
-import { useAppContext } from "src/app";
+import { useAppContext } from "src/app/context";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FileViewPane, type FileMeta } from "./FileViewPane";
 
