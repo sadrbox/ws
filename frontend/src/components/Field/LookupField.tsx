@@ -5,9 +5,11 @@ import { fetchList } from "src/services/offlineDataService";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
 import { useCellFieldState } from "src/hooks/useDirtyHighlight";
 import { useFormRequiredScope } from "src/hooks/useFormRequired";
+import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { useAppContext } from "src/app/context";
 import SelectPaneWrapper from "./SelectPaneWrapper";
 import FieldActionButton from "./FieldActionButton";
+import { Icon } from "src/components/IconButton/icons";
 import type { IconName } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
 import type { FieldVariant } from "./index";
@@ -131,6 +133,29 @@ const defaultSecondaryFieldsMap: Record<string, string[]> = {
 
 // ── Ленивая загрузка Form-компонента по endpoint (через единый реестр) ──
 import { getByEndpoint } from "src/registry/modelRegistry";
+
+// endpoint → имя модели прав (UserAccessRight.modelName) для гейтинга кнопки
+// «Создать»: показываем её только если у пользователя есть право на запись
+// (создание) этого справочника. Неизвестный endpoint → права не подтверждены →
+// кнопка скрыта (для не-суперадмина).
+const ENDPOINT_ACCESS_MODEL: Record<string, string> = {
+  organizations: "Organization",
+  counterparties: "Counterparty",
+  contracts: "Contract",
+  products: "Product",
+  employees: "Employee",
+  warehouses: "Warehouse",
+  cashboxes: "Cashbox",
+  bankaccounts: "BankAccount",
+  contactpersons: "ContactPerson",
+  contacts: "Contact",
+  taxes: "Tax",
+  users: "User",
+  "price-types": "PriceType",
+  "unit-of-measures": "UnitOfMeasure",
+  brands: "Brand",
+  currencies: "Currency",
+};
 
 // Нормализация для клиентского поиска по метке: нижний регистр + ё→е.
 const normForSearch = (s: string): string => s.toLowerCase().replace(/ё/g, "е");
@@ -331,7 +356,7 @@ const LookupField: FC<LookupFieldProps> = ({
     if (disabled) return;
     addPane({
       component: SelectPaneWrapper,
-      label: `Выбор: ${(typeof label === "string" && label.trim()) ? label : (getByEndpoint(endpoint)?.label ?? endpoint)}`,
+      label: `${translate("selectTitle")}: ${(typeof label === "string" && label.trim()) ? translate(label) : (getByEndpoint(endpoint)?.label ?? endpoint)}`,
       isSelector: true,
       data: { endpoint, listComponent, extraParams } as any,
       onSelectResult: (item: Record<string, any>) => {
@@ -421,6 +446,33 @@ const LookupField: FC<LookupFieldProps> = ({
       });
     }).catch(() => { /* тихо игнорируем ошибку загрузки */ });
   }, [value, disabled, endpoint, displayValue, addPane]);
+
+  // ── Создать новый элемент справочника (открывает форму создания) ─────────
+  const handleCreateItem = useCallback(() => {
+    if (disabled) return;
+    const entry = getByEndpoint(endpoint);
+    if (!entry) return;
+    entry.module().then((mod) => {
+      const FormComp: FC<any> | undefined = mod[entry.formName] || mod.default;
+      if (!FormComp) return;
+      addPane({
+        label: translate(entry.formName) || entry.label || endpoint,
+        component: FormComp,
+        data: {} as any, // новая запись
+      });
+      setIsDropdownOpen(false);
+    }).catch(() => { /* тихо игнорируем ошибку загрузки */ });
+  }, [disabled, endpoint, addPane]);
+
+  // Есть ли форма создания для этого справочника (реестр моделей).
+  // Право на создание нового элемента справочника (гейт кнопки «Создать»).
+  const { canWrite: canCreateByRight } = useUserAccessRight(ENDPOINT_ACCESS_MODEL[endpoint] ?? "");
+  const canCreate = !disabled && !!getByEndpoint(endpoint) && canCreateByRight;
+  // Название справочника для кнопки «Создать» (не введённый текст — он не
+  // подставляется в форму создания, поэтому показывать его в label некорректно).
+  const createEntityLabel = (typeof label === "string" && label.trim())
+    ? translate(label)
+    : (getByEndpoint(endpoint)?.label ?? "");
 
   // Выбор элемента из dropdown
   const handleSuggestionClick = useCallback((item: Record<string, any>) => {
@@ -688,7 +740,7 @@ const LookupField: FC<LookupFieldProps> = ({
         </div>
 
         {/* ── Autocomplete dropdown ───────────────────────────────────── */}
-        {isDropdownOpen && (suggestions.length > 0 || isLoading) && !isTable && (
+        {isDropdownOpen && (suggestions.length > 0 || isLoading || (canCreate && inputText.trim() !== "" && inputText !== displayValue)) && !isTable && (
           <div className={styles.LookupDropdown} ref={dropdownRef}>
             {isLoading && suggestions.length === 0 && (
               <div className={styles.LookupDropdownLoading}>Поиск...</div>
@@ -701,6 +753,7 @@ const LookupField: FC<LookupFieldProps> = ({
                   key={item.uuid ?? idx}
                   className={`${styles.LookupDropdownItem} ${idx === activeIndex ? styles.LookupDropdownItemActive : ""}`}
                   onMouseDown={(e) => {
+                    if (e.button !== 0) return; // только ЛКМ (ПКМ/СКМ не выбирают)
                     e.preventDefault(); // Не дать blur сработать раньше click
                     handleSuggestionClick(item);
                   }}
@@ -714,12 +767,23 @@ const LookupField: FC<LookupFieldProps> = ({
             {!isLoading && suggestions.length === 0 && (
               <div className={styles.LookupDropdownLoading}>Ничего не найдено</div>
             )}
+            {canCreate && (
+              <div className={styles.LookupDropdownCreateWrapper}>
+                <button type="button" className={styles.LookupDropdownCreate}
+                  onMouseDown={(e) => { if (e.button !== 0) return; e.preventDefault(); handleCreateItem(); }}>
+                  <Icon name="plus" width={16} height={16} />
+                  {translate("createNew")} новый
+
+                  {/* {createEntityLabel ? `: ${createEntityLabel}` : ""} */}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* ── Portal dropdown for table variant ──────────────────────────── */}
-      {isTable && isDropdownOpen && (suggestions.length > 0 || isLoading) && dropdownPos && createPortal(
+      {isTable && isDropdownOpen && (suggestions.length > 0 || isLoading || (canCreate && inputText.trim() !== "" && inputText !== displayValue)) && dropdownPos && createPortal(
         <div
           className={styles.LookupDropdown}
           ref={dropdownRef}
@@ -742,6 +806,7 @@ const LookupField: FC<LookupFieldProps> = ({
                 key={item.uuid ?? idx}
                 className={`${styles.LookupDropdownItem} ${idx === activeIndex ? styles.LookupDropdownItemActive : ""}`}
                 onMouseDown={(e) => {
+                  if (e.button !== 0) return; // только ЛКМ (ПКМ/СКМ не выбирают)
                   e.preventDefault();
                   handleSuggestionClick(item);
                 }}
@@ -754,6 +819,17 @@ const LookupField: FC<LookupFieldProps> = ({
           })}
           {!isLoading && suggestions.length === 0 && (
             <div className={styles.LookupDropdownLoading}>Ничего не найдено</div>
+          )}
+          {canCreate && (
+            <div className={styles.LookupDropdownCreateWrapper}>
+              <button type="button" className={styles.LookupDropdownCreate}
+                onMouseDown={(e) => { if (e.button !== 0) return; e.preventDefault(); handleCreateItem(); }}>
+                <Icon name="plus" width={16} height={16} />
+                {translate("createNew")} новый
+
+                {/* {createEntityLabel ? `: ${createEntityLabel}` : ""} */}
+              </button>
+            </div>
           )}
         </div>,
         document.body,

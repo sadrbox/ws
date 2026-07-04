@@ -194,6 +194,8 @@
 	"status": "Мәртебесі",
 	"period": "Кезең",
 	"select": "Таңдаңыз",
+	"selectTitle": "Таңдау",
+	"createNew": "Жасау",
 	"noName": "Атауы жоқ",
 	"new": "Жаңа",
 	"organization": "Ұйым",

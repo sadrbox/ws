@@ -442,6 +442,8 @@
 	"accessLevelReadonly": "Только чтение",
 	"accessLevelNone": "Нет доступа",
 	"select": "Выберите",
+	"selectTitle": "Выбор",
+	"createNew": "Создать",
 	"comment": "Комментарий",
 	"iin": "ИИН",
 	"brand.name": "Бренд",

@@ -124,15 +124,16 @@
 
 .DropdownMenu {
 	/* position/top/left/z-index applied via inline style (viewport-aware) */
-	/* Оформление — единое с ColSettingsPanel (PrintPreview.module.scss). */
+	/* Оформление — единое с LookupDropdown (Field.module.scss). */
 	min-width: 210px;
 	max-height: 360px;
 	overflow-y: auto;
+	overscroll-behavior: contain;
 	background: #fff;
-	border: 1px solid $color5;
-	border-radius: $radius2;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-	padding: 4px 0;
+	border: 1px solid $color10;
+	border-radius: $radius3;
+	box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.08);
+	padding: 4px;
 	display: flex;
 	flex-direction: column;
 }
@@ -141,7 +142,8 @@
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	padding: 5px 12px;
+	padding: 7px 10px;
+	border-radius: $radius2;
 	background: transparent;
 	border: none;
 	cursor: pointer;
@@ -150,9 +152,10 @@
 	text-align: left;
 	white-space: nowrap;
 	user-select: none;
+	transition: background 0.1s ease;
 
 	&:hover:not(:disabled) {
-		background: rgba($color1, 0.08);
+		background: $accentBlueSoft;
 	}
 
 	&:disabled {
