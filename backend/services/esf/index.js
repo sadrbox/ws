@@ -108,6 +108,70 @@ export async function currentUser(sessionId) {
 	};
 }
 
+// ── InvoiceService.queryInvoice — списки входящих/исходящих ЭСФ ───────────────
+
+/** Дата → xs:dateTime ISO 8601 (формат критериев queryInvoice). */
+function esfDateTime(d) {
+	if (!d) return null;
+	const dt = d instanceof Date ? d : new Date(d);
+	return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
+}
+
+/**
+ * Список ЭСФ по критериям (queryInvoice). Для «Входящих» direction=INBOUND
+ * (ЭСФ, где предприятие — получатель), для «Исходящих» — OUTBOUND.
+ * @param {object} p
+ * @param {string} p.sessionId
+ * @param {"INBOUND"|"OUTBOUND"} [p.direction="INBOUND"]
+ * @param {string} [p.contragentTin] — БИН контрагента (фильтр)
+ * @param {string|Date} [p.dateFrom] @param {string|Date} [p.dateTo]
+ * @param {string[]} [p.statuses] — invoiceStatus фильтр
+ * @param {number} [p.pageNum=1]
+ * @returns {Promise<{total:number, page:number, lastBlock:boolean, items:Array}>}
+ */
+export async function queryInvoices({ sessionId, direction = "INBOUND", contragentTin, dateFrom, dateTo, statuses, orderBy, asc = true, pageNum = 1 } = {}) {
+	if (!sessionId) throw new EsfSoapError("Нет sessionId");
+	const df = esfDateTime(dateFrom), dt = esfDateTime(dateTo);
+	const statusList = (statuses && statuses.length)
+		? `<invoiceStatusList>${statuses.map((s) => `<invoiceStatus>${xmlEscape(s)}</invoiceStatus>`).join("")}</invoiceStatusList>`
+		: "";
+	// Порядок элементов criteria строго по схеме: direction, contragentTin?,
+	// dateFrom, dateTo, lastUpdate*?, invoiceStatusList?, invoiceType?, orderBy?, asc?.
+	// (pageNum в criteria НЕ входит — проверено валидацией контура.)
+	const criteria =
+		"<criteria>" +
+		`<direction>${xmlEscape(direction)}</direction>` +
+		(contragentTin ? `<contragentTin>${xmlEscape(contragentTin)}</contragentTin>` : "") +
+		(df ? `<dateFrom>${xmlEscape(df)}</dateFrom>` : "") +
+		(dt ? `<dateTo>${xmlEscape(dt)}</dateTo>` : "") +
+		statusList +
+		(orderBy ? `<orderBy>${xmlEscape(orderBy)}</orderBy>` : "") +
+		`<asc>${asc ? "true" : "false"}</asc>` + // asc обязателен по схеме
+		"</criteria>";
+	const body = `<esf:queryInvoiceRequest><sessionId>${xmlEscape(sessionId)}</sessionId>${criteria}</esf:queryInvoiceRequest>`;
+	const xml = await soapCall(serviceUrl("InvoiceService"), body);
+
+	const rows = (xml.match(/<(?:\w+:)?invoiceInfo\b[^>]*>[\s\S]*?<\/(?:\w+:)?invoiceInfo>/gi) || []).map((f) => ({
+		invoiceId: extractTag(f, "invoiceId"),
+		registrationNumber: extractTag(f, "registrationNumber"),
+		invoiceStatus: extractTag(f, "invoiceStatus"),
+		inputDate: extractTag(f, "inputDate"),
+		deliveryDate: extractTag(f, "deliveryDate"),
+		lastUpdateDate: extractTag(f, "lastUpdateDate"),
+		signatureValid: extractTag(f, "signatureValid"),
+		cancelReason: extractTag(f, "cancelReason"),
+	}));
+	return {
+		total: Number(extractTag(xml, "rsCount") || rows.length),
+		page: Number(extractTag(xml, "currPage") || pageNum),
+		lastBlock: (extractTag(xml, "lastBlock") || "").toLowerCase() === "true",
+		items: rows,
+	};
+}
+
+/** Входящие ЭСФ (предприятие — получатель). */
+export const queryIncomingInvoices = (opts) => queryInvoices({ ...opts, direction: "INBOUND" });
+
 // ── UploadInvoiceService ────────────────────────────────────────────────────
 
 /**
@@ -178,5 +242,5 @@ function parseSyncResult(xml) {
 export default {
 	getVersion, getApiVersion, createAuthTicket,
 	createSessionSigned, closeSession, currentUser,
-	syncInvoice,
+	syncInvoice, queryInvoices, queryIncomingInvoices,
 };

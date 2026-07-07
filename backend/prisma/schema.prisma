@@ -111,8 +111,8 @@ model Organization {
   bin                  String                          @unique @db.VarChar(12)
   name                 String?
   legalName            String?
-  // Реквизиты для ЭСФ (форма ЭСФ РК, раздел B — поставщик):
-  address              String? // адрес места нахождения (B8)
+  // Реквизиты для ЭСФ (форма ЭСФ РК, раздел B — поставщик).
+  // Адрес (B8) берётся из «Контактов» (тип legal_address), не хранится здесь.
   vatSeries            String? // серия свид-ва о постановке на учёт по НДС (B9.1)
   vatNumber            String? // номер свид-ва по НДС (B9.2)
   inviteCode           String?                         @unique
@@ -174,8 +174,8 @@ model Counterparty {
   bin                  String                @unique @db.VarChar(12)
   name                 String?
   legalName            String?
-  // Реквизиты для ЭСФ (форма ЭСФ РК, раздел C — получатель):
-  address              String? // адрес (C18)
+  // Реквизиты для ЭСФ (форма ЭСФ РК, раздел C — получатель).
+  // Адрес (C18) берётся из «Контактов» (тип legal_address), не хранится здесь.
   countryCode          String?               @default("KZ") // код страны получателя (C18.1)
   organizationUuid     String?
   createdAt            DateTime              @default(now())
@@ -2331,4 +2331,40 @@ model EdoSignature {
   @@index([edoDocumentUuid])
   @@index([orgUuid])
   @@map("edo_signatures")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Классификаторы РК/ЕАЭС для гос-документов (ЭСФ/СНТ/ЭАВР). Единая таблица с
+// дискриминатором type: "country"(ISO 3166) | "tnved"(ТН ВЭД ЕАЭС) |
+// "kato"(регионы КАТО) | "gsvs"(ГС ВС, catalogTruId) | "mkei"(ед.изм) и т.д.
+// Крупные официальные справочники (tnved/kato) наполняются импортом (POST
+// /classifiers/import); страны сидируются. code уникален в пределах type.
+// ═══════════════════════════════════════════════════════════════════════════
+model Classifier {
+  id         Int       @id @default(autoincrement())
+  uuid       String    @unique @default(uuid())
+  type       String
+  code       String
+  name       String
+  parentCode String? // для иерархических (ТН ВЭД/КАТО)
+  extra      Json?
+  isActive   Boolean   @default(true)
+  updatedAt  DateTime  @default(now()) @updatedAt
+  deletedAt  DateTime?
+
+  @@unique([type, code])
+  @@index([type])
+  @@index([type, parentCode])
+  @@map("classifiers")
+}
+
+// Системные настройки (key-value) — напр. конфиг интеграции eGov (egov.dataset,
+// egov.apiKey и т.п.). Секреты хранятся только на сервере. Правит суперадмин.
+model AppSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String?
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("app_settings")
 }

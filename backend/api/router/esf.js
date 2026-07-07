@@ -12,11 +12,14 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
+import { getLegalAddress } from "../../services/legalAddress.js";
+import { ESF_DICTIONARIES } from "../../services/esf/dictionaries.js";
 import {
 	esfConfig, EsfSoapError,
 	getVersion, createAuthTicket, createSessionSigned,
 	buildInvoiceV2Xml, INVOICE_ESF_INCLUDE,
-	syncInvoice, queryInvoiceById, queryInvoiceErrorById,
+	syncInvoice, queryInvoiceById, queryInvoiceErrorById, queryIncomingInvoices,
+	confirmInvoiceById, declineInvoiceById,
 } from "../../services/esf/index.js";
 
 const router = express.Router();
@@ -52,6 +55,12 @@ async function loadInvoice(req, uuid) {
 		include: INVOICE_ESF_INCLUDE,
 	});
 }
+
+// ── Справочники (статические перечни ЭСФ) — для pick-list'ов форм ──────────────
+router.get(`/${ROUTE}/dictionaries`, (req, res) => {
+	if (!requireAuth(req, res)) return;
+	res.json({ success: true, dictionaries: ESF_DICTIONARIES });
+});
 
 // ── Health / версия контура ──────────────────────────────────────────────────
 router.get(`/${ROUTE}/version`, async (req, res) => {
@@ -97,6 +106,13 @@ router.post(`/${ROUTE}/invoices/:uuid/build-xml`, async (req, res) => {
 		const invoice = await loadInvoice(req, req.params.uuid);
 		if (!invoice) return res.status(404).json({ success: false, message: "Счёт-фактура не найдена" });
 		if (!invoice.posted) return res.status(400).json({ success: false, message: "Сначала проведите счёт-фактуру" });
+		// Юр.адрес продавца/покупателя — из контактов (legal_address), не из поля.
+		if (invoice.organization) {
+			invoice.organization.address = await getLegalAddress("organization", invoice.organizationUuid);
+		}
+		if (invoice.counterparty) {
+			invoice.counterparty.address = await getLegalAddress("counterparty", invoice.counterpartyUuid);
+		}
 		const xml = buildInvoiceV2Xml(invoice, { num: invoice.esfNum || invoice.number });
 		res.json({ success: true, xml });
 	} catch (err) {
@@ -154,6 +170,43 @@ router.post(`/${ROUTE}/invoices/:uuid/sync`, async (req, res) => {
 	} catch (err) {
 		respondEsfError(res, err);
 	}
+});
+
+// ── Входящие ЭСФ (queryInvoice direction=INBOUND) ─────────────────────────────
+router.post(`/${ROUTE}/incoming`, async (req, res) => {
+	if (!requireAuth(req, res)) return;
+	try {
+		const { sessionId, dateFrom, dateTo, contragentTin, statuses, pageNum } = req.body || {};
+		if (!sessionId) return res.status(400).json({ success: false, message: "Нет сессии ЭСФ" });
+		const result = await queryIncomingInvoices({ sessionId, dateFrom, dateTo, contragentTin, statuses, pageNum });
+		res.json({ success: true, ...result });
+	} catch (err) {
+		respondEsfError(res, err);
+	}
+});
+
+// ── Подтвердить входящие ЭСФ (без подписи) ────────────────────────────────────
+router.post(`/${ROUTE}/incoming/confirm`, async (req, res) => {
+	if (!requireAuth(req, res)) return;
+	try {
+		const { sessionId, ids } = req.body || {};
+		if (!sessionId) return res.status(400).json({ success: false, message: "Нет сессии ЭСФ" });
+		if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ success: false, message: "Не указаны ЭСФ" });
+		await confirmInvoiceById(sessionId, ids);
+		res.json({ success: true, message: "Подтверждено" });
+	} catch (err) { respondEsfError(res, err); }
+});
+
+// ── Отклонить входящие ЭСФ (подписанная операция: signature+x509 от клиента) ───
+router.post(`/${ROUTE}/incoming/decline`, async (req, res) => {
+	if (!requireAuth(req, res)) return;
+	try {
+		const { sessionId, items, signature, x509Certificate } = req.body || {};
+		if (!sessionId) return res.status(400).json({ success: false, message: "Нет сессии ЭСФ" });
+		if (!Array.isArray(items) || !items.length) return res.status(400).json({ success: false, message: "Не указаны ЭСФ/причины" });
+		await declineInvoiceById(sessionId, items, { signature, x509Certificate });
+		res.json({ success: true, message: "Отклонено" });
+	} catch (err) { respondEsfError(res, err); }
 });
 
 // ── 5. Обновление статуса из ИС ЭСФ ────────────────────────────────────────────

@@ -60,6 +60,7 @@ export const MODEL_NAME_OPTIONS = [
     { value: "BankStatement", i18: "BankStatementsList" },
     { value: "MonthClose", i18: "MonthClosesList" },
     { value: "FiscalReceipt", i18: "FiscalReceiptsList" },
+    { value: "EdoDocument", i18: "edoSection" },
     { value: "UnitOfMeasure", i18: "UnitOfMeasuresList" },
     { value: "Tax", i18: "TaxesList" },
     { value: "OrganizationAccountingSetting", i18: "OrganizationAccountingSettingsList" },

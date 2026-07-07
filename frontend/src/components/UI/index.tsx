@@ -48,6 +48,10 @@ const PurchasesList = lazyView("PurchasesList", () => import('src/models/Purchas
 const PurchaseReturnsList = lazyView("PurchaseReturnsList", () => import('src/models/PurchaseReturns').then(m => ({ default: m.PurchaseReturnsList })));
 const PurchaseRequisitionsList = lazyView("PurchaseRequisitionsList", () => import('src/models/PurchaseRequisitions').then(m => ({ default: m.PurchaseRequisitionsList })));
 const OutgoingInvoicesList = lazyView("OutgoingInvoicesList", () => import('src/models/OutgoingInvoices').then(m => ({ default: m.OutgoingInvoicesList })));
+const EdoInboxList = lazyView("EdoInboxList", () => import('src/models/Edo').then(m => ({ default: m.EdoInboxList })));
+const EdoOutboxList = lazyView("EdoOutboxList", () => import('src/models/Edo').then(m => ({ default: m.EdoOutboxList })));
+const ClassifiersList = lazyView("ClassifiersList", () => import('src/models/Classifiers').then(m => ({ default: m.ClassifiersList })));
+const EsfIncomingList = lazyView("EsfIncomingList", () => import('src/models/EsfIncoming').then(m => ({ default: m.EsfIncomingList })));
 const IncomingInvoicesList = lazyView("IncomingInvoicesList", () => import('src/models/IncomingInvoices').then(m => ({ default: m.IncomingInvoicesList })));
 const PaymentInvoicesList = lazyView("PaymentInvoicesList", () => import('src/models/PaymentInvoices').then(m => ({ default: m.PaymentInvoicesList })));
 const ScheduledTasksList = lazyView("ScheduledTasksList", () => import('src/models/ScheduledTasks').then(m => ({ default: m.ScheduledTasksList })));
@@ -979,6 +983,22 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceTypesList, label: translate("PriceTypesList") })}>{translate("PriceTypesList")}</li>}
               {can("Product") && <li onClick={() => addPane({ component: ProductImportExport, label: translate("ProductImportExport") })}>{translate("ProductImportExport")}</li>}
               {can("Brand") && <li onClick={() => addPane({ component: BrandsList, label: translate("BrandsList") })}>{translate("BrandsList")}</li>}
+              <li onClick={() => addPane({ component: ClassifiersList, label: translate("clsSection") })}>{translate("clsSection")}</li>
+            </ul>
+          </div>
+          <div className={styles.NavGroup}>
+            <h3>{translate("govDocsSection")}</h3>
+            <ul className={styles.NavList}>
+              {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("esfOutgoingSection") })}>{translate("esfOutgoingSection")}</li>}
+              {can("OutgoingInvoice") && <li onClick={() => addPane({ component: EsfIncomingList, label: translate("esfIncomingSection") })}>{translate("esfIncomingSection")}</li>}
+              <li className={styles.NavHint}>{translate("govDocsHint")}</li>
+            </ul>
+          </div>
+          <div className={styles.NavGroup}>
+            <h3>{translate("edoSection")}</h3>
+            <ul className={styles.NavList}>
+              {can("EdoDocument") && <li onClick={() => addPane({ component: EdoInboxList, label: translate("edoInbox") })}>{translate("edoInbox")}</li>}
+              {can("EdoDocument") && <li onClick={() => addPane({ component: EdoOutboxList, label: translate("edoOutbox") })}>{translate("edoOutbox")}</li>}
             </ul>
           </div>
         </div>

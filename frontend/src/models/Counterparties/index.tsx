@@ -19,12 +19,13 @@ import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
+import EgovFillButton from "src/components/EgovFillButton";
 
 const MODEL_ENDPOINT = "counterparties";
 const LIST_NAME = "CounterpartiesList";
 
-interface TFields { id?: number; uuid?: string; bin: string; name: string; legalName: string; address: string; countryCode: string; }
-const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", address: "", countryCode: "KZ" };
+interface TFields { id?: number; uuid?: string; bin: string; name: string; legalName: string; countryCode: string; }
+const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", countryCode: "KZ" };
 
 const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useUserAccessRight("Counterparty");
@@ -54,11 +55,11 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
       bankAccounts: { endpoint: "bankaccounts", parentField: "ownerUuid", label: translate("BankAccountsList") || "Банковские счета", batchEndpoint: "bankaccounts/batch", extraFields: { ownerType: "counterparty" } },
       contracts: { endpoint: "contracts", parentField: "counterpartyUuid", label: translate("ContractsList") || "Договора", batchEndpoint: "contracts/batch" },
     },
-    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", name: d.name ?? "", legalName: d.legalName ?? "", address: d.address ?? "", countryCode: d.countryCode ?? "KZ" }),
+    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", name: d.name ?? "", legalName: d.legalName ?? "", countryCode: d.countryCode ?? "KZ" }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
       if (!bin || !/^\d{12}$/.test(bin)) return translate("binMustBe12Digits");
-      return { bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null, address: fd.address?.trim() || null, countryCode: fd.countryCode?.trim() || "KZ" };
+      return { bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null, countryCode: fd.countryCode?.trim() || "KZ" };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, translate("counterparty"), saved, saved.name || saved.bin),
     afterSave: invalidateSubTables,
@@ -89,7 +90,10 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
                     <Field label={translate("countryCode")} name={`${form.formUid}_countryCode`} value={form.fields.countryCode} onChange={e => form.setField("countryCode", e.target.value)} disabled={form.isLoading} maxLength={2} width="120px" />
                   </Group>
                 </GroupRow>
-                <Field label={translate("address")} name={`${form.formUid}_address`} minWidth={FIELD_WIDTH.lg} value={form.fields.address} onChange={e => form.setField("address", e.target.value)} disabled={form.isLoading} />
+                <EgovFillButton ownerType="counterparty" bin={form.fields.bin} uuid={form.fields.uuid}
+                  disabled={form.isLoading || !canWrite}
+                  onFillName={(n) => form.setFields({ name: n, legalName: n } as Partial<TFields>)}
+                  onReload={form.handleReload} />
               </GroupCol>
             </div>
           </div>

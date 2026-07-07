@@ -58,3 +58,27 @@ export const refreshStatus = (uuid: string, sessionId: string) =>
 /** Получить ошибки ИС ЭСФ по счёту-фактуре. */
 export const getInvoiceErrors = (uuid: string, sessionId: string) =>
 	api.post<{ success: boolean; errors: EsfError[] }>(`/esf/invoices/${uuid}/errors`, { sessionId }, cfg);
+
+// ── Сессия + Входящие ЭСФ (G1) ────────────────────────────────────────────────
+export const esfAuthTicket = requestAuthTicket;
+export const esfCreateSession = createSession;
+
+export interface EsfIncomingRow {
+	invoiceId: string | null;
+	registrationNumber: string | null;
+	invoiceStatus: string | null;
+	inputDate: string | null;
+	deliveryDate: string | null;
+	lastUpdateDate: string | null;
+	signatureValid: string | null;
+	cancelReason: string | null;
+}
+
+/** Список входящих ЭСФ (INBOUND) за период. */
+export const fetchEsfIncoming = (sessionId: string, dateFrom?: string, dateTo?: string) =>
+	api.post<{ success: boolean; total: number; page: number; lastBlock: boolean; items: EsfIncomingRow[] }>(
+		"/esf/incoming", { sessionId, dateFrom, dateTo }, cfg);
+
+/** Подтвердить входящие ЭСФ (без подписи). */
+export const confirmEsfIncoming = (sessionId: string, ids: string[]) =>
+	api.post<{ success: boolean; message: string }>("/esf/incoming/confirm", { sessionId, ids }, cfg);

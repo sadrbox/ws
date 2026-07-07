@@ -59,11 +59,12 @@ export function xmlEscape(value) {
 
 /**
  * Собирает SOAP 1.1-конверт. `bodyXml` — уже готовый XML тела запроса
- * (напр. `<esf:apiVersionRequest/>`).
+ * (напр. `<esf:apiVersionRequest/>`). ns/prefix — namespace тела: по умолчанию
+ * esf (ЭСФ), для СНТ — {prefix:"snt", ns:"v1.snt"}, ЭАВР — {prefix:"awp", ns:"v1.awp"}.
  */
-export function buildEnvelope(bodyXml) {
+export function buildEnvelope(bodyXml, { prefix = "esf", ns = "esf" } = {}) {
 	return (
-		`<soapenv:Envelope xmlns:soapenv="${SOAP_ENV}" xmlns:esf="esf">` +
+		`<soapenv:Envelope xmlns:soapenv="${SOAP_ENV}" xmlns:${prefix}="${ns}">` +
 		`<soapenv:Body>${bodyXml}</soapenv:Body>` +
 		`</soapenv:Envelope>`
 	);
@@ -99,8 +100,8 @@ export function extractAllTags(xml, name) {
  * @returns {Promise<string>} сырой XML ответа.
  * @throws {EsfSoapError} при SOAP Fault или транспортной ошибке.
  */
-export async function soapCall(url, bodyXml, { soapAction = "", timeoutMs } = {}) {
-	const envelope = buildEnvelope(bodyXml);
+export async function soapCall(url, bodyXml, { soapAction = "", timeoutMs, ns } = {}) {
+	const envelope = buildEnvelope(bodyXml, ns);
 	let resp;
 	try {
 		resp = await axios.post(url, envelope, {

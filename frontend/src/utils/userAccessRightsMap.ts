@@ -29,6 +29,7 @@ export const ENDPOINT_TO_MODEL: Record<string, string> = {
 	"bank-statements": "BankStatement",
 	"month-closes": "MonthClose",
 	"fiscal-receipts": "FiscalReceipt",
+	edo: "EdoDocument",
 	"cash-receipt-orders": "CashReceiptOrder",
 	"cash-expense-orders": "CashExpenseOrder",
 	brands: "Brand",

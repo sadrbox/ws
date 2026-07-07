@@ -7,6 +7,7 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { EdoError } from "../../services/edo/index.js";
 import {
 	createEdoDocument, buildForSign, sendEdoDocument, loadAttachments,
+	buildForAccept, acceptEdoDocument, rejectEdoDocument, revokeEdoDocument, annulEdoDocument,
 } from "../../services/edo/documents.js";
 
 const router = express.Router();
@@ -62,6 +63,29 @@ router.get(`/${ROUTE}/documents/outbox`, async (req, res) => {
 	} catch (err) { respondEdoError(res, err); }
 });
 
+// ── Список входящих (Inbox) активной организации ──────────────────────────────
+router.get(`/${ROUTE}/documents/inbox`, async (req, res) => {
+	if (!requireAuth(req, res) || !requireOrg(req, res)) return;
+	try {
+		const items = await prisma.edoDocument.findMany({
+			where: { receiverOrgUuid: req.user.organizationUuid, deletedAt: null },
+			orderBy: { id: "desc" }, take: 500,
+		});
+		res.json({ success: true, items });
+	} catch (err) { respondEdoError(res, err); }
+});
+
+// ── Счётчик новых входящих (статус DELIVERED — ещё не обработаны) ──────────────
+router.get(`/${ROUTE}/documents/inbox/new-count`, async (req, res) => {
+	if (!requireAuth(req, res) || !requireOrg(req, res)) return;
+	try {
+		const count = await prisma.edoDocument.count({
+			where: { receiverOrgUuid: req.user.organizationUuid, deletedAt: null, status: "DELIVERED" },
+		});
+		res.json({ success: true, count });
+	} catch (err) { respondEdoError(res, err); }
+});
+
 // ── Один документ (+ подписи + вложения). Виден отправителю или получателю ─────
 router.get(`/${ROUTE}/documents/:uuid`, async (req, res) => {
 	if (!requireAuth(req, res) || !requireOrg(req, res)) return;
@@ -104,6 +128,60 @@ router.post(`/${ROUTE}/documents/:uuid/send`, async (req, res) => {
 			delivered: doc.status === "DELIVERED",
 			message: doc.status === "DELIVERED" ? "Документ доставлен получателю" : "Документ отправлен (получатель не подключён к системе)",
 		});
+	} catch (err) { respondEdoError(res, err); }
+});
+
+// ── Построить XML для встречной подписи получателем ──────────────────────────
+router.post(`/${ROUTE}/documents/:uuid/accept-xml`, async (req, res) => {
+	if (!requireAuth(req, res) || !requireOrg(req, res)) return;
+	try {
+		const { xml } = await buildForAccept(req.params.uuid, req.user.organizationUuid);
+		res.json({ success: true, xml });
+	} catch (err) { respondEdoError(res, err); }
+});
+
+// ── Приём документа (со встречной подписью или без) ──────────────────────────
+router.post(`/${ROUTE}/documents/:uuid/accept`, async (req, res) => {
+	if (!requireAuth(req, res) || !requireOrg(req, res)) return;
+	try {
+		const { signedXml, certificate } = req.body || {};
+		const doc = await acceptEdoDocument({
+			uuid: req.params.uuid, receiverOrgUuid: req.user.organizationUuid,
+			userUuid: req.user.uuid, signedXml, certificate,
+		});
+		res.json({ success: true, status: doc.status, message: doc.status === "SIGNED" ? "Документ подписан" : "Документ принят" });
+	} catch (err) { respondEdoError(res, err); }
+});
+
+// ── Отклонение документа получателем с причиной ──────────────────────────────
+router.post(`/${ROUTE}/documents/:uuid/reject`, async (req, res) => {
+	if (!requireAuth(req, res) || !requireOrg(req, res)) return;
+	try {
+		const { reason } = req.body || {};
+		if (!reason || !reason.trim()) return res.status(400).json({ success: false, message: "Укажите причину отклонения" });
+		const doc = await rejectEdoDocument({ uuid: req.params.uuid, receiverOrgUuid: req.user.organizationUuid, reason: reason.trim() });
+		res.json({ success: true, status: doc.status, message: "Документ отклонён" });
+	} catch (err) { respondEdoError(res, err); }
+});
+
+// ── Отзыв документа отправителем ─────────────────────────────────────────────
+router.post(`/${ROUTE}/documents/:uuid/revoke`, async (req, res) => {
+	if (!requireAuth(req, res) || !requireOrg(req, res)) return;
+	try {
+		const { reason } = req.body || {};
+		const doc = await revokeEdoDocument({ uuid: req.params.uuid, senderOrgUuid: req.user.organizationUuid, reason: reason?.trim() });
+		res.json({ success: true, status: doc.status, message: "Документ отозван" });
+	} catch (err) { respondEdoError(res, err); }
+});
+
+// ── Аннулирование по согласию (любой из сторон) ──────────────────────────────
+router.post(`/${ROUTE}/documents/:uuid/annul`, async (req, res) => {
+	if (!requireAuth(req, res) || !requireOrg(req, res)) return;
+	try {
+		const { reason } = req.body || {};
+		if (!reason || !reason.trim()) return res.status(400).json({ success: false, message: "Укажите причину аннулирования" });
+		const doc = await annulEdoDocument({ uuid: req.params.uuid, orgUuid: req.user.organizationUuid, reason: reason.trim() });
+		res.json({ success: true, status: doc.status, message: "Документ аннулирован" });
 	} catch (err) { respondEdoError(res, err); }
 });
 

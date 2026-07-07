@@ -506,6 +506,18 @@ body {
 			background: $accentBlueSoft;
 		}
 	}
+
+	li.NavHint {
+		font-size: 11px;
+		color: #888;
+		cursor: default;
+		white-space: normal;
+		line-height: 1.3;
+
+		&:hover {
+			background: transparent;
+		}
+	}
 }
 
 .Panes {

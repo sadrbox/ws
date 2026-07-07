@@ -136,4 +136,97 @@ export async function sendEdoDocument({ uuid, senderOrgUuid, userUuid, signedXml
 	});
 }
 
-export default { buildCanonicalXml, createEdoDocument, buildForSign, sendEdoDocument, loadAttachments };
+// ── P2: приём / встречная подпись / отклонение (сторона получателя) ──────────
+
+/** Загружает документ, доступный получателю (по receiverOrgUuid). */
+async function loadForReceiver(uuid, receiverOrgUuid) {
+	const doc = await prisma.edoDocument.findFirst({
+		where: { uuid, receiverOrgUuid, deletedAt: null },
+	});
+	if (!doc) throw new EdoError("Входящий документ ЭДО не найден", { status: 404 });
+	return doc;
+}
+
+/**
+ * Готовит канонический XML для встречной подписи получателем (тот же контент,
+ * что подписал отправитель — параллельная подпись).
+ */
+export async function buildForAccept(uuid, receiverOrgUuid) {
+	const doc = await loadForReceiver(uuid, receiverOrgUuid);
+	const attachments = await loadAttachments(uuid);
+	return { xml: buildCanonicalXml(doc, attachments), doc };
+}
+
+/**
+ * Приём документа получателем. Если передан signedXml — встречная подпись
+ * (role=receiver, статус SIGNED); иначе просто приём (ACCEPTED). Переход из DELIVERED.
+ * @returns {Promise<object>} обновлённый документ.
+ */
+export async function acceptEdoDocument({ uuid, receiverOrgUuid, userUuid, signedXml, certificate }) {
+	const doc = await loadForReceiver(uuid, receiverOrgUuid);
+	const target = signedXml ? EDO_STATUS.SIGNED : EDO_STATUS.ACCEPTED;
+	assertTransition(doc.status, target);
+	const now = new Date();
+	return prisma.$transaction(async (tx) => {
+		if (signedXml) {
+			await tx.edoSignature.create({
+				data: {
+					edoDocumentUuid: uuid, orgUuid: receiverOrgUuid, userUuid: userUuid || null,
+					role: "receiver", signedXml, certificate: certificate || null,
+				},
+			});
+		}
+		return tx.edoDocument.update({
+			where: { uuid }, data: { status: target, respondedAt: now },
+		});
+	});
+}
+
+/** Отклонение документа получателем с причиной (DELIVERED→REJECTED). */
+export async function rejectEdoDocument({ uuid, receiverOrgUuid, reason }) {
+	const doc = await loadForReceiver(uuid, receiverOrgUuid);
+	assertTransition(doc.status, EDO_STATUS.REJECTED);
+	return prisma.edoDocument.update({
+		where: { uuid },
+		data: { status: EDO_STATUS.REJECTED, rejectionReason: reason || null, respondedAt: new Date() },
+	});
+}
+
+// ── P3: отзыв отправителем / аннулирование по согласию ───────────────────────
+
+/**
+ * Отзыв документа отправителем (SENT|DELIVERED → REVOKED). Причина в rejectionReason.
+ */
+export async function revokeEdoDocument({ uuid, senderOrgUuid, reason }) {
+	const doc = await prisma.edoDocument.findFirst({ where: { uuid, senderOrgUuid, deletedAt: null } });
+	if (!doc) throw new EdoError("Документ ЭДО не найден", { status: 404 });
+	assertTransition(doc.status, EDO_STATUS.REVOKED);
+	return prisma.edoDocument.update({
+		where: { uuid },
+		data: { status: EDO_STATUS.REVOKED, rejectionReason: reason || null, respondedAt: new Date() },
+	});
+}
+
+/**
+ * Аннулирование принятого/подписанного документа (SIGNED|ACCEPTED → ANNULLED).
+ * Доступно любой из сторон (отправитель или получатель). Причина в rejectionReason.
+ */
+export async function annulEdoDocument({ uuid, orgUuid, reason }) {
+	const doc = await prisma.edoDocument.findFirst({
+		where: {
+			uuid, deletedAt: null,
+			OR: [{ senderOrgUuid: orgUuid }, { receiverOrgUuid: orgUuid }],
+		},
+	});
+	if (!doc) throw new EdoError("Документ ЭДО не найден", { status: 404 });
+	assertTransition(doc.status, EDO_STATUS.ANNULLED);
+	return prisma.edoDocument.update({
+		where: { uuid },
+		data: { status: EDO_STATUS.ANNULLED, rejectionReason: reason || null, respondedAt: new Date() },
+	});
+}
+
+export default {
+	buildCanonicalXml, createEdoDocument, buildForSign, sendEdoDocument, loadAttachments,
+	buildForAccept, acceptEdoDocument, rejectEdoDocument, revokeEdoDocument, annulEdoDocument,
+};

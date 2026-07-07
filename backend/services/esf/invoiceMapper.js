@@ -9,6 +9,7 @@
 // Опциональные реквизиты (адрес, банк, свид-во НДС) опускаются, если их нет в
 // моделях — это XSD-валидно (minOccurs=0). Уточнять по мере наполнения моделей.
 import { xmlEscape } from "./soapClient.js";
+import { isValidCode } from "./dictionaries.js";
 
 // Признак происхождения ТРУ (G2, [1-6]). 1 — произведён/реализуется в РК.
 // TODO: выводить из категории товара, когда появится классификация.
@@ -148,7 +149,8 @@ function productSetXml(invoice) {
  */
 export function buildInvoiceV2Xml(invoice, opts = {}) {
 	if (!invoice) throw new Error("buildInvoiceV2Xml: нет данных счёта-фактуры");
-	const invoiceType = opts.invoiceType || "ORDINARY_INVOICE";
+	// Тип ЭСФ — из справочника (invalid → основной ЭСФ).
+	const invoiceType = isValidCode("invoiceType", opts.invoiceType) ? opts.invoiceType : "ORDINARY_INVOICE";
 	const num = opts.num || invoice.number || "";
 	const operator = invoice.author?.username || invoice.organization?.name || "";
 	const d = esfDate(invoice.date);
