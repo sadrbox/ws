@@ -60,6 +60,16 @@
 		"inlist": true
 	},
 	{
+		"identifier": "kbe",
+		"type": "string",
+		"width": "80px",
+		"minWidth": "50px",
+		"alignment": "center",
+		"hint": "КБе — код бенефициара (для ЭСФ)",
+		"visible": true,
+		"inlist": true
+	},
+	{
 		"identifier": "currency.name",
 		"type": "string",
 		"width": "100px",

@@ -37,6 +37,7 @@ interface TFields {
   iban: string;
   bik: string;
   bankName: string;
+  kbe: string;
   currencyUuid: string;
   currencyName: string;
   ownerType: OwnerType;
@@ -45,7 +46,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  name: "", iban: "", bik: "", bankName: "",
+  name: "", iban: "", bik: "", bankName: "", kbe: "",
   currencyUuid: "", currencyName: "",
   ownerType: "", ownerUuid: "", ownerName: "",
 };
@@ -85,6 +86,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
         iban: d.iban ?? "",
         bik: d.bik ?? "",
         bankName: d.bankName ?? "",
+        kbe: d.kbe ?? "",
         currencyUuid: d.currencyUuid ?? "",
         currencyName: d.currency ? `${d.currency.code} — ${d.currency.name}` : "",
         ownerType: (d.ownerType as OwnerType) ?? "",
@@ -101,6 +103,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
         iban: fd.iban.trim(),
         bik: fd.bik?.trim() || null,
         bankName: fd.bankName?.trim() || null,
+        kbe: fd.kbe?.trim() || null,
         currencyUuid: fd.currencyUuid || null,
         ownerType: fd.ownerType || null,
         ownerUuid: fd.ownerUuid || null,
@@ -123,6 +126,9 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow>
                 <Group className={styles.w1of2}>
                   <Field label={translate("bik")} name={`${form.formUid}_bik`} minWidth="200px" value={form.fields.bik} onChange={e => form.setField("bik", e.target.value)} disabled={form.isLoading} />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <Field label={translate("kbe")} name={`${form.formUid}_kbe`} value={form.fields.kbe} onChange={e => form.setField("kbe", e.target.value)} disabled={form.isLoading} maxLength={2} width="120px" />
                 </Group>
                 <Group className={styles.w1of2}>
                   <FormLookup form={form} field="currency" endpoint="currencies" displayField="code" minWidth="250px"
@@ -239,6 +245,10 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
       if (ctx.inlineEditing) return <Field label="" name={`ba_bik_${row.id}`} value={(row.bik as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "bik", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
       return <span>{(row.bik as string) ?? ""}</span>;
     }
+    if (col.identifier === "kbe") {
+      if (ctx.inlineEditing) return <Field label="" name={`ba_kbe_${row.id}`} value={(row.kbe as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "kbe", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
+      return <span>{(row.kbe as string) ?? ""}</span>;
+    }
     if (col.identifier === "currency.name") {
       const cur = row.currency as { code?: string; name?: string } | null | undefined;
       const display = cur ? [cur.code, cur.name].filter(Boolean).join(" — ") : "";
@@ -280,7 +290,7 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
   }, [addPane, ownerType, parentUuid, parentName, queryClient]);
 
   const defaultNewRow = useMemo(() => ({
-    name: "", iban: "", bik: "", bankName: "", currencyUuid: null,
+    name: "", iban: "", bik: "", bankName: "", kbe: "", currencyUuid: null,
   }), []);
 
   const adjustedColumns = useMemo(

@@ -39,6 +39,8 @@ import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
+import { useEsfInvoice } from "src/hooks/useEsfInvoice";
+import type { NoticeItem } from "src/components/Notice";
 import { useAppContext } from "src/app/context";
 import { type BasisFromTarget, type OrgDependentField, openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
@@ -82,6 +84,8 @@ export interface InvoiceLikeFormConfig {
    * true — только для Счёт-фактуры исходящей; остальные документы не блокируются.
    */
   lockFieldsOnBasis?: boolean;
+  /** Включить интеграцию с ИС ЭСФ РК (подпись NCALayer + отправка). Только для «Счёт-фактура исходящая». */
+  hasEsf?: boolean;
 }
 
 interface TFields {
@@ -328,6 +332,52 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       contractMismatch,
     });
 
+    // ── Интеграция ИС ЭСФ (только для «Счёт-фактура исходящая», cfg.hasEsf) ──
+    const esf = useEsfInvoice();
+    const esfFields = form.fields as unknown as {
+      esfStatus?: string | null; esfRegistrationNumber?: string | null;
+      esfInvoiceId?: string | null; esfNum?: string | null;
+    };
+    const handleEsfAction = useCallback(async (id: string) => {
+      const uuid = form.fields.uuid;
+      if (!uuid) return;
+      try {
+        if (id === "send") {
+          const r = await esf.sendToEsf(uuid);
+          form.setFields({
+            esfStatus: r.esfStatus, esfRegistrationNumber: r.esfRegistrationNumber,
+            esfInvoiceId: r.esfInvoiceId, esfNum: r.esfNum,
+          } as unknown as Partial<TFields>);
+        } else if (id === "refresh") {
+          const r = await esf.refresh(uuid);
+          form.setFields({
+            esfStatus: r.esfStatus, esfRegistrationNumber: r.esfRegistrationNumber,
+          } as unknown as Partial<TFields>);
+        } else if (id === "errors") {
+          await esf.loadErrors(uuid);
+        }
+      } catch {
+        /* сообщение об ошибке отображается через esf.error → <Notice/> */
+      }
+    }, [form.fields.uuid, form.setFields, esf]);
+
+    const esfNotices = useMemo<NoticeItem[]>(() => {
+      if (!cfg.hasEsf) return [];
+      const out: NoticeItem[] = [];
+      if (esfFields.esfStatus) {
+        const reg = esfFields.esfRegistrationNumber ? ` · ${translate("esfRegNo")} ${esfFields.esfRegistrationNumber}` : "";
+        const ok = ["DELIVERED", "CONFIRMED", "PROCESSED", "IMPORTED", "CREATED"].includes(esfFields.esfStatus);
+        out.push({ type: ok ? "success" : "warning", text: `${translate("esf")}: ${esfFields.esfStatus}${reg}` });
+      }
+      if (esf.error) out.push({ type: "attention", text: `${translate("esf")}: ${esf.error}` });
+      // Детальные ошибки ИС ЭСФ (queryInvoiceErrorById) — по кнопке «Показать ошибки».
+      for (const e of esf.errors) {
+        const code = e.errorCode ? `[${e.errorCode}] ` : "";
+        out.push({ type: "attention", text: `${code}${e.text || ""}` });
+      }
+      return out;
+    }, [esfFields.esfStatus, esfFields.esfRegistrationNumber, esf.error, esf.errors]);
+
     const handleRefillFromBasis = useCallback(async (skipFields = false) => {
       setIsRefilling(true);
       try {
@@ -447,6 +497,21 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                 title={printDisabled ? "Сохраните изменения перед печатью" : "Печать"}
                 options={[{ id: "print", label: "Печать" }]}
                 onSelect={handlePrint}
+              />
+            )}
+            {cfg.hasEsf && isSavedDoc && (
+              <ActionsDropdownButton
+                icon="download"
+                label={translate("esf")}
+                disabled={esf.busy || form.isLoading || form.isDirty || hasDirtyItems}
+                options={[
+                  { id: "send", label: esfFields.esfStatus ? translate("esfResend") : translate("esfSignAndSend") },
+                  ...(esfFields.esfInvoiceId ? [
+                    { id: "refresh", label: translate("esfRefreshStatus") },
+                    { id: "errors", label: translate("esfShowErrors") },
+                  ] : []),
+                ]}
+                onSelect={(id) => void handleEsfAction(id)}
               />
             )}
           </>)}
@@ -599,6 +664,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
               </GroupCol>
               <GroupCol className={styles.FormNotice}>
                 <Notice items={notices} />
+                {cfg.hasEsf && <Notice items={esfNotices} />}
               </GroupCol>
             </div>
             <GroupRow>

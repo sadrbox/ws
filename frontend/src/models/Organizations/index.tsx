@@ -34,9 +34,12 @@ interface TFields {
   bin: string;
   name: string;
   legalName: string;
+  address: string;
+  vatSeries: string;
+  vatNumber: string;
 }
 
-const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "" };
+const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", address: "", vatSeries: "", vatNumber: "" };
 
 const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useUserAccessRight("Organization");
@@ -106,11 +109,19 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       bin: d.bin ?? "",
       name: d.name ?? "",
       legalName: d.legalName ?? "",
+      address: d.address ?? "",
+      vatSeries: d.vatSeries ?? "",
+      vatNumber: d.vatNumber ?? "",
     }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
       if (!bin || !/^\d{12}$/.test(bin)) return "БИН должен состоять ровно из 12 цифр";
-      return { bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null };
+      return {
+        bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null,
+        address: fd.address?.trim() || null,
+        vatSeries: fd.vatSeries?.trim() || null,
+        vatNumber: fd.vatNumber?.trim() || null,
+      };
     },
     buildPaneLabel: (saved) =>
       makePaneLabel(LIST_NAME, "Организации", saved, saved.name || saved.bin),
@@ -142,6 +153,17 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
                 <GroupRow>
                   <Group className={styles.w1of2}>
                     <Field label={translate("binIin")} name={`${form.formUid}_bin`} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading} required />
+                  </Group>
+                </GroupRow>
+                <Group>
+                  <Field label={translate("address")} name={`${form.formUid}_address`} value={form.fields.address} onChange={e => form.setField("address", e.target.value)} disabled={form.isLoading} />
+                </Group>
+                <GroupRow>
+                  <Group className={styles.w1of2}>
+                    <Field label={translate("vatCertSeries")} name={`${form.formUid}_vatSeries`} value={form.fields.vatSeries} onChange={e => form.setField("vatSeries", e.target.value)} disabled={form.isLoading} width="160px" />
+                  </Group>
+                  <Group className={styles.w1of2}>
+                    <Field label={translate("vatCertNumber")} name={`${form.formUid}_vatNumber`} value={form.fields.vatNumber} onChange={e => form.setField("vatNumber", e.target.value)} disabled={form.isLoading} width="200px" />
                   </Group>
                 </GroupRow>
               </GroupCol>

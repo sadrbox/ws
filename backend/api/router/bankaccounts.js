@@ -227,7 +227,7 @@ router.get("/bankaccounts/:id", async (req, res) => {
 // ============================================
 router.post("/bankaccounts", async (req, res) => {
 	try {
-		const { name, iban, bik, bankName, currencyUuid, ownerType, ownerUuid } = req.body;
+		const { name, iban, bik, bankName, kbe, currencyUuid, ownerType, ownerUuid } = req.body;
 
 		if (!iban || typeof iban !== "string") {
 			return res.status(400).json({ success: false, message: "IBAN обязателен" });
@@ -240,6 +240,7 @@ router.post("/bankaccounts", async (req, res) => {
 				iban: iban.trim(),
 				bik: bik?.trim() ?? null,
 				bankName: bankName?.trim() ?? null,
+				kbe: kbe?.trim() ?? null,
 				currencyUuid: currencyUuid ?? null,
 				ownerType: ownerType?.trim() || null,
 				ownerUuid: ownerUuid?.trim() || null,
@@ -271,13 +272,14 @@ router.put("/bankaccounts/:id", async (req, res) => {
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 
-		const { name, iban, bik, bankName, currencyUuid, ownerType, ownerUuid, isPrimary } = req.body;
+		const { name, iban, bik, bankName, kbe, currencyUuid, ownerType, ownerUuid, isPrimary } = req.body;
 		const data = {};
 
 		if (name !== undefined) data.name = name?.trim() ?? null;
 		if (iban !== undefined) data.iban = iban.trim();
 		if (bik !== undefined) data.bik = bik?.trim() ?? null;
 		if (bankName !== undefined) data.bankName = bankName?.trim() ?? null;
+		if (kbe !== undefined) data.kbe = kbe?.trim() ?? null;
 		if (currencyUuid !== undefined) data.currencyUuid = currencyUuid ?? null;
 		if (ownerType !== undefined) data.ownerType = ownerType?.trim() || null;
 		if (ownerUuid !== undefined) data.ownerUuid = ownerUuid?.trim() || null;
@@ -340,6 +342,7 @@ router.post("/bankaccounts/batch", async (req, res) => {
 							iban: (data.iban ?? "").trim(),
 							bik: data.bik?.trim() ?? null,
 							bankName: data.bankName?.trim() ?? null,
+							kbe: data.kbe?.trim() ?? null,
 							currencyUuid: data.currencyUuid ?? null,
 							ownerType: data.ownerType?.trim() || null,
 							ownerUuid: data.ownerUuid?.trim() || null,
@@ -352,6 +355,7 @@ router.post("/bankaccounts/batch", async (req, res) => {
 					if (data.iban !== undefined) updateData.iban = (data.iban ?? "").trim();
 					if (data.bik !== undefined) updateData.bik = data.bik?.trim() ?? null;
 					if (data.bankName !== undefined) updateData.bankName = data.bankName?.trim() ?? null;
+					if (data.kbe !== undefined) updateData.kbe = data.kbe?.trim() ?? null;
 					if (data.currencyUuid !== undefined) updateData.currencyUuid = data.currencyUuid ?? null;
 					if (Object.keys(updateData).length > 0)
 						await tx.bankAccount.update({ where: { uuid }, data: updateData });

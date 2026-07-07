@@ -204,7 +204,7 @@ router.get("/organizations/:id", async (req, res) => {
 // ============================================
 router.post("/organizations", async (req, res) => {
 	try {
-		const { bin, name, legalName } = req.body;
+		const { bin, name, legalName, address, vatSeries, vatNumber } = req.body;
 
 		if (!bin || typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
 			return res.status(400).json({
@@ -218,6 +218,9 @@ router.post("/organizations", async (req, res) => {
 				bin: bin.trim(),
 				name: name?.trim() ?? null,
 				legalName: legalName?.trim() ?? null,
+				address: address?.trim() ?? null,
+				vatSeries: vatSeries?.trim() ?? null,
+				vatNumber: vatNumber?.trim() ?? null,
 			},
 		});
 
@@ -244,7 +247,7 @@ router.put("/organizations/:id", async (req, res) => {
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 
-		const { bin, name, legalName } = req.body;
+		const { bin, name, legalName, address, vatSeries, vatNumber } = req.body;
 		const data = {};
 
 		if (bin !== undefined) {
@@ -261,6 +264,9 @@ router.put("/organizations/:id", async (req, res) => {
 		if (name !== undefined) data.name = name?.trim() ?? null;
 		if (legalName !== undefined)
 			data.legalName = legalName?.trim() ?? null;
+		if (address !== undefined) data.address = address?.trim() ?? null;
+		if (vatSeries !== undefined) data.vatSeries = vatSeries?.trim() ?? null;
+		if (vatNumber !== undefined) data.vatNumber = vatNumber?.trim() ?? null;
 
 		const item = await prisma.organization.update({
 			where: whereClause,

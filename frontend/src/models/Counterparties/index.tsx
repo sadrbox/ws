@@ -23,8 +23,8 @@ import { makePaneLabel } from "src/utils/buildPaneLabel";
 const MODEL_ENDPOINT = "counterparties";
 const LIST_NAME = "CounterpartiesList";
 
-interface TFields { id?: number; uuid?: string; bin: string; name: string; legalName: string; }
-const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "" };
+interface TFields { id?: number; uuid?: string; bin: string; name: string; legalName: string; address: string; countryCode: string; }
+const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", address: "", countryCode: "KZ" };
 
 const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useUserAccessRight("Counterparty");
@@ -54,11 +54,11 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
       bankAccounts: { endpoint: "bankaccounts", parentField: "ownerUuid", label: translate("BankAccountsList") || "Банковские счета", batchEndpoint: "bankaccounts/batch", extraFields: { ownerType: "counterparty" } },
       contracts: { endpoint: "contracts", parentField: "counterpartyUuid", label: translate("ContractsList") || "Договора", batchEndpoint: "contracts/batch" },
     },
-    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", name: d.name ?? "", legalName: d.legalName ?? "" }),
+    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", name: d.name ?? "", legalName: d.legalName ?? "", address: d.address ?? "", countryCode: d.countryCode ?? "KZ" }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
       if (!bin || !/^\d{12}$/.test(bin)) return translate("binMustBe12Digits");
-      return { bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null };
+      return { bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null, address: fd.address?.trim() || null, countryCode: fd.countryCode?.trim() || "KZ" };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, translate("counterparty"), saved, saved.name || saved.bin),
     afterSave: invalidateSubTables,
@@ -85,7 +85,11 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
                   <Group className={styles.w1of2}>
                     <Field label={`${translate("binIin")}`} name={`${form.formUid}_bin`} minWidth={FIELD_WIDTH.lg} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading} required />
                   </Group>
+                  <Group className={styles.w1of2}>
+                    <Field label={translate("countryCode")} name={`${form.formUid}_countryCode`} value={form.fields.countryCode} onChange={e => form.setField("countryCode", e.target.value)} disabled={form.isLoading} maxLength={2} width="120px" />
+                  </Group>
                 </GroupRow>
+                <Field label={translate("address")} name={`${form.formUid}_address`} minWidth={FIELD_WIDTH.lg} value={form.fields.address} onChange={e => form.setField("address", e.target.value)} disabled={form.isLoading} />
               </GroupCol>
             </div>
           </div>

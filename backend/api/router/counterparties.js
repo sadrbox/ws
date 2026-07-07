@@ -53,7 +53,7 @@ const validateCounterpartyData = (data) => {
 // ============================================
 router.post("/counterparties", async (req, res) => {
 	try {
-		const { bin, name, legalName } = req.body;
+		const { bin, name, legalName, address, countryCode } = req.body;
 
 		// 1. Ранняя проверка наличия
 		if (!bin || typeof bin !== "string") {
@@ -91,6 +91,8 @@ router.post("/counterparties", async (req, res) => {
 					bin: normalizedBin,
 					name: name?.trim() ?? null,
 					legalName: legalName?.trim() ?? null,
+					address: address?.trim() ?? null,
+					countryCode: countryCode?.trim() || "KZ",
 					organizationUuid: req.user?.organizationUuid ?? null,
 				},
 			});
@@ -379,7 +381,7 @@ router.get("/counterparties/uuid/:uuid", async (req, res) => {
 router.put("/counterparties/:uuid", async (req, res) => {
 	try {
 		const { uuid } = req.params;
-		const { bin, name, legalName } = req.body;
+		const { bin, name, legalName, address, countryCode } = req.body;
 
 		if (
 			typeof uuid !== "string" ||
@@ -450,6 +452,12 @@ router.put("/counterparties/:uuid", async (req, res) => {
 		}
 		if (bin !== undefined) {
 			updateData.bin = bin.trim();
+		}
+		if (address !== undefined) {
+			updateData.address = address?.trim() || null;
+		}
+		if (countryCode !== undefined) {
+			updateData.countryCode = countryCode?.trim() || "KZ";
 		}
 
 		// Обновление контрагента

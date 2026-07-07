@@ -22,14 +22,14 @@ model User {
   createdAt                    DateTime              @default(now())
   updatedAt                    DateTime              @default(now()) @updatedAt
   deletedAt                    DateTime?
-  userAccessRights                 UserAccessRight[]
+  userAccessRights             UserAccessRight[]
   curatorTodos                 Todo[]                @relation("TodoCurator")
   executorTodos                Todo[]                @relation("TodoExecutor")
   employee                     Employee?             @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
   organization                 Organization?         @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   /// Список организаций, к которым у пользователя есть доступ
-  userSettings              UserSetting[]
-  userDefaults       UserDefault[]
+  userSettings                 UserSetting[]
+  userDefaults                 UserDefault[]
   // Авторство документов — заполняется при создании, не редактируется.
   authoredSales                Sale[]                @relation("SaleAuthor")
   authoredPriceSettings        ProductPriceSetting[] @relation("PriceSettingAuthor")
@@ -111,6 +111,10 @@ model Organization {
   bin                  String                          @unique @db.VarChar(12)
   name                 String?
   legalName            String?
+  // Реквизиты для ЭСФ (форма ЭСФ РК, раздел B — поставщик):
+  address              String? // адрес места нахождения (B8)
+  vatSeries            String? // серия свид-ва о постановке на учёт по НДС (B9.1)
+  vatNumber            String? // номер свид-ва по НДС (B9.2)
   inviteCode           String?                         @unique
   createdAt            DateTime                        @default(now())
   updatedAt            DateTime                        @default(now()) @updatedAt
@@ -133,9 +137,9 @@ model Organization {
   scheduledTasks       ScheduledTask[]
   todos                Todo[]
   users                User[]                          @relation("UserOrganization")
-  userSettings        UserSetting[]
-  userDefaults UserDefault[]
-  userAccessRights           UserAccessRight[]
+  userSettings         UserSetting[]
+  userDefaults         UserDefault[]
+  userAccessRights     UserAccessRight[]
   warehouses           Warehouse[]
   employeeHistories    EmployeeHistory[]
   counterparties       Counterparty[]                  @relation("OrgCounterparties")
@@ -170,6 +174,9 @@ model Counterparty {
   bin                  String                @unique @db.VarChar(12)
   name                 String?
   legalName            String?
+  // Реквизиты для ЭСФ (форма ЭСФ РК, раздел C — получатель):
+  address              String? // адрес (C18)
+  countryCode          String?               @default("KZ") // код страны получателя (C18.1)
   organizationUuid     String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @default(now()) @updatedAt
@@ -310,21 +317,22 @@ model ContactPerson {
 }
 
 model BankAccount {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
+  id               Int             @id @default(autoincrement())
+  uuid             String          @unique @default(uuid())
   ownerType        String?
   ownerUuid        String?
   iban             String
   bik              String?
   bankName         String?
+  kbe              String? // КБе — код бенефициара (форма ЭСФ, B1 12)
   name             String?
   currencyUuid     String?
-  isPrimary        Boolean       @default(false)
+  isPrimary        Boolean         @default(false)
   organizationUuid String?
-  updatedAt        DateTime      @default(now()) @updatedAt
+  updatedAt        DateTime        @default(now()) @updatedAt
   deletedAt        DateTime?
-  currency         Currency?     @relation(fields: [currencyUuid], references: [uuid])
-  organization     Organization? @relation("OrgBankAccounts", fields: [organizationUuid], references: [uuid])
+  currency         Currency?       @relation(fields: [currencyUuid], references: [uuid])
+  organization     Organization?   @relation("OrgBankAccounts", fields: [organizationUuid], references: [uuid])
   bankStatements   BankStatement[]
 
   @@index([ownerType, ownerUuid])
@@ -390,26 +398,26 @@ model Todo {
 }
 
 model Warehouse {
-  id                     Int                 @id @default(autoincrement())
-  uuid                   String              @unique @default(uuid())
+  id                     Int                   @id @default(autoincrement())
+  uuid                   String                @unique @default(uuid())
   name                   String
   address                String?
   comment                String?
   organizationUuid       String?
-  updatedAt              DateTime            @default(now()) @updatedAt
+  updatedAt              DateTime              @default(now()) @updatedAt
   deletedAt              DateTime?
-  inventoryTransfersFrom InventoryTransfer[] @relation("TransferFrom")
-  inventoryTransfersTo   InventoryTransfer[] @relation("TransferTo")
+  inventoryTransfersFrom InventoryTransfer[]   @relation("TransferFrom")
+  inventoryTransfersTo   InventoryTransfer[]   @relation("TransferTo")
   sales                  Sale[]
-  saleReturns            SaleReturn[]        @relation("WhSaleReturns")
-  purchases              Purchase[]          @relation("WhPurchases")
-  purchaseReturns        PurchaseReturn[]    @relation("WhPurchaseReturns")
-  organization           Organization?       @relation(fields: [organizationUuid], references: [uuid])
+  saleReturns            SaleReturn[]          @relation("WhSaleReturns")
+  purchases              Purchase[]            @relation("WhPurchases")
+  purchaseReturns        PurchaseReturn[]      @relation("WhPurchaseReturns")
+  organization           Organization?         @relation(fields: [organizationUuid], references: [uuid])
   productRegister        ProductRegister[]
   reservationRegister    ReservationRegister[]
-  salesOrders            SalesOrder[]        @relation("WhSalesOrders")
-  reservations           Reservation[]       @relation("WhReservations")
-  purchaseOrders         PurchaseOrder[]     @relation("WhPurchaseOrders")
+  salesOrders            SalesOrder[]          @relation("WhSalesOrders")
+  reservations           Reservation[]         @relation("WhReservations")
+  purchaseOrders         PurchaseOrder[]       @relation("WhPurchaseOrders")
 
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -417,14 +425,14 @@ model Warehouse {
 }
 
 model Cashbox {
-  id                Int                @id @default(autoincrement())
-  uuid              String             @unique @default(uuid())
-  name              String
-  organizationUuid  String?
-  updatedAt         DateTime           @default(now()) @updatedAt
-  deletedAt         DateTime?
-  organization      Organization?      @relation("OrgCashboxes", fields: [organizationUuid], references: [uuid])
-  cashOrders        CashOrder[]        @relation("CashboxCashOrders")
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  name             String
+  organizationUuid String?
+  updatedAt        DateTime      @default(now()) @updatedAt
+  deletedAt        DateTime?
+  organization     Organization? @relation("OrgCashboxes", fields: [organizationUuid], references: [uuid])
+  cashOrders       CashOrder[]   @relation("CashboxCashOrders")
 
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -434,7 +442,7 @@ model Cashbox {
 model Sale {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  number             String?
+  number           String?
   date             DateTime      @default(now())
   comment          String?
   amount           Decimal?      @db.Decimal(18, 2)
@@ -484,7 +492,7 @@ model Sale {
 model Purchase {
   id               Int            @id @default(autoincrement())
   uuid             String         @unique @default(uuid())
-  number             String?
+  number           String?
   date             DateTime       @default(now())
   comment          String?
   amount           Decimal?       @db.Decimal(18, 2)
@@ -529,7 +537,7 @@ model Purchase {
 model OutgoingInvoice {
   id                   Int                   @id @default(autoincrement())
   uuid                 String                @unique @default(uuid())
-  number             String?
+  number               String?
   date                 DateTime              @default(now())
   comment              String?
   amount               Decimal?              @db.Decimal(18, 2)
@@ -553,6 +561,17 @@ model OutgoingInvoice {
   basisDocumentUuid  String?
   basisDocumentLabel String?
 
+  // ── Интеграция с ИС ЭСФ РК (электронные счета-фактуры) ──
+  // esfStatus: null=не отправлялся | DRAFT | SIGNING | SENT | PROCESSING |
+  //            PROCESSED | FAILED | DELIVERED | DECLINED | REVOKED
+  esfStatus             String?
+  esfRegistrationNumber String? // рег. номер ЭСФ (присваивается ИС ЭСФ)
+  esfInvoiceId          String? // идентификатор инвойса в ИС ЭСФ
+  esfNum                String? // внутренний номер ЭСФ (invoiceNum)
+  esfSentAt             DateTime?
+  esfErrorText          String?
+  esfXml                String?   @db.Text // отправленный подписанный XML
+
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([contractUuid])
@@ -560,13 +579,14 @@ model OutgoingInvoice {
   @@index([date])
   @@index([updatedAt])
   @@index([basisDocumentUuid])
+  @@index([esfStatus])
   @@map("outgoing_invoices")
 }
 
 model IncomingInvoice {
   id                   Int                   @id @default(autoincrement())
   uuid                 String                @unique @default(uuid())
-  number             String?
+  number               String?
   date                 DateTime              @default(now())
   comment              String?
   amount               Decimal?              @db.Decimal(18, 2)
@@ -598,7 +618,7 @@ model IncomingInvoice {
 model PaymentInvoice {
   id                  Int                  @id @default(autoincrement())
   uuid                String               @unique @default(uuid())
-  number             String?
+  number              String?
   date                DateTime             @default(now())
   comment             String?
   amount              Decimal?             @db.Decimal(18, 2)
@@ -653,7 +673,7 @@ model ScheduledTask {
 model InventoryTransfer {
   id                     Int                     @id @default(autoincrement())
   uuid                   String                  @unique @default(uuid())
-  number             String?
+  number                 String?
   date                   DateTime                @default(now())
   comment                String?
   /// Итоговая сумма по строкам (Σ quantity × price). Без НДС/акциза —
@@ -681,42 +701,40 @@ model InventoryTransfer {
   @@map("inventory_transfers")
 }
 
-
-
 /// Кассовый ордер (объединяет ПКО и РКО). direction задаёт тип:
 /// "receipt" — приходный (ПКО), "expense" — расходный (РКО). Документ-тип для
 /// проводок/нумерации выводится из direction (cash_receipt_order / cash_expense_order).
 model CashOrder {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
+  id                 Int           @id @default(autoincrement())
+  uuid               String        @unique @default(uuid())
   /// "receipt" (ПКО) | "expense" (РКО)
-  direction        String
-  number           String?
-  date             DateTime      @default(now())
-  comment          String?
-  amount           Decimal?      @db.Decimal(18, 2)
+  direction          String
+  number             String?
+  date               DateTime      @default(now())
+  comment            String?
+  amount             Decimal?      @db.Decimal(18, 2)
   /// Тип кассовой операции (определяет корр-счёт проводки). null → дефолт по direction.
-  operationType    String?
+  operationType      String?
   /// Документ-основание (тип/uuid + человекочитаемая метка).
   basisDocumentType  String?
   basisDocumentUuid  String?
   basisDocumentLabel String?
-  organizationUuid String?
-  counterpartyUuid String?
-  contractUuid     String?
-  cashboxUuid      String?
+  organizationUuid   String?
+  counterpartyUuid   String?
+  contractUuid       String?
+  cashboxUuid        String?
   /// Подотчётное лицо (сотрудник) — для операций «выдача/возврат подотчёт» (счёт 1250).
-  employeeUuid     String?
-  authorUuid       String
-  posted           Boolean       @default(true)
-  updatedAt        DateTime      @default(now()) @updatedAt
-  deletedAt        DateTime?
-  cashbox          Cashbox?      @relation("CashboxCashOrders", fields: [cashboxUuid], references: [uuid])
-  contract         Contract?     @relation("ContractCashOrders", fields: [contractUuid], references: [uuid])
-  counterparty     Counterparty? @relation("CpCashOrders", fields: [counterpartyUuid], references: [uuid])
-  organization     Organization? @relation("OrgCashOrders", fields: [organizationUuid], references: [uuid])
-  employee         Employee?     @relation("CashOrderEmployee", fields: [employeeUuid], references: [uuid])
-  author           User          @relation("CashOrderAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+  employeeUuid       String?
+  authorUuid         String
+  posted             Boolean       @default(true)
+  updatedAt          DateTime      @default(now()) @updatedAt
+  deletedAt          DateTime?
+  cashbox            Cashbox?      @relation("CashboxCashOrders", fields: [cashboxUuid], references: [uuid])
+  contract           Contract?     @relation("ContractCashOrders", fields: [contractUuid], references: [uuid])
+  counterparty       Counterparty? @relation("CpCashOrders", fields: [counterpartyUuid], references: [uuid])
+  organization       Organization? @relation("OrgCashOrders", fields: [organizationUuid], references: [uuid])
+  employee           Employee?     @relation("CashOrderEmployee", fields: [employeeUuid], references: [uuid])
+  author             User          @relation("CashOrderAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -901,7 +919,7 @@ model SaleItem {
   sale              Sale           @relation(fields: [saleUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
-  sourceRowId       String?
+  sourceRowId String?
 
   @@index([saleUuid])
   @@index([sourceRowId])
@@ -947,7 +965,7 @@ model PurchaseItem {
   purchase          Purchase       @relation(fields: [purchaseUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
-  sourceRowId       String?
+  sourceRowId String?
 
   @@index([purchaseUuid])
   @@index([sourceRowId])
@@ -988,7 +1006,7 @@ model OutgoingInvoiceItem {
   outgoingInvoice     OutgoingInvoice @relation(fields: [outgoingInvoiceUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure       UnitOfMeasure?  @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
-  sourceRowId       String?
+  sourceRowId String?
 
   @@index([outgoingInvoiceUuid])
   @@index([sourceRowId])
@@ -1104,25 +1122,25 @@ model InventoryTransferItem {
 }
 
 model Employee {
-  id                  Int                  @id @default(autoincrement())
-  uuid                String               @unique @default(uuid())
-  firstName           String?
-  lastName            String?
-  middleName          String?
-  fullName            String?              @db.VarChar(255)
-  iin                 String?              @db.VarChar(12)
-  avatarPath          String?
-  organizationUuid    String?
-  updatedAt           DateTime             @default(now()) @updatedAt
-  deletedAt           DateTime?
-  employeeHistory     EmployeeHistory[]
-  payrollCalculations PayrollCalculation[] @relation("PayrollCalcEmployee")
-  payrollPayments     PayrollPayment[]     @relation("PayrollPayEmployee")
-  organization        Organization?        @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid])
-  users               User[]
-  salesManaged        Sale[]               @relation("SaleManager")
-  saleReturnsManaged  SaleReturn[]         @relation("SaleReturnManager")
-  accountableCashOrders CashOrder[]        @relation("CashOrderEmployee")
+  id                    Int                  @id @default(autoincrement())
+  uuid                  String               @unique @default(uuid())
+  firstName             String?
+  lastName              String?
+  middleName            String?
+  fullName              String?              @db.VarChar(255)
+  iin                   String?              @db.VarChar(12)
+  avatarPath            String?
+  organizationUuid      String?
+  updatedAt             DateTime             @default(now()) @updatedAt
+  deletedAt             DateTime?
+  employeeHistory       EmployeeHistory[]
+  payrollCalculations   PayrollCalculation[] @relation("PayrollCalcEmployee")
+  payrollPayments       PayrollPayment[]     @relation("PayrollPayEmployee")
+  organization          Organization?        @relation("EmployeeOrganization", fields: [organizationUuid], references: [uuid])
+  users                 User[]
+  salesManaged          Sale[]               @relation("SaleManager")
+  saleReturnsManaged    SaleReturn[]         @relation("SaleReturnManager")
+  accountableCashOrders CashOrder[]          @relation("CashOrderEmployee")
 
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -1206,7 +1224,7 @@ model Currency {
 model PayrollCalculation {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  number             String?
+  number           String?
   date             DateTime      @default(now())
   comment          String?
   period           String?       @db.VarChar(7)
@@ -1244,7 +1262,7 @@ model PayrollCalculation {
 model PayrollPayment {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
-  number             String?
+  number           String?
   date             DateTime      @default(now())
   comment          String?
   period           String?       @db.VarChar(7)
@@ -1353,7 +1371,7 @@ model OrganizationAccountingSetting {
 model SaleReturn {
   id               Int              @id @default(autoincrement())
   uuid             String           @unique @default(uuid())
-  number             String?
+  number           String?
   date             DateTime         @default(now())
   comment          String?
   amount           Decimal?         @db.Decimal(18, 2)
@@ -1421,7 +1439,7 @@ model SaleReturnItem {
   saleReturn        SaleReturn     @relation(fields: [saleReturnUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
-  sourceRowId       String?
+  sourceRowId String?
 
   @@index([saleReturnUuid])
   @@index([sourceRowId])
@@ -1438,7 +1456,7 @@ model SaleReturnItem {
 model PurchaseReturn {
   id                  Int                  @id @default(autoincrement())
   uuid                String               @unique @default(uuid())
-  number             String?
+  number              String?
   date                DateTime             @default(now())
   comment             String?
   amount              Decimal?             @db.Decimal(18, 2)
@@ -1502,7 +1520,7 @@ model PurchaseReturnItem {
   purchaseReturn     PurchaseReturn @relation(fields: [purchaseReturnUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure      UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
-  sourceRowId       String?
+  sourceRowId String?
 
   @@index([purchaseReturnUuid])
   @@index([sourceRowId])
@@ -1519,7 +1537,7 @@ model PurchaseReturnItem {
 model PurchaseRequisition {
   id                       Int                       @id @default(autoincrement())
   uuid                     String                    @unique @default(uuid())
-  number             String?
+  number                   String?
   date                     DateTime                  @default(now())
   comment                  String?
   amount                   Decimal?                  @db.Decimal(18, 2)
@@ -1579,7 +1597,7 @@ model PurchaseRequisitionItem {
   purchaseRequisition     PurchaseRequisition @relation(fields: [purchaseRequisitionUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure           UnitOfMeasure?      @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
-  sourceRowId       String?
+  sourceRowId String?
 
   @@index([purchaseRequisitionUuid])
   @@index([sourceRowId])
@@ -1794,7 +1812,7 @@ model AccountingEntryAnalytic {
 model CommercialOffer {
   id                   Int                   @id @default(autoincrement())
   uuid                 String                @unique @default(uuid())
-  number             String?
+  number               String?
   date                 DateTime              @default(now())
   comment              String?
   amount               Decimal?              @db.Decimal(18, 2)
@@ -1828,33 +1846,33 @@ model CommercialOffer {
 }
 
 model CommercialOfferItem {
-  id                Int             @id @default(autoincrement())
-  uuid              String          @unique @default(uuid())
-  quantity          Decimal         @default(0) @db.Decimal(18, 4)
-  price             Decimal         @default(0) @db.Decimal(18, 2)
-  amount            Decimal         @default(0) @db.Decimal(18, 2)
-  amountWithoutVat  Decimal         @default(0) @db.Decimal(18, 2)
-  unitOfMeasureUuid String?
-  vatRate           Decimal         @default(12) @db.Decimal(5, 2)
-  vatAmount         Decimal         @default(0) @db.Decimal(18, 2)
-  exciseRate        Decimal         @default(0) @db.Decimal(8, 4)
-  exciseAmount      Decimal         @default(0) @db.Decimal(18, 2)
-  discountPercent   Decimal         @default(0) @db.Decimal(5, 2)
-  discountAmount    Decimal         @default(0) @db.Decimal(18, 2)
-  productUuid       String?
+  id                  Int             @id @default(autoincrement())
+  uuid                String          @unique @default(uuid())
+  quantity            Decimal         @default(0) @db.Decimal(18, 4)
+  price               Decimal         @default(0) @db.Decimal(18, 2)
+  amount              Decimal         @default(0) @db.Decimal(18, 2)
+  amountWithoutVat    Decimal         @default(0) @db.Decimal(18, 2)
+  unitOfMeasureUuid   String?
+  vatRate             Decimal         @default(12) @db.Decimal(5, 2)
+  vatAmount           Decimal         @default(0) @db.Decimal(18, 2)
+  exciseRate          Decimal         @default(0) @db.Decimal(8, 4)
+  exciseAmount        Decimal         @default(0) @db.Decimal(18, 2)
+  discountPercent     Decimal         @default(0) @db.Decimal(5, 2)
+  discountAmount      Decimal         @default(0) @db.Decimal(18, 2)
+  productUuid         String?
   commercialOfferUuid String
-  taxes             Json?
-  date              DateTime?
-  posted            Boolean         @default(false)
-  organizationUuid  String?
-  counterpartyUuid  String?
-  updatedAt         DateTime        @default(now()) @updatedAt
-  deletedAt         DateTime?
-  product           Product?        @relation(fields: [productUuid], references: [uuid])
-  commercialOffer   CommercialOffer @relation(fields: [commercialOfferUuid], references: [uuid], onDelete: Cascade)
-  unitOfMeasure     UnitOfMeasure?  @relation(fields: [unitOfMeasureUuid], references: [uuid])
+  taxes               Json?
+  date                DateTime?
+  posted              Boolean         @default(false)
+  organizationUuid    String?
+  counterpartyUuid    String?
+  updatedAt           DateTime        @default(now()) @updatedAt
+  deletedAt           DateTime?
+  product             Product?        @relation(fields: [productUuid], references: [uuid])
+  commercialOffer     CommercialOffer @relation(fields: [commercialOfferUuid], references: [uuid], onDelete: Cascade)
+  unitOfMeasure       UnitOfMeasure?  @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
-  sourceRowId       String?
+  sourceRowId String?
 
   @@index([commercialOfferUuid])
   @@index([sourceRowId])
@@ -1931,7 +1949,7 @@ model SalesOrderItem {
   salesOrder        SalesOrder     @relation(fields: [salesOrderUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
-  sourceRowId       String?
+  sourceRowId String?
 
   @@index([salesOrderUuid])
   @@index([sourceRowId])
@@ -2009,7 +2027,7 @@ model ReservationItem {
   reservation       Reservation    @relation(fields: [reservationUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
-  sourceRowId       String?
+  sourceRowId String?
 
   @@index([reservationUuid])
   @@index([sourceRowId])
@@ -2086,7 +2104,7 @@ model PurchaseOrderItem {
   purchaseOrder     PurchaseOrder  @relation(fields: [purchaseOrderUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
 
-  sourceRowId       String?
+  sourceRowId String?
 
   @@index([purchaseOrderUuid])
   @@index([sourceRowId])
@@ -2098,36 +2116,36 @@ model PurchaseOrderItem {
 
 /// Направление движения по банковской выписке.
 enum BankStatementDirection {
-  bankStatementIn  // поступление
+  bankStatementIn // поступление
   bankStatementOut // списание
 }
 
 /// Банковская выписка (одна операция: in/out). Проводки: in → Дт1030/Кт основание,
 /// out → Дт основание/Кт1030 (см. accountingPosting.js). Движение денег по 1030.
 model BankStatement {
-  id                 Int           @id @default(autoincrement())
-  uuid               String        @unique @default(uuid())
+  id                 Int                    @id @default(autoincrement())
+  uuid               String                 @unique @default(uuid())
   number             String?
-  date               DateTime      @default(now())
+  date               DateTime               @default(now())
   comment            String?
   direction          BankStatementDirection @default(bankStatementIn)
-  amount             Decimal       @default(0) @db.Decimal(18, 2)
+  amount             Decimal                @default(0) @db.Decimal(18, 2)
   organizationUuid   String?
   counterpartyUuid   String?
   contractUuid       String?
   bankAccountUuid    String?
   authorUuid         String
-  posted             Boolean       @default(true)
+  posted             Boolean                @default(true)
   basisDocumentType  String?
   basisDocumentUuid  String?
   basisDocumentLabel String?
-  updatedAt          DateTime      @default(now()) @updatedAt
+  updatedAt          DateTime               @default(now()) @updatedAt
   deletedAt          DateTime?
-  contract           Contract?     @relation(fields: [contractUuid], references: [uuid])
-  counterparty       Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
-  organization       Organization? @relation(fields: [organizationUuid], references: [uuid])
-  bankAccount        BankAccount?  @relation(fields: [bankAccountUuid], references: [uuid])
-  author             User          @relation("BankStatementAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+  contract           Contract?              @relation(fields: [contractUuid], references: [uuid])
+  counterparty       Counterparty?          @relation(fields: [counterpartyUuid], references: [uuid])
+  organization       Organization?          @relation(fields: [organizationUuid], references: [uuid])
+  bankAccount        BankAccount?           @relation(fields: [bankAccountUuid], references: [uuid])
+  author             User                   @relation("BankStatementAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -2239,4 +2257,78 @@ model ProductPrice {
   @@index([priceTypeUuid])
   @@index([date])
   @@map("product_prices")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ЭДО (электронный документооборот с контрагентами) — внутрисистемный обмен
+// юридически значимыми документами между организациями. Получатель резолвится
+// по БИН (Counterparty.bin ↔ Organization.bin). Подпись — ЭЦП NCALayer.
+// Ссылки на орг/пользователя — soft (uuid без FK, как AttachedFile);
+// целостность обеспечивает роутер. Вложения — через AttachedFile
+// (ownerType="edo_document"). Статусы — String (конвенция проекта).
+// ═══════════════════════════════════════════════════════════════════════════
+
+model EdoDocument {
+  id   Int    @id @default(autoincrement())
+  uuid String @unique @default(uuid())
+
+  // Стороны обмена. sender* — отправитель (организация системы, tenant «Исходящие»).
+  // receiver* — получатель по БИН; receiverOrgUuid заполняется, если контрагент —
+  // организация системы (иначе null: «контрагент не подключён»).
+  senderOrgUuid   String
+  senderBin       String
+  receiverBin     String
+  receiverOrgUuid String?
+
+  // Содержимое документа.
+  kind          String // тип документа ЭДО: invoice|act|waybill|free|...
+  title         String?
+  number        String?
+  date          DateTime @default(now())
+  comment       String?
+  // Необязательная связь с документом системы (Реализация/Счёт-фактура/…).
+  sourceDocType String?
+  sourceDocUuid String?
+  // Канонический/подписываемый контент (XML) документа.
+  canonicalXml  String?  @db.Text
+
+  // Жизненный цикл: DRAFT|SENT|DELIVERED|SIGNED|ACCEPTED|REJECTED|REVOKED|ANNULLED
+  status          String  @default("DRAFT")
+  rejectionReason String?
+
+  authorUuid  String // пользователь-создатель (отправитель)
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  respondedAt DateTime? // приём/отклонение получателем
+  updatedAt   DateTime  @default(now()) @updatedAt
+  deletedAt   DateTime?
+
+  signatures EdoSignature[]
+
+  @@index([senderOrgUuid])
+  @@index([receiverOrgUuid])
+  @@index([receiverBin])
+  @@index([status])
+  @@index([sourceDocType, sourceDocUuid])
+  @@index([date])
+  @@index([updatedAt])
+  @@map("edo_documents")
+}
+
+model EdoSignature {
+  id              Int      @id @default(autoincrement())
+  uuid            String   @unique @default(uuid())
+  edoDocumentUuid String
+  orgUuid         String // организация, от имени которой подписано
+  userUuid        String? // пользователь-подписант
+  role            String // sender|receiver
+  signedXml       String?  @db.Text // подписанный XML (enveloped, NCALayer)
+  certificate     String?  @db.Text // PEM/Base64 сертификата
+  signedAt        DateTime @default(now())
+
+  edoDocument EdoDocument @relation(fields: [edoDocumentUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([edoDocumentUuid])
+  @@index([orgUuid])
+  @@map("edo_signatures")
 }
