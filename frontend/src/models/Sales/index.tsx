@@ -38,6 +38,7 @@ import { buildSaleInvoiceWorkbook } from "./saleInvoiceWorkbook";
 import PrintDocumentPane, { type PrintColumnDef } from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
+import { useGovDocs } from "src/hooks/useGovDocs";
 import { useAppContext } from "src/app/context";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
@@ -628,6 +629,20 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     : undefined;
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
   const existingDeps = useExistingDependents(isSavedDoc ? form.fields.uuid : undefined, SALES_DEPENDENT_ENDPOINTS);
+  // ── Гос-документы РК: ЭАВР (акт работ/услуг) и СНТ (накладная) ──
+  const govDocs = useGovDocs();
+  const govFields = form.fields as unknown as { awpStatus?: string | null; awpId?: string | null; sntStatus?: string | null; sntId?: string | null };
+  const handleGovDoc = useCallback(async (id: string) => {
+    const uuid = form.fields.uuid;
+    if (!uuid) return;
+    try {
+      if (id === "awp") { const r = await govDocs.issueAwp(uuid); form.setFields({ awpStatus: r.awpStatus, awpId: r.awpId, awpRegistrationNumber: r.awpRegistrationNumber } as any); }
+      else if (id === "awpStatus") { const r = await govDocs.refreshAwp(uuid); form.setFields({ awpStatus: r.awpStatus, awpRegistrationNumber: r.awpRegistrationNumber } as any); }
+      else if (id === "snt") { const r = await govDocs.issueSnt("sales", uuid); form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as any); }
+      else if (id === "sntStatus") { const r = await govDocs.refreshSnt("sales", uuid); form.setFields({ sntStatus: r.sntStatus, sntRegistrationNumber: r.sntRegistrationNumber } as any); }
+    } catch { /* ошибка показывается через govDocs.error */ }
+  }, [form.fields.uuid, form.setFields, govDocs]);
+
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
     (
@@ -644,6 +659,20 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
               if (id === "outgoing") void handleCreateFromBasis(OutgoingInvoicesForm, translate("outgoingInvoice"), "sale", "saleitems", "outgoing-invoices");
               if (id === "saleReturn") void handleCreateFromBasis(SaleReturnsForm, translate("SaleReturnsList"), "sale", "saleitems", "sale-returns");
             }}
+          />
+        )}
+        {isSavedDoc && (
+          <ActionsDropdownButton
+            icon="download"
+            label={translate("govDocsSection")}
+            disabled={govDocs.busy || form.isLoading || form.isDirty}
+            options={[
+              { id: "awp", label: govFields.awpStatus ? translate("govAwpResend") : translate("govAwpIssue") },
+              ...(govFields.awpId ? [{ id: "awpStatus", label: translate("govAwpStatus") }] : []),
+              { id: "snt", label: govFields.sntStatus ? translate("govSntResend") : translate("govSntIssue") },
+              ...(govFields.sntId ? [{ id: "sntStatus", label: translate("govSntStatus") }] : []),
+            ]}
+            onSelect={(id) => void handleGovDoc(id)}
           />
         )}
         <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />

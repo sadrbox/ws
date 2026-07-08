@@ -204,7 +204,7 @@ router.get("/organizations/:id", async (req, res) => {
 // ============================================
 router.post("/organizations", async (req, res) => {
 	try {
-		const { bin, name, legalName, vatSeries, vatNumber } = req.body;
+		const { bin, name, legalName, vatSeries, vatNumber, enterpriseCategory } = req.body;
 
 		if (!bin || typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
 			return res.status(400).json({
@@ -220,6 +220,7 @@ router.post("/organizations", async (req, res) => {
 				legalName: legalName?.trim() ?? null,
 				vatSeries: vatSeries?.trim() ?? null,
 				vatNumber: vatNumber?.trim() ?? null,
+				enterpriseCategory: enterpriseCategory || null,
 			},
 		});
 
@@ -246,9 +247,10 @@ router.put("/organizations/:id", async (req, res) => {
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 
-		const { bin, name, legalName, vatSeries, vatNumber } = req.body;
+		const { bin, name, legalName, vatSeries, vatNumber, enterpriseCategory } = req.body;
 		const data = {};
 
+		if (enterpriseCategory !== undefined) data.enterpriseCategory = enterpriseCategory || null;
 		if (bin !== undefined) {
 			// БИН редактируем — валидируем формат (12 цифр) и при записи; уникальность
 			// обеспечивает БД-ограничение (P2002 → 409 ниже).

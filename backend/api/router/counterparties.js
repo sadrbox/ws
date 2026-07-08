@@ -53,7 +53,7 @@ const validateCounterpartyData = (data) => {
 // ============================================
 router.post("/counterparties", async (req, res) => {
 	try {
-		const { bin, name, legalName, countryCode } = req.body;
+		const { bin, name, legalName, countryCode, enterpriseCategory } = req.body;
 
 		// 1. Ранняя проверка наличия
 		if (!bin || typeof bin !== "string") {
@@ -92,6 +92,7 @@ router.post("/counterparties", async (req, res) => {
 					name: name?.trim() ?? null,
 					legalName: legalName?.trim() ?? null,
 					countryCode: countryCode?.trim() || "KZ",
+					enterpriseCategory: enterpriseCategory || null,
 					organizationUuid: req.user?.organizationUuid ?? null,
 				},
 			});
@@ -380,7 +381,7 @@ router.get("/counterparties/uuid/:uuid", async (req, res) => {
 router.put("/counterparties/:uuid", async (req, res) => {
 	try {
 		const { uuid } = req.params;
-		const { bin, name, legalName, countryCode } = req.body;
+		const { bin, name, legalName, countryCode, enterpriseCategory } = req.body;
 
 		if (
 			typeof uuid !== "string" ||
@@ -455,6 +456,9 @@ router.put("/counterparties/:uuid", async (req, res) => {
 		if (countryCode !== undefined) {
 			updateData.countryCode = countryCode?.trim() || "KZ";
 		}
+		if (enterpriseCategory !== undefined) {
+			updateData.enterpriseCategory = enterpriseCategory || null;
+		}
 
 		// Обновление контрагента
 		const updatedCounterparty = await prisma.counterparty.update({
@@ -512,7 +516,7 @@ router.patch("/counterparties/:uuid", async (req, res) => {
 		}
 
 		// Фильтруем только допустимые поля для обновления
-		const allowedFields = ["name", "legalName"];
+		const allowedFields = ["name", "legalName", "countryCode", "enterpriseCategory"];
 		const updateData = {};
 
 		for (const field of allowedFields) {

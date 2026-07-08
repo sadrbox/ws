@@ -39,6 +39,24 @@
 		"alignment": "left"
 	},
 	{
+		"identifier": "product.tnvedCode",
+		"hint": "Код товара по ТН ВЭД ЕАЭС — графа 3.1 ЭСФ РК (из карточки товара)",
+		"type": "string",
+		"visible": true,
+		"width": "140px",
+		"minWidth": "90px",
+		"alignment": "left"
+	},
+	{
+		"identifier": "product.truOriginCode",
+		"hint": "Признак происхождения ТРУ [1-6] — графа 2 ЭСФ РК (из карточки товара)",
+		"type": "string",
+		"visible": true,
+		"width": "120px",
+		"minWidth": "80px",
+		"alignment": "center"
+	},
+	{
 		"identifier": "unitOfMeasure.name",
 		"hint": "Единица измерения — графа 6 ЭСФ РК",
 		"type": "string",

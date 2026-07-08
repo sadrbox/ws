@@ -6,10 +6,12 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import barcodeColumns from "./barcodeColumns.json";
 import priceColumns from "./priceColumns.json";
-import { Field, FieldNumber, FieldDate } from "src/components/Field";
+import { Field, FieldNumber, FieldDate, FieldSelect } from "src/components/Field";
+import { useEsfDictionaries } from "src/services/esf/dictionaries";
 import FieldToggle from "src/components/Field/FieldToggle";
 import LookupField from "src/components/Field/LookupField";
 import { FormLookup } from "src/components/Field/FormLookup";
+import { ClassifierLookup } from "src/components/Field/ClassifierLookup";
 import { isoToLocalInput, getFormatDateOnly } from "src/utils/datetime";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -30,12 +32,13 @@ import { ProductPriceCorrection } from "src/models/ProductPriceProcessing";
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
 
-interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; }
-const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "" };
+interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; tnvedCode: string; truOriginCode: string; }
+const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "", tnvedCode: "", truOriginCode: "" };
 
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useUserAccessRight("Product");
   const queryClient = useQueryClient();
+  const esfDict = useEsfDictionaries();
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "products-form", defaultFields: DEFAULT_FIELDS, paneProps,
     tables: {
@@ -60,13 +63,14 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       isService: d.isService === true,
       brandUuid: d.brandUuid ?? "", brandName: d.brand?.name ?? "",
       unitOfMeasureUuid: d.unitOfMeasureUuid ?? "", unitOfMeasureName: d.unitOfMeasure?.name ?? "",
+      tnvedCode: d.tnvedCode ?? "", truOriginCode: d.truOriginCode ?? "",
     }),
     buildPayload: (fd) => {
       if (!fd.name?.trim()) return "Наименование обязательно";
       // price НЕ отправляем: Product.price — денормализованная цена, автоматически
       // пересчитывается из вкладки «Цены» (services/productPricing.js). Источник
       // истины — «Цены», ручной ввод убран как избыточный.
-      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null };
+      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null, tnvedCode: fd.tnvedCode?.trim() || null, truOriginCode: fd.truOriginCode || null };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
     afterSave: async (saved) => {
@@ -104,6 +108,17 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
                   <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
                 </Group>
               </GroupRow>
+              {/* Реквизиты для гос-документов (СНТ): ТН ВЭД ЕАЭС + признак происхождения ТРУ */}
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  <ClassifierLookup type="tnved" label={translate("tnvedCode")} name={`${form.formUid}_tnved`} value={form.fields.tnvedCode} onChange={(code) => form.setField("tnvedCode", code)} disabled={form.isLoading} />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <FieldSelect label={translate("truOriginCode")} name={`${form.formUid}_truOrigin`} value={form.fields.truOriginCode} disabled={form.isLoading}
+                    onChange={(e) => form.setField("truOriginCode", e.target.value)}
+                    options={[{ value: "", label: "—" }, ...(esfDict?.truOrigin ?? []).map((o) => ({ value: o.code, label: `${o.code} — ${o.label}` }))]} />
+                </Group>
+              </GroupRow>
               <ProductImagesField productUuid={form.fields.uuid} disabled={form.isLoading || !canWrite} />
             </GroupCol>
           </div>
@@ -133,7 +148,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, barcodes.pending, barcodes.onItemsChange, prices?.pending, prices?.onItemsChange, canWrite]);
+  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, barcodes.pending, barcodes.onItemsChange, prices?.pending, prices?.onItemsChange, canWrite, esfDict]);
 
   return (
     <FormRequiredScope requiredKeys={["name"]} active>

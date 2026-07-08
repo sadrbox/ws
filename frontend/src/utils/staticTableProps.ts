@@ -50,6 +50,7 @@ export function buildStaticTableProps(p: Params) {
 		hideAddDelete: true,
 		hideReload: !p.onReload,
 		readonly: true,
+		selectable: false, // read-only списки без массового выбора → без колонки-чекбокса
 		...(p.extraButtons ? { extraButtons: p.extraButtons } : {}),
 		...(p.renderCell ? { renderCell: p.renderCell } : {}),
 	};

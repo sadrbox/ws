@@ -17,6 +17,8 @@ import { Field, FieldDateTime } from "src/components/Field";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
+import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
+import { useGovDocs } from "src/hooks/useGovDocs";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -242,9 +244,36 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     },
   ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items, notices, assignNumber]);
 
+  // ── СНТ (сопроводительная накладная) из документа Перемещения ──
+  const govDocs = useGovDocs();
+  const sntFields = form.fields as unknown as { sntStatus?: string | null; sntId?: string | null };
+  const isSavedDoc = form.isEditMode && !!form.fields.uuid;
+  const handleSnt = useCallback(async (id: string) => {
+    const uuid = form.fields.uuid;
+    if (!uuid) return;
+    try {
+      if (id === "snt") { const r = await govDocs.issueSnt("inventory-transfers", uuid); form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as any); }
+      else if (id === "sntStatus") { const r = await govDocs.refreshSnt("inventory-transfers", uuid); form.setFields({ sntStatus: r.sntStatus, sntRegistrationNumber: r.sntRegistrationNumber } as any); }
+    } catch { /* ошибка через govDocs.error */ }
+  }, [form.fields.uuid, form.setFields, govDocs]);
+
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,
-    <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />,
+    <>
+      <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
+      {isSavedDoc && (
+        <ActionsDropdownButton
+          icon="download"
+          label={translate("govDocsSection")}
+          disabled={govDocs.busy || form.isLoading || form.isDirty}
+          options={[
+            { id: "snt", label: sntFields.sntStatus ? translate("govSntResend") : translate("govSntIssue") },
+            ...(sntFields.sntId ? [{ id: "sntStatus", label: translate("govSntStatus") }] : []),
+          ]}
+          onSelect={(id) => void handleSnt(id)}
+        />
+      )}
+    </>,
   );
 
   return (

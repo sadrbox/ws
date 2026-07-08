@@ -1509,3 +1509,10 @@ body {
 	pointer-events: none;
 	z-index: 10;
 }
+// Пояснение-подпись под полем формы (мелкий приглушённый текст).
+.FieldHint {
+	margin-top: 3px;
+	color: #888;
+	font-size: 12px;
+	line-height: 1.3;
+}

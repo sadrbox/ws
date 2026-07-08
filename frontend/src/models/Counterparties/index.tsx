@@ -7,7 +7,9 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
-import { Field } from "src/components/Field";
+import { Field, FieldSelect } from "src/components/Field";
+import { ClassifierLookup } from "src/components/Field/ClassifierLookup";
+import { useEsfDictionaries } from "src/services/esf/dictionaries";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { BankAccountsTable } from "../BankAccounts";
@@ -24,10 +26,11 @@ import EgovFillButton from "src/components/EgovFillButton";
 const MODEL_ENDPOINT = "counterparties";
 const LIST_NAME = "CounterpartiesList";
 
-interface TFields { id?: number; uuid?: string; bin: string; name: string; legalName: string; countryCode: string; }
-const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", countryCode: "KZ" };
+interface TFields { id?: number; uuid?: string; bin: string; name: string; legalName: string; countryCode: string; enterpriseCategory: string; }
+const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", countryCode: "KZ", enterpriseCategory: "" };
 
 const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
+  const esfDict = useEsfDictionaries();
   const { canWrite } = useUserAccessRight("Counterparty");
   const { canRead: canReadBankAccounts } = useUserAccessRight("BankAccount");
   const { canRead: canReadContracts } = useUserAccessRight("Contract");
@@ -55,11 +58,11 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
       bankAccounts: { endpoint: "bankaccounts", parentField: "ownerUuid", label: translate("BankAccountsList") || "Банковские счета", batchEndpoint: "bankaccounts/batch", extraFields: { ownerType: "counterparty" } },
       contracts: { endpoint: "contracts", parentField: "counterpartyUuid", label: translate("ContractsList") || "Договора", batchEndpoint: "contracts/batch" },
     },
-    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", name: d.name ?? "", legalName: d.legalName ?? "", countryCode: d.countryCode ?? "KZ" }),
+    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", name: d.name ?? "", legalName: d.legalName ?? "", countryCode: d.countryCode ?? "KZ", enterpriseCategory: d.enterpriseCategory ?? "" }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
       if (!bin || !/^\d{12}$/.test(bin)) return translate("binMustBe12Digits");
-      return { bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null, countryCode: fd.countryCode?.trim() || "KZ" };
+      return { bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null, countryCode: fd.countryCode?.trim() || "KZ", enterpriseCategory: fd.enterpriseCategory || null };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, translate("counterparty"), saved, saved.name || saved.bin),
     afterSave: invalidateSubTables,
@@ -87,7 +90,13 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
                     <Field label={`${translate("binIin")}`} name={`${form.formUid}_bin`} minWidth={FIELD_WIDTH.lg} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading} required />
                   </Group>
                   <Group className={styles.w1of2}>
-                    <Field label={translate("countryCode")} name={`${form.formUid}_countryCode`} value={form.fields.countryCode} onChange={e => form.setField("countryCode", e.target.value)} disabled={form.isLoading} maxLength={2} width="120px" />
+                    <ClassifierLookup type="country" label={translate("countryCode")} name={`${form.formUid}_countryCode`} value={form.fields.countryCode} onChange={(code) => form.setField("countryCode", code)} disabled={form.isLoading} width="220px" />
+                    <GroupCol>
+                      <FieldSelect label={translate("enterpriseCategory")} name={`${form.formUid}_enterpriseCategory`} value={form.fields.enterpriseCategory} disabled={form.isLoading}
+                        onChange={(e) => form.setField("enterpriseCategory", e.target.value)}
+                        options={[{ value: "", label: "—" }, ...(esfDict?.customerType ?? []).map((o) => ({ value: o.code, label: o.label || o.code }))]} />
+                      <div className={styles.FieldHint}>{translate("enterpriseCategoryHint")}</div>
+                    </GroupCol>
                   </Group>
                 </GroupRow>
                 <EgovFillButton ownerType="counterparty" bin={form.fields.bin} uuid={form.fields.uuid}

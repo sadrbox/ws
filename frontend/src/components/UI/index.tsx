@@ -52,6 +52,10 @@ const EdoInboxList = lazyView("EdoInboxList", () => import('src/models/Edo').the
 const EdoOutboxList = lazyView("EdoOutboxList", () => import('src/models/Edo').then(m => ({ default: m.EdoOutboxList })));
 const ClassifiersList = lazyView("ClassifiersList", () => import('src/models/Classifiers').then(m => ({ default: m.ClassifiersList })));
 const EsfIncomingList = lazyView("EsfIncomingList", () => import('src/models/EsfIncoming').then(m => ({ default: m.EsfIncomingList })));
+const AwpOutboxList = lazyView("AwpOutboxList", () => import('src/models/GovDocs').then(m => ({ default: m.AwpOutboxList })));
+const SntOutboxList = lazyView("SntOutboxList", () => import('src/models/GovDocs').then(m => ({ default: m.SntOutboxList })));
+const AwpIncomingList = lazyView("AwpIncomingList", () => import('src/models/GovDocs').then(m => ({ default: m.AwpIncomingList })));
+const SntIncomingList = lazyView("SntIncomingList", () => import('src/models/GovDocs').then(m => ({ default: m.SntIncomingList })));
 const IncomingInvoicesList = lazyView("IncomingInvoicesList", () => import('src/models/IncomingInvoices').then(m => ({ default: m.IncomingInvoicesList })));
 const PaymentInvoicesList = lazyView("PaymentInvoicesList", () => import('src/models/PaymentInvoices').then(m => ({ default: m.PaymentInvoicesList })));
 const ScheduledTasksList = lazyView("ScheduledTasksList", () => import('src/models/ScheduledTasks').then(m => ({ default: m.ScheduledTasksList })));
@@ -991,6 +995,10 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("esfOutgoingSection") })}>{translate("esfOutgoingSection")}</li>}
               {can("OutgoingInvoice") && <li onClick={() => addPane({ component: EsfIncomingList, label: translate("esfIncomingSection") })}>{translate("esfIncomingSection")}</li>}
+              {can("Sale") && <li onClick={() => addPane({ component: AwpOutboxList, label: translate("awpOutboxSection") })}>{translate("awpOutboxSection")}</li>}
+              {can("Sale") && <li onClick={() => addPane({ component: AwpIncomingList, label: translate("awpIncomingSection") })}>{translate("awpIncomingSection")}</li>}
+              {can("Sale") && <li onClick={() => addPane({ component: SntOutboxList, label: translate("sntOutboxSection") })}>{translate("sntOutboxSection")}</li>}
+              {can("Sale") && <li onClick={() => addPane({ component: SntIncomingList, label: translate("sntIncomingSection") })}>{translate("sntIncomingSection")}</li>}
               <li className={styles.NavHint}>{translate("govDocsHint")}</li>
             </ul>
           </div>

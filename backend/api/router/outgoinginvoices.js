@@ -9,6 +9,15 @@ import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 const router = express.Router();
 const MODEL = "outgoingInvoice";
 const ROUTE = "outgoing-invoices";
+
+// Плоские опциональные ЭСФ-поля (док. поверенного I/J + госучреждение C1) — Э5.
+const ESF_STR_FIELDS = [
+	"esfCustomerAgentDocNum", "esfCustomerAgentDocDate",
+	"esfSellerAgentDocNum", "esfSellerAgentDocDate",
+	"esfPoBik", "esfPoIik", "esfPoPayPurpose", "esfPoProductCode",
+];
+// UUID-ссылки ЭСФ (грузо- + поверенные).
+const ESF_UUID_FIELDS = ["esfConsignorUuid", "esfConsigneeUuid", "esfCustomerAgentUuid", "esfSellerAgentUuid"];
 const TEXT_FIELDS = ["comment"];
 
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -129,6 +138,23 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Номер основного ЭСФ (для отображения связи в форме исправл./дополн.).
+		if (item.esfRelatedInvoiceUuid) {
+			const rel = await prisma[MODEL].findUnique({ where: { uuid: item.esfRelatedInvoiceUuid }, select: { number: true } });
+			item.esfRelatedInvoiceNumber = rel?.number ?? null;
+		}
+		// Имена связанных сущностей (грузо- + поверенные) для отображения в форме.
+		for (const [uuidKey, nameKey, model] of [
+			["esfConsignorUuid", "esfConsignorName", "organization"],
+			["esfConsigneeUuid", "esfConsigneeName", "counterparty"],
+			["esfCustomerAgentUuid", "esfCustomerAgentName", "counterparty"],
+			["esfSellerAgentUuid", "esfSellerAgentName", "organization"],
+		]) {
+			if (item[uuidKey]) {
+				const ent = await prisma[model].findUnique({ where: { uuid: item[uuidKey] }, select: { name: true } });
+				item[nameKey] = ent?.name ?? null;
+			}
+		}
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		console.error(`GET /${ROUTE}/:id error:`, error);
@@ -154,6 +180,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			basisDocumentType,
 			basisDocumentUuid,
 			basisDocumentLabel,
+			esfSellerType,
+			esfCustomerType,
+			esfInvoiceType,
+			esfRelatedInvoiceUuid,
 		} = req.body;
 		// Stage D: договор принадлежит организации документа.
 		await assertOrgFieldMembership({ organizationUuid, contractUuid }, prisma);
@@ -174,6 +204,11 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				basisDocumentType: basisDocumentType || null,
 				basisDocumentUuid: basisDocumentUuid || null,
 				basisDocumentLabel: basisDocumentLabel || null,
+				esfSellerType: esfSellerType || null,
+				esfCustomerType: esfCustomerType || null,
+				esfInvoiceType: esfInvoiceType || null,
+				esfRelatedInvoiceUuid: esfRelatedInvoiceUuid || null,
+				...Object.fromEntries([...ESF_UUID_FIELDS, ...ESF_STR_FIELDS].map((f) => [f, req.body[f] || null])),
 				authorUuid: req.user.uuid,
 			},
 			include: {
@@ -215,7 +250,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			data.amount =
 				req.body.amount != null ? parseFloat(req.body.amount) : null;
 		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
-		for (const f of ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"]) {
+		for (const f of ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel", "esfSellerType", "esfCustomerType", "esfInvoiceType", "esfRelatedInvoiceUuid", ...ESF_UUID_FIELDS, ...ESF_STR_FIELDS]) {
 			if (req.body[f] !== undefined) data[f] = req.body[f] || null;
 		}
 		// Stage D: договор принадлежит организации документа (мерж с текущими).

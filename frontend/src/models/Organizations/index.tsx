@@ -6,7 +6,8 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
-import { Field } from "src/components/Field";
+import { Field, FieldSelect } from "src/components/Field";
+import { useEsfDictionaries } from "src/services/esf/dictionaries";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { BankAccountsTable } from "../BankAccounts";
@@ -37,11 +38,13 @@ interface TFields {
   legalName: string;
   vatSeries: string;
   vatNumber: string;
+  enterpriseCategory: string;
 }
 
-const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", vatSeries: "", vatNumber: "" };
+const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", vatSeries: "", vatNumber: "", enterpriseCategory: "" };
 
 const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
+  const esfDict = useEsfDictionaries();
   const { canWrite } = useUserAccessRight("Organization");
   const { canRead: canReadBankAccounts } = useUserAccessRight("BankAccount");
   const { canRead: canReadContracts } = useUserAccessRight("Contract");
@@ -111,6 +114,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
       legalName: d.legalName ?? "",
       vatSeries: d.vatSeries ?? "",
       vatNumber: d.vatNumber ?? "",
+      enterpriseCategory: d.enterpriseCategory ?? "",
     }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
@@ -119,6 +123,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
         bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null,
         vatSeries: fd.vatSeries?.trim() || null,
         vatNumber: fd.vatNumber?.trim() || null,
+        enterpriseCategory: fd.enterpriseCategory || null,
       };
     },
     buildPaneLabel: (saved) =>
@@ -164,6 +169,14 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
                   <Group className={styles.w1of2}>
                     <Field label={translate("vatCertNumber")} name={`${form.formUid}_vatNumber`} value={form.fields.vatNumber} onChange={e => form.setField("vatNumber", e.target.value)} disabled={form.isLoading} width="200px" />
                   </Group>
+                </GroupRow>
+                <GroupRow>
+                  <GroupCol>
+                    <FieldSelect label={translate("enterpriseCategory")} name={`${form.formUid}_enterpriseCategory`} value={form.fields.enterpriseCategory} disabled={form.isLoading}
+                      onChange={(e) => form.setField("enterpriseCategory", e.target.value)}
+                      options={[{ value: "", label: "—" }, ...(esfDict?.sellerType ?? []).map((o) => ({ value: o.code, label: o.label || o.code }))]} />
+                    <div className={styles.FieldHint}>{translate("enterpriseCategoryHint")}</div>
+                  </GroupCol>
                 </GroupRow>
               </GroupCol>
             </div>

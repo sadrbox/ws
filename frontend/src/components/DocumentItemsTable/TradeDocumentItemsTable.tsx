@@ -36,6 +36,8 @@ const VAT_COLUMN_IDS = new Set(["vatRate", "vatAmount"]);
 const DISCOUNT_COLUMN_IDS = new Set(["discountPercent", "discountAmount"]);
 const EXCISE_COLUMN_IDS = new Set(["exciseRate", "exciseAmount"]);
 const AMOUNT_WITHOUT_VAT_IDS = new Set(["amountWithoutVat", "amountNetOfIndirectTaxes"]);
+// ЭСФ-метаданные строки (из карточки товара) — только для СФ исходящей.
+const ESF_COLUMN_IDS = new Set(["product.tnvedCode", "product.truOriginCode"]);
 // Ценовые колонки — не нужны для документов без стоимостной части (напр.
 // Перемещение ТМЗ только двигает товар: ни цены, ни скидки, ни суммы продажи).
 const PRICING_COLUMN_IDS = new Set(["price", "amount", "discountPercent", "discountAmount"]);
@@ -97,6 +99,8 @@ export interface TradeDocumentItemsTableProps {
   onAllItemsChange?: (rows: TDataItem[]) => void;
   /** Колонки, скрытые по умолчанию для данного типа документа (пользователь может включить через настройки). */
   defaultHiddenColumns?: string[];
+  /** Показывать ЭСФ-метаданные строк (ТН ВЭД, признак происхождения — из карточки товара). Для СФ исходящей. */
+  showEsfColumns?: boolean;
   /** Переопределяет кнопку «Обновить» в тулбаре SubTable (вместо handleCleanRefresh). */
   onRefresh?: () => void;
   /** Запретить добавление строк (независимо от disabled). */
@@ -139,6 +143,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   showRequiredHighlight = false,
   onAllItemsChange,
   defaultHiddenColumns,
+  showEsfColumns = false,
   onRefresh,
   disableAddRows = false,
   disableDeleteRows = false,
@@ -181,6 +186,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       if (!useDiscount && DISCOUNT_COLUMN_IDS.has(id)) return false;
       if (!useExcise && EXCISE_COLUMN_IDS.has(id)) return false;
       if (!isVatEnabled && AMOUNT_WITHOUT_VAT_IDS.has(id)) return false;
+      if (!showEsfColumns && ESF_COLUMN_IDS.has(id)) return false;
       return true;
     });
 
@@ -265,7 +271,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       base = base.map((c) => hidden.has(c.identifier) ? { ...c, visible: false } : c);
     }
     return base;
-  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing]);
+  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing, showEsfColumns]);
 
   const taxSig = useMemo(
     () => "vat:" + (isVatEnabled ? "1" : "0") + "|disc:" + (useDiscount ? "1" : "0") + "|exc:" + (useExcise ? "1" : "0") + "|m:" + vatCalculationMethod + "|r:" + String(orgVatRate ?? ""),
@@ -394,6 +400,9 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     // SubTable остаётся активным — поэтому попытка редактирования (Enter / двойной
     // клик) запускает анимацию-пульс «нельзя редактировать» (data-pulse).
     const cellEditable = ctx.inlineEditing && !fieldsReadOnly;
+    // ЭСФ-метаданные строки (read-only, из карточки товара): ТН ВЭД и признак происхождения.
+    if (id === "product.tnvedCode") return <span>{String((row.product as { tnvedCode?: string } | undefined)?.tnvedCode ?? "")}</span>;
+    if (id === "product.truOriginCode") return <span>{String((row.product as { truOriginCode?: string } | undefined)?.truOriginCode ?? "")}</span>;
     if (id === "lineNumber") {
       const idx = ctx.rows.indexOf(row);
       const value = idx >= 0 ? idx + 1 : (row.lineNumber as string | number | null | undefined) ?? "";

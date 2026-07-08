@@ -115,6 +115,9 @@ model Organization {
   // Адрес (B8) берётся из «Контактов» (тип legal_address), не хранится здесь.
   vatSeries            String? // серия свид-ва о постановке на учёт по НДС (B9.1)
   vatNumber            String? // номер свид-ва по НДС (B9.2)
+  // Категория предприятия для ЭСФ (SellerType): комитент/экспортёр/лизингодатель… (B10).
+  // Подставляется в «Категория поставщика» при выборе организации в ЭСФ.
+  enterpriseCategory   String?
   inviteCode           String?                         @unique
   createdAt            DateTime                        @default(now())
   updatedAt            DateTime                        @default(now()) @updatedAt
@@ -177,6 +180,9 @@ model Counterparty {
   // Реквизиты для ЭСФ (форма ЭСФ РК, раздел C — получатель).
   // Адрес (C18) берётся из «Контактов» (тип legal_address), не хранится здесь.
   countryCode          String?               @default("KZ") // код страны получателя (C18.1)
+  // Категория предприятия для ЭСФ (CustomerType): розница/физлицо/госорган/нерезидент… (C20).
+  // Подставляется в «Категория получателя» при выборе контрагента в ЭСФ.
+  enterpriseCategory   String?
   organizationUuid     String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @default(now()) @updatedAt
@@ -440,37 +446,50 @@ model Cashbox {
 }
 
 model Sale {
-  id               Int           @id @default(autoincrement())
-  uuid             String        @unique @default(uuid())
-  number           String?
-  date             DateTime      @default(now())
-  comment          String?
-  amount           Decimal?      @db.Decimal(18, 2)
-  amountWithoutVat Decimal?      @db.Decimal(18, 2)
-  vatAmount        Decimal?      @db.Decimal(18, 2)
-  discountAmount   Decimal?      @db.Decimal(18, 2)
-  organizationUuid String?
-  counterpartyUuid String?
-  contractUuid     String?
-  warehouseUuid    String?
+  id                    Int           @id @default(autoincrement())
+  uuid                  String        @unique @default(uuid())
+  number                String?
+  date                  DateTime      @default(now())
+  comment               String?
+  amount                Decimal?      @db.Decimal(18, 2)
+  amountWithoutVat      Decimal?      @db.Decimal(18, 2)
+  vatAmount             Decimal?      @db.Decimal(18, 2)
+  discountAmount        Decimal?      @db.Decimal(18, 2)
+  organizationUuid      String?
+  counterpartyUuid      String?
+  contractUuid          String?
+  warehouseUuid         String?
   /// Менеджер реализации (Employee.uuid) — аналитика учёта движения продаж
   /// товаров и услуг (НК РК). Необязательное субконто «Manager».
-  managerUuid      String?
+  managerUuid           String?
   /// Тип цен документа (PriceType.uuid) — подставляется из предопределённых
   /// значений пользователя при создании.
-  priceTypeUuid    String?
-  authorUuid       String
-  posted           Boolean       @default(false)
-  updatedAt        DateTime      @default(now()) @updatedAt
-  deletedAt        DateTime?
-  saleItems        SaleItem[]
-  contract         Contract?     @relation(fields: [contractUuid], references: [uuid])
-  counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
-  organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
-  warehouse        Warehouse?    @relation(fields: [warehouseUuid], references: [uuid])
-  manager          Employee?     @relation("SaleManager", fields: [managerUuid], references: [uuid])
-  priceType        PriceType?    @relation(fields: [priceTypeUuid], references: [uuid], onDelete: SetNull)
-  author           User          @relation("SaleAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+  priceTypeUuid         String?
+  authorUuid            String
+  posted                Boolean       @default(false)
+  // Гос-документы: ЭАВР (акт работ/услуг) и СНТ (сопроводительная накладная)
+  awpStatus             String?
+  awpId                 String?
+  awpRegistrationNumber String?
+  awpSentAt             DateTime?
+  awpErrorText          String?
+  awpXml                String?       @db.Text
+  sntStatus             String?
+  sntId                 String?
+  sntRegistrationNumber String?
+  sntSentAt             DateTime?
+  sntErrorText          String?
+  sntXml                String?       @db.Text
+  updatedAt             DateTime      @default(now()) @updatedAt
+  deletedAt             DateTime?
+  saleItems             SaleItem[]
+  contract              Contract?     @relation(fields: [contractUuid], references: [uuid])
+  counterparty          Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
+  organization          Organization? @relation(fields: [organizationUuid], references: [uuid])
+  warehouse             Warehouse?    @relation(fields: [warehouseUuid], references: [uuid])
+  manager               Employee?     @relation("SaleManager", fields: [managerUuid], references: [uuid])
+  priceType             PriceType?    @relation(fields: [priceTypeUuid], references: [uuid], onDelete: SetNull)
+  author                User          @relation("SaleAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
 
   basisDocumentType  String?
   basisDocumentUuid  String?
@@ -571,6 +590,37 @@ model OutgoingInvoice {
   esfSentAt             DateTime?
   esfErrorText          String?
   esfXml                String?   @db.Text // отправленный подписанный XML
+
+  // Категория поставщика/получателя в ЭСФ (роль в документе): SellerType/CustomerType.
+  // null = обычная реализация (блок «Категория» B10/C20 не выводится). Розница=RETAIL и т.п.
+  esfSellerType         String?
+  esfCustomerType       String?
+
+  // Тип ЭСФ (InvoiceType): null/ORDINARY_INVOICE=обычный, FIXED_INVOICE=исправленный,
+  // ADDITIONAL_INVOICE=дополнительный. Для FIXED/ADDITIONAL нужна связь с основным ЭСФ.
+  esfInvoiceType        String?
+  esfRelatedInvoiceUuid String? // основной ЭСФ (OutgoingInvoice), к которому относится корректировка
+
+  // Грузоотправитель/грузополучатель ЭСФ (раздел D) — ссылки на Контрагентов.
+  // Заполняются ТОЛЬКО если отличаются от продавца/покупателя; иначе ИС ЭСФ подставляет сама.
+  esfConsignorUuid      String? // грузоотправитель (D25)
+  esfConsigneeUuid      String? // грузополучатель (D26)
+
+  // Поверенный/оператор покупателя (J 39–42) и поставщика (I 35–38) — раздел Э5.
+  // Ссылка на контрагента/организацию → БИН/наименование/адрес резолвятся на сервере;
+  // вручную задаются только номер и дата документа поверенного.
+  esfCustomerAgentUuid    String? // поверенный покупателя = контрагент
+  esfCustomerAgentDocNum  String?
+  esfCustomerAgentDocDate String?
+  esfSellerAgentUuid      String? // поверенный поставщика = организация
+  esfSellerAgentDocNum    String?
+  esfSellerAgentDocDate   String?
+
+  // Госучреждение (госзакуп, C1 21–24) — заполняется для получателя-госоргана (PUBLIC_OFFICE).
+  esfPoBik         String?
+  esfPoIik         String?
+  esfPoPayPurpose  String?
+  esfPoProductCode String?
 
   @@index([organizationUuid])
   @@index([counterpartyUuid])
@@ -684,6 +734,13 @@ model InventoryTransfer {
   organizationUuid       String?
   authorUuid             String
   posted                 Boolean                 @default(false)
+  // Гос-документ: СНТ (сопроводительная накладная на перемещение)
+  sntStatus              String?
+  sntId                  String?
+  sntRegistrationNumber  String?
+  sntSentAt              DateTime?
+  sntErrorText           String?
+  sntXml                 String?                 @db.Text
   updatedAt              DateTime                @default(now()) @updatedAt
   deletedAt              DateTime?
   inventoryTransferItems InventoryTransferItem[]
@@ -827,6 +884,10 @@ model Product {
   name                     String
   sku                      String?
   barcode                  String?
+  // Реквизиты для гос-документов (СНТ): код ТН ВЭД ЕАЭС (обязателен в СНТ) и
+  // признак происхождения ТРУ [1-6]. См. классификатор type="tnved".
+  tnvedCode                String?
+  truOriginCode            String?
   isService                Boolean                   @default(false)
   /// Продажная цена в Product НЕ хранится — источник истины таблица «Цены»
   /// (ProductPrice, тип «по умолчанию»); автоподстановка через product-prices/price-list.

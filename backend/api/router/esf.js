@@ -21,6 +21,7 @@ import {
 	syncInvoice, queryInvoiceById, queryInvoiceErrorById, queryIncomingInvoices,
 	confirmInvoiceById, declineInvoiceById,
 } from "../../services/esf/index.js";
+import { validateEsfInvoice } from "../../services/esf/validateInvoice.js";
 
 const router = express.Router();
 const ROUTE = "esf";
@@ -113,7 +114,55 @@ router.post(`/${ROUTE}/invoices/:uuid/build-xml`, async (req, res) => {
 		if (invoice.counterparty) {
 			invoice.counterparty.address = await getLegalAddress("counterparty", invoice.counterpartyUuid);
 		}
-		const xml = buildInvoiceV2Xml(invoice, { num: invoice.esfNum || invoice.number });
+		// Наименование ТН ВЭД (G 3.1) — из классификатора tnved по коду товара.
+		const tnvedCodes = [...new Set((invoice.outgoingInvoiceItems || []).map((it) => it.product?.tnvedCode).filter(Boolean))];
+		if (tnvedCodes.length) {
+			const rows = await prisma.classifier.findMany({ where: { type: "tnved", code: { in: tnvedCodes } }, select: { code: true, name: true } });
+			const nameByCode = new Map(rows.map((r) => [r.code, r.name]));
+			for (const it of invoice.outgoingInvoiceItems || []) {
+				if (it.product?.tnvedCode) it.product.tnvedName = nameByCode.get(it.product.tnvedCode) || null;
+			}
+		}
+		// Исправленный/дополнительный ЭСФ: связь с основным (relatedInvoice) по его дате/номеру/рег.№.
+		let related = null;
+		let relatedMeta = null;
+		if (invoice.esfRelatedInvoiceUuid) {
+			const orig = await prisma.outgoingInvoice.findFirst({
+				where: { uuid: invoice.esfRelatedInvoiceUuid, deletedAt: null, ...tenantFilter(req) },
+				select: { date: true, number: true, esfNum: true, esfRegistrationNumber: true },
+			});
+			relatedMeta = { found: !!orig, registrationNumber: orig?.esfRegistrationNumber || null };
+			if (orig) related = { date: orig.date, num: orig.esfNum || orig.number, registrationNumber: orig.esfRegistrationNumber };
+		}
+		// Валидация бизнес-правил ДО сборки XML — понятные сообщения вместо отказа ИС ЭСФ.
+		const problems = validateEsfInvoice(invoice, { related: relatedMeta });
+		if (problems.length) {
+			return res.status(400).json({ success: false, message: `Документ не готов к отправке:\n• ${problems.join("\n• ")}`, errors: problems });
+		}
+		// Грузоотправитель (организация) / грузополучатель (контрагент) + юр.адрес из контактов.
+		const loadParty = async (uuid) => {
+			if (!uuid) return null;
+			const cp = await prisma.counterparty.findFirst({ where: { uuid, deletedAt: null, ...tenantFilter(req) } });
+			if (cp) cp.address = await getLegalAddress("counterparty", uuid);
+			return cp;
+		};
+		const loadOrg = async (uuid) => {
+			if (!uuid) return null;
+			const org = await prisma.organization.findFirst({ where: { uuid, deletedAt: null, ...tenantFilter(req) } });
+			if (org) org.address = await getLegalAddress("organization", uuid);
+			return org;
+		};
+		const [consignor, consignee, customerAgent, sellerAgent] = await Promise.all([
+			loadOrg(invoice.esfConsignorUuid),   // грузоотправитель = организация
+			loadParty(invoice.esfConsigneeUuid), // грузополучатель = контрагент
+			loadParty(invoice.esfCustomerAgentUuid),
+			loadOrg(invoice.esfSellerAgentUuid),
+		]);
+		const xml = buildInvoiceV2Xml(invoice, {
+			num: invoice.esfNum || invoice.number,
+			invoiceType: invoice.esfInvoiceType || undefined,
+			related, consignor, consignee, customerAgent, sellerAgent,
+		});
 		res.json({ success: true, xml });
 	} catch (err) {
 		respondEsfError(res, err);

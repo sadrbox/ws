@@ -46,13 +46,78 @@ function reqTag(name, value) {
 
 // ── Секции ──────────────────────────────────────────────────────────────────
 
-function customerXml(counterparty) {
-	// Порядок по Customer (xs:sequence): address?, countryCode(req), name(req), tin?
+/** Поверенный/оператор покупателя (J 39–42). agent — резолвленный контрагент {name,bin,address}. */
+function customerAgentXml(inv, agent) {
+	const a = agent || {};
+	return (
+		tag("customerAgentAddress", a.address) +
+		tag("customerAgentDocDate", inv.esfCustomerAgentDocDate) +
+		tag("customerAgentDocNum", inv.esfCustomerAgentDocNum) +
+		tag("customerAgentName", a.legalName || a.name) +
+		tag("customerAgentTin", a.bin)
+	);
+}
+
+/** Поверенный/оператор поставщика (I 35–38). agent — резолвленная организация {name,bin,address}. */
+function sellerAgentXml(inv, agent) {
+	const a = agent || {};
+	return (
+		tag("sellerAgentAddress", a.address) +
+		tag("sellerAgentDocDate", inv.esfSellerAgentDocDate) +
+		tag("sellerAgentDocNum", inv.esfSellerAgentDocNum) +
+		tag("sellerAgentName", a.legalName || a.name) +
+		tag("sellerAgentTin", a.bin)
+	);
+}
+
+/** Госучреждение (госзакуп, C1 21–24). Опускается, если нет ни одного поля. */
+function publicOfficeXml(inv) {
+	if (!inv.esfPoBik && !inv.esfPoIik && !inv.esfPoPayPurpose && !inv.esfPoProductCode) return "";
+	// Порядок PublicOffice (xs:sequence): bik(req), iik?, payPurpose?, productCode?
+	return (
+		"<publicOffice>" +
+		reqTag("bik", inv.esfPoBik || "") +
+		tag("iik", inv.esfPoIik) +
+		tag("payPurpose", inv.esfPoPayPurpose) +
+		tag("productCode", inv.esfPoProductCode) +
+		"</publicOffice>"
+	);
+}
+
+/** Грузоотправитель (D25) — из контрагента-отправителя. Опускается, если не задан. */
+function consignorXml(cp) {
+	if (!cp) return "";
+	// Порядок Consignor (xs:sequence): address?, name?, tin?
+	return "<consignor>" + tag("address", cp.address) + tag("name", cp.legalName || cp.name) + tag("tin", cp.bin) + "</consignor>";
+}
+
+/** Грузополучатель (D26) — из контрагента-получателя. Опускается, если не задан. */
+function consigneeXml(cp) {
+	if (!cp) return "";
+	// Порядок Consignee (xs:sequence): address?, countryCode(req), name?, tin?
+	return (
+		"<consignee>" +
+		tag("address", cp.address) +
+		reqTag("countryCode", cp.countryCode || DEFAULT_COUNTRY) +
+		tag("name", cp.legalName || cp.name) +
+		tag("tin", cp.bin) +
+		"</consignee>"
+	);
+}
+
+/** Блок «Категория» (B10/C20): <statuses><status>TYPE</status></statuses> либо "". */
+function statusesXml(type) {
+	return type ? `<statuses><status>${xmlEscape(type)}</status></statuses>` : "";
+}
+
+function customerXml(counterparty, customerType) {
+	// Порядок по Customer (xs:sequence): address?, countryCode(req), name(req), statuses?, tin?
 	return (
 		"<customer>" +
 		tag("address", counterparty?.address) +
 		reqTag("countryCode", counterparty?.countryCode || DEFAULT_COUNTRY) +
 		reqTag("name", counterparty?.legalName || counterparty?.name || "") +
+		statusesXml(customerType) +
 		tag("tin", counterparty?.bin) +
 		"</customer>"
 	);
@@ -64,10 +129,10 @@ function primaryAccount(organization) {
 	return accounts.find((a) => a.isPrimary) || accounts[0] || null;
 }
 
-function sellerXml(organization) {
+function sellerXml(organization, sellerType) {
 	const acc = primaryAccount(organization);
 	// Порядок по Seller (xs:sequence): address?, bank?, bik?, certificateNum?,
-	// certificateSeries?, iik?, kbe?, name(req), ..., tin(req).
+	// certificateSeries?, iik?, kbe?, name(req), …, statuses?, tin(req).
 	return (
 		"<seller>" +
 		tag("address", organization?.address) +
@@ -78,6 +143,7 @@ function sellerXml(organization) {
 		tag("iik", acc?.iban) +
 		tag("kbe", acc?.kbe) +
 		reqTag("name", organization?.legalName || organization?.name || "") +
+		statusesXml(sellerType) +
 		reqTag("tin", organization?.bin || "") +
 		"</seller>"
 	);
@@ -93,27 +159,70 @@ function productXml(item, index) {
 	const ndsRate = item.vatRate != null ? String(Math.round(Number(item.vatRate))) : null;
 	const turnoverSize = money(item.amountWithoutVat); // облагаемый оборот = без НДС
 	const unitPrice = qty > 0 ? money(Number(item.amountWithoutVat ?? 0) / qty, 6) : null;
-	// unitCode по XSD — только [0-9]{1,10}; иначе опускаем.
-	const unitCode = unit?.code && /^[0-9]{1,10}$/.test(unit.code) ? unit.code : null;
+	// unitCode (G 4) — это КОД ТОВАРА ТН ВЭД ЕАЭС (не код ед.изм!); по XSD [0-9]{1,10}.
+	const unitCode = product.tnvedCode && /^[0-9]{1,10}$/.test(product.tnvedCode) ? product.tnvedCode : null;
+	// truOriginCode (G 2) — признак происхождения ТРУ [1-6] из карточки товара.
+	const truOrigin = /^[1-6]$/.test(String(product.truOriginCode || "")) ? String(product.truOriginCode) : DEFAULT_TRU_ORIGIN;
+	// gtinCode (G 17.1) — из штрихкода товара, если это валидный GTIN (8/12/13/14 цифр).
+	const gtin = /^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(String(product.barcode || "")) ? String(product.barcode) : null;
+	// Акциз (G 9/10) — из позиции; опускаем при нуле.
+	const exciseRateN = Number(item.exciseRate ?? 0);
+	const exciseAmountN = Number(item.exciseAmount ?? 0);
+	// tnvedName (G 3.1) — наименование по классификатору ТН ВЭД (проставляется в esf.js).
+	const tnvedName = product.tnvedName || null;
 
-	// Порядок по Product (xs:sequence): catalogTruId, description, ndsAmount,
-	// ndsRate?, priceWithTax, priceWithoutTax, quantity?, truOriginCode,
-	// turnoverSize, unitCode?, unitNomenclature?, unitPrice?
+	// Порядок по Product (xs:sequence, алфавитный): catalogTruId, description,
+	// exciseAmount?, exciseRate?, gtinCode?, ndsAmount, ndsRate?, priceWithTax,
+	// priceWithoutTax, quantity?, tnvedName?, truOriginCode, turnoverSize,
+	// unitCode?, unitNomenclature?, unitPrice?
 	return (
 		"<product>" +
 		reqTag("catalogTruId", DEFAULT_CATALOG_TRU_ID) +
 		tag("description", product.name || `Позиция ${index + 1}`) +
+		tag("exciseAmount", exciseAmountN ? money(exciseAmountN) : null) +
+		tag("exciseRate", exciseRateN ? String(exciseRateN) : null) +
+		tag("gtinCode", gtin) +
 		reqTag("ndsAmount", ndsAmount) +
 		tag("ndsRate", ndsRate) +
 		reqTag("priceWithTax", priceWithTax) +
 		reqTag("priceWithoutTax", priceWithoutTax) +
 		tag("quantity", qty ? money(qty, 6) : null) +
-		reqTag("truOriginCode", DEFAULT_TRU_ORIGIN) +
+		tag("tnvedName", tnvedName) +
+		reqTag("truOriginCode", truOrigin) +
 		reqTag("turnoverSize", turnoverSize) +
 		tag("unitCode", unitCode) +
 		tag("unitNomenclature", unit?.name) +
 		tag("unitPrice", unitPrice) +
 		"</product>"
+	);
+}
+
+/** Связь с основным ЭСФ (relatedInvoice) — для исправленного/дополнительного. Опускается, если нет. */
+function relatedInvoiceXml(r) {
+	if (!r || (!r.num && !r.registrationNumber)) return "";
+	// Порядок RelatedInvoice (xs:sequence): date(req), num(req), registrationNumber?
+	return (
+		"<relatedInvoice>" +
+		reqTag("date", esfDate(r.date)) +
+		reqTag("num", r.num || "") +
+		tag("registrationNumber", r.registrationNumber) +
+		"</relatedInvoice>"
+	);
+}
+
+/** Условия поставки (раздел E) — из привязанного договора. Опускается, если договора нет. */
+function deliveryTermXml(invoice) {
+	const c = invoice.contract;
+	if (!c) return "";
+	// Порядок DeliveryTerm (xs:sequence, алфавитный): accountNumber?, contractDate?,
+	// contractNum?, deliveryConditionCode?, destination?, hasContract(req), term?,
+	// transportTypeCode?, warrant?, warrantDate?
+	return (
+		"<deliveryTerm>" +
+		tag("contractDate", esfDate(c.startDate)) +
+		tag("contractNum", c.contractNumber || c.name) +
+		reqTag("hasContract", "true") +
+		"</deliveryTerm>"
 	);
 }
 
@@ -154,6 +263,9 @@ export function buildInvoiceV2Xml(invoice, opts = {}) {
 	const num = opts.num || invoice.number || "";
 	const operator = invoice.author?.username || invoice.organization?.name || "";
 	const d = esfDate(invoice.date);
+	// Категории (роль в документе) — из документа; невалидное значение опускаем.
+	const sellerType = isValidCode("sellerType", invoice.esfSellerType) ? invoice.esfSellerType : null;
+	const customerType = isValidCode("customerType", invoice.esfCustomerType) ? invoice.esfCustomerType : null;
 
 	// Порядок AbstractInvoice: date, invoiceType, num, operatorFullname,
 	// [relatedInvoice], turnoverDate — затем поля InvoiceV2 (customers, productSet, sellers).
@@ -162,10 +274,18 @@ export function buildInvoiceV2Xml(invoice, opts = {}) {
 		reqTag("invoiceType", invoiceType) +
 		reqTag("num", num) +
 		reqTag("operatorFullname", operator) +
+		relatedInvoiceXml(opts.related) +
 		reqTag("turnoverDate", d) +
-		"<customers>" + customerXml(invoice.counterparty) + "</customers>" +
+		tag("addInf", invoice.comment) +
+		consigneeXml(opts.consignee) +
+		consignorXml(opts.consignor) +
+		customerAgentXml(invoice, opts.customerAgent) +
+		"<customers>" + customerXml(invoice.counterparty, customerType) + "</customers>" +
+		deliveryTermXml(invoice) +
 		productSetXml(invoice) +
-		"<sellers>" + sellerXml(invoice.organization) + "</sellers>";
+		publicOfficeXml(invoice) +
+		sellerAgentXml(invoice, opts.sellerAgent) +
+		"<sellers>" + sellerXml(invoice.organization, sellerType) + "</sellers>";
 
 	return (
 		'<esf:invoiceContainer xmlns:esf="esf">' +
@@ -183,6 +303,7 @@ export const INVOICE_ESF_INCLUDE = {
 	outgoingInvoiceItems: { include: { product: { include: { unitOfMeasure: true } }, unitOfMeasure: true } },
 	organization: { include: { bankAccounts: { where: { deletedAt: null } } } },
 	counterparty: true,
+	contract: true,
 	author: true,
 };
 
