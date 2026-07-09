@@ -8,6 +8,7 @@ import { useFormRequiredScope } from "src/hooks/useFormRequired";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { useAppContext } from "src/app/context";
 import SelectPaneWrapper from "./SelectPaneWrapper";
+import { setPendingHighlight } from "src/utils/listHighlight";
 import FieldActionButton from "./FieldActionButton";
 import { Icon } from "src/components/IconButton/icons";
 import type { IconName } from "src/components/IconButton/icons";
@@ -354,6 +355,9 @@ const LookupField: FC<LookupFieldProps> = ({
 
   const handleOpenModal = useCallback(() => {
     if (disabled) return;
+    // «Выбор из списка»: подсветить/активировать текущее выбранное значение в списке
+    // (activeRow), как это делает «Показать в списке».
+    if (value) setPendingHighlight(endpoint, value);
     addPane({
       component: SelectPaneWrapper,
       label: `${translate("selectTitle")}: ${(typeof label === "string" && label.trim()) ? translate(label) : (getByEndpoint(endpoint)?.label ?? endpoint)}`,
@@ -379,7 +383,7 @@ const LookupField: FC<LookupFieldProps> = ({
         }
       },
     });
-  }, [disabled, addPane, label, endpoint, listComponent, displayField, getSuggestionLabel, onSelect, extraParams, onAfterSelect]);
+  }, [disabled, addPane, label, endpoint, listComponent, displayField, getSuggestionLabel, onSelect, extraParams, onAfterSelect, value]);
 
   // ── Быстрый выбор — загружает все записи и открывает inline dropdown ──
   const handleQuickSelect = useCallback(() => {

@@ -17,9 +17,11 @@ import { FC, useCallback, useMemo, useState, useRef } from "react";
 import type { MutableRefObject, ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { TColumn, TDataItem } from "src/components/Table/types";
-import { FieldNumber } from "src/components/Field";
+import { Field, FieldNumber, FieldSelect } from "src/components/Field";
 import FieldActionButton from "src/components/Field/FieldActionButton";
 import LookupField from "src/components/Field/LookupField";
+import { ClassifierLookup } from "src/components/Field/ClassifierLookup";
+import { useEsfDictionaries } from "src/services/esf/dictionaries";
 import styles from "./TradeDocumentItemsTable.module.scss";
 import apiClient from "src/services/api/client";
 import columnsJson from "./documentItemsColumns.json";
@@ -37,7 +39,7 @@ const DISCOUNT_COLUMN_IDS = new Set(["discountPercent", "discountAmount"]);
 const EXCISE_COLUMN_IDS = new Set(["exciseRate", "exciseAmount"]);
 const AMOUNT_WITHOUT_VAT_IDS = new Set(["amountWithoutVat", "amountNetOfIndirectTaxes"]);
 // ЭСФ-метаданные строки (из карточки товара) — только для СФ исходящей.
-const ESF_COLUMN_IDS = new Set(["product.tnvedCode", "product.truOriginCode"]);
+const ESF_COLUMN_IDS = new Set(["product.tnvedCode", "product.truOriginCode", "productDeclaration", "productNumberInDeclaration"]);
 // Ценовые колонки — не нужны для документов без стоимостной части (напр.
 // Перемещение ТМЗ только двигает товар: ни цены, ни скидки, ни суммы продажи).
 const PRICING_COLUMN_IDS = new Set(["price", "amount", "discountPercent", "discountAmount"]);
@@ -159,6 +161,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   const priceTypeUuidRef = useRef<string | null | undefined>(priceTypeUuid);
   priceTypeUuidRef.current = priceTypeUuid;
   const settings = useOrgAccountingSettings(organizationUuid ?? null, documentDate ?? null);
+  const esfDict = useEsfDictionaries();
   // Если hasTaxes=false — принудительно отключаем все косвенные налоги.
   const useDiscount = settings.useDiscount;
   const isVatEnabled = hasTaxes && settings.isVatEnabled;
@@ -400,9 +403,32 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     // SubTable остаётся активным — поэтому попытка редактирования (Enter / двойной
     // клик) запускает анимацию-пульс «нельзя редактировать» (data-pulse).
     const cellEditable = ctx.inlineEditing && !fieldsReadOnly;
-    // ЭСФ-метаданные строки (read-only, из карточки товара): ТН ВЭД и признак происхождения.
-    if (id === "product.tnvedCode") return <span>{String((row.product as { tnvedCode?: string } | undefined)?.tnvedCode ?? "")}</span>;
-    if (id === "product.truOriginCode") return <span>{String((row.product as { truOriginCode?: string } | undefined)?.truOriginCode ?? "")}</span>;
+    // Записать пер-строчное поле (без пересчёта сумм).
+    const setRowField = (field: string, value: string) => {
+      if (ctx.deferRemoteChanges) { ctx.updateLocalRow(row, { ...row, [field]: value }); return; }
+      ctx.handleInlineChange(row, field, value);
+    };
+    // ЭСФ-метаданные строки: ТН ВЭД (ссылка на классификатор) и признак происхождения (справочник).
+    // Значение — пер-строчное (item), с fallback на карточку товара.
+    if (id === "product.tnvedCode") {
+      const val = (row.tnvedCode as string) || (row.product as { tnvedCode?: string } | undefined)?.tnvedCode || "";
+      if (!cellEditable) return <span>{val}</span>;
+      return <ClassifierLookup type="tnved" name={`docitem_tnved_${row.id}`} value={val} width="100%" variant="table"
+        disabled={ctx.disabled} onChange={(code) => setRowField("tnvedCode", code)} />;
+    }
+    if (id === "product.truOriginCode") {
+      const val = (row.truOriginCode as string) || (row.product as { truOriginCode?: string } | undefined)?.truOriginCode || "";
+      if (!cellEditable) return <span>{val}</span>;
+      return <FieldSelect name={`docitem_truorigin_${row.id}`} value={val} variant="table" disabled={ctx.disabled}
+        onChange={(e) => setRowField("truOriginCode", e.target.value)}
+        options={[{ value: "", label: "—" }, ...(esfDict?.truOrigin ?? []).map((o) => ({ value: o.code, label: `${o.code} — ${o.label}` }))]} />;
+    }
+    if (id === "productDeclaration" || id === "productNumberInDeclaration") {
+      const val = (row[id] as string) ?? "";
+      if (!cellEditable) return <span>{val}</span>;
+      return <Field name={`docitem_${id}_${row.id}`} value={val} width="100%" variant="table" disabled={ctx.disabled}
+        onChange={(e) => setRowField(id, e.target.value)} />;
+    }
     if (id === "lineNumber") {
       const idx = ctx.rows.indexOf(row);
       const value = idx >= 0 ? idx + 1 : (row.lineNumber as string | number | null | undefined) ?? "";
@@ -467,6 +493,11 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
             if (umUuid) {
               extra.unitOfMeasureUuid = umUuid;
               extra.unitOfMeasure = um ? { uuid: um.uuid ?? umUuid, name: um.name ?? "" } : { uuid: umUuid, name: "" };
+            }
+            // Автозаполнение ЭСФ-метаданных строки из карточки товара (можно переопределить).
+            if (showEsfColumns && item) {
+              extra.tnvedCode = (item.tnvedCode as string) ?? null;
+              extra.truOriginCode = (item.truOriginCode as string) ?? null;
             }
             ctx.handleLookupChange(row, "productUuid", uuid, extra);
             // Автозаполнение цены из истории цен товара по типу цены документа.
@@ -609,7 +640,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       );
     }
     return undefined;
-  }, [recalcWithFlags, vatCalculationMethod, fieldsReadOnly, quantityStepper]);
+  }, [recalcWithFlags, vatCalculationMethod, fieldsReadOnly, quantityStepper, esfDict, showEsfColumns]);
 
   const defaultNewRow = useMemo(() => ({
     productUuid: null,

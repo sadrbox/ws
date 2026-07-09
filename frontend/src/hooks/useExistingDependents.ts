@@ -6,6 +6,7 @@ import { getFormatDateOnly } from "src/utils/datetime";
 export interface ExistingDependent {
 	uuid: string;
 	id: number;
+	number?: string | null;
 	date: string;
 }
 
@@ -21,7 +22,7 @@ async function fetchDependent(
 		? resp
 		: (resp?.items ?? resp?.data ?? []);
 	if (!items[0]) return null;
-	return { uuid: items[0].uuid, id: items[0].id, date: items[0].date };
+	return { uuid: items[0].uuid, id: items[0].id, number: items[0].number ?? null, date: items[0].date };
 }
 
 /**
@@ -56,7 +57,8 @@ export function formatDependentOption(
 ): string {
 	if (dep) {
 		const dateStr = dep.date ? ` - ${getFormatDateOnly(dep.date) ?? ""}` : "";
-		return `${docLabel}: ID ${dep.id}${dateStr}`;
+		const ref = dep.number ? `№ ${dep.number}` : `ID ${dep.id}`;
+		return `${docLabel}: ${ref}${dateStr}`;
 	}
 	return `Создать ${docLabel}`;
 }

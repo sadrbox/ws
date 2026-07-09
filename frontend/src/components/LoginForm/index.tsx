@@ -19,6 +19,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   const [inviteResult, setInviteResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [twoFaRequired, setTwoFaRequired] = useState(false);
+  const [code, setCode] = useState("");
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,12 +44,16 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
     if (!trimmed) { setError("Введите имя пользователя"); return; }
     setIsLoading(true);
     try {
-      const result = await login(trimmed, password || undefined);
+      const result = await login(trimmed, password || undefined, code || undefined);
       if (result.success) onLoginSuccess();
-      else setError(result.message || "Ошибка авторизации");
+      else if (result.twoFactorRequired) {
+        setTwoFaRequired(true);
+        // Ошибку показываем только если код уже вводился (повторная неверная попытка).
+        setError(code ? (result.message || "Неверный код") : null);
+      } else setError(result.message || "Ошибка авторизации");
     } catch { setError("Ошибка соединения с сервером"); }
     finally { setIsLoading(false); }
-  }, [username, password, onLoginSuccess]);
+  }, [username, password, code, onLoginSuccess]);
 
   // ── REGISTER ──
   const handleRegister = useCallback(async (e: React.FormEvent) => {
@@ -147,6 +153,16 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
             placeholder={mode === "login" ? "Введите пароль (если задан)" : "Минимум 6 символов"}
             autoComplete={mode === "login" ? "current-password" : "new-password"} />
         </div>
+
+        {/* ── Код 2FA (показывается после запроса сервера) ── */}
+        {mode === "login" && twoFaRequired && (
+          <div className={styles.field}>
+            <label htmlFor="auth_2fa">Код двухфакторной аутентификации</label>
+            <input id="auth_2fa" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+              value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ""))} disabled={isLoading}
+              placeholder="6 цифр из приложения" autoFocus />
+          </div>
+        )}
 
         {/* ── Email (только при регистрации/присоединении) ── */}
         {mode !== "login" && (

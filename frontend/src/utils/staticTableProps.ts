@@ -18,6 +18,9 @@ interface Params {
 	search?: { value: string; onChange: (v: string) => void };
 	/** Доп. кнопки тулбара Table. */
 	extraButtons?: ReactNode;
+	/** Подсветка/активация строки по uuid (для «Показать в списке» / «Выбор из списка»). */
+	highlightUuid?: string;
+	highlightToken?: number;
 }
 
 /** Собирает объект пропсов для <Table {...props} /> на статичных данных. */
@@ -53,6 +56,8 @@ export function buildStaticTableProps(p: Params) {
 		selectable: false, // read-only списки без массового выбора → без колонки-чекбокса
 		...(p.extraButtons ? { extraButtons: p.extraButtons } : {}),
 		...(p.renderCell ? { renderCell: p.renderCell } : {}),
+		...(p.highlightUuid ? { highlightUuid: p.highlightUuid } : {}),
+		...(p.highlightToken !== undefined ? { highlightToken: p.highlightToken } : {}),
 	};
 }
 

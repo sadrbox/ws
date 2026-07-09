@@ -2,15 +2,18 @@
 // стандартный компонент <Table/> (read-only) + тулбар: выбор типа, поиск, импорт
 // официальных данных (суперадмин): из XML-файла гос-системы (КАТО/ГС ВС) или JSON.
 // См. backend/api/router/classifiers.js.
-import { FC, useCallback, useMemo, useRef, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { consumePendingHighlight, subscribeHighlight } from "src/utils/listHighlight";
 import { translate } from "src/i18";
 import { getCurrentUser } from "src/services/auth";
 import Table from "src/components/Table";
 import { getModelColumns } from "src/components/Table/services";
-import type { TColumn } from "src/components/Table/types";
+import type { TColumn, TDataItem } from "src/components/Table/types";
 import Modal from "src/components/Modal";
-import Notice, { type NoticeItem } from "src/components/Notice";
+import { FieldSelect } from "src/components/Field";
+import { Button } from "src/components/Button";
+import { showToast } from "src/components/UIToast";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { fetchClassifiers, importClassifiers, importClassifiersFile, CLASSIFIER_TYPES } from "src/services/classifiers/api";
 import styles from "./Classifiers.module.scss";
@@ -31,7 +34,6 @@ export const ClassifiersList: FC = () => {
 	const [importText, setImportText] = useState("");
 	const [file, setFile] = useState<File | null>(null);
 	const [busy, setBusy] = useState(false);
-	const [notice, setNotice] = useState<NoticeItem | null>(null);
 	const fileRef = useRef<HTMLInputElement>(null);
 
 	const { data, isLoading, refetch } = useQuery({
@@ -44,32 +46,32 @@ export const ClassifiersList: FC = () => {
 
 	const doImport = useCallback(async () => {
 		if (busy) return;
-		setNotice(null); setBusy(true);
+		setBusy(true);
 		try {
 			if (file) {
 				const r = await importClassifiersFile(file);
 				const detail = Object.entries(r.counts).map(([t, n]) => `${t}: ${n}`).join(", ");
-				setNotice({ type: "success", text: `${translate("clsImported")} (${detail})` });
+				showToast(`${translate("clsImported")} (${detail})`, "success");
 			} else {
 				let parsed: { code: string; name: string; parentCode?: string }[];
 				try { parsed = JSON.parse(importText); if (!Array.isArray(parsed)) throw new Error(); }
-				catch { setNotice({ type: "attention", text: translate("clsImportBadJson") }); return; }
+				catch { showToast(translate("clsImportBadJson"), "error"); return; }
 				const r = await importClassifiers(type, parsed);
-				setNotice({ type: "success", text: `${translate("clsImported")}: ${r.upserted}` });
+				showToast(`${translate("clsImported")}: ${r.upserted}`, "success");
 			}
 			closeImport(); void refetch();
 		} catch (e) {
 			const a = e as { response?: { data?: { message?: string } }; message?: string };
-			setNotice({ type: "attention", text: a?.response?.data?.message || a?.message || "Ошибка импорта" });
+			showToast(a?.response?.data?.message || a?.message || "Ошибка импорта", "error");
 		} finally { setBusy(false); }
 	}, [busy, file, importText, type, refetch, closeImport]);
 
 	const toolbar = (
 		<>
-			<select className={styles.Select} value={type} onChange={(e) => { setType(e.target.value); setSearch(""); }}>
-				{CLASSIFIER_TYPES.map((t) => <option key={t.type} value={t.type}>{translate(t.i18) || t.type}</option>)}
-			</select>
-			{isSuperAdmin && <button className={styles.Btn} onClick={() => setShowImport(true)}>{translate("clsImport")}</button>}
+			<FieldSelect name="cls-type" size="sm" value={type}
+				onChange={(e) => { setType(e.target.value); setSearch(""); }}
+				options={CLASSIFIER_TYPES.map((t) => ({ value: t.type, label: translate(t.i18) || t.type }))} />
+			{isSuperAdmin && <Button variant="secondary" onClick={() => setShowImport(true)}>{translate("clsImport")}</Button>}
 		</>
 	);
 
@@ -79,9 +81,10 @@ export const ClassifiersList: FC = () => {
 		search: { value: search, onChange: setSearch },
 	}), [rows, columns, isLoading, refetch, toolbar, search]);
 
+	// Разметка как у обычного *List: <Table/> заполняет панель (без паддинг-обёртки).
+	// Модалка импорта — портал (в body), рендерится сиблингом.
 	return (
-		<div className={styles.Wrapper}>
-			<Notice items={notice ? [notice] : []} />
+		<>
 			<Table {...tableProps} />
 			{showImport && (
 				<Modal title={translate("clsImport")} onClose={closeImport} onApply={doImport}>
@@ -96,7 +99,39 @@ export const ClassifiersList: FC = () => {
 					{busy && <div className={styles.Count}>{translate("clsImporting")}</div>}
 				</Modal>
 			)}
-		</div>
+		</>
 	);
 };
 ClassifiersList.displayName = "ClassifiersList";
+
+// ── Пикер классификатора для «Выбора из списка» (LookupField → SelectPaneWrapper).
+// Тип классификатора приходит через extraParams/extraQueryParams.type.
+interface PickerProps {
+	onSelectItem?: (item: Record<string, unknown>) => void;
+	extraParams?: Record<string, string>;
+	extraQueryParams?: Record<string, string>;
+}
+
+export const ClassifierPicker: FC<PickerProps> = ({ onSelectItem, extraParams, extraQueryParams }) => {
+	const type = extraParams?.type || extraQueryParams?.type || "country";
+	const [search, setSearch] = useState("");
+	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(COLUMNS, "ClassifierPicker"));
+	const { data, isLoading, refetch } = useQuery({
+		queryKey: ["classifiers", type, search],
+		queryFn: async () => (await fetchClassifiers(type, search)).items,
+	});
+	const rows = useMemo(() => (data ?? []).map((c, i) => ({ id: i + 1, uuid: c.code, ...c })), [data]);
+	const onClick = useCallback((d: Partial<TDataItem>) => { if (d?.code) onSelectItem?.(d as Record<string, unknown>); }, [onSelectItem]);
+
+	// Подсветка/активация текущей строки при открытии «Выбор из списка» (по коду).
+	const [highlight, setHighlight] = useState<{ uuid?: string; token: number }>(() => ({ uuid: consumePendingHighlight("classifiers"), token: 0 }));
+	useEffect(() => subscribeHighlight("classifiers", (uuid) => setHighlight((h) => ({ uuid, token: h.token + 1 }))), []);
+
+	const tableProps = useMemo(() => buildStaticTableProps({
+		componentName: "ClassifierPicker", rows, columns, setColumns, isLoading,
+		onReload: () => void refetch(), onRowClick: onClick, search: { value: search, onChange: setSearch },
+		highlightUuid: highlight.uuid, highlightToken: highlight.token,
+	}), [rows, columns, isLoading, refetch, onClick, search, highlight]);
+	return <Table {...tableProps} />;
+};
+ClassifierPicker.displayName = "ClassifierPicker";

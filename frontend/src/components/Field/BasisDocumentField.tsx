@@ -103,7 +103,9 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   // подтягиваем документ-основание по uuid и собираем корректную метку.
   const [resolvedLabel, setResolvedLabel] = useState<string | undefined>(undefined);
   useEffect(() => {
-    const isCanonical = !!basisDocumentLabel && /:\s*(?:ID\s+\d+|№\S+)/i.test(basisDocumentLabel);
+    // Канонична только метка с «№…» — метку с «ID {n}» перерезолвим по документу-
+    // основанию, чтобы показать номер (№), если он присвоен.
+    const isCanonical = !!basisDocumentLabel && /:\s*№\S+/.test(basisDocumentLabel);
     const type = basisDocumentType || "";
     const endpoint = allowedTypes.find((t) => t.type === type)?.endpoint ?? docTypeToEndpoint(type);
     if (!basisDocumentUuid || !type || !endpoint || isCanonical) {

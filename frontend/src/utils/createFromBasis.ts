@@ -29,6 +29,12 @@ export interface BasisFromTarget {
 	 * открывает его вместо создания нового.
 	 */
 	existingCheckEndpoint?: string;
+	/**
+	 * Уже известный зависимый документ (из меню «На основании» — useExistingDependents).
+	 * Если задан, открывается напрямую по uuid, БЕЗ повторного запроса — устраняет
+	 * рассинхрон между тем, что показывает меню, и тем, что открывается по клику.
+	 */
+	knownExisting?: { uuid: string; id: number; number?: string | null; date?: string } | null;
 }
 
 interface BasisSourceConfig {
@@ -489,7 +495,19 @@ export async function openDocumentFromBasis(
 	target: BasisFromTarget,
 	addPane: (pane: any) => void,
 ): Promise<void> {
-	// Проверка: уже есть зависимый документ этого типа?
+	// Приоритет: если меню уже определило существующий зависимый — открываем его напрямую.
+	if (target.knownExisting?.uuid) {
+		const d = target.knownExisting.date ? " - " + getFormatDateOnly(String(target.knownExisting.date)) : "";
+		const ref = target.knownExisting.number ? `№ ${target.knownExisting.number}` : `ID ${target.knownExisting.id ?? "?"}`;
+		addPane({
+			component: target.FormComponent,
+			label: `${target.docLabel}: ${ref}${d}`,
+			data: { uuid: target.knownExisting.uuid },
+		});
+		return;
+	}
+
+	// Проверка: уже есть зависимый документ этого типа? (fallback, если меню не знало)
 	if (target.existingCheckEndpoint && sourceFields.uuid) {
 		try {
 			const resp: any = await api.get(`/${target.existingCheckEndpoint}`, {
@@ -504,9 +522,10 @@ export async function openDocumentFromBasis(
 				const existingDate = existingDoc.date
 					? " - " + getFormatDateOnly(String(existingDoc.date))
 					: "";
+				const ref = existingDoc.number ? `№ ${existingDoc.number}` : `ID ${existingDoc.id ?? "?"}`;
 				addPane({
 					component: target.FormComponent,
-					label: `${target.docLabel}: ID ${existingDoc.id ?? "?"}${existingDate}`,
+					label: `${target.docLabel}: ${ref}${existingDate}`,
 					data: { uuid: existingDoc.uuid },
 				});
 				return;
@@ -535,9 +554,12 @@ export async function openDocumentFromBasis(
 	}
 
 	const dateStr = sourceFields.date ? getFormatDateOnly(sourceFields.date) : "";
+	const basisRef = sourceFields.number != null && String(sourceFields.number).trim() !== ""
+		? `№${sourceFields.number}`
+		: `ID ${sourceFields.id ?? "?"}`;
 	const basisLabel = dateStr
-		? `${sourceTypeLabel}: ID ${sourceFields.id ?? "?"} - ${dateStr}`
-		: `${sourceTypeLabel}: ID ${sourceFields.id ?? "?"}`;
+		? `${sourceTypeLabel}: ${basisRef} - ${dateStr}`
+		: `${sourceTypeLabel}: ${basisRef}`;
 
 	const initialFields = {
 		...target.mapFields(sourceFields),

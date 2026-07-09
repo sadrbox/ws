@@ -8,7 +8,6 @@ import { translate } from "src/i18";
 import type { TPane } from "src/app/types";
 import type { TDataItem } from "src/components/Table/types";
 import { Field, FieldDateTime, FieldSelect } from "src/components/Field";
-import FieldToggle from "src/components/Field/FieldToggle";
 import { useEsfDictionaries } from "src/services/esf/dictionaries";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
@@ -244,7 +243,6 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     });
     const [itemsTableKey, setItemsTableKey] = useState(0);
     const [isRefilling, setIsRefilling] = useState(false);
-    const [agentsOpen, setAgentsOpen] = useState(false); // ЭСФ: раскрытие блока «поверенный/оператор»
 
     const invalidateSubTables = useCallback(async () => {
       await queryClient.invalidateQueries({ queryKey: [cfg.itemsEndpoint], refetchType: "active" });
@@ -278,6 +276,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             vatRate: r.vatRate ?? 0,
             exciseRate: r.exciseRate ?? 0,
             discountPercent: r.discountPercent ?? 0,
+            ...(cfg.hasEsf ? { tnvedCode: r.tnvedCode ?? null, truOriginCode: r.truOriginCode ?? null, productDeclaration: r.productDeclaration ?? null, productNumberInDeclaration: r.productNumberInDeclaration ?? null } : {}),
           }),
           updatePayload: (r: TDataItem) => ({
             sourceRowId: r.sourceRowId ?? null,
@@ -288,6 +287,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             vatRate: r.vatRate ?? 0,
             exciseRate: r.exciseRate ?? 0,
             discountPercent: r.discountPercent ?? 0,
+            ...(cfg.hasEsf ? { tnvedCode: r.tnvedCode ?? null, truOriginCode: r.truOriginCode ?? null, productDeclaration: r.productDeclaration ?? null, productNumberInDeclaration: r.productNumberInDeclaration ?? null } : {}),
           }),
           extraSkipFields: [cfg.itemsParentField],
         },
@@ -509,14 +509,15 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       }
     }, [form.fields, addPane]);
 
-    const handleCreateFromBasis = useCallback(async (target: BasisFromTarget) => {
-      await openDocumentFromBasis(form.fields as any, cfg.formLabel, target, addPane);
-    }, [form.fields, addPane]);
-
     const hasDirtyItems = (items.pending?.length ?? 0) > 0;
     const printDisabled = form.isLoading || form.isDirty || hasDirtyItems;
     const isSavedDoc = form.isEditMode && !!form.fields.uuid;
     const existingDeps = useExistingDependents(isSavedDoc ? form.fields.uuid : undefined, dependentEndpoints);
+
+    const handleCreateFromBasis = useCallback(async (target: BasisFromTarget) => {
+      const withKnown: BasisFromTarget = { ...target, knownExisting: target.existingCheckEndpoint ? (existingDeps[target.existingCheckEndpoint] ?? null) : null };
+      await openDocumentFromBasis(form.fields as any, cfg.formLabel, withKnown, addPane);
+    }, [form.fields, addPane, existingDeps]);
     const showHeaderActions = isSavedDoc || hasBasis;
     const headerActionsPortal = usePaneHeaderActions(
       form.paneId,
@@ -730,74 +731,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                   </GroupCol>
                 )}
 
-                {/* Реквизиты ЭСФ (тип, связь с основным, категории B10/C20) — только для СФ исходящей. */}
-                {cfg.hasEsf && (<>
-                  <HelpBox title="❔ Как отправить ЭСФ в ИС ЭСФ">
-                    <p><b>1.</b> Проведите документ и заполните реквизиты ниже. <b>2.</b> В шапке — кнопка
-                      «{translate("esf")}» → «{translate("esfSignAndSend")}»: система соберёт XML, вы подпишете
-                      его ЭЦП в NCALayer, и документ уйдёт в ИС ЭСФ (нужен запущенный NCALayer и ключ ЭЦП).</p>
-                    <p><b>3.</b> После отправки статус <b>SENT/PROCESSING</b> — в обработке; нажмите
-                      «{translate("esfRefreshStatus")}», чтобы увидеть итог: <b>DELIVERED/CONFIRMED</b> — принято,
-                      <b> FAILED/DECLINED</b> — ошибка (см. «{translate("esfShowErrors")}»). Статус и рег.номер
-                      показываются здесь же, в блоке уведомлений.</p>
-                  </HelpBox>
-                  <Group>
-                    <FieldSelect label={translate("esfInvoiceTypeLabel")} name={`${form.formUid}_esfInvoiceType`}
-                      value={form.fields.esfInvoiceType} disabled={form.isLoading}
-                      onChange={(e) => form.setFields({ esfInvoiceType: e.target.value, ...(e.target.value === "" || e.target.value === "ORDINARY_INVOICE" ? { esfRelatedInvoiceUuid: "", esfRelatedInvoiceName: "" } : {}) } as Partial<TFields>)}
-                      options={[{ value: "", label: "—" }, ...(esfDict?.invoiceType ?? []).map((o) => ({ value: o.code, label: o.label || o.code }))]} />
-                    {form.fields.esfInvoiceType && form.fields.esfInvoiceType !== "ORDINARY_INVOICE" && (
-                      <FormLookup form={form} field="esfRelatedInvoice" endpoint="outgoing-invoices"
-                        displayField="number" disabled={form.isLoading} />
-                    )}
-                  </Group>
-                  <Group>
-                    <FieldSelect label={translate("esfSellerCategory")} name={`${form.formUid}_esfSellerType`}
-                      value={form.fields.esfSellerType} disabled={form.isLoading}
-                      onChange={(e) => form.setField("esfSellerType", e.target.value)}
-                      options={[{ value: "", label: "—" }, ...(esfDict?.sellerType ?? []).map((o) => ({ value: o.code, label: o.label || o.code }))]} />
-                    <FieldSelect label={translate("esfCustomerCategory")} name={`${form.formUid}_esfCustomerType`}
-                      value={form.fields.esfCustomerType} disabled={form.isLoading}
-                      onChange={(e) => form.setField("esfCustomerType", e.target.value)}
-                      options={[{ value: "", label: "—" }, ...(esfDict?.customerType ?? []).map((o) => ({ value: o.code, label: o.label || o.code }))]} />
-                  </Group>
-                  {/* Грузоотправитель (организация) / получатель (контрагент) — авто-заполняются
-                      из документа, меняются только если отличаются. */}
-                  <Group>
-                    <FormLookup form={form} field="esfConsignor" endpoint="organizations" disabled={form.isLoading} />
-                    <FormLookup form={form} field="esfConsignee" endpoint="counterparties" disabled={form.isLoading} />
-                  </Group>
-                  {/* Госучреждение (C1) — для получателя-госоргана (Э5). */}
-                  {form.fields.esfCustomerType === "PUBLIC_OFFICE" && (
-                    <Group>
-                      <Field label={translate("esfPoBik")} name={`${form.formUid}_esfPoBik`} value={form.fields.esfPoBik} onChange={(e) => form.setField("esfPoBik", e.target.value)} disabled={form.isLoading} />
-                      <Field label={translate("esfPoIik")} name={`${form.formUid}_esfPoIik`} value={form.fields.esfPoIik} onChange={(e) => form.setField("esfPoIik", e.target.value)} disabled={form.isLoading} />
-                      <Field label={translate("esfPoPayPurpose")} name={`${form.formUid}_esfPoPayPurpose`} value={form.fields.esfPoPayPurpose} onChange={(e) => form.setField("esfPoPayPurpose", e.target.value)} disabled={form.isLoading} />
-                      <Field label={translate("esfPoProductCode")} name={`${form.formUid}_esfPoProductCode`} value={form.fields.esfPoProductCode} onChange={(e) => form.setField("esfPoProductCode", e.target.value)} disabled={form.isLoading} />
-                    </Group>
-                  )}
-                  {/* Поверенный/оператор (I/J) — редкий случай: документ оформляет представитель/
-                      оператор от имени поставщика или покупателя. Скрыто по умолчанию. */}
-                  {(() => {
-                    const showAgents = agentsOpen || !!(form.fields.esfCustomerAgentUuid || form.fields.esfSellerAgentUuid);
-                    return (<>
-                      <FieldToggle label={translate("esfViaAgent")} value={showAgents} disabled={form.isLoading}
-                        onChange={(v: boolean) => setAgentsOpen(v)} />
-                      {showAgents && (<>
-                        <Group>
-                          <FormLookup form={form} field="esfCustomerAgent" endpoint="counterparties" disabled={form.isLoading} />
-                          <Field label={translate("esfAgentDocNum")} name={`${form.formUid}_esfCustomerAgentDocNum`} value={form.fields.esfCustomerAgentDocNum} onChange={(e) => form.setField("esfCustomerAgentDocNum", e.target.value)} disabled={form.isLoading} width="160px" />
-                          <Field label={translate("esfAgentDocDate")} name={`${form.formUid}_esfCustomerAgentDocDate`} value={form.fields.esfCustomerAgentDocDate} onChange={(e) => form.setField("esfCustomerAgentDocDate", e.target.value)} disabled={form.isLoading} width="160px" />
-                        </Group>
-                        <Group>
-                          <FormLookup form={form} field="esfSellerAgent" endpoint="organizations" disabled={form.isLoading} />
-                          <Field label={translate("esfAgentDocNum")} name={`${form.formUid}_esfSellerAgentDocNum`} value={form.fields.esfSellerAgentDocNum} onChange={(e) => form.setField("esfSellerAgentDocNum", e.target.value)} disabled={form.isLoading} width="160px" />
-                          <Field label={translate("esfAgentDocDate")} name={`${form.formUid}_esfSellerAgentDocDate`} value={form.fields.esfSellerAgentDocDate} onChange={(e) => form.setField("esfSellerAgentDocDate", e.target.value)} disabled={form.isLoading} width="160px" />
-                        </Group>
-                      </>)}
-                    </>);
-                  })()}
-                </>)}
+                {/* Реквизиты ЭСФ вынесены в отдельную вкладку «Метаданные ЭСФ» (tab-esf). */}
               </GroupCol>
               <GroupCol className={styles.FormTotals}>
                 <DocumentTotals
@@ -845,7 +779,55 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           />
         )
       },
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleCounterpartySelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, esfDict, agentsOpen]);
+      // Вкладка «Метаданные ЭСФ» — только для СФ исходящей (cfg.hasEsf).
+      ...(cfg.hasEsf ? [{
+        id: "tab-esf", label: translate("esfMetaTab"), component: (
+          <div className={styles.FormContainer}>
+            <GroupCol className={styles.Form}>
+              <HelpBox title="❔ Как отправить ЭСФ в ИС ЭСФ">
+                <p><b>1.</b> Проведите документ и заполните реквизиты. <b>2.</b> В шапке — кнопка
+                  «{translate("esf")}» → «{translate("esfSignAndSend")}»: система соберёт XML, вы подпишете
+                  его ЭЦП в NCALayer, и документ уйдёт в ИС ЭСФ (нужен запущенный NCALayer и ключ ЭЦП).</p>
+                <p><b>3.</b> После отправки статус <b>SENT/PROCESSING</b> — в обработке; нажмите
+                  «{translate("esfRefreshStatus")}», чтобы увидеть итог: <b>DELIVERED/CONFIRMED</b> — принято,
+                  <b> FAILED/DECLINED</b> — ошибка (см. «{translate("esfShowErrors")}»).</p>
+              </HelpBox>
+              <Group>
+                <FieldSelect label={translate("esfInvoiceTypeLabel")} name={`${form.formUid}_esfInvoiceType`}
+                  value={form.fields.esfInvoiceType} disabled={form.isLoading}
+                  onChange={(e) => form.setFields({ esfInvoiceType: e.target.value, ...(e.target.value === "" || e.target.value === "ORDINARY_INVOICE" ? { esfRelatedInvoiceUuid: "", esfRelatedInvoiceName: "" } : {}) } as Partial<TFields>)}
+                  options={[{ value: "", label: "—" }, ...(esfDict?.invoiceType ?? []).map((o) => ({ value: o.code, label: o.label || o.code }))]} />
+                {form.fields.esfInvoiceType && form.fields.esfInvoiceType !== "ORDINARY_INVOICE" && (
+                  <FormLookup form={form} field="esfRelatedInvoice" endpoint="outgoing-invoices" displayField="number" disabled={form.isLoading} />
+                )}
+              </Group>
+              <Group>
+                <FieldSelect label={translate("esfSellerCategory")} name={`${form.formUid}_esfSellerType`}
+                  value={form.fields.esfSellerType} disabled={form.isLoading}
+                  onChange={(e) => form.setField("esfSellerType", e.target.value)}
+                  options={[{ value: "", label: "—" }, ...(esfDict?.sellerType ?? []).map((o) => ({ value: o.code, label: o.label || o.code }))]} />
+                <FieldSelect label={translate("esfCustomerCategory")} name={`${form.formUid}_esfCustomerType`}
+                  value={form.fields.esfCustomerType} disabled={form.isLoading}
+                  onChange={(e) => form.setField("esfCustomerType", e.target.value)}
+                  options={[{ value: "", label: "—" }, ...(esfDict?.customerType ?? []).map((o) => ({ value: o.code, label: o.label || o.code }))]} />
+              </Group>
+              <Group>
+                <FormLookup form={form} field="esfConsignor" endpoint="organizations" disabled={form.isLoading} />
+                <FormLookup form={form} field="esfConsignee" endpoint="counterparties" disabled={form.isLoading} />
+              </Group>
+              {form.fields.esfCustomerType === "PUBLIC_OFFICE" && (
+                <Group>
+                  <Field label={translate("esfPoBik")} name={`${form.formUid}_esfPoBik`} value={form.fields.esfPoBik} onChange={(e) => form.setField("esfPoBik", e.target.value)} disabled={form.isLoading} />
+                  <Field label={translate("esfPoIik")} name={`${form.formUid}_esfPoIik`} value={form.fields.esfPoIik} onChange={(e) => form.setField("esfPoIik", e.target.value)} disabled={form.isLoading} />
+                  <Field label={translate("esfPoPayPurpose")} name={`${form.formUid}_esfPoPayPurpose`} value={form.fields.esfPoPayPurpose} onChange={(e) => form.setField("esfPoPayPurpose", e.target.value)} disabled={form.isLoading} />
+                  <Field label={translate("esfPoProductCode")} name={`${form.formUid}_esfPoProductCode`} value={form.fields.esfPoProductCode} onChange={(e) => form.setField("esfPoProductCode", e.target.value)} disabled={form.isLoading} />
+                </Group>
+              )}
+            </GroupCol>
+          </div>
+        )
+      }] : []),
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleCounterpartySelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, esfDict]);
 
     return (
       <FormRequiredScope docType={cfg.docType} active>

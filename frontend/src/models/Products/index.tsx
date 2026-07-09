@@ -32,8 +32,8 @@ import { ProductPriceCorrection } from "src/models/ProductPriceProcessing";
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
 
-interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; tnvedCode: string; truOriginCode: string; }
-const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "", tnvedCode: "", truOriginCode: "" };
+interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; tnvedCode: string; truOriginCode: string; catalogTruId: string; }
+const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "", tnvedCode: "", truOriginCode: "", catalogTruId: "" };
 
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useUserAccessRight("Product");
@@ -63,14 +63,14 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       isService: d.isService === true,
       brandUuid: d.brandUuid ?? "", brandName: d.brand?.name ?? "",
       unitOfMeasureUuid: d.unitOfMeasureUuid ?? "", unitOfMeasureName: d.unitOfMeasure?.name ?? "",
-      tnvedCode: d.tnvedCode ?? "", truOriginCode: d.truOriginCode ?? "",
+      tnvedCode: d.tnvedCode ?? "", truOriginCode: d.truOriginCode ?? "", catalogTruId: d.catalogTruId ?? "",
     }),
     buildPayload: (fd) => {
       if (!fd.name?.trim()) return "Наименование обязательно";
       // price НЕ отправляем: Product.price — денормализованная цена, автоматически
       // пересчитывается из вкладки «Цены» (services/productPricing.js). Источник
       // истины — «Цены», ручной ввод убран как избыточный.
-      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null, tnvedCode: fd.tnvedCode?.trim() || null, truOriginCode: fd.truOriginCode || null };
+      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null, tnvedCode: fd.tnvedCode?.trim() || null, truOriginCode: fd.truOriginCode || null, catalogTruId: fd.catalogTruId?.trim() || null };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
     afterSave: async (saved) => {
@@ -105,7 +105,16 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
                   <FormLookup form={form} field="unitOfMeasure" endpoint="unit-of-measures" maxWidth="160px" />
                 </Group>
                 <Group className={styles.w1of2}>
-                  <FieldToggle label={translate("isService")} value={form.fields.isService} onChange={(v) => form.setField("isService", v)} disabled={form.isLoading} />
+                  <FieldToggle label={translate("isService")} value={form.fields.isService} disabled={form.isLoading}
+                    onChange={(v) => {
+                      // Авто-подстановка признака происхождения ЭСФ: услуга → «5», товар → «1».
+                      // Не затираем ручной выбор (2/3/4) — только пустое или дефолт.
+                      const cur = form.fields.truOriginCode;
+                      const patch: Partial<TFields> = { isService: v };
+                      if (v && (!cur || cur === "1")) patch.truOriginCode = "5";
+                      else if (!v && (!cur || cur === "5")) patch.truOriginCode = "1";
+                      form.setFields(patch);
+                    }} />
                 </Group>
               </GroupRow>
               {/* Реквизиты для гос-документов (СНТ): ТН ВЭД ЕАЭС + признак происхождения ТРУ */}
@@ -117,6 +126,11 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
                   <FieldSelect label={translate("truOriginCode")} name={`${form.formUid}_truOrigin`} value={form.fields.truOriginCode} disabled={form.isLoading}
                     onChange={(e) => form.setField("truOriginCode", e.target.value)}
                     options={[{ value: "", label: "—" }, ...(esfDict?.truOrigin ?? []).map((o) => ({ value: o.code, label: `${o.code} — ${o.label}` }))]} />
+                </Group>
+              </GroupRow>
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  <ClassifierLookup type="gsvs" label={translate("catalogTruId")} name={`${form.formUid}_catalogTru`} value={form.fields.catalogTruId} onChange={(code) => form.setField("catalogTruId", code)} disabled={form.isLoading} />
                 </Group>
               </GroupRow>
               <ProductImagesField productUuid={form.fields.uuid} disabled={form.isLoading || !canWrite} />

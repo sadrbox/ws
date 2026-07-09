@@ -36,6 +36,14 @@ export interface ModelRegistryEntry {
 
 const MODEL_REGISTRY: ModelRegistryEntry[] = [
 	{
+		endpoint: "classifiers",
+		module: () => import("src/models/Classifiers"),
+		formName: "ClassifierPicker",
+		listName: "ClassifierPicker",
+		storageKey: "classifier-picker",
+		label: "Классификатор",
+	},
+	{
 		endpoint: "product-prices",
 		module: () => import("src/models/ProductPriceProcessing"),
 		formName: "ProductPriceCorrection",

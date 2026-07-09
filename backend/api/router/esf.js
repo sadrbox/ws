@@ -114,13 +114,16 @@ router.post(`/${ROUTE}/invoices/:uuid/build-xml`, async (req, res) => {
 		if (invoice.counterparty) {
 			invoice.counterparty.address = await getLegalAddress("counterparty", invoice.counterpartyUuid);
 		}
-		// Наименование ТН ВЭД (G 3.1) — из классификатора tnved по коду товара.
-		const tnvedCodes = [...new Set((invoice.outgoingInvoiceItems || []).map((it) => it.product?.tnvedCode).filter(Boolean))];
+		// Наименование ТН ВЭД (G 3.1) — из классификатора tnved по эффективному коду
+		// позиции (item.tnvedCode приоритетнее карточки товара).
+		const effTnved = (it) => it.tnvedCode || it.product?.tnvedCode || null;
+		const tnvedCodes = [...new Set((invoice.outgoingInvoiceItems || []).map(effTnved).filter(Boolean))];
 		if (tnvedCodes.length) {
 			const rows = await prisma.classifier.findMany({ where: { type: "tnved", code: { in: tnvedCodes } }, select: { code: true, name: true } });
 			const nameByCode = new Map(rows.map((r) => [r.code, r.name]));
 			for (const it of invoice.outgoingInvoiceItems || []) {
-				if (it.product?.tnvedCode) it.product.tnvedName = nameByCode.get(it.product.tnvedCode) || null;
+				const code = effTnved(it);
+				if (code) it.tnvedName = nameByCode.get(code) || null;
 			}
 		}
 		// Исправленный/дополнительный ЭСФ: связь с основным (relatedInvoice) по его дате/номеру/рег.№.

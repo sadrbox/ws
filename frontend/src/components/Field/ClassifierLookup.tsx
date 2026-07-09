@@ -1,11 +1,11 @@
 // Поле-автокомплит по классификатору РК/ЕАЭС (страны/ТН ВЭД/КАТО/ГС ВС).
-// Хранит КОД (не uuid). Поиск по коду/наименованию через GET /classifiers.
-// См. backend/services/classifiers, frontend/src/services/classifiers/api.ts.
-import { FC, useEffect, useRef, useState } from "react";
+// Хранит КОД (не uuid). Обёртка над LookupField — единый вид/поведение с остальными
+// лукапами (стили FieldWrapper, портал-дропдаун в ячейках, «Быстрый выбор» + «Список»).
+// Отображает «код — наименование» (имя резолвится по коду, если не передано явно).
+import { FC } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Field } from "./index";
-import { fetchClassifiers, type ClassifierItem } from "src/services/classifiers/api";
-import styles from "./ClassifierLookup.module.scss";
+import LookupField from "./LookupField";
+import { fetchClassifiers } from "src/services/classifiers/api";
 
 interface Props {
 	/** Тип классификатора: country | tnved | kato | gsvs | … */
@@ -14,67 +14,41 @@ interface Props {
 	name: string;
 	/** Хранимый код. */
 	value: string;
-	/** Отображаемое наименование (если известно). */
+	/** Отображаемое наименование (если известно — иначе резолвится по коду). */
 	displayName?: string;
 	onChange: (code: string, name: string) => void;
 	disabled?: boolean;
 	width?: string;
+	variant?: "default" | "table";
 }
 
 /** Автокомплит по классификатору. Показывает «код — наименование», хранит код. */
-export const ClassifierLookup: FC<Props> = ({ type, label, name, value, displayName, onChange, disabled, width }) => {
-	const [text, setText] = useState("");
-	const [open, setOpen] = useState(false);
-	const [debounced, setDebounced] = useState("");
-	const boxRef = useRef<HTMLDivElement>(null);
-
-	// Текст поля: при закрытом списке — «код — наименование», иначе — ввод пользователя.
-	const displayValue = open ? text : (value ? `${value}${displayName ? ` — ${displayName}` : ""}` : "");
-
-	useEffect(() => {
-		const t = setTimeout(() => setDebounced(text.trim()), 250);
-		return () => clearTimeout(t);
-	}, [text]);
-
-	const { data } = useQuery({
-		queryKey: ["classifier-lookup", type, debounced],
-		queryFn: async () => (await fetchClassifiers(type, debounced, undefined, 20)).items,
-		enabled: open,
-		staleTime: 60_000,
+export const ClassifierLookup: FC<Props> = ({ type, label, name, value, displayName, onChange, disabled, width, variant }) => {
+	// Резолв наименования по хранимому коду (когда имя не передано, напр. после перезагрузки).
+	const { data: resolvedName } = useQuery({
+		queryKey: ["classifier-name", type, value],
+		queryFn: async () => (await fetchClassifiers(type, value, undefined, 10)).items.find((i) => i.code === value)?.name ?? "",
+		enabled: !!value && !displayName,
+		staleTime: 5 * 60_000,
 	});
-	const items: ClassifierItem[] = data ?? [];
-
-	// Клик вне — закрыть.
-	useEffect(() => {
-		if (!open) return;
-		const onDoc = (e: MouseEvent) => { if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false); };
-		document.addEventListener("mousedown", onDoc);
-		return () => document.removeEventListener("mousedown", onDoc);
-	}, [open]);
-
-	const pick = (it: ClassifierItem) => { onChange(it.code, it.name); setOpen(false); setText(""); };
-
-	const openList = () => { if (!disabled && !open) { setText(""); setOpen(true); } };
-
+	const shownName = displayName || resolvedName || "";
+	const displayValue = value ? (shownName ? `${value} — ${shownName}` : value) : "";
 	return (
-		<div className={styles.Wrap} ref={boxRef} onClick={openList} style={width ? { width } : undefined}>
-			<Field
-				label={label}
-				name={name}
-				value={displayValue}
-				disabled={disabled}
-				onChange={(e) => { setText(e.target.value); if (!open) setOpen(true); }}
-			/>
-			{open && items.length > 0 && (
-				<ul className={styles.List}>
-					{items.map((it) => (
-						<li key={it.code} className={styles.Item} onMouseDown={() => pick(it)}>
-							<span className={styles.Code}>{it.code}</span> {it.name}
-						</li>
-					))}
-				</ul>
-			)}
-		</div>
+		<LookupField
+			label={label ?? ""}
+			name={name}
+			value={value}
+			displayValue={displayValue}
+			endpoint="classifiers"
+			displayField="name"
+			extraParams={{ type }}
+			getSuggestionLabel={(i) => `${i.code}${i.name ? ` — ${i.name}` : ""}`}
+			visibleActions={["quickselect", "list"]}
+			disabled={disabled}
+			width={width}
+			variant={variant ?? "default"}
+			onSelect={(_uuid, _display, item) => onChange(String(item.code ?? ""), String(item.name ?? ""))}
+		/>
 	);
 };
 

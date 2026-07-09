@@ -105,11 +105,13 @@ async function verifyOfflineCredentials(username: string, password: string): Pro
 export async function login(
 	username: string,
 	password?: string,
-): Promise<{ success: boolean; user?: AuthUser; message?: string; offline?: boolean }> {
+	code?: string,
+): Promise<{ success: boolean; user?: AuthUser; message?: string; offline?: boolean; twoFactorRequired?: boolean }> {
 	try {
 		const res = await apiClient.post<LoginResponse>("/auth/login", {
 			username,
 			password: password || undefined,
+			code: code || undefined,
 		});
 		const data = res.data;
 
@@ -125,6 +127,10 @@ export async function login(
 
 		return { success: false, message: data.message || "Ошибка авторизации" };
 	} catch (err: any) {
+		// Требуется код 2FA — сообщаем форме, чтобы показать поле ввода кода.
+		if (err.response?.data?.twoFactorRequired) {
+			return { success: false, twoFactorRequired: true, message: err.response.data.message || "Введите код двухфакторной аутентификации" };
+		}
 		// ── Offline fallback ──
 		// Если ошибка сети и у нас есть кэшированные credentials — проверяем
 		if (isNetworkError(err) && password) {
@@ -296,3 +302,13 @@ export async function switchOrganization(
 		return { success: false, message: err.response?.data?.message || err.message || "Ошибка соединения" };
 	}
 }
+
+// ── Двухфакторная аутентификация (TOTP) ──────────────────────────────────────
+export const twoFactorStatus = () =>
+	apiClient.get<{ success: boolean; enabled: boolean }>("/auth/2fa/status").then((r) => r.data);
+export const twoFactorSetup = () =>
+	apiClient.post<{ success: boolean; secret: string; otpauthUrl: string }>("/auth/2fa/setup").then((r) => r.data);
+export const twoFactorEnable = (code: string) =>
+	apiClient.post<{ success: boolean; message: string }>("/auth/2fa/enable", { code }).then((r) => r.data);
+export const twoFactorDisable = (code: string) =>
+	apiClient.post<{ success: boolean; message: string }>("/auth/2fa/disable", { code }).then((r) => r.data);

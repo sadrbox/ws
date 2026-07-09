@@ -206,8 +206,17 @@ export function createDocumentItemsRouter({
 	// — включается для документов-приёмников «Перезаполнить по основанию»,
 	// чтобы refill был идемпотентным (без дублирования строк).
 	hasSourceRowId = false,
+	// Модель строки имеет пер-строчные поля ЭСФ (tnvedCode/truOriginCode) —
+	// только для позиций СФ исходящей (переопределяют карточку товара).
+	esfLineFields = false,
 }) {
 	const router = express.Router();
+
+	/** Пер-строчные ЭСФ-поля строки (только для моделей с esfLineFields). */
+	const ESF_LINE_FIELDS = ["tnvedCode", "truOriginCode", "productDeclaration", "productNumberInDeclaration"];
+	const esfFields = (body) => (esfLineFields
+		? Object.fromEntries(ESF_LINE_FIELDS.map((f) => [f, body[f] || null]))
+		: {});
 
 	// Изоляция: строки документа доступны только если РОДИТЕЛЬСКИЙ документ
 	// принадлежит организации пользователя (строки сами по себе фильтра не имеют).
@@ -456,6 +465,7 @@ export function createDocumentItemsRouter({
 					...(hasSourceRowId && req.body.sourceRowId
 						? { sourceRowId: String(req.body.sourceRowId) }
 						: {}),
+					...esfFields(req.body),
 					...denorm,
 				};
 			} else {
@@ -467,6 +477,7 @@ export function createDocumentItemsRouter({
 					price: prc,
 					amount,
 					unitOfMeasureUuid: unitOfMeasureUuid || null,
+					...esfFields(req.body),
 				};
 			}
 
@@ -517,6 +528,9 @@ export function createDocumentItemsRouter({
 			// по основанию (без sourceRowId) сохранялось после первого перезаполнения.
 			if (hasSourceRowId && req.body.sourceRowId !== undefined) {
 				data.sourceRowId = req.body.sourceRowId ? String(req.body.sourceRowId) : null;
+			}
+			if (esfLineFields) {
+				for (const f of ESF_LINE_FIELDS) if (req.body[f] !== undefined) data[f] = req.body[f] || null;
 			}
 
 			const parseNum = (v) => {
@@ -738,6 +752,7 @@ export function createDocumentItemsRouter({
 								...(hasSourceRowId && data.sourceRowId
 									? { sourceRowId: String(data.sourceRowId) }
 									: {}),
+								...esfFields(data),
 								...denorm,
 							};
 						} else {
@@ -746,6 +761,7 @@ export function createDocumentItemsRouter({
 								quantity: qty, price: prc,
 								amount: Math.round(qty * prc * 100) / 100,
 								unitOfMeasureUuid: data.unitOfMeasureUuid || null,
+								...esfFields(data),
 							};
 						}
 						await tx[MODEL].create({ data: itemData });
@@ -759,6 +775,9 @@ export function createDocumentItemsRouter({
 							updateData.unitOfMeasure = data.unitOfMeasureUuid ? { connect: { uuid: data.unitOfMeasureUuid } } : { disconnect: true };
 						if (hasSourceRowId && data.sourceRowId !== undefined)
 							updateData.sourceRowId = data.sourceRowId ? String(data.sourceRowId) : null;
+						if (esfLineFields) {
+							for (const f of ESF_LINE_FIELDS) if (data[f] !== undefined) updateData[f] = data[f] || null;
+						}
 						const qty = parseNum(data.quantity);
 						const prc = parseNum(data.price);
 						if (qty !== undefined) updateData.quantity = qty;

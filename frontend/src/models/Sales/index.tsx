@@ -600,6 +600,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   // ВАЖНО: возвращаемый ReactNode (портал) надо отрендерить в JSX,
   // иначе React не выполнит createPortal и кнопка не появится.
   const hasDirtyItems = (saleItems.pending?.length ?? 0) > 0;
+  const isSavedDoc = form.isEditMode && !!form.fields.uuid;
+  const existingDeps = useExistingDependents(isSavedDoc ? form.fields.uuid : undefined, SALES_DEPENDENT_ENDPOINTS);
   const handleCreateFromBasis = useCallback(async (
     FormComponent: typeof OutgoingInvoicesForm,
     docLabel: string,
@@ -618,17 +620,16 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         sourceItemsParentField: "saleUuid",
         mapFields: mapCommonTradeFields,
         existingCheckEndpoint,
+        knownExisting: existingCheckEndpoint ? (existingDeps[existingCheckEndpoint] ?? null) : null,
       },
       addPane,
     );
-  }, [form.fields, addPane]);
+  }, [form.fields, addPane, existingDeps]);
 
   const printDisabled = form.isLoading || form.isDirty || hasDirtyItems;
   const printTitle = (form.isDirty || hasDirtyItems)
     ? "Сохраните изменения перед печатью"
     : undefined;
-  const isSavedDoc = form.isEditMode && !!form.fields.uuid;
-  const existingDeps = useExistingDependents(isSavedDoc ? form.fields.uuid : undefined, SALES_DEPENDENT_ENDPOINTS);
   // ── Гос-документы РК: ЭАВР (акт работ/услуг) и СНТ (накладная) ──
   const govDocs = useGovDocs();
   const govFields = form.fields as unknown as { awpStatus?: string | null; awpId?: string | null; sntStatus?: string | null; sntId?: string | null };

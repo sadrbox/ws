@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { prisma } from "../../prisma/prisma-client.js";
 import { generateToken, authMiddleware } from "../../utils/auth.js";
+import { generateSecret, verifyTotp, otpauthUrl } from "../../services/twoFactor.js";
 
 const router = express.Router();
 
@@ -98,6 +99,8 @@ router.post("/auth/login", async (req, res) => {
 				uuid: true,
 				username: true,
 				password: true,
+				twoFactorEnabled: true,
+				twoFactorSecret: true,
 				employeeUuid: true,
 				organizationUuid: true,
 				isSuperAdmin: true,
@@ -192,6 +195,18 @@ router.post("/auth/login", async (req, res) => {
 					success: false,
 					message: INVALID_CREDENTIALS,
 				});
+			}
+		}
+
+		// Двухфакторная аутентификация (opt-in): если включена — требуем валидный TOTP-код.
+		// Для пользователей БЕЗ 2FA поведение входа не меняется.
+		if (user.twoFactorEnabled) {
+			const code = req.body.code;
+			if (!code) {
+				return res.status(401).json({ success: false, twoFactorRequired: true, message: "Введите код из приложения-аутентификатора" });
+			}
+			if (!verifyTotp(user.twoFactorSecret, code)) {
+				return res.status(401).json({ success: false, twoFactorRequired: true, message: "Неверный код двухфакторной аутентификации" });
 			}
 		}
 
@@ -383,6 +398,66 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 		return res.status(200).json({ success: true, message: "Пароль изменён" });
 	} catch (error) {
 		console.error("POST /auth/change-password error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ============================================
+// Двухфакторная аутентификация (TOTP, opt-in)
+// ============================================
+
+// GET /auth/2fa/status — включена ли 2FA у текущего пользователя
+router.get("/auth/2fa/status", authMiddleware, async (req, res) => {
+	try {
+		const u = await prisma.user.findUnique({ where: { uuid: req.user.uuid }, select: { twoFactorEnabled: true } });
+		return res.json({ success: true, enabled: !!u?.twoFactorEnabled });
+	} catch (error) {
+		console.error("GET /auth/2fa/status error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// POST /auth/2fa/setup — сгенерировать секрет (2FA ещё НЕ активна), вернуть для приложения
+router.post("/auth/2fa/setup", authMiddleware, async (req, res) => {
+	try {
+		const u = await prisma.user.findUnique({ where: { uuid: req.user.uuid }, select: { username: true, twoFactorEnabled: true } });
+		if (u?.twoFactorEnabled) return res.status(400).json({ success: false, message: "2FA уже включена" });
+		const secret = generateSecret();
+		await prisma.user.update({ where: { uuid: req.user.uuid }, data: { twoFactorSecret: secret } });
+		return res.json({ success: true, secret, otpauthUrl: otpauthUrl(secret, u?.username || req.user.uuid) });
+	} catch (error) {
+		console.error("POST /auth/2fa/setup error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// POST /auth/2fa/enable { code } — подтвердить код и активировать 2FA
+router.post("/auth/2fa/enable", authMiddleware, async (req, res) => {
+	try {
+		const { code } = req.body || {};
+		const u = await prisma.user.findUnique({ where: { uuid: req.user.uuid }, select: { twoFactorSecret: true, twoFactorEnabled: true } });
+		if (!u?.twoFactorSecret) return res.status(400).json({ success: false, message: "Сначала выполните настройку (setup)" });
+		if (u.twoFactorEnabled) return res.status(400).json({ success: false, message: "2FA уже включена" });
+		if (!verifyTotp(u.twoFactorSecret, code)) return res.status(400).json({ success: false, message: "Неверный код — проверьте время на устройстве" });
+		await prisma.user.update({ where: { uuid: req.user.uuid }, data: { twoFactorEnabled: true } });
+		return res.json({ success: true, message: "Двухфакторная аутентификация включена" });
+	} catch (error) {
+		console.error("POST /auth/2fa/enable error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// POST /auth/2fa/disable { code } — отключить 2FA (нужен текущий код)
+router.post("/auth/2fa/disable", authMiddleware, async (req, res) => {
+	try {
+		const { code } = req.body || {};
+		const u = await prisma.user.findUnique({ where: { uuid: req.user.uuid }, select: { twoFactorSecret: true, twoFactorEnabled: true } });
+		if (!u?.twoFactorEnabled) return res.json({ success: true, message: "2FA не была включена" });
+		if (!verifyTotp(u.twoFactorSecret, code)) return res.status(400).json({ success: false, message: "Неверный код" });
+		await prisma.user.update({ where: { uuid: req.user.uuid }, data: { twoFactorEnabled: false, twoFactorSecret: null } });
+		return res.json({ success: true, message: "Двухфакторная аутентификация отключена" });
+	} catch (error) {
+		console.error("POST /auth/2fa/disable error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

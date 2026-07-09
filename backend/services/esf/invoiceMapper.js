@@ -159,17 +159,23 @@ function productXml(item, index) {
 	const ndsRate = item.vatRate != null ? String(Math.round(Number(item.vatRate))) : null;
 	const turnoverSize = money(item.amountWithoutVat); // облагаемый оборот = без НДС
 	const unitPrice = qty > 0 ? money(Number(item.amountWithoutVat ?? 0) / qty, 6) : null;
-	// unitCode (G 4) — это КОД ТОВАРА ТН ВЭД ЕАЭС (не код ед.изм!); по XSD [0-9]{1,10}.
-	const unitCode = product.tnvedCode && /^[0-9]{1,10}$/.test(product.tnvedCode) ? product.tnvedCode : null;
-	// truOriginCode (G 2) — признак происхождения ТРУ [1-6] из карточки товара.
-	const truOrigin = /^[1-6]$/.test(String(product.truOriginCode || "")) ? String(product.truOriginCode) : DEFAULT_TRU_ORIGIN;
+	// unitCode (G 4) — КОД ТОВАРА ТН ВЭД ЕАЭС (не код ед.изм!); по XSD [0-9]{1,10}.
+	// Пер-строчное значение (item.tnvedCode) приоритетнее карточки товара.
+	const tnved = item.tnvedCode || product.tnvedCode;
+	const unitCode = tnved && /^[0-9]{1,10}$/.test(tnved) ? tnved : null;
+	// truOriginCode (G 2) — признак происхождения ТРУ [1-6]; пер-строчное приоритетнее товара.
+	// Fallback (если не задан): услуга → «5 Работа, услуга», иначе «1 Товар РК».
+	const originRaw = item.truOriginCode || product.truOriginCode;
+	const truOrigin = /^[1-6]$/.test(String(originRaw || ""))
+		? String(originRaw)
+		: (product.isService ? "5" : DEFAULT_TRU_ORIGIN);
 	// gtinCode (G 17.1) — из штрихкода товара, если это валидный GTIN (8/12/13/14 цифр).
 	const gtin = /^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(String(product.barcode || "")) ? String(product.barcode) : null;
 	// Акциз (G 9/10) — из позиции; опускаем при нуле.
 	const exciseRateN = Number(item.exciseRate ?? 0);
 	const exciseAmountN = Number(item.exciseAmount ?? 0);
 	// tnvedName (G 3.1) — наименование по классификатору ТН ВЭД (проставляется в esf.js).
-	const tnvedName = product.tnvedName || null;
+	const tnvedName = item.tnvedName || product.tnvedName || null;
 
 	// Порядок по Product (xs:sequence, алфавитный): catalogTruId, description,
 	// exciseAmount?, exciseRate?, gtinCode?, ndsAmount, ndsRate?, priceWithTax,
@@ -177,15 +183,18 @@ function productXml(item, index) {
 	// unitCode?, unitNomenclature?, unitPrice?
 	return (
 		"<product>" +
-		reqTag("catalogTruId", DEFAULT_CATALOG_TRU_ID) +
+		reqTag("catalogTruId", product.catalogTruId || DEFAULT_CATALOG_TRU_ID) +
 		tag("description", product.name || `Позиция ${index + 1}`) +
 		tag("exciseAmount", exciseAmountN ? money(exciseAmountN) : null) +
 		tag("exciseRate", exciseRateN ? String(exciseRateN) : null) +
 		tag("gtinCode", gtin) +
+		tag("kpvedCode", product.catalogTruId) +
 		reqTag("ndsAmount", ndsAmount) +
 		tag("ndsRate", ndsRate) +
 		reqTag("priceWithTax", priceWithTax) +
 		reqTag("priceWithoutTax", priceWithoutTax) +
+		tag("productDeclaration", item.productDeclaration) +
+		tag("productNumberInDeclaration", item.productNumberInDeclaration) +
 		tag("quantity", qty ? money(qty, 6) : null) +
 		tag("tnvedName", tnvedName) +
 		reqTag("truOriginCode", truOrigin) +

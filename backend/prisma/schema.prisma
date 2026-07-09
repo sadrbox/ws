@@ -13,6 +13,10 @@ model User {
   username                     String?
   email                        String?
   password                     String?
+  // Двухфакторная аутентификация (TOTP, opt-in). secret хранится, пока идёт настройка;
+  // enabled=true — 2FA активна и требуется код при входе.
+  twoFactorEnabled             Boolean               @default(false)
+  twoFactorSecret              String?
   employeeUuid                 String?
   isSuperAdmin                 Boolean               @default(false)
   avatarPath                   String?
@@ -888,6 +892,9 @@ model Product {
   // признак происхождения ТРУ [1-6]. См. классификатор type="tnved".
   tnvedCode                String?
   truOriginCode            String?
+  // Идентификатор позиции в каталоге ГС ВС (ТРУ) — графа G18 ЭСФ (catalogTruId).
+  // Хранит код позиции ГС ВС; см. классификатор type="gsvs".
+  catalogTruId             String?
   isService                Boolean                   @default(false)
   /// Продажная цена в Product НЕ хранится — источник истины таблица «Цены»
   /// (ProductPrice, тип «по умолчанию»); автоподстановка через product-prices/price-list.
@@ -1066,6 +1073,14 @@ model OutgoingInvoiceItem {
   product             Product?        @relation(fields: [productUuid], references: [uuid])
   outgoingInvoice     OutgoingInvoice @relation(fields: [outgoingInvoiceUuid], references: [uuid], onDelete: Cascade)
   unitOfMeasure       UnitOfMeasure?  @relation(fields: [unitOfMeasureUuid], references: [uuid])
+
+  // Пер-строчные метаданные ЭСФ (переопределяют карточку товара): ТН ВЭД (G4/3.1),
+  // признак происхождения (G2). Заполняются автоматически при выборе товара.
+  tnvedCode           String?
+  truOriginCode       String?
+  // ГТД/декларация на товары (импорт): номер декларации и № товарной позиции в ней.
+  productDeclaration          String?
+  productNumberInDeclaration  String?
 
   sourceRowId String?
 

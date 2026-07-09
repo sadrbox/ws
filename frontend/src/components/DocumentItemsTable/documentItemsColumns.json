@@ -57,6 +57,24 @@
 		"alignment": "center"
 	},
 	{
+		"identifier": "productDeclaration",
+		"hint": "Номер декларации на товары (ГТД / заявление ТС / СТ-1 / СТ-KZ) — ЭСФ РК",
+		"type": "string",
+		"visible": true,
+		"width": "160px",
+		"minWidth": "100px",
+		"alignment": "left"
+	},
+	{
+		"identifier": "productNumberInDeclaration",
+		"hint": "№ товарной позиции в декларации на товары — ЭСФ РК",
+		"type": "string",
+		"visible": true,
+		"width": "120px",
+		"minWidth": "80px",
+		"alignment": "left"
+	},
+	{
 		"identifier": "unitOfMeasure.name",
 		"hint": "Единица измерения — графа 6 ЭСФ РК",
 		"type": "string",

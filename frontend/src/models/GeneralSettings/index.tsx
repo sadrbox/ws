@@ -2,6 +2,7 @@ import { FC } from "react";
 import { translate } from "src/i18";
 import { useGeneralSettings, UTC_OFFSET_OPTIONS } from "src/hooks/useGeneralSettings";
 import EgovSettingsSection from "./EgovSettingsSection";
+import TwoFactorSection from "./TwoFactorSection";
 import styles from "./GeneralSettings.module.scss";
 
 const GeneralSettings: FC = () => {
@@ -29,6 +30,7 @@ const GeneralSettings: FC = () => {
           <span className={styles.Hint}>{translate("timezoneHint")}</span>
         </div>
       </div>
+      <TwoFactorSection />
       <EgovSettingsSection />
     </div>
   );

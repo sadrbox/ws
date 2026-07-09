@@ -173,7 +173,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { name, sku, barcode, brandUuid, unitOfMeasureUuid, isService, tnvedCode, truOriginCode } = req.body;
+		const { name, sku, barcode, brandUuid, unitOfMeasureUuid, isService, tnvedCode, truOriginCode, catalogTruId } = req.body;
 		if (!name?.trim())
 			return res
 				.status(400)
@@ -191,6 +191,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				isService: isService === true,
 				tnvedCode: tnvedCode?.trim() || null,
 				truOriginCode: truOriginCode?.trim() || null,
+				catalogTruId: catalogTruId?.trim() || null,
 				brandUuid: brandUuid || null,
 				unitOfMeasureUuid: unitOfMeasureUuid || null,
 				organizationUuid: req.user?.organizationUuid ?? null,
@@ -212,7 +213,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const data = {};
-		const strFields = ["name", "sku", "barcode", "brandUuid", "unitOfMeasureUuid", "tnvedCode", "truOriginCode"];
+		const strFields = ["name", "sku", "barcode", "brandUuid", "unitOfMeasureUuid", "tnvedCode", "truOriginCode", "catalogTruId"];
 		for (const f of strFields) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
