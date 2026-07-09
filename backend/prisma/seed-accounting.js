@@ -38,6 +38,7 @@ export const KZ_CHART_OF_ACCOUNTS = [
 	{ code: "2410", name: "Основные средства", accountType: "active", sub: ["FixedAsset"] },
 	{ code: "3310", name: "Краткосрочная задолженность поставщикам и подрядчикам", accountType: "passive", sub: ["Counterparty", "Contract"] },
 	{ code: "3130", name: "Налог на добавленную стоимость (к уплате)", accountType: "passive" },
+	{ code: "3390", name: "Прочая краткосрочная кредиторская задолженность (таможенные платежи)", accountType: "passive" },
 	{ code: "3350", name: "Краткосрочная задолженность по оплате труда", accountType: "passive", sub: ["Employee"] },
 	{ code: "5510", name: "Нераспределённая прибыль (непокрытый убыток) отчётного года", accountType: "passive" },
 	{ code: "5610", name: "Итоговая прибыль (итоговый убыток)", accountType: "passive" },

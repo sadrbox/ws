@@ -30,6 +30,8 @@ const MODEL_MAP = {
 	warehouses: "warehouse",
 	sales: "sale",
 	purchases: "purchase",
+	importdeclarations: "importDeclaration",
+	importdeclarationitems: "importDeclarationItem",
 	"outgoing-invoices": "outgoingInvoice",
 	"incoming-invoices": "incomingInvoice",
 	"payment-invoices": "paymentInvoice",

@@ -17,6 +17,7 @@
 import { prisma } from "../prisma/prisma-client.js";
 import { reservedQuantity } from "./reservationRegister.js";
 import { resolveUnitCost } from "./accountingPosting.js";
+import { allocateImportLandedCost } from "./importLandedCost.js";
 
 // Конфигурация документов-регистраторов.
 const DOC_CONFIG = {
@@ -52,6 +53,12 @@ const DOC_CONFIG = {
 		itemModel: "purchaseReturnItem",
 		parentField: "purchaseReturnUuid",
 		movements: [{ type: "out", warehouseField: "warehouseUuid" }],
+	},
+	import_declaration: {
+		parentModel: "importDeclaration",
+		itemModel: "importDeclarationItem",
+		parentField: "importDeclarationUuid",
+		movements: [{ type: "in", warehouseField: "warehouseUuid" }],
 	},
 };
 
@@ -136,6 +143,13 @@ export async function reconcileDocumentRegister(
 			if (basisSale?.date) saleReturnCostDate = basisSale.date;
 		}
 
+		// ГТД по импорту: стоимость прихода = landed cost (таможенная стоимость +
+		// капитализированные пошлина/сбор/акциз [+ импортный НДС для неплательщика]).
+		const landedMap =
+			documentType === "import_declaration"
+				? allocateImportLandedCost(doc, items, useVat)
+				: null;
+
 		// 4. Формируем движения (приход/расход) по каждой строке-товару.
 		const records = [];
 		for (const it of items) {
@@ -157,6 +171,11 @@ export async function reconcileDocumentRegister(
 				const unit = await resolveUnitCost(doc.organizationUuid ?? null, it.productUuid, doc.warehouseUuid ?? null, saleReturnCostDate, qty, client);
 				const costValue = Math.round((Number(unit) || 0) * qty * 100) / 100;
 				if (costValue > 0) value = costValue;
+			}
+			// ГТД: приход по landed cost (с капитализированными таможенными платежами).
+			if (landedMap) {
+				const landed = landedMap.get(it.uuid);
+				if (landed) value = landed.landed;
 			}
 			if (qty === 0 && value === 0) continue;
 			for (const mv of cfg.movements) {

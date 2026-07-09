@@ -29,6 +29,7 @@ export type DocumentType =
 	| "reservation"
 	| "purchase_order"
 	| "bank_statement"
+	| "import_declaration"
 	| "month_close";
 
 export interface ValidationError {
@@ -139,6 +140,15 @@ export const REQUIRED_FIELDS_MAP: Record<DocumentType, readonly string[]> = {
 
 	// ── Банковская выписка ───────────────────────────────────────────────────
 	bank_statement: ["date", "organizationUuid", "counterpartyUuid"],
+
+	// ── ГТД по импорту ───────────────────────────────────────────────────────
+	import_declaration: [
+		"date",
+		"organizationUuid",
+		"counterpartyUuid",
+		"warehouseUuid",
+		"declarationNumber",
+	],
 
 	// ── Регламентные операции ────────────────────────────────────────────────
 	month_close: ["periodStart", "periodEnd", "organizationUuid"],
@@ -252,6 +262,9 @@ export function getFieldLabel(fieldName: string): string {
 		employeeUuid: "Сотрудник",
 		period: "Период",
 		amount: "Сумма",
+		declarationNumber: "№ декларации (ГТД)",
+		declarationDate: "Дата декларации",
+		countryCode: "Страна происхождения",
 	};
 	return labels[fieldName] ?? fieldName;
 }

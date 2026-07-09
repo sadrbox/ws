@@ -246,6 +246,8 @@ const ROUTE_TO_MODEL = {
 	"reservation-items": "ReservationItem",
 	"purchase-orders": "PurchaseOrder",
 	"purchase-order-items": "PurchaseOrderItem",
+	importdeclarations: "ImportDeclaration",
+	importdeclarationitems: "ImportDeclarationItem",
 	"bank-statements": "BankStatement",
 	"scheduled-tasks": "ScheduledTask",
 	"inventory-transfers": "InventoryTransfer",

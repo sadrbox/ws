@@ -38,6 +38,7 @@ model User {
   authoredSales                Sale[]                @relation("SaleAuthor")
   authoredPriceSettings        ProductPriceSetting[] @relation("PriceSettingAuthor")
   authoredPurchases            Purchase[]            @relation("PurchaseAuthor")
+  authoredImportDeclarations   ImportDeclaration[]   @relation("ImportDeclarationAuthor")
   authoredSaleReturns          SaleReturn[]          @relation("SaleReturnAuthor")
   authoredPurchaseReturns      PurchaseReturn[]      @relation("PurchaseReturnAuthor")
   authoredOutgoingInvoices     OutgoingInvoice[]     @relation("OutgoingInvoiceAuthor")
@@ -138,6 +139,7 @@ model Organization {
   payrollCalculations  PayrollCalculation[]            @relation("OrgPayrollCalc")
   payrollPayments      PayrollPayment[]                @relation("OrgPayrollPay")
   purchases            Purchase[]
+  importDeclarations   ImportDeclaration[]             @relation("OrgImportDeclarations")
   purchaseReturns      PurchaseReturn[]
   sales                Sale[]
   saleReturns          SaleReturn[]
@@ -198,6 +200,7 @@ model Counterparty {
   outgoingInvoices     OutgoingInvoice[]     @relation("CpOutgoingInvoices")
   paymentInvoices      PaymentInvoice[]
   purchases            Purchase[]
+  importDeclarations   ImportDeclaration[]             @relation("CpImportDeclarations")
   purchaseReturns      PurchaseReturn[]
   purchaseRequisitions PurchaseRequisition[]
   sales                Sale[]
@@ -421,6 +424,7 @@ model Warehouse {
   sales                  Sale[]
   saleReturns            SaleReturn[]          @relation("WhSaleReturns")
   purchases              Purchase[]            @relation("WhPurchases")
+  importDeclarations     ImportDeclaration[]   @relation("WhImportDeclarations")
   purchaseReturns        PurchaseReturn[]      @relation("WhPurchaseReturns")
   organization           Organization?         @relation(fields: [organizationUuid], references: [uuid])
   productRegister        ProductRegister[]
@@ -912,6 +916,7 @@ model Product {
   saleItems                SaleItem[]
   saleReturnItems          SaleReturnItem[]
   purchaseItems            PurchaseItem[]
+  importDeclarationItems   ImportDeclarationItem[]
   purchaseReturnItems      PurchaseReturnItem[]
   outgoingInvoiceItems     OutgoingInvoiceItem[]
   incomingInvoiceItems     IncomingInvoiceItem[]
@@ -1374,6 +1379,7 @@ model UnitOfMeasure {
   saleItems                SaleItem[]
   saleReturnItems          SaleReturnItem[]
   purchaseItems            PurchaseItem[]
+  importDeclarationItems   ImportDeclarationItem[]
   purchaseReturnItems      PurchaseReturnItem[]
   outgoingInvoiceItems     OutgoingInvoiceItem[]
   incomingInvoiceItems     IncomingInvoiceItem[]
@@ -2443,4 +2449,68 @@ model AppSetting {
   updatedAt DateTime @default(now()) @updatedAt
 
   @@map("app_settings")
+}
+
+// Документ «ГТД по импорту» (Этап 1: регистр ГТД + приход на склад + источник
+// данных декларации для ЭСФ/СНТ). Аналог поступления товара (Purchase).
+model ImportDeclaration {
+  id                     Int                     @id @default(autoincrement())
+  uuid                   String                  @unique @default(uuid())
+  number                 String? // номер документа (внутренняя нумерация)
+  date                   DateTime                @default(now())
+  declarationNumber      String? // № декларации на товары (ГТД)
+  declarationDate        DateTime? // дата декларации
+  countryCode            String? // страна происхождения/отправления (классификатор country)
+  comment                String?
+  amount                 Decimal?                @db.Decimal(18, 2) // итог таможенной стоимости
+  // Этап 2: таможенные платежи (итоги по декларации). Пошлина/сбор/акциз
+  // капитализируются в себестоимость товара (landed cost); импортный НДС —
+  // к возмещению (1420) для плательщика НДС, иначе тоже в себестоимость.
+  dutyAmount             Decimal?                @db.Decimal(18, 2) // таможенная пошлина
+  customsFeeAmount       Decimal?                @db.Decimal(18, 2) // таможенный сбор за оформление
+  exciseAmount           Decimal?                @db.Decimal(18, 2) // акциз (подакцизные товары)
+  importVatAmount        Decimal?                @db.Decimal(18, 2) // импортный НДС
+  organizationUuid       String?
+  counterpartyUuid       String? // поставщик/декларант
+  warehouseUuid          String?
+  authorUuid             String
+  posted                 Boolean                 @default(false)
+  updatedAt              DateTime                @default(now()) @updatedAt
+  deletedAt              DateTime?
+  importDeclarationItems ImportDeclarationItem[]
+  organization           Organization?           @relation("OrgImportDeclarations", fields: [organizationUuid], references: [uuid])
+  counterparty           Counterparty?           @relation("CpImportDeclarations", fields: [counterpartyUuid], references: [uuid])
+  warehouse              Warehouse?              @relation("WhImportDeclarations", fields: [warehouseUuid], references: [uuid])
+  author                 User                    @relation("ImportDeclarationAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@index([warehouseUuid])
+  @@index([date])
+  @@index([updatedAt])
+  @@map("import_declarations")
+}
+
+model ImportDeclarationItem {
+  id                    Int               @id @default(autoincrement())
+  uuid                  String            @unique @default(uuid())
+  quantity              Decimal           @default(0) @db.Decimal(18, 4)
+  price                 Decimal           @default(0) @db.Decimal(18, 2) // таможенная стоимость за единицу
+  amount                Decimal           @default(0) @db.Decimal(18, 2)
+  positionNumber        String? // № товарной позиции в декларации (графа 32)
+  unitOfMeasureUuid     String?
+  productUuid           String?
+  importDeclarationUuid String
+  organizationUuid      String?
+  sourceRowId           String?
+  updatedAt             DateTime          @default(now()) @updatedAt
+  deletedAt             DateTime?
+  product               Product?          @relation(fields: [productUuid], references: [uuid])
+  importDeclaration     ImportDeclaration @relation(fields: [importDeclarationUuid], references: [uuid], onDelete: Cascade)
+  unitOfMeasure         UnitOfMeasure?    @relation(fields: [unitOfMeasureUuid], references: [uuid])
+
+  @@index([importDeclarationUuid])
+  @@index([productUuid])
+  @@index([sourceRowId])
+  @@map("import_declaration_items")
 }

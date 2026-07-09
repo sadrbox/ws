@@ -60,6 +60,7 @@ const IncomingInvoicesList = lazyView("IncomingInvoicesList", () => import('src/
 const PaymentInvoicesList = lazyView("PaymentInvoicesList", () => import('src/models/PaymentInvoices').then(m => ({ default: m.PaymentInvoicesList })));
 const ScheduledTasksList = lazyView("ScheduledTasksList", () => import('src/models/ScheduledTasks').then(m => ({ default: m.ScheduledTasksList })));
 const InventoryTransfersList = lazyView("InventoryTransfersList", () => import('src/models/InventoryTransfers').then(m => ({ default: m.InventoryTransfersList })));
+const ImportDeclarationsList = lazyView("ImportDeclarationsList", () => import('src/models/ImportDeclarations').then(m => ({ default: m.ImportDeclarationsList })));
 const CommercialOffersList = lazyView("CommercialOffersList", () => import('src/models/CommercialOffers').then(m => ({ default: m.CommercialOffersList })));
 const SalesOrdersList = lazyView("SalesOrdersList", () => import('src/models/SalesOrders').then(m => ({ default: m.SalesOrdersList })));
 const ReservationsList = lazyView("ReservationsList", () => import('src/models/Reservations').then(m => ({ default: m.ReservationsList })));
@@ -946,6 +947,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList, label: translate("incomingInvoice") })}>{translate("incomingInvoice")}</li>}
               {can("PurchaseRequisition") && <li onClick={() => addPane({ component: PurchaseRequisitionsList, label: translate("PurchaseRequisitionsList") })}>{translate("PurchaseRequisitionsList")}</li>}
               {can("PurchaseOrder") && <li onClick={() => addPane({ component: PurchaseOrdersList, label: translate("docType_purchase_order") })}>{translate("docType_purchase_order")}</li>}
+              {can("ImportDeclaration") && <li onClick={() => addPane({ component: ImportDeclarationsList, label: translate("ImportDeclarationsList") })}>{translate("ImportDeclarationsList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>

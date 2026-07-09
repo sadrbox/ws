@@ -44,6 +44,7 @@ const ALL_MODEL_NAMES = [
 	"PaymentInvoice",
 	"ScheduledTask",
 	"InventoryTransfer",
+	"ImportDeclaration",
 	"CashReceiptOrder",
 	"CashExpenseOrder",
 	"Brand",

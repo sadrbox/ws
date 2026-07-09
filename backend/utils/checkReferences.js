@@ -197,6 +197,8 @@ export const REFERENCE_LABELS = {
 	reservations: "Резервирования",
 	bank_statements: "Банковские выписки",
 	month_closes: "Закрытия месяца",
+	import_declarations: "ГТД по импорту",
+	import_declaration_items: "Строки ГТД",
 	payroll_calculations: "Начисления ЗП",
 	payroll_payments: "Выплаты ЗП",
 	brands: "Бренды",

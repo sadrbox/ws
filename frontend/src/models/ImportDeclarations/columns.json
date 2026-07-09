@@ -1,0 +1,132 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Внутренний номер",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"hint": "Уникальный идентификатор",
+		"type": "string",
+		"visible": false,
+		"inlist": false,
+		"width": "300px",
+		"minWidth": "80px",
+		"alignment": "left"
+	},
+	{
+		"identifier": "number",
+		"type": "string",
+		"width": "130px",
+		"minWidth": "90px",
+		"alignment": "left",
+		"hint": "Номер документа",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "date",
+		"type": "datetime",
+		"width": "150px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Дата документа",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "posted",
+		"type": "boolean",
+		"width": "90px",
+		"minWidth": "70px",
+		"alignment": "center",
+		"hint": "Документ проведён",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "declarationNumber",
+		"type": "string",
+		"width": "200px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"hint": "№ декларации на товары (ГТД)",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "declarationDate",
+		"type": "datetime",
+		"width": "150px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Дата декларации",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "organization.name",
+		"type": "string",
+		"width": "200px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Организация",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "counterparty.name",
+		"type": "string",
+		"width": "200px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Поставщик/декларант",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "warehouse.name",
+		"type": "string",
+		"width": "200px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Склад",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "countryCode",
+		"type": "string",
+		"width": "120px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Страна происхождения",
+		"visible": false,
+		"inlist": true
+	},
+	{
+		"identifier": "amount",
+		"type": "number",
+		"width": "140px",
+		"minWidth": "80px",
+		"alignment": "right",
+		"hint": "Таможенная стоимость",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "comment",
+		"type": "string",
+		"width": "200px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Комментарий",
+		"visible": true,
+		"inlist": true
+	}
+]

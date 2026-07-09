@@ -107,6 +107,9 @@ export interface LookupFieldProps {
    *  при импорте). Введённый текст НЕ теряется при потере фокуса — он отдаётся
    *  через onTextChange, а value (uuid) остаётся пустым до выбора из списка. */
   allowFreeText?: boolean;
+  /** Разрешить кнопку «Создать» в дропдауне (по умолчанию true). false — для
+   *  справочников только для чтения (напр. классификаторы РК). */
+  allowCreate?: boolean;
   /** Колбэк свободного ввода (только при allowFreeText): (text) => void. */
   onTextChange?: (text: string) => void;
 }
@@ -203,6 +206,7 @@ const LookupField: FC<LookupFieldProps> = ({
   error = false,
   searchTransform,
   allowFreeText = false,
+  allowCreate = true,
   onTextChange,
   autoFocus = false,
   postedIndicator = false,
@@ -238,6 +242,10 @@ const LookupField: FC<LookupFieldProps> = ({
   // ── Autocomplete state ──────────────────────────────────────────────────
   const [inputText, setInputText] = useState(displayValue || "");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  // Дропдаун открыт ЯВНЫМ действием «Быстрый выбор» — только тогда показываем
+  // область «Создать» при пустом списке (иначе — только при вводе текста).
+  const [qsOpened, setQsOpened] = useState(false);
+  useEffect(() => { if (!isDropdownOpen) setQsOpened(false); }, [isDropdownOpen]);
   const [suggestions, setSuggestions] = useState<Record<string, any>[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -394,6 +402,7 @@ const LookupField: FC<LookupFieldProps> = ({
     // удерживает фокус, но если кнопка нажата с клавиатуры (Enter/Space) или
     // input ещё не был сфокусирован — явно переводим фокус сюда.
     inputRef.current?.focus();
+    setQsOpened(true);
     setIsLoading(true);
     fetchList(endpoint, undefined, { limit: 200, ...extraParams })
       .then((result) => {
@@ -471,7 +480,7 @@ const LookupField: FC<LookupFieldProps> = ({
   // Есть ли форма создания для этого справочника (реестр моделей).
   // Право на создание нового элемента справочника (гейт кнопки «Создать»).
   const { canWrite: canCreateByRight } = useUserAccessRight(ENDPOINT_ACCESS_MODEL[endpoint] ?? "");
-  const canCreate = !disabled && !!getByEndpoint(endpoint) && canCreateByRight;
+  const canCreate = allowCreate && !disabled && !!getByEndpoint(endpoint) && canCreateByRight;
   // Название справочника для кнопки «Создать» (не введённый текст — он не
   // подставляется в форму создания, поэтому показывать его в label некорректно).
   const createEntityLabel = (typeof label === "string" && label.trim())
@@ -486,6 +495,7 @@ const LookupField: FC<LookupFieldProps> = ({
   // Обработка ввода текста
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    setQsOpened(false); // ввод текста — это уже не «быстрый выбор»
     setInputText(val);
     // Если пользователь стирает текст — очистить выбранное значение
     if (!val && value) {
@@ -744,7 +754,7 @@ const LookupField: FC<LookupFieldProps> = ({
         </div>
 
         {/* ── Autocomplete dropdown ───────────────────────────────────── */}
-        {isDropdownOpen && (suggestions.length > 0 || isLoading || (canCreate && inputText.trim() !== "" && inputText !== displayValue)) && !isTable && (
+        {isDropdownOpen && (suggestions.length > 0 || isLoading || (canCreate && (qsOpened || (inputText.trim() !== "" && inputText !== displayValue)))) && !isTable && (
           <div className={styles.LookupDropdown} ref={dropdownRef}>
             {isLoading && suggestions.length === 0 && (
               <div className={styles.LookupDropdownLoading}>Поиск...</div>
@@ -787,7 +797,7 @@ const LookupField: FC<LookupFieldProps> = ({
       </div>
 
       {/* ── Portal dropdown for table variant ──────────────────────────── */}
-      {isTable && isDropdownOpen && (suggestions.length > 0 || isLoading || (canCreate && inputText.trim() !== "" && inputText !== displayValue)) && dropdownPos && createPortal(
+      {isTable && isDropdownOpen && (suggestions.length > 0 || isLoading || (canCreate && (qsOpened || (inputText.trim() !== "" && inputText !== displayValue)))) && dropdownPos && createPortal(
         <div
           className={styles.LookupDropdown}
           ref={dropdownRef}

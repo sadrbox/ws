@@ -325,6 +325,30 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     else ctx.handleInlineChange(row, "price", String(price));
   }, [recalcWithFlags]);
 
+  // Автозаполнение реквизитов декларации (ГТД № и № товара в декларации) из
+  // последней проведённой «ГТД по импорту», которой приходовался товар. Значения
+  // подставляются как значения по умолчанию — пользователь может переопределить.
+  const autofillEsfDeclaration = useCallback(async (
+    ctx: SubTableContext,
+    row: TDataItem,
+    productUuid: string,
+  ) => {
+    try {
+      const resp = await apiClient.get<{ source?: { declarationNumber?: string | null; positionNumber?: string | null } | null }>(
+        "importdeclarations/product-source",
+        { params: { productUuid, ...(organizationUuid ? { organizationUuid } : {}) } },
+      );
+      const src = resp.data?.source;
+      if (!src) return;
+      const patch: Record<string, unknown> = {};
+      if (src.declarationNumber) patch.productDeclaration = src.declarationNumber;
+      if (src.positionNumber) patch.productNumberInDeclaration = src.positionNumber;
+      if (Object.keys(patch).length === 0) return;
+      if (ctx.deferRemoteChanges) ctx.updateLocalRow(row, recalcWithFlags(row as any, patch));
+      else for (const [k, v] of Object.entries(patch)) ctx.handleInlineChange(row, k, String(v));
+    } catch { /* нет данных/ошибка → поля не трогаем */ }
+  }, [recalcWithFlags, organizationUuid]);
+
   const allRequiredFields = useMemo(() => (
     hasPricing
       ? ["product.name", "quantity", "price", "unitOfMeasure.name"]
@@ -502,6 +526,8 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
             ctx.handleLookupChange(row, "productUuid", uuid, extra);
             // Автозаполнение цены из истории цен товара по типу цены документа.
             if (uuid) void autofillRowPrice(ctx, row, uuid);
+            // Автозаполнение реквизитов декларации (ГТД) из последней проведённой ГТД по импорту.
+            if (uuid && showEsfColumns) void autofillEsfDeclaration(ctx, row, uuid);
           }}
           onClear={() => ctx.handleLookupChange(row, "productUuid", null, { product: null })}
           onEnterKey={() => focusNextInRow(document.activeElement)}

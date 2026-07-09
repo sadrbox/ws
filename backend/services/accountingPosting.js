@@ -16,6 +16,7 @@
 // (debitWarehouseId и т.п.) НЕТ.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
+import { allocateImportLandedCost } from "./importLandedCost.js";
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -31,6 +32,7 @@ export const ACC = {
 	AP: "3310", // задолженность поставщикам
 	VAT_IN: "1420", // НДС к возмещению (входящий, к зачёту)
 	VAT_OUT: "3130", // НДС к уплате (исходящий)
+	CUSTOMS: "3390", // прочая кредиторка: таможенные платежи (пошлина/сбор/акциз/импортный НДС)
 	PAYROLL: "3350",
 	RETAINED: "5510",
 	RESULT: "5610", // итоговая прибыль/убыток (закрытие месяца)
@@ -102,6 +104,7 @@ const DOC_CONFIG = {
 	sale: { parentModel: "sale", itemModel: "saleItem", parentField: "saleUuid" },
 	sale_return: { parentModel: "saleReturn", itemModel: "saleReturnItem", parentField: "saleReturnUuid" },
 	purchase_return: { parentModel: "purchaseReturn", itemModel: "purchaseReturnItem", parentField: "purchaseReturnUuid" },
+	import_declaration: { parentModel: "importDeclaration", itemModel: "importDeclarationItem", parentField: "importDeclarationUuid" },
 	inventory_transfer: { parentModel: "inventoryTransfer", itemModel: "inventoryTransferItem", parentField: "inventoryTransferUuid" },
 	cash_receipt_order: { parentModel: "cashOrder" },
 	cash_expense_order: { parentModel: "cashOrder" },
@@ -212,6 +215,45 @@ export const POSTING_RULES = {
 					debit: ACC.VAT_IN, credit: ACC.AP, amount: vat,
 					description: "НДС по приобретённым товарам (к зачёту)",
 					debitAnalytics: [], creditAnalytics: apAnalytics,
+				});
+			}
+		}
+		return out;
+	},
+
+	// ГТД по импорту (Этап 2): оприходование товара по landed cost.
+	//   Дт 1330 Кт 3310 — товар по таможенной стоимости (перед декларантом/поставщиком).
+	//   Дт 1330 Кт 3390 — капитализированные пошлина/сбор/акциз [+ импортный НДС у неплательщика].
+	//   Дт 1420 Кт 3390 — импортный НДС к возмещению (только плательщик НДС).
+	// Аналитика 1330 — Номенклатура+Склад; 3310 — Контрагент (декларант); 3390 — без субконто.
+	import_declaration: (doc, items, ctx) => {
+		const out = [];
+		const alloc = allocateImportLandedCost(doc, items, ctx.useVat);
+		const apAnalytics = compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
+		for (const it of items) {
+			if (!it.productUuid) continue;
+			const a = alloc.get(it.uuid);
+			if (!a) continue;
+			const goodsAnalytics = compact([an("Nomenclature", it.productUuid), an("Warehouse", doc.warehouseUuid)]);
+			if (a.customsValue > 0) {
+				out.push({
+					debit: ACC.GOODS, credit: ACC.AP, amount: a.customsValue,
+					description: "Оприходование импортного товара (таможенная стоимость)",
+					debitAnalytics: goodsAnalytics, creditAnalytics: apAnalytics,
+				});
+			}
+			if (a.capitalized > 0) {
+				out.push({
+					debit: ACC.GOODS, credit: ACC.CUSTOMS, amount: a.capitalized,
+					description: "Таможенные платежи в себестоимости товара",
+					debitAnalytics: goodsAnalytics, creditAnalytics: [],
+				});
+			}
+			if (a.importVat > 0) {
+				out.push({
+					debit: ACC.VAT_IN, credit: ACC.CUSTOMS, amount: a.importVat,
+					description: "Импортный НДС (к зачёту)",
+					debitAnalytics: [], creditAnalytics: [],
 				});
 			}
 		}

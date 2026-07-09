@@ -26,6 +26,7 @@ export const ENDPOINT_TO_MODEL: Record<string, string> = {
 	"sales-orders": "SalesOrder",
 	"reservations": "Reservation",
 	"purchase-orders": "PurchaseOrder",
+	importdeclarations: "ImportDeclaration",
 	"bank-statements": "BankStatement",
 	"month-closes": "MonthClose",
 	"fiscal-receipts": "FiscalReceipt",

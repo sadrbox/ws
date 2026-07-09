@@ -34,6 +34,7 @@ const ENDPOINT_DOCTYPE = {
 	"purchase-orders": "purchase_order",
 	"commercial-offers": "commercial_offer",
 	"reservations": "reservation",
+	"importdeclarations": "import_declaration",
 	"purchase-requisitions": "purchase_requisition",
 	"payroll-calculations": "payroll_calculation",
 	"payroll-payments": "payroll_payment",

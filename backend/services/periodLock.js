@@ -28,6 +28,7 @@ export const PERIOD_LOCKED_MODELS = new Set([
 	"purchaseOrder",
 	"commercialOffer",
 	"reservation",
+	"importDeclaration",
 ]);
 
 // Лёгкий TTL-кэш границы по организации (запрос дешёвый, но мутации частые).

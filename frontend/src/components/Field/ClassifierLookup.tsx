@@ -44,6 +44,7 @@ export const ClassifierLookup: FC<Props> = ({ type, label, name, value, displayN
 			extraParams={{ type }}
 			getSuggestionLabel={(i) => `${i.code}${i.name ? ` — ${i.name}` : ""}`}
 			visibleActions={["quickselect", "list"]}
+			allowCreate={false}
 			disabled={disabled}
 			width={width}
 			variant={variant ?? "default"}

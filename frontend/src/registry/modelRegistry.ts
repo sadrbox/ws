@@ -284,6 +284,14 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Перемещение ТМЗ",
 	},
 	{
+		endpoint: "importdeclarations",
+		module: () => import("src/models/ImportDeclarations"),
+		formName: "ImportDeclarationsForm",
+		listName: "ImportDeclarationsList",
+		storageKey: "import-declarations-form",
+		label: "ГТД по импорту",
+	},
+	{
 		endpoint: "commercial-offers",
 		module: () => import("src/models/CommercialOffers"),
 		formName: "CommercialOffersForm",

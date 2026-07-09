@@ -37,6 +37,7 @@ export const NUMBER_CONFIG = {
 	payroll_payment: { prefix: "ВЗП", label: "Выплата зарплаты" },
 	price_setting: { prefix: "ЦЕН", label: "Установка цен номенклатуры" },
 	month_close: { prefix: "ЗМ", label: "Закрытие месяца" },
+	import_declaration: { prefix: "ГТД", label: "ГТД по импорту" },
 };
 
 export const GLOBAL_SETTINGS_KEY = "__global__";

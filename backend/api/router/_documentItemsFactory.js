@@ -209,6 +209,9 @@ export function createDocumentItemsRouter({
 	// Модель строки имеет пер-строчные поля ЭСФ (tnvedCode/truOriginCode) —
 	// только для позиций СФ исходящей (переопределяют карточку товара).
 	esfLineFields = false,
+	// Произвольные строковые поля строки (напр. positionNumber у позиций ГТД) —
+	// просто пробрасываются в create/update без спец-логики.
+	extraStringFields = [],
 }) {
 	const router = express.Router();
 
@@ -217,6 +220,9 @@ export function createDocumentItemsRouter({
 	const esfFields = (body) => (esfLineFields
 		? Object.fromEntries(ESF_LINE_FIELDS.map((f) => [f, body[f] || null]))
 		: {});
+	/** Произвольные строковые поля строки (positionNumber и т.п.). */
+	const extraFields = (body) =>
+		Object.fromEntries(extraStringFields.map((f) => [f, body[f] != null ? String(body[f]).trim() || null : null]));
 
 	// Изоляция: строки документа доступны только если РОДИТЕЛЬСКИЙ документ
 	// принадлежит организации пользователя (строки сами по себе фильтра не имеют).
@@ -466,6 +472,7 @@ export function createDocumentItemsRouter({
 						? { sourceRowId: String(req.body.sourceRowId) }
 						: {}),
 					...esfFields(req.body),
+					...extraFields(req.body),
 					...denorm,
 				};
 			} else {
@@ -477,7 +484,11 @@ export function createDocumentItemsRouter({
 					price: prc,
 					amount,
 					unitOfMeasureUuid: unitOfMeasureUuid || null,
+					...(hasSourceRowId && req.body.sourceRowId
+						? { sourceRowId: String(req.body.sourceRowId) }
+						: {}),
 					...esfFields(req.body),
+					...extraFields(req.body),
 				};
 			}
 
@@ -531,6 +542,9 @@ export function createDocumentItemsRouter({
 			}
 			if (esfLineFields) {
 				for (const f of ESF_LINE_FIELDS) if (req.body[f] !== undefined) data[f] = req.body[f] || null;
+			}
+			for (const f of extraStringFields) {
+				if (req.body[f] !== undefined) data[f] = req.body[f] != null ? String(req.body[f]).trim() || null : null;
 			}
 
 			const parseNum = (v) => {
