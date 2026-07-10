@@ -61,6 +61,10 @@ const PaymentInvoicesList = lazyView("PaymentInvoicesList", () => import('src/mo
 const ScheduledTasksList = lazyView("ScheduledTasksList", () => import('src/models/ScheduledTasks').then(m => ({ default: m.ScheduledTasksList })));
 const InventoryTransfersList = lazyView("InventoryTransfersList", () => import('src/models/InventoryTransfers').then(m => ({ default: m.InventoryTransfersList })));
 const ImportDeclarationsList = lazyView("ImportDeclarationsList", () => import('src/models/ImportDeclarations').then(m => ({ default: m.ImportDeclarationsList })));
+const WriteOffsList = lazyView("WriteOffsList", () => import('src/models/WriteOffs').then(m => ({ default: m.WriteOffsList })));
+const SerialNumbersList = lazyView("SerialNumbersList", () => import('src/models/SerialNumbers').then(m => ({ default: m.SerialNumbersList })));
+const GoodsReceiptsList = lazyView("GoodsReceiptsList", () => import('src/models/GoodsReceipts').then(m => ({ default: m.GoodsReceiptsList })));
+const StockCountsList = lazyView("StockCountsList", () => import('src/models/StockCounts').then(m => ({ default: m.StockCountsList })));
 const CommercialOffersList = lazyView("CommercialOffersList", () => import('src/models/CommercialOffers').then(m => ({ default: m.CommercialOffersList })));
 const SalesOrdersList = lazyView("SalesOrdersList", () => import('src/models/SalesOrders').then(m => ({ default: m.SalesOrdersList })));
 const ReservationsList = lazyView("ReservationsList", () => import('src/models/Reservations').then(m => ({ default: m.ReservationsList })));
@@ -955,6 +959,10 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               {can("Warehouse") && <li onClick={() => addPane({ component: WarehousesList, label: translate("WarehousesList") })}>{translate("WarehousesList")}</li>}
               {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList, label: translate("InventoryTransfersList") })}>{translate("InventoryTransfersList")}</li>}
+              {can("WriteOff") && <li onClick={() => addPane({ component: WriteOffsList, label: translate("WriteOffsList") })}>{translate("WriteOffsList")}</li>}
+              {can("SerialNumber") && <li onClick={() => addPane({ component: SerialNumbersList, label: translate("SerialNumbersList") })}>{translate("SerialNumbersList")}</li>}
+              {can("GoodsReceipt") && <li onClick={() => addPane({ component: GoodsReceiptsList, label: translate("GoodsReceiptsList") })}>{translate("GoodsReceiptsList")}</li>}
+              {can("StockCount") && <li onClick={() => addPane({ component: StockCountsList, label: translate("StockCountsList") })}>{translate("StockCountsList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>

@@ -182,6 +182,73 @@ test("Перемещение: Дт 1330(склад-получатель) Кт 13
 	assert.equal(cW?.objectUuid, fromWh, "кредит — склад-источник");
 });
 
+// ─── Складские документы (E6.2) и ГТД (Этап 2) ───────────────────────────────
+test("Оприходование излишков: Дт 1330 Кт 6280 по цене строки", async (t) => {
+	if (!fx.orgUuid || !fx.productUuid) return t.skip("нет фикстур");
+	const doc = { organizationUuid: fx.orgUuid, warehouseUuid: fx.warehouseUuid, date: new Date(), posted: true };
+	const items = [
+		{ productUuid: fx.productUuid, quantity: 3, price: 100, amount: 300 },
+		{ productUuid: fx.productUuid, quantity: 2, price: 50, amount: 100 },
+	];
+	const entries = await buildDocumentEntries("goods_receipt", doc, items);
+	assert.ok(entries.length >= 1);
+	// Строки одного товара+склада схлопываются в одну проводку (общая аналитика).
+	for (const e of entries) {
+		assert.equal(e.debitAccountCode, ACC.GOODS);
+		assert.equal(e.creditAccountCode, ACC.OTHER_INCOME, "прочие доходы 6280, НЕ выручка 6010");
+		assert.ok(e.debitAnalytics.some((a) => a.subkontoType === "Nomenclature"));
+	}
+	assert.equal(sumDebit(entries), 400, "итог = 300 + 100");
+});
+
+test("ГТД (плательщик НДС): 1330/3310 таможенная + 1330/3390 пошлины + 1420/3390 импортный НДС", async (t) => {
+	if (!fx.orgUuid || !fx.productUuid) return t.skip("нет фикстур");
+	// useVat включён в before → импортный НДС идёт к возмещению (1420), не в себестоимость.
+	const doc = {
+		organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid,
+		date: new Date(), posted: true,
+		dutyAmount: 100, customsFeeAmount: 20, exciseAmount: 30, importVatAmount: 150,
+	};
+	const items = [{ productUuid: fx.productUuid, quantity: 10, price: 100, amount: 1000 }];
+	const entries = await buildDocumentEntries("import_declaration", doc, items);
+
+	const goodsFromSupplier = entries.find((e) => e.debitAccountCode === ACC.GOODS && e.creditAccountCode === ACC.AP);
+	const capitalized = entries.find((e) => e.debitAccountCode === ACC.GOODS && e.creditAccountCode === ACC.CUSTOMS);
+	const importVat = entries.find((e) => e.debitAccountCode === ACC.VAT_IN && e.creditAccountCode === ACC.CUSTOMS);
+	assert.equal(goodsFromSupplier?.amount, 1000, "таможенная стоимость → 1330/3310");
+	assert.equal(capitalized?.amount, 150, "пошлина+сбор+акциз (100+20+30) капитализируются → 1330/3390");
+	assert.equal(importVat?.amount, 150, "импортный НДС → 1420/3390 (к возмещению)");
+	// Товар оприходован на landed = таможенная + капитализированное = 1150, НДС отдельно.
+	const toGoods = entries.filter((e) => e.debitAccountCode === ACC.GOODS).reduce((s, e) => s + e.amount, 0);
+	assert.equal(toGoods, 1150);
+});
+
+test("Списание: Дт 7210 Кт 1330 по себестоимости из регистра", async (t) => {
+	if (!fx.orgUuid || !fx.userUuid) return t.skip("нет фикстур");
+	// Свежий товар + склад: засеваем приход 10×100 в регистр, затем списываем 3.
+	const product = await prisma.product.create({ data: { name: `ТЕСТ-СПИС-${crypto.randomUUID().slice(0, 8)}` } });
+	const wh = await prisma.warehouse.create({ data: { name: `W-СПИС-${crypto.randomUUID().slice(0, 8)}`, organizationUuid: fx.orgUuid } });
+	const gr = await prisma.goodsReceipt.create({ data: { number: `ОПРХ-Т-${Date.now()}`, date: new Date(Date.now() - 86400000), organizationUuid: fx.orgUuid, warehouseUuid: wh.uuid, authorUuid: fx.userUuid, posted: true } });
+	await prisma.goodsReceiptItem.create({ data: { goodsReceiptUuid: gr.uuid, productUuid: product.uuid, quantity: 10, price: 100, amount: 1000, organizationUuid: fx.orgUuid } });
+	await reconcileDocumentRegister("goods_receipt", gr.uuid);
+	try {
+		const doc = { organizationUuid: fx.orgUuid, warehouseUuid: wh.uuid, date: new Date(), posted: true };
+		const items = [{ productUuid: product.uuid, quantity: 3, amount: 0 }];
+		const entries = await buildDocumentEntries("write_off", doc, items);
+		assert.equal(entries.length, 1);
+		assert.equal(entries[0].debitAccountCode, ACC.ADMIN_EXP, "списание на 7210");
+		assert.equal(entries[0].creditAccountCode, ACC.GOODS);
+		assert.equal(entries[0].amount, 300, "3 ед × себестоимость 100");
+		assert.ok(entries[0].creditAnalytics.some((a) => a.subkontoType === "Nomenclature"));
+	} finally {
+		await removeDocumentRegister("goods_receipt", gr.uuid);
+		await prisma.goodsReceiptItem.deleteMany({ where: { goodsReceiptUuid: gr.uuid } });
+		await prisma.goodsReceipt.delete({ where: { uuid: gr.uuid } });
+		await prisma.warehouse.delete({ where: { uuid: wh.uuid } });
+		await prisma.product.delete({ where: { uuid: product.uuid } });
+	}
+});
+
 // ─── Проверки проведения ─────────────────────────────────────────────────────
 test("Проверка: проведение без организации запрещено", async () => {
 	const doc = { organizationUuid: null, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid, date: new Date(), posted: true };

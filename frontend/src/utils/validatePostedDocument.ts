@@ -30,6 +30,9 @@ export type DocumentType =
 	| "purchase_order"
 	| "bank_statement"
 	| "import_declaration"
+	| "write_off"
+	| "goods_receipt"
+	| "stock_count"
 	| "month_close";
 
 export interface ValidationError {
@@ -113,6 +116,12 @@ export const REQUIRED_FIELDS_MAP: Record<DocumentType, readonly string[]> = {
 		"fromWarehouseUuid",
 		"toWarehouseUuid",
 	],
+	// Списание: себестоимость определяется учётом — контрагент/цена не требуются.
+	write_off: ["date", "organizationUuid", "warehouseUuid"],
+	// Оприходование излишков: цена вводится пользователем, контрагента нет.
+	goods_receipt: ["date", "organizationUuid", "warehouseUuid"],
+	// Инвентаризация: только фиксирует расхождение (регистр не двигает).
+	stock_count: ["date", "organizationUuid", "warehouseUuid"],
 
 	// ── Кассовые ордера ──────────────────────────────────────────────────────
 	cash_receipt_order: [

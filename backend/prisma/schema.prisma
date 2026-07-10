@@ -57,6 +57,9 @@ model User {
   authoredPurchaseOrders       PurchaseOrder[]       @relation("PurchaseOrderAuthor")
   authoredBankStatements       BankStatement[]       @relation("BankStatementAuthor")
 
+  authoredWriteOffs      WriteOff[]              @relation("WriteOffAuthor")
+  authoredGoodsReceipts  GoodsReceipt[]          @relation("GoodsReceiptAuthor")
+  authoredStockCounts    StockCount[]            @relation("StockCountAuthor")
   @@index([employeeUuid])
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -173,6 +176,9 @@ model Organization {
   accountingEntries    AccountingEntry[]               @relation("OrgAccountingEntries")
   fiscalReceipts       FiscalReceipt[]                 @relation("OrgFiscalReceipts")
 
+  writeOffs              WriteOff[]              @relation("OrgWriteOffs")
+  goodsReceipts          GoodsReceipt[]          @relation("OrgGoodsReceipts")
+  stockCounts            StockCount[]            @relation("OrgStockCounts")
   @@index([updatedAt])
   @@map("organizations")
 }
@@ -357,27 +363,35 @@ model BankAccount {
   @@map("bank_accounts")
 }
 
+// Сквозной журнал действий (E1.2): кто / что / когда / diff.
+// Заполняется автоматически через auditMiddleware на всех мутирующих запросах.
+// organizationUuid необязателен: справочники (валюты, должности, пользователи)
+// к организации не привязаны. Журнал переживает удаление организации (SetNull).
 model ActivityHistory {
-  id                    Int          @id @default(autoincrement())
-  uuid                  String       @unique @default(uuid())
-  actionDate            DateTime     @default(now())
-  actionType            String
-  organizationUuid      String
-  organizationShortName String
-  bin                   String
+  id                    Int           @id @default(autoincrement())
+  uuid                  String        @unique @default(uuid())
+  actionDate            DateTime      @default(now())
+  actionType            String // create | update | delete | batch_delete
+  organizationUuid      String?
+  organizationShortName String?
+  bin                   String?
+  userUuid              String?
   userName              String
-  host                  String
+  host                  String?
   ip                    String?
   city                  String?
   objectId              String
   objectType            String
   objectName            String
+  /// Изменения: { поле: { from, to } }. Для create/delete — снимок значимых полей.
+  diff                  Json?
   props                 Json?
-  organization          Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  organization          Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: SetNull)
 
   @@index([actionDate])
   @@index([organizationUuid])
   @@index([objectType, objectId])
+  @@index([userUuid])
   @@map("activity_history")
 }
 
@@ -433,6 +447,9 @@ model Warehouse {
   reservations           Reservation[]         @relation("WhReservations")
   purchaseOrders         PurchaseOrder[]       @relation("WhPurchaseOrders")
 
+  writeOffs              WriteOff[]              @relation("WhWriteOffs")
+  goodsReceipts          GoodsReceipt[]          @relation("WhGoodsReceipts")
+  stockCounts            StockCount[]            @relation("WhStockCounts")
   @@index([organizationUuid])
   @@index([updatedAt])
   @@map("warehouses")
@@ -900,6 +917,9 @@ model Product {
   // Хранит код позиции ГС ВС; см. классификатор type="gsvs".
   catalogTruId             String?
   isService                Boolean                   @default(false)
+  /// Учёт по серийным номерам (T6.1): при приёмке серии вводятся, при выбытии
+  /// списываются. Кол-во строки документа должно совпадать с числом серий.
+  trackSerialNumbers       Boolean                   @default(false)
   /// Продажная цена в Product НЕ хранится — источник истины таблица «Цены»
   /// (ProductPrice, тип «по умолчанию»); автоподстановка через product-prices/price-list.
   /// Ниже — денормализованные цены закупки/опта (по дате документа «Установка цен»).
@@ -933,6 +953,10 @@ model Product {
   priceSettingItems        ProductPriceSettingItem[]
   productPrices            ProductPrice[]
 
+  writeOffItems          WriteOffItem[]
+  goodsReceiptItems      GoodsReceiptItem[]
+  stockCountItems        StockCountItem[]
+  serialNumbers          SerialNumber[]
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
   @@index([organizationUuid])
@@ -1392,6 +1416,9 @@ model UnitOfMeasure {
   reservationItems         ReservationItem[]
   purchaseOrderItems       PurchaseOrderItem[]
 
+  writeOffItems          WriteOffItem[]
+  goodsReceiptItems      GoodsReceiptItem[]
+  stockCountItems        StockCountItem[]
   @@index([updatedAt])
   @@map("units_of_measure")
 }
@@ -2513,4 +2540,194 @@ model ImportDeclarationItem {
   @@index([productUuid])
   @@index([sourceRowId])
   @@map("import_declaration_items")
+}
+
+// Документ «Списание товара» (E6.2). Расход со склада по себестоимости
+// (ФИФО/средняя): регистр movement "out" + проводка Дт 7210 Кт 1330.
+// Может создаваться на основании Инвентаризации (недостача).
+model WriteOff {
+  id                 Int            @id @default(autoincrement())
+  uuid               String         @unique @default(uuid())
+  number             String?
+  date               DateTime       @default(now())
+  comment            String?
+  amount             Decimal?       @db.Decimal(18, 2) // итог себестоимости списания
+  organizationUuid   String?
+  warehouseUuid      String?
+  authorUuid         String
+  posted             Boolean        @default(false)
+  basisDocumentType  String?
+  basisDocumentUuid  String?
+  basisDocumentLabel String?
+  updatedAt          DateTime       @default(now()) @updatedAt
+  deletedAt          DateTime?
+  writeOffItems      WriteOffItem[]
+  organization       Organization?  @relation("OrgWriteOffs", fields: [organizationUuid], references: [uuid])
+  warehouse          Warehouse?     @relation("WhWriteOffs", fields: [warehouseUuid], references: [uuid])
+  author             User           @relation("WriteOffAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+
+  @@index([organizationUuid])
+  @@index([warehouseUuid])
+  @@index([date])
+  @@index([updatedAt])
+  @@map("write_offs")
+}
+
+model WriteOffItem {
+  id                Int            @id @default(autoincrement())
+  uuid              String         @unique @default(uuid())
+  quantity          Decimal        @default(0) @db.Decimal(18, 4)
+  price             Decimal        @default(0) @db.Decimal(18, 2)
+  amount            Decimal        @default(0) @db.Decimal(18, 2)
+  unitOfMeasureUuid String?
+  productUuid       String?
+  writeOffUuid      String
+  organizationUuid  String?
+  sourceRowId       String?
+  updatedAt         DateTime       @default(now()) @updatedAt
+  deletedAt         DateTime?
+  product           Product?       @relation(fields: [productUuid], references: [uuid])
+  writeOff          WriteOff       @relation(fields: [writeOffUuid], references: [uuid], onDelete: Cascade)
+  unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
+
+  @@index([writeOffUuid])
+  @@index([productUuid])
+  @@index([sourceRowId])
+  @@map("write_off_items")
+}
+
+// Документ «Оприходование товара» (E6.2) — излишки / постановка на учёт.
+// Приход на склад: регистр movement "in" по цене оприходования + проводка
+// Дт 1330 Кт 6280 (прочие доходы). Может создаваться на основании Инвентаризации.
+model GoodsReceipt {
+  id                 Int                @id @default(autoincrement())
+  uuid               String             @unique @default(uuid())
+  number             String?
+  date               DateTime           @default(now())
+  comment            String?
+  amount             Decimal?           @db.Decimal(18, 2) // итог стоимости оприходования
+  organizationUuid   String?
+  warehouseUuid      String?
+  authorUuid         String
+  posted             Boolean            @default(false)
+  basisDocumentType  String?
+  basisDocumentUuid  String?
+  basisDocumentLabel String?
+  updatedAt          DateTime           @default(now()) @updatedAt
+  deletedAt          DateTime?
+  goodsReceiptItems  GoodsReceiptItem[]
+  organization       Organization?      @relation("OrgGoodsReceipts", fields: [organizationUuid], references: [uuid])
+  warehouse          Warehouse?         @relation("WhGoodsReceipts", fields: [warehouseUuid], references: [uuid])
+  author             User               @relation("GoodsReceiptAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+
+  @@index([organizationUuid])
+  @@index([warehouseUuid])
+  @@index([date])
+  @@index([updatedAt])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id                Int            @id @default(autoincrement())
+  uuid              String         @unique @default(uuid())
+  quantity          Decimal        @default(0) @db.Decimal(18, 4)
+  price             Decimal        @default(0) @db.Decimal(18, 2) // цена оприходования за единицу
+  amount            Decimal        @default(0) @db.Decimal(18, 2)
+  unitOfMeasureUuid String?
+  productUuid       String?
+  goodsReceiptUuid  String
+  organizationUuid  String?
+  sourceRowId       String?
+  updatedAt         DateTime       @default(now()) @updatedAt
+  deletedAt         DateTime?
+  product           Product?       @relation(fields: [productUuid], references: [uuid])
+  goodsReceipt      GoodsReceipt   @relation(fields: [goodsReceiptUuid], references: [uuid], onDelete: Cascade)
+  unitOfMeasure     UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
+
+  @@index([goodsReceiptUuid])
+  @@index([productUuid])
+  @@index([sourceRowId])
+  @@map("goods_receipt_items")
+}
+
+// Документ «Инвентаризация» (E6.2). НЕ двигает регистр товаров и НЕ формирует
+// проводок: фиксирует расхождение «учёт vs факт». На его основании создаются
+// Списание (недостача) и Оприходование (излишек).
+model StockCount {
+  id               Int              @id @default(autoincrement())
+  uuid             String           @unique @default(uuid())
+  number           String?
+  date             DateTime         @default(now())
+  comment          String?
+  organizationUuid String?
+  warehouseUuid    String?
+  authorUuid       String
+  posted           Boolean          @default(false)
+  updatedAt        DateTime         @default(now()) @updatedAt
+  deletedAt        DateTime?
+  stockCountItems  StockCountItem[]
+  organization     Organization?    @relation("OrgStockCounts", fields: [organizationUuid], references: [uuid])
+  warehouse        Warehouse?       @relation("WhStockCounts", fields: [warehouseUuid], references: [uuid])
+  author           User             @relation("StockCountAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+
+  @@index([organizationUuid])
+  @@index([warehouseUuid])
+  @@index([date])
+  @@index([updatedAt])
+  @@map("stock_counts")
+}
+
+model StockCountItem {
+  id                 Int            @id @default(autoincrement())
+  uuid               String         @unique @default(uuid())
+  // quantity — ФАКТИЧЕСКОЕ количество (вводит кладовщик).
+  quantity           Decimal        @default(0) @db.Decimal(18, 4)
+  // accountingQuantity — количество ПО УЧЁТУ (снимок остатка регистра на дату).
+  accountingQuantity Decimal        @default(0) @db.Decimal(18, 4)
+  price              Decimal        @default(0) @db.Decimal(18, 2)
+  amount             Decimal        @default(0) @db.Decimal(18, 2)
+  unitOfMeasureUuid  String?
+  productUuid        String?
+  stockCountUuid     String
+  organizationUuid   String?
+  updatedAt          DateTime       @default(now()) @updatedAt
+  deletedAt          DateTime?
+  product            Product?       @relation(fields: [productUuid], references: [uuid])
+  stockCount         StockCount     @relation(fields: [stockCountUuid], references: [uuid], onDelete: Cascade)
+  unitOfMeasure      UnitOfMeasure? @relation(fields: [unitOfMeasureUuid], references: [uuid])
+
+  @@index([stockCountUuid])
+  @@index([productUuid])
+  @@map("stock_count_items")
+}
+
+// Серийный номер единицы товара (T6.1). Уникален в пределах товар+организация.
+// Жизненный цикл: in_stock (принят на склад) → issued (выбыл продажей/списанием).
+// Привязка к документам приёмки/выбытия — скалярными type+uuid (без FK, т.к.
+// документов-источников много). Склад/организация — тоже скаляры (фильтрация по ним).
+model SerialNumber {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  serialNumber     String
+  status           String    @default("in_stock") // in_stock | issued | written_off
+  productUuid      String
+  warehouseUuid    String?
+  organizationUuid String?
+  receiptDocType   String?
+  receiptDocUuid   String?
+  issueDocType     String?
+  issueDocUuid     String?
+  updatedAt        DateTime  @default(now()) @updatedAt
+  deletedAt        DateTime?
+  product          Product   @relation(fields: [productUuid], references: [uuid], onDelete: Cascade)
+
+  // Серия уникальна для товара в пределах организации (частичный uq — активные).
+  @@unique([organizationUuid, productUuid, serialNumber], name: "serial_org_product_uq")
+  @@index([productUuid])
+  @@index([status])
+  @@index([warehouseUuid])
+  @@index([organizationUuid])
+  @@index([receiptDocUuid])
+  @@index([issueDocUuid])
+  @@map("serial_numbers")
 }

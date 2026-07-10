@@ -8,14 +8,21 @@ import { Field } from "src/components/Field";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import { getFormatDate } from "src/utils/datetime";
 import styles from "src/styles/main.module.scss";
+import auditStyles from "./ActivityHistories.module.scss";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import { renderAuditCell, summarizeDiff } from "./renderAuditCell";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "activityhistories";
+
+/** actionType → i18-ключ (тот же набор, что в renderAuditCell). */
+const ACTION_LABEL_KEYS: Record<string, string> = {
+  create: "auditCreate", update: "auditUpdate", delete: "auditDelete", batch_delete: "auditBatchDelete",
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FORM
@@ -36,6 +43,7 @@ interface TFields {
   objectId: string;
   objectType: string;
   objectName: string;
+  diff?: any;
   props?: any;
 }
 
@@ -66,6 +74,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
       objectId: d.objectId ?? "",
       objectType: d.objectType ?? "",
       objectName: d.objectName ?? "",
+      diff: d.diff,
       props: d.props,
       id: d.id,
       uuid: d.uuid,
@@ -86,7 +95,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
             <GroupCol>
               <GroupRow>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("actionType")} name={`${form.formUid}_actionType`} minWidth="200px" value={form.fields.actionType} disabled />
+                  <Field label={translate("actionType")} name={`${form.formUid}_actionType`} minWidth="200px" value={form.fields.actionType ? translate(ACTION_LABEL_KEYS[form.fields.actionType] ?? form.fields.actionType) : ""} disabled />
                 </Group>
                 <Group className={styles.w1of2}>
                   <Field label={translate("actionDate")} name={`${form.formUid}_actionDate`} minWidth="200px" value={getFormatDate(form.fields.actionDate)} disabled />
@@ -102,6 +111,11 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
                 <Field label={translate("bin")} name={`${form.formUid}_bin`} minWidth="150px" value={form.fields.bin} disabled />
               </Group>
               <Group>
+                {/* Сводка изменений: «поле: было → стало». Полный JSON — в props ниже. */}
+                <Field label={translate("diff")} name={`${form.formUid}_diff`}
+                  value={form.fields.diff ? summarizeDiff(form.fields.diff, form.fields.actionType) : ""} disabled />
+              </Group>
+              <Group>
                 <Field label={translate("user")} name={`${form.formUid}_userName`} minWidth="200px" value={form.fields.userName} disabled />
                 <Field label={translate("host")} name={`${form.formUid}_host`} minWidth="200px" value={form.fields.host} disabled />
                 <Field label={translate("ip")} name={`${form.formUid}_ip`} minWidth="120px" value={form.fields.ip || ""} disabled />
@@ -110,12 +124,12 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
 
             {form.fields.props && (
-              <div style={{ padding: "0 0 12px 0" }}>
-                <details style={{ position: "relative", zIndex: 1 }}>
-                  <summary style={{ cursor: "pointer", fontSize: "13px", color: "#666", userSelect: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    Данные (props)
+              <div className={auditStyles.PropsBlock}>
+                <details className={auditStyles.PropsDetails}>
+                  <summary className={auditStyles.PropsSummary}>
+                    {translate("auditProps")}
                   </summary>
-                  <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: "12px", background: "#f5f5f5", padding: "8px", borderRadius: "4px", marginTop: "6px" }}>
+                  <pre className={auditStyles.PropsPre}>
                     {JSON.stringify(form.fields.props, null, 2)}
                   </pre>
                 </details>
@@ -158,6 +172,9 @@ const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant, onSele
     onSelectItem={onSelectItem}
     ownerUuid={ownerUuid}
     ownerField={ownerField}
+    defaultSort={{ id: "desc" }}
+    enableDateRange
+    renderCell={renderAuditCell}
   />
 );
 

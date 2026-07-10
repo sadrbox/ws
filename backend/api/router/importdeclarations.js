@@ -6,6 +6,7 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
@@ -196,6 +197,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.date !== undefined) data.date = req.body.date ? new Date(req.body.date) : null;
 		if (req.body.declarationDate !== undefined) data.declarationDate = req.body.declarationDate ? new Date(req.body.declarationDate) : null;
 		if (req.body.amount !== undefined) data.amount = req.body.amount != null ? parseFloat(req.body.amount) : null;
+		for (const f of ["dutyAmount", "customsFeeAmount", "exciseAmount", "importVatAmount"]) {
+			if (req.body[f] !== undefined) data[f] = req.body[f] != null && req.body[f] !== "" ? parseFloat(req.body[f]) : null;
+		}
 		if (req.body.number !== undefined) data.number = req.body.number?.trim?.() || null;
 		if (data.warehouseUuid) {
 			const fkError = await checkFkOwnership(req, prisma, [{ model: "warehouse", uuid: data.warehouseUuid }]);
@@ -213,12 +217,22 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			organizationUuid: data.organizationUuid !== undefined ? data.organizationUuid : existing.organizationUuid,
 			warehouseUuid: data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid,
 		}, prisma);
+		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
+		if (willBePosted) {
+			// Бух. проверки проведения (организация, дата, счета, субконто, Дт=Кт).
+			await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
+		}
 		const item = await prisma[MODEL].update({ where: w, data, include: INCLUDE });
 		await syncItemsFromParent("importDeclarationItem", "importDeclarationUuid", item.uuid, item);
 		await reconcileDocumentRegister(DOC_TYPE, item.uuid);
+		await reconcileDocumentEntries(DOC_TYPE, item.uuid);
+		// Ввод задним числом делает COGS последующих документов устаревшим —
+		// пересчитываем хвост истории (не трогая закрытый период).
+		await recomputeIfRetroactive({ organizationUuid: item.organizationUuid, date: item.date });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (respondOrgFieldError(error, res)) return;
+		if (respondPostingError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
@@ -229,6 +243,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 
 const onDeleted = async (doc) => {
 	await removeDocumentRegister(DOC_TYPE, doc.uuid);
+	await removeDocumentEntries(DOC_TYPE, doc.uuid);
 };
 
 router.delete(`/${ROUTE}/:id`, (req, res) =>

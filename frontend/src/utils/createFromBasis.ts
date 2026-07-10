@@ -23,6 +23,13 @@ export interface BasisFromTarget {
 	/** Маппинг полей шапки исходного документа в поля нового */
 	mapFields: (source: any) => Record<string, any>;
 	/**
+	 * Маппинг СТРОК основания в строки нового документа. По умолчанию —
+	 * mapItemsForBasis (перенос 1:1). Переопределяется, когда переносится не весь
+	 * набор строк: напр. Инвентаризация → Списание берёт только строки с
+	 * недостачей, а количество = модуль отклонения.
+	 */
+	mapItems?: (sourceItems: any[]) => any[];
+	/**
 	 * Эндпоинт для проверки уже существующего зависимого документа.
 	 * Если указан, при нажатии «На основании» система сначала ищет
 	 * документ с basisDocumentUuid === sourceFields.uuid. Если найден —
@@ -575,7 +582,7 @@ export async function openDocumentFromBasis(
 		data: {
 			_paneToken: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
 			fromBasisFields: initialFields,
-			fromBasisItems: mapItemsForBasis(sourceItems),
+			fromBasisItems: (target.mapItems ?? mapItemsForBasis)(sourceItems),
 		},
 	});
 }

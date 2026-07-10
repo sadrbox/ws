@@ -15,8 +15,9 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { Field, FieldDateTime } from "src/components/Field";
+import { Field, FieldDateTime, FieldNumber } from "src/components/Field";
 import ClassifierLookup from "src/components/Field/ClassifierLookup";
+import { useOrgAccountingSettings } from "src/hooks/useOrgAccountingSettings";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
@@ -48,6 +49,10 @@ interface TFields {
   amount: number; posted: boolean;
   declarationNumber: string; declarationDate: string;
   countryCode: string; countryName: string;
+  // Таможенные платежи (итоги по декларации). Пошлина/сбор/акциз идут в
+  // себестоимость товара; импортный НДС — к зачёту (плательщик НДС) либо тоже
+  // в себестоимость (неплательщик). Разнесение по позициям — на сервере.
+  dutyAmount: number; customsFeeAmount: number; exciseAmount: number; importVatAmount: number;
   organizationUuid: string; organizationName: string;
   counterpartyUuid: string; counterpartyName: string;
   warehouseUuid: string; warehouseName: string;
@@ -60,6 +65,7 @@ const DEFAULT_FIELDS: TFields = {
   amount: 0, posted: false,
   declarationNumber: "", declarationDate: "",
   countryCode: "", countryName: "",
+  dutyAmount: 0, customsFeeAmount: 0, exciseAmount: 0, importVatAmount: 0,
   organizationUuid: "", organizationName: "",
   counterpartyUuid: "", counterpartyName: "",
   warehouseUuid: "", warehouseName: "",
@@ -124,6 +130,10 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
       declarationDate: d.declarationDate ? isoToLocalInput(d.declarationDate) : "",
       countryCode: d.countryCode ?? "",
       countryName: "",
+      dutyAmount: d.dutyAmount != null ? Number(d.dutyAmount) : 0,
+      customsFeeAmount: d.customsFeeAmount != null ? Number(d.customsFeeAmount) : 0,
+      exciseAmount: d.exciseAmount != null ? Number(d.exciseAmount) : 0,
+      importVatAmount: d.importVatAmount != null ? Number(d.importVatAmount) : 0,
       organizationUuid: d.organizationUuid ?? "",
       organizationName: d.organization?.name ?? "",
       counterpartyUuid: d.counterpartyUuid ?? "",
@@ -145,6 +155,10 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
         declarationNumber: fd.declarationNumber?.trim() || null,
         declarationDate: fd.declarationDate ? localInputToIso(fd.declarationDate) : null,
         countryCode: fd.countryCode || null,
+        dutyAmount: fd.dutyAmount || null,
+        customsFeeAmount: fd.customsFeeAmount || null,
+        exciseAmount: fd.exciseAmount || null,
+        importVatAmount: fd.importVatAmount || null,
         organizationUuid: fd.organizationUuid || null,
         counterpartyUuid: fd.counterpartyUuid || null,
         warehouseUuid: fd.warehouseUuid || null,
@@ -175,6 +189,19 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const assignNumber = useAssignNumber();
   const notices = useDocumentNotices({ docType: "import_declaration", fields: form.fields as unknown as Record<string, unknown> });
+
+  // Предпросмотр себестоимости импорта (landed cost). Разнесение по позициям
+  // делает сервер; здесь — только итог, чтобы пользователь видел результат.
+  // Импортный НДС входит в себестоимость только у НЕплательщика НДС.
+  const { isVatEnabled } = useOrgAccountingSettings(form.fields.organizationUuid || null, form.fields.date || null);
+  const setNum = useCallback((name: keyof TFields) => (e: { target: { value: string } }) => {
+    form.setField(name, (parseFloat(e.target.value) || 0) as never);
+  }, [form.setField]);
+  const customsPayments = (form.fields.dutyAmount || 0) + (form.fields.customsFeeAmount || 0) + (form.fields.exciseAmount || 0);
+  const importVat = form.fields.importVatAmount || 0;
+  const landedTotal = Math.round(((form.fields.amount || 0) + customsPayments + (isVatEnabled ? 0 : importVat)) * 100) / 100;
+  const fmtMoney = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -204,6 +231,47 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
                   value={form.fields.countryCode} onChange={(code, name) => form.setFields({ countryCode: code, countryName: name } as Partial<TFields>)}
                   disabled={form.isLoading} width="240px" />
               </Group>
+
+              {/* Таможенные платежи по декларации. Разносятся по позициям пропорционально
+                  таможенной стоимости: пошлина/сбор/акциз — в себестоимость товара,
+                  импортный НДС — на счёт 1420 (плательщик НДС) либо тоже в себестоимость. */}
+              <GroupRow>
+                <FieldNumber label={translate("customsDuty")} name={`${form.formUid}_dutyAmount`}
+                  value={String(form.fields.dutyAmount ?? 0)} onChange={setNum("dutyAmount")}
+                  disabled={form.isLoading} decimals={2} width="170px" />
+                <FieldNumber label={translate("customsFee")} name={`${form.formUid}_customsFeeAmount`}
+                  value={String(form.fields.customsFeeAmount ?? 0)} onChange={setNum("customsFeeAmount")}
+                  disabled={form.isLoading} decimals={2} width="170px" />
+                <FieldNumber label={translate("exciseLabel")} name={`${form.formUid}_exciseAmount`}
+                  value={String(form.fields.exciseAmount ?? 0)} onChange={setNum("exciseAmount")}
+                  disabled={form.isLoading} decimals={2} width="170px" />
+                <FieldNumber label={translate("importVat")} name={`${form.formUid}_importVatAmount`}
+                  value={String(form.fields.importVatAmount ?? 0)} onChange={setNum("importVatAmount")}
+                  disabled={form.isLoading} decimals={2} width="170px" />
+              </GroupRow>
+            </GroupCol>
+            <GroupCol className={styles.FormTotals}>
+              <div className={styles.SummaryCard}>
+                <div className={styles.SummaryRow}>
+                  <span>{translate("customsValue")}</span>
+                  <span>{fmtMoney.format(form.fields.amount || 0)}</span>
+                </div>
+                <div className={styles.SummaryRow}>
+                  <span>{translate("customsPayments")}</span>
+                  <span>{fmtMoney.format(customsPayments)}</span>
+                </div>
+                <div className={styles.SummaryRow}>
+                  <span>{translate("importVat")}</span>
+                  <span>{fmtMoney.format(importVat)}</span>
+                </div>
+                <div className={styles.SummaryRow}>
+                  <span>{translate("landedCost")}</span>
+                  <span>{fmtMoney.format(landedTotal)}</span>
+                </div>
+                <div className={styles.SummaryNote}>
+                  {isVatEnabled ? translate("landedCostNoteVat") : translate("landedCostNoteNoVat")}
+                </div>
+              </div>
             </GroupCol>
             <GroupCol className={styles.FormNotice}>
               <Notice items={notices} />
@@ -232,7 +300,7 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items, notices, assignNumber]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items, notices, assignNumber, isVatEnabled, setNum, customsPayments, importVat, landedTotal]);
 
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,

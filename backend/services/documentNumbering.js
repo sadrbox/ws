@@ -38,6 +38,9 @@ export const NUMBER_CONFIG = {
 	price_setting: { prefix: "ЦЕН", label: "Установка цен номенклатуры" },
 	month_close: { prefix: "ЗМ", label: "Закрытие месяца" },
 	import_declaration: { prefix: "ГТД", label: "ГТД по импорту" },
+	write_off: { prefix: "СПИС", label: "Списание товара" },
+	goods_receipt: { prefix: "ОПРХ", label: "Оприходование товара" },
+	stock_count: { prefix: "ИНВ", label: "Инвентаризация" },
 };
 
 export const GLOBAL_SETTINGS_KEY = "__global__";

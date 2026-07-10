@@ -1,10 +1,33 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
+import { resolveCostingMethod } from "../../services/accountingPosting.js";
+import { replayProductCosting } from "../../services/costingReplay.js";
 
 const router = express.Router();
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+const INVENTORY_ACCOUNT_CODE = "1330"; // ТМЗ (товары) — типовой счёт учёта РК
+const COGS_ACCOUNT_CODE = "7010"; // себестоимость реализованных товаров
+
+// Документы, у которых amount приходного движения — это ФАКТИЧЕСКАЯ стоимость,
+// уже посчитанная при проведении (см. services/productRegister.js):
+//   purchase           — сумма поступления (без НДС у плательщика);
+//   import_declaration — landed cost (таможенная стоимость + пошлины/сборы);
+//   goods_receipt      — стоимость оприходования излишков;
+//   sale_return        — себестоимость на момент исходной продажи;
+//   inventory_transfer — себестоимость на складе-ИСТОЧНИКЕ.
+// Приход, не входящий в набор, оценивается по текущей средней склада-получателя.
+const COST_BEARING_IN_DOCS = new Set([
+	"purchase",
+	"import_declaration",
+	"goods_receipt",
+	"sale_return",
+	"inventory_transfer",
+]);
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
 
 function buildDocWhere(req, { dateFrom, dateTo, organizationUuid } = {}) {
 	const where = { posted: true, ...tenantFilter(req) };
@@ -67,19 +90,85 @@ router.get("/reports/sales-by-product", async (req, res) => {
 			row.amountNoTaxSale += Number(item.amountWithoutVat);
 		}
 
+		// ── Возвраты от покупателя за тот же период ──────────────────────────
+		const returnWhere = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
+		if (counterpartyUuid) returnWhere.counterpartyUuid = counterpartyUuid;
+		const saleReturns = await prisma.saleReturn.findMany({ where: returnWhere, select: { uuid: true } });
+		const returnUuids = saleReturns.map((r) => r.uuid);
+
+		if (returnUuids.length > 0) {
+			const returnItems = await prisma.saleReturnItem.findMany({
+				where: { saleReturnUuid: { in: returnUuids }, deletedAt: null },
+				include: { product: { select: { uuid: true, name: true } }, unitOfMeasure: { select: { name: true } } },
+			});
+			for (const item of returnItems) {
+				const key = item.productUuid ?? "__no_product__";
+				if (!map.has(key)) {
+					map.set(key, {
+						productUuid: item.productUuid,
+						productName: item.product?.name ?? "—",
+						uom: item.unitOfMeasure?.name ?? "",
+						qtySale: 0, qtyReturn: 0, amountSale: 0, amountReturn: 0,
+						exciseAmountSale: 0, vatAmountSale: 0, amountNoTaxSale: 0,
+						amountNoTaxReturn: 0,
+					});
+				}
+				const row = map.get(key);
+				row.qtyReturn += Number(item.quantity);
+				row.amountReturn += Number(item.amount);
+				row.amountNoTaxReturn = (row.amountNoTaxReturn ?? 0) + Number(item.amountWithoutVat ?? item.amount);
+			}
+		}
+
+		// ── Себестоимость проданного: из ПРОВОДОК, а не пересчётом ───────────
+		// Дт 7010 Кт 1330 при реализации и обратная Дт 1330 Кт 7010 при возврате.
+		// Проводки формируются на проведении по фактической политике организации
+		// (ФИФО/средняя), поэтому отчёт всегда сходится с ОСВ и карточкой счёта.
+		const costByProduct = new Map();
+		const docUuids = [...saleUuids, ...returnUuids];
+		if (docUuids.length > 0) {
+			const entries = await prisma.accountingEntry.findMany({
+				where: {
+					documentUuid: { in: docUuids },
+					OR: [{ debitAccountCode: COGS_ACCOUNT_CODE }, { creditAccountCode: COGS_ACCOUNT_CODE }],
+				},
+				select: {
+					amount: true,
+					debitAccountCode: true,
+					analytics: { where: { subkontoType: "Nomenclature" }, select: { objectUuid: true } },
+				},
+			});
+			for (const e of entries) {
+				const productUuid = e.analytics.find((a) => a.objectUuid)?.objectUuid;
+				if (!productUuid) continue;
+				// Дт 7010 — себестоимость списана; Кт 7010 — возвращена (сторно).
+				const sign = e.debitAccountCode === COGS_ACCOUNT_CODE ? 1 : -1;
+				costByProduct.set(productUuid, (costByProduct.get(productUuid) ?? 0) + sign * Number(e.amount));
+			}
+		}
+
 		const rows = Array.from(map.values())
-			.map((r) => ({
-				...r,
-				qtySale: Math.round(r.qtySale * 10000) / 10000,
-				qtyNet: Math.round((r.qtySale - r.qtyReturn) * 10000) / 10000,
-				amountSale: Math.round(r.amountSale * 100) / 100,
-				amountNet: Math.round((r.amountSale - r.amountReturn) * 100) / 100,
-				exciseAmountSale: Math.round(r.exciseAmountSale * 100) / 100,
-				vatAmountSale: Math.round(r.vatAmountSale * 100) / 100,
-				amountNoTaxSale: Math.round(r.amountNoTaxSale * 100) / 100,
-				costNoVat: 0,
-				profit: 0,
-			}))
+			.map((r) => {
+				const costNoVat = r2(costByProduct.get(r.productUuid) ?? 0);
+				const amountNoTaxReturn = r2(r.amountNoTaxReturn ?? 0);
+				// Прибыль = чистая выручка без НДС − чистая себестоимость.
+				const profit = r2(r.amountNoTaxSale - amountNoTaxReturn - costNoVat);
+				return {
+					...r,
+					qtySale: Math.round(r.qtySale * 10000) / 10000,
+					qtyReturn: Math.round(r.qtyReturn * 10000) / 10000,
+					qtyNet: Math.round((r.qtySale - r.qtyReturn) * 10000) / 10000,
+					amountSale: r2(r.amountSale),
+					amountReturn: r2(r.amountReturn),
+					amountNet: r2(r.amountSale - r.amountReturn),
+					exciseAmountSale: r2(r.exciseAmountSale),
+					vatAmountSale: r2(r.vatAmountSale),
+					amountNoTaxSale: r2(r.amountNoTaxSale),
+					amountNoTaxReturn,
+					costNoVat,
+					profit,
+				};
+			})
 			.sort((a, b) => a.productName.localeCompare(b.productName, "ru"));
 
 		return res.json({ success: true, items: rows, orgName });
@@ -90,25 +179,18 @@ router.get("/reports/sales-by-product", async (req, res) => {
 });
 
 // ─── GET /reports/material-statement ─────────────────────────────────────────
-// Материальная ведомость по средневзвешенной (скользящей) себестоимости.
-// Источник — регистр накопления product_register (только проведённые документы).
+// Материальная ведомость. Источник — регистр накопления product_register
+// (только проведённые документы). Себестоимость выбытия считается ЕДИНЫМ движком
+// replayProductCosting по МЕТОДУ ОРГАНИЗАЦИИ (AVERAGE|FIFO), покомпонентно по
+// складу — тем же, что и проводки. Поэтому прибыль сходится с sales-by-product и
+// главной книгой при обоих методах.
 //
-// Метод: перпетуальная средневзвешенная. По каждому товару движения
-// обрабатываются хронологически; средняя себестоимость единицы пересчитывается
-// при каждом ПОСТУПЛЕНИИ (purchase), а любой расход списывается по текущей
-// средней и НЕ меняет её. Возвраты и перемещения тоже двигают остаток
-// (по текущей средней), но не формируют выручку/прибыль.
-//
-//   Себестоимость(ед.)  = Сумма закупок ÷ Кол-во закупок (нарастающим итогом)
-//   Себестоимость расхода = Кол-во расхода × Себестоимость(на момент)
-//   Сумма продажи        = Σ amount строк реализаций (выручка)
-//   Прибыль              = Сумма продажи − Себестоимость проданного
+//   Приход       = Σ стоимости приходов (по COST_BEARING_IN_DOCS / средней)
+//   Себест. расхода = списание по методу (ФИФО-слои либо скользящая средняя)
+//   Сумма продажи = Σ amount движений реализаций (выручка)
+//   Прибыль      = Сумма продажи − Себестоимость проданного
 //
 // Params: dateFrom, dateTo, organizationUuid, warehouseUuid
-const INVENTORY_ACCOUNT_CODE = "1330"; // ТМЗ (товары) — типовой счёт учёта РК
-const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
-
 router.get("/reports/material-statement", async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid, warehouseUuid } = req.query;
@@ -127,10 +209,13 @@ router.get("/reports/material-statement", async (req, res) => {
 				product: { select: { uuid: true, name: true, sku: true } },
 				unitOfMeasure: { select: { name: true } },
 			},
-			orderBy: [{ date: "asc" }, { id: "asc" }],
+			// Порядок ОБЯЗАН совпадать с ФИФО проводок: (date, documentId, id).
+			orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
 		});
 
 		const from = dateFrom ? new Date(dateFrom) : null;
+		// Метод — тот, что действовал на конец периода (учётная политика по дате).
+		const method = await resolveCostingMethod(organizationUuid || null, dateTo ? new Date(dateTo) : null);
 
 		// Группируем движения по товару (порядок внутри группы сохраняется).
 		const byProduct = new Map();
@@ -142,83 +227,32 @@ router.get("/reports/material-statement", async (req, res) => {
 
 		const items = [];
 		for (const mvs of byProduct.values()) {
-			let qty = 0;      // текущий остаток, кол-во
-			let value = 0;    // текущий остаток, сумма по себестоимости
-			let avg = 0;      // текущая средневзвешенная себестоимость единицы
-			let openQty = 0, openAmount = 0, openCaptured = !from;
-
-			const p = {
-				inQty: 0, inAmount: 0,           // приход (все поступающие движения, по себестоимости)
-				outQty: 0, cogsOut: 0,           // расход (все исходящие движения, по себестоимости)
-				salesQty: 0, salesRevenue: 0, salesCogs: 0, // только реализации
-			};
-
-			let product = null, uom = "";
-			for (const mv of mvs) {
-				if (!product && mv.product) product = mv.product;
-				if (!uom && mv.unitOfMeasure?.name) uom = mv.unitOfMeasure.name;
-
-				// Начальный остаток = состояние перед первым движением периода.
-				if (!openCaptured && from && mv.date >= from) {
-					openQty = qty; openAmount = value; openCaptured = true;
-				}
-				const inPeriod = !from || mv.date >= from;
-				const q = Number(mv.quantity) || 0;
-				const amt = Number(mv.amount) || 0;
-
-				if (mv.movementType === "in") {
-					// Поступление задаёт себестоимость; прочий приход (возврат от
-					// покупателя, перемещение «в») приходуется по текущей средней.
-					const addCost = mv.documentType === "purchase" ? amt : (avg > 0 ? q * avg : amt);
-					qty += q;
-					value += addCost;
-					if (qty > 0) avg = value / qty;
-					if (inPeriod) { p.inQty += q; p.inAmount += addCost; }
-				} else {
-					// Расход списывается по текущей средней и не меняет её.
-					const outCost = avg > 0 ? q * avg : 0;
-					qty -= q;
-					value -= outCost;
-					if (qty > 0) avg = value / qty;
-					else value = Math.max(value, 0);
-					if (inPeriod) {
-						p.outQty += q;
-						p.cogsOut += outCost;
-						if (mv.documentType === "sale") {
-							p.salesQty += q;
-							p.salesRevenue += amt;
-							p.salesCogs += outCost;
-						}
-					}
-				}
-			}
-			if (!openCaptured) { openQty = qty; openAmount = value; }
-
-			const closeQty = qty;
-			const closeAmount = Math.max(value, 0);
+			const c = replayProductCosting(mvs, { method, from, costBearingInDocs: COST_BEARING_IN_DOCS });
 			const hasActivity =
-				openQty || openAmount || closeQty || closeAmount ||
-				p.inQty || p.outQty || p.salesRevenue;
+				c.openQty || c.openAmount || c.closeQty || c.closeAmount ||
+				c.inQty || c.outQty || c.salesRevenue;
 			if (!hasActivity) continue;
 
+			const product = mvs.find((m) => m.product)?.product ?? null;
+			const uom = mvs.find((m) => m.unitOfMeasure?.name)?.unitOfMeasure?.name ?? "";
 			items.push({
 				productUuid: product?.uuid ?? null,
 				productName: product?.name ?? "—",
 				sku: product?.sku ?? "",
 				accountCode: INVENTORY_ACCOUNT_CODE,
 				uom,
-				unitCost: r2(avg),
-				openQty: r3(openQty),
-				openAmount: r2(openAmount),
-				inQty: r3(p.inQty),
-				inAmount: r2(p.inAmount),
-				outQty: r3(p.outQty),
-				cogsOut: r2(p.cogsOut),
-				salePrice: r2(p.salesQty > 0 ? p.salesRevenue / p.salesQty : 0),
-				saleAmount: r2(p.salesRevenue),
-				profit: r2(p.salesRevenue - p.salesCogs),
-				closeQty: r3(closeQty),
-				closeAmount: r2(closeAmount),
+				unitCost: c.unitCost,
+				openQty: c.openQty,
+				openAmount: c.openAmount,
+				inQty: c.inQty,
+				inAmount: c.inAmount,
+				outQty: c.outQty,
+				cogsOut: c.cogsOut,
+				salePrice: r2(c.salesQty > 0 ? c.salesRevenue / c.salesQty : 0),
+				saleAmount: c.salesRevenue,
+				profit: r2(c.salesRevenue - c.salesCogs),
+				closeQty: c.closeQty,
+				closeAmount: c.closeAmount,
 			});
 		}
 

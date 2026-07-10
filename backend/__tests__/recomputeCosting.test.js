@@ -1,13 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { recomputeCosting } from "../services/recomputeCosting.js";
+import { recomputeCosting, unmappedDocTypes } from "../services/recomputeCosting.js";
+import { REGISTER_DOC_TYPES } from "../services/productRegister.js";
+import { POSTING_DOC_TYPES } from "../services/accountingPosting.js";
 
 // Мок-клиент: все findMany возвращают [] (документов нет) → reconcile-функции не
 // вызываются; проверяем КАК формируется выборка (scope) и что обе фазы прошли.
 function mockClient(calls) {
 	const tableNames = [
 		"purchase", "sale", "inventoryTransfer", "saleReturn", "purchaseReturn",
-		"cashReceiptOrder", "cashExpenseOrder", "bankStatement", "payrollCalculation", "payrollPayment",
+		"importDeclaration", "writeOff", "goodsReceipt",
+		"cashOrder", "bankStatement", "payrollCalculation", "payrollPayment", "monthClose",
 	];
 	const c = {};
 	for (const t of tableNames) {
@@ -37,4 +40,31 @@ test("recomputeCosting: без dateFilter — без ограничения по
 	const calls = [];
 	await recomputeCosting({ organizationUuid: "org1" }, mockClient(calls));
 	for (const { where } of calls) assert.equal("date" in where, false, "поле date не задано");
+});
+
+test("ПКО и РКО делят модель cashOrder и различаются по direction", async () => {
+	const calls = [];
+	await recomputeCosting({}, mockClient(calls));
+	const cash = calls.filter((c) => c.table === "cashOrder");
+	assert.ok(cash.length >= 2, "cashOrder выбирается для ПКО и РКО");
+	const directions = new Set(cash.map((c) => c.where.direction));
+	assert.deepEqual([...directions].sort(), ["expense", "receipt"],
+		"без фильтра direction расходный ордер пересчитался бы по правилу приходного");
+});
+
+// Пересчёт молча пропускает типы, которых нет в его карте моделей. Именно так
+// кассовые ордера не пересчитывались: карта ссылалась на несуществующие модели
+// cashReceiptOrder/cashExpenseOrder вместо cashOrder. Страж ловит рассинхрон при
+// добавлении нового документа-регистратора.
+test("recomputeCosting знает про ВСЕ документы-регистраторы и все правила проводок", () => {
+	const missing = unmappedDocTypes();
+	assert.deepEqual(missing, [],
+		`Типы без модели в recomputeCosting (их себестоимость/проводки не пересчитываются): ${missing.join(", ")}`);
+});
+
+test("складские документы зарегистрированы в регистре и в проводках", () => {
+	for (const t of ["write_off", "goods_receipt", "import_declaration", "inventory_transfer"]) {
+		assert.ok(REGISTER_DOC_TYPES.includes(t), `${t} нет в REGISTER_DOC_TYPES`);
+		assert.ok(POSTING_DOC_TYPES.includes(t), `${t} нет в POSTING_DOC_TYPES`);
+	}
 });

@@ -120,6 +120,46 @@
 		"inlist": true
 	},
 	{
+		"identifier": "dutyAmount",
+		"type": "number",
+		"width": "130px",
+		"minWidth": "80px",
+		"alignment": "right",
+		"hint": "Таможенная пошлина",
+		"visible": false,
+		"inlist": true
+	},
+	{
+		"identifier": "customsFeeAmount",
+		"type": "number",
+		"width": "130px",
+		"minWidth": "80px",
+		"alignment": "right",
+		"hint": "Таможенный сбор",
+		"visible": false,
+		"inlist": true
+	},
+	{
+		"identifier": "exciseAmount",
+		"type": "number",
+		"width": "130px",
+		"minWidth": "80px",
+		"alignment": "right",
+		"hint": "Акциз",
+		"visible": false,
+		"inlist": true
+	},
+	{
+		"identifier": "importVatAmount",
+		"type": "number",
+		"width": "130px",
+		"minWidth": "80px",
+		"alignment": "right",
+		"hint": "Импортный НДС",
+		"visible": false,
+		"inlist": true
+	},
+	{
 		"identifier": "comment",
 		"type": "string",
 		"width": "200px",

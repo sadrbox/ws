@@ -10,7 +10,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("src/services/offlineDataService", () => ({
 	fetchList: vi.fn(),
 }));
-vi.mock("src/app", () => ({
+// useAppContext живёт в src/app/context (модули-компоненты держим component-only
+// ради Fast Refresh) — мокаем именно этот путь, иначе LookupField падает без провайдера.
+vi.mock("src/app/context", () => ({
 	useAppContext: () => ({ windows: { addPane: vi.fn() } }),
 }));
 vi.mock("src/hooks/useDirtyHighlight", () => ({
@@ -21,6 +23,10 @@ vi.mock("src/hooks/useDirtyHighlight", () => ({
 }));
 vi.mock("src/registry/modelRegistry", () => ({
 	getByEndpoint: () => null,
+}));
+// Гейт права на кнопку «Создать» — читает пользователя из контекста приложения.
+vi.mock("src/hooks/useUserAccessRight", () => ({
+	useUserAccessRight: () => ({ canWrite: true }),
 }));
 
 import LookupField from "src/components/Field/LookupField";

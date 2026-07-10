@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { prisma } from "../../prisma/prisma-client.js";
 import { generateToken, authMiddleware } from "../../utils/auth.js";
 import { generateSecret, verifyTotp, otpauthUrl } from "../../services/twoFactor.js";
+import { recordAuthEvent, AUTH_ACTIONS } from "../../services/auditLog.js";
 
 const router = express.Router();
 
@@ -45,6 +46,10 @@ const ALL_MODEL_NAMES = [
 	"ScheduledTask",
 	"InventoryTransfer",
 	"ImportDeclaration",
+	"WriteOff",
+	"GoodsReceipt",
+	"StockCount",
+	"SerialNumber",
 	"CashReceiptOrder",
 	"CashExpenseOrder",
 	"Brand",
@@ -144,6 +149,7 @@ router.post("/auth/login", async (req, res) => {
 		const INVALID_CREDENTIALS = "Неверное имя пользователя или пароль";
 
 		if (!user) {
+			void recordAuthEvent({ actionType: AUTH_ACTIONS.LOGIN_FAILED, username: trimmedUsername, req, props: { reason: "unknown_user" } });
 			return res.status(401).json({
 				success: false,
 				message: INVALID_CREDENTIALS,
@@ -168,6 +174,7 @@ router.post("/auth/login", async (req, res) => {
 			}
 		} else {
 			if (!password || typeof password !== "string") {
+				void recordAuthEvent({ actionType: AUTH_ACTIONS.LOGIN_FAILED, user, req, props: { reason: "no_password" } });
 				return res.status(401).json({
 					success: false,
 					message: INVALID_CREDENTIALS,
@@ -192,6 +199,7 @@ router.post("/auth/login", async (req, res) => {
 			}
 
 			if (!passwordValid) {
+				void recordAuthEvent({ actionType: AUTH_ACTIONS.LOGIN_FAILED, user, req, props: { reason: "bad_password" } });
 				return res.status(401).json({
 					success: false,
 					message: INVALID_CREDENTIALS,
@@ -207,12 +215,14 @@ router.post("/auth/login", async (req, res) => {
 				return res.status(401).json({ success: false, twoFactorRequired: true, message: "Введите код из приложения-аутентификатора" });
 			}
 			if (!verifyTotp(user.twoFactorSecret, code)) {
+				void recordAuthEvent({ actionType: AUTH_ACTIONS.LOGIN_FAILED, user, req, props: { reason: "bad_2fa_code" } });
 				return res.status(401).json({ success: false, twoFactorRequired: true, message: "Неверный код двухфакторной аутентификации" });
 			}
 		}
 
 		// Генерируем JWT-токен
 		const token = generateToken(user);
+		void recordAuthEvent({ actionType: AUTH_ACTIONS.LOGIN, user, req });
 
 		// Определяем Разрешения пользователей
 		const isSuperOrDevAdmin =
@@ -396,6 +406,7 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 			data: { password: hashed },
 		});
 
+		void recordAuthEvent({ actionType: AUTH_ACTIONS.PASSWORD_CHANGED, user: req.user, req });
 		return res.status(200).json({ success: true, message: "Пароль изменён" });
 	} catch (error) {
 		console.error("POST /auth/change-password error:", error);
@@ -441,6 +452,7 @@ router.post("/auth/2fa/enable", authMiddleware, async (req, res) => {
 		if (u.twoFactorEnabled) return res.status(400).json({ success: false, message: "2FA уже включена" });
 		if (!verifyTotp(u.twoFactorSecret, code)) return res.status(400).json({ success: false, message: "Неверный код — проверьте время на устройстве" });
 		await prisma.user.update({ where: { uuid: req.user.uuid }, data: { twoFactorEnabled: true } });
+		void recordAuthEvent({ actionType: AUTH_ACTIONS.TWO_FACTOR_ENABLED, user: req.user, req });
 		return res.json({ success: true, message: "Двухфакторная аутентификация включена" });
 	} catch (error) {
 		console.error("POST /auth/2fa/enable error:", error);
@@ -456,6 +468,7 @@ router.post("/auth/2fa/disable", authMiddleware, async (req, res) => {
 		if (!u?.twoFactorEnabled) return res.json({ success: true, message: "2FA не была включена" });
 		if (!verifyTotp(u.twoFactorSecret, code)) return res.status(400).json({ success: false, message: "Неверный код" });
 		await prisma.user.update({ where: { uuid: req.user.uuid }, data: { twoFactorEnabled: false, twoFactorSecret: null } });
+		void recordAuthEvent({ actionType: AUTH_ACTIONS.TWO_FACTOR_DISABLED, user: req.user, req });
 		return res.json({ success: true, message: "Двухфакторная аутентификация отключена" });
 	} catch (error) {
 		console.error("POST /auth/2fa/disable error:", error);

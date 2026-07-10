@@ -43,6 +43,9 @@ const ESF_COLUMN_IDS = new Set(["product.tnvedCode", "product.truOriginCode", "p
 // Ценовые колонки — не нужны для документов без стоимостной части (напр.
 // Перемещение ТМЗ только двигает товар: ни цены, ни скидки, ни суммы продажи).
 const PRICING_COLUMN_IDS = new Set(["price", "amount", "discountPercent", "discountAmount"]);
+// Колонки Инвентаризации: учётное количество (из регистра) и отклонение
+// (факт − учёт). Обе только для чтения; «факт» вводится в колонке quantity.
+const STOCKCOUNT_COLUMN_IDS = new Set(["accountingQuantity", "deviation"]);
 
 const focusNextInRow = (currentTarget: EventTarget | null) => {
   if (!(currentTarget instanceof HTMLElement)) return;
@@ -103,6 +106,8 @@ export interface TradeDocumentItemsTableProps {
   defaultHiddenColumns?: string[];
   /** Показывать ЭСФ-метаданные строк (ТН ВЭД, признак происхождения — из карточки товара). Для СФ исходящей. */
   showEsfColumns?: boolean;
+  /** Показывать колонки Инвентаризации: «Кол-во по учёту» и «Отклонение» (обе — только чтение). */
+  showStockCountColumns?: boolean;
   /** Переопределяет кнопку «Обновить» в тулбаре SubTable (вместо handleCleanRefresh). */
   onRefresh?: () => void;
   /** Запретить добавление строк (независимо от disabled). */
@@ -146,6 +151,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   onAllItemsChange,
   defaultHiddenColumns,
   showEsfColumns = false,
+  showStockCountColumns = false,
   onRefresh,
   disableAddRows = false,
   disableDeleteRows = false,
@@ -190,6 +196,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       if (!useExcise && EXCISE_COLUMN_IDS.has(id)) return false;
       if (!isVatEnabled && AMOUNT_WITHOUT_VAT_IDS.has(id)) return false;
       if (!showEsfColumns && ESF_COLUMN_IDS.has(id)) return false;
+      if (!showStockCountColumns && STOCKCOUNT_COLUMN_IDS.has(id)) return false;
       return true;
     });
 
@@ -274,7 +281,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       base = base.map((c) => hidden.has(c.identifier) ? { ...c, visible: false } : c);
     }
     return base;
-  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing, showEsfColumns]);
+  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing, showEsfColumns, showStockCountColumns]);
 
   const taxSig = useMemo(
     () => "vat:" + (isVatEnabled ? "1" : "0") + "|disc:" + (useDiscount ? "1" : "0") + "|exc:" + (useExcise ? "1" : "0") + "|m:" + vatCalculationMethod + "|r:" + String(orgVatRate ?? ""),
@@ -457,6 +464,12 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       const idx = ctx.rows.indexOf(row);
       const value = idx >= 0 ? idx + 1 : (row.lineNumber as string | number | null | undefined) ?? "";
       return <ReadOnlyCell value={String(value)} />;
+    }
+    // Инвентаризация: учёт — из регистра (не редактируется), отклонение = факт − учёт.
+    if (id === "accountingQuantity") return <ReadOnlyCell value={row.accountingQuantity ?? 0} column={col} />;
+    if (id === "deviation") {
+      const dev = (Number(row.quantity) || 0) - (Number(row.accountingQuantity) || 0);
+      return <ReadOnlyCell value={Math.round(dev * 10000) / 10000} column={col} />;
     }
     if (id === "vatAmount") return <ReadOnlyCell value={row.vatAmount ?? 0} column={col} />;
     if (id === "amount") return <ReadOnlyCell value={row.amount ?? 0} column={col} />;

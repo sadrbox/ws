@@ -69,6 +69,14 @@ import reservationsRouter from "./api/router/reservations.js";
 import reservationItemsRouter from "./api/router/reservationitems.js";
 import importDeclarationsRouter from "./api/router/importdeclarations.js";
 import importDeclarationItemsRouter from "./api/router/importdeclarationitems.js";
+import writeOffsRouter from "./api/router/writeoffs.js";
+import writeOffItemsRouter from "./api/router/writeoffitems.js";
+import goodsReceiptsRouter from "./api/router/goodsreceipts.js";
+import goodsReceiptItemsRouter from "./api/router/goodsreceiptitems.js";
+import { auditMiddleware } from "./utils/auditMiddleware.js";
+import stockCountsRouter from "./api/router/stockcounts.js";
+import serialNumbersRouter from "./api/router/serialnumbers.js";
+import stockCountItemsRouter from "./api/router/stockcountitems.js";
 import purchaseOrdersRouter from "./api/router/purchaseorders.js";
 import purchaseOrderItemsRouter from "./api/router/purchaseorderitems.js";
 import bankStatementsRouter from "./api/router/bankstatements.js";
@@ -299,6 +307,9 @@ app.use("/api/v1", authRouter);
 app.use("/api/v1", authMiddleware);
 app.use("/api/v1", tenantMiddleware);
 app.use("/api/v1", userAccessRightMiddleware);
+// Сквозной журнал действий (E1.2): пишет create/update/delete с diff. Строго
+// после проверки прав — незаконные запросы до сюда не доходят.
+app.use("/api/v1", auditMiddleware);
 
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);
@@ -346,6 +357,13 @@ app.use("/api/v1", reservationsRouter);
 app.use("/api/v1", reservationItemsRouter);
 app.use("/api/v1", importDeclarationsRouter);
 app.use("/api/v1", importDeclarationItemsRouter);
+app.use("/api/v1", writeOffsRouter);
+app.use("/api/v1", writeOffItemsRouter);
+app.use("/api/v1", goodsReceiptsRouter);
+app.use("/api/v1", goodsReceiptItemsRouter);
+app.use("/api/v1", stockCountsRouter);
+app.use("/api/v1", stockCountItemsRouter);
+app.use("/api/v1", serialNumbersRouter);
 app.use("/api/v1", purchaseOrdersRouter);
 app.use("/api/v1", purchaseOrderItemsRouter);
 app.use("/api/v1", bankStatementsRouter);

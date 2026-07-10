@@ -215,7 +215,7 @@ export async function checkFkOwnership(req, tx, checks) {
 // ═══════════════════════════════════════════════════════════════════════════
 // Маппинг URL-путей → имя модели в UserAccessRight (PascalCase из ALL_MODEL_NAMES)
 // ═══════════════════════════════════════════════════════════════════════════
-const ROUTE_TO_MODEL = {
+export const ROUTE_TO_MODEL = {
 	organizations: "Organization",
 	counterparties: "Counterparty",
 	contracts: "Contract",
@@ -248,6 +248,13 @@ const ROUTE_TO_MODEL = {
 	"purchase-order-items": "PurchaseOrderItem",
 	importdeclarations: "ImportDeclaration",
 	importdeclarationitems: "ImportDeclarationItem",
+	writeoffs: "WriteOff",
+	writeoffitems: "WriteOffItem",
+	goodsreceipts: "GoodsReceipt",
+	goodsreceiptitems: "GoodsReceiptItem",
+	stockcounts: "StockCount",
+	stockcountitems: "StockCountItem",
+	serialnumbers: "SerialNumber",
 	"bank-statements": "BankStatement",
 	"scheduled-tasks": "ScheduledTask",
 	"inventory-transfers": "InventoryTransfer",

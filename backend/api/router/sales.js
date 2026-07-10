@@ -6,6 +6,7 @@ import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgF
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
@@ -346,6 +347,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await reconcileDocumentRegister("sale", item.uuid);
 		// Пересобираем бухгалтерские проводки документа.
 		await reconcileDocumentEntries("sale", item.uuid);
+		// Ввод задним числом делает COGS последующих документов устаревшим —
+		// пересчитываем хвост истории (не трогая закрытый период).
+		await recomputeIfRetroactive({ organizationUuid: item.organizationUuid, date: item.date });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (respondBasisError(error, res)) return;

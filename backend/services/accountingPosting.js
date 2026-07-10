@@ -37,6 +37,7 @@ export const ACC = {
 	RETAINED: "5510",
 	RESULT: "5610", // итоговая прибыль/убыток (закрытие месяца)
 	REVENUE: "6010",
+	OTHER_INCOME: "6280", // прочие доходы (излишки при оприходовании)
 	COGS: "7010",
 	ADMIN_EXP: "7210",
 };
@@ -46,6 +47,7 @@ export const ACC = {
 // нормальной стороне переносится на счёт итоговой прибыли 5610.
 const CLOSE_ACCOUNTS = [
 	{ account: ACC.REVENUE, normal: "credit" }, // 6010 доход
+	{ account: ACC.OTHER_INCOME, normal: "credit" }, // 6280 прочие доходы (излишки)
 	{ account: ACC.COGS, normal: "debit" },     // 7010 себестоимость
 	{ account: ACC.ADMIN_EXP, normal: "debit" }, // 7210 админрасходы
 ];
@@ -105,6 +107,8 @@ const DOC_CONFIG = {
 	sale_return: { parentModel: "saleReturn", itemModel: "saleReturnItem", parentField: "saleReturnUuid" },
 	purchase_return: { parentModel: "purchaseReturn", itemModel: "purchaseReturnItem", parentField: "purchaseReturnUuid" },
 	import_declaration: { parentModel: "importDeclaration", itemModel: "importDeclarationItem", parentField: "importDeclarationUuid" },
+	write_off: { parentModel: "writeOff", itemModel: "writeOffItem", parentField: "writeOffUuid" },
+	goods_receipt: { parentModel: "goodsReceipt", itemModel: "goodsReceiptItem", parentField: "goodsReceiptUuid" },
 	inventory_transfer: { parentModel: "inventoryTransfer", itemModel: "inventoryTransferItem", parentField: "inventoryTransferUuid" },
 	cash_receipt_order: { parentModel: "cashOrder" },
 	cash_expense_order: { parentModel: "cashOrder" },
@@ -163,12 +167,30 @@ export async function resolveUseVat(orgUuid, client = prisma) {
 	}
 }
 
-/** Метод расчёта себестоимости организации: "AVERAGE" (по умолчанию) | "FIFO". */
-export async function resolveCostingMethod(orgUuid, client = prisma) {
+/**
+ * Метод расчёта себестоимости организации: "AVERAGE" (по умолчанию) | "FIFO".
+ *
+ * Выбирается настройка, ДЕЙСТВОВАВШАЯ НА ДАТУ ДОКУМЕНТА (`startDate <= date`),
+ * а не самая свежая: учётная политика меняется с начала периода, и документы
+ * прошлых периодов обязаны сохранять прежний метод. Иначе переключение
+ * организации на ФИФО заставило бы пересчёт переписать по ФИФО всю историю,
+ * включая периоды, закрытые по средней.
+ *
+ * Если на дату документа настройки ещё не было — "AVERAGE" (безопасный дефолт).
+ *
+ * @param {string|null} orgUuid
+ * @param {Date|string|null} [date] — дата документа; null → текущая настройка.
+ */
+export async function resolveCostingMethod(orgUuid, date = null, client = prisma) {
 	if (!orgUuid) return "AVERAGE";
 	try {
+		const at = date ? new Date(date) : null;
 		const s = await client.organizationAccountingSetting.findFirst({
-			where: { organizationUuid: orgUuid, deletedAt: null },
+			where: {
+				organizationUuid: orgUuid,
+				deletedAt: null,
+				...(at && !isNaN(at.getTime()) ? { startDate: { lte: at } } : {}),
+			},
 			orderBy: { startDate: "desc" },
 			select: { costingMethod: true },
 		});
@@ -186,8 +208,32 @@ export async function resolveCostingMethod(orgUuid, client = prisma) {
  */
 export async function resolveUnitCost(orgUuid, productUuid, warehouseUuid, dateUpTo, quantity, client = prisma) {
 	const ctx = makeContext(client, orgUuid ?? null);
-	ctx.beginDocument(await resolveCostingMethod(orgUuid ?? null, client), null, null);
+	// Метод — тот, что действовал на дату оценки (dateUpTo), а не текущий.
+	ctx.beginDocument(await resolveCostingMethod(orgUuid ?? null, dateUpTo ?? null, client), null, null);
 	return ctx.unitCost(productUuid, warehouseUuid, dateUpTo, quantity, { consume: false });
+}
+
+/**
+ * Контекст себестоимости на ОДИН документ — для оценки нескольких строк подряд.
+ *
+ * В отличие от resolveUnitCost (свежий контекст на каждый вызов) здесь общий
+ * fifoOffset: строки одного документа последовательно «съедают» ФИФО-слои, и две
+ * строки одного товара не оцениваются повторно по одним и тем же партиям.
+ * Для AVERAGE поведение не меняется (средняя одинакова для всех строк).
+ *
+ * docUuid/docId исключают собственные расходы документа и задают тай-брейк по
+ * documentId среди расходов той же даты. Для оценки ПРИХОДА по состоянию на
+ * прошлую дату (возврат от покупателя) их передавать НЕ нужно: иначе будут
+ * пропущены расходы исходной продажи, и вернутся не те слои.
+ *
+ * @param {string|null} orgUuid
+ * @param {Date|string|null} date — дата документа (по ней же выбирается метод)
+ * @param {{docUuid?:string|null, docId?:number|null}} [opts]
+ */
+export async function createCostingContext(orgUuid, date, { docUuid = null, docId = null } = {}, client = prisma) {
+	const ctx = makeContext(client, orgUuid ?? null);
+	ctx.beginDocument(await resolveCostingMethod(orgUuid ?? null, date ?? null, client), docUuid, docId);
+	return ctx;
 }
 
 // ─── Реестр правил формирования проводок ─────────────────────────────────────
@@ -254,6 +300,47 @@ export const POSTING_RULES = {
 					debit: ACC.VAT_IN, credit: ACC.CUSTOMS, amount: a.importVat,
 					description: "Импортный НДС (к зачёту)",
 					debitAnalytics: [], creditAnalytics: [],
+				});
+			}
+		}
+		return out;
+	},
+
+	// Списание товара (порча/недостача/внутреннее потребление): Дт 7210 Кт 1330 по СЕБЕСТОИМОСТИ
+	// (ФИФО/средняя), а не по цене строки. consume:true — расход потребляет партии
+	// ФИФО так же, как реализация.
+	write_off: async (doc, items, ctx) => {
+		const out = [];
+		for (const it of items) {
+			if (!it.productUuid) continue;
+			const qty = Number(it.quantity || 0);
+			const cost = r2((await ctx.unitCost(it.productUuid, doc.warehouseUuid, doc.date, qty, { consume: true })) * qty);
+			if (cost > 0) {
+				out.push({
+					debit: ACC.ADMIN_EXP, credit: ACC.GOODS, amount: cost,
+					description: "Списание товара",
+					debitAnalytics: [],
+					creditAnalytics: compact([an("Nomenclature", it.productUuid), an("Warehouse", doc.warehouseUuid)]),
+				});
+			}
+		}
+		return out;
+	},
+
+	// Оприходование излишков: Дт 1330 Кт 6280 (прочие доходы) по цене оприходования.
+	// Цена вводится пользователем: у излишка может не быть остатка, из которого можно
+	// вывести себестоимость, поэтому unitCost здесь неприменим.
+	goods_receipt: (doc, items) => {
+		const out = [];
+		for (const it of items) {
+			if (!it.productUuid) continue;
+			const amount = r2(it.amount);
+			if (amount > 0) {
+				out.push({
+					debit: ACC.GOODS, credit: ACC.OTHER_INCOME, amount,
+					description: "Оприходование излишков товара",
+					debitAnalytics: compact([an("Nomenclature", it.productUuid), an("Warehouse", doc.warehouseUuid)]),
+					creditAnalytics: [],
 				});
 			}
 		}
@@ -664,11 +751,14 @@ function makeContext(client, orgUuid) {
 		if (orgUuid) base.organizationUuid = orgUuid;
 		const dateCond = dateUpTo ? { lte: dateUpTo } : undefined;
 
-		// Слои прихода (oldest → newest).
+		// Слои прихода (oldest → newest). Ключ сортировки ОБЯЗАН совпадать с тем,
+		// по которому ниже отсекается «уже потреблённое» (date, затем documentId):
+		// иначе при нескольких документах одной датой слои и расходы упорядочены
+		// по-разному, и ФИФО списывает не те партии.
 		const ins = await client.productRegister.findMany({
 			where: { ...base, movementType: "in", ...(dateCond ? { date: dateCond } : {}) },
 			select: { quantity: true, amount: true },
-			orderBy: [{ date: "asc" }, { id: "asc" }],
+			orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
 		});
 		// Потреблено ДО этого документа в порядке ФИФО (date, затем documentId) —
 		// расходы других документов. Строгий порядок исключает двойной «пропуск»
@@ -744,7 +834,7 @@ export async function buildDocumentEntries(documentType, doc, items, client = pr
 	// Плательщик НДС? (определяет разнесение НДС на 1420/3130).
 	ctx.useVat = await resolveUseVat(doc.organizationUuid ?? null, client);
 	// Метод себестоимости организации (AVERAGE|FIFO) + инициализация ФИФО-состояния.
-	ctx.beginDocument(await resolveCostingMethod(doc.organizationUuid ?? null, client), doc.uuid, doc.id);
+	ctx.beginDocument(await resolveCostingMethod(doc.organizationUuid ?? null, doc.date ?? null, client), doc.uuid, doc.id);
 	const raw = await rule(doc, items ?? [], ctx);
 	if (!raw?.length) return [];
 

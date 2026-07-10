@@ -199,6 +199,13 @@ export const REFERENCE_LABELS = {
 	month_closes: "Закрытия месяца",
 	import_declarations: "ГТД по импорту",
 	import_declaration_items: "Строки ГТД",
+	write_offs: "Списания товара",
+	write_off_items: "Строки списания",
+	goods_receipts: "Оприходования товара",
+	goods_receipt_items: "Строки оприходования",
+	stock_counts: "Инвентаризации",
+	stock_count_items: "Строки инвентаризации",
+	serial_numbers: "Серийные номера",
 	payroll_calculations: "Начисления ЗП",
 	payroll_payments: "Выплаты ЗП",
 	brands: "Бренды",
@@ -275,6 +282,8 @@ const BASIS_CHILD_TABLES = [
 	"commercial_offers",
 	"reservations",
 	"bank_statements",
+	"write_offs",
+	"goods_receipts",
 ];
 
 /**
@@ -296,6 +305,7 @@ const BASIS_SOURCE_MODELS = new Set([
 	"purchaseOrder",
 	"commercialOffer",
 	"reservation",
+	"stockCount",
 ]);
 
 /**

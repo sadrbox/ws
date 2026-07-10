@@ -43,6 +43,7 @@ export const KZ_CHART_OF_ACCOUNTS = [
 	{ code: "5510", name: "Нераспределённая прибыль (непокрытый убыток) отчётного года", accountType: "passive" },
 	{ code: "5610", name: "Итоговая прибыль (итоговый убыток)", accountType: "passive" },
 	{ code: "6010", name: "Доход от реализации продукции и оказания услуг", accountType: "passive", sub: ["Counterparty", "Nomenclature", "Manager"] },
+	{ code: "6280", name: "Прочие доходы (излишки, оприходование)", accountType: "passive" },
 	{ code: "7010", name: "Себестоимость реализованных товаров и услуг", accountType: "active", sub: ["Nomenclature", "Warehouse"] },
 	{ code: "7210", name: "Административные расходы", accountType: "active", sub: ["Department", "CostItem"] },
 ];

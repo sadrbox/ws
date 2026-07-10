@@ -212,6 +212,8 @@ export function createDocumentItemsRouter({
 	// Произвольные строковые поля строки (напр. positionNumber у позиций ГТД) —
 	// просто пробрасываются в create/update без спец-логики.
 	extraStringFields = [],
+	// Произвольные числовые поля строки (напр. accountingQuantity у Инвентаризации).
+	extraNumberFields = [],
 }) {
 	const router = express.Router();
 
@@ -221,8 +223,10 @@ export function createDocumentItemsRouter({
 		? Object.fromEntries(ESF_LINE_FIELDS.map((f) => [f, body[f] || null]))
 		: {});
 	/** Произвольные строковые поля строки (positionNumber и т.п.). */
-	const extraFields = (body) =>
-		Object.fromEntries(extraStringFields.map((f) => [f, body[f] != null ? String(body[f]).trim() || null : null]));
+	const extraFields = (body) => ({
+		...Object.fromEntries(extraStringFields.map((f) => [f, body[f] != null ? String(body[f]).trim() || null : null])),
+		...Object.fromEntries(extraNumberFields.map((f) => [f, body[f] != null && body[f] !== "" ? Number(body[f]) || 0 : 0])),
+	});
 
 	// Изоляция: строки документа доступны только если РОДИТЕЛЬСКИЙ документ
 	// принадлежит организации пользователя (строки сами по себе фильтра не имеют).
@@ -545,6 +549,9 @@ export function createDocumentItemsRouter({
 			}
 			for (const f of extraStringFields) {
 				if (req.body[f] !== undefined) data[f] = req.body[f] != null ? String(req.body[f]).trim() || null : null;
+			}
+			for (const f of extraNumberFields) {
+				if (req.body[f] !== undefined) data[f] = req.body[f] != null && req.body[f] !== "" ? Number(req.body[f]) || 0 : 0;
 			}
 
 			const parseNum = (v) => {

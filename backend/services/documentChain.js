@@ -27,6 +27,11 @@ export const DOC_REGISTRY = {
 	incoming_invoice: { model: "incomingInvoice", label: "Счёт-фактура (вх.)", hasBasis: false },
 	purchase_return: { model: "purchaseReturn", label: "Возврат поставщику", hasBasis: true },
 	bank_statement: { model: "bankStatement", label: "Банковская выписка", hasBasis: true },
+	// Складские документы: Инвентаризация — только ИСТОЧНИК основания (сама на
+	// основании не создаётся), Списание/Оприходование — её потомки.
+	stock_count: { model: "stockCount", label: "Инвентаризация", hasBasis: false },
+	write_off: { model: "writeOff", label: "Списание товара", hasBasis: true },
+	goods_receipt: { model: "goodsReceipt", label: "Оприходование товара", hasBasis: true },
 };
 
 /** Типы-«дети» — те, у кого есть поле basisDocumentUuid (могут ссылаться на основание). */

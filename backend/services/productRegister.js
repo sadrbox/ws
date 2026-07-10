@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
 import { reservedQuantity } from "./reservationRegister.js";
-import { resolveUnitCost } from "./accountingPosting.js";
+import { createCostingContext } from "./accountingPosting.js";
 import { allocateImportLandedCost } from "./importLandedCost.js";
 
 // Конфигурация документов-регистраторов.
@@ -58,6 +58,18 @@ const DOC_CONFIG = {
 		parentModel: "importDeclaration",
 		itemModel: "importDeclarationItem",
 		parentField: "importDeclarationUuid",
+		movements: [{ type: "in", warehouseField: "warehouseUuid" }],
+	},
+	write_off: {
+		parentModel: "writeOff",
+		itemModel: "writeOffItem",
+		parentField: "writeOffUuid",
+		movements: [{ type: "out", warehouseField: "warehouseUuid" }],
+	},
+	goods_receipt: {
+		parentModel: "goodsReceipt",
+		itemModel: "goodsReceiptItem",
+		parentField: "goodsReceiptUuid",
 		movements: [{ type: "in", warehouseField: "warehouseUuid" }],
 	},
 };
@@ -150,6 +162,23 @@ export async function reconcileDocumentRegister(
 				? allocateImportLandedCost(doc, items, useVat)
 				: null;
 
+		// Контексты себестоимости — ОДИН на документ, чтобы строки последовательно
+		// потребляли ФИФО-слои. Иначе две строки одного товара оценивались бы по
+		// одним и тем же старейшим партиям (при AVERAGE разницы нет).
+		//
+		// docCtx — для оценки на дату САМОГО документа (списание, перемещение):
+		//   исключает собственные расходы и упорядочивает расходы той же даты по id.
+		// pastCtx — для оценки на ПРОШЛУЮ дату (возврат от покупателя оценивается на
+		//   дату исходной продажи). docUuid/docId здесь не передаём намеренно: иначе
+		//   расходы самой продажи попали бы в «уже потреблённое» и вернулись бы слои,
+		//   лежащие ЗА проданными.
+		let docCtx = null;
+		let pastCtx = null;
+		const useDocCtx = async () =>
+			(docCtx ??= await createCostingContext(doc.organizationUuid ?? null, doc.date, { docUuid: documentUuid, docId: doc.id ?? null }, client));
+		const usePastCtx = async () =>
+			(pastCtx ??= await createCostingContext(doc.organizationUuid ?? null, saleReturnCostDate, {}, client));
+
 		// 4. Формируем движения (приход/расход) по каждой строке-товару.
 		const records = [];
 		for (const it of items) {
@@ -168,7 +197,8 @@ export async function reconcileDocumentRegister(
 			// текущему остатку. Фолбэк на сумму строки, если себестоимость не
 			// определена (нет приходов до даты продажи).
 			if (documentType === "sale_return" && qty > 0) {
-				const unit = await resolveUnitCost(doc.organizationUuid ?? null, it.productUuid, doc.warehouseUuid ?? null, saleReturnCostDate, qty, client);
+				const ctx = await usePastCtx();
+				const unit = await ctx.unitCost(it.productUuid, doc.warehouseUuid ?? null, saleReturnCostDate, qty, { consume: true });
 				const costValue = Math.round((Number(unit) || 0) * qty * 100) / 100;
 				if (costValue > 0) value = costValue;
 			}
@@ -176,6 +206,25 @@ export async function reconcileDocumentRegister(
 			if (landedMap) {
 				const landed = landedMap.get(it.uuid);
 				if (landed) value = landed.landed;
+			}
+			// Списание: расход по СЕБЕСТОИМОСТИ (ФИФО/средняя) на дату документа —
+			// цена в строке не вводится (себестоимость определяется учётом, не пользователем).
+			if (documentType === "write_off" && qty > 0) {
+				const ctx = await useDocCtx();
+				const unit = await ctx.unitCost(it.productUuid, doc.warehouseUuid ?? null, doc.date ?? new Date(), qty, { consume: true });
+				value = Math.round((Number(unit) || 0) * qty * 100) / 100;
+			}
+			// Перемещение ТМЗ: цена в строках не вводится (amount = 0), поэтому
+			// стоимость обоих движений — себестоимость на складе-ИСТОЧНИКЕ. Иначе
+			// склад-получатель получает товар по нулевой стоимости: при средней она
+			// размылась бы, а при ФИФО остаётся вечным нулевым слоем и списывается
+			// в COGS нулём. Слои источника при переносе смешиваются в одну сумму —
+			// движение регистра несёт одну стоимость (осознанное упрощение).
+			if (documentType === "inventory_transfer" && qty > 0) {
+				const ctx = await useDocCtx();
+				const unit = await ctx.unitCost(it.productUuid, doc.fromWarehouseUuid ?? null, doc.date ?? new Date(), qty, { consume: true });
+				const costValue = Math.round((Number(unit) || 0) * qty * 100) / 100;
+				if (costValue > 0) value = costValue;
 			}
 			if (qty === 0 && value === 0) continue;
 			for (const mv of cfg.movements) {
@@ -197,6 +246,15 @@ export async function reconcileDocumentRegister(
 		}
 		if (records.length) {
 			await client.productRegister.createMany({ data: records });
+		}
+		// Итог документа списания = фактическая себестоимость движений: цена в
+		// строках не вводится, поэтому recalcParentAmount (Σ qty × price) дал бы 0.
+		if (documentType === "write_off") {
+			const total = records.reduce((s, r) => s + Number(r.amount || 0), 0);
+			await client.writeOff.update({
+				where: { uuid: documentUuid },
+				data: { amount: Math.round(total * 100) / 100 },
+			});
 		}
 	} catch (err) {
 		console.error(
@@ -286,6 +344,45 @@ async function balanceFor(productUuid, warehouseUuid, excludeDocumentUuid, clien
 	for (const r of rows)
 		bal += (r.movementType === "out" ? -1 : 1) * (Number(r.quantity) || 0);
 	return Math.round(bal * 10000) / 10000;
+}
+
+/**
+ * Остатки всех товаров на складе по состоянию на дату (включительно).
+ * Используется Инвентаризацией для заполнения «количества по учёту».
+ *
+ * @returns {Promise<Map<string, {quantity:number, amount:number}>>} productUuid → остаток
+ */
+export async function warehouseBalances(
+	organizationUuid,
+	warehouseUuid,
+	dateUpTo,
+	client = prisma,
+) {
+	if (!warehouseUuid) return new Map();
+	const rows = await client.productRegister.findMany({
+		where: {
+			warehouseUuid,
+			...(organizationUuid ? { organizationUuid } : {}),
+			...(dateUpTo ? { date: { lte: dateUpTo } } : {}),
+		},
+		select: { productUuid: true, movementType: true, quantity: true, amount: true },
+	});
+	const map = new Map();
+	for (const r of rows) {
+		if (!r.productUuid) continue;
+		const sign = r.movementType === "out" ? -1 : 1;
+		const cur = map.get(r.productUuid) ?? { quantity: 0, amount: 0 };
+		cur.quantity += sign * (Number(r.quantity) || 0);
+		cur.amount += sign * (Number(r.amount) || 0);
+		map.set(r.productUuid, cur);
+	}
+	for (const [k, v] of map) {
+		v.quantity = Math.round(v.quantity * 10000) / 10000;
+		v.amount = Math.round(v.amount * 100) / 100;
+		// Нулевые остатки в инвентаризацию не тянем.
+		if (v.quantity === 0 && v.amount === 0) map.delete(k);
+	}
+	return map;
 }
 
 /** Суммирует требуемый расход по паре товар+склад из строк документа. */

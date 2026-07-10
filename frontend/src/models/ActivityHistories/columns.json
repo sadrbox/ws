@@ -96,7 +96,7 @@
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Идентификатор объекта",
-		"visible": true,
+		"visible": false,
 		"inlist": true
 	},
 	{
@@ -118,6 +118,15 @@
 		"hint": "Название объекта",
 		"visible": true,
 		"inlist": true
+	},
+	{
+		"identifier": "diff",
+		"hint": "Изменения (поле: было → стало)",
+		"type": "string",
+		"visible": true,
+		"width": "360px",
+		"minWidth": "160px",
+		"alignment": "left"
 	},
 	{
 		"identifier": "organization.name",

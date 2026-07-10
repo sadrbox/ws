@@ -1,0 +1,52 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Внутренний номер",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"type": "string",
+		"visible": false,
+		"inlist": false,
+		"width": "300px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Уникальный идентификатор"
+	},
+	{
+		"identifier": "serialNumber",
+		"type": "string",
+		"width": "220px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"hint": "Серийный номер",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "product.name",
+		"type": "string",
+		"width": "260px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"hint": "Номенклатура",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "status",
+		"type": "string",
+		"width": "120px",
+		"minWidth": "90px",
+		"alignment": "left",
+		"hint": "Статус",
+		"visible": true,
+		"inlist": true
+	}
+]

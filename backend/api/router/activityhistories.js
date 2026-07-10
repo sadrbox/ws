@@ -2,8 +2,30 @@ import express from "express";
 import { querySchema } from "../../utils/module.js";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
+import { pruneAuditLog, retentionDays } from "../../services/auditLog.js";
 // import { success } from "zod";
 const router = express.Router();
+
+// Ручная чистка журнала по сроку хранения (AUDIT_RETENTION_DAYS, по умолчанию 365).
+// Обычно чистка идёт сама, не чаще раза в сутки, попутно с записью в журнал —
+// планировщика (cron) в проекте нет. Эндпоинт нужен, когда ждать окна нельзя.
+// Только суперадмин: массовое удаление журнала — привилегированная операция.
+router.post("/activityhistories/prune", async (req, res) => {
+	try {
+		if (!req.user?.isSuperAdmin) {
+			return res.status(403).json({ success: false, message: "Требуются права суперадминистратора" });
+		}
+		const days = req.body?.days !== undefined ? Number(req.body.days) : retentionDays();
+		if (!Number.isFinite(days) || days <= 0) {
+			return res.status(400).json({ success: false, message: "days должен быть положительным числом" });
+		}
+		const result = await pruneAuditLog(days);
+		return res.status(200).json({ success: true, ...result });
+	} catch (error) {
+		console.error("POST /activityhistories/prune error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
 
 // Zod-схема валидации входящих query-параметров
 // ──────────────────────────────────────────────────────────────────────────────

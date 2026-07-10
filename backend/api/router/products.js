@@ -173,7 +173,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { name, sku, barcode, brandUuid, unitOfMeasureUuid, isService, tnvedCode, truOriginCode, catalogTruId } = req.body;
+		const { name, sku, barcode, brandUuid, unitOfMeasureUuid, isService, trackSerialNumbers, tnvedCode, truOriginCode, catalogTruId } = req.body;
 		if (!name?.trim())
 			return res
 				.status(400)
@@ -189,6 +189,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				sku: sku?.trim() || null,
 				barcode: barcode?.trim() || null,
 				isService: isService === true,
+				trackSerialNumbers: trackSerialNumbers === true,
 				tnvedCode: tnvedCode?.trim() || null,
 				truOriginCode: truOriginCode?.trim() || null,
 				catalogTruId: catalogTruId?.trim() || null,
@@ -219,6 +220,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
 		if (req.body.isService !== undefined) data.isService = req.body.isService === true;
+		if (req.body.trackSerialNumbers !== undefined) data.trackSerialNumbers = req.body.trackSerialNumbers === true;
 		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true } });
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });

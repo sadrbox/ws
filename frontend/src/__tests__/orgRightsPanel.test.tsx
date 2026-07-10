@@ -102,6 +102,7 @@ vi.mock('src/components/Field/LookupField', () => ({
 }));
 
 vi.mock('src/components/UI', () => ({
+  Group: ({ children }: any) => React.createElement('div', null, children),
   GroupCol: ({ children }: any) => React.createElement('div', null, children),
   GroupRow: ({ children }: any) => React.createElement('div', null, children),
 }));

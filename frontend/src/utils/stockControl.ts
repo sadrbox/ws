@@ -10,7 +10,7 @@
 import { api } from "src/services/api/client";
 
 /** Тип расходного документа-регистратора. */
-export type ExpenseDocumentType = "sale" | "inventory_transfer" | "purchase_return";
+export type ExpenseDocumentType = "sale" | "inventory_transfer" | "purchase_return" | "write_off";
 
 export interface StockShortage {
 	productUuid: string | null;

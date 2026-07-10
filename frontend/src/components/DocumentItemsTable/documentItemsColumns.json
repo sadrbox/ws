@@ -84,6 +84,16 @@
 		"alignment": "center"
 	},
 	{
+		"identifier": "accountingQuantity",
+		"hint": "Количество по учёту (из регистра товаров)",
+		"type": "number",
+		"decimals": 4,
+		"visible": true,
+		"width": "120px",
+		"minWidth": "90px",
+		"alignment": "right"
+	},
+	{
 		"identifier": "quantity",
 		"hint": "Количество (объём) — графа 7 ЭСФ РК",
 		"type": "number",
@@ -91,6 +101,16 @@
 		"visible": true,
 		"width": "100px",
 		"minWidth": "80px",
+		"alignment": "right"
+	},
+	{
+		"identifier": "deviation",
+		"hint": "Отклонение: факт − учёт (излишек > 0, недостача < 0)",
+		"type": "number",
+		"decimals": 4,
+		"visible": true,
+		"width": "120px",
+		"minWidth": "90px",
 		"alignment": "right"
 	},
 	{
