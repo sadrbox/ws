@@ -6,6 +6,7 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { assertDocumentSerials, respondSerialError, releaseIssuedSerials, removeReceiptSerials } from "../../services/serialNumbers.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
@@ -212,6 +213,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 	} catch (error) {
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
+		if (respondSerialError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
@@ -273,6 +275,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		}, prisma);
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) {
+			// Серийные номера: число серий строки должно совпадать с количеством.
+			await assertDocumentSerials({ docType: "purchase", docUuid: existing.uuid, itemModel: "purchaseItem", parentField: "purchaseUuid" });
 			// Бух. проверки проведения (организация, дата, счета, субконто, Дт=Кт).
 			await assertPostable("purchase", existing.uuid, { ...data, posted: true });
 		}
@@ -299,6 +303,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondPostingError(error, res)) return;
+		if (respondSerialError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025")
@@ -311,6 +316,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 const onPurchaseDeleted = async (doc) => {
 	await removeDocumentRegister("purchase", doc.uuid);
 	await removeDocumentEntries("purchase", doc.uuid);
+	await removeReceiptSerials("purchase", doc.uuid);
 };
 
 router.delete(`/${ROUTE}/:id`, (req, res) =>

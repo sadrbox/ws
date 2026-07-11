@@ -26,6 +26,7 @@ import styles from "./TradeDocumentItemsTable.module.scss";
 import apiClient from "src/services/api/client";
 import columnsJson from "./documentItemsColumns.json";
 import SubTable, { ReadOnlyCell, type SubTableContext, type SubTableApi, type TCellValidator } from "src/components/SubTable";
+import { SerialNumbersCell } from "./SerialNumbersCell";
 import { useSubTableContext } from "src/components/SubTable/context";
 import { withSaleItemRecalc, withSaleItemRecalcFromDiscountAmount, recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
 import { parseNumericInput } from "src/components/Table/services";
@@ -46,6 +47,8 @@ const PRICING_COLUMN_IDS = new Set(["price", "amount", "discountPercent", "disco
 // Колонки Инвентаризации: учётное количество (из регистра) и отклонение
 // (факт − учёт). Обе только для чтения; «факт» вводится в колонке quantity.
 const STOCKCOUNT_COLUMN_IDS = new Set(["accountingQuantity", "deviation"]);
+// Колонка серийных номеров (T6.1) — только если документ в роли receipt/issue.
+const SERIAL_COLUMN_IDS = new Set(["serials"]);
 
 const focusNextInRow = (currentTarget: EventTarget | null) => {
   if (!(currentTarget instanceof HTMLElement)) return;
@@ -108,6 +111,13 @@ export interface TradeDocumentItemsTableProps {
   showEsfColumns?: boolean;
   /** Показывать колонки Инвентаризации: «Кол-во по учёту» и «Отклонение» (обе — только чтение). */
   showStockCountColumns?: boolean;
+  /** Роль документа для серийных номеров: "receipt" (приёмка) | "issue" (выбытие).
+   *  Включает колонку «Серии» для товаров с учётом по серийным номерам. */
+  serialMode?: "receipt" | "issue";
+  /** documentType для операций с сериями (goods_receipt/purchase/sale/write_off/…). */
+  serialDocType?: string;
+  /** Склад документа — нужен для приёмки/выбора серий. */
+  warehouseUuid?: string;
   /** Переопределяет кнопку «Обновить» в тулбаре SubTable (вместо handleCleanRefresh). */
   onRefresh?: () => void;
   /** Запретить добавление строк (независимо от disabled). */
@@ -152,6 +162,9 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   defaultHiddenColumns,
   showEsfColumns = false,
   showStockCountColumns = false,
+  serialMode,
+  serialDocType,
+  warehouseUuid,
   onRefresh,
   disableAddRows = false,
   disableDeleteRows = false,
@@ -197,6 +210,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       if (!isVatEnabled && AMOUNT_WITHOUT_VAT_IDS.has(id)) return false;
       if (!showEsfColumns && ESF_COLUMN_IDS.has(id)) return false;
       if (!showStockCountColumns && STOCKCOUNT_COLUMN_IDS.has(id)) return false;
+      if (!serialMode && SERIAL_COLUMN_IDS.has(id)) return false;
       return true;
     });
 
@@ -281,7 +295,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       base = base.map((c) => hidden.has(c.identifier) ? { ...c, visible: false } : c);
     }
     return base;
-  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing, showEsfColumns, showStockCountColumns]);
+  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing, showEsfColumns, showStockCountColumns, serialMode]);
 
   const taxSig = useMemo(
     () => "vat:" + (isVatEnabled ? "1" : "0") + "|disc:" + (useDiscount ? "1" : "0") + "|exc:" + (useExcise ? "1" : "0") + "|m:" + vatCalculationMethod + "|r:" + String(orgVatRate ?? ""),
@@ -464,6 +478,23 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       const idx = ctx.rows.indexOf(row);
       const value = idx >= 0 ? idx + 1 : (row.lineNumber as string | number | null | undefined) ?? "";
       return <ReadOnlyCell value={String(value)} />;
+    }
+    // Серийные номера: кнопка-модалка ввода (приёмка) / выбора (выбытие) серий.
+    if (id === "serials") {
+      const pUuid = (row.productUuid as string) ?? "";
+      if (!pUuid || !serialMode) return <span />;
+      return (
+        <SerialNumbersCell
+          productUuid={pUuid}
+          quantity={Number(row.quantity) || 0}
+          docType={serialDocType ?? ""}
+          docUuid={parentUuid}
+          mode={serialMode}
+          organizationUuid={organizationUuid ?? undefined}
+          warehouseUuid={warehouseUuid ?? undefined}
+          disabled={ctx.disabled}
+        />
+      );
     }
     // Инвентаризация: учёт — из регистра (не редактируется), отклонение = факт − учёт.
     if (id === "accountingQuantity") return <ReadOnlyCell value={row.accountingQuantity ?? 0} column={col} />;

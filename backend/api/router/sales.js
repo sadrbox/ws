@@ -6,6 +6,7 @@ import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgF
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { assertDocumentSerials, respondSerialError, releaseIssuedSerials, removeReceiptSerials } from "../../services/serialNumbers.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
@@ -241,6 +242,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 	} catch (error) {
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
+		if (respondSerialError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
@@ -322,6 +324,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		// Контроль остатка ПЕРЕД фиксацией проведения (см. productRegister.js).
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) {
+			// Серийные номера: число серий строки должно совпадать с количеством.
+			await assertDocumentSerials({ docType: "sale", docUuid: existing.uuid, itemModel: "saleItem", parentField: "saleUuid" });
 			const warehouseUuid =
 				data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid;
 			await assertStockForPosting("sale", existing.uuid, { warehouseUuid });
@@ -356,6 +360,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondOrgFieldError(error, res)) return;
 		if (respondStockError(error, res)) return;
 		if (respondPostingError(error, res)) return;
+		if (respondSerialError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025")
@@ -368,6 +373,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 const onSaleDeleted = async (doc) => {
 	await removeDocumentRegister("sale", doc.uuid);
 	await removeDocumentEntries("sale", doc.uuid);
+	await releaseIssuedSerials("sale", doc.uuid);
 };
 
 router.delete(`/${ROUTE}/:id`, (req, res) =>

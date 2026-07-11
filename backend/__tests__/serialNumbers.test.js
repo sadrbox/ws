@@ -94,3 +94,50 @@ test("конфликт: серия, принятая другим докумен
 		await prisma.product.delete({ where: { uuid: product.uuid } });
 	}
 });
+
+import { assertDocumentSerials, SerialCountError } from "../services/serialNumbers.js";
+
+test("assertDocumentSerials: проведение блокируется при несовпадении серий и количества", async (t) => {
+	const org = await prisma.organization.findFirst({ select: { uuid: true } });
+	const user = await prisma.user.findFirst({ select: { uuid: true } });
+	const wh = await prisma.warehouse.findFirst({ select: { uuid: true } });
+	if (!org || !user) return t.skip("нет фикстур");
+	const product = await prisma.product.create({ data: { name: `SN-DOC-${crypto.randomUUID().slice(0, 8)}`, trackSerialNumbers: true } });
+	const gr = await prisma.goodsReceipt.create({ data: { number: `ОПРХ-SN-${Date.now()}`, date: new Date(), organizationUuid: org.uuid, warehouseUuid: wh?.uuid ?? null, authorUuid: user.uuid, posted: false } });
+	await prisma.goodsReceiptItem.create({ data: { goodsReceiptUuid: gr.uuid, productUuid: product.uuid, quantity: 2, price: 100, amount: 200, organizationUuid: org.uuid } });
+	try {
+		const args = { docType: "goods_receipt", docUuid: gr.uuid, itemModel: "goodsReceiptItem", parentField: "goodsReceiptUuid" };
+
+		// 0 серий при количестве 2 → ошибка.
+		await assert.rejects(() => assertDocumentSerials(args), (e) => e instanceof SerialCountError);
+
+		// 1 серия — всё ещё не совпадает.
+		await setReceiptSerials({ docType: "goods_receipt", docUuid: gr.uuid, productUuid: product.uuid, organizationUuid: org.uuid, serials: ["S1"] });
+		await assert.rejects(() => assertDocumentSerials(args), (e) => e instanceof SerialCountError);
+
+		// 2 серии — инвариант выполнен, ошибки нет.
+		await setReceiptSerials({ docType: "goods_receipt", docUuid: gr.uuid, productUuid: product.uuid, organizationUuid: org.uuid, serials: ["S1", "S2"] });
+		await assert.doesNotReject(() => assertDocumentSerials(args));
+	} finally {
+		await prisma.serialNumber.deleteMany({ where: { productUuid: product.uuid } });
+		await prisma.goodsReceiptItem.deleteMany({ where: { goodsReceiptUuid: gr.uuid } });
+		await prisma.goodsReceipt.delete({ where: { uuid: gr.uuid } });
+		await prisma.product.delete({ where: { uuid: product.uuid } });
+	}
+});
+
+test("assertDocumentSerials: товар без учёта по сериям не проверяется", async (t) => {
+	const org = await prisma.organization.findFirst({ select: { uuid: true } });
+	const user = await prisma.user.findFirst({ select: { uuid: true } });
+	if (!org || !user) return t.skip("нет фикстур");
+	const product = await prisma.product.create({ data: { name: `NOSN-${crypto.randomUUID().slice(0, 8)}`, trackSerialNumbers: false } });
+	const gr = await prisma.goodsReceipt.create({ data: { number: `ОПРХ-NOSN-${Date.now()}`, date: new Date(), organizationUuid: org.uuid, authorUuid: user.uuid, posted: false } });
+	await prisma.goodsReceiptItem.create({ data: { goodsReceiptUuid: gr.uuid, productUuid: product.uuid, quantity: 5, price: 10, amount: 50, organizationUuid: org.uuid } });
+	try {
+		await assert.doesNotReject(() => assertDocumentSerials({ docType: "goods_receipt", docUuid: gr.uuid, itemModel: "goodsReceiptItem", parentField: "goodsReceiptUuid" }));
+	} finally {
+		await prisma.goodsReceiptItem.deleteMany({ where: { goodsReceiptUuid: gr.uuid } });
+		await prisma.goodsReceipt.delete({ where: { uuid: gr.uuid } });
+		await prisma.product.delete({ where: { uuid: product.uuid } });
+	}
+});

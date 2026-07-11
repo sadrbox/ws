@@ -233,6 +233,7 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
           parentUuid={form.fields.uuid ?? ""} parentField="goodsReceiptUuid"
           endpoint="goodsreceiptitems" componentName="GoodsReceiptItemsList_part"
           hasTaxes={false}
+          serialMode="receipt" serialDocType="goods_receipt" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
           parentLabel={`${translate("GoodsReceiptsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}

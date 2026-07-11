@@ -1,0 +1,73 @@
+.Cell {
+	display: flex;
+	justify-content: center;
+}
+
+.Dash,
+.Hint {
+	color: #999;
+}
+
+.BtnLabel {
+	margin-left: 6px;
+}
+
+.CountOk {
+	color: #1a7f37;
+	font-weight: 600;
+}
+
+.CountBad {
+	color: #b35900;
+	font-weight: 600;
+}
+
+.ModalBody {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 340px;
+}
+
+.CounterOk {
+	color: #1a7f37;
+	font-weight: 600;
+}
+
+.CounterBad {
+	color: #b35900;
+	font-weight: 600;
+}
+
+.Textarea {
+	width: 100%;
+	resize: vertical;
+	font-family: monospace;
+	font-size: 13px;
+	padding: 8px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	box-sizing: border-box;
+}
+
+.PickList {
+	max-height: 320px;
+	overflow-y: auto;
+	border: 1px solid #eee;
+	border-radius: 4px;
+	padding: 4px 8px;
+}
+
+.PickRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 0;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.Error {
+	color: #c0392b;
+	font-size: 13px;
+}

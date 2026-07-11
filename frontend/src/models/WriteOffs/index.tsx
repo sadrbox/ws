@@ -246,6 +246,7 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
           parentUuid={form.fields.uuid ?? ""} parentField="writeOffUuid"
           endpoint="writeoffitems" componentName="WriteOffItemsList_part"
           hasTaxes={false} hasPricing={false}
+          serialMode="issue" serialDocType="write_off" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
           parentLabel={`${translate("WriteOffsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}

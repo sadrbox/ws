@@ -797,6 +797,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           parentField="saleUuid"
           endpoint="saleitems"
           componentName="SaleItemsList_part"
+          serialMode="issue" serialDocType="sale" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid}
           documentDate={form.fields.date || null}
           priceTypeUuid={form.fields.priceTypeUuid}

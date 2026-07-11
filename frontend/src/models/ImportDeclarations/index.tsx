@@ -290,6 +290,7 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
           parentUuid={form.fields.uuid ?? ""} parentField="importDeclarationUuid"
           endpoint="importdeclarationitems" componentName="ImportDeclarationItemsList_part"
           hasTaxes={false}
+          serialMode="receipt" serialDocType="import_declaration" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
           parentLabel={`${translate("ImportDeclarationsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}

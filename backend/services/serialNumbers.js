@@ -175,8 +175,83 @@ export async function removeReceiptSerials(docType, docUuid, client = prisma) {
 	return res.count;
 }
 
+/** Ошибка инварианта серий (число серий != количеству) — роут вернёт 422. */
+export class SerialCountError extends Error {
+	constructor(errors) {
+		super(errors.join("; "));
+		this.name = "SerialCountError";
+		this.errors = errors;
+	}
+}
+
+/**
+ * Проверка инварианта серий при ПРОВЕДЕНИИ документа. Для каждого товара строки
+ * с trackSerialNumbers число привязанных серий (приёмки/выбытия) должно совпадать
+ * с суммарным количеством по товару. Бросает SerialCountError при расхождении.
+ *
+ * @param {object} p
+ * @param {string} p.docType @param {string} p.docUuid
+ * @param {string} p.itemModel  — prisma-модель строк (writeOffItem, saleItem, …)
+ * @param {string} p.parentField — FK-поле строки на документ (writeOffUuid, …)
+ */
+export async function assertDocumentSerials({ docType, docUuid, itemModel, parentField }, client = prisma) {
+	const mode = SERIAL_ISSUE_DOCS.has(docType) ? "issue" : SERIAL_RECEIPT_DOCS.has(docType) ? "receipt" : null;
+	if (!mode) return; // документ не относится к серийному учёту
+
+	const items = await client[itemModel].findMany({
+		where: { [parentField]: docUuid, ...(itemModel === "saleItem" ? { deletedAt: null } : {}) },
+		select: { productUuid: true, quantity: true },
+	});
+	const productUuids = items.map((i) => i.productUuid).filter(Boolean);
+	const tracked = await serialTrackedProducts(productUuids, client);
+	if (!tracked.size) return;
+
+	// Суммарное количество по товару (несколько строк одного товара складываются).
+	const qtyByProduct = new Map();
+	for (const it of items) {
+		if (!tracked.has(it.productUuid)) continue;
+		qtyByProduct.set(it.productUuid, (qtyByProduct.get(it.productUuid) ?? 0) + (Number(it.quantity) || 0));
+	}
+
+	// Число привязанных серий по товару.
+	const serialWhere = mode === "receipt"
+		? { receiptDocType: docType, receiptDocUuid: docUuid, deletedAt: null }
+		: { issueDocType: docType, issueDocUuid: docUuid, deletedAt: null };
+	const grouped = await client.serialNumber.groupBy({
+		by: ["productUuid"],
+		where: { ...serialWhere, productUuid: { in: [...qtyByProduct.keys()] } },
+		_count: { _all: true },
+	});
+	const serialByProduct = new Map(grouped.map((g) => [g.productUuid, g._count._all]));
+
+	// Имена товаров для сообщения.
+	const names = new Map(
+		(await client.product.findMany({ where: { uuid: { in: [...qtyByProduct.keys()] } }, select: { uuid: true, name: true } }))
+			.map((p) => [p.uuid, p.name]),
+	);
+
+	const lines = [...qtyByProduct.entries()].map(([uuid, quantity]) => ({
+		productName: names.get(uuid) ?? uuid,
+		quantity,
+		serialCount: serialByProduct.get(uuid) ?? 0,
+		tracked: true,
+	}));
+	const { ok, errors } = assertSerialCount(lines);
+	if (!ok) throw new SerialCountError(errors);
+}
+
+/** Express-хелпер: SerialCountError → 422. Возвращает true, если ответ отправлен. */
+export function respondSerialError(err, res) {
+	if (err instanceof SerialCountError) {
+		res.status(422).json({ success: false, message: `Серийные номера: ${err.message}`, serialErrors: err.errors });
+		return true;
+	}
+	return false;
+}
+
 export default {
 	SERIAL_STATUS, SERIAL_RECEIPT_DOCS, SERIAL_ISSUE_DOCS,
 	normalizeSerials, assertSerialCount, serialTrackedProducts,
 	setReceiptSerials, countReceiptSerials, issueSerials, releaseIssuedSerials, removeReceiptSerials,
+	assertDocumentSerials, respondSerialError, SerialCountError,
 };

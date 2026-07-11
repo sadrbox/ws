@@ -83,6 +83,9 @@ export interface TradeDocConfig {
   basisAllowedTypes: BasisTypeConfig[];
   /** Рендерить лукап «Тип цены» (default true) + valueType для дефолтов пользователя. */
   hasPriceType?: boolean;
+  /** Серийные номера: роль документа (receipt/issue) + docType. Включает колонку «Серии». */
+  serialMode?: "receipt" | "issue";
+  serialDocType?: string;
   priceTypeValueType?: "salePriceType" | "purchasePriceType";
   /** Скрытые по умолчанию колонки позиций. */
   defaultHiddenColumns?: string[];
@@ -522,6 +525,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           <TradeDocumentItemsTable
             parentUuid={form.fields.uuid ?? ""} parentField={cfg.itemsParentField}
             endpoint={cfg.itemsEndpoint} componentName={cfg.itemsComponentName}
+            serialMode={cfg.serialMode} serialDocType={cfg.serialDocType} warehouseUuid={form.fields.warehouseUuid}
             organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
             priceTypeUuid={form.fields.priceTypeUuid}
             disabled={form.isLoading} deferRemoteChanges

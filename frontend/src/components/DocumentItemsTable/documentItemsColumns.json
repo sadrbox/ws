@@ -84,6 +84,15 @@
 		"alignment": "center"
 	},
 	{
+		"identifier": "serials",
+		"hint": "Серийные номера",
+		"type": "string",
+		"visible": true,
+		"width": "130px",
+		"minWidth": "110px",
+		"alignment": "center"
+	},
+	{
 		"identifier": "accountingQuantity",
 		"hint": "Количество по учёту (из регистра товаров)",
 		"type": "number",
