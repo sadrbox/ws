@@ -206,6 +206,7 @@ export const REFERENCE_LABELS = {
 	stock_counts: "Инвентаризации",
 	stock_count_items: "Строки инвентаризации",
 	serial_numbers: "Серийные номера",
+	product_batches: "Партии товара",
 	payroll_calculations: "Начисления ЗП",
 	payroll_payments: "Выплаты ЗП",
 	brands: "Бренды",

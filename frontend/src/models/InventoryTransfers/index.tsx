@@ -296,6 +296,21 @@ const InventoryTransfersList: FC<{ variant?: TTableVariant; onSelectItem?: (item
     getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
+    previewTabs={(row) => [{
+      id: "items",
+      label: translate("tabTMZ"),
+      component: (
+        <TradeDocumentItemsTable
+          parentUuid={String(row.uuid ?? "")} parentField="inventoryTransferUuid"
+          endpoint="inventorytransferitems" componentName="InventoryTransferItemsList_part"
+          hasTaxes={false} hasPricing={false}
+          organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
+          documentDate={row.date ? String(row.date) : null}
+          disabled disableAddRows disableDeleteRows
+          emptyMessage={translate("noItems") || "Нет позиций"}
+        />
+      ),
+    }]}
   />
 );
 InventoryTransfersList.displayName = LIST_NAME;

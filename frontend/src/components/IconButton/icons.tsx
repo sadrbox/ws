@@ -193,6 +193,13 @@ export const ListIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+export const ViewSplitIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <rect x="2" y="3" width="5" height="10" rx="1" />
+    <rect x="9" y="3" width="5" height="10" rx="1" />
+  </svg>
+);
+
 /** Открыть элемент — лаконичная «external link»:
  *  миниатюрный прямоугольник в левом-нижнем углу + диагональная стрелка
  *  наружу в правый-верхний. Минимум линий, максимум смысла. */
@@ -332,6 +339,7 @@ export const ICONS = {
   minus: MinusIcon,
   quickselect: QuickSelectIcon,
   list: ListIcon,
+  viewSplit: ViewSplitIcon,
   open: OpenIcon,
   print: PrintIcon,
   posted: PostedIcon,

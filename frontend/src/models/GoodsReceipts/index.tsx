@@ -105,12 +105,14 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
+          batchUuid: r.batchUuid ?? null,
         }),
         updatePayload: (r: any) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
+          batchUuid: r.batchUuid ?? null,
         }),
         extraSkipFields: ["goodsReceiptUuid"],
       },
@@ -233,7 +235,7 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
           parentUuid={form.fields.uuid ?? ""} parentField="goodsReceiptUuid"
           endpoint="goodsreceiptitems" componentName="GoodsReceiptItemsList_part"
           hasTaxes={false}
-          serialMode="receipt" serialDocType="goods_receipt" warehouseUuid={form.fields.warehouseUuid}
+          serialMode="receipt" serialDocType="goods_receipt" batchMode="receipt" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
           parentLabel={`${translate("GoodsReceiptsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
@@ -271,6 +273,23 @@ const GoodsReceiptsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDa
     getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
+    previewTabs={(row) => [{
+      id: "items",
+      label: translate("tabTMZ"),
+      component: (
+        <TradeDocumentItemsTable
+          parentUuid={String(row.uuid ?? "")} parentField="goodsReceiptUuid"
+          endpoint="goodsreceiptitems" componentName="GoodsReceiptItemsList_part"
+          hasTaxes={false}
+          serialMode="receipt" serialDocType="goods_receipt" batchMode="receipt"
+          warehouseUuid={row.warehouseUuid ? String(row.warehouseUuid) : undefined}
+          organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
+          documentDate={row.date ? String(row.date) : null}
+          disabled disableAddRows disableDeleteRows
+          emptyMessage={translate("noItems") || "Нет позиций"}
+        />
+      ),
+    }]}
   />
 );
 GoodsReceiptsList.displayName = LIST_NAME;

@@ -108,6 +108,22 @@ const ClearButton: FC<Omit<ToolbarIconButtonProps, "icon" | "children">> = ({
 );
 ClearButton.displayName = "Toolbar.ClearButton";
 
+// ─── Toolbar.ToggleSplit — переключатель вида списка (list / split) ──────
+const ToggleSplit: FC<{
+  pressed?: boolean;
+  onClick?: () => void;
+  title?: string;
+}> = ({ pressed = false, onClick, title }) => (
+  <ToolbarIconButton
+    icon={pressed ? "viewSplit" as IconName : "list" as IconName}
+    aria-pressed={pressed}
+    aria-label={title ?? translate("toolbar.toggleSplit")}
+    title={title ?? translate("toolbar.toggleSplit")}
+    onClick={onClick}
+  />
+);
+ToggleSplit.displayName = "Toolbar.ToggleSplit";
+
 // ─── Compound export ────────────────────────────────────────────────────
 
 type ToolbarComponent = typeof ToolbarRoot & {
@@ -118,6 +134,7 @@ type ToolbarComponent = typeof ToolbarRoot & {
   ReloadButton: typeof ReloadButton;
   SettingsButton: typeof SettingsButton;
   PeriodButton: typeof PeriodButton;
+  ToggleSplit: typeof ToggleSplit;
   SearchButton: typeof SearchButton;
   InlineEditButton: typeof InlineEditButton;
   MakePrimaryButton: typeof MakePrimaryButton;
@@ -135,6 +152,7 @@ Toolbar.Icon = Icon;
 Toolbar.ReloadButton = ReloadButton;
 Toolbar.SettingsButton = SettingsButton;
 Toolbar.PeriodButton = PeriodButton;
+Toolbar.ToggleSplit = ToggleSplit;
 Toolbar.SearchButton = SearchButton;
 Toolbar.InlineEditButton = InlineEditButton;
 Toolbar.MakePrimaryButton = MakePrimaryButton;

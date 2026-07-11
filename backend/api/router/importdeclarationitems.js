@@ -8,5 +8,5 @@ export default createDocumentItemsRouter({
 	PARENT_MODEL: "importDeclaration",
 	PARENT_FIELD: "importDeclarationUuid",
 	hasTaxes: false,
-	extraStringFields: ["positionNumber"],
+	extraStringFields: ["positionNumber", "batchUuid"],
 });

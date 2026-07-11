@@ -109,11 +109,13 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
+          batchUuid: r.batchUuid ?? null,
         }),
         updatePayload: (r: any) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
+          batchUuid: r.batchUuid ?? null,
         }),
         extraSkipFields: ["writeOffUuid"],
       },
@@ -246,7 +248,7 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
           parentUuid={form.fields.uuid ?? ""} parentField="writeOffUuid"
           endpoint="writeoffitems" componentName="WriteOffItemsList_part"
           hasTaxes={false} hasPricing={false}
-          serialMode="issue" serialDocType="write_off" warehouseUuid={form.fields.warehouseUuid}
+          serialMode="issue" serialDocType="write_off" batchMode="issue" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
           parentLabel={`${translate("WriteOffsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
@@ -284,6 +286,23 @@ const WriteOffsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataIt
     getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
+    previewTabs={(row) => [{
+      id: "items",
+      label: translate("tabTMZ"),
+      component: (
+        <TradeDocumentItemsTable
+          parentUuid={String(row.uuid ?? "")} parentField="writeOffUuid"
+          endpoint="writeoffitems" componentName="WriteOffItemsList_part"
+          hasTaxes={false} hasPricing={false}
+          serialMode="issue" serialDocType="write_off" batchMode="issue"
+          warehouseUuid={row.warehouseUuid ? String(row.warehouseUuid) : undefined}
+          organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
+          documentDate={row.date ? String(row.date) : null}
+          disabled disableAddRows disableDeleteRows
+          emptyMessage={translate("noItems") || "Нет позиций"}
+        />
+      ),
+    }]}
   />
 );
 WriteOffsList.displayName = LIST_NAME;

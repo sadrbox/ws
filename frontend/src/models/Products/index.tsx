@@ -32,8 +32,8 @@ import { ProductPriceCorrection } from "src/models/ProductPriceProcessing";
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
 
-interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; trackSerialNumbers: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; tnvedCode: string; truOriginCode: string; catalogTruId: string; }
-const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, trackSerialNumbers: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "", tnvedCode: "", truOriginCode: "", catalogTruId: "" };
+interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; trackSerialNumbers: boolean; trackBatches: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; tnvedCode: string; truOriginCode: string; catalogTruId: string; }
+const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, trackSerialNumbers: false, trackBatches: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "", tnvedCode: "", truOriginCode: "", catalogTruId: "" };
 
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useUserAccessRight("Product");
@@ -62,6 +62,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       name: d.name ?? "", sku: d.sku ?? "", barcode: d.barcode ?? "",
       isService: d.isService === true,
       trackSerialNumbers: d.trackSerialNumbers === true,
+      trackBatches: d.trackBatches === true,
       brandUuid: d.brandUuid ?? "", brandName: d.brand?.name ?? "",
       unitOfMeasureUuid: d.unitOfMeasureUuid ?? "", unitOfMeasureName: d.unitOfMeasure?.name ?? "",
       tnvedCode: d.tnvedCode ?? "", truOriginCode: d.truOriginCode ?? "", catalogTruId: d.catalogTruId ?? "",
@@ -71,7 +72,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       // price НЕ отправляем: Product.price — денормализованная цена, автоматически
       // пересчитывается из вкладки «Цены» (services/productPricing.js). Источник
       // истины — «Цены», ручной ввод убран как избыточный.
-      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, trackSerialNumbers: fd.trackSerialNumbers === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null, tnvedCode: fd.tnvedCode?.trim() || null, truOriginCode: fd.truOriginCode || null, catalogTruId: fd.catalogTruId?.trim() || null };
+      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, trackSerialNumbers: fd.trackSerialNumbers === true, trackBatches: fd.trackBatches === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null, tnvedCode: fd.tnvedCode?.trim() || null, truOriginCode: fd.truOriginCode || null, catalogTruId: fd.catalogTruId?.trim() || null };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
     afterSave: async (saved) => {
@@ -120,6 +121,10 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
                 <Group className={styles.w1of2}>
                   <FieldToggle label={translate("trackSerialNumbers")} value={form.fields.trackSerialNumbers} disabled={form.isLoading}
                     onChange={(v) => form.setField("trackSerialNumbers", v)} />
+                </Group>
+                <Group className={styles.w1of2}>
+                  <FieldToggle label={translate("trackBatches")} value={form.fields.trackBatches} disabled={form.isLoading}
+                    onChange={(v) => form.setField("trackBatches", v)} />
                 </Group>
               </GroupRow>
               {/* Реквизиты для гос-документов (СНТ): ТН ВЭД ЕАЭС + признак происхождения ТРУ */}

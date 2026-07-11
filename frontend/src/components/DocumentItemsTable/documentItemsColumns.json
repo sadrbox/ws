@@ -93,6 +93,15 @@
 		"alignment": "center"
 	},
 	{
+		"identifier": "batch",
+		"hint": "Партия (срок годности)",
+		"type": "string",
+		"visible": true,
+		"width": "170px",
+		"minWidth": "120px",
+		"alignment": "left"
+	},
+	{
 		"identifier": "accountingQuantity",
 		"hint": "Количество по учёту (из регистра товаров)",
 		"type": "number",

@@ -10,35 +10,96 @@ const router = express.Router();
 // Обычно чистка идёт сама, не чаще раза в сутки, попутно с записью в журнал —
 // планировщика (cron) в проекте нет. Эндпоинт нужен, когда ждать окна нельзя.
 // Только суперадмин: массовое удаление журнала — привилегированная операция.
-router.post("/activityhistories/prune", async (req, res) => {
+// POST /prune  — ручная чистка журнала
+router.post("/prune", async (req, res) => {
 	try {
 		if (!req.user?.isSuperAdmin) {
-			return res.status(403).json({ success: false, message: "Требуются права суперадминистратора" });
+			return res.status(403).json({
+				success: false,
+				message: "Требуются права суперадминистратора",
+			});
 		}
-		const days = req.body?.days !== undefined ? Number(req.body.days) : retentionDays();
+		const days =
+			req.body?.days !== undefined ? Number(req.body.days) : retentionDays();
 		if (!Number.isFinite(days) || days <= 0) {
-			return res.status(400).json({ success: false, message: "days должен быть положительным числом" });
+			return res.status(400).json({
+				success: false,
+				message: "days должен быть положительным числом",
+			});
 		}
 		const result = await pruneAuditLog(days);
 		return res.status(200).json({ success: true, ...result });
 	} catch (error) {
-		console.error("POST /activityhistories/prune error:", error);
+		console.error("POST /pipe/prune error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 
-// Zod-схема валидации входящих query-параметров
-// ──────────────────────────────────────────────────────────────────────────────
-// Предполагается, что querySchema уже объявлена выше в файле примерно так:
-//
-// const querySchema = z.object({
-//   cursor: z.coerce.number().int().positive().optional(),
-//   limit:  z.coerce.number().int().min(1).max(500).default(80),
-//   sort:   z.string().optional(),           // "-createdAt,name"
-//   search: z.string().optional(),
-//   filter: z.record(z.record(z.unknown())).optional(),
-// });
-//
+// ============================================
+// POST /  — прием события от 1С (ДанныеОбъекта)
+// Ожидаем JSON с полями: actionDate, actionType, organization, user, object, props
+// Логируем тело для отладки и сохраняем запись в activity_history.
+// ============================================
+router.post("/", async (req, res) => {
+	try {
+		const body = req.body || {};
+		console.log("POST /pipe body:", JSON.stringify(body));
+
+		const actionType = body.actionType ? String(body.actionType) : "create";
+		const actionDate = body.actionDate ? new Date(body.actionDate) : new Date();
+
+		const organizationShortName = body.organization?.shortName ?? null;
+		const bin = body.organization?.bin ?? null;
+
+		const userName =
+			body.user?.userName ??
+			body.user?.userName ??
+			body.userName ??
+			req.user?.username ??
+			"1C";
+		const host = body.user?.host ?? null;
+		const ip = body.user?.ip ?? req.ip ?? null;
+
+		const objectId = body.object?.id ?? body.objectId ?? null;
+		const objectType = body.object?.type ?? body.objectType ?? null;
+		const objectName = body.object?.name ?? null;
+
+		const props = body.props ?? null;
+
+		if (!objectId || !objectType) {
+			return res
+				.status(400)
+				.json({ success: false, message: "Missing object.id or object.type" });
+		}
+
+		const item = await prisma.pipeActivity.create({
+			data: {
+				actionDate,
+				actionType,
+				organizationShortName,
+				bin,
+				userName: String(userName).slice(0, 255),
+				host,
+				ip,
+				objectId: String(objectId),
+				objectType: String(objectType),
+				objectName: objectName
+					? String(objectName).slice(0, 255)
+					: String(objectType).slice(0, 255),
+				props: props ?? undefined,
+				payload: body,
+			},
+		});
+
+		return res.status(201).json({ success: true, item });
+	} catch (error) {
+		console.error("POST /pipe error:", error);
+		return res
+			.status(500)
+			.json({ success: false, message: "Ошибка сервера при приёме события" });
+	}
+});
+
 // ──────────────────────────────────────────────────────────────────────────────
 
 // router.get("/activityhistories", async (req, res) => {
@@ -222,7 +283,8 @@ router.post("/activityhistories/prune", async (req, res) => {
 // ============================================
 // READ - Получение записи истории по UUID
 // ============================================
-router.get("/activityhistories/:uuid", async (req, res) => {
+// GET /:uuid — получить запись по UUID
+router.get("/:uuid", async (req, res) => {
 	try {
 		const { uuid } = req.params;
 
@@ -251,7 +313,7 @@ router.get("/activityhistories/:uuid", async (req, res) => {
 
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
-		console.error("GET /activityhistories/:uuid error:", error);
+		console.error("GET /pipe/:uuid error:", error);
 		return res.status(500).json({
 			success: false,
 			message: "Ошибка сервера при получении записи",
@@ -262,7 +324,8 @@ router.get("/activityhistories/:uuid", async (req, res) => {
 // ============================================
 // READ - Список записей истории (курсорная пагинация)
 // ============================================
-router.get("/activityhistories", async (req, res) => {
+// GET /  — список записей (cursor pagination)
+router.get("/", async (req, res) => {
 	try {
 		// ── Разбор и валидация query-параметров вручную ───────────────────────
 		const rawLimit = req.query.limit;
@@ -461,7 +524,7 @@ router.get("/activityhistories", async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error("GET /activityhistories error:", error);
+		console.error("GET /pipe error:", error);
 		return res.status(500).json({
 			success: false,
 			message: "Ошибка сервера при получении истории активностей",
@@ -472,7 +535,8 @@ router.get("/activityhistories", async (req, res) => {
 // ============================================
 // DELETE /activityhistories/:id
 // ============================================
-router.delete("/activityhistories/:id", async (req, res) => {
+// DELETE /:id
+router.delete("/:id", async (req, res) => {
 	try {
 		const param = req.params.id;
 		const numId = Number(param);
@@ -489,7 +553,7 @@ router.delete("/activityhistories/:id", async (req, res) => {
 				.status(404)
 				.json({ success: false, message: "Запись не найдена" });
 		}
-		console.error("DELETE /activityhistories/:id error:", error);
+		console.error("DELETE /pipe/:id error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

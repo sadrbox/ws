@@ -27,6 +27,7 @@ import apiClient from "src/services/api/client";
 import columnsJson from "./documentItemsColumns.json";
 import SubTable, { ReadOnlyCell, type SubTableContext, type SubTableApi, type TCellValidator } from "src/components/SubTable";
 import { SerialNumbersCell } from "./SerialNumbersCell";
+import { BatchNumbersCell } from "./BatchNumbersCell";
 import { useSubTableContext } from "src/components/SubTable/context";
 import { withSaleItemRecalc, withSaleItemRecalcFromDiscountAmount, recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
 import { parseNumericInput } from "src/components/Table/services";
@@ -49,6 +50,8 @@ const PRICING_COLUMN_IDS = new Set(["price", "amount", "discountPercent", "disco
 const STOCKCOUNT_COLUMN_IDS = new Set(["accountingQuantity", "deviation"]);
 // Колонка серийных номеров (T6.1) — только если документ в роли receipt/issue.
 const SERIAL_COLUMN_IDS = new Set(["serials"]);
+// Колонка партий (T6.1 Stage 2) — только если документ в роли receipt/issue.
+const BATCH_COLUMN_IDS = new Set(["batch"]);
 
 const focusNextInRow = (currentTarget: EventTarget | null) => {
   if (!(currentTarget instanceof HTMLElement)) return;
@@ -116,7 +119,9 @@ export interface TradeDocumentItemsTableProps {
   serialMode?: "receipt" | "issue";
   /** documentType для операций с сериями (goods_receipt/purchase/sale/write_off/…). */
   serialDocType?: string;
-  /** Склад документа — нужен для приёмки/выбора серий. */
+  /** Роль документа для партий: "receipt" (ввод партии+срок) | "issue" (выбор FEFO). */
+  batchMode?: "receipt" | "issue";
+  /** Склад документа — нужен для приёмки/выбора серий и партий. */
   warehouseUuid?: string;
   /** Переопределяет кнопку «Обновить» в тулбаре SubTable (вместо handleCleanRefresh). */
   onRefresh?: () => void;
@@ -164,6 +169,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   showStockCountColumns = false,
   serialMode,
   serialDocType,
+  batchMode,
   warehouseUuid,
   onRefresh,
   disableAddRows = false,
@@ -211,6 +217,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       if (!showEsfColumns && ESF_COLUMN_IDS.has(id)) return false;
       if (!showStockCountColumns && STOCKCOUNT_COLUMN_IDS.has(id)) return false;
       if (!serialMode && SERIAL_COLUMN_IDS.has(id)) return false;
+      if (!batchMode && BATCH_COLUMN_IDS.has(id)) return false;
       return true;
     });
 
@@ -496,6 +503,22 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
         />
       );
     }
+    // Партия: кнопка-модалка ввода (приёмка) / FEFO-выбора (выбытие). batchUuid — на строке.
+    if (id === "batch") {
+      const pUuid = (row.productUuid as string) ?? "";
+      if (!pUuid || !batchMode) return <span />;
+      return (
+        <BatchNumbersCell
+          productUuid={pUuid}
+          mode={batchMode}
+          batchUuid={(row.batchUuid as string) ?? ""}
+          onChange={(uuid) => setRowField("batchUuid", uuid)}
+          organizationUuid={organizationUuid ?? undefined}
+          warehouseUuid={warehouseUuid ?? undefined}
+          disabled={ctx.disabled}
+        />
+      );
+    }
     // Инвентаризация: учёт — из регистра (не редактируется), отклонение = факт − учёт.
     if (id === "accountingQuantity") return <ReadOnlyCell value={row.accountingQuantity ?? 0} column={col} />;
     if (id === "deviation") {
@@ -710,7 +733,11 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       );
     }
     return undefined;
-  }, [recalcWithFlags, vatCalculationMethod, fieldsReadOnly, quantityStepper, esfDict, showEsfColumns]);
+  }, [recalcWithFlags, vatCalculationMethod, fieldsReadOnly, quantityStepper, esfDict, showEsfColumns,
+    // Серийные номера/партии: без этих зависимостей renderCell замораживает
+    // parentUuid="" (документ ещё не сохранён на первом рендере), и ячейка «Серии»
+    // навсегда показывает «сначала сохраните» даже после записи документа.
+    serialMode, serialDocType, batchMode, warehouseUuid, parentUuid, organizationUuid]);
 
   const defaultNewRow = useMemo(() => ({
     productUuid: null,

@@ -373,6 +373,168 @@ test("Интеграция: себестоимость реализации сп
 	}
 });
 
+test("Инвариант регистра: движение расхода продажи несёт СЕБЕСТОИМОСТЬ, а не выручку; проводка 7010 == out.amount", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid || !fx.warehouseUuid || !fx.userUuid) return t.skip("нет фикстур");
+
+	const product = await prisma.product.create({
+		data: { name: `__test_invariant_${Date.now()}`, organizationUuid: fx.orgUuid },
+	}).catch(() => null);
+	if (!product) return t.skip("не удалось создать тестовый товар");
+
+	// Приход-слой: 10 ед по 5000 → себестоимость 500/ед.
+	const reg = await prisma.productRegister.create({
+		data: {
+			date: new Date(Date.now() - 86400000), movementType: "in", quantity: 10, amount: 5000,
+			productUuid: product.uuid, warehouseUuid: fx.warehouseUuid, organizationUuid: fx.orgUuid,
+			documentType: "purchase", documentUuid: crypto.randomUUID(),
+		},
+	});
+	// Персистентная реализация 2 ед по цене 1800 (выручка 3600 — НЕ себестоимость).
+	const sale = await prisma.sale.create({
+		data: {
+			organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid,
+			authorUuid: fx.userUuid, date: new Date(), posted: true,
+		},
+	});
+	await prisma.saleItem.create({
+		data: { saleUuid: sale.uuid, productUuid: product.uuid, quantity: 2, price: 1800, amount: 3600, amountWithoutVat: 3600 },
+	});
+	try {
+		// Фаза 1: регистр. Движение расхода должно нести СЕБЕСТОИМОСТЬ (2×500=1000).
+		await reconcileDocumentRegister("sale", sale.uuid);
+		const outMv = await prisma.productRegister.findFirst({
+			where: { documentType: "sale", documentUuid: sale.uuid, movementType: "out" },
+			select: { amount: true, quantity: true },
+		});
+		assert.ok(outMv, "движение расхода создано");
+		assert.equal(Number(outMv.amount), 1000, "out.amount = себестоимость 1000 (а не выручка 3600)");
+
+		// Фаза 2: проводки. COGS (Дт7010 Кт1330) читается из регистра = 1000.
+		await reconcileDocumentEntries("sale", sale.uuid);
+		const cogsEntry = await prisma.accountingEntry.findFirst({
+			where: { documentType: "sale", documentUuid: sale.uuid, debitAccountCode: "7010", creditAccountCode: "1330" },
+			select: { amount: true },
+		});
+		assert.ok(cogsEntry, "проводка себестоимости создана");
+		assert.equal(Number(cogsEntry.amount), 1000, "проводка 7010 == out.amount регистра (единый источник)");
+
+		// Выручка отражена отдельно (Дт1210 Кт6010), не смешана с себестоимостью.
+		const revEntry = await prisma.accountingEntry.findFirst({
+			where: { documentType: "sale", documentUuid: sale.uuid, creditAccountCode: "6010" },
+			select: { amount: true },
+		});
+		assert.ok(revEntry && Number(revEntry.amount) > 0, "выручка проведена на 6010 отдельно от COGS");
+	} finally {
+		await prisma.accountingEntry.deleteMany({ where: { documentType: "sale", documentUuid: sale.uuid } }).catch(() => {});
+		await prisma.productRegister.deleteMany({ where: { documentUuid: sale.uuid } }).catch(() => {});
+		await prisma.saleItem.deleteMany({ where: { saleUuid: sale.uuid } }).catch(() => {});
+		await prisma.sale.delete({ where: { uuid: sale.uuid } }).catch(() => {});
+		await prisma.productRegister.delete({ where: { uuid: reg.uuid } }).catch(() => {});
+		await prisma.product.delete({ where: { uuid: product.uuid } }).catch(() => {});
+	}
+});
+
+test("Инвариант: возврат от покупателя — проводка Дт1330 == in.amount регистра (себестоимость, не цена возврата)", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid || !fx.warehouseUuid || !fx.userUuid) return t.skip("нет фикстур");
+
+	const product = await prisma.product.create({
+		data: { name: `__test_saleret_${Date.now()}`, organizationUuid: fx.orgUuid },
+	}).catch(() => null);
+	if (!product) return t.skip("не удалось создать тестовый товар");
+
+	// Приход-слой: 10 ед по 5000 → себестоимость 500/ед.
+	const reg = await prisma.productRegister.create({
+		data: {
+			date: new Date(Date.now() - 86400000), movementType: "in", quantity: 10, amount: 5000,
+			productUuid: product.uuid, warehouseUuid: fx.warehouseUuid, organizationUuid: fx.orgUuid,
+			documentType: "purchase", documentUuid: crypto.randomUUID(),
+		},
+	});
+	// Возврат от покупателя 2 ед по цене возврата 1800 (без основания → cost-дата = дата возврата).
+	const ret = await prisma.saleReturn.create({
+		data: {
+			organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid,
+			authorUuid: fx.userUuid, date: new Date(), posted: true,
+		},
+	});
+	await prisma.saleReturnItem.create({
+		data: { saleReturnUuid: ret.uuid, productUuid: product.uuid, quantity: 2, price: 1800, amount: 3600, amountWithoutVat: 3600 },
+	});
+	try {
+		await reconcileDocumentRegister("sale_return", ret.uuid);
+		const inMv = await prisma.productRegister.findFirst({
+			where: { documentType: "sale_return", documentUuid: ret.uuid, movementType: "in" },
+			select: { amount: true },
+		});
+		assert.ok(inMv, "движение прихода возврата создано");
+		assert.equal(Number(inMv.amount), 1000, "in.amount = себестоимость 1000 (не цена возврата 3600)");
+
+		await reconcileDocumentEntries("sale_return", ret.uuid);
+		const goodsEntry = await prisma.accountingEntry.findFirst({
+			where: { documentType: "sale_return", documentUuid: ret.uuid, debitAccountCode: "1330", creditAccountCode: "7010" },
+			select: { amount: true },
+		});
+		assert.ok(goodsEntry, "проводка возврата на склад создана");
+		assert.equal(Number(goodsEntry.amount), 1000, "проводка Дт1330 Кт7010 == in.amount регистра");
+	} finally {
+		await prisma.accountingEntry.deleteMany({ where: { documentType: "sale_return", documentUuid: ret.uuid } }).catch(() => {});
+		await prisma.productRegister.deleteMany({ where: { documentUuid: ret.uuid } }).catch(() => {});
+		await prisma.saleReturnItem.deleteMany({ where: { saleReturnUuid: ret.uuid } }).catch(() => {});
+		await prisma.saleReturn.delete({ where: { uuid: ret.uuid } }).catch(() => {});
+		await prisma.productRegister.delete({ where: { uuid: reg.uuid } }).catch(() => {});
+		await prisma.product.delete({ where: { uuid: product.uuid } }).catch(() => {});
+	}
+});
+
+test("Инвариант: возврат поставщику — out.amount регистра == кредит 1330 проводки (уже согласовано)", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid || !fx.warehouseUuid || !fx.userUuid) return t.skip("нет фикстур");
+
+	const product = await prisma.product.create({
+		data: { name: `__test_purchret_${Date.now()}`, organizationUuid: fx.orgUuid },
+	}).catch(() => null);
+	if (!product) return t.skip("не удалось создать тестовый товар");
+
+	// Остаток на складе, чтобы расход прошёл контроль остатков.
+	const reg = await prisma.productRegister.create({
+		data: {
+			date: new Date(Date.now() - 86400000), movementType: "in", quantity: 10, amount: 5000,
+			productUuid: product.uuid, warehouseUuid: fx.warehouseUuid, organizationUuid: fx.orgUuid,
+			documentType: "purchase", documentUuid: crypto.randomUUID(),
+		},
+	});
+	// Возврат поставщику 2 ед по цене 600 без НДС (amountWithoutVat=1200).
+	const ret = await prisma.purchaseReturn.create({
+		data: {
+			organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid,
+			authorUuid: fx.userUuid, date: new Date(), posted: true,
+		},
+	});
+	await prisma.purchaseReturnItem.create({
+		data: { purchaseReturnUuid: ret.uuid, productUuid: product.uuid, quantity: 2, price: 600, amount: 1200, amountWithoutVat: 1200 },
+	});
+	try {
+		await reconcileDocumentRegister("purchase_return", ret.uuid);
+		const outMv = await prisma.productRegister.findFirst({
+			where: { documentType: "purchase_return", documentUuid: ret.uuid, movementType: "out" },
+			select: { amount: true },
+		});
+		await reconcileDocumentEntries("purchase_return", ret.uuid);
+		const goodsCredit = await prisma.accountingEntry.findFirst({
+			where: { documentType: "purchase_return", documentUuid: ret.uuid, creditAccountCode: "1330" },
+			select: { amount: true },
+		});
+		assert.ok(outMv && goodsCredit, "движение и проводка созданы");
+		assert.equal(Number(outMv.amount), Number(goodsCredit.amount), "out.amount == кредит 1330 (инвариант держится)");
+	} finally {
+		await prisma.accountingEntry.deleteMany({ where: { documentType: "purchase_return", documentUuid: ret.uuid } }).catch(() => {});
+		await prisma.productRegister.deleteMany({ where: { documentUuid: ret.uuid } }).catch(() => {});
+		await prisma.purchaseReturnItem.deleteMany({ where: { purchaseReturnUuid: ret.uuid } }).catch(() => {});
+		await prisma.purchaseReturn.delete({ where: { uuid: ret.uuid } }).catch(() => {});
+		await prisma.productRegister.delete({ where: { uuid: reg.uuid } }).catch(() => {});
+		await prisma.product.delete({ where: { uuid: product.uuid } }).catch(() => {});
+	}
+});
+
 // ─── Интеграция: ФИФО-себестоимость списания через границу слоёв ───────────────
 test("Интеграция: при costingMethod=FIFO себестоимость считается по партиям (не по средней)", async (t) => {
 	if (!fx.orgUuid || !fx.cpUuid || !fx.warehouseUuid) return t.skip("нет фикстур");
@@ -408,6 +570,65 @@ test("Интеграция: при costingMethod=FIFO себестоимость
 		const avgCogs = avgEntries.find((e) => e.debitAccountCode === "7010" && e.creditAccountCode === "1330");
 		assert.equal(avgCogs.amount, 7200, "средняя: 12 × 600 = 7200");
 	} finally {
+		await prisma.organizationAccountingSetting.update({ where: { uuid: setting.uuid }, data: { costingMethod: savedMethod } }).catch(() => {});
+		await prisma.productRegister.delete({ where: { uuid: reg1.uuid } }).catch(() => {});
+		await prisma.productRegister.delete({ where: { uuid: reg2.uuid } }).catch(() => {});
+		await prisma.product.delete({ where: { uuid: product.uuid } }).catch(() => {});
+	}
+});
+
+test("Производительность: общий costCache читает историю товара один раз и не искажает COGS", async (t) => {
+	if (!fx.orgUuid || !fx.cpUuid || !fx.warehouseUuid) return t.skip("нет фикстур");
+	const setting = await prisma.organizationAccountingSetting.findFirst({
+		where: { organizationUuid: fx.orgUuid, deletedAt: null }, orderBy: { startDate: "desc" },
+	});
+	if (!setting) return t.skip("нет параметров учёта организации");
+
+	const product = await prisma.product.create({
+		data: { name: `__test_costcache_${Date.now()}`, organizationUuid: fx.orgUuid },
+	}).catch(() => null);
+	if (!product) return t.skip("не удалось создать тестовый товар");
+
+	const base = { productUuid: product.uuid, warehouseUuid: fx.warehouseUuid, organizationUuid: fx.orgUuid, documentType: "purchase" };
+	const reg1 = await prisma.productRegister.create({ data: { ...base, date: new Date(Date.now() - 3 * 86400000), movementType: "in", quantity: 10, amount: 5000, documentUuid: crypto.randomUUID() } });
+	const reg2 = await prisma.productRegister.create({ data: { ...base, date: new Date(Date.now() - 2 * 86400000), movementType: "in", quantity: 10, amount: 7000, documentUuid: crypto.randomUUID() } });
+	const savedMethod = setting.costingMethod;
+
+	// Шпион на чтения регистра.
+	const orig = prisma.productRegister.findMany.bind(prisma.productRegister);
+	let calls = 0;
+	prisma.productRegister.findMany = (...a) => { calls += 1; return orig(...a); };
+
+	try {
+		await prisma.organizationAccountingSetting.update({ where: { uuid: setting.uuid }, data: { costingMethod: "FIFO" } });
+		const items = [{ productUuid: product.uuid, quantity: 6, amount: 9000 }];
+		const docA = { organizationUuid: fx.orgUuid, counterpartyUuid: fx.cpUuid, warehouseUuid: fx.warehouseUuid, date: new Date(), posted: true };
+		const docB = { ...docA };
+
+		// Свежие кэши (по умолчанию): каждый документ читает историю заново.
+		calls = 0;
+		const fresh1 = await buildDocumentEntries("sale", docA, items);
+		const fresh2 = await buildDocumentEntries("sale", docB, items);
+		const freshCalls = calls;
+		const cogs = (es) => es.find((e) => e.debitAccountCode === "7010" && e.creditAccountCode === "1330")?.amount;
+		// FIFO 6 ед из слоя 10×500 → 3000.
+		assert.equal(cogs(fresh1), 3000, "ФИФО COGS первого документа");
+		assert.equal(cogs(fresh2), 3000, "ФИФО COGS второго документа (свежий кэш)");
+
+		// Общий кэш: второй документ НЕ должен добавить чтений регистра по этому товару.
+		const shared = new Map();
+		calls = 0;
+		const sh1 = await buildDocumentEntries("sale", docA, items, prisma, shared);
+		const afterFirst = calls;
+		const sh2 = await buildDocumentEntries("sale", docB, items, prisma, shared);
+		const afterSecond = calls;
+
+		assert.equal(cogs(sh1), 3000, "общий кэш: COGS первого == свежему");
+		assert.equal(cogs(sh2), 3000, "общий кэш: COGS второго == свежему (кэш не искажает)");
+		assert.equal(afterSecond - afterFirst, 0, "второй документ не делает НИ ОДНОГО нового чтения регистра (кэш-хит)");
+		assert.ok(freshCalls > afterFirst, "свежие кэши читают регистр больше раз, чем общий");
+	} finally {
+		prisma.productRegister.findMany = orig;
 		await prisma.organizationAccountingSetting.update({ where: { uuid: setting.uuid }, data: { costingMethod: savedMethod } }).catch(() => {});
 		await prisma.productRegister.delete({ where: { uuid: reg1.uuid } }).catch(() => {});
 		await prisma.productRegister.delete({ where: { uuid: reg2.uuid } }).catch(() => {});

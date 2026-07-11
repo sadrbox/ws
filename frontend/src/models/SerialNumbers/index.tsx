@@ -42,6 +42,9 @@ const SerialNumbersForm: FC<Partial<TPane>> = (paneProps) => {
       <div className={styles.FormWrapper}>
         <div className={styles.Form}>
           <GroupCol>
+            {/* Серии создаются документами приёмки и выбывают продажей/списанием;
+                ручное редактирование не предусмотрено — это справочник для просмотра. */}
+            <div className={styles.SettingHint}>{translate("serialReadOnlyNote")}</div>
             <Group>
               <Field label={translate("serialNumber")} name={`${form.formUid}_sn`} value={form.fields.serialNumber} disabled />
               <Field label={translate("serialStatus")} name={`${form.formUid}_st`} value={form.fields.status ? translate(STATUS_KEYS[form.fields.status] ?? form.fields.status) : ""} disabled />

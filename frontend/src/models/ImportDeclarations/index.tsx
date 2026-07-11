@@ -108,6 +108,7 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
           price: r.price ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
           positionNumber: r.positionNumber ?? null,
+          batchUuid: r.batchUuid ?? null,
         }),
         updatePayload: (r: any) => ({
           productUuid: r.productUuid ?? null,
@@ -115,6 +116,7 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
           price: r.price ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
           positionNumber: r.positionNumber ?? null,
+          batchUuid: r.batchUuid ?? null,
         }),
         extraSkipFields: ["importDeclarationUuid"],
       },
@@ -290,7 +292,7 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
           parentUuid={form.fields.uuid ?? ""} parentField="importDeclarationUuid"
           endpoint="importdeclarationitems" componentName="ImportDeclarationItemsList_part"
           hasTaxes={false}
-          serialMode="receipt" serialDocType="import_declaration" warehouseUuid={form.fields.warehouseUuid}
+          serialMode="receipt" serialDocType="import_declaration" batchMode="receipt" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
           parentLabel={`${translate("ImportDeclarationsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
@@ -328,6 +330,23 @@ const ImportDeclarationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item
     getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
+    previewTabs={(row) => [{
+      id: "items",
+      label: translate("tabTMZ"),
+      component: (
+        <TradeDocumentItemsTable
+          parentUuid={String(row.uuid ?? "")} parentField="importDeclarationUuid"
+          endpoint="importdeclarationitems" componentName="ImportDeclarationItemsList_part"
+          hasTaxes={false}
+          serialMode="receipt" serialDocType="import_declaration" batchMode="receipt"
+          warehouseUuid={row.warehouseUuid ? String(row.warehouseUuid) : undefined}
+          organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
+          documentDate={row.date ? String(row.date) : null}
+          disabled disableAddRows disableDeleteRows
+          emptyMessage={translate("noItems") || "Нет позиций"}
+        />
+      ),
+    }]}
   />
 );
 ImportDeclarationsList.displayName = LIST_NAME;

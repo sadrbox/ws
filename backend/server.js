@@ -76,6 +76,7 @@ import goodsReceiptItemsRouter from "./api/router/goodsreceiptitems.js";
 import { auditMiddleware } from "./utils/auditMiddleware.js";
 import stockCountsRouter from "./api/router/stockcounts.js";
 import serialNumbersRouter from "./api/router/serialnumbers.js";
+import productBatchesRouter from "./api/router/productbatches.js";
 import stockCountItemsRouter from "./api/router/stockcountitems.js";
 import purchaseOrdersRouter from "./api/router/purchaseorders.js";
 import purchaseOrderItemsRouter from "./api/router/purchaseorderitems.js";
@@ -126,7 +127,9 @@ app.set("trust proxy", "192.168.1.113");
 // прямые хиты сканеров). Прямой LAN-доступ к API (минуя туннель) — легитимен.
 // Spoofing X-Forwarded-For это не открывает: trust proxy доверяет только .113.
 const extraTrustedPeers = (process.env.TRUSTED_PROXY_IPS || "")
-	.split(",").map((x) => x.trim()).filter(Boolean);
+	.split(",")
+	.map((x) => x.trim())
+	.filter(Boolean);
 const peerGuardEnabled = !!process.env.TRUSTED_PROXY_IPS;
 const seenRejected = new Set(); // лог отклонённого источника — один раз на IP
 function isTrustedPeer(peer) {
@@ -313,7 +316,7 @@ app.use("/api/v1", auditMiddleware);
 
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);
-app.use("/api/v1", activityHistoriesRouter);
+app.use("/api/v1/activityhistories", activityHistoriesRouter);
 app.use("/api/v1", organizationsRouter);
 app.use("/api/v1", contractsRouter);
 app.use("/api/v1", filesRouter);
@@ -364,6 +367,7 @@ app.use("/api/v1", goodsReceiptItemsRouter);
 app.use("/api/v1", stockCountsRouter);
 app.use("/api/v1", stockCountItemsRouter);
 app.use("/api/v1", serialNumbersRouter);
+app.use("/api/v1", productBatchesRouter);
 app.use("/api/v1", purchaseOrdersRouter);
 app.use("/api/v1", purchaseOrderItemsRouter);
 app.use("/api/v1", bankStatementsRouter);
@@ -397,6 +401,18 @@ app.use("/api/v1", documentNumberSettingsRouter);
 app.use("/api/v1", documentNumberRouter);
 app.use("/api/v1", priceTypesRouter);
 app.use("/api/v1", productPricesRouter);
+
+// Дополнительный публичный (или проксируемый) endpoint для интеграций:
+// api.buhprof.kz/pipe
+// Подключаем те же middleware что и для /api/v1 (auth/tenant/access/audit)
+app.use(
+	"/pipe",
+	authMiddleware,
+	tenantMiddleware,
+	userAccessRightMiddleware,
+	auditMiddleware,
+	activityHistoriesRouter,
+);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. ОБРАБОТКА 404

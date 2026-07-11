@@ -106,6 +106,7 @@ interface SaleItemRow extends TDataItem {
   organizationUuid?: string | null;
   counterpartyUuid?: string | null;
   warehouseUuid?: string | null;
+  batchUuid?: string | null;
 }
 
 /** Сид панели формы реализации (paneProps.data). */
@@ -241,6 +242,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             organizationUuid: row.organization?.uuid ?? row.organizationUuid ?? null,
             counterpartyUuid: row.counterparty?.uuid ?? row.counterpartyUuid ?? null,
             warehouseUuid: row.warehouse?.uuid ?? row.warehouseUuid ?? null,
+            batchUuid: row.batchUuid ?? null,
           };
         },
         updatePayload: (r: TDataItem) => {
@@ -259,6 +261,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             organizationUuid: row.organization?.uuid ?? row.organizationUuid ?? null,
             counterpartyUuid: row.counterparty?.uuid ?? row.counterpartyUuid ?? null,
             warehouseUuid: row.warehouse?.uuid ?? row.warehouseUuid ?? null,
+            batchUuid: row.batchUuid ?? null,
           };
         },
         extraSkipFields: ["saleUuid"],
@@ -797,7 +800,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           parentField="saleUuid"
           endpoint="saleitems"
           componentName="SaleItemsList_part"
-          serialMode="issue" serialDocType="sale" warehouseUuid={form.fields.warehouseUuid}
+          serialMode="issue" serialDocType="sale" batchMode="issue" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid}
           documentDate={form.fields.date || null}
           priceTypeUuid={form.fields.priceTypeUuid}
@@ -841,6 +844,23 @@ const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
     }} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
+    previewTabs={(row) => [{
+      id: "items",
+      label: translate("SaleItemsList"),
+      component: (
+        <TradeDocumentItemsTable
+          parentUuid={String(row.uuid ?? "")} parentField="saleUuid"
+          endpoint="saleitems" componentName="SaleItemsList_part"
+          serialMode="issue" serialDocType="sale" batchMode="issue"
+          warehouseUuid={row.warehouseUuid ? String(row.warehouseUuid) : undefined}
+          organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
+          documentDate={row.date ? String(row.date) : null}
+          disabled disableAddRows disableDeleteRows
+          emptyMessage={translate("noItems") || "Нет позиций"}
+          defaultHiddenColumns={["amountNetOfIndirectTaxes", "amountWithoutVat"]}
+        />
+      ),
+    }]}
   />
 );
 SalesList.displayName = "SalesList";

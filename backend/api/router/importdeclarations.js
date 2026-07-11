@@ -7,6 +7,7 @@ import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 import { assertDocumentSerials, respondSerialError, releaseIssuedSerials, removeReceiptSerials } from "../../services/serialNumbers.js";
+import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
@@ -179,6 +180,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 	} catch (error) {
 		if (respondOrgFieldError(error, res)) return;
 		if (respondSerialError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
@@ -223,6 +225,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (willBePosted) {
 			// Серийные номера: число серий строки должно совпадать с количеством.
 			await assertDocumentSerials({ docType: DOC_TYPE, docUuid: existing.uuid, itemModel: "importDeclarationItem", parentField: "importDeclarationUuid" });
+			await assertDocumentBatches({ docType: DOC_TYPE, docUuid: existing.uuid, itemModel: "importDeclarationItem", parentField: "importDeclarationUuid" });
 			// Бух. проверки проведения (организация, дата, счета, субконто, Дт=Кт).
 			await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
 		}
@@ -238,6 +241,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondOrgFieldError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (respondSerialError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });

@@ -293,6 +293,7 @@ interface TableControlPanelProps {
   hideReload?: boolean;
   /** Если true — скрыть кнопку «Удалить» (удаление недоступно) */
   canDelete?: boolean;
+  componentName?: string;
 }
 
 const TableControlPanel = memo(({
@@ -315,6 +316,7 @@ const TableControlPanel = memo(({
   hideAddDelete = false,
   hideReload = false,
   canDelete = true,
+  componentName,
 }: TableControlPanelProps) => {
   const isSelect = variant === 'select';
   const hideWrite = isSelect || isReadonly || hideAddDelete;
@@ -334,6 +336,19 @@ const TableControlPanel = memo(({
         <>
           <Toolbar.Divider />
           <Toolbar.PeriodButton onClick={onDateRangeToggle} active={visibleDateRange} />
+          {/* Переключатель вида списка (список / split-предпросмотр), персист per-list.
+              Раскладку рендерит ModelList — она слушает CustomEvent "listLayoutToggle". */}
+          {componentName && (
+            <Toolbar.ToggleSplit
+              pressed={(localStorage.getItem(`listPaneLayout:${componentName}`) || 'list') === 'split'}
+              onClick={() => {
+                const key = `listPaneLayout:${componentName}`;
+                const next = (localStorage.getItem(key) || 'list') === 'split' ? 'list' : 'split';
+                localStorage.setItem(key, next);
+                window.dispatchEvent(new CustomEvent('listLayoutToggle', { detail: componentName }));
+              }}
+            />
+          )}
         </>
       )}
       {!isSelect && <Toolbar.Divider />}
@@ -876,6 +891,7 @@ const Table: FC<TableProps> = memo((props) => {
       <div className={styles.TableWrapper}>
         <TableControlPanel
           variant={variant}
+          componentName={componentName}
           showDateRangeButton={showDateRangeButton}
           isLoading={isLoading}
           visibleDateRange={hasDateRange}

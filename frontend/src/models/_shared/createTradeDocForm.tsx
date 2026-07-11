@@ -86,6 +86,8 @@ export interface TradeDocConfig {
   /** Серийные номера: роль документа (receipt/issue) + docType. Включает колонку «Серии». */
   serialMode?: "receipt" | "issue";
   serialDocType?: string;
+  /** Партии: роль документа (receipt/issue). Включает колонку «Партия» (FEFO). */
+  batchMode?: "receipt" | "issue";
   priceTypeValueType?: "salePriceType" | "purchasePriceType";
   /** Скрытые по умолчанию колонки позиций. */
   defaultHiddenColumns?: string[];
@@ -252,6 +254,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
             vatRate: r.vatRate ?? 0,
             exciseRate: r.exciseRate ?? 0,
             discountPercent: r.discountPercent ?? 0,
+            batchUuid: r.batchUuid ?? null,
           }),
           updatePayload: (r: TDataItem) => ({
             sourceRowId: r.sourceRowId ?? null,
@@ -262,6 +265,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
             vatRate: r.vatRate ?? 0,
             exciseRate: r.exciseRate ?? 0,
             discountPercent: r.discountPercent ?? 0,
+            batchUuid: r.batchUuid ?? null,
           }),
           extraSkipFields: [cfg.itemsParentField],
         },
@@ -525,7 +529,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           <TradeDocumentItemsTable
             parentUuid={form.fields.uuid ?? ""} parentField={cfg.itemsParentField}
             endpoint={cfg.itemsEndpoint} componentName={cfg.itemsComponentName}
-            serialMode={cfg.serialMode} serialDocType={cfg.serialDocType} warehouseUuid={form.fields.warehouseUuid}
+            serialMode={cfg.serialMode} serialDocType={cfg.serialDocType} batchMode={cfg.batchMode} warehouseUuid={form.fields.warehouseUuid}
             organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
             priceTypeUuid={form.fields.priceTypeUuid}
             disabled={form.isLoading} deferRemoteChanges
@@ -651,6 +655,23 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
       variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
       defaultSort={{ id: "desc" }} enableDateRange
       renderCell={renderPostedCell}
+      previewTabs={(row) => [{
+        id: "items",
+        label: translate(cfg.itemsTabLabelKey ?? "SaleItemsList"),
+        component: (
+          <TradeDocumentItemsTable
+            parentUuid={String(row.uuid ?? "")} parentField={cfg.itemsParentField}
+            endpoint={cfg.itemsEndpoint} componentName={cfg.itemsComponentName}
+            serialMode={cfg.serialMode} serialDocType={cfg.serialDocType} batchMode={cfg.batchMode}
+            warehouseUuid={row.warehouseUuid ? String(row.warehouseUuid) : undefined}
+            organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
+            documentDate={row.date ? String(row.date) : null}
+            disabled disableAddRows disableDeleteRows
+            emptyMessage={translate("noItems") || "Нет позиций"}
+            defaultHiddenColumns={cfg.defaultHiddenColumns ?? ["amountNetOfIndirectTaxes", "amountWithoutVat"]}
+          />
+        ),
+      }]}
     />
   );
   List.displayName = cfg.listName;

@@ -7,6 +7,7 @@ import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 import { assertDocumentSerials, respondSerialError, releaseIssuedSerials, removeReceiptSerials } from "../../services/serialNumbers.js";
+import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
@@ -138,6 +139,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondSerialError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
@@ -181,6 +183,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (willBePosted) {
 			// Серийные номера: число серий строки должно совпадать с количеством.
 			await assertDocumentSerials({ docType: DOC_TYPE, docUuid: existing.uuid, itemModel: "writeOffItem", parentField: "writeOffUuid" });
+			await assertDocumentBatches({ docType: DOC_TYPE, docUuid: existing.uuid, itemModel: "writeOffItem", parentField: "writeOffUuid" });
 			// Расходный документ: остаток не должен уходить в минус (до записи проведения).
 			const warehouseUuid = data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid;
 			await assertStockForPosting(DOC_TYPE, existing.uuid, { warehouseUuid });
@@ -202,6 +205,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondStockError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (respondSerialError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });

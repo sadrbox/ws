@@ -57,9 +57,10 @@ model User {
   authoredPurchaseOrders       PurchaseOrder[]       @relation("PurchaseOrderAuthor")
   authoredBankStatements       BankStatement[]       @relation("BankStatementAuthor")
 
-  authoredWriteOffs      WriteOff[]              @relation("WriteOffAuthor")
-  authoredGoodsReceipts  GoodsReceipt[]          @relation("GoodsReceiptAuthor")
-  authoredStockCounts    StockCount[]            @relation("StockCountAuthor")
+  authoredWriteOffs     WriteOff[]     @relation("WriteOffAuthor")
+  authoredGoodsReceipts GoodsReceipt[] @relation("GoodsReceiptAuthor")
+  authoredStockCounts   StockCount[]   @relation("StockCountAuthor")
+
   @@index([employeeUuid])
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -176,9 +177,10 @@ model Organization {
   accountingEntries    AccountingEntry[]               @relation("OrgAccountingEntries")
   fiscalReceipts       FiscalReceipt[]                 @relation("OrgFiscalReceipts")
 
-  writeOffs              WriteOff[]              @relation("OrgWriteOffs")
-  goodsReceipts          GoodsReceipt[]          @relation("OrgGoodsReceipts")
-  stockCounts            StockCount[]            @relation("OrgStockCounts")
+  writeOffs     WriteOff[]     @relation("OrgWriteOffs")
+  goodsReceipts GoodsReceipt[] @relation("OrgGoodsReceipts")
+  stockCounts   StockCount[]   @relation("OrgStockCounts")
+
   @@index([updatedAt])
   @@map("organizations")
 }
@@ -206,7 +208,7 @@ model Counterparty {
   outgoingInvoices     OutgoingInvoice[]     @relation("CpOutgoingInvoices")
   paymentInvoices      PaymentInvoice[]
   purchases            Purchase[]
-  importDeclarations   ImportDeclaration[]             @relation("CpImportDeclarations")
+  importDeclarations   ImportDeclaration[]   @relation("CpImportDeclarations")
   purchaseReturns      PurchaseReturn[]
   purchaseRequisitions PurchaseRequisition[]
   sales                Sale[]
@@ -395,6 +397,29 @@ model ActivityHistory {
   @@map("activity_history")
 }
 
+// Специальная таблица для событий, приходящих от внешних интеграций (1С -> /pipe)
+model PipeActivity {
+  id                    Int      @id @default(autoincrement())
+  uuid                  String   @unique @default(uuid())
+  receivedAt            DateTime @default(now())
+  actionDate            DateTime @default(now())
+  actionType            String
+  organizationShortName String?
+  bin                   String?
+  userName              String
+  host                  String?
+  ip                    String?
+  objectId              String
+  objectType            String
+  objectName            String
+  props                 Json?
+  payload               Json? // оригинальный пришедший JSON от 1С
+
+  @@index([receivedAt])
+  @@index([objectType, objectId])
+  @@map("pipe_activity")
+}
+
 model Todo {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
@@ -447,9 +472,10 @@ model Warehouse {
   reservations           Reservation[]         @relation("WhReservations")
   purchaseOrders         PurchaseOrder[]       @relation("WhPurchaseOrders")
 
-  writeOffs              WriteOff[]              @relation("WhWriteOffs")
-  goodsReceipts          GoodsReceipt[]          @relation("WhGoodsReceipts")
-  stockCounts            StockCount[]            @relation("WhStockCounts")
+  writeOffs     WriteOff[]     @relation("WhWriteOffs")
+  goodsReceipts GoodsReceipt[] @relation("WhGoodsReceipts")
+  stockCounts   StockCount[]   @relation("WhStockCounts")
+
   @@index([organizationUuid])
   @@index([updatedAt])
   @@map("warehouses")
@@ -618,8 +644,8 @@ model OutgoingInvoice {
 
   // Категория поставщика/получателя в ЭСФ (роль в документе): SellerType/CustomerType.
   // null = обычная реализация (блок «Категория» B10/C20 не выводится). Розница=RETAIL и т.п.
-  esfSellerType         String?
-  esfCustomerType       String?
+  esfSellerType   String?
+  esfCustomerType String?
 
   // Тип ЭСФ (InvoiceType): null/ORDINARY_INVOICE=обычный, FIXED_INVOICE=исправленный,
   // ADDITIONAL_INVOICE=дополнительный. Для FIXED/ADDITIONAL нужна связь с основным ЭСФ.
@@ -628,8 +654,8 @@ model OutgoingInvoice {
 
   // Грузоотправитель/грузополучатель ЭСФ (раздел D) — ссылки на Контрагентов.
   // Заполняются ТОЛЬКО если отличаются от продавца/покупателя; иначе ИС ЭСФ подставляет сама.
-  esfConsignorUuid      String? // грузоотправитель (D25)
-  esfConsigneeUuid      String? // грузополучатель (D26)
+  esfConsignorUuid String? // грузоотправитель (D25)
+  esfConsigneeUuid String? // грузополучатель (D26)
 
   // Поверенный/оператор покупателя (J 39–42) и поставщика (I 35–38) — раздел Э5.
   // Ссылка на контрагента/организацию → БИН/наименование/адрес резолвятся на сервере;
@@ -920,6 +946,9 @@ model Product {
   /// Учёт по серийным номерам (T6.1): при приёмке серии вводятся, при выбытии
   /// списываются. Кол-во строки документа должно совпадать с числом серий.
   trackSerialNumbers       Boolean                   @default(false)
+  /// Учёт по партиям (T6.1 Stage 2): приёмка задаёт партию (№ + срок годности),
+  /// выбытие списывает по FEFO (раньше истекает — раньше выбывает).
+  trackBatches             Boolean                   @default(false)
   /// Продажная цена в Product НЕ хранится — источник истины таблица «Цены»
   /// (ProductPrice, тип «по умолчанию»); автоподстановка через product-prices/price-list.
   /// Ниже — денормализованные цены закупки/опта (по дате документа «Установка цен»).
@@ -953,10 +982,12 @@ model Product {
   priceSettingItems        ProductPriceSettingItem[]
   productPrices            ProductPrice[]
 
-  writeOffItems          WriteOffItem[]
-  goodsReceiptItems      GoodsReceiptItem[]
-  stockCountItems        StockCountItem[]
-  serialNumbers          SerialNumber[]
+  writeOffItems     WriteOffItem[]
+  goodsReceiptItems GoodsReceiptItem[]
+  stockCountItems   StockCountItem[]
+  serialNumbers     SerialNumber[]
+  productBatches    ProductBatch[]
+
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
   @@index([organizationUuid])
@@ -1004,6 +1035,7 @@ model SaleItem {
   discountPercent   Decimal        @default(0) @db.Decimal(7, 4)
   discountAmount    Decimal        @default(0) @db.Decimal(18, 2)
   productUuid       String?
+  batchUuid         String? // партия (T6.1 Stage 2)
   saleUuid          String
   taxes             Json?
   date              DateTime?
@@ -1050,6 +1082,7 @@ model PurchaseItem {
   discountPercent   Decimal        @default(0) @db.Decimal(7, 4)
   discountAmount    Decimal        @default(0) @db.Decimal(18, 2)
   productUuid       String?
+  batchUuid         String? // партия (T6.1 Stage 2)
   purchaseUuid      String
   taxes             Json?
   date              DateTime?
@@ -1105,11 +1138,11 @@ model OutgoingInvoiceItem {
 
   // Пер-строчные метаданные ЭСФ (переопределяют карточку товара): ТН ВЭД (G4/3.1),
   // признак происхождения (G2). Заполняются автоматически при выборе товара.
-  tnvedCode           String?
-  truOriginCode       String?
+  tnvedCode                  String?
+  truOriginCode              String?
   // ГТД/декларация на товары (импорт): номер декларации и № товарной позиции в ней.
-  productDeclaration          String?
-  productNumberInDeclaration  String?
+  productDeclaration         String?
+  productNumberInDeclaration String?
 
   sourceRowId String?
 
@@ -1416,9 +1449,10 @@ model UnitOfMeasure {
   reservationItems         ReservationItem[]
   purchaseOrderItems       PurchaseOrderItem[]
 
-  writeOffItems          WriteOffItem[]
-  goodsReceiptItems      GoodsReceiptItem[]
-  stockCountItems        StockCountItem[]
+  writeOffItems     WriteOffItem[]
+  goodsReceiptItems GoodsReceiptItem[]
+  stockCountItems   StockCountItem[]
+
   @@index([updatedAt])
   @@map("units_of_measure")
 }
@@ -1754,6 +1788,8 @@ model ProductRegister {
   documentId        Int?
   /// UUID строки документа-источника движения.
   documentItemUuid  String?
+  /// Партия (T6.1 Stage 2): приход задаёт партию, расход списывает по FEFO.
+  batchUuid         String?
   createdAt         DateTime       @default(now())
   product           Product?       @relation(fields: [productUuid], references: [uuid])
   warehouse         Warehouse?     @relation(fields: [warehouseUuid], references: [uuid])
@@ -1765,7 +1801,37 @@ model ProductRegister {
   @@index([organizationUuid])
   @@index([documentType, documentUuid])
   @@index([date])
+  @@index([batchUuid])
   @@map("product_register")
+}
+
+// ─── Снапшот себестоимости на границе закрытого периода ───────────────────────
+// Материализация ФИФО-слоёв: остаточные слои (и остаток qty/value) по паре
+// товар+склад НА конец закрытого периода (month_close). Костинг стартует от
+// последнего снапшота с asOfDate ≤ границы закрытого периода и переигрывает только
+// движения ПОСЛЕ asOfDate — вместо всей истории. Чистый кэш (нет relation-ов):
+// при отсутствии/недоверии снапшоту костинг переигрывает историю целиком (фолбэк).
+// Валидность гарантируется блокировкой периода: период ≤ asOfDate неизменен.
+model ProductCostSnapshot {
+  id               Int      @id @default(autoincrement())
+  uuid             String   @unique @default(uuid())
+  organizationUuid String
+  productUuid      String
+  /// Себестоимость ведётся ПО СКЛАДУ — снапшот тоже по складу.
+  warehouseUuid    String
+  /// Состояние НА конец этого момента (включительно; = конец дня periodEnd).
+  asOfDate         DateTime
+  /// Остаток количества (Σ приход − Σ расход) на asOfDate.
+  quantity         Decimal  @default(0) @db.Decimal(18, 4)
+  /// Стоимость остатка на asOfDate (для средней: unit = value/quantity).
+  value            Decimal  @default(0) @db.Decimal(18, 2)
+  /// Остаточные ФИФО-слои oldest→newest: [{ q:number, unit:number }] (для FIFO-старта).
+  layers           Json     @default("[]")
+  createdAt        DateTime @default(now())
+
+  @@unique([organizationUuid, productUuid, warehouseUuid, asOfDate])
+  @@index([organizationUuid, asOfDate])
+  @@map("product_cost_snapshot")
 }
 
 // ─── Регистр накопления «Резервы товаров» ────────────────────────────────────
@@ -2527,6 +2593,7 @@ model ImportDeclarationItem {
   positionNumber        String? // № товарной позиции в декларации (графа 32)
   unitOfMeasureUuid     String?
   productUuid           String?
+  batchUuid             String? // партия (T6.1 Stage 2)
   importDeclarationUuid String
   organizationUuid      String?
   sourceRowId           String?
@@ -2581,6 +2648,7 @@ model WriteOffItem {
   amount            Decimal        @default(0) @db.Decimal(18, 2)
   unitOfMeasureUuid String?
   productUuid       String?
+  batchUuid         String? // партия (T6.1 Stage 2)
   writeOffUuid      String
   organizationUuid  String?
   sourceRowId       String?
@@ -2635,6 +2703,7 @@ model GoodsReceiptItem {
   amount            Decimal        @default(0) @db.Decimal(18, 2)
   unitOfMeasureUuid String?
   productUuid       String?
+  batchUuid         String? // партия (T6.1 Stage 2)
   goodsReceiptUuid  String
   organizationUuid  String?
   sourceRowId       String?
@@ -2730,4 +2799,28 @@ model SerialNumber {
   @@index([receiptDocUuid])
   @@index([issueDocUuid])
   @@map("serial_numbers")
+}
+
+// Партия товара (T6.1 Stage 2) — учёт по партиям и срокам годности.
+// Партия = поступившая партия с номером и (опц.) сроком годности. Выбытие идёт по
+// FEFO (First-Expired-First-Out: раньше истекает — раньше выбывает). Остаток по
+// партии считается из движений регистра (product_register.batchUuid). Уникальна
+// в пределах товар+организация по номеру.
+model ProductBatch {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  batchNumber      String
+  expiryDate       DateTime? // срок годности (null — без срока)
+  manufactureDate  DateTime? // дата производства (опц.)
+  productUuid      String
+  organizationUuid String?
+  updatedAt        DateTime  @default(now()) @updatedAt
+  deletedAt        DateTime?
+  product          Product   @relation(fields: [productUuid], references: [uuid], onDelete: Cascade)
+
+  @@unique([organizationUuid, productUuid, batchNumber], name: "batch_org_product_uq")
+  @@index([productUuid])
+  @@index([expiryDate])
+  @@index([organizationUuid])
+  @@map("product_batches")
 }

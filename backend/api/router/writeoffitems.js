@@ -11,4 +11,5 @@ export default createDocumentItemsRouter({
 	PARENT_FIELD: "writeOffUuid",
 	hasTaxes: false,
 	hasSourceRowId: true,
+	extraStringFields: ["batchUuid"],
 });

@@ -328,6 +328,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				taxes: calc.taxes ?? undefined,
 				// uuid строки документа-основания — для идемпотентного refill.
 				...(req.body.sourceRowId ? { sourceRowId: String(req.body.sourceRowId) } : {}),
+				// Партия (T6.1): выбрана по FEFO на строке реализации.
+				batchUuid: req.body.batchUuid || null,
 			},
 			include: {
 				product: { include: { brand: true } },
@@ -374,6 +376,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				? { connect: { uuid: req.body.unitOfMeasureUuid } }
 				: { disconnect: true };
 		}
+		// Партия (T6.1): выбор по FEFO на строке реализации.
+		if (req.body.batchUuid !== undefined) data.batchUuid = req.body.batchUuid || null;
 		// Закрепляем sourceRowId на UPDATE (усыновление легаси-строк по основанию).
 		if (req.body.sourceRowId !== undefined) {
 			data.sourceRowId = req.body.sourceRowId ? String(req.body.sourceRowId) : null;

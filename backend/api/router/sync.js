@@ -39,6 +39,7 @@ const MODEL_MAP = {
 	stockcounts: "stockCount",
 	stockcountitems: "stockCountItem",
 	serialnumbers: "serialNumber",
+	productbatches: "productBatch",
 	"outgoing-invoices": "outgoingInvoice",
 	"incoming-invoices": "incomingInvoice",
 	"payment-invoices": "paymentInvoice",

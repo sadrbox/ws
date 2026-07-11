@@ -172,10 +172,17 @@ export async function reconcileDocumentRegister(
 		//   дату исходной продажи). docUuid/docId здесь не передаём намеренно: иначе
 		//   расходы самой продажи попали бы в «уже потреблённое» и вернулись бы слои,
 		//   лежащие ЗА проданными.
+		// Граница закрытого периода: если дата документа СТРОГО позже границы, docCtx
+		// стартует оценку от снапшота на границе (материализация ФИФО-слоёв), а не от
+		// начала истории. pastCtx (возврат покупателя, оценка на прошлую дату) снапшот
+		// НЕ использует — его cutoff может быть ≤ границы.
+		const docDate = doc.date ? new Date(doc.date) : null;
+		const closedBoundary = await getClosedBoundary(doc.organizationUuid ?? null, client);
+		const docBoundary = closedBoundary && docDate && docDate > closedBoundary ? closedBoundary : null;
 		let docCtx = null;
 		let pastCtx = null;
 		const useDocCtx = async () =>
-			(docCtx ??= await createCostingContext(doc.organizationUuid ?? null, doc.date, { docUuid: documentUuid, docId: doc.id ?? null }, client));
+			(docCtx ??= await createCostingContext(doc.organizationUuid ?? null, doc.date, { docUuid: documentUuid, docId: doc.id ?? null, boundary: docBoundary }, client));
 		const usePastCtx = async () =>
 			(pastCtx ??= await createCostingContext(doc.organizationUuid ?? null, saleReturnCostDate, {}, client));
 
@@ -226,6 +233,19 @@ export async function reconcileDocumentRegister(
 				const costValue = Math.round((Number(unit) || 0) * qty * 100) / 100;
 				if (costValue > 0) value = costValue;
 			}
+			// Реализация: в строке хранится ВЫРУЧКА (цена продажи), но движение регистра
+			// (расход) должно нести СЕБЕСТОИМОСТЬ выбытия — тогда out.amount = COGS
+			// (инвариант регистра: out.amount == кредит 1330 в проводке), а стоимость
+			// остатка (warehouseBalances = Σin−Σout) считается верно. Себестоимость —
+			// тем же контекстом, что списание/перемещение (последовательное потребление
+			// слоёв многострочного документа). Проводка реализации ПРОЕЦИРУЕТ это значение
+			// (единый источник COGS — accountingPosting читает out.amount, не пересчитывает).
+			// COGS=0 (нет слоёв до даты) → движение с нулевой стоимостью, как у списания.
+			if (documentType === "sale" && qty > 0) {
+				const ctx = await useDocCtx();
+				const unit = await ctx.unitCost(it.productUuid, doc.warehouseUuid ?? null, doc.date ?? new Date(), qty, { consume: true });
+				value = Math.round((Number(unit) || 0) * qty * 100) / 100;
+			}
 			if (qty === 0 && value === 0) continue;
 			for (const mv of cfg.movements) {
 				records.push({
@@ -241,6 +261,8 @@ export async function reconcileDocumentRegister(
 					documentUuid,
 					documentId: doc.id ?? null,
 					documentItemUuid: it.uuid ?? null,
+					// Партия (T6.1 Stage 2): приход задаёт партию, расход её списывает.
+					batchUuid: it.batchUuid ?? null,
 				});
 			}
 		}

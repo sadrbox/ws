@@ -50,6 +50,7 @@ const ALL_MODEL_NAMES = [
 	"GoodsReceipt",
 	"StockCount",
 	"SerialNumber",
+	"ProductBatch",
 	"CashReceiptOrder",
 	"CashExpenseOrder",
 	"Brand",

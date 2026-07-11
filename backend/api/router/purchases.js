@@ -7,6 +7,7 @@ import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 import { assertDocumentSerials, respondSerialError, releaseIssuedSerials, removeReceiptSerials } from "../../services/serialNumbers.js";
+import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
@@ -214,6 +215,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondSerialError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
@@ -277,6 +279,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (willBePosted) {
 			// Серийные номера: число серий строки должно совпадать с количеством.
 			await assertDocumentSerials({ docType: "purchase", docUuid: existing.uuid, itemModel: "purchaseItem", parentField: "purchaseUuid" });
+			await assertDocumentBatches({ docType: "purchase", docUuid: existing.uuid, itemModel: "purchaseItem", parentField: "purchaseUuid" });
 			// Бух. проверки проведения (организация, дата, счета, субконто, Дт=Кт).
 			await assertPostable("purchase", existing.uuid, { ...data, posted: true });
 		}
@@ -304,6 +307,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondOrgFieldError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (respondSerialError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025")

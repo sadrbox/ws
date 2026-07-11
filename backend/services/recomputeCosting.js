@@ -92,17 +92,20 @@ export async function recomputeCosting({ organizationUuid = null, dateFilter = n
 		return docs;
 	}
 
-	async function phase(types, fn) {
+	async function phase(types, fn, extraArg) {
 		const docs = await collect(types);
-		for (const d of docs) await fn(d.type, d.uuid, client);
+		for (const d of docs) await fn(d.type, d.uuid, client, extraArg);
 		return docs.length;
 	}
 
 	running = true;
 	try {
-		// Порядок важен: регистр целиком, затем проводки (COGS из полного регистра).
+		// Порядок важен: регистр целиком (фаза мутирует регистр — БЕЗ общего кэша!),
+		// затем проводки. На фазе проводок регистр НЕизменен, поэтому историю
+		// себестоимости читаем один раз на весь пересчёт через общий costCache
+		// (иначе каждый документ×строка перечитывал бы всю историю → O(история²)).
 		const registers = await phase(REGISTER_DOC_TYPES, reconcileDocumentRegister);
-		const entries = await phase(POSTING_DOC_TYPES, reconcileDocumentEntries);
+		const entries = await phase(POSTING_DOC_TYPES, reconcileDocumentEntries, new Map());
 		return { registers, entries };
 	} finally {
 		running = false;

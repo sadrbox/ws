@@ -7,4 +7,5 @@ export default createDocumentItemsRouter({
 	PARENT_FIELD: "purchaseUuid",
 	hasTaxes: true,
 	hasSourceRowId: true,
+	extraStringFields: ["batchUuid"],
 });

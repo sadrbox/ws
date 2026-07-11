@@ -255,6 +255,7 @@ export const ROUTE_TO_MODEL = {
 	stockcounts: "StockCount",
 	stockcountitems: "StockCountItem",
 	serialnumbers: "SerialNumber",
+	productbatches: "ProductBatch",
 	"bank-statements": "BankStatement",
 	"scheduled-tasks": "ScheduledTask",
 	"inventory-transfers": "InventoryTransfer",

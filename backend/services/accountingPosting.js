@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
 import { allocateImportLandedCost } from "./importLandedCost.js";
+import { getSnapshotFor } from "./costSnapshot.js";
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -230,8 +231,12 @@ export async function resolveUnitCost(orgUuid, productUuid, warehouseUuid, dateU
  * @param {Date|string|null} date — дата документа (по ней же выбирается метод)
  * @param {{docUuid?:string|null, docId?:number|null}} [opts]
  */
-export async function createCostingContext(orgUuid, date, { docUuid = null, docId = null } = {}, client = prisma) {
-	const ctx = makeContext(client, orgUuid ?? null);
+export async function createCostingContext(orgUuid, date, { docUuid = null, docId = null, boundary = null } = {}, client = prisma) {
+	// boundary — граница закрытого периода. Передавать ТОЛЬКО когда все оценки этого
+	// контекста идут на дату СТРОГО позже границы (оценка документа хвоста): тогда
+	// costing стартует от снапшота на границе, а не от начала истории. Для оценки на
+	// прошлую дату (возврат от покупателя) boundary НЕ передавать.
+	const ctx = makeContext(client, orgUuid ?? null, new Map(), boundary);
 	ctx.beginDocument(await resolveCostingMethod(orgUuid ?? null, date ?? null, client), docUuid, docId);
 	return ctx;
 }
@@ -373,7 +378,12 @@ export const POSTING_RULES = {
 					debitAnalytics: arAnalytics, creditAnalytics: [],
 				});
 			}
-			const cost = r2((await ctx.unitCost(it.productUuid, doc.warehouseUuid, doc.date, Number(it.quantity || 0), { consume: true })) * Number(it.quantity || 0));
+			// COGS = out.amount из регистра (инвариант: движение расхода уже несёт
+			// себестоимость). Регистра ещё нет (валидация/прямой вызов) → считаем сами.
+			const qtyNum = Number(it.quantity || 0);
+			const cost = ctx.registerCosts.has(it.uuid)
+				? r2(ctx.registerCosts.get(it.uuid))
+				: r2((await ctx.unitCost(it.productUuid, doc.warehouseUuid, doc.date, qtyNum, { consume: true })) * qtyNum);
 			if (cost > 0) {
 				out.push({
 					debit: ACC.COGS,
@@ -414,7 +424,13 @@ export const POSTING_RULES = {
 					debitAnalytics: [], creditAnalytics: arAnalytics,
 				});
 			}
-			const cost = r2((await ctx.unitCost(it.productUuid, doc.warehouseUuid, doc.date, Number(it.quantity || 0), { consume: false })) * Number(it.quantity || 0));
+			// Стоимость возврата на склад = in.amount из регистра (cost-basis на дату
+			// исходной продажи): единый источник, регистр↔ГК по 1330 согласованы.
+			// Регистра ещё нет (валидация/прямой вызов) → считаем сами на дату возврата.
+			const qtyNum = Number(it.quantity || 0);
+			const cost = ctx.registerCosts.has(it.uuid)
+				? r2(ctx.registerCosts.get(it.uuid))
+				: r2((await ctx.unitCost(it.productUuid, doc.warehouseUuid, doc.date, qtyNum, { consume: false })) * qtyNum);
 			if (cost > 0) {
 				out.push({
 					debit: ACC.GOODS,
@@ -628,7 +644,7 @@ export const POSTING_RULES = {
 };
 
 // ─── Резолверы счетов и наименований субконто (с кэшем на вызов) ──────────────
-function makeContext(client, orgUuid) {
+function makeContext(client, orgUuid, costCache = new Map(), boundary = null) {
 	const accCache = new Map(); // code → account|null
 	const subkontoCache = new Map(); // code → SubkontoType|null
 	const nameCache = new Map(); // `${model}:${uuid}` → name
@@ -638,6 +654,70 @@ function makeContext(client, orgUuid) {
 	let docUuid = null;
 	let docId = null;
 	const fifoOffset = new Map(); // `product|warehouse` → потреблено строками документа
+
+	// ── Кэш чтений регистра для себестоимости ────────────────────────────────
+	// avgCost/fifoCost переигрывают ВСЮ историю движений товара. Раньше каждая
+	// строка каждого документа делала свой findMany (с фильтром date lte / docUuid),
+	// т.е. O(строки × история); при пересчёте всей истории — O(история²).
+	// Теперь всю историю (product|warehouse) читаем ОДИН раз и держим в costCache,
+	// а отсечение по дате/документу делаем в памяти (та же логика, что была в SQL).
+	// costCache можно передать снаружи: в пределах документа — мемоизация повторных
+	// товаров; при пересчёте проводок (фаза 2, регистр НЕизменен) — на всю фазу.
+	// ВАЖНО: НЕ переиспользовать между перестройками регистра — только там, где
+	// productRegister не меняется за время жизни кэша.
+	// Возвращает { seed, rows }: seed — снапшот остатка/слоёв на границе закрытого
+	// периода (или null), rows — движения ПОСЛЕ даты снапшота (или вся история, если
+	// снапшота нет). boundary передаётся ТОЛЬКО для контекстов, где все запросы имеют
+	// cutoff > boundary (оценка на дату документа хвоста) — иначе tail-only rows были
+	// бы неполными. Снапшот эквивалентен полному replay истории ≤ asOfDate (доказано
+	// в costSnapshot: ФИФО — front-removal, средняя — та же аккумуляция).
+	async function loadRegister(productUuid, warehouseUuid) {
+		const key = `${orgUuid ?? ""}|${productUuid}|${warehouseUuid ?? ""}`;
+		let cached = costCache.get(key);
+		if (cached) return cached;
+
+		let seed = null;
+		let afterDate = null;
+		if (boundary && orgUuid && warehouseUuid) {
+			const snap = await getSnapshotFor(orgUuid, productUuid, warehouseUuid, boundary, client);
+			if (snap) {
+				seed = {
+					quantity: Number(snap.quantity) || 0,
+					value: Number(snap.value) || 0,
+					layers: Array.isArray(snap.layers)
+						? snap.layers.map((l) => ({ q: Number(l.q) || 0, unit: Number(l.unit) || 0 }))
+						: [],
+				};
+				afterDate = snap.asOfDate;
+			}
+		}
+
+		const base = { productUuid };
+		if (warehouseUuid) base.warehouseUuid = warehouseUuid;
+		if (orgUuid) base.organizationUuid = orgUuid;
+		if (afterDate) base.date = { gt: afterDate };
+		const raw = await client.productRegister.findMany({
+			where: base,
+			select: { quantity: true, amount: true, movementType: true, date: true, documentId: true, documentUuid: true },
+			orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
+		});
+		// Нормализуем: число + метка времени (мс) один раз, чтобы не парсить дату
+		// повторно на каждой строке каждого документа.
+		const rows = raw.map((r) => ({
+			q: Number(r.quantity) || 0,
+			amount: Number(r.amount) || 0,
+			movementType: r.movementType,
+			t: r.date instanceof Date ? r.date.getTime() : new Date(r.date).getTime(),
+			documentId: r.documentId,
+			documentUuid: r.documentUuid,
+		}));
+		cached = { seed, rows };
+		costCache.set(key, cached);
+		return cached;
+	}
+
+	const upToMs = (dateUpTo) =>
+		dateUpTo ? (dateUpTo instanceof Date ? dateUpTo.getTime() : new Date(dateUpTo).getTime()) : null;
 
 	// Инициализация контекста под конкретный документ: метод себестоимости, uuid+id
 	// (для исключения собственных outs и упорядочивания ФИФО) и сброс offset строк.
@@ -704,34 +784,27 @@ function makeContext(client, orgUuid) {
 	// Возвращаем среднюю на момент непосредственно перед текущим документом.
 	async function avgCost(productUuid, warehouseUuid, dateUpTo) {
 		if (!productUuid) return 0;
-		const base = { productUuid };
-		if (warehouseUuid) base.warehouseUuid = warehouseUuid;
-		if (orgUuid) base.organizationUuid = orgUuid;
-		const dateCond = dateUpTo ? { lte: dateUpTo } : undefined;
-		const rows = await client.productRegister.findMany({
-			where: { ...base, ...(dateCond ? { date: dateCond } : {}), documentUuid: { not: docUuid ?? undefined } },
-			select: { quantity: true, amount: true, movementType: true, date: true, documentId: true },
-			orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
-		});
-		const upTo = dateUpTo ? (dateUpTo instanceof Date ? dateUpTo.getTime() : new Date(dateUpTo).getTime()) : null;
-		let qty = 0;
-		let value = 0;
+		const { seed, rows } = await loadRegister(productUuid, warehouseUuid);
+		const upTo = upToMs(dateUpTo);
+		// Старт от снапшота (остаток/стоимость на границе закрытого периода), если есть.
+		let qty = seed ? seed.quantity : 0;
+		let value = seed ? seed.value : 0;
 		for (const r of rows) {
+			// Исключаем собственные движения документа (как SQL `documentUuid not`).
+			if (docUuid && r.documentUuid === docUuid) continue;
 			// Строго ДО текущего документа: по дате, при равной дате — по documentId.
-			const rt = r.date instanceof Date ? r.date.getTime() : new Date(r.date).getTime();
-			const before = upTo == null || rt < upTo
-				|| (rt === upTo && (docId == null || r.documentId == null || r.documentId < docId));
+			const before = upTo == null || r.t < upTo
+				|| (r.t === upTo && (docId == null || r.documentId == null || r.documentId < docId));
 			if (!before) continue;
-			const q = Number(r.quantity) || 0;
 			if (r.movementType === "out") {
 				const avg = qty > 0 ? value / qty : 0;
-				qty -= q;
-				value -= avg * q;
+				qty -= r.q;
+				value -= avg * r.q;
 				if (qty < 0) qty = 0;
 				if (value < 0) value = 0;
 			} else {
-				qty += q;
-				value += Number(r.amount) || 0;
+				qty += r.q;
+				value += r.amount;
 			}
 		}
 		return qty > 0 ? value / qty : 0;
@@ -746,36 +819,36 @@ function makeContext(client, orgUuid) {
 	async function fifoCost(productUuid, warehouseUuid, dateUpTo, quantity, consume) {
 		const qtyNeed = Number(quantity) || 0;
 		if (!productUuid || qtyNeed <= 0) return 0;
-		const base = { productUuid };
-		if (warehouseUuid) base.warehouseUuid = warehouseUuid;
-		if (orgUuid) base.organizationUuid = orgUuid;
-		const dateCond = dateUpTo ? { lte: dateUpTo } : undefined;
 
-		// Слои прихода (oldest → newest). Ключ сортировки ОБЯЗАН совпадать с тем,
-		// по которому ниже отсекается «уже потреблённое» (date, затем documentId):
-		// иначе при нескольких документах одной датой слои и расходы упорядочены
-		// по-разному, и ФИФО списывает не те партии.
-		const ins = await client.productRegister.findMany({
-			where: { ...base, movementType: "in", ...(dateCond ? { date: dateCond } : {}) },
-			select: { quantity: true, amount: true },
-			orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
-		});
-		// Потреблено ДО этого документа в порядке ФИФО (date, затем documentId) —
-		// расходы других документов. Строгий порядок исключает двойной «пропуск»
-		// при нескольких документах одной даты (иначе COGS считается неверно).
-		const outRows = await client.productRegister.findMany({
-			where: { ...base, movementType: "out", ...(dateCond ? { date: dateCond } : {}), documentUuid: { not: docUuid ?? undefined } },
-			select: { quantity: true, date: true, documentId: true },
-		});
-		const upTo = dateUpTo ? (dateUpTo instanceof Date ? dateUpTo.getTime() : new Date(dateUpTo).getTime()) : null;
+		const { seed, rows } = await loadRegister(productUuid, warehouseUuid);
+		const upTo = upToMs(dateUpTo);
+
+		// Слои прихода (oldest → newest) и «уже потреблённое» — из одной выборки,
+		// упорядоченной по (date, documentId, id). Порядок ОБЯЗАН совпадать для слоёв
+		// и расходов, иначе при нескольких документах одной датой ФИФО списывает не те
+		// партии. Приходы берём по date lte (как SQL), расходы других документов —
+		// строго ДО текущего (date, затем documentId), собственные исключаем.
+		// Снапшот (если есть) даёт остаточные слои на границе закрытого периода —
+		// в начало (oldest); его pre-boundary расходы уже вычтены (front-removal),
+		// поэтому priorOut считаем только по движениям ПОСЛЕ границы (rows).
+		const ins = [];
 		let priorOut = 0;
-		for (const r of outRows) {
-			const rt = r.date instanceof Date ? r.date.getTime() : new Date(r.date).getTime();
-			const before =
-				upTo == null || rt < upTo // строго раньше по дате
-					? true
-					: rt === upTo && docId != null && r.documentId != null && r.documentId < docId; // та же дата → по documentId
-			if (before) priorOut += Number(r.quantity) || 0;
+		if (seed) {
+			for (const l of seed.layers) {
+				if (l.q > 0) ins.push({ q: l.q, amount: l.q * l.unit });
+			}
+		}
+		for (const r of rows) {
+			if (r.movementType === "in") {
+				if (upTo == null || r.t <= upTo) ins.push(r);
+			} else {
+				if (docUuid && r.documentUuid === docUuid) continue;
+				const before =
+					upTo == null || r.t < upTo
+						? true
+						: r.t === upTo && docId != null && r.documentId != null && r.documentId < docId;
+				if (before) priorOut += r.q;
+			}
 		}
 		const key = `${productUuid}|${warehouseUuid ?? ""}`;
 		let skip = priorOut + (fifoOffset.get(key) || 0);
@@ -784,8 +857,8 @@ function makeContext(client, orgUuid) {
 		let consumed = 0;
 		let need = qtyNeed;
 		for (const layer of ins) {
-			let lQty = Number(layer.quantity) || 0;
-			const lAmt = Number(layer.amount) || 0;
+			let lQty = layer.q;
+			const lAmt = layer.amount;
 			if (lQty <= 0) continue;
 			const unit = lAmt / lQty;
 			if (skip > 0) {
@@ -827,14 +900,31 @@ function makeContext(client, orgUuid) {
  *   { debitAccountUuid, debitAccountCode, creditAccountUuid, creditAccountCode,
  *     amount, description, debitAnalytics:[{subkontoType,objectUuid,objectName}], creditAnalytics:[...] }
  */
-export async function buildDocumentEntries(documentType, doc, items, client = prisma) {
+export async function buildDocumentEntries(documentType, doc, items, client = prisma, costCache = new Map()) {
 	const rule = POSTING_RULES[documentType];
 	if (!rule) return [];
-	const ctx = makeContext(client, doc.organizationUuid ?? null);
+	const ctx = makeContext(client, doc.organizationUuid ?? null, costCache);
 	// Плательщик НДС? (определяет разнесение НДС на 1420/3130).
 	ctx.useVat = await resolveUseVat(doc.organizationUuid ?? null, client);
 	// Метод себестоимости организации (AVERAGE|FIFO) + инициализация ФИФО-состояния.
 	ctx.beginDocument(await resolveCostingMethod(doc.organizationUuid ?? null, doc.date ?? null, client), doc.uuid, doc.id);
+	// Себестоимость движения — из УЖЕ построенного регистра (amount по строке
+	// документа): единый источник, проводка проецирует регистр, а не считает
+	// себестоимость повторно. Расход (sale) — out.amount = COGS; приход возврата
+	// покупателя (sale_return) — in.amount = cost-basis на дату исходной продажи.
+	// Пусто (валидация ДО пересбора регистра / прямой вызов buildDocumentEntries в
+	// тестах) → правило посчитает себестоимость само (fallback). У документа один тип
+	// движения на строку (кроме перемещения in+out одной цены — оно карту не читает).
+	ctx.registerCosts = new Map();
+	if (doc.uuid) {
+		const movs = await client.productRegister.findMany({
+			where: { documentType, documentUuid: doc.uuid },
+			select: { documentItemUuid: true, amount: true },
+		});
+		for (const m of movs) {
+			if (m.documentItemUuid) ctx.registerCosts.set(m.documentItemUuid, Number(m.amount) || 0);
+		}
+	}
 	const raw = await rule(doc, items ?? [], ctx);
 	if (!raw?.length) return [];
 
@@ -978,7 +1068,7 @@ async function loadDocument(documentType, documentUuid, client) {
  * и, если документ проведён (posted=true) и не удалён, создаёт новые из текущего
  * состояния. Идемпотентно. Безопасно вызывать при каждом сохранении.
  */
-export async function reconcileDocumentEntries(documentType, documentUuid, client = prisma) {
+export async function reconcileDocumentEntries(documentType, documentUuid, client = prisma, costCache = new Map()) {
 	const cfg = DOC_CONFIG[documentType];
 	if (!cfg || !documentUuid) return;
 	try {
@@ -989,8 +1079,9 @@ export async function reconcileDocumentEntries(documentType, documentUuid, clien
 		const { doc, items } = await loadDocument(documentType, documentUuid, client);
 		if (!doc || doc.posted !== true || doc.deletedAt) return;
 
-		// 3. Формируем проводки.
-		const entries = await buildDocumentEntries(documentType, doc, items, client);
+		// 3. Формируем проводки. costCache разделяется на всю фазу пересчёта проводок
+		//    (регистр в это время НЕизменен) — история товара читается один раз.
+		const entries = await buildDocumentEntries(documentType, doc, items, client, costCache);
 		if (!entries.length) return;
 
 		// 4. Создаём проводки + аналитику.

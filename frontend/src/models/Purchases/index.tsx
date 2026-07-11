@@ -33,6 +33,7 @@ const { Form: PurchasesForm, List: PurchasesList } = createTradeDocForm({
   priceTypeValueType: "purchasePriceType",
   serialMode: "receipt",
   serialDocType: "purchase",
+  batchMode: "receipt",
   defaultHiddenColumns: ["amountNetOfIndirectTaxes", "amountWithoutVat"],
   basisSourceLabelKey: "purchaseReceipt",
   createFromBasisTargets: [

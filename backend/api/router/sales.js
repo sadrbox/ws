@@ -7,6 +7,7 @@ import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 import { assertDocumentSerials, respondSerialError, releaseIssuedSerials, removeReceiptSerials } from "../../services/serialNumbers.js";
+import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
@@ -243,6 +244,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondSerialError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
@@ -326,6 +328,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (willBePosted) {
 			// Серийные номера: число серий строки должно совпадать с количеством.
 			await assertDocumentSerials({ docType: "sale", docUuid: existing.uuid, itemModel: "saleItem", parentField: "saleUuid" });
+			await assertDocumentBatches({ docType: "sale", docUuid: existing.uuid, itemModel: "saleItem", parentField: "saleUuid" });
 			const warehouseUuid =
 				data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid;
 			await assertStockForPosting("sale", existing.uuid, { warehouseUuid });
@@ -361,6 +364,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondStockError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (respondSerialError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025")

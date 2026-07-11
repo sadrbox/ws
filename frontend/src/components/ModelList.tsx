@@ -1,5 +1,5 @@
 // 1. React
-import { FC, ComponentType, useMemo, useCallback, useState, useEffect } from "react";
+import { FC, ComponentType, Component, useMemo, useCallback, useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { consumePendingHighlight, subscribeHighlight } from "src/utils/listHighlight";
 import type { ReactNode } from "react";
 
@@ -12,13 +12,16 @@ import { useModelListState } from "src/hooks/useModelListState";
 // 4. Компоненты
 import Table from "src/components/Table";
 import type { TOpenModelFormProps, TTableVariant } from "src/components/Table";
+import Tabs from "src/components/Tabs";
 
 // 5. Типы
 import type { TColumn, TDataItem } from "src/components/Table/types";
 
 // 6. Utils / i18n
 import { translate } from "src/i18";
+import { getFormatColumnValue } from "src/components/Table/services";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
+import { Button } from "src/components/Button";
 
 // 7. Стили
 import styles from "./ModelList.module.scss";
@@ -79,6 +82,12 @@ interface ModelListProps {
   enableDateRange?: boolean;
   /** Кастомный рендер ячеек */
   renderCell?: (row: TDataItem, col: TColumn) => ReactNode | undefined;
+  /**
+   * Доп. вкладки предпросмотра (split-вид), только для чтения. Модель поставляет
+   * read-only таблицы позиций документа по выбранной строке. Вкладка «Основное»
+   * (поля) добавляется автоматически. Если не задано — предпросмотр = только поля.
+   */
+  previewTabs?: (row: TDataItem) => { id: string; label: string; component: ReactNode }[];
 }
 
 // ─── Вспомогательный компонент состояния ошибки ───────────────────────────────
@@ -110,6 +119,67 @@ const ErrorState: FC<ErrorStateProps> = ({ message, onRetry }) => (
 
 ErrorState.displayName = "ErrorState";
 
+// Локальный ErrorBoundary: если содержимое вкладки предпросмотра (таблица позиций)
+// упало при рендере — показываем фолбэк вместо падения всего списка.
+class PreviewBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(e: unknown) { console.error("ListPreview render error:", e); }
+  render() { return this.state.failed ? this.props.fallback : this.props.children; }
+}
+
+// Плоский список «поле: значение» по колонкам — лёгкий предпросмотр / фолбэк.
+const FlatFields: FC<{ row: TDataItem; columns: TColumn[] }> = ({ row, columns }) => {
+  const fields = columns.filter((c) => c.inlist !== false && c.identifier !== "uuid" && c.identifier !== "id");
+  return (
+    <div className={styles.previewBody}>
+      {fields.map((c) => (
+        <div key={c.identifier} className={styles.previewRow}>
+          <span className={styles.previewLabel}>{c.hint || t(c.identifier)}</span>
+          <span className={styles.previewValue}>{String(getFormatColumnValue(row, c) ?? "")}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ─── Панель предпросмотра (split-вид) ─────────────────────────────────────────
+// ТОЛЬКО ДЛЯ ЧТЕНИЯ. Вкладка «Основное» — поля документа (по колонкам списка),
+// плюс опциональные вкладки с таблицами позиций (previewTabs, поставляет модель:
+// read-only TradeDocumentItemsTable). Редактирование — по кнопке «Открыть»
+// (выносит документ в полноценную вкладку). Никакого монтирования редактируемой
+// pane-формы: предпросмотр не тянет edit-режим / порталы тулбара / dirty-guard.
+export type PreviewTab = { id: string; label: string; component: ReactNode };
+
+const ListPreview: FC<{
+  row: TDataItem | null;
+  columns: TColumn[];
+  previewTabs?: (row: TDataItem) => PreviewTab[];
+  onOpen: () => void;
+}> = ({ row, columns, previewTabs, onOpen }) => {
+  if (!row) return <div className={styles.previewEmpty}>{t("viewer.empty") || "Выберите запись"}</div>;
+  const uuid = row.uuid ? String(row.uuid) : "";
+  const mainTab: PreviewTab = {
+    id: "main",
+    label: t("general") || "Основное",
+    component: <FlatFields row={row} columns={columns} />,
+  };
+  const extraTabs = uuid && previewTabs ? previewTabs(row) : [];
+  const tabs = [mainTab, ...extraTabs];
+  return (
+    <div className={styles.preview}>
+      <div className={styles.previewHeader}>
+        <span className={styles.previewTitle}>{t("preview") || "Предпросмотр"}</span>
+        <Button variant="secondary" onClick={onOpen}>{t("open") || "Открыть"}</Button>
+      </div>
+      <PreviewBoundary key={uuid} fallback={<FlatFields row={row} columns={columns} />}>
+        <Tabs tabs={tabs} />
+      </PreviewBoundary>
+    </div>
+  );
+};
+ListPreview.displayName = "ListPreview";
+
 // ─── Основной компонент ───────────────────────────────────────────────────────
 
 const ModelList: FC<ModelListProps> = ({
@@ -127,11 +197,63 @@ const ModelList: FC<ModelListProps> = ({
   extraQueryParams,
   enableDateRange = false,
   renderCell,
+  previewTabs,
 }) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? `${listName}_part` : listName;
 
   const { addPane } = useAppContext().windows;
+
+  // Вид списка: "list" (обычный) | "split" (список + предпросмотр справа).
+  // Персист per-list в localStorage; тумблер в тулбаре Table шлёт "listLayoutToggle".
+  const layoutKey = `listPaneLayout:${componentName}`;
+  const [layout, setLayout] = useState<"list" | "split">(
+    () => ((localStorage.getItem(layoutKey) as "list" | "split") || "list"),
+  );
+  const [previewRow, setPreviewRow] = useState<TDataItem | null>(null);
+
+  // Ширина панели предпросмотра (в % от split-контейнера), перетаскивается
+  // разделителем; персист per-list. Кламп 20–70% чтобы обе части оставались видимы.
+  const widthKey = `listSplitWidth:${componentName}`;
+  const [previewWidth, setPreviewWidth] = useState<number>(() => {
+    const v = Number(localStorage.getItem(widthKey));
+    return v >= 20 && v <= 70 ? v : 38;
+  });
+  const splitViewRef = useRef<HTMLDivElement>(null);
+  const startResize = useCallback((e: ReactPointerEvent) => {
+    e.preventDefault();
+    const move = (ev: PointerEvent) => {
+      const box = splitViewRef.current?.getBoundingClientRect();
+      if (!box || box.width === 0) return;
+      const pct = ((box.right - ev.clientX) / box.width) * 100;
+      setPreviewWidth(Math.min(70, Math.max(20, pct)));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem(widthKey, String(Math.round(previewWidth)));
+  }, [widthKey, previewWidth]);
+
+  useEffect(() => {
+    const onToggle = (e: Event) => {
+      if ((e as CustomEvent).detail !== componentName) return;
+      setLayout((localStorage.getItem(layoutKey) as "list" | "split") || "list");
+    };
+    window.addEventListener("listLayoutToggle", onToggle);
+    return () => window.removeEventListener("listLayoutToggle", onToggle);
+  }, [componentName, layoutKey]);
+  // Split доступен только для самостоятельного списка (не встроенного в форму
+  // владельца и не в режиме выбора-селектора, где onSelectItem уже занят).
+  const splitActive = layout === "split" && !isPartOf && !onSelectItem;
 
   // Подсветка строки документа («Показать в списке» / после «Сохранить и закрыть»):
   // при монтировании забираем отложенное значение, а пока список открыт —
@@ -222,10 +344,45 @@ const ModelList: FC<ModelListProps> = ({
     );
   }
 
-  return (
+  // В split-режиме двойной клик по строке показывает предпросмотр (через
+  // onSelectItem), а не открывает вкладку; в обычном — прежнее поведение.
+  const table = (
     <Table
-      {...buildTableProps({ variant, onSelectItem, openModelForm, enableDateRange, renderCell, highlightUuid: highlight.uuid, highlightToken: highlight.token })}
+      {...buildTableProps({
+        variant,
+        onSelectItem: splitActive ? (row: TDataItem) => setPreviewRow(row) : onSelectItem,
+        openModelForm,
+        enableDateRange,
+        renderCell,
+        highlightUuid: highlight.uuid,
+        highlightToken: highlight.token,
+      })}
     />
+  );
+
+  if (!splitActive) return table;
+
+  const previewColumns = (columnsJson as TColumn[] | undefined) ?? [];
+  return (
+    <div className={styles.splitView} ref={splitViewRef}>
+      <div className={styles.splitList}>{table}</div>
+      <div
+        className={styles.splitResizer}
+        role="separator"
+        aria-orientation="vertical"
+        title={t("resizePanels") || "Потяните, чтобы изменить размер"}
+        onPointerDown={startResize}
+        onDoubleClick={() => setPreviewWidth(38)}
+      />
+      <div className={styles.splitPreview} style={{ flexBasis: `${previewWidth}%` }}>
+        <ListPreview
+          row={previewRow}
+          columns={previewColumns}
+          previewTabs={previewTabs}
+          onOpen={() => previewRow && openModelForm({ data: previewRow })}
+        />
+      </div>
+    </div>
   );
 };
 
