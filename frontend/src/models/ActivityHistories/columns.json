@@ -120,7 +120,7 @@
 		"inlist": true
 	},
 	{
-		"identifier": "diff",
+		"identifier": "diff", "sortable": false,
 		"hint": "Изменения (поле: было → стало)",
 		"type": "string",
 		"visible": true,

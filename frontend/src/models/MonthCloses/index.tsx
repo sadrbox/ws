@@ -172,7 +172,7 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
     return () => { cancelled = true; };
   }, [isSavedDoc, form.fields.posted, form.fields.periodStart, form.fields.periodEnd, form.fields.organizationUuid, form.fields.uuid]);
 
-  const notices = useDocumentNotices({ docType: DOC_TYPE, fields: form.fields as unknown as Record<string, unknown> });
+  const notices = useDocumentNotices({ docType: DOC_TYPE, fields: form.fields as unknown as Record<string, unknown>, formError: form.errorKind === "form" ? form.error : null });
 
   const tabs = useMemo(() => [
     {
@@ -248,13 +248,13 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
 };
 MonthClosesForm.displayName = "MonthClosesForm";
 
-const MonthClosesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
-  { variant, onSelectItem, ownerUuid, ownerField }
+const MonthClosesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = (
+  { variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }
 ) => (
   <ModelList
     endpoint={ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={MonthClosesForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
-    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
+    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />

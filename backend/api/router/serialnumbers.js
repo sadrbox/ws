@@ -5,6 +5,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
+import { buildOrderBy } from "../../utils/sortOrder.js";
 import {
 	setReceiptSerials, issueSerials, SERIAL_STATUS,
 } from "../../services/serialNumbers.js";
@@ -14,6 +15,57 @@ const ROUTE = "serialnumbers";
 const TEXT_FIELDS = ["serialNumber"];
 
 const INCLUDE = { product: { select: { uuid: true, name: true, sku: true } } };
+
+/** prisma-модель документа по его типу (для резолва номера/даты приёмки). */
+const RECEIPT_MODEL = {
+	purchase: "purchase",
+	goods_receipt: "goodsReceipt",
+	import_declaration: "importDeclaration",
+	opening_balance: null, // ввод остатков — документа нет
+};
+
+const RECEIPT_LABEL = {
+	purchase: "Поступление",
+	goods_receipt: "Оприходование",
+	import_declaration: "ГТД",
+	opening_balance: "Ввод остатков",
+};
+
+/**
+ * Добавляет к сериям происхождение: receiptLabel = «Оприходование № 5 от 01.07.2026».
+ * Документы резолвим ПАЧКОЙ (по одному запросу на тип), а не по серии — иначе на
+ * 1000 серий было бы 1000 запросов.
+ */
+async function withReceiptOrigin(items) {
+	const byType = new Map(); // docType → Set(uuid)
+	for (const it of items) {
+		if (!it.receiptDocType || !it.receiptDocUuid) continue;
+		if (!RECEIPT_MODEL[it.receiptDocType]) continue;
+		if (!byType.has(it.receiptDocType)) byType.set(it.receiptDocType, new Set());
+		byType.get(it.receiptDocType).add(it.receiptDocUuid);
+	}
+	const docs = new Map(); // `${type}:${uuid}` → { number, date }
+	for (const [type, uuids] of byType) {
+		const model = RECEIPT_MODEL[type];
+		try {
+			const rows = await prisma[model].findMany({
+				where: { uuid: { in: [...uuids] } },
+				select: { uuid: true, number: true, date: true },
+			});
+			for (const r of rows) docs.set(`${type}:${r.uuid}`, r);
+		} catch { /* тип без модели — просто не покажем номер */ }
+	}
+	return items.map((it) => {
+		const base = RECEIPT_LABEL[it.receiptDocType] ?? it.receiptDocType ?? null;
+		if (!base) return { ...it, receiptLabel: null };
+		const d = docs.get(`${it.receiptDocType}:${it.receiptDocUuid}`);
+		const parts = [base];
+		if (d?.number) parts.push(`№ ${d.number}`);
+		if (d?.date) parts.push(`от ${new Date(d.date).toLocaleDateString("ru-KZ")}`);
+		return { ...it, receiptLabel: parts.join(" ") };
+	});
+}
+
 
 // ── Справочник серий (только чтение) ─────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
@@ -31,8 +83,12 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			const v = filter?.[f]?.equals ?? filter?.[f];
 			if (typeof v === "string" && v) where[f] = v;
 		}
+		// Сортировка из UI (раньше orderBy был ЗАХАРДКОЖЕН, и ?sort= игнорировался —
+		// клик по заголовку колонки ничего не менял). buildOrderBy валидирует поля по
+		// схеме: скаляры (serialNumber/status/id) и пути «связь.поле» (product.name).
+		const orderBy = buildOrderBy("serialNumber", req.query.sort, { fallback: { id: "desc" } });
 		const items = await prisma.serialNumber.findMany({
-			where, take: limitNumber, orderBy: [{ id: "desc" }], include: INCLUDE,
+			where, take: limitNumber, orderBy, include: INCLUDE,
 		});
 		const total = await prisma.serialNumber.count({ where });
 		return res.status(200).json({ success: true, items, total, hasMore: items.length === limitNumber, nextCursor: null });
@@ -73,7 +129,11 @@ router.get(`/${ROUTE}/available`, async (req, res) => {
 		};
 		if (warehouseUuid) where.warehouseUuid = String(warehouseUuid);
 		const items = await prisma.serialNumber.findMany({ where, orderBy: [{ serialNumber: "asc" }], take: 1000 });
-		return res.status(200).json({ success: true, items });
+		// ПРОИСХОЖДЕНИЕ серии: каким документом принята, его номер и дата. Без этого
+		// пользователь выбирает серию вслепую — а серии физически различимы, и «не та
+		// серия» = отгружен не тот экземпляр (гарантия, возврат, претензия).
+		const enriched = await withReceiptOrigin(items);
+		return res.status(200).json({ success: true, items: enriched });
 	} catch (error) {
 		console.error(`GET /${ROUTE}/available error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });

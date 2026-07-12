@@ -2,11 +2,14 @@
 // заметки полей). Отображает список сообщений с тремя палитрами:
 //   success   — форма заполнена корректно;
 //   warning   — условное предупреждение (напр. несоответствие договора/основания);
-//   attention — ошибка/незаполненные обязательные поля.
+//   attention — незаполненные обязательные поля (нужны для проведения);
+//   error     — ОШИБКА ДАННЫХ формы: клиентская валидация или бизнес-отказ бэка
+//               (422 «серий меньше количества», 423 «период закрыт»…). Системные
+//               сбои (сеть, 5xx, права) сюда НЕ идут — они уходят в <UIToast />.
 import type { FC } from "react";
 import styles from "./Notice.module.scss";
 
-export type NoticeType = "success" | "warning" | "attention";
+export type NoticeType = "success" | "warning" | "attention" | "error";
 
 export interface NoticeItem {
   type: NoticeType;
@@ -22,6 +25,7 @@ const ICON: Record<NoticeType, string> = {
   success: "✓",
   warning: "!",
   attention: "✕",
+  error: "✕",
 };
 
 export const Notice: FC<NoticeProps> = ({ items, className }) => {

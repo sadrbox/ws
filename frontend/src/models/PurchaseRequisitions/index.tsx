@@ -50,6 +50,10 @@ const PurchaseRequisitionsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
     fileBaseName: (f) => `ЗаявкаЗакупку_${f.number || "новый"}`,
     title: (f) => `Заявка на закупку № ${f.number || "—"}`,
   },
+  // Заявка — документ-«утверждение»: регистры не двигает, проводок не даёт, поэтому
+  // её проведение = УТВЕРЖДЕНИЕ. Заказ поставщику / Закупку оформляем только по
+  // утверждённой заявке (тот же инвариант держит бэкенд → 422).
+  requirePostedForBasis: true,
   createFromBasisTargets: [
     {
       docLabel: "Заказ поставщику",
@@ -74,13 +78,13 @@ const PurchaseRequisitionsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   defaultHiddenItemColumns: ["amountNetOfIndirectTaxes", "amountWithoutVat", "discountPercent", "discountAmount"],
 });
 
-const PurchaseRequisitionsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
-  { variant, onSelectItem, ownerUuid, ownerField }
+const PurchaseRequisitionsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = (
+  { variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }
 ) => (
   <ModelList
     endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={PurchaseRequisitionsForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
-    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
+    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />

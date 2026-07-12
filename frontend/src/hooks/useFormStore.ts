@@ -7,6 +7,7 @@ import {
 	useState,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { showToast } from "src/components/UIToast";
 import { useAppContext } from "src/app/context";
 import { isNetworkError } from "src/services/networkUtils";
 import { getIsOnline } from "src/services/networkStatus";
@@ -85,6 +86,15 @@ export interface FormStoreState<F extends object> {
 		isLoading: boolean;
 		isEditMode: boolean;
 		error: string | null;
+		/**
+		 * Класс ошибки — определяет, ГДЕ её показывать (см. памятку Notice vs Toast):
+		 *   "form"   — ошибка ДАННЫХ формы: клиентская валидация или бизнес-отказ бэка
+		 *              (400/409/422/423: «серий меньше количества», «период закрыт»…).
+		 *              Показывается в <Notice /> ВНУТРИ формы — её чинят правкой полей.
+		 *   "system" — сбой, к форме не относящийся (сеть, 5xx, нет прав). Правкой полей
+		 *              не лечится → уходит в <UIToast />.
+		 */
+		errorKind: "form" | "system";
 		errorRevision: number;
 		tablesValidationFailed: boolean;
 		headerValidationFailed: boolean;
@@ -217,6 +227,7 @@ function createFormStore<F extends object>(
 			isLoading: false,
 			isEditMode: !!uuid,
 			error: null,
+			errorKind: "form",
 			errorRevision: 0,
 			tablesValidationFailed: false,
 				headerValidationFailed: false,
@@ -522,7 +533,13 @@ function createFormStore<F extends object>(
 	function setError(
 		msg: string | null,
 		noteType?: PaneNotification["type"],
+		kind: "form" | "system" = "form",
 	): void {
+		// Системная ошибка к форме не привязана и правкой полей не чинится → тост.
+		// Ошибка данных формы остаётся в meta.error и рендерится в <Notice /> формы.
+		if (msg && kind === "system") {
+			showToast(msg, noteType === "warning" ? "warning" : "error");
+		}
 		if (msg && _paneUniqId) {
 			const entityUuid = state.meta.uuid || (state.fields as any)?.uuid;
 			// Человекочитаемый идентификатор источника: «№ X от ДД.ММ.ГГГГ»,
@@ -542,6 +559,7 @@ function createFormStore<F extends object>(
 		}
 		setMeta({
 			error: msg,
+			errorKind: kind,
 			errorRevision: msg
 				? state.meta.errorRevision + 1
 				: state.meta.errorRevision,
@@ -732,21 +750,38 @@ function createFormStore<F extends object>(
 		} catch (err: any) {
 			let msg = "Не удалось сохранить";
 			let noteType: PaneNotification["type"] = "error";
+			// Класс ошибки решает, где её показать: данные формы → <Notice /> в форме,
+			// системный сбой → <UIToast />.
+			let kind: "form" | "system" = "system";
+			const status = err.response?.status;
+			const serverMsg = translateError(err.response?.data?.message);
+
 			if (isNetworkError(err)) {
 				msg = getIsOnline()
 					? "Сервер временно недоступен. Повторите попытку сохранения."
 					: "Нет связи с сервером. Повторите попытку при восстановлении соединения.";
 				noteType = "warning";
-			} else if (err.response?.status === 409)
-				msg =
-					translateError(err.response.data?.message) || "Запись уже существует";
-			else if (err.response?.status === 400)
-				msg = translateError(err.response.data?.message) || "Ошибка валидации";
-			else if (err.response?.status === 423)
+			} else if (status === 409) {
+				msg = serverMsg || "Запись уже существует";
+				kind = "form";
+			} else if (status === 400) {
+				msg = serverMsg || "Ошибка валидации";
+				kind = "form";
+			} else if (status === 422) {
+				// Бизнес-отказ бэка: серии/партии, проводки, документ-основание.
+				// РАНЬШЕ 422 сюда не попадал, и пользователь видел сырое
+				// «Request failed with status code 422» вместо внятной причины
+				// («Серийные номера: количество 2, серий 1 — должны совпадать»).
+				msg = serverMsg || "Проверьте данные документа";
+				kind = "form";
+			} else if (status === 423) {
 				// Закрытый период: показываем серверное сообщение «Период закрыт…».
-				msg = translateError(err.response.data?.message) || "Период закрыт для изменений";
-			else if (err.message) msg = translateError(err.message);
-			setError(msg, noteType);
+				msg = serverMsg || "Период закрыт для изменений";
+				kind = "form";
+			} else if (err.message) {
+				msg = serverMsg || translateError(err.message);
+			}
+			setError(msg, noteType, kind);
 			setMeta({ isLoading: false });
 			return { success: false };
 		}
@@ -1455,6 +1490,8 @@ export interface UseFormStoreReturn<F extends object> {
 	/** true если поля формы были изменены относительно последнего сохранённого состояния. */
 	isDirty: boolean;
 	error: string | null;
+	/** Класс ошибки: "form" → показывать в <Notice /> формы, "system" → уже показан тостом. */
+	errorKind: "form" | "system";
 	errorRevision: number;
 	setError: (msg: string | null) => void;
 	clearFormStorage: () => void;
@@ -2152,6 +2189,7 @@ export function useFormStore<F extends object>(
 		isEditMode: snapshot.meta.isEditMode,
 		isDirty: store.isDirty(),
 		error: snapshot.meta.error,
+		errorKind: snapshot.meta.errorKind,
 		errorRevision: snapshot.meta.errorRevision,
 		setError: store.setError,
 		clearFormStorage,

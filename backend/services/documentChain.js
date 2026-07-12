@@ -32,6 +32,11 @@ export const DOC_REGISTRY = {
 	stock_count: { model: "stockCount", label: "Инвентаризация", hasBasis: false },
 	write_off: { model: "writeOff", label: "Списание товара", hasBasis: true },
 	goods_receipt: { model: "goodsReceipt", label: "Оприходование товара", hasBasis: true },
+	// Кассовые ордера (денежное звено цепочки) — одна таблица cash_orders,
+	// два docType различаются полем `direction`. `where` разграничивает записи,
+	// чтобы одна и та же модель не попала в дерево дважды.
+	cash_receipt_order: { model: "cashOrder", label: "Приходный кассовый ордер", hasBasis: true, where: { direction: "receipt" } },
+	cash_expense_order: { model: "cashOrder", label: "Расходный кассовый ордер", hasBasis: true, where: { direction: "expense" } },
 };
 
 /** Типы-«дети» — те, у кого есть поле basisDocumentUuid (могут ссылаться на основание). */
@@ -157,7 +162,9 @@ async function fetchChildren(uuid) {
 		let recs = [];
 		try {
 			recs = await prisma[cfg.model].findMany({
-				where: { basisDocumentUuid: uuid },
+				// `cfg.where` разграничивает docType'ы, делящие одну модель
+				// (кассовые ордера: receipt/expense), иначе запись попадёт дважды.
+				where: { basisDocumentUuid: uuid, ...(cfg.where ?? {}) },
 			});
 		} catch {
 			continue;

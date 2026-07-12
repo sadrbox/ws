@@ -77,6 +77,8 @@ import { auditMiddleware } from "./utils/auditMiddleware.js";
 import stockCountsRouter from "./api/router/stockcounts.js";
 import serialNumbersRouter from "./api/router/serialnumbers.js";
 import productBatchesRouter from "./api/router/productbatches.js";
+import pipeActivitiesRouter from "./api/router/pipeactivities.js";
+import openingBalanceRouter from "./api/router/openingbalance.js";
 import stockCountItemsRouter from "./api/router/stockcountitems.js";
 import purchaseOrdersRouter from "./api/router/purchaseorders.js";
 import purchaseOrderItemsRouter from "./api/router/purchaseorderitems.js";
@@ -368,6 +370,10 @@ app.use("/api/v1", stockCountsRouter);
 app.use("/api/v1", stockCountItemsRouter);
 app.use("/api/v1", serialNumbersRouter);
 app.use("/api/v1", productBatchesRouter);
+// Просмотр входящих событий 1С (данные пишет POST /pipe; здесь — только чтение).
+app.use("/api/v1", pipeActivitiesRouter);
+// Ввод остатков серий/партий: разметка имеющегося остатка (количество не меняется).
+app.use("/api/v1", openingBalanceRouter);
 app.use("/api/v1", purchaseOrdersRouter);
 app.use("/api/v1", purchaseOrderItemsRouter);
 app.use("/api/v1", bankStatementsRouter);

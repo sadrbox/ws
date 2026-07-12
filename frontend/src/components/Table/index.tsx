@@ -229,6 +229,9 @@ export interface TableProps {
   disableAdd?: boolean;
   /** Если true — скрыть кнопки «Добавить»/«Удалить», НЕ отключая inline-редактирование. */
   hideAddDelete?: boolean;
+  /** Если true — скрыть ТОЛЬКО «Добавить» (удаление остаётся). Для журналов: записи
+   *  порождаются системой, а не пользователем, но админ может их чистить. */
+  hideAdd?: boolean;
   /** Если true — скрыть кнопку «Обновить» в тулбаре (когда перезагрузка с сервера не нужна). */
   hideReload?: boolean;
   /** Раскрытые строки (expand) */
@@ -289,6 +292,8 @@ interface TableControlPanelProps {
   disableAdd?: boolean;
   /** Если true — скрыть кнопки «Добавить»/«Удалить» (inline-редактирование сохраняется). */
   hideAddDelete?: boolean;
+  /** Если true — скрыть ТОЛЬКО «Добавить» (удаление остаётся). */
+  hideAdd?: boolean;
   /** Если true — скрыть кнопку «Обновить». */
   hideReload?: boolean;
   /** Если true — скрыть кнопку «Удалить» (удаление недоступно) */
@@ -314,6 +319,7 @@ const TableControlPanel = memo(({
   readonly: isReadonly = false,
   disableAdd = false,
   hideAddDelete = false,
+  hideAdd = false,
   hideReload = false,
   canDelete = true,
   componentName,
@@ -324,8 +330,8 @@ const TableControlPanel = memo(({
     <Toolbar
       right={visibleFastSearch ? <FieldFastSearchInternal value={search.value} onChange={search.onChange} /> : undefined}
     >
-      {!hideWrite && <Button onClick={onAddClick} disabled={isLoading || disableAdd} title={disableAdd ? translate("allModelsAssigned") : undefined}><span>Добавить</span></Button>}
-      {!hideWrite && <Button onClick={canDelete ? onDeleteClick : undefined} disabled={isLoading || !hasSelection || !canDelete} title={!hasSelection ? "Выделите одну или несколько строк" : undefined}><span>Удалить</span></Button>}
+      {!hideWrite && !hideAdd && <Button onClick={onAddClick} disabled={isLoading || disableAdd} title={disableAdd ? translate("allModelsAssigned") : undefined}><span>{translate("add")}</span></Button>}
+      {!hideWrite && <Button onClick={canDelete ? onDeleteClick : undefined} disabled={isLoading || !hasSelection || !canDelete} title={!hasSelection ? translate("selectRowsFirst") : undefined}><span>{translate("delete")}</span></Button>}
       {extraButtons && (
         <>
           {/* <Toolbar.Divider /> */}
@@ -373,6 +379,7 @@ const TableControlPanel = memo(({
     prevProps.readonly === nextProps.readonly &&
     prevProps.disableAdd === nextProps.disableAdd &&
     prevProps.hideAddDelete === nextProps.hideAddDelete &&
+    prevProps.hideAdd === nextProps.hideAdd &&
     prevProps.hideReload === nextProps.hideReload &&
     prevProps.canDelete === nextProps.canDelete
   );
@@ -403,6 +410,7 @@ const Table: FC<TableProps> = memo((props) => {
     readonly: isReadonly = false,
     disableAdd = false,
     hideAddDelete = false,
+    hideAdd = false,
     hideReload = false,
     expandedRowIds,
     renderExpandedRow,
@@ -908,6 +916,7 @@ const Table: FC<TableProps> = memo((props) => {
           readonly={isReadonly}
           disableAdd={disableAdd}
           hideAddDelete={hideAddDelete}
+          hideAdd={hideAdd}
           hideReload={hideReload}
           canDelete={!!onDelete}
         />
@@ -1757,7 +1766,7 @@ const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
   useEffect(() => { setColumnsConfig(columns.filter(c => !c.identifier.startsWith("__"))); }, [columns]);
 
   return (
-    <Modal title="Колонки таблицы" method={method} onApply={onApply} className={styles.ColumnsModal}>
+    <Modal title={translate("tableColumns")} method={method} onApply={onApply} className={styles.ColumnsModal}>
       <TableConfigColumns columns={columnsConfig} setColumns={setColumnsConfig} />
     </Modal>
   );
@@ -1843,7 +1852,7 @@ const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ colu
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`${styles.ListItem} ${isDragging ? styles.dragging : ''}`}
     >
-      <div {...listeners} {...attributes} className={styles.DragAndDrop} title="Переместить">
+      <div {...listeners} {...attributes} className={styles.DragAndDrop} title={translate("move")}>
         <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
       </div>
       <div className={styles.CheckboxWrapper}>
@@ -1890,9 +1899,9 @@ const DateRangeBar = memo(({ startDate, endDate, onClick, onClear }: {
 
   return (
     <div className={styles.DateRangeBar}>
-      <span className={styles.DateRangeBarLabel}>Период:</span>
-      <a className={styles.DateRangeLink} onClick={onClick} title="Изменить период">{label}</a>
-      <Toolbar.ClearButton size='sm' onClick={onClear} title="Сбросить период" />
+      <span className={styles.DateRangeBarLabel}>{translate("period")}:</span>
+      <a className={styles.DateRangeLink} onClick={onClick} title={translate("changePeriod")}>{label}</a>
+      <Toolbar.ClearButton size='sm' onClick={onClear} title={translate("resetPeriod")} />
     </div>
   );
 });
@@ -1958,7 +1967,7 @@ const FieldDateRangeModal = memo(({ method, startDate, endDate, onApply }: {
     <Modal
       method={method}
       onApply={handleApply}
-      title="Период"
+      title={translate("period")}
       className={styles.DateRangeModal}
     >
       <Group>
@@ -2029,11 +2038,15 @@ const FieldFastSearchInternal = memo(({ value, onChange }: {
   }, []);
 
   return (
+    // ВАЖНО: не оборачивать поле в <span> ради title — обёртка ломает растягивание
+    // поля до края родителя. Подсказка про шаблоны ([Колонка: подстрока]) идёт
+    // прямо на инпут через проп title.
     <Field
       name="fastSearch"
       value={inputValue}
       onChange={(e) => handleChange(e.target.value)}
-      placeholder="Быстрый поиск"
+      placeholder={translate("fastSearch")}
+      title={translate("fastSearchTemplateHint")}
       autoFocus
       actions={[{ type: 'clear', onClick: handleClear }]}
     />

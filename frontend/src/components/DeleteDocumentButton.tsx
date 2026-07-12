@@ -7,6 +7,7 @@
  * Самоскрывается, пока документ не сохранён (нет uuid).
  */
 import { FC } from "react";
+import { translate } from "src/i18";
 import { useQueryClient } from "@tanstack/react-query";
 import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app/context";
@@ -55,7 +56,7 @@ const DeleteDocumentButton: FC<{
     }
   };
 
-  return <IconButton icon="trash" title="Удалить" aria-label="Удалить" onClick={handleClick} />;
+  return <IconButton icon="trash" title={translate("delete")} aria-label={translate("delete")} onClick={handleClick} />;
 };
 
 export default DeleteDocumentButton;

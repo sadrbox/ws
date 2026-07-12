@@ -40,7 +40,7 @@
 		"inlist": true
 	},
 	{
-		"identifier": "ownerName",
+		"identifier": "ownerName", "sortable": false,
 		"type": "string",
 		"width": "250px",
 		"minWidth": "80px",

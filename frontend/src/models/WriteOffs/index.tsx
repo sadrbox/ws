@@ -187,7 +187,7 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.setFields, form.store]);
 
   const assignNumber = useAssignNumber();
-  const notices = useDocumentNotices({ docType: "write_off", fields: form.fields as unknown as Record<string, unknown> });
+  const notices = useDocumentNotices({ docType: "write_off", fields: form.fields as unknown as Record<string, unknown>, formError: form.errorKind === "form" ? form.error : null });
   const fmtMoney = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 
   const tabs = useMemo(() => [
@@ -213,6 +213,8 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
                 <BasisDocumentField
                   allowedTypes={BASIS_ALLOWED_TYPES}
                   basisDocumentType={form.fields.basisDocumentType}
+                  // Подбор основания — только документы организации этого документа.
+                  organizationUuid={form.fields.organizationUuid}
                   basisDocumentUuid={form.fields.basisDocumentUuid}
                   basisDocumentLabel={form.fields.basisDocumentLabel}
                   formUid={form.formUid}
@@ -281,10 +283,10 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
 };
 WriteOffsForm.displayName = "WriteOffsForm";
 
-const WriteOffsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const WriteOffsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={WriteOffsForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
-    ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
+    ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
     previewTabs={(row) => [{
       id: "items",

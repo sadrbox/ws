@@ -1,4 +1,5 @@
 import { FC, useEffect, useCallback } from "react";
+import { translate } from "src/i18";
 import styles from "./FormError.module.scss";
 
 interface FormErrorProps {
@@ -53,7 +54,7 @@ const FormError: FC<FormErrorProps> = ({ message, onDismiss, autoDismissMs = 800
       </svg>
       <span className={styles.message}>{message}</span>
       {onDismiss && (
-        <button className={styles.close} onClick={handleDismiss} title="Закрыть" type="button">
+        <button className={styles.close} onClick={handleDismiss} title={translate("close")} type="button">
           ×
         </button>
       )}

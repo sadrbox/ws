@@ -219,7 +219,7 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.fields.uuid, invalidateSubTables]);
 
   const assignNumber = useAssignNumber();
-  const notices = useDocumentNotices({ docType: "stock_count", fields: form.fields as unknown as Record<string, unknown> });
+  const notices = useDocumentNotices({ docType: "stock_count", fields: form.fields as unknown as Record<string, unknown>, formError: form.errorKind === "form" ? form.error : null });
 
   // Сводка расхождений по текущим строкам (излишек / недостача, в штуках).
   const { surplus, shortage } = useMemo(() => {
@@ -349,7 +349,11 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
         <ActionsDropdownButton
           icon="fromBasis"
           label={translate("createFromBasis")}
-          disabled={form.isLoading || form.isDirty}
+          // Списание/Оприходование оформляются только по УТВЕРЖДЁННОЙ инвентаризации.
+          // Проведение — единственный эффект её флага (регистр она не двигает);
+          // бэкенд держит тот же инвариант (assertBasisExists → 422).
+          disabled={form.isLoading || form.isDirty || form.fields.posted !== true}
+          title={form.fields.posted !== true ? translate("basisNotPostedHint") : undefined}
           options={[
             { id: "writeOff", label: `${translate("stockCountShortage")} → ${translate("WriteOffsList")}` },
             { id: "goodsReceipt", label: `${translate("stockCountSurplus")} → ${translate("GoodsReceiptsList")}` },
@@ -375,10 +379,10 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
 };
 StockCountsForm.displayName = "StockCountsForm";
 
-const StockCountsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const StockCountsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={StockCountsForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
-    ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
+    ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />
 );

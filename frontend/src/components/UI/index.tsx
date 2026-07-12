@@ -28,6 +28,7 @@ function lazyView(name: string, loader: () => Promise<{ default: React.Component
 }
 const ContractsList = lazyView("ContractsList", () => import('src/models/Contracts').then(m => ({ default: m.ContractsList })));
 const ActivityHistoriesList = lazyView("ActivityHistoriesList", () => import('src/models/ActivityHistories').then(m => ({ default: m.ActivityHistoriesList })));
+const PipeActivitiesList = lazyView("PipeActivitiesList", () => import('src/models/PipeActivities').then(m => ({ default: m.PipeActivitiesList })));
 const OrganizationsList = lazyView("OrganizationsList", () => import('src/models/Organizations').then(m => ({ default: m.OrganizationsList })));
 const BankAccountsList = lazyView("BankAccountsList", () => import('src/models/BankAccounts').then(m => ({ default: m.BankAccountsList })));
 const CounterpartiesList = lazyView("CounterpartiesList", () => import('src/models/Counterparties').then(m => ({ default: m.CounterpartiesList })));
@@ -106,6 +107,7 @@ const SubkontoTypesList = lazyView("SubkontoTypesList", () => import('src/models
 const UnsavedFormsList = lazyView("UnsavedFormsList", () => import('src/models/UnsavedForms').then(m => ({ default: m.UnsavedFormsList })));
 const SyncDashboard = lazyView("SyncDashboard", () => import('src/models/SyncDashboard').then(m => ({ default: m.SyncDashboard })));
 const SearchReplaceRefsForm = lazyView("SearchReplaceRefsForm", () => import('src/models/SearchReplaceRefs').then(m => ({ default: m.SearchReplaceRefsForm })));
+const OpeningBalanceForm = lazyView("OpeningBalanceForm", () => import('src/models/OpeningBalance').then(m => ({ default: m.OpeningBalanceForm })));
 const OrphanRefsForm = lazyView("OrphanRefsForm", () => import('src/models/OrphanRefs').then(m => ({ default: m.OrphanRefsForm })));
 // UserSettingsModuleList/UserAccessRightsList загружаются динамически (разрыв цикла UI→models→app→UI)
 import NotificationToast from 'src/components/NotificationToast';
@@ -961,6 +963,9 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList, label: translate("InventoryTransfersList") })}>{translate("InventoryTransfersList")}</li>}
               {can("WriteOff") && <li onClick={() => addPane({ component: WriteOffsList, label: translate("WriteOffsList") })}>{translate("WriteOffsList")}</li>}
               {can("SerialNumber") && <li onClick={() => addPane({ component: SerialNumbersList, label: translate("SerialNumbersList") })}>{translate("SerialNumbersList")}</li>}
+              {/* Разметка уже имеющегося остатка сериями/партиями — без неё товар с
+                  историей нельзя продать после включения учёта. */}
+              {can("Product") && <li onClick={() => addPane({ component: OpeningBalanceForm, label: translate("openingBalanceEntry") })}>{translate("openingBalanceEntry")}</li>}
               {can("GoodsReceipt") && <li onClick={() => addPane({ component: GoodsReceiptsList, label: translate("GoodsReceiptsList") })}>{translate("GoodsReceiptsList")}</li>}
               {can("StockCount") && <li onClick={() => addPane({ component: StockCountsList, label: translate("StockCountsList") })}>{translate("StockCountsList")}</li>}
             </ul>
@@ -1128,6 +1133,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
               {can("User") && <li onClick={() => addPane({ component: UsersList, label: translate("UsersList") })}>{translate("UsersList")}</li>}
               {can("UserSettings") && <li onClick={async () => { const m = await import("src/models/UserSettings"); addPane({ component: m.UserSettingsModuleList, label: translate("UserSettings") }); }}>{translate("UserSettings")}</li>}
               {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList, label: translate("ActivityHistoriesList") })}>{translate("ActivityHistoriesList")}</li>}
+              {/* Входящие события интеграции 1С (POST /pipe) — просмотр «входящего ящика». */}
+              {can("ActivityHistory") && <li onClick={() => addPane({ component: PipeActivitiesList, label: translate("PipeActivitiesList") })}>{translate("PipeActivitiesList")}</li>}
               {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</li>}
               <li onClick={() => addPane({ component: FilesList, label: translate("files") })}>{translate("files")}</li>
               <li onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</li>

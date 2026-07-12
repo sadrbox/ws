@@ -126,6 +126,51 @@ test("assertDocumentSerials: проведение блокируется при 
 	}
 });
 
+// Регрессия: включение «Учёта по серийным номерам» на товаре С ИСТОРИЕЙ ломало
+// сохранение уже существующих документов (в них серий нет) — PUT отдавал 422
+// «количество 150, серий 1». Учёт не должен применяться ЗАДНИМ ЧИСЛОМ: контроль
+// действует только для документов с датой >= момента включения флага.
+test("assertDocumentSerials: учёт не применяется задним числом (serialTrackingSince)", async (t) => {
+	const org = await prisma.organization.findFirst({ select: { uuid: true } });
+	const user = await prisma.user.findFirst({ select: { uuid: true } });
+	if (!org || !user) return t.skip("нет фикстур");
+
+	const since = new Date();
+	const product = await prisma.product.create({
+		data: { name: `SN-SINCE-${crypto.randomUUID().slice(0, 8)}`, trackSerialNumbers: true, serialTrackingSince: since },
+	});
+	// СТАРЫЙ документ (до включения флага) — серий нет.
+	const older = await prisma.goodsReceipt.create({
+		data: { number: `ОПРХ-OLD-${Date.now()}`, date: new Date(since.getTime() - 86400000), organizationUuid: org.uuid, authorUuid: user.uuid, posted: false },
+	});
+	await prisma.goodsReceiptItem.create({ data: { goodsReceiptUuid: older.uuid, productUuid: product.uuid, quantity: 150, price: 10, amount: 1500, organizationUuid: org.uuid } });
+	// НОВЫЙ документ (после включения флага) — серий тоже нет.
+	const newer = await prisma.goodsReceipt.create({
+		data: { number: `ОПРХ-NEW-${Date.now()}`, date: new Date(since.getTime() + 86400000), organizationUuid: org.uuid, authorUuid: user.uuid, posted: false },
+	});
+	await prisma.goodsReceiptItem.create({ data: { goodsReceiptUuid: newer.uuid, productUuid: product.uuid, quantity: 2, price: 10, amount: 20, organizationUuid: org.uuid } });
+
+	try {
+		const args = (uuid) => ({ docType: "goods_receipt", docUuid: uuid, itemModel: "goodsReceiptItem", parentField: "goodsReceiptUuid" });
+
+		// Документ СТАРШЕ отметки → контроль не применяется, сохраняется как раньше.
+		await assert.doesNotReject(() => assertDocumentSerials(args(older.uuid)), "старый документ не должен блокироваться");
+
+		// Документ ПОСЛЕ отметки → контроль работает (серий 0 при количестве 2).
+		await assert.rejects(() => assertDocumentSerials(args(newer.uuid)), (e) => e instanceof SerialCountError, "новый документ обязан требовать серии");
+
+		// Явно переданная дата документа имеет приоритет над датой из БД.
+		await assert.doesNotReject(
+			() => assertDocumentSerials({ ...args(newer.uuid), docDate: new Date(since.getTime() - 3600000) }),
+			"дата до включения флага → контроля нет",
+		);
+	} finally {
+		await prisma.goodsReceiptItem.deleteMany({ where: { goodsReceiptUuid: { in: [older.uuid, newer.uuid] } } });
+		await prisma.goodsReceipt.deleteMany({ where: { uuid: { in: [older.uuid, newer.uuid] } } });
+		await prisma.product.delete({ where: { uuid: product.uuid } });
+	}
+});
+
 test("assertDocumentSerials: товар без учёта по сериям не проверяется", async (t) => {
 	const org = await prisma.organization.findFirst({ select: { uuid: true } });
 	const user = await prisma.user.findFirst({ select: { uuid: true } });

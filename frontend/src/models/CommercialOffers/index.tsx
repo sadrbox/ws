@@ -69,13 +69,13 @@ const CommercialOffersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   ],
 });
 
-const CommercialOffersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
-  { variant, onSelectItem, ownerUuid, ownerField }
+const CommercialOffersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = (
+  { variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }
 ) => (
   <ModelList
     endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={CommercialOffersForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
-    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
+    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />

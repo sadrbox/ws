@@ -16,6 +16,17 @@ function mockClient(calls) {
 	for (const t of tableNames) {
 		c[t] = { findMany: async ({ where }) => { calls.push({ table: t, where }); return []; } };
 	}
+	// ПОЛНЫЙ пересчёт (без dateFilter) перестраивает и закрытую историю → сбрасывает
+	// снапшоты себестоимости и заново материализует их на границе закрытого периода.
+	// Мок обязан отражать эти модели, иначе тест падает не по существу проверки.
+	c.productCostSnapshot = {
+		deleteMany: async () => ({ count: 0 }),
+		createMany: async () => ({ count: 0 }),
+		findFirst: async () => null,
+	};
+	c.productRegister = { findMany: async () => [] };
+	// Закрытий нет → граница null → снапшоты не строятся.
+	c.monthClose.aggregate = async () => ({ _max: { periodEnd: null } });
 	return c;
 }
 

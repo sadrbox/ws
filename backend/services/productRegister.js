@@ -18,6 +18,7 @@ import { prisma } from "../prisma/prisma-client.js";
 import { reservedQuantity } from "./reservationRegister.js";
 import { createCostingContext } from "./accountingPosting.js";
 import { allocateImportLandedCost } from "./importLandedCost.js";
+import { getClosedBoundary } from "./periodLock.js";
 
 // Конфигурация документов-регистраторов.
 const DOC_CONFIG = {

@@ -1,4 +1,5 @@
 import express from "express";
+import { applyPipeReference } from "../../services/pipeReference.js";
 import { querySchema } from "../../utils/module.js";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
@@ -91,7 +92,22 @@ router.post("/", async (req, res) => {
 			},
 		});
 
-		return res.status(201).json({ success: true, item });
+		// Применяем событие к справочнику (создать / обновить / привязать).
+		// Сопоставление по (externalSource="1C", externalId=object.id) — см. pipeReference.js.
+		// Сбой сопоставления НЕ роняет приём: событие уже сохранено, результат пишем в него же,
+		// и он виден во «Входящих 1С» (applyStatus). Иначе 1С получала бы 500 и слала повторы.
+		const applied = await applyPipeReference(body);
+		const saved = await prisma.pipeActivity.update({
+			where: { uuid: item.uuid },
+			data: {
+				applyStatus: applied.status,
+				applyModel: applied.model ?? null,
+				applyUuid: applied.uuid ?? null,
+				applyMessage: applied.message ?? null,
+			},
+		});
+
+		return res.status(201).json({ success: true, item: saved, applied });
 	} catch (error) {
 		console.error("POST /pipe error:", error);
 		return res
@@ -425,9 +441,7 @@ router.get("/", async (req, res) => {
 						[field]: { contains: word, mode: "insensitive" },
 					}));
 					const num = Number(word);
-					if (Number.isInteger(num) && num > 0) {
-						orConditions.push({ id: { equals: num } });
-					}
+					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),
 			};

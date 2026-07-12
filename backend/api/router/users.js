@@ -98,9 +98,7 @@ router.get("/users", async (req, res) => {
 						})),
 					];
 					const num = Number(word);
-					if (Number.isInteger(num) && num > 0) {
-						orConditions.push({ id: { equals: num } });
-					}
+					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),
 			};

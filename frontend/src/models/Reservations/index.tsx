@@ -26,7 +26,8 @@ const ReservationsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   userAccessRightModel: "Reservation",
   formDisplayName: "ReservationsForm",
   docType: "reservation",
-  hidePosted: true,
+  // Резерв ПРОВОДИТСЯ: только проведённый двигает регистр резервов (уменьшает
+  // доступный к продаже остаток), поэтому тоггл «Проведён» нужен на форме.
   hasWarehouse: true,
   printConfig: {
     buildLayout: (fields, items, cols) => (
@@ -63,13 +64,13 @@ const ReservationsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   ],
 });
 
-const ReservationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
-  { variant, onSelectItem, ownerUuid, ownerField }
+const ReservationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = (
+  { variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }
 ) => (
   <ModelList
     endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={ReservationsForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
-    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
+    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />

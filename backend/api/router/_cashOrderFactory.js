@@ -16,6 +16,7 @@ import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodL
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
+import { idSearchCondition } from "../../utils/searchId.js";
 
 const MODEL = "cashOrder";
 const TEXT_FIELDS = ["comment"];
@@ -58,8 +59,8 @@ export function createCashOrderRouter({ direction, route, docType }) {
 				searchWhere = {
 					AND: searchWords.map((w) => {
 						const orConditions = TEXT_FIELDS.map((f) => ({ [f]: { contains: w, mode: "insensitive" } }));
-						const num = Number(w);
-						if (Number.isInteger(num) && num > 0) orConditions.push({ id: { equals: num } });
+						const idNum = idSearchCondition(w);
+						if (idNum) orConditions.push(idNum);
 						return { OR: orConditions };
 					}),
 				};

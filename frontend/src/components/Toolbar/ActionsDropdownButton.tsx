@@ -16,9 +16,11 @@ interface ActionsDropdownButtonProps {
   onSelect: (id: string) => void;
   disabled?: boolean;
   icon?: IconName;
+  /** Подсказка на кнопке — например причина, по которой она заблокирована. */
+  title?: string;
 }
 
-const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options, onSelect, disabled, icon }) => {
+const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options, onSelect, disabled, icon, title }) => {
   const { open, toggle, setOpen, wrapRef, dropRef, dropStyle } = useDropdownMenu();
 
   return (
@@ -27,6 +29,7 @@ const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options,
         type="button"
         className={styles.ActionsButton}
         disabled={disabled}
+        title={title}
         onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}

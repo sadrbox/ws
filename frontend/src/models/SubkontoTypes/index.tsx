@@ -118,13 +118,13 @@ const SubkontoTypesForm: FC<Partial<TPane>> = (paneProps) => {
 };
 SubkontoTypesForm.displayName = "SubkontoTypesForm";
 
-const SubkontoTypesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
-  { variant, onSelectItem, ownerUuid, ownerField }
+const SubkontoTypesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = (
+  { variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }
 ) => (
   <ModelList
     endpoint={ENDPOINT} listName="SubkontoTypesList" columnsJson={columnsJson} FormComponent={SubkontoTypesForm}
     getLabel={(d) => (d?.name ? String(d.name) : "?")}
-    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
+    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ sortOrder: "asc" }}
   />
 );

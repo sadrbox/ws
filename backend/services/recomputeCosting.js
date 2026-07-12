@@ -22,6 +22,7 @@ import { prisma } from "../prisma/prisma-client.js";
 import { reconcileDocumentRegister, REGISTER_DOC_TYPES } from "./productRegister.js";
 import { reconcileDocumentEntries, POSTING_DOC_TYPES } from "./accountingPosting.js";
 import { getClosedBoundary } from "./periodLock.js";
+import { buildSnapshotsAt, deleteSnapshotsAfter } from "./costSnapshot.js";
 
 // Пересчёт сам вызывает reconcile* по каждому документу; без этого флага
 // авто-триггер (recomputeIfRetroactive) запустил бы пересчёт из пересчёта.
@@ -98,6 +99,13 @@ export async function recomputeCosting({ organizationUuid = null, dateFilter = n
 		return docs.length;
 	}
 
+	// Снапшоты себестоимости материализованы ИЗ регистра. ПОЛНЫЙ пересчёт (без
+	// dateFilter) перестраивает и ЗАКРЫТУЮ историю → снапшоты на границе протухают,
+	// а costing стартовал бы от устаревших слоёв. Поэтому удаляем их ДО фазы регистра.
+	// Пересчёт хвоста ({ gt: boundary }) закрытую историю не трогает → снапшоты валидны.
+	const fullRebuild = !dateFilter;
+	if (fullRebuild) await deleteSnapshotsAfter(organizationUuid, null, client);
+
 	running = true;
 	try {
 		// Порядок важен: регистр целиком (фаза мутирует регистр — БЕЗ общего кэша!),
@@ -106,6 +114,13 @@ export async function recomputeCosting({ organizationUuid = null, dateFilter = n
 		// (иначе каждый документ×строка перечитывал бы всю историю → O(история²)).
 		const registers = await phase(REGISTER_DOC_TYPES, reconcileDocumentRegister);
 		const entries = await phase(POSTING_DOC_TYPES, reconcileDocumentEntries, new Map());
+
+		// Регистр перестроен → возвращаем материализацию на текущую границу, иначе
+		// оптимизация осталась бы выключенной до следующего сохранения «Закрытия месяца».
+		if (fullRebuild && organizationUuid) {
+			const boundary = await getClosedBoundary(organizationUuid, client);
+			if (boundary) await buildSnapshotsAt(organizationUuid, boundary, client);
+		}
 		return { registers, entries };
 	} finally {
 		running = false;

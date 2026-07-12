@@ -31,15 +31,22 @@ export function setLanguage(lang: "ru" | "kk"): void {
 	window.location.reload();
 }
 
+// Индекс «нормализованный ключ → перевод», собирается ОДИН раз.
+// Раньше getTranslation на КАЖДЫЙ вызов делал Object.entries(...).find(...) —
+// линейный перебор ~1000 ключей с toLowerCase() на каждом. А translate() дёргается
+// на каждый заголовок колонки, подпись поля и ячейку таблицы, т.е. тысячи раз за
+// рендер списка. Теперь это O(1) по Map.
+const NORMALIZE = (s: string) => s.toLowerCase().replace(/\s/g, "");
+const translationIndex: Map<string, string> = new Map(
+	Object.entries(translations).map(([key, value]) => [NORMALIZE(key), value]),
+);
+
 export function getTranslation(word: string | undefined | null): string {
-	const normalizedWord = word?.toLowerCase()?.replace(/\s/g, "") || "";
-
-	const entry = Object.entries(translations).find(([key]) => {
-		const normalizedKey = key.toLowerCase().replace(/\s/g, "");
-		return normalizedKey === normalizedWord;
-	});
-
-	return entry !== undefined ? entry[1] : word || "";
+	if (!word) return "";
+	// Ключа нет → возвращаем сам ключ (как и раньше).
+	// Для казахского словарь собран как {...RU, ...KK}, поэтому непереведённый ключ
+	// показывается по-русски, а не сырым кодом.
+	return translationIndex.get(NORMALIZE(word)) ?? word;
 }
 
 export const translate = (word: string) => getTranslation(word);

@@ -4,6 +4,7 @@ import { Button } from "src/components/Button";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { showToast } from "src/components/UIToast";
 import type { TDataItem, TColumn } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -240,12 +241,18 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   <span className={styles.SettingSubLabel}>Способ расчёта:</span>
                   <select
                     value={form.fields.vatCalculationMethod}
-                    onChange={(e) =>
-                      form.setField(
-                        "vatCalculationMethod",
-                        e.target.value === "ADDED" ? "ADDED" : "INCLUDED",
-                      )
-                    }
+                    onChange={(e) => {
+                      const next = e.target.value === "ADDED" ? "ADDED" : "INCLUDED";
+                      // «В сумме» ↔ «сверху» меняет расчёт сумм строк во ВСЕХ документах,
+                      // где действуют эти настройки: итоги и НДС станут другими.
+                      if (form.isEditMode && next !== form.fields.vatCalculationMethod) {
+                        showToast(
+                          "Смена способа расчёта НДС изменит суммы и НДС в документах, где действуют эти настройки",
+                          "warning",
+                        );
+                      }
+                      form.setField("vatCalculationMethod", next);
+                    }}
                     disabled={form.isLoading || !canWrite || !form.fields.useVat || lockVat}
                   >
                     <option value="INCLUDED">В сумме (в т.ч.)</option>
@@ -265,12 +272,19 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   <span className={styles.SettingSubLabel}>Метод себестоимости:</span>
                   <select
                     value={form.fields.costingMethod}
-                    onChange={(e) =>
-                      form.setField(
-                        "costingMethod",
-                        e.target.value === "FIFO" ? "FIFO" : "AVERAGE",
-                      )
-                    }
+                    onChange={(e) => {
+                      const next = e.target.value === "FIFO" ? "FIFO" : "AVERAGE";
+                      // Смена метода себестоимости переигрывает COGS всех документов
+                      // организации с даты этих настроек — суммы в проводках и отчётах
+                      // изменятся. Потенциально дорогая ошибка → предупреждаем.
+                      if (form.isEditMode && next !== form.fields.costingMethod) {
+                        showToast(
+                          "Смена метода себестоимости пересчитает COGS всех документов с даты настроек — суммы в проводках и отчётах изменятся",
+                          "warning",
+                        );
+                      }
+                      form.setField("costingMethod", next);
+                    }}
                     disabled={form.isLoading || !canWrite}
                   >
                     <option value="AVERAGE">Средняя (скользящая)</option>

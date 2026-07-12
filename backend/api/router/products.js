@@ -1,8 +1,10 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { findBarcodeOwner } from "../../utils/barcodeUniqueness.js";
+import { idSearchCondition } from "../../utils/searchId.js";
 
 const router = express.Router();
 
@@ -56,17 +58,19 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		if (searchWords.length > 0)
 			searchWhere = {
 				AND: searchWords.map((w) => {
-					const orConditions = TEXT_FIELDS.map((f) => ({
-						[f]: { contains: w, mode: "insensitive" },
-					}));
-					// Поиск также по дополнительным штрих-кодам товара (таблица).
-					orConditions.push({
-						barcodes: { some: { barcode: { contains: w, mode: "insensitive" } } },
-					});
-					const num = Number(w);
-					if (Number.isInteger(num) && num > 0) {
-						orConditions.push({ id: { equals: num } });
-					}
+					const like = { contains: w, mode: "insensitive" };
+					const orConditions = TEXT_FIELDS.map((f) => ({ [f]: like }));
+					// Штрих-код у товара НЕ один: основной лежит в product.barcode, остальные
+					// (GTIN/EAN поставщиков) — в отдельной таблице. Искать только по основному
+					// — значит не находить товар по его же коду.
+					orConditions.push({ barcodes: { some: { barcode: like } } });
+					// Список Номенклатуры ищет СЕРВЕРОМ (см. useModelListState), поэтому здесь
+					// обязано покрываться всё, что пользователь видит в колонках, — иначе поиск
+					// по бренду/единице молча перестал бы работать.
+					orConditions.push({ brand: { name: like } });
+					orConditions.push({ unitOfMeasure: { name: like } });
+					const idNum = idSearchCondition(w);
+					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),
 			};
@@ -92,6 +96,10 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		}
 
 		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
+		// Поиск по ВЛОЖЕННЫМ таблицам товара: «[штрихкод: 333]» ищет и в основном
+		// штрихкоде, и в дополнительных (отдельная таблица product_barcodes).
+		const nestedConds = buildNestedItemsConditions(MODEL, req.query.nested);
+		if (nestedConds.length) baseWhere.AND = [...(baseWhere.AND ?? []), ...nestedConds];
 		const opts = {
 			take: limitNumber,
 			where: baseWhere,
@@ -191,6 +199,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				isService: isService === true,
 				trackSerialNumbers: trackSerialNumbers === true,
 				trackBatches: trackBatches === true,
+				// Новый товар: учёт действует с момента создания (истории у него нет).
+				serialTrackingSince: trackSerialNumbers === true ? new Date() : null,
+				batchTrackingSince: trackBatches === true ? new Date() : null,
 				tnvedCode: tnvedCode?.trim() || null,
 				truOriginCode: truOriginCode?.trim() || null,
 				catalogTruId: catalogTruId?.trim() || null,
@@ -223,9 +234,20 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.isService !== undefined) data.isService = req.body.isService === true;
 		if (req.body.trackSerialNumbers !== undefined) data.trackSerialNumbers = req.body.trackSerialNumbers === true;
 		if (req.body.trackBatches !== undefined) data.trackBatches = req.body.trackBatches === true;
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, organizationUuid: true } });
+		const existing = await prisma[MODEL].findUnique({
+			where: w,
+			select: { uuid: true, organizationUuid: true, trackSerialNumbers: true, trackBatches: true, serialTrackingSince: true, batchTrackingSince: true },
+		});
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Момент включения учёта: контроль серий/партий не действует задним числом,
+		// поэтому фиксируем, С КАКОГО МОМЕНТА товар отслеживается. Включение (false→true)
+		// ставит отметку «сейчас» → уже существующие документы остаются валидными и
+		// продолжают сохраняться. Выключение — снимает отметку.
+		if (data.trackSerialNumbers === true && !existing.trackSerialNumbers) data.serialTrackingSince = new Date();
+		else if (data.trackSerialNumbers === false) data.serialTrackingSince = null;
+		if (data.trackBatches === true && !existing.trackBatches) data.batchTrackingSince = new Date();
+		else if (data.trackBatches === false) data.batchTrackingSince = null;
 		if (data.barcode) {
 			const owner = await findBarcodeOwner(data.barcode, existing.uuid);
 			if (owner)

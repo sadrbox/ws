@@ -3,6 +3,7 @@
 // счетов организации (типовые засеяны и не редактируются обычным пользователем).
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { buildOrderBy } from "../../utils/sortOrder.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 
@@ -26,15 +27,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 
 		const filter = req.query.filter && typeof req.query.filter === "object" ? req.query.filter : {};
-		const orderBy = [];
-		if (typeof req.query.sort === "string") {
-			try {
-				const s = JSON.parse(req.query.sort);
-				if (s) for (const [f, d] of Object.entries(s)) if (d === "asc" || d === "desc") orderBy.push({ [f]: d });
-			} catch {}
-		}
-		if (!orderBy.length) orderBy.push({ code: "asc" });
-		if (!orderBy.some((o) => "id" in o)) orderBy.push({ id: "asc" });
+		// Сортировка валидируется по схеме — неизвестные поля не улетают в Prisma.
+		const orderBy = buildOrderBy(MODEL, req.query.sort, { fallback: [{ code: "asc" }, { id: "asc" }] });
 
 		const words = search ? search.split(/\s+/).filter(Boolean) : [];
 		const searchWhere = words.length

@@ -19,7 +19,10 @@ export async function reconcileReservationRegister(reservationUuid, client = pri
 		await client.reservationRegister.deleteMany({ where: { reservationUuid } });
 
 		const doc = await client.reservation.findUnique({ where: { uuid: reservationUuid } });
-		if (!doc || doc.deletedAt) return; // удалённый резерв — без строк регистра
+		// Регистр движет только ПРОВЕДЁННЫЙ резерв — как и регистр товаров
+		// (productRegister: doc.posted !== true → выходим). Иначе черновик резерва
+		// молча уменьшал бы доступный к продаже остаток.
+		if (!doc || doc.deletedAt || doc.posted !== true) return;
 
 		const items = await client.reservationItem.findMany({
 			where: { reservationUuid, deletedAt: null },

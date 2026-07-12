@@ -1,10 +1,12 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
+import { idSearchCondition } from "../../utils/searchId.js";
 const router = express.Router();
 const MODEL = "incomingInvoice";
 const ROUTE = "incoming-invoices";
@@ -49,10 +51,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					const orConditions = TEXT_FIELDS.map((f) => ({
 						[f]: { contains: w, mode: "insensitive" },
 					}));
-					const num = Number(w);
-					if (Number.isInteger(num) && num > 0) {
-						orConditions.push({ id: { equals: num } });
-					}
+					const idNum = idSearchCondition(w);
+					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),
 			};
@@ -78,6 +78,11 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
+		// Поиск по ВЛОЖЕННЫМ строкам документа: «[номенклатура: ноут]» → покажи
+		// документы, в позициях которых есть такой товар. Дописываем в AND, а не
+		// разливаем в корень: searchWhere уже может занимать ключ AND.
+		const nestedConds = buildNestedItemsConditions(MODEL, req.query.nested);
+		if (nestedConds.length) baseWhere.AND = [...(baseWhere.AND ?? []), ...nestedConds];
 		const opts = {
 			take: limitNumber,
 			where: baseWhere,

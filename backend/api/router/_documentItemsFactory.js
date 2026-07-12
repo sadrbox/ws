@@ -25,6 +25,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { checkOwnership } from "../../utils/auth.js";
+import { buildOrderBy } from "../../utils/sortOrder.js";
 import {
 	reconcileByParentModel,
 	assertStockAvailable,
@@ -320,11 +321,6 @@ export function createDocumentItemsRouter({
 		}
 	}
 
-	const NESTED_SORT_FIELDS = {
-		"product.name": { product: { name: "asc" } },
-		"unitOfMeasure.name": { unitOfMeasure: { name: "asc" } },
-	};
-
 	// ── GET list ─────────────────────────────────────────────────────────
 	router.get(`/${ROUTE}`, async (req, res) => {
 		try {
@@ -338,35 +334,9 @@ export function createDocumentItemsRouter({
 			// Изоляция: строки чужого документа не отдаём.
 			if (!(await assertParentOwned(parentUuid, req, res))) return;
 
-			const orderBy = [];
-			const sortParam =
-				typeof req.query.sort === "string" ? req.query.sort : null;
-			if (sortParam) {
-				try {
-					const s = JSON.parse(sortParam);
-					if (s && typeof s === "object")
-						for (const [f, d] of Object.entries(s)) {
-							if (d !== "asc" && d !== "desc") continue;
-							if (NESTED_SORT_FIELDS[f]) {
-								const nested = JSON.parse(
-									JSON.stringify(NESTED_SORT_FIELDS[f]),
-								);
-								const setDir = (obj) => {
-									for (const k of Object.keys(obj)) {
-										if (typeof obj[k] === "object") setDir(obj[k]);
-										else obj[k] = d;
-									}
-								};
-								setDir(nested);
-								orderBy.push(nested);
-							} else {
-								orderBy.push({ [f]: d });
-							}
-						}
-				} catch {}
-			}
-			if (orderBy.length === 0) orderBy.push({ id: "asc" });
-			else if (!orderBy.some((o) => "id" in o)) orderBy.push({ id: "asc" });
+			// Сортировка по схеме: скаляры и пути "связь.поле" (product.name и т.п.)
+			// пропускаются, виртуальные колонки (serials/batch/lineNumber/…) — нет.
+			const orderBy = buildOrderBy(MODEL, req.query.sort);
 
 			const items = await prisma[MODEL].findMany({
 				where: { [PARENT_FIELD]: parentUuid },
@@ -774,6 +744,10 @@ export function createDocumentItemsRouter({
 									? { sourceRowId: String(data.sourceRowId) }
 									: {}),
 								...esfFields(data),
+								// Доп. поля строки (в т.ч. batchUuid). Форма коммитит строки
+								// ПАЧКОЙ через этот эндпоинт, а он их не применял — выбор
+								// партии молча терялся, в строке оставалась прежняя.
+								...extraFields(data),
 								...denorm,
 							};
 						} else {
@@ -796,6 +770,10 @@ export function createDocumentItemsRouter({
 							updateData.unitOfMeasure = data.unitOfMeasureUuid ? { connect: { uuid: data.unitOfMeasureUuid } } : { disconnect: true };
 						if (hasSourceRowId && data.sourceRowId !== undefined)
 							updateData.sourceRowId = data.sourceRowId ? String(data.sourceRowId) : null;
+						// Доп. поля строки (в т.ч. batchUuid) — см. комментарий в ветке create.
+						for (const f of extraStringFields) {
+							if (data[f] !== undefined) updateData[f] = data[f] ? String(data[f]).trim() || null : null;
+						}
 						if (esfLineFields) {
 							for (const f of ESF_LINE_FIELDS) if (data[f] !== undefined) updateData[f] = data[f] || null;
 						}

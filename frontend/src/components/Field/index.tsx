@@ -102,6 +102,9 @@ interface TypeFieldStringProps {
   minWidth?: string;
   disabled?: boolean;
   placeholder?: string;
+  /** Подсказка при наведении (title инпута). Не оборачивать поле в <span> ради
+   *  title — обёртка ломает растягивание поля по ширине родителя. */
+  title?: string;
   required?: boolean;
   error?: boolean;
   /** Явный список действий-кнопок (полностью переопределяет встроенные). */
@@ -129,6 +132,8 @@ interface TypeFieldGroupProps {
   style?: CSSProperties;
   disabled?: boolean;
   placeholder?: string;
+  /** Подсказка при наведении (title инпута). */
+  title?: string;
   required?: boolean;
   error?: boolean;
   variant?: FieldVariant;
@@ -175,6 +180,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   minWidth,
   disabled = false,
   placeholder,
+  title,
   required = false,
   error = false,
   actions,
@@ -225,6 +231,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       actions={visibleActions.length > 0 ? visibleActions : undefined}
       disabled={disabled}
       placeholder={placeholder}
+      title={title}
       required={required}
       error={error}
       variant={variant}
@@ -247,6 +254,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
   style,
   disabled = false,
   placeholder,
+  title,
   required = false,
   error = false,
   variant = 'default',
@@ -273,6 +281,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
           autoComplete='off'
           disabled={disabled}
           placeholder={placeholder}
+          title={title}
           maxLength={maxLength}
           autoFocus={autoFocus}
         />

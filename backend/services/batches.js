@@ -119,11 +119,22 @@ export const BATCH_RECEIPT_DOCS = new Set(["purchase", "goods_receipt", "import_
 export const BATCH_ISSUE_DOCS = new Set(["sale", "write_off"]);
 
 /** Товары с учётом по партиям среди переданных. */
-export async function batchTrackedProducts(productUuids, client = prisma) {
+export async function batchTrackedProducts(productUuids, client = prisma, docDate = null) {
 	const ids = [...new Set(productUuids.filter(Boolean))];
 	if (!ids.length) return new Set();
-	const rows = await client.product.findMany({ where: { uuid: { in: ids }, trackBatches: true }, select: { uuid: true } });
-	return new Set(rows.map((r) => r.uuid));
+	const rows = await client.product.findMany({
+		where: { uuid: { in: ids }, trackBatches: true },
+		select: { uuid: true, batchTrackingSince: true },
+	});
+	// Учёт НЕ применяется задним числом: документ старше момента включения флага
+	// контролю не подлежит (партия в нём не проставлена — иначе он перестал бы
+	// сохраняться). docDate=null → контролируем (строгий путь).
+	const d = docDate ? new Date(docDate) : null;
+	return new Set(
+		rows
+			.filter((r) => !d || !r.batchTrackingSince || d >= r.batchTrackingSince)
+			.map((r) => r.uuid),
+	);
 }
 
 /** Ошибка партионного контроля при проведении — роут вернёт 422. */
@@ -142,7 +153,7 @@ export class BatchValidationError extends Error {
  *     самого документа — иначе повторное проведение вычитало бы свой же расход).
  * Бросает BatchValidationError при нарушении.
  */
-export async function assertDocumentBatches({ docType, docUuid, itemModel, parentField, warehouseField = "warehouseUuid" }, client = prisma) {
+export async function assertDocumentBatches({ docType, docUuid, itemModel, parentField, warehouseField = "warehouseUuid", docDate = null }, client = prisma) {
 	const mode = BATCH_ISSUE_DOCS.has(docType) ? "issue" : BATCH_RECEIPT_DOCS.has(docType) ? "receipt" : null;
 	if (!mode) return;
 
@@ -153,7 +164,13 @@ export async function assertDocumentBatches({ docType, docUuid, itemModel, paren
 		where: { [parentField]: docUuid, ...(itemModel === "saleItem" ? { deletedAt: null } : {}) },
 		select: { productUuid: true, quantity: true, batchUuid: true },
 	});
-	const tracked = await batchTrackedProducts(items.map((i) => i.productUuid), client);
+	// Дата сохраняемого документа (или текущая из БД) — учёт партий не применяется
+	// задним числом (см. batchTrackedProducts).
+	const tracked = await batchTrackedProducts(
+		items.map((i) => i.productUuid),
+		client,
+		docDate ?? doc.date ?? null,
+	);
 	if (!tracked.size) return;
 
 	const names = new Map(

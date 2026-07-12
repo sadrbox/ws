@@ -85,9 +85,7 @@ router.get("/todos", async (req, res) => {
 						[field]: { contains: word, mode: "insensitive" },
 					}));
 					const num = Number(word);
-					if (Number.isInteger(num) && num > 0) {
-						orConditions.push({ id: { equals: num } });
-					}
+					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),
 			};

@@ -14,7 +14,6 @@ import { useFormStore } from "src/hooks/useFormStore";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { renderAuditCell, summarizeDiff } from "./renderAuditCell";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 
 const MODEL_ENDPOINT = "activityhistories";
@@ -54,8 +53,8 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useUserAccessRight("ActivityHistory");
-
+  // Форма — только просмотр записи журнала: у роутера нет PUT, редактировать нечем
+  // (и не нужно — журнал аудита, который правят руками, перестаёт быть журналом).
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT,
     storageKey: "activity-histories-form",
@@ -142,7 +141,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
   ], [form.fields, form.isLoading, form.isEditMode, form.formUid]);
 
   return (
-    <ModelForm paneId={form.paneId} tabs={tabs} readonly={!canWrite}
+    <ModelForm paneId={form.paneId} tabs={tabs} readonly
       onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.isEditMode ? form.handleReload : undefined}
       isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}/>
@@ -175,6 +174,10 @@ const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant, onSele
     defaultSort={{ id: "desc" }}
     enableDateRange
     renderCell={renderAuditCell}
+    // Записи журнала порождает аудит-middleware, а не пользователь: POST-роут создания
+    // из UI отсутствует (POST /activityhistories — это приём событий 1С), поэтому
+    // «Добавить» просто падала. Удаление админу оставляем (роут DELETE /:id есть).
+    hideAdd
   />
 );
 

@@ -9,12 +9,20 @@ interface PrimaryToolbarButtonProps {
   endpoint: string;
   label?: string;
   disabled?: boolean;
+  /**
+   * Вызывается после успешной смены основного. Нужен там, где «основной» хранится
+   * не флагом строки, а полем РОДИТЕЛЯ (штрихкод товара — Product.barcode): форма
+   * родителя должна перечитать данные, иначе её поле останется старым и при
+   * сохранении откатит основной обратно.
+   */
+  onDone?: () => void | Promise<void>;
 }
 
 export const PrimaryToolbarButton: FC<PrimaryToolbarButtonProps> = ({
   endpoint,
   label = "Сделать основным",
   disabled = false,
+  onDone,
 }) => {
   const ctx = useTableContext();
   const subCtx = useSubTableContext();
@@ -34,10 +42,11 @@ export const PrimaryToolbarButton: FC<PrimaryToolbarButtonProps> = ({
       // Toggle: если уже основной — снимаем флаг, иначе — устанавливаем
       await api.put(`/${endpoint}/${activeUuid}`, { isPrimary: !alreadyPrimary });
       await queryClient.invalidateQueries({ queryKey: [endpoint] });
+      await onDone?.();
     } finally {
       setBusy(false);
     }
-  }, [activeUuid, alreadyPrimary, busy, endpoint, queryClient]);
+  }, [activeUuid, alreadyPrimary, busy, endpoint, queryClient, onDone]);
 
   const title = busy
     ? "Сохранение…"

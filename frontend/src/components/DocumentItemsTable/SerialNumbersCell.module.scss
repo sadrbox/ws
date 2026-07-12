@@ -71,3 +71,45 @@
 	color: #c0392b;
 	font-size: 13px;
 }
+
+/* Фильтр по номеру серии — когда серий десятки, искать глазами = ошибиться. */
+.Filter {
+	width: 100%;
+	padding: 6px 8px;
+	margin-bottom: 6px;
+	border: 1px solid #d0d7de;
+	border-radius: 4px;
+	font: inherit;
+	font-size: 13px;
+}
+
+/* Номер серии — главное; происхождение — вторичный ориентир «та ли серия». */
+.PickSerial {
+	font-weight: 600;
+}
+
+.PickOrigin {
+	margin-left: auto;
+	padding-left: 12px;
+	color: #6b7280;
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+/* Норма набрана: остальные серии гасим — отгрузить больше количества нельзя. */
+.PickRowBlocked {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+/* Первоисточник партии — кликабелен, только если документ существует
+   («Ввод остатков» документа не имеет). */
+.PickOriginLink {
+	color: #0969da;
+	cursor: pointer;
+	text-decoration: underline dotted;
+
+	&:hover {
+		text-decoration: underline;
+	}
+}

@@ -5,9 +5,10 @@
 // Кнопка с бейджем «n/qty» открывает модалку. Сохранение идёт в справочник серий
 // сразу (документ должен быть уже сохранён — есть docUuid). Инвариант «серий == qty»
 // финально проверяет сервер при проведении.
-import { FC, useState, useCallback } from "react";
+import { FC, useState, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import Notice, { type NoticeItem } from "src/components/Notice";
 import apiClient from "src/services/api/client";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
@@ -21,24 +22,43 @@ export interface SerialCellProps {
   mode: "receipt" | "issue";
   organizationUuid?: string;
   warehouseUuid?: string;
+  /** Дата документа — учёт по сериям не применяется задним числом (serialTrackingSince). */
+  documentDate?: string | null;
   disabled?: boolean;
 }
 
-interface SerialRow { uuid: string; serialNumber: string; status: string; issueDocUuid?: string | null }
+interface SerialRow {
+  uuid: string; serialNumber: string; status: string;
+  issueDocUuid?: string | null;
+  /** Откуда серия: «Оприходование № ОПРХ-5 от 01.07.2026» (бэк резолвит документ приёмки). */
+  receiptLabel?: string | null;
+}
 
 const qkFlag = (uuid: string) => ["product-serial-flag", uuid];
 const qkCount = (docUuid: string, productUuid: string, mode: string) => ["serial-count", mode, docUuid, productUuid];
 
-export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, docType, docUuid, mode, organizationUuid, warehouseUuid, disabled }) => {
+export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, docType, docUuid, mode, organizationUuid, warehouseUuid, documentDate, disabled }) => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
 
-  // Учитывается ли товар по сериям (кэш по товару).
+  // Учитывается ли товар по сериям НА ДАТУ ЭТОГО ДОКУМЕНТА (кэш по товару).
+  //
+  // Учёт не применяется ЗАДНИМ ЧИСЛОМ: контроль действует только для документов с
+  // датой >= serialTrackingSince (момент включения флага). Точно тот же инвариант
+  // держит бэкенд (services/serialNumbers.js → serialTrackedProducts). Без этой
+  // проверки старый документ показывал бы красное «0/150» и требовал серии, хотя
+  // сохранению это уже не мешает — UI пугал бы несуществующей проблемой.
   const { data: tracked } = useQuery({
-    queryKey: qkFlag(productUuid),
+    queryKey: [...qkFlag(productUuid), documentDate ?? ""],
     queryFn: async () => {
-      const r = await apiClient.get<{ item?: { trackSerialNumbers?: boolean } }>(`products/${productUuid}`);
-      return r.data?.item?.trackSerialNumbers === true;
+      const r = await apiClient.get<{ item?: { trackSerialNumbers?: boolean; serialTrackingSince?: string | null } }>(`products/${productUuid}`);
+      const item = r.data?.item;
+      if (item?.trackSerialNumbers !== true) return false;
+      const since = item.serialTrackingSince ? new Date(item.serialTrackingSince) : null;
+      if (!since) return true;
+      // Новый документ (даты ещё нет) — считаем «сейчас»: учёт действует.
+      const docAt = documentDate ? new Date(documentDate) : new Date();
+      return docAt >= since;
     },
     enabled: !!productUuid,
     staleTime: 5 * 60_000,
@@ -94,6 +114,7 @@ const SerialModal: FC<Omit<SerialCellProps, "disabled"> & { onClose: () => void;
   const [picked, setPicked] = useState<Set<string> | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState("");
 
   // Приёмка: подгружаем уже введённые серии в textarea.
   const receipt = useQuery({
@@ -141,15 +162,65 @@ const SerialModal: FC<Omit<SerialCellProps, "disabled"> & { onClose: () => void;
   }, [mode, docType, docUuid, productUuid, organizationUuid, warehouseUuid, textValue, pickedSet, onSaved]);
 
   const currentCount = mode === "receipt"
-    ? textValue.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean).length
+    ? textValue.split(/[\n,;]+/).map((v) => v.trim()).filter(Boolean).length
     : pickedSet.size;
 
+  // ── Подсказки, чтобы не выбрать «не ту» серию ───────────────────────────────
+  // Серии физически различимы: отгрузив не тот экземпляр, получим спор по гарантии
+  // и возврату. Поэтому даём ЯВНЫЕ ориентиры и не даём набрать лишнего.
+  const all = available.data ?? [];
+  const rows = mode === "issue"
+    ? all.filter((v) => !filter.trim() || v.serialNumber.toLowerCase().includes(filter.trim().toLowerCase()))
+    : [];
+  const full = currentCount >= quantity;         // норма набрана — лишнее выбрать нельзя
+  const over = currentCount > quantity;
+
+  // Дубликаты во вводе приёмки — частая ошибка (скопировали строку дважды).
+  const receiptDupes = useMemo(() => {
+    if (mode !== "receipt") return [];
+    const seen = new Set<string>();
+    const dup = new Set<string>();
+    for (const v of textValue.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean)) {
+      const k = v.toLowerCase();
+      if (seen.has(k)) dup.add(v); else seen.add(k);
+    }
+    return [...dup];
+  }, [mode, textValue]);
+
+  const notices: NoticeItem[] = [];
+  if (error) notices.push({ type: "error", text: error });
+  if (receiptDupes.length) {
+    notices.push({ type: "error", text: `${translate("serialDuplicate")}: ${receiptDupes.join(", ")}` });
+  }
+  if (over) {
+    notices.push({ type: "error", text: `${translate("serialTooMany")} (${currentCount} / ${quantity})` });
+  } else if (currentCount < quantity) {
+    notices.push({
+      type: "attention",
+      text: `${translate("serialNeedMore")}: ${quantity - currentCount}`,
+    });
+  } else if (!receiptDupes.length) {
+    notices.push({ type: "success", text: translate("serialCountOk") });
+  }
+  if (mode === "issue" && all.length > 0 && all.length < quantity) {
+    // Серий на складе физически меньше, чем продаём — предупредить ДО сохранения,
+    // иначе пользователь упрётся в 422 при записи документа.
+    notices.push({ type: "warning", text: `${translate("serialStockShort")}: ${all.length} / ${quantity}` });
+  }
+  if (mode === "issue") {
+    notices.push({ type: "warning", text: translate("serialPickHint") });
+  }
+
   return (
-    <Modal title={`${translate("serialNumbers")} — ${translate("quantity")}: ${quantity}`} onClose={onClose} onApply={saving ? undefined : () => void save()}>
+    <Modal title={`${translate("serialNumbers")} — ${translate("quantity")}: ${quantity}`} onClose={onClose} onApply={saving || over ? undefined : () => void save()}>
       <div className={styles.ModalBody}>
+        {/* Ошибки/подсказки — это состояние ФОРМЫ, поэтому Notice, а не тост. */}
+        <Notice items={notices} />
+
         <div className={currentCount === quantity ? styles.CounterOk : styles.CounterBad}>
           {translate("serialSelected")}: {currentCount} / {quantity}
         </div>
+
         {mode === "receipt" ? (
           <textarea
             className={styles.Textarea}
@@ -159,25 +230,49 @@ const SerialModal: FC<Omit<SerialCellProps, "disabled"> & { onClose: () => void;
             rows={Math.max(6, Math.min(16, quantity + 2))}
           />
         ) : (
-          <div className={styles.PickList}>
-            {(available.data ?? []).length === 0 && <div className={styles.Hint}>{translate("serialNoneAvailable")}</div>}
-            {(available.data ?? []).map((s) => (
-              <label key={s.uuid} className={styles.PickRow}>
-                <input
-                  type="checkbox"
-                  checked={pickedSet.has(s.uuid)}
-                  onChange={(e) => {
-                    const next = new Set(pickedSet);
-                    if (e.target.checked) next.add(s.uuid); else next.delete(s.uuid);
-                    setPicked(next);
-                  }}
-                />
-                <span>{s.serialNumber}</span>
-              </label>
-            ))}
-          </div>
+          <>
+            {/* Фильтр: когда серий десятки, глазами искать нужную — прямой путь к ошибке. */}
+            {all.length > 8 && (
+              <input
+                className={styles.Filter}
+                value={filter}
+                placeholder={translate("serialFilterHint")}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+            )}
+            <div className={styles.PickList}>
+              {all.length === 0 && <div className={styles.Hint}>{translate("serialNoneAvailable")}</div>}
+              {all.length > 0 && rows.length === 0 && <div className={styles.Hint}>{translate("no_results_found")}</div>}
+              {rows.map((v) => {
+                const checked = pickedSet.has(v.uuid);
+                // Норма набрана → остальные гасим: физически нельзя отгрузить больше,
+                // чем указано в количестве строки.
+                const blocked = !checked && full;
+                return (
+                  <label
+                    key={v.uuid}
+                    className={[styles.PickRow, blocked ? styles.PickRowBlocked : ""].filter(Boolean).join(" ")}
+                    title={blocked ? translate("serialLimitReached") : (v.receiptLabel ?? undefined)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={blocked}
+                      onChange={(e) => {
+                        const next = new Set(pickedSet);
+                        if (e.target.checked) next.add(v.uuid); else next.delete(v.uuid);
+                        setPicked(next);
+                      }}
+                    />
+                    <span className={styles.PickSerial}>{v.serialNumber}</span>
+                    {/* Происхождение — главный ориентир «та ли это серия». */}
+                    {v.receiptLabel && <span className={styles.PickOrigin}>{v.receiptLabel}</span>}
+                  </label>
+                );
+              })}
+            </div>
+          </>
         )}
-        {error && <div className={styles.Error}>{error}</div>}
       </div>
     </Modal>
   );

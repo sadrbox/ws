@@ -62,14 +62,22 @@ export function assertSerialCount(lines) {
 }
 
 /** Множество uuid товаров с учётом по сериям среди переданных. */
-export async function serialTrackedProducts(productUuids, client = prisma) {
+export async function serialTrackedProducts(productUuids, client = prisma, docDate = null) {
 	const ids = [...new Set(productUuids.filter(Boolean))];
 	if (!ids.length) return new Set();
 	const rows = await client.product.findMany({
 		where: { uuid: { in: ids }, trackSerialNumbers: true },
-		select: { uuid: true },
+		select: { uuid: true, serialTrackingSince: true },
 	});
-	return new Set(rows.map((r) => r.uuid));
+	// Учёт НЕ применяется задним числом: документ старше момента включения флага
+	// контролю не подлежит (в нём серий нет — иначе он перестал бы сохраняться).
+	// docDate=null → контролируем (не смогли определить дату — берём строгий путь).
+	const d = docDate ? new Date(docDate) : null;
+	return new Set(
+		rows
+			.filter((r) => !d || !r.serialTrackingSince || d >= r.serialTrackingSince)
+			.map((r) => r.uuid),
+	);
 }
 
 /**
@@ -194,16 +202,28 @@ export class SerialCountError extends Error {
  * @param {string} p.itemModel  — prisma-модель строк (writeOffItem, saleItem, …)
  * @param {string} p.parentField — FK-поле строки на документ (writeOffUuid, …)
  */
-export async function assertDocumentSerials({ docType, docUuid, itemModel, parentField }, client = prisma) {
+export async function assertDocumentSerials({ docType, docUuid, itemModel, parentField, docDate = null }, client = prisma) {
 	const mode = SERIAL_ISSUE_DOCS.has(docType) ? "issue" : SERIAL_RECEIPT_DOCS.has(docType) ? "receipt" : null;
 	if (!mode) return; // документ не относится к серийному учёту
+
+	// Дата документа нужна, чтобы НЕ применять серийный учёт задним числом
+	// (см. serialTrackedProducts). Вызывающий может передать сохраняемую дату;
+	// иначе берём текущую из БД (parentField "purchaseUuid" → модель "purchase").
+	let date = docDate;
+	if (!date) {
+		const parentModel = String(parentField).replace(/Uuid$/, "");
+		const doc = client[parentModel]
+			? await client[parentModel].findUnique({ where: { uuid: docUuid }, select: { date: true } })
+			: null;
+		date = doc?.date ?? null;
+	}
 
 	const items = await client[itemModel].findMany({
 		where: { [parentField]: docUuid, ...(itemModel === "saleItem" ? { deletedAt: null } : {}) },
 		select: { productUuid: true, quantity: true },
 	});
 	const productUuids = items.map((i) => i.productUuid).filter(Boolean);
-	const tracked = await serialTrackedProducts(productUuids, client);
+	const tracked = await serialTrackedProducts(productUuids, client, date);
 	if (!tracked.size) return;
 
 	// Суммарное количество по товару (несколько строк одного товара складываются).

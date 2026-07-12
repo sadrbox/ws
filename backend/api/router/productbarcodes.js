@@ -2,6 +2,7 @@
 // Sub-таблица товара: GET (по productUuid) / POST / PUT / DELETE / batch.
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { buildOrderBy } from "../../utils/sortOrder.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { findBarcodeOwner } from "../../utils/barcodeUniqueness.js";
 
@@ -17,24 +18,27 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		if (!productUuid)
 			return res.status(400).json({ success: false, message: "Параметр productUuid обязателен" });
 
-		const orderBy = [];
-		const sortParam = typeof req.query.sort === "string" ? req.query.sort : null;
-		if (sortParam) {
-			try {
-				const s = JSON.parse(sortParam);
-				if (s && typeof s === "object")
-					for (const [f, d] of Object.entries(s)) {
-						if (d === "asc" || d === "desc") orderBy.push({ [f]: d });
-					}
-			} catch {}
-		}
-		if (orderBy.length === 0) orderBy.push({ id: "asc" });
+		// Сортировка валидируется по схеме — неизвестные поля не улетают в Prisma.
+		const orderBy = buildOrderBy(MODEL, req.query.sort);
 
 		const items = await prisma[MODEL].findMany({
 			where: { productUuid: String(productUuid) },
 			orderBy,
 		});
-		return res.status(200).json({ success: true, items, total: items.length });
+		// «Основной» штрихкод — это НЕ флаг строки, а скаляр Product.barcode
+		// (на нём partial-unique индекс и по нему товар подбирается в документах).
+		// Поэтому isPrimary ВЫЧИСЛЯЕМЫЙ: строка основная, если её код совпадает с
+		// Product.barcode. Так кнопка «Сделать основным» переиспользуется как есть
+		// (PrimaryToolbarButton ждёт row.isPrimary), а второго источника истины нет.
+		const product = await prisma.product.findUnique({
+			where: { uuid: String(productUuid) },
+			select: { barcode: true },
+		});
+		const main = product?.barcode ?? null;
+		const withPrimary = items.map((it) => ({ ...it, isPrimary: !!main && it.barcode === main }));
+		// Основной — первым (как основной контакт в контрагенте).
+		withPrimary.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+		return res.status(200).json({ success: true, items: withPrimary, total: withPrimary.length });
 	} catch (error) {
 		console.error(`GET /${ROUTE} error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -96,6 +100,56 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			data.barcode = bc;
 		}
 		if (req.body.comment !== undefined) data.comment = req.body.comment?.trim() || null;
+
+		// ── «Сделать основным» / «Убрать основным» ────────────────────────────
+		// Основной штрихкод хранится в Product.barcode, поэтому меняем ТОВАР, а не
+		// строку. Прежний основной не теряем: если его нет среди строк — заводим,
+		// иначе он бы просто исчез из карточки.
+		if (req.body.isPrimary !== undefined) {
+			const row = await prisma[MODEL].findUnique({ where: w, select: { barcode: true, productUuid: true } });
+			if (!row) return res.status(404).json({ success: false, message: "Не найдено" });
+
+			if (req.body.isPrimary === true) {
+				const owner = await findBarcodeOwner(row.barcode, row.productUuid);
+				if (owner) {
+					return res.status(409).json({
+						success: false,
+						message: `Штрих-код «${row.barcode}» уже используется другим товаром`,
+					});
+				}
+				const product = await prisma.product.findUnique({
+					where: { uuid: row.productUuid },
+					select: { barcode: true },
+				});
+				const prevMain = product?.barcode ?? null;
+				await prisma.$transaction(async (tx) => {
+					if (prevMain && prevMain !== row.barcode) {
+						const kept = await tx[MODEL].findFirst({
+							where: { productUuid: row.productUuid, barcode: prevMain, deletedAt: null },
+							select: { uuid: true },
+						});
+						if (!kept) {
+							await tx[MODEL].create({ data: { productUuid: row.productUuid, barcode: prevMain } });
+						}
+					}
+					await tx.product.update({ where: { uuid: row.productUuid }, data: { barcode: row.barcode } });
+				});
+			} else if (req.body.isPrimary === false) {
+				// Снятие основного: у товара просто не остаётся основного штрихкода,
+				// сама строка при этом сохраняется.
+				await prisma.product.updateMany({
+					where: { uuid: row.productUuid, barcode: row.barcode },
+					data: { barcode: null },
+				});
+			}
+			const item = await prisma[MODEL].findUnique({ where: w });
+			const product = await prisma.product.findUnique({ where: { uuid: row.productUuid }, select: { barcode: true } });
+			return res.status(200).json({
+				success: true,
+				item: { ...item, isPrimary: !!product?.barcode && item.barcode === product.barcode },
+			});
+		}
+
 		if (data.barcode) {
 			const existing = await prisma[MODEL].findUnique({ where: w, select: { productUuid: true } });
 			const owner = await findBarcodeOwner(data.barcode, existing?.productUuid ?? null);

@@ -141,10 +141,10 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
 };
 TodosForm.displayName = "TodosForm";
 
-const TodosList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const TodosList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName="TodosList" columnsJson={columnsJson} FormComponent={TodosForm}
     getLabel={(d) => d?.description ? ((d.description as string).slice(0, 50) + ((d.description as string).length > 50 ? "..." : "")) : "?"}
-    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} />
+    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} />
 );
 TodosList.displayName = "TodosList";
 

@@ -2,6 +2,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, orgQueryFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { buildOrderBy } from "../../utils/sortOrder.js";
 
 const router = express.Router();
 
@@ -27,7 +28,10 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				.json({ success: false, message: "Некорректный параметр cursor" });
 		}
 
-		const orderBy = [{ id: "asc" }];
+		// Сортировка из UI: раньше orderBy был ЗАХАРДКОЖЕН, и ?sort= игнорировался —
+		// клик по заголовку колонки ничего не менял. buildOrderBy валидирует поля по
+		// схеме (скаляры + пути «связь.поле»), неизвестные молча отбрасывает.
+		const orderBy = buildOrderBy(MODEL, req.query.sort, { fallback: { id: "asc" } });
 
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhereClause = {};

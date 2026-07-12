@@ -164,13 +164,13 @@ const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
 };
 ChartOfAccountsForm.displayName = "ChartOfAccountsForm";
 
-const ChartOfAccountsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
-  { variant, onSelectItem, ownerUuid, ownerField }
+const ChartOfAccountsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = (
+  { variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }
 ) => (
   <ModelList
     endpoint={ENDPOINT} listName="ChartOfAccountsList" columnsJson={columnsJson} FormComponent={ChartOfAccountsForm}
     getLabel={(d) => (d?.code ? `${d.code} ${d.name ?? ""}`.trim() : "?")}
-    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
+    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ code: "asc" }}
   />
 );

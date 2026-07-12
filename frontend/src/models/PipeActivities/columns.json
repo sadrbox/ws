@@ -1,0 +1,165 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"width": "70px",
+		"minWidth": "60px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"type": "string",
+		"width": "300px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Уникальный идентификатор",
+		"visible": false,
+		"inlist": false
+	},
+	{
+		"identifier": "receivedAt",
+		"type": "datetime",
+		"width": "160px",
+		"minWidth": "110px",
+		"alignment": "left",
+		"hint": "Когда событие получено от 1С",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "actionDate",
+		"type": "datetime",
+		"width": "160px",
+		"minWidth": "110px",
+		"alignment": "left",
+		"hint": "Дата действия в 1С",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "actionType",
+		"type": "string",
+		"width": "130px",
+		"minWidth": "90px",
+		"alignment": "left",
+		"hint": "Тип действия",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "applyStatus",
+		"sortable": false,
+		"type": "string",
+		"width": "130px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Что сделано со справочником",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "applyMessage",
+		"sortable": false,
+		"type": "string",
+		"width": "280px",
+		"minWidth": "140px",
+		"alignment": "left",
+		"hint": "Причина, если пропущено или ошибка",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "objectType",
+		"type": "string",
+		"width": "200px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"hint": "Тип объекта в 1С: Справочник или Документ (object.type)",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "objectName",
+		"type": "string",
+		"width": "260px",
+		"minWidth": "140px",
+		"alignment": "left",
+		"hint": "Какой справочник/документ: Номенклатура, Контрагенты, Склады… (object.name)",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "objectId",
+		"type": "string",
+		"width": "160px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Идентификатор элемента в 1С (object.id) — ключ сопоставления",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "userName",
+		"type": "string",
+		"width": "160px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Пользователь 1С",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "organizationShortName",
+		"type": "string",
+		"width": "200px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"hint": "Организация (как прислана 1С)",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "bin",
+		"type": "string",
+		"width": "140px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "БИН организации",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "host",
+		"type": "string",
+		"width": "140px",
+		"minWidth": "90px",
+		"alignment": "left",
+		"hint": "Хост 1С",
+		"visible": false,
+		"inlist": true
+	},
+	{
+		"identifier": "ip",
+		"type": "string",
+		"width": "130px",
+		"minWidth": "90px",
+		"alignment": "left",
+		"hint": "IP-адрес",
+		"visible": false,
+		"inlist": true
+	},
+	{
+		"identifier": "props",
+		"sortable": false,
+		"type": "string",
+		"width": "260px",
+		"minWidth": "140px",
+		"alignment": "left",
+		"hint": "Реквизиты, присланные 1С",
+		"visible": true,
+		"inlist": true
+	}
+]

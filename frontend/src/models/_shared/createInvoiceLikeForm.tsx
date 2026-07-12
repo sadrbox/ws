@@ -19,6 +19,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { HelpBox } from "src/components/HelpBox";
 import { useFormStore } from "src/hooks/useFormStore";
+import { useContractSync } from "src/hooks/useContractSync";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
@@ -78,6 +79,13 @@ export interface InvoiceLikeFormConfig {
   defaultHiddenItemColumns?: string[];
   /** Скрыть переключатель "Проведение" (напр. Счёт на оплату — не проводится). */
   hidePosted?: boolean;
+  /**
+   * Документ-«утверждение»: создавать документы «на основании» можно только когда он
+   * ПРОВЕДЁН (утверждён). Так проведение получает смысл у документов, которые не
+   * двигают регистры и не дают проводок (заявка на закупку). Бэкенд держит тот же
+   * инвариант — assertBasisExists отдаёт 422 на непроведённое основание.
+   */
+  requirePostedForBasis?: boolean;
   /** Показать поле «Склад» в шапке (для заказов покупателя/поставщику, резерва). */
   hasWarehouse?: boolean;
   /**
@@ -390,6 +398,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       fields: form.fields as unknown as Record<string, unknown>,
       basisMismatch,
       contractMismatch,
+      // Ошибка ДАННЫХ формы → в <Notice /> (системные сбои уходят в тост, см. useFormStore).
+      formError: form.errorKind === "form" ? form.error : null,
     });
 
     // ── Интеграция ИС ЭСФ (только для «Счёт-фактура исходящая», cfg.hasEsf) ──
@@ -528,6 +538,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             <ActionsDropdownButton
               icon="fromBasis"
               label="На основании"
+              disabled={cfg.requirePostedForBasis === true && form.fields.posted !== true}
+              title={cfg.requirePostedForBasis === true && form.fields.posted !== true ? translate("basisNotPostedHint") : undefined}
               options={cfg.createFromBasisTargets.map((t, i) => ({
                 // id — индекс цели: basisType одинаков у всех целей одного источника,
                 // поэтому по нему нельзя различить цели (открывалась бы первая).
@@ -581,6 +593,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       ),
     );
 
+    const syncContract = useContractSync();
     const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
       const updates: Partial<TFields> = { contractUuid: uuid, contractName: displayValue };
       if (item.organizationUuid) { updates.organizationUuid = item.organizationUuid; updates.organizationName = item.organization?.name ?? ""; }
@@ -589,14 +602,22 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     }, [form.setFields]);
 
     // Выбор контрагента: ЭСФ — грузополучатель = контрагент; категория получателя из карточки.
-    const handleCounterpartySelect = useCallback((uuid: string, displayValue: string, item?: Record<string, any>) => {
+    const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string, item?: Record<string, any>) => {
       const updates: Partial<TFields> = { counterpartyUuid: uuid, counterpartyName: displayValue };
       if (cfg.hasEsf) {
         updates.esfConsigneeUuid = uuid; updates.esfConsigneeName = displayValue;
         if (item?.enterpriseCategory) updates.esfCustomerType = item.enterpriseCategory;
       }
       form.setFields(updates);
-    }, [form.setFields]);
+      // Договор: основной у нового контрагента → подставить, чужой → очистить.
+      const cur = form.store.getSnapshot().fields;
+      const patch = await syncContract({
+        counterpartyUuid: uuid,
+        organizationUuid: cur.organizationUuid,
+        currentContractUuid: cur.contractUuid,
+      });
+      if (patch) form.setFields(patch as Partial<TFields>);
+    }, [form.setFields, form.store, syncContract]);
 
     // Смена организации: зависимые поля (договор, склад если есть) →
     // дефолт пользователя для новой орг, иначе очистка.
@@ -718,6 +739,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                     <BasisDocumentField
                       allowedTypes={cfg.basisConfig.allowedTypes}
                       basisDocumentType={form.fields.basisDocumentType}
+                      // Подбор основания — только документы организации этого документа.
+                      organizationUuid={form.fields.organizationUuid}
                       basisDocumentUuid={form.fields.basisDocumentUuid}
                       basisDocumentLabel={form.fields.basisDocumentLabel}
                       formUid={form.formUid}

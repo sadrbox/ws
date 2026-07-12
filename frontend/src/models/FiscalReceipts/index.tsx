@@ -51,13 +51,13 @@ function renderCell(row: TDataItem, col: TColumn): ReactNode | undefined {
   return undefined;
 }
 
-const FiscalReceiptsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
-  { variant, onSelectItem, ownerUuid, ownerField }
+const FiscalReceiptsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = (
+  { variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }
 ) => (
   <ModelList
     endpoint={ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={FiscalReceiptsForm}
     getLabel={(d) => (d?.fiscalNumber ? `№ ${d.fiscalNumber as string}` : translate("fiscalReceiptTitle"))}
-    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
+    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ id: "desc" }}
     renderCell={renderCell}
   />

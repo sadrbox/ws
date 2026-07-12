@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
@@ -31,6 +32,7 @@ import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
+import { idSearchCondition } from "../../utils/searchId.js";
 
 const BASIS_FIELDS = ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"];
 
@@ -94,8 +96,8 @@ export function createDocumentHeaderRouter({
 				searchWhere = {
 					AND: searchWords.map((w) => {
 						const orConditions = TEXT_FIELDS.map((f) => ({ [f]: { contains: w, mode: "insensitive" } }));
-						const num = Number(w);
-						if (Number.isInteger(num) && num > 0) orConditions.push({ id: { equals: num } });
+						const idNum = idSearchCondition(w);
+						if (idNum) orConditions.push(idNum);
 						return { OR: orConditions };
 					}),
 				};
@@ -120,6 +122,11 @@ export function createDocumentHeaderRouter({
 				}
 			}
 			const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
+		// Поиск по ВЛОЖЕННЫМ строкам документа: «[номенклатура: ноут]» → покажи
+		// документы, в позициях которых есть такой товар. Дописываем в AND, а не
+		// разливаем в корень: searchWhere уже может занимать ключ AND.
+		const nestedConds = buildNestedItemsConditions(MODEL, req.query.nested);
+		if (nestedConds.length) baseWhere.AND = [...(baseWhere.AND ?? []), ...nestedConds];
 			const opts = { take: limitNumber, where: baseWhere, orderBy, include };
 			if (cursorNumber !== null) {
 				opts.cursor = { id: cursorNumber };

@@ -6,6 +6,7 @@
  * Самоскрывается, пока документ не сохранён (нет uuid).
  */
 import { FC } from "react";
+import { translate } from "src/i18";
 import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app/context";
 import { setPendingHighlight } from "src/utils/listHighlight";
@@ -17,8 +18,8 @@ const ShowInJournalButton: FC<{ endpoint: string; uuid?: string }> = ({ endpoint
   return (
     <IconButton
       icon="list"
-      title="Показать в списке"
-      aria-label="Показать в списке"
+      title={translate("showInList")}
+      aria-label={translate("showInList")}
       onClick={() => {
         setPendingHighlight(endpoint, uuid);
         void openListByRef(endpoint, addPane);

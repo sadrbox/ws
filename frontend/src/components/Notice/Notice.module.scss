@@ -75,3 +75,17 @@
 		background: $attention;
 	}
 }
+
+// Ошибка данных формы (отказ валидации/бэка) — та же красная палитра, что у
+// attention, но текст жирный: это не «ещё не заполнено», а «сохранить нельзя».
+.error {
+	background: $attentionBg;
+	border-color: $attentionBorder;
+	border-left-color: $attention;
+	color: $attentionText;
+	font-weight: 600;
+
+	.Icon {
+		background: $attention;
+	}
+}

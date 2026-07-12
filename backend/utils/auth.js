@@ -224,6 +224,10 @@ export const ROUTE_TO_MODEL = {
 	contactpersons: "ContactPerson",
 	bankaccounts: "BankAccount",
 	activityhistories: "ActivityHistory",
+	// Входящие события 1С — тот же журнал, только внешний источник: право общее.
+	pipeactivities: "ActivityHistory",
+	// Ввод остатков серий/партий меняет учётные данные товара → право номенклатуры.
+	"opening-balance": "Product",
 	todos: "Todo",
 	warehouses: "Warehouse",
 	cashboxes: "Cashbox",

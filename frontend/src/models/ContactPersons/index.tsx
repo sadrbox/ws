@@ -126,10 +126,10 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
 };
 ContactPersonsForm.displayName = "ContactPersonsForm";
 
-const ContactPersonsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const ContactPersonsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName="ContactPersonsList" columnsJson={columnsJson} FormComponent={ContactPersonsForm}
     getLabel={(d) => d?.fullName ? (d.fullName as string) : "?"} variant={variant} onSelectItem={onSelectItem}
-    ownerUuid={ownerUuid} ownerField={ownerField} />
+    ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} />
 );
 ContactPersonsList.displayName = "ContactPersonsList";
 

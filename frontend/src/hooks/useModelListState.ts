@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { translate } from "src/i18";
 import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,6 +11,7 @@ import { useModelDelete } from "src/hooks/useModelDelete";
 import {
 	getModelColumns,
 	matchRowBySearch,
+	parseSearchQuery,
 	loadTableView,
 	saveTableView,
 } from "src/components/Table/services";
@@ -21,6 +23,12 @@ import type {
 import type { TTableVariant } from "src/components/Table";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { ENDPOINT_TO_MODEL } from "src/utils/userAccessRightsMap";
+
+// Модели, где свободные слова ищет СЕРВЕР, а не клиент по видимым колонкам.
+// Признак: искомое не сводится к колонкам списка (у товара — несколько штрих-кодов,
+// доп. коды лежат в отдельной таблице). Роутер такой модели ОБЯЗАН искать по
+// надмножеству видимых колонок — иначе поиск по колонке молча сломается.
+const SERVER_WORD_SEARCH = new Set(["products"]);
 
 export interface UseModelListStateOptions {
 	/** API endpoint (например "organizations") */
@@ -105,7 +113,35 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		[],
 	);
 
-	// search не передаётся на бэкенд — фильтрация только client-side (см. rows ниже)
+	// Шаблоны поиска «[номенклатура: ноут]» — это поиск по ВЛОЖЕННЫМ строкам документа
+	// (позициям), а не по колонкам списка: колонки «Номенклатура» в списке Реализаций
+	// нет и быть не может. Такой фильтр возможен только на сервере (Prisma `some`),
+	// поэтому области уходят в запрос как nested[имя]=текст, а СВОБОДНЫЕ слова
+	// по-прежнему фильтруются на клиенте по видимым колонкам (см. rows ниже).
+	const nestedParams = useMemo(() => {
+		const { scopes } = parseSearchQuery(search);
+		if (scopes.length === 0) return undefined;
+		const out: Record<string, string> = {};
+		for (const { scope, text } of scopes) out[`nested[${scope}]`] = text;
+		return out;
+	}, [search]);
+
+	// Свободные слова: где ищем — на клиенте или на сервере.
+	//
+	// По умолчанию клиент фильтрует ПОДГРУЖЕННЫЕ строки по видимым колонкам — этого
+	// хватает, пока искомое видно в колонке. Для Номенклатуры не хватает: штрих-кодов
+	// у товара несколько (основной в product.barcode, GTIN/EAN поставщиков — в
+	// отдельной таблице), колонки под них нет, а товар может лежать на неподгруженной
+	// странице. Поэтому слова уходят на СЕРВЕР (см. products.js: OR по name/sku/
+	// штрих-кодам/бренду/единице — надмножеству видимых колонок), а клиент их не
+	// перефильтровывает, иначе снова отсёк бы найденное по доп. штрих-коду.
+	const serverWordSearch = SERVER_WORD_SEARCH.has(model);
+	const searchParam = useMemo(() => {
+		if (!serverWordSearch) return undefined;
+		const { words } = parseSearchQuery(search);
+		return words.length ? { search: words.join(" ") } : undefined;
+	}, [serverWordSearch, search]);
+
 	// Сортировка по «Номер» естественно-числовая на уровне БД: колонки `number`
 	// имеют ICU-коллацию `app_natural_numeric` (миграция natural_document_number_sort),
 	// поэтому ORDER BY number даёт «1,2,…,10» / «РЕАЛ-1…РЕАЛ-10» — спец-обработка не нужна.
@@ -113,9 +149,12 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		() => ({
 			sort,
 			filter: ownerFilter ? { ...ownerFilter, ...filter } : filter,
-			extra: extraQueryParams,
+			extra:
+				nestedParams || searchParam
+					? { ...(extraQueryParams ?? {}), ...nestedParams, ...searchParam }
+					: extraQueryParams,
 		}),
-		[sort, filter, ownerFilter, extraQueryParams],
+		[sort, filter, ownerFilter, extraQueryParams, nestedParams, searchParam],
 	);
 
 	const {
@@ -157,19 +196,22 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		}
 
 		if (search) {
+			// Поддерживаются шаблоны [Колонка: подстрока] — напр. «[номенклатура: ноутбук]»
+			// или «[контрагент: строй]». Свободные слова ищутся как раньше, по всем
+			// видимым колонкам. Разбор — parseSearchQuery (components/Table/services).
 			const visibleCols = columns.filter((c) => c.visible);
-			const words = search
-				.toLowerCase()
-				.split(/\s+/)
-				.filter(Boolean)
-				.map((w) => w.replace(",", "."));
-			result = result.filter((row: TDataItem) =>
-				matchRowBySearch(row, visibleCols, words),
-			);
+			// Области (шаблоны) уже применил СЕРВЕР по строкам документа — на клиенте
+			// остаются только свободные слова, по видимым колонкам (прежнее поведение).
+			const { words } = parseSearchQuery(search);
+			if (words.length > 0 && !serverWordSearch) {
+				result = result.filter((row: TDataItem) =>
+					matchRowBySearch(row, visibleCols, words),
+				);
+			}
 		}
 
 		return result;
-	}, [cacheVersion, ownerFilter, search, columns]);
+	}, [cacheVersion, ownerFilter, search, columns, componentName, serverWordSearch]);
 
 	// ── Handlers ───────────────────────────────────────────────────────────
 	const handleSortChange = useCallback(

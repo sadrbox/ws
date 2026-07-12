@@ -13,7 +13,8 @@
 import { prisma } from "./prisma-client.js";
 import { reconcileDocumentRegister } from "../services/productRegister.js";
 import { findOrCreateBatch, availableBatchesFEFO } from "../services/batches.js";
-import { setReceiptSerials } from "../services/serialNumbers.js";
+import { setReceiptSerials, issueSerials } from "../services/serialNumbers.js";
+import { serialGap, batchGap } from "../services/openingBalance.js";
 
 const day = (offset) => new Date(Date.now() + offset * 86400000);
 
@@ -76,14 +77,89 @@ async function main() {
 	await setReceiptSerials({ docType: "goods_receipt", docUuid: grL.uuid, productUuid: laptop.uuid, warehouseUuid: wh.uuid, organizationUuid: org.uuid, serials: ["NB-0001", "NB-0002", "NB-0003"] });
 	console.log(`Оприходование «${grLap}»: 3 ноутбука + серии NB-0001..0003.`);
 
-	// ── Печать FEFO-порядка ─────────────────────────────────────────────────────
-	const fefo = await availableBatchesFEFO({ organizationUuid: org.uuid, warehouseUuid: wh.uuid, productUuid: milk.uuid });
-	console.log("\nFEFO-порядок доступных партий молока (раньше истекает — раньше уходит):");
-	for (const b of fefo) console.log(`  ${b.batchNumber}  срок ${new Date(b.expiryDate).toISOString().slice(0, 10)}  остаток ${b.quantity}`);
-	console.log("\nГотово.");
-	console.log("• Серии: открой «Оприходование/Списание» с ноутбуком → ячейка «Серии» (UI готов).");
-	console.log("• Партии: FEFO-логика и данные готовы; UI-ячейка выбора партии — Stage 2c (в работе).");
-	console.log("  Проверить FEFO сейчас: GET /api/v1/productbatches/available?productUuid=" + milk.uuid + "&warehouseUuid=" + wh.uuid);
+	// ── Товар с ОСТАТКОМ БЕЗ МАРКИРОВКИ (сценарий «Ввод остатков») ───────────────
+	// Так выглядит реальная ситуация: учёт включили на товар, у которого уже лежит
+	// остаток, набранный приходами без серий/партий. Продать его нельзя, пока
+	// остаток не разметить — для этого и сделан «Ввод остатков».
+	const legacy = await ensureProduct("Дрель (учёт включён задним числом)", {
+		trackSerialNumbers: true,
+		serialTrackingSince: day(0),           // учёт включён СЕГОДНЯ
+		unitOfMeasureUuid: uom?.uuid ?? null,
+		organizationUuid: org.uuid,
+	});
+	const grOld = "ОПРХ-ДЕМО-ДРЕЛЬ";
+	let grO = await prisma.goodsReceipt.findFirst({ where: { number: grOld } });
+	if (!grO) {
+		grO = await prisma.goodsReceipt.create({ data: { number: grOld, date: day(-30), organizationUuid: org.uuid, warehouseUuid: wh.uuid, authorUuid: user.uuid, posted: true } });
+	}
+	await prisma.goodsReceiptItem.deleteMany({ where: { goodsReceiptUuid: grO.uuid } });
+	await prisma.goodsReceiptItem.create({ data: {
+		goodsReceiptUuid: grO.uuid, productUuid: legacy.uuid, quantity: 5, price: 20000, amount: 100000,
+		unitOfMeasureUuid: uom?.uuid ?? null, organizationUuid: org.uuid,
+	} });
+	await reconcileDocumentRegister("goods_receipt", grO.uuid);
+
+	// ── РАСХОД: продажа с сериями + FEFO-списанием партий ───────────────────────
+	const saleNumber = "РЕАЛ-ДЕМО-СЕРИИ-ПАРТИИ";
+	let sale = await prisma.sale.findFirst({ where: { number: saleNumber } });
+	if (!sale) {
+		sale = await prisma.sale.create({ data: {
+			number: saleNumber, date: new Date(), organizationUuid: org.uuid, warehouseUuid: wh.uuid,
+			counterpartyUuid: (await prisma.counterparty.findFirst({ select: { uuid: true } }))?.uuid ?? null,
+			authorUuid: user.uuid, posted: true,
+		} });
+	}
+	await prisma.saleItem.deleteMany({ where: { saleUuid: sale.uuid } });
+
+	// Партии: продаём 45 молока → FEFO должен взять M-2609 (30) и добить M-2620 (15).
+	const fefoBefore = await availableBatchesFEFO({ organizationUuid: org.uuid, warehouseUuid: wh.uuid, productUuid: milk.uuid });
+	const firstBatch = fefoBefore[0];
+	await prisma.saleItem.create({ data: {
+		saleUuid: sale.uuid, productUuid: milk.uuid, quantity: 30, price: 600, amount: 18000,
+		unitOfMeasureUuid: uom?.uuid ?? null, organizationUuid: org.uuid, batchUuid: firstBatch?.uuid ?? null,
+	} });
+	// Серии: продаём 1 ноутбук.
+	await prisma.saleItem.create({ data: {
+		saleUuid: sale.uuid, productUuid: laptop.uuid, quantity: 1, price: 450000, amount: 450000,
+		unitOfMeasureUuid: uom?.uuid ?? null, organizationUuid: org.uuid,
+	} });
+	await reconcileDocumentRegister("sale", sale.uuid);
+	const nb1 = await prisma.serialNumber.findFirst({ where: { productUuid: laptop.uuid, serialNumber: "NB-0001" } });
+	if (nb1) await issueSerials({ docType: "sale", docUuid: sale.uuid, serialUuids: [nb1.uuid] });
+	console.log(`Реализация «${saleNumber}»: 30 молока (партия ${firstBatch?.batchNumber ?? "—"}) + 1 ноутбук (серия NB-0001).`);
+
+	// ── СВЕРКА: приход и расход ────────────────────────────────────────────────
+	const stock = async (p) => {
+		const i = await prisma.productRegister.aggregate({ where: { productUuid: p, warehouseUuid: wh.uuid, movementType: "in" }, _sum: { quantity: true } });
+		const o = await prisma.productRegister.aggregate({ where: { productUuid: p, warehouseUuid: wh.uuid, movementType: "out" }, _sum: { quantity: true } });
+		return { in: Number(i._sum.quantity ?? 0), out: Number(o._sum.quantity ?? 0), balance: Number(i._sum.quantity ?? 0) - Number(o._sum.quantity ?? 0) };
+	};
+
+	console.log("\n─── ДВИЖЕНИЕ ТОВАРА (регистр) ───");
+	for (const [name, uuid] of [["Молоко (партии)", milk.uuid], ["Ноутбук (серии)", laptop.uuid], ["Дрель (без маркировки)", legacy.uuid]]) {
+		const s = await stock(uuid);
+		console.log(`  ${name.padEnd(26)} приход ${String(s.in).padStart(4)}  расход ${String(s.out).padStart(4)}  остаток ${String(s.balance).padStart(4)}`);
+	}
+
+	console.log("\n─── ПАРТИИ: FEFO после продажи ───");
+	const fefoAfter = await availableBatchesFEFO({ organizationUuid: org.uuid, warehouseUuid: wh.uuid, productUuid: milk.uuid });
+	for (const b of fefoAfter) console.log(`  ${b.batchNumber}  срок ${new Date(b.expiryDate).toISOString().slice(0, 10)}  остаток ${b.quantity}`);
+
+	console.log("\n─── СЕРИИ: статусы ───");
+	const byStatus = await prisma.serialNumber.groupBy({ by: ["status"], where: { productUuid: laptop.uuid }, _count: { _all: true } });
+	for (const g of byStatus) console.log(`  ${g.status.padEnd(12)} ${g._count._all}`);
+
+	console.log("\n─── ВВОД ОСТАТКОВ: что ждёт разметки ───");
+	const sg = await serialGap({ productUuid: legacy.uuid, warehouseUuid: wh.uuid, organizationUuid: org.uuid });
+	console.log(`  Дрель: остаток ${sg.stock}, размечено сериями ${sg.marked} → нужно ввести ${sg.gap}`);
+	console.log(`  Пока не разметить — продать нельзя (система потребует серию на каждую единицу).`);
+	const bg = await batchGap({ productUuid: milk.uuid, warehouseUuid: wh.uuid, organizationUuid: org.uuid });
+	console.log(`  Молоко: остаток ${bg.stock}, в партиях ${bg.marked} → без партии ${bg.gap}`);
+
+	console.log("\nГотово. Проверить в UI:");
+	console.log("  • Реализация «" + saleNumber + "» — ячейки «Серии» и «Партия» в позициях;");
+	console.log("  • Номенклатура → «Дрель» — включённый учёт серий на товаре с остатком;");
+	console.log("  • Ввод остатков: POST /api/v1/opening-balance/serials { productUuid, warehouseUuid, serials }");
 }
 
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

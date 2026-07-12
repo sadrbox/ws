@@ -124,6 +124,14 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Журнал действий",
 	},
 	{
+		endpoint: "pipeactivities",
+		module: () => import("src/models/PipeActivities"),
+		formName: "PipeActivitiesForm",
+		listName: "PipeActivitiesList",
+		storageKey: "pipe-activities-form",
+		label: "События 1С",
+	},
+	{
 		endpoint: "todos",
 		module: () => import("src/models/Todos"),
 		formName: "TodosForm",

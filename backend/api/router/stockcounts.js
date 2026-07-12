@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
 import { tenantFilter, checkOwnership, checkFkOwnership } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
@@ -8,6 +9,7 @@ import { warehouseBalances } from "../../services/productRegister.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
+import { idSearchCondition } from "../../utils/searchId.js";
 
 const router = express.Router();
 
@@ -50,8 +52,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			searchWhere = {
 				AND: searchWords.map((w) => {
 					const orConditions = TEXT_FIELDS.map((f) => ({ [f]: { contains: w, mode: "insensitive" } }));
-					const num = Number(w);
-					if (Number.isInteger(num) && num > 0) orConditions.push({ id: { equals: num } });
+					const idNum = idSearchCondition(w);
+					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),
 			};
@@ -76,6 +78,11 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
+		// Поиск по ВЛОЖЕННЫМ строкам документа: «[номенклатура: ноут]» → покажи
+		// документы, в позициях которых есть такой товар. Дописываем в AND, а не
+		// разливаем в корень: searchWhere уже может занимать ключ AND.
+		const nestedConds = buildNestedItemsConditions(MODEL, req.query.nested);
+		if (nestedConds.length) baseWhere.AND = [...(baseWhere.AND ?? []), ...nestedConds];
 		const opts = { take: limitNumber, where: baseWhere, orderBy, include: INCLUDE };
 		if (cursorNumber !== null) { opts.cursor = { id: cursorNumber }; opts.skip = 1; }
 		const items = await prisma[MODEL].findMany(opts);

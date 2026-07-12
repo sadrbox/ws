@@ -21,6 +21,7 @@ import { FormLookup } from "src/components/Field/FormLookup";
 import Notice from "src/components/Notice";
 import { useDocumentNotices } from "src/hooks/useDocumentNotices";
 import { useContractCounterpartyMismatch } from "src/hooks/useContractCounterpartyMismatch";
+import { useContractSync } from "src/hooks/useContractSync";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -175,7 +176,7 @@ interface TradeServerRecord {
 
 export function createTradeDocForm(cfg: TradeDocConfig): {
   Form: FC<Partial<TPane>>;
-  List: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }>;
+  List: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }>;
 } {
   const hasPriceType = cfg.hasPriceType !== false;
   const itemsTabLabelKey = cfg.itemsTabLabelKey ?? "SaleItemsList";
@@ -356,11 +357,14 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
     });
 
     const contractMismatch = useContractCounterpartyMismatch(form.fields.contractUuid, form.fields.counterpartyUuid);
+    const syncContract = useContractSync();
     const notices = useDocumentNotices({
       docType: cfg.docType,
       fields: form.fields as unknown as Record<string, unknown>,
       basisMismatch,
       contractMismatch,
+      // Ошибка ДАННЫХ формы → в <Notice /> (системные сбои уходят в тост, см. useFormStore).
+      formError: form.errorKind === "form" ? form.error : null,
     });
 
     const { isRefilling, handleRefillFromBasis } = useRefillFromBasis({
@@ -389,6 +393,20 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
       if (item.counterpartyUuid) { updates.counterpartyUuid = item.counterpartyUuid; updates.counterpartyName = item.counterparty?.name ?? ""; }
       form.setFields(updates);
     }, [form.setFields]);
+
+    // Смена контрагента: подставляем его ОСНОВНОЙ договор, иначе чистим чужой
+    // (см. useContractSync). Тот же onSelect отрабатывает и очистку контрагента —
+    // LookupField зовёт onSelect("", "", {}).
+    const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string) => {
+      form.setFields({ counterpartyUuid: uuid, counterpartyName: displayValue } as Partial<TFields>);
+      const cur = form.store.getSnapshot().fields;
+      const patch = await syncContract({
+        counterpartyUuid: uuid,
+        organizationUuid: cur.organizationUuid,
+        currentContractUuid: cur.contractUuid,
+      });
+      if (patch) form.setFields(patch as Partial<TFields>);
+    }, [form.setFields, form.store, syncContract]);
 
     const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
       const cur = form.store.getSnapshot().fields;
@@ -471,7 +489,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
                 </Group>
 
                 <Group>
-                  <FormLookup form={form} field="counterparty" endpoint="counterparties" />
+                  <FormLookup form={form} field="counterparty" endpoint="counterparties" onSelect={handleCounterpartySelect} />
                   <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect}
                     extraParams={{
                       ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
@@ -491,6 +509,8 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
                   <BasisDocumentField
                     allowedTypes={cfg.basisAllowedTypes}
                     basisDocumentType={form.fields.basisDocumentType}
+                    // Подбор основания — только документы организации этого документа.
+                    organizationUuid={form.fields.organizationUuid}
                     basisDocumentUuid={form.fields.basisDocumentUuid}
                     basisDocumentLabel={form.fields.basisDocumentLabel}
                     formUid={form.formUid}
@@ -646,13 +666,13 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
   };
   Form.displayName = cfg.formDisplayName;
 
-  const List: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = (
-    { variant, onSelectItem, ownerUuid, ownerField }
+  const List: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = (
+    { variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }
   ) => (
     <ModelList
       endpoint={cfg.endpoint} listName={cfg.listName} columnsJson={cfg.columnsJson as any} FormComponent={Form}
       getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
-      variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
+      variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
       defaultSort={{ id: "desc" }} enableDateRange
       renderCell={renderPostedCell}
       previewTabs={(row) => [{

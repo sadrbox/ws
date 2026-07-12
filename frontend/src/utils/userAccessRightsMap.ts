@@ -12,6 +12,7 @@ export const ENDPOINT_TO_MODEL: Record<string, string> = {
 	contactpersons: "ContactPerson",
 	bankaccounts: "BankAccount",
 	activityhistories: "ActivityHistory",
+	pipeactivities: "ActivityHistory",
 	todos: "Todo",
 	notifications: "Notification",
 	warehouses: "Warehouse",

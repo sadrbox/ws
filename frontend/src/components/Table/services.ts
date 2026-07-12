@@ -1,6 +1,7 @@
 import { getFormatDateOnly } from "src/utils/datetime";
 import { getFormatDate } from "src/utils/datetime";
 import { TColumn, TDataItem, TypeTableTypes } from "./types";
+import { getTranslateColumn } from "src/i18";
 
 const getNestedValue = <T>(obj: T, path: string): any => {
 	return path.split(".").reduce((acc: any, key) => acc?.[key], obj);
@@ -282,6 +283,166 @@ export function matchRowBySearch(
 
 	const haystack = parts.join(" ");
 	return searchWords.every((w) => haystack.includes(w));
+}
+
+
+// ─── Шаблоны быстрого поиска: [Колонка: подстрока] ──────────────────────────
+//
+// Пример: «[номенклатура: ноутбук]» или «[контРагеНт: СтроЙ] [склад: основной]».
+// Область поиска сопоставляется с ЗАГОЛОВКОМ колонки (а не с захардкоженным списком
+// моделей) — поэтому шаблон работает в любом списке, где такая колонка есть, и не
+// требует правок при добавлении новых моделей. Регистр и пробелы не важны.
+//
+// Свободные слова вне скобок ищутся как раньше — по всем видимым колонкам.
+// Условия объединяются по И: все шаблоны + все свободные слова.
+
+/** Один шаблон: искать `text` ТОЛЬКО в колонке, чей заголовок/идентификатор = `scope`. */
+export interface SearchScope {
+	scope: string;
+	text: string;
+	/**
+	 * Шаблон записан БЕЗ скобок («контрагент: строй»). Такая форма может оказаться
+	 * случайностью (время «12:30», префикс «ИНВ:1»), поэтому если колонки с таким
+	 * именем нет — мягко откатываемся к обычному поиску по тексту, а не обнуляем
+	 * выдачу. Скобочная форма — явное намерение, там режим строгий.
+	 */
+	bare?: boolean;
+}
+
+export interface ParsedSearch {
+	scopes: SearchScope[];
+	/** Свободные слова (нормализованные: lowercase, запятая → точка). */
+	words: string[];
+}
+
+const normalize = (v: string) => v.toLowerCase().trim();
+
+/**
+ * Разбирает строку поиска на шаблоны и свободные слова.
+ *
+ * Поддерживаются ОБЕ формы (пользователи пишут и так, и так):
+ *   [номенклатура: ноутбук]   — скобочная, строгая;
+ *    контрагент: строй        — голая (скобки не обязательны).
+ * Регистр и пробелы вокруг «:» не важны.
+ */
+export function parseSearchQuery(input: string): ParsedSearch {
+	const scopes: SearchScope[] = [];
+
+	// 1) Скобочная форма: [ имя : значение ]
+	let rest = (input ?? "").replace(/\[\s*([^:\]]+?)\s*:\s*([^\]]*?)\s*\]/g, (_m, scope, text) => {
+		const t = normalize(String(text));
+		if (t) scopes.push({ scope: normalize(String(scope)), text: t });
+		return " ";
+	});
+
+	// 2) Голая форма: имя: значение. Значение тянется до следующего «имя:» или конца
+	//    строки — чтобы «номенклатура: ноутбук dell» искало «ноутбук dell» целиком.
+	rest = rest.replace(
+		/([^\s:]{2,})\s*:\s*([^:]*?)(?=\s+[^\s:]{2,}\s*:|$)/g,
+		(_m, scope, text) => {
+			const t = normalize(String(text));
+			if (t) scopes.push({ scope: normalize(String(scope)), text: t, bare: true });
+			return " ";
+		},
+	);
+
+	const words = rest
+		.toLowerCase()
+		.split(/\s+/)
+		.filter(Boolean)
+		.map((w) => w.replace(",", "."));
+	return { scopes, words };
+}
+
+/** Колонки-«наименования» списка: name, product.name, counterpartyName и т.п. */
+const isNameColumn = (col: TColumn): boolean => {
+	const id = String(col.identifier ?? "");
+	return id === "name" || id.endsWith(".name") || /name$/i.test(id);
+};
+
+/**
+ * Колонки, подходящие под область поиска. Область — это ИМЯ МОДЕЛИ («номенклатура»,
+ * «контрагент»), и в разных списках оно означает разное:
+ *
+ *   1) КОЛОНКА-ссылка на эту модель. В списке Реализаций есть колонка «Контрагент»
+ *      → «контрагент: строй» фильтрует по ней.
+ *   2) САМ СПИСОК. В списке Номенклатуры колонки «Номенклатура» нет (там «Наименование»),
+ *      но список ИМЕННО о номенклатуре → «номенклатура: ноут» ищет в наименовании.
+ *      Без этого шага шаблон в «родном» списке молча ничего не находил.
+ *
+ * Сопоставляем и с переведённым заголовком, и с идентификатором — чтобы работало
+ * и для колонок без перевода.
+ */
+function columnsForScope(
+	scope: string,
+	visibleColumns: TColumn[],
+	modelLabel?: string,
+): TColumn[] {
+	const byColumn = visibleColumns.filter((col) => {
+		const id = normalize(String(col.identifier ?? ""));
+		const label = normalize(String(getTranslateColumn(col) ?? ""));
+		return (label && label.includes(scope)) || (id && id.includes(scope));
+	});
+	if (byColumn.length > 0) return byColumn;
+
+	// Область = сам список («номенклатура» в списке Номенклатуры) → ищем в наименовании.
+	const model = normalize(modelLabel ?? "");
+	if (model && (model.includes(scope) || scope.includes(model))) {
+		const nameCols = visibleColumns.filter(isNameColumn);
+		return nameCols.length > 0 ? nameCols : visibleColumns;
+	}
+	return [];
+}
+
+/** Все строковые значения колонки строки — в нижнем регистре. */
+function columnHaystack(row: TDataItem, col: TColumn): string {
+	const parts: string[] = [];
+	const collect = (v: unknown) => {
+		if (v == null) return;
+		if (typeof v === "object") {
+			for (const x of Object.values(v as Record<string, unknown>)) collect(x);
+		} else if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+			parts.push(String(v).toLowerCase());
+		}
+	};
+	const raw = getNestedValue(row, col.identifier);
+	if (raw != null && typeof raw === "object") collect(raw);
+	else {
+		const formatted = getFormatColumnValue(row, col);
+		if (formatted !== "" && formatted != null) parts.push(String(formatted).toLowerCase());
+	}
+	return parts.join(" ");
+}
+
+/**
+ * Проверка строки по разобранному запросу: шаблоны ищутся в СВОЕЙ колонке,
+ * свободные слова — по всем видимым (прежнее поведение).
+ *
+ * Область, которой нет в этом списке, НЕ совпадает ни с чем: молча искать по всем
+ * колонкам было бы враньём — пользователь думал бы, что ограничил поиск.
+ */
+export function matchRowByQuery(
+	row: TDataItem,
+	visibleColumns: TColumn[],
+	parsed: ParsedSearch,
+	/** Переведённое имя МОДЕЛИ списка («Номенклатура») — см. columnsForScope. */
+	modelLabel?: string,
+): boolean {
+	const extraWords: string[] = [];
+	for (const { scope, text, bare } of parsed.scopes) {
+		const cols = columnsForScope(scope, visibleColumns, modelLabel);
+		if (cols.length === 0) {
+			// Скобочная форма — явное намерение: колонки нет → не совпадает ничего.
+			if (!bare) return false;
+			// Голая форма могла оказаться случайным «:» (время, префикс номера) —
+			// не обнуляем выдачу, а ищем текст как обычное слово.
+			extraWords.push(text);
+			continue;
+		}
+		const hit = cols.some((col) => columnHaystack(row, col).includes(text));
+		if (!hit) return false;
+	}
+	return matchRowBySearch(row, visibleColumns, [...parsed.words, ...extraWords]);
 }
 
 // Формат числа /////////////////////////////////////////////////////////////////////////

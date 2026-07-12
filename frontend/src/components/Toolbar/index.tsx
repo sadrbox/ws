@@ -115,7 +115,9 @@ const ToggleSplit: FC<{
   title?: string;
 }> = ({ pressed = false, onClick, title }) => (
   <ToolbarIconButton
-    icon={pressed ? "viewSplit" as IconName : "list" as IconName}
+    // Пара «одна панель ↔ две панели». НЕ использовать "list": это иконка кнопки
+    // «Показать в списке» — пользователи путали их между собой.
+    icon={pressed ? "viewSplit" as IconName : "viewSingle" as IconName}
     aria-pressed={pressed}
     aria-label={title ?? translate("toolbar.toggleSplit")}
     title={title ?? translate("toolbar.toggleSplit")}

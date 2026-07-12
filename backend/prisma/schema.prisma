@@ -36,7 +36,6 @@ model User {
   userDefaults                 UserDefault[]
   // Авторство документов — заполняется при создании, не редактируется.
   authoredSales                Sale[]                @relation("SaleAuthor")
-  authoredPriceSettings        ProductPriceSetting[] @relation("PriceSettingAuthor")
   authoredPurchases            Purchase[]            @relation("PurchaseAuthor")
   authoredImportDeclarations   ImportDeclaration[]   @relation("ImportDeclarationAuthor")
   authoredSaleReturns          SaleReturn[]          @relation("SaleReturnAuthor")
@@ -117,6 +116,12 @@ model UserDefault {
 model Organization {
   id                   Int                             @id @default(autoincrement())
   uuid                 String                          @unique @default(uuid())
+  /// Идентификатор элемента во ВНЕШНЕЙ системе (1С: object.id). Вместе с
+  /// externalSource — ключ сопоставления при приёме событий /pipe: по нему элемент
+  /// находится повторно, поэтому переименование в 1С не создаёт дубль.
+  externalId               String?
+  /// Источник внешнего идентификатора ("1C").
+  externalSource           String?
   bin                  String                          @unique @db.VarChar(12)
   name                 String?
   legalName            String?
@@ -157,7 +162,6 @@ model Organization {
   employeeHistories    EmployeeHistory[]
   counterparties       Counterparty[]                  @relation("OrgCounterparties")
   products             Product[]                       @relation("OrgProducts")
-  productPriceSettings ProductPriceSetting[]
   brands               Brand[]                         @relation("OrgBrands")
   positions            Position[]                      @relation("OrgPositions")
   contacts             Contact[]                       @relation("OrgContacts")
@@ -182,12 +186,19 @@ model Organization {
   stockCounts   StockCount[]   @relation("OrgStockCounts")
 
   @@index([updatedAt])
+  @@unique([externalSource, externalId])
   @@map("organizations")
 }
 
 model Counterparty {
   id                   Int                   @id @default(autoincrement())
   uuid                 String                @unique @default(uuid())
+  /// Идентификатор элемента во ВНЕШНЕЙ системе (1С: object.id). Вместе с
+  /// externalSource — ключ сопоставления при приёме событий /pipe: по нему элемент
+  /// находится повторно, поэтому переименование в 1С не создаёт дубль.
+  externalId               String?
+  /// Источник внешнего идентификатора ("1C").
+  externalSource           String?
   bin                  String                @unique @db.VarChar(12)
   name                 String?
   legalName            String?
@@ -222,6 +233,7 @@ model Counterparty {
 
   @@index([organizationUuid])
   @@index([updatedAt])
+  @@unique([externalSource, externalId])
   @@map("counterparties")
 }
 
@@ -414,6 +426,14 @@ model PipeActivity {
   objectName            String
   props                 Json?
   payload               Json? // оригинальный пришедший JSON от 1С
+  /// Результат применения события к справочнику: created | updated | linked |
+  /// skipped (не справочник / не поддержан) | error. null — событие ещё не обработано.
+  applyStatus           String?
+  /// Какой справочник затронут (prisma-модель) и какая запись получилась.
+  applyModel            String?
+  applyUuid             String?
+  /// Причина, если applyStatus = error/skipped (напр. «нет БИН — создать нельзя»).
+  applyMessage          String?
 
   @@index([receivedAt])
   @@index([objectType, objectId])
@@ -452,6 +472,12 @@ model Todo {
 model Warehouse {
   id                     Int                   @id @default(autoincrement())
   uuid                   String                @unique @default(uuid())
+  /// Идентификатор элемента во ВНЕШНЕЙ системе (1С: object.id). Вместе с
+  /// externalSource — ключ сопоставления при приёме событий /pipe: по нему элемент
+  /// находится повторно, поэтому переименование в 1С не создаёт дубль.
+  externalId               String?
+  /// Источник внешнего идентификатора ("1C").
+  externalSource           String?
   name                   String
   address                String?
   comment                String?
@@ -478,6 +504,7 @@ model Warehouse {
 
   @@index([organizationUuid])
   @@index([updatedAt])
+  @@unique([externalSource, externalId])
   @@map("warehouses")
 }
 
@@ -853,6 +880,7 @@ model CashOrder {
   @@index([direction])
   @@index([date])
   @@index([updatedAt])
+  @@index([basisDocumentUuid])
   @@map("cash_orders")
 }
 
@@ -932,6 +960,12 @@ model Brand {
 model Product {
   id                       Int                       @id @default(autoincrement())
   uuid                     String                    @unique @default(uuid())
+  /// Идентификатор элемента во ВНЕШНЕЙ системе (1С: object.id). Вместе с
+  /// externalSource — ключ сопоставления при приёме событий /pipe: по нему элемент
+  /// находится повторно, поэтому переименование в 1С не создаёт дубль.
+  externalId               String?
+  /// Источник внешнего идентификатора ("1C").
+  externalSource           String?
   name                     String
   sku                      String?
   barcode                  String?
@@ -946,9 +980,16 @@ model Product {
   /// Учёт по серийным номерам (T6.1): при приёмке серии вводятся, при выбытии
   /// списываются. Кол-во строки документа должно совпадать с числом серий.
   trackSerialNumbers       Boolean                   @default(false)
+  /// Момент ВКЛЮЧЕНИЯ учёта по сериям. Контроль применяется только к документам с
+  /// датой >= этой отметки: иначе включение флага задним числом ломало бы уже
+  /// существующие документы (в них серий нет) — они переставали сохраняться (422).
+  /// Ставится роутером при переводе trackSerialNumbers false→true, снимается при false.
+  serialTrackingSince      DateTime?
   /// Учёт по партиям (T6.1 Stage 2): приёмка задаёт партию (№ + срок годности),
   /// выбытие списывает по FEFO (раньше истекает — раньше выбывает).
   trackBatches             Boolean                   @default(false)
+  /// Момент включения учёта по партиям — та же семантика, что serialTrackingSince.
+  batchTrackingSince       DateTime?
   /// Продажная цена в Product НЕ хранится — источник истины таблица «Цены»
   /// (ProductPrice, тип «по умолчанию»); автоподстановка через product-prices/price-list.
   /// Ниже — денормализованные цены закупки/опта (по дате документа «Установка цен»).
@@ -979,7 +1020,6 @@ model Product {
   purchaseOrderItems       PurchaseOrderItem[]
   reservationRegister      ReservationRegister[]
   barcodes                 ProductBarcode[]
-  priceSettingItems        ProductPriceSettingItem[]
   productPrices            ProductPrice[]
 
   writeOffItems     WriteOffItem[]
@@ -993,6 +1033,7 @@ model Product {
   @@index([organizationUuid])
   @@index([barcode])
   @@index([updatedAt])
+  @@unique([externalSource, externalId])
   @@map("products")
 }
 
@@ -1428,6 +1469,12 @@ model PayrollPayment {
 model UnitOfMeasure {
   id                       Int                       @id @default(autoincrement())
   uuid                     String                    @unique @default(uuid())
+  /// Идентификатор элемента во ВНЕШНЕЙ системе (1С: object.id). Вместе с
+  /// externalSource — ключ сопоставления при приёме событий /pipe: по нему элемент
+  /// находится повторно, поэтому переименование в 1С не создаёт дубль.
+  externalId               String?
+  /// Источник внешнего идентификатора ("1C").
+  externalSource           String?
   name                     String
   code                     String?
   updatedAt                DateTime                  @default(now()) @updatedAt
@@ -1454,6 +1501,7 @@ model UnitOfMeasure {
   stockCountItems   StockCountItem[]
 
   @@index([updatedAt])
+  @@unique([externalSource, externalId])
   @@map("units_of_measure")
 }
 
@@ -2349,49 +2397,6 @@ model DocumentNumberSetting {
 
   @@unique([organizationUuid, docType])
   @@map("document_number_settings")
-}
-
-/// Документ «Установка цен номенклатуры» (периодический). Шапка.
-/// Цены, проставленные проведённым документом, денормализуются в Product
-/// (последний по дате проведённый документ задаёт текущие цены товара).
-model ProductPriceSetting {
-  id               Int                       @id @default(autoincrement())
-  uuid             String                    @unique @default(uuid())
-  number           String?
-  date             DateTime                  @default(now())
-  comment          String?
-  organizationUuid String?
-  posted           Boolean                   @default(false)
-  authorUuid       String
-  updatedAt        DateTime                  @default(now()) @updatedAt
-  deletedAt        DateTime?
-  items            ProductPriceSettingItem[]
-  organization     Organization?             @relation(fields: [organizationUuid], references: [uuid])
-  author           User                      @relation("PriceSettingAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
-
-  @@index([organizationUuid])
-  @@index([date])
-  @@index([updatedAt])
-  @@map("product_price_settings")
-}
-
-/// Строка документа «Установка цен»: товар и три цены.
-model ProductPriceSettingItem {
-  id               Int                 @id @default(autoincrement())
-  uuid             String              @unique @default(uuid())
-  priceSettingUuid String
-  productUuid      String?
-  salePrice        Decimal?            @db.Decimal(18, 2)
-  purchasePrice    Decimal?            @db.Decimal(18, 2)
-  wholesalePrice   Decimal?            @db.Decimal(18, 2)
-  updatedAt        DateTime            @default(now()) @updatedAt
-  deletedAt        DateTime?
-  priceSetting     ProductPriceSetting @relation(fields: [priceSettingUuid], references: [uuid], onDelete: Cascade)
-  product          Product?            @relation(fields: [productUuid], references: [uuid])
-
-  @@index([priceSettingUuid])
-  @@index([productUuid])
-  @@map("product_price_setting_items")
 }
 
 /// Справочник «Типы цен» (Цена продажи / закупки / оптовая и т.п.).

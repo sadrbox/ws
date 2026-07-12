@@ -66,6 +66,29 @@ export function useModelDelete(
 			const deletedUuids = new Set<string>();
 			const deletedIds = new Set<number>();
 
+			/** Удалить ОДНУ запись через DELETE /{model}/{key}. Ошибки — в errors. */
+			const deleteOne = async (item: TDataItem) => {
+				const key = item.uuid || item.id;
+				try {
+					await apiClient.delete(`/${model}/${key}`);
+					if (item.uuid) deletedUuids.add(String(item.uuid));
+					if (item.id != null) deletedIds.add(Number(item.id));
+				} catch (err: any) {
+					const status = err?.response?.status;
+					const data = err?.response?.data;
+					if (status === 409) {
+						const refsMsg =
+							typeof data?.message === "string"
+								? data.message
+								: `Запись ${item.id} используется и не может быть удалена`;
+						errors.push(refsMsg);
+					} else {
+						const msg = data?.message || `Ошибка удаления ${item.id}`;
+						errors.push(msg);
+					}
+				}
+			};
+
 			if (items.length > 1) {
 				// ── Batch-удаление через POST /{model}/batch-delete ───────────────
 				const uuids = items.map((i) => i.uuid).filter(Boolean);
@@ -86,32 +109,20 @@ export function useModelDelete(
 						errors.push(f.message);
 					}
 				} catch (err: any) {
-					const msg =
-						err?.response?.data?.message || "Ошибка пакетного удаления";
-					errors.push(msg);
-				}
-			} else {
-				// ── Одиночное удаление ────────────────────────────────────────────
-				const item = items[0];
-				const key = item.uuid || item.id;
-				try {
-					await apiClient.delete(`/${model}/${key}`);
-					if (item.uuid) deletedUuids.add(String(item.uuid));
-					if (item.id != null) deletedIds.add(Number(item.id));
-				} catch (err: any) {
-					const status = err?.response?.status;
-					const data = err?.response?.data;
-					if (status === 409) {
-						const refsMsg =
-							typeof data?.message === "string"
-								? data.message
-								: `Запись ${item.id} используется и не может быть удалена`;
-						errors.push(refsMsg);
+					// Батч-роута у модели может не быть (журнал действий, задачи,
+					// пользователи) — тогда сервер отвечает 404, и раньше пользователь
+					// получал «Ошибка пакетного удаления», хотя записи удалимы
+					// поштучно. Мягко деградируем: удаляем по одной.
+					if (err?.response?.status === 404) {
+						for (const item of items) await deleteOne(item);
 					} else {
-						const msg = data?.message || `Ошибка удаления ${item.id}`;
+						const msg =
+							err?.response?.data?.message || "Ошибка пакетного удаления";
 						errors.push(msg);
 					}
 				}
+			} else {
+				await deleteOne(items[0]);
 			}
 
 			// ── 1) Mark-as-deleted в Dexie для синхронизируемых endpoint-ов ──────

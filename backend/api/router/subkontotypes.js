@@ -2,6 +2,7 @@
 // Новые виды добавляются записями; структура таблиц не меняется.
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { buildOrderBy } from "../../utils/sortOrder.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
@@ -18,14 +19,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const searchWhere = words.length
 			? { AND: words.map((w) => ({ OR: TEXT_FIELDS.map((f) => ({ [f]: { contains: w, mode: "insensitive" } })) })) }
 			: {};
-		const orderBy = [];
-		if (typeof req.query.sort === "string") {
-			try {
-				const s = JSON.parse(req.query.sort);
-				if (s) for (const [f, d] of Object.entries(s)) if (d === "asc" || d === "desc") orderBy.push({ [f]: d });
-			} catch {}
-		}
-		if (!orderBy.length) orderBy.push({ sortOrder: "asc" }, { name: "asc" });
+		// Сортировка валидируется по схеме — неизвестные поля не улетают в Prisma.
+		const orderBy = buildOrderBy(MODEL, req.query.sort, { fallback: [{ sortOrder: "asc" }, { name: "asc" }] });
 		const baseWhere = { deletedAt: null, ...searchWhere };
 		const items = await prisma[MODEL].findMany({ where: baseWhere, orderBy, take: limitNumber });
 		const total = await prisma[MODEL].count({ where: baseWhere });

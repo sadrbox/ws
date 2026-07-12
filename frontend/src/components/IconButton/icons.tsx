@@ -200,6 +200,19 @@ export const ViewSplitIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+/** Одиночная панель (список без предпросмотра) — ВЫКЛЮЧЕННОЕ состояние тумблера
+ *  «Переключить вид списка». Раньше там стояла ListIcon (три полоски) — та же самая
+ *  иконка, что у кнопки «Показать в списке», и пользователи их путали. Теперь тумблер
+ *  имеет собственную пару «одна панель ↔ две панели» (ViewSingle ↔ ViewSplit):
+ *  иконки читаются как состояния одного переключателя и ни с чем не пересекаются. */
+export const ViewSingleIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <rect x="2" y="3" width="12" height="10" rx="1" />
+    <path d="M4.5 6.5h7" />
+    <path d="M4.5 9.5h7" />
+  </svg>
+);
+
 /** Открыть элемент — лаконичная «external link»:
  *  миниатюрный прямоугольник в левом-нижнем углу + диагональная стрелка
  *  наружу в правый-верхний. Минимум линий, максимум смысла. */
@@ -279,6 +292,22 @@ export const FromBasisIcon: FC<SvgProps> = (props) => (
 );
 
 /** Перезаполнить по основанию — стрелки синхронизации + мини-документ в центре. */
+/** Связанные документы (цепочка) — ДЕРЕВО СВЯЗЕЙ: узел-основание слева, порождённые
+ *  документы справа. Раньше здесь стояла FromBasisIcon — та же иконка, что у дропдауна
+ *  «На основании», причём обе кнопки соседствуют в шапке формы, и пользователи их путали.
+ *  «На основании» = СОЗДАТЬ (документ→стрелка→документ), цепочка = ПОСМОТРЕТЬ (граф). */
+export const DocumentChainIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <circle cx="3" cy="8" r="2" />
+    <circle cx="13" cy="4" r="2" />
+    <circle cx="13" cy="12" r="2" />
+    <path d="M5 8h3" />
+    <path d="M8 4v8" />
+    <path d="M8 4h3" />
+    <path d="M8 12h3" />
+  </svg>
+);
+
 export const SyncFromBasisIcon: FC<SvgProps> = (props) => (
   <svg {...baseProps} {...props}>
     <path d="M13.5 8A5.5 5.5 0 0 0 8 2.5" />
@@ -340,6 +369,8 @@ export const ICONS = {
   quickselect: QuickSelectIcon,
   list: ListIcon,
   viewSplit: ViewSplitIcon,
+  viewSingle: ViewSingleIcon,
+  documentChain: DocumentChainIcon,
   open: OpenIcon,
   print: PrintIcon,
   posted: PostedIcon,

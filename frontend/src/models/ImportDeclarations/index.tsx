@@ -190,7 +190,7 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [form.setFields, form.store]);
 
   const assignNumber = useAssignNumber();
-  const notices = useDocumentNotices({ docType: "import_declaration", fields: form.fields as unknown as Record<string, unknown> });
+  const notices = useDocumentNotices({ docType: "import_declaration", fields: form.fields as unknown as Record<string, unknown>, formError: form.errorKind === "form" ? form.error : null });
 
   // Предпросмотр себестоимости импорта (landed cost). Разнесение по позициям
   // делает сервер; здесь — только итог, чтобы пользователь видел результат.
@@ -325,10 +325,10 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
 };
 ImportDeclarationsForm.displayName = "ImportDeclarationsForm";
 
-const ImportDeclarationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const ImportDeclarationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={ImportDeclarationsForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
-    ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
+    ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
     previewTabs={(row) => [{
       id: "items",

@@ -33,7 +33,9 @@ const SerialNumbersForm: FC<Partial<TPane>> = (paneProps) => {
       status: d.status ?? "",
       productName: d.product?.name ?? "",
     }),
-    buildPayload: (fd) => ({ serialNumber: fd.serialNumber }),
+    // Запись невозможна: у роутера serialnumbers нет POST/PUT. Форма — только
+    // просмотр карточки серии (номер, статус, товар), открывается двойным кликом.
+    buildPayload: () => ({}),
     buildPaneLabel: (saved) => makePaneLabel("SerialNumbersList", "Серийный номер", saved, saved.serialNumber || undefined),
   });
 
@@ -76,10 +78,15 @@ function renderSerialCell(row: TDataItem, col: TColumn) {
   return undefined;
 }
 
-const SerialNumbersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const SerialNumbersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName="SerialNumbersList" columnsJson={columnsJson} FormComponent={SerialNumbersForm}
     getLabel={(d) => (d?.serialNumber as string | undefined) || ""} variant={variant} onSelectItem={onSelectItem}
-    ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} renderCell={renderSerialCell}
+    ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} renderCell={renderSerialCell}
+    // Серии не создаются и не удаляются вручную: они появляются при приёмке и выбывают
+    // при продаже/списании. У роутера serialnumbers НЕТ ни POST /, ни DELETE /:id, ни
+    // batch-delete — кнопки «Добавить»/«Удалить» просто падали с ошибкой. Ручное
+    // удаление к тому же ломало бы инвариант «число серий == количеству в документе».
+    hideAddDelete
   />
 );
 SerialNumbersList.displayName = "SerialNumbersList";

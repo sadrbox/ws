@@ -14,6 +14,10 @@ export default createDocumentHeaderRouter({
 		author: { select: { uuid: true, username: true, email: true } },
 	},
 	hasBasis: true,
+	// Резерв — операционный документ: по умолчанию проведён (как кассовые ордера).
+	// Регистр резервов движет ТОЛЬКО проведённый резерв, поэтому без этого новые
+	// резервы молча перестали бы резервировать товар.
+	defaultPosted: true,
 	// Жёсткий резерв: пересобираем регистр резервов при изменении шапки
 	// (дата/склад денормализованы в строки регистра) и удаляем при удалении.
 	afterSave: (uuid) => reconcileReservationRegister(uuid),

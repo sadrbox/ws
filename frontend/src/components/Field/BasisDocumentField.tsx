@@ -24,6 +24,13 @@ export interface BasisDocumentFieldProps {
   onClear: () => void;
   disabled?: boolean;
   formUid: string;
+  /**
+   * Организация документа. Ограничивает подбор основания её документами —
+   * во ВСЕХ трёх режимах лукапа (выбор из списка, быстрый выбор, автокомплит),
+   * т.к. LookupField прокидывает extraParams во все запросы.
+   * Не задана → фильтра нет (показываем все доступные пользователю документы).
+   */
+  organizationUuid?: string;
   /** Документ-основание не совпадает с текущим (организация/контрагент/строки). */
   mismatch?: boolean;
   /** Перечень расхождений с основанием (для подсказки). */
@@ -67,9 +74,19 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   mismatch,
   mismatchDetails,
   hint,
+  organizationUuid,
 }) => {
   const [selectedType, setSelectedType] = useState<string>(
     basisDocumentType || allowedTypes[0]?.type || "",
+  );
+
+  // Подбор основания — только документы организации, выбранной в форме.
+  // Используем общий фильтр списков `filter[поле][equals]` (его поддерживают все
+  // роутеры-источники основания), а не отдельный query-параметр: тогда не нужно
+  // добавлять `organizationUuid` в каждый из ~11 роутеров.
+  const extraParams = useMemo(
+    () => (organizationUuid ? { "filter[organizationUuid][equals]": organizationUuid } : undefined),
+    [organizationUuid],
   );
 
   useEffect(() => {
@@ -202,6 +219,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           disabled={disabled || !activeType}
           variant="default"
           searchTransform={extractBasisSearch}
+          extraParams={extraParams}
         />
       </div>
     );
@@ -230,6 +248,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
         onSelect={handleSelect}
         disabled={disabled || !activeType}
         searchTransform={extractBasisSearch}
+        extraParams={extraParams}
       />
     </div>
   );

@@ -150,7 +150,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
   });
 
-  const notices = useDocumentNotices({ docType: "payroll_calculation", fields: form.fields as unknown as Record<string, unknown> });
+  const notices = useDocumentNotices({ docType: "payroll_calculation", fields: form.fields as unknown as Record<string, unknown>, formError: form.errorKind === "form" ? form.error : null });
 
   const handleSalaryChange = useCallback((value: string) => {
     const salary = parseFloat(value) || 0;
@@ -253,10 +253,10 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
 };
 PayrollCalculationsForm.displayName = "PayrollCalculationsForm";
 
-const PayrollCalculationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const PayrollCalculationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={PayrollCalculationsForm}
     getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
-    ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
+    ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />
 );

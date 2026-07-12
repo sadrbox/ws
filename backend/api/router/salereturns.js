@@ -1,5 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
+import { buildOrderBy } from "../../utils/sortOrder.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
@@ -11,6 +13,7 @@ import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodL
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
+import { idSearchCondition } from "../../utils/searchId.js";
 
 const router = express.Router();
 
@@ -36,30 +39,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			req.query.filter && typeof req.query.filter === "object"
 				? req.query.filter
 				: {};
-		const orderBy = [];
-		const sortParam =
-			typeof req.query.sort === "string" ? req.query.sort : null;
-		if (sortParam) {
-			try {
-				const s = JSON.parse(sortParam);
-				if (s && typeof s === "object")
-					for (const [f, d] of Object.entries(s)) {
-						if (d !== "asc" && d !== "desc") continue;
-						if (f.includes(".")) {
-							const parts = f.split(".");
-							let nested = { [parts[parts.length - 1]]: d };
-							for (let i = parts.length - 2; i >= 0; i--) {
-								nested = { [parts[i]]: nested };
-							}
-							orderBy.push(nested);
-						} else {
-							orderBy.push({ [f]: d });
-						}
-					}
-			} catch {}
-		}
-		if (orderBy.length === 0) orderBy.push({ id: "desc" });
-		else if (!orderBy.some((o) => "id" in o)) orderBy.push({ id: "asc" });
+		// Сортировка валидируется по схеме (скаляры + пути "связь.поле"); неизвестные
+		// и виртуальные колонки игнорируются, а не улетают в Prisma (иначе — 500).
+		const orderBy = buildOrderBy(MODEL, req.query.sort, { fallback: { id: "desc" } });
 
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
 		let searchWhere = {};
@@ -69,10 +51,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					const orConditions = TEXT_FIELDS.map((f) => ({
 						[f]: { contains: w, mode: "insensitive" },
 					}));
-					const num = Number(w);
-					if (Number.isInteger(num) && num > 0) {
-						orConditions.push({ id: { equals: num } });
-					}
+					const idNum = idSearchCondition(w);
+					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),
 			};
@@ -100,6 +80,11 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		}
 
 		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
+		// Поиск по ВЛОЖЕННЫМ строкам документа: «[номенклатура: ноут]» → покажи
+		// документы, в позициях которых есть такой товар. Дописываем в AND, а не
+		// разливаем в корень: searchWhere уже может занимать ключ AND.
+		const nestedConds = buildNestedItemsConditions(MODEL, req.query.nested);
+		if (nestedConds.length) baseWhere.AND = [...(baseWhere.AND ?? []), ...nestedConds];
 		const opts = {
 			take: limitNumber,
 			where: baseWhere,

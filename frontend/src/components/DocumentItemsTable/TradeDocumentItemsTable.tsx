@@ -499,6 +499,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           mode={serialMode}
           organizationUuid={organizationUuid ?? undefined}
           warehouseUuid={warehouseUuid ?? undefined}
+          documentDate={documentDate ?? null}
           disabled={ctx.disabled}
         />
       );
@@ -515,6 +516,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           onChange={(uuid) => setRowField("batchUuid", uuid)}
           organizationUuid={organizationUuid ?? undefined}
           warehouseUuid={warehouseUuid ?? undefined}
+          documentDate={documentDate ?? null}
           disabled={ctx.disabled}
         />
       );

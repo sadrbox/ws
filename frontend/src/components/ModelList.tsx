@@ -88,6 +88,21 @@ interface ModelListProps {
    * (поля) добавляется автоматически. Если не задано — предпросмотр = только поля.
    */
   previewTabs?: (row: TDataItem) => { id: string; label: string; component: ReactNode }[];
+  /**
+   * Скрыть кнопки «Добавить»/«Удалить» — для СПРАВОЧНИКОВ ТОЛЬКО ДЛЯ ЧТЕНИЯ, записи
+   * в которых порождаются документами, а не пользователем (например серийные номера:
+   * появляются при приёмке, выбывают при продаже/списании). Без этого кнопки бьют в
+   * несуществующие роуты (POST /{model}, DELETE /{model}/:id, POST /{model}/batch-delete),
+   * а ручное удаление ломало бы инвариант «число серий == количеству в документе».
+   */
+  hideAddDelete?: boolean;
+  /**
+   * Скрыть только «Добавить» (удаление остаётся) — для ЖУРНАЛОВ: записи порождает
+   * система (аудит-middleware, приём событий 1С), а не пользователь. У журналов нет
+   * POST-роута создания из UI, поэтому кнопка просто падала с ошибкой; чистить старые
+   * записи админу при этом можно.
+   */
+  hideAdd?: boolean;
 }
 
 // ─── Вспомогательный компонент состояния ошибки ───────────────────────────────
@@ -198,6 +213,8 @@ const ModelList: FC<ModelListProps> = ({
   enableDateRange = false,
   renderCell,
   previewTabs,
+  hideAddDelete = false,
+  hideAdd = false,
 }) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? `${listName}_part` : listName;
@@ -357,6 +374,8 @@ const ModelList: FC<ModelListProps> = ({
         highlightUuid: highlight.uuid,
         highlightToken: highlight.token,
       })}
+      hideAddDelete={hideAddDelete}
+      hideAdd={hideAdd}
     />
   );
 

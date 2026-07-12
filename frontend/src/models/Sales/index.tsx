@@ -18,6 +18,7 @@ import { Group, GroupRow, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
+import { useContractSync } from "src/hooks/useContractSync";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
@@ -358,6 +359,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     fields: form.fields as unknown as Record<string, unknown>,
     basisMismatch,
     contractMismatch,
+    // Ошибка ДАННЫХ формы → в <Notice /> (системные сбои уходят в тост, см. useFormStore).
+    formError: form.errorKind === "form" ? form.error : null,
   });
 
   const { isRefilling, handleRefillFromBasis } = useRefillFromBasis({
@@ -456,6 +459,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     if (form.fields.counterpartyUuid) p.counterpartyUuid = form.fields.counterpartyUuid;
     return p;
   }, [form.fields.organizationUuid, form.fields.counterpartyUuid]);
+  const syncContract = useContractSync();
   const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
     const updates: Partial<TFields> = {
       contractUuid: uuid,
@@ -471,6 +475,20 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     }
     form.setFields(updates);
   }, [form.setFields]);
+
+    // Смена контрагента: подставляем ОСНОВНОЙ договор нового контрагента, иначе
+    // чистим чужой (см. useContractSync). Очистка контрагента приходит сюда же —
+    // LookupField зовёт onSelect("", "", {}).
+    const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string) => {
+      form.setFields({ counterpartyUuid: uuid, counterpartyName: displayValue } as Partial<TFields>);
+      const cur = form.store.getSnapshot().fields;
+      const patch = await syncContract({
+        counterpartyUuid: uuid,
+        organizationUuid: cur.organizationUuid,
+        currentContractUuid: cur.contractUuid,
+      });
+      if (patch) form.setFields(patch as Partial<TFields>);
+    }, [form.setFields, form.store, syncContract]);
 
   // Смена организации: зависимые поля (склад/договор) → дефолт пользователя для
   // новой орг, иначе очистка (значение принадлежало прежней организации).
@@ -733,7 +751,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 
               <Group>
                 {/* Контрагент — во всю ширину */}
-                <FormLookup form={form} field="counterparty" endpoint="counterparties" />
+                <FormLookup form={form} field="counterparty" endpoint="counterparties" onSelect={handleCounterpartySelect} />
                 <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect} extraParams={contractExtraParams} />
               </Group>
 
@@ -759,6 +777,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                     { type: "payment_invoice", endpoint: "payment-invoices" },
                   ]}
                   basisDocumentType={form.fields.basisDocumentType}
+                  // Подбор основания — только документы организации этого документа.
+                  organizationUuid={form.fields.organizationUuid}
                   basisDocumentUuid={form.fields.basisDocumentUuid}
                   basisDocumentLabel={form.fields.basisDocumentLabel}
                   formUid={form.formUid}
@@ -837,12 +857,12 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
 };
 SalesForm.displayName = "SalesForm";
 
-const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string }> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={SalesForm}
     getLabel={(d) => {
       return d?.date ? getFormatDateOnly(d.date as string) : "";
     }} variant={variant} onSelectItem={onSelectItem}
-    ownerUuid={ownerUuid} ownerField={ownerField} defaultSort={{ id: "desc" }} enableDateRange
+    ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
     previewTabs={(row) => [{
       id: "items",

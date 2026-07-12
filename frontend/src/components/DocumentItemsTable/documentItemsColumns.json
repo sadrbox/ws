@@ -84,7 +84,7 @@
 		"alignment": "center"
 	},
 	{
-		"identifier": "serials",
+		"identifier": "serials", "sortable": false,
 		"hint": "Серийные номера",
 		"type": "string",
 		"visible": true,
@@ -93,7 +93,7 @@
 		"alignment": "center"
 	},
 	{
-		"identifier": "batch",
+		"identifier": "batch", "sortable": false,
 		"hint": "Партия (срок годности)",
 		"type": "string",
 		"visible": true,
@@ -122,7 +122,7 @@
 		"alignment": "right"
 	},
 	{
-		"identifier": "deviation",
+		"identifier": "deviation", "sortable": false,
 		"hint": "Отклонение: факт − учёт (излишек > 0, недостача < 0)",
 		"type": "number",
 		"decimals": 4,
@@ -163,7 +163,7 @@
 		"footer": "sum"
 	},
 	{
-		"identifier": "amountNetOfIndirectTaxes",
+		"identifier": "amountNetOfIndirectTaxes", "sortable": false,
 		"hint": "Облагаемый оборот по НДС и без акциза — графа 13 ЭСФ РК (ст. 412 НК РК), после скидки.\nСумма без налогов = Количество × Цена − Сумма скидки\n= база до начисления акциза и НДС",
 		"type": "number",
 		"decimals": 2,

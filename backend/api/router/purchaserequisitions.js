@@ -6,6 +6,7 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
+import { idSearchCondition } from "../../utils/searchId.js";
 const router = express.Router();
 const MODEL = "purchaseRequisition";
 const ROUTE = "purchase-requisitions";
@@ -50,10 +51,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					const orConditions = TEXT_FIELDS.map((f) => ({
 						[f]: { contains: w, mode: "insensitive" },
 					}));
-					const num = Number(w);
-					if (Number.isInteger(num) && num > 0) {
-						orConditions.push({ id: { equals: num } });
-					}
+					const idNum = idSearchCondition(w);
+					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),
 			};

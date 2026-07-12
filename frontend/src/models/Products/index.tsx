@@ -1,5 +1,7 @@
 import { FC, useMemo, useCallback } from "react";
 import { translate } from "src/i18";
+import { showToast } from "src/components/UIToast";
+import { api } from "src/services/api/client";
 import type { TDataItem, TColumn } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -22,6 +24,7 @@ import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
+import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import ProductImagesField from "./ProductImagesField";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useQueryClient } from "@tanstack/react-query";
@@ -85,6 +88,49 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   const barcodes = form.useTable("barcodes");
   const prices = form.useTable("prices");
 
+
+  // ── Предупреждение при включении учёта по сериям/партиям ────────────────────
+  // Включение флага на товаре, у которого УЖЕ есть остаток без маркировки, делает
+  // этот остаток непродаваемым: система потребует серию/партию на каждую единицу,
+  // а взять их неоткуда. Это потенциальная ошибка → предупреждаем через UIToast
+  // (это не ошибка данных формы: сохранить можно, но нужно понимать последствия).
+  // Предупреждаем ТОЛЬКО когда переключение НЕКОРРЕКТНО — то есть создаёт проблему,
+  // которую пользователь не увидит сразу. Корректное включение/выключение молчит:
+  // лишний шум обесценивает предупреждение.
+  //
+  //   ВКЛЮЧЕНИЕ  некорректно, если есть остаток БЕЗ маркировки (gap > 0):
+  //              этот остаток станет непродаваемым — система потребует серию/партию
+  //              на каждую единицу, а взять их будет неоткуда (нужен «Ввод остатков»).
+  //              Нет остатка или он весь размечен → включать безопасно, молчим.
+  //
+  //   ВЫКЛЮЧЕНИЕ некорректно, если на складе ЕСТЬ серии/партии (marked > 0):
+  //              учёт по ним перестанет применяться, данные повиснут.
+  //              Размеченного нет → выключать безопасно, молчим.
+  const warnTrackingToggle = useCallback(async (kind: "serial" | "batch", enabling: boolean) => {
+    const productUuid = form.fields.uuid;
+    if (!productUuid) return; // новый товар — истории нет, ошибиться нечем
+    try {
+      const r = await api.get<{ gap?: number; marked?: number }>("opening-balance/gap", {
+        params: { productUuid, kind },
+      });
+      const gap = Number(r?.gap ?? 0);
+      const marked = Number(r?.marked ?? 0);
+      const what = translate(kind === "serial" ? "trackSerialNumbers" : "trackBatches");
+
+      if (enabling && gap > 0) {
+        showToast(
+          `${what}: ${translate("trackWarnUnmarkedStock").replace("{n}", String(gap))}`,
+          "warning",
+        );
+      } else if (!enabling && marked > 0) {
+        showToast(
+          `${what}: ${translate("trackWarnDisableMarked").replace("{n}", String(marked))}`,
+          "warning",
+        );
+      }
+    } catch { /* подсказка не критична — молчим */ }
+  }, [form.fields.uuid]);
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -120,11 +166,11 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
                 </Group>
                 <Group className={styles.w1of2}>
                   <FieldToggle label={translate("trackSerialNumbers")} value={form.fields.trackSerialNumbers} disabled={form.isLoading}
-                    onChange={(v) => form.setField("trackSerialNumbers", v)} />
+                    onChange={(v) => { form.setField("trackSerialNumbers", v); void warnTrackingToggle("serial", v); }} />
                 </Group>
                 <Group className={styles.w1of2}>
                   <FieldToggle label={translate("trackBatches")} value={form.fields.trackBatches} disabled={form.isLoading}
-                    onChange={(v) => form.setField("trackBatches", v)} />
+                    onChange={(v) => { form.setField("trackBatches", v); void warnTrackingToggle("batch", v); }} />
                 </Group>
               </GroupRow>
               {/* Реквизиты для гос-документов (СНТ): ТН ВЭД ЕАЭС + признак происхождения ТРУ */}
@@ -157,6 +203,9 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
           deferRemoteChanges
           initialPendingRows={barcodes.pending}
           onItemsChange={barcodes.onItemsChange}
+          // Основной штрихкод — поле САМОГО товара: после смены перечитываем форму,
+          // иначе её поле «Штрих-код» останется старым и сохранение откатит основной.
+          onPrimaryChanged={form.isEditMode ? form.handleReload : undefined}
         />
       )
     },
@@ -193,6 +242,8 @@ const PB_COMPONENT = "ProductBarcodesList_part";
 
 interface ProductBarcodesTableProps {
   productUuid: string;
+  /** Сменили основной штрихкод → форма товара должна перечитать Product.barcode. */
+  onPrimaryChanged?: () => void | Promise<void>;
   disabled?: boolean;
   deferRemoteChanges?: boolean;
   onItemsChange?: (items: TDataItem[]) => void;
@@ -200,12 +251,18 @@ interface ProductBarcodesTableProps {
 }
 
 const ProductBarcodesTable: FC<ProductBarcodesTableProps> = ({
-  productUuid, disabled = false, deferRemoteChanges = false, onItemsChange, initialPendingRows,
+  productUuid, onPrimaryChanged, disabled = false, deferRemoteChanges = false, onItemsChange, initialPendingRows,
 }) => {
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     if (col.identifier === "barcode") {
       if (ctx.inlineEditing) return <Field label="" name={`pb_barcode_${row.id}`} value={(row.barcode as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "barcode", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
-      return <span>{(row.barcode as string) ?? ""}</span>;
+      // Основной штрихкод помечаем: без отметки непонятно, какой из них главный.
+      return (
+        <span>
+          {(row.barcode as string) ?? ""}
+          {row.isPrimary === true && <strong title={translate("isPrimary")}> ★</strong>}
+        </span>
+      );
     }
     if (col.identifier === "comment") {
       if (ctx.inlineEditing) return <Field label="" name={`pb_comment_${row.id}`} value={(row.comment as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "comment", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" />;
@@ -236,6 +293,10 @@ const ProductBarcodesTable: FC<ProductBarcodesTableProps> = ({
       validationRules={validationRules}
       defaultNewRow={defaultNewRow}
       onItemsChange={onItemsChange}
+      // «Сделать основным» — как у контактов контрагента. Основной штрихкод
+      // хранится в Product.barcode (по нему товар подбирается в документах),
+      // поэтому isPrimary у строки ВЫЧИСЛЯЕМЫЙ — см. router/productbarcodes.js.
+      extraButtons={<PrimaryToolbarButton endpoint={PB_MODEL} disabled={disabled} label={translate("makePrimary")} onDone={onPrimaryChanged} />}
     />
   );
 };

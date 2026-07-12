@@ -11,6 +11,82 @@ const ROUTE = "productbatches";
 
 const INCLUDE = { product: { select: { uuid: true, name: true, sku: true } } };
 
+// ─── Происхождение партии: каким документом она пришла на склад ───────────────
+// Без первоисточника пользователь выбирает партию вслепую: партии физически
+// различимы (свой срок годности, своя поставка), и «не та партия» = отгружен не тот
+// товар. Документ восстанавливаем из регистра: строки прихода с этим batchUuid.
+const RECEIPT_MODEL = {
+	purchase: "purchase",
+	goods_receipt: "goodsReceipt",
+	import_declaration: "importDeclaration",
+	opening_balance: null, // ввод остатков — документа нет
+};
+const RECEIPT_LABEL = {
+	purchase: "Поступление",
+	goods_receipt: "Оприходование",
+	import_declaration: "ГТД",
+	opening_balance: "Ввод остатков",
+};
+
+/**
+ * Добавляет к партиям `receipt` = { docType, docUuid, label } — документ-первоисточник.
+ * Документы резолвим ПАЧКОЙ (по одному запросу на тип): иначе на каждую партию был бы
+ * свой запрос.
+ */
+async function withBatchOrigin(items, { productUuid, warehouseUuid, organizationUuid }) {
+	if (!items.length) return items;
+	// Приходные движения этих партий — берём САМОЕ РАННЕЕ по каждой партии:
+	// именно им партия попала на склад.
+	const moves = await prisma.productRegister.findMany({
+		where: {
+			productUuid, warehouseUuid, movementType: "in",
+			batchUuid: { in: items.map((b) => b.uuid) },
+			...(organizationUuid ? { organizationUuid } : {}),
+		},
+		select: { batchUuid: true, documentType: true, documentUuid: true, date: true },
+		orderBy: [{ date: "asc" }, { id: "asc" }],
+	});
+	const firstIn = new Map(); // batchUuid → движение
+	for (const m of moves) if (!firstIn.has(m.batchUuid)) firstIn.set(m.batchUuid, m);
+
+	// Резолвим номера/даты документов пачкой по типам.
+	const byType = new Map();
+	for (const m of firstIn.values()) {
+		if (!m.documentType || !m.documentUuid || !RECEIPT_MODEL[m.documentType]) continue;
+		if (!byType.has(m.documentType)) byType.set(m.documentType, new Set());
+		byType.get(m.documentType).add(m.documentUuid);
+	}
+	const docs = new Map();
+	for (const [type, uuids] of byType) {
+		try {
+			const rows = await prisma[RECEIPT_MODEL[type]].findMany({
+				where: { uuid: { in: [...uuids] } },
+				select: { uuid: true, number: true, date: true },
+			});
+			for (const r of rows) docs.set(`${type}:${r.uuid}`, r);
+		} catch { /* нет модели — покажем хотя бы тип */ }
+	}
+
+	return items.map((b) => {
+		const m = firstIn.get(b.uuid);
+		if (!m?.documentType) return { ...b, receipt: null };
+		const d = docs.get(`${m.documentType}:${m.documentUuid}`);
+		return {
+			...b,
+			receipt: {
+				docType: m.documentType,
+				docUuid: m.documentUuid ?? null,
+				// Метку собираем на бэке: номер/тип он знает, а фронт форматирует дату
+				// проектной функцией — поэтому дату отдаём отдельно, в ISO.
+				label: RECEIPT_LABEL[m.documentType] ?? m.documentType,
+				number: d?.number ?? null,
+				date: d?.date ?? m.date ?? null,
+			},
+		};
+	});
+}
+
+
 // Справочник партий (только чтение).
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -39,12 +115,15 @@ router.get(`/${ROUTE}/available`, async (req, res) => {
 	try {
 		const { productUuid, warehouseUuid, organizationUuid, dateTo } = req.query;
 		if (!productUuid || !warehouseUuid) return res.status(400).json({ success: false, message: "productUuid и warehouseUuid обязательны" });
-		const items = await availableBatchesFEFO({
+		const scope = {
 			productUuid: String(productUuid), warehouseUuid: String(warehouseUuid),
 			organizationUuid: organizationUuid ? String(organizationUuid) : null,
+		};
+		const items = await availableBatchesFEFO({
+			...scope,
 			dateTo: dateTo ? new Date(String(dateTo) + "T23:59:59.999Z") : null,
 		});
-		return res.status(200).json({ success: true, items });
+		return res.status(200).json({ success: true, items: await withBatchOrigin(items, scope) });
 	} catch (error) {
 		console.error(`GET /${ROUTE}/available error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });

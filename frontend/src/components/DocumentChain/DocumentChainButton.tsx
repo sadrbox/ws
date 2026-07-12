@@ -152,7 +152,7 @@ const DocumentChainButton: FC<Props> = ({ documentType, documentUuid, disabled }
         disabled={disabled || !documentUuid}
         onClick={handleToggleOpen}
       >
-        <Icon name="fromBasis" />
+        <Icon name="documentChain" />
       </IconButton>
       {open && (
         <Modal
