@@ -78,6 +78,7 @@ import stockCountsRouter from "./api/router/stockcounts.js";
 import serialNumbersRouter from "./api/router/serialnumbers.js";
 import productBatchesRouter from "./api/router/productbatches.js";
 import pipeActivitiesRouter from "./api/router/pipeactivities.js";
+import { pipeAuth } from "./utils/pipeAuth.js";
 import openingBalanceRouter from "./api/router/openingbalance.js";
 import stockCountItemsRouter from "./api/router/stockcountitems.js";
 import purchaseOrdersRouter from "./api/router/purchaseorders.js";
@@ -413,7 +414,7 @@ app.use("/api/v1", productPricesRouter);
 // Подключаем те же middleware что и для /api/v1 (auth/tenant/access/audit)
 app.use(
 	"/pipe",
-	authMiddleware,
+	pipeAuth,
 	tenantMiddleware,
 	userAccessRightMiddleware,
 	auditMiddleware,
