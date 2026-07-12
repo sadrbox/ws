@@ -1,58 +1,104 @@
 #!/bin/bash
+#
+# Синхронизация репозитория: подтянуть → закоммитить → отправить.
+#
+# Работает с ТЕКУЩЕЙ веткой. Прежняя версия была прибита к main: если работа шла в
+# feature-ветке, коммит уходил в неё, а `git push origin main` отправлял ЛОКАЛЬНУЮ
+# main — без этих коммитов. Git отвечал "Everything up-to-date" (это успех!), скрипт
+# печатал «✅ Push успешен!», а работа оставалась только на диске.
 
-# Определение ветки и удалённого репозитория
-BRANCH="main"
+set -u
+
 REMOTE="origin"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"   # ← текущая ветка, а не жёстко "main"
 
-# Переход в директорию (если нужно)
-REPO_DIR="$(pwd)"
-cd "$REPO_DIR" || { echo "❌ Ошибка: не удалось перейти в $REPO_DIR"; exit 1; }
-
-echo "🔄 Обновление репозитория..."
-
-# Pull с ошибкой
-git pull "$REMOTE" "$BRANCH" || { echo "❌ Ошибка при git pull"; exit 1; }
-
-# Проверка статуса
-git status -s
-
-# Если есть изменения
-if [ -n "$(git status --porcelain)" ]; then
-    echo "✏️ Есть изменения. Проверяем на большие файлы..."
-    
-    # Проверка на файлы > 50MB (предупреждение GitHub)
-    LARGE_FILES=$(git diff --cached --name-only | xargs -I {} sh -c 'if [ -f "{}" ] && [ $(stat -c%s "{}" 2>/dev/null || echo 0) -gt 52428800 ]; then echo "{}"; fi')
-    
-    if [ -n "$LARGE_FILES" ]; then
-        echo "⚠️  Большие файлы найдены (>50MB): $LARGE_FILES"
-        echo "   Рекомендация: Используйте Git LFS (git lfs track '*.zip') или добавьте в .gitignore."
-        echo "   Хотите продолжить? (y/N)"
-        read -r choice
-        if [[ ! "$choice" =~ ^[Yy]$ ]]; then
-            echo "⏹️  Остановка. Добавьте LFS или игнорируйте файлы."
-            exit 1
-        fi
-    fi
-    
-    # Добавляем изменения (но проверьте .gitignore заранее!)
-    git add .
-    
-    # Коммит
-    commit_msg="Auto commit: $(date +'%Y-%m-%d %H:%M:%S')"
-    git commit -m "$commit_msg" || { echo "❌ Ошибка при коммите"; exit 1; }
-    
-    # Push
-    echo "🚀 Push изменений..."
-    if git push "$REMOTE" "$BRANCH"; then
-        echo "✅ Push успешен!"
-    else
-        echo "❌ Push провалился. Проверьте лимиты GitHub или используйте LFS."
-        exit 1
-    fi
-else
-    echo "✅ Нет изменений."
+if [ "$BRANCH" = "HEAD" ]; then
+	echo "❌ Detached HEAD — сначала переключитесь на ветку: git switch <branch>"
+	exit 1
 fi
 
-# Финальный статус
-git status -s
+cd "$(git rev-parse --show-toplevel)" || { echo "❌ Не git-репозиторий"; exit 1; }
+
+echo "🔄 Ветка: $BRANCH"
+
+# ── 1. Закоммитить локальные изменения ───────────────────────────────────────
+if [ -n "$(git status --porcelain)" ]; then
+	git status -s
+	echo "✏️  Есть изменения — коммитим."
+
+	git add -A
+
+	# Проверка больших файлов — ПОСЛЕ `git add`. В прежней версии она стояла ДО,
+	# читала пустой индекс и потому не срабатывала никогда.
+	LIMIT=$((50 * 1024 * 1024))
+	LARGE_FILES=$(git diff --cached --name-only -z | xargs -0 -I{} sh -c \
+		'[ -f "{}" ] && [ "$(stat -c%s "{}" 2>/dev/null || echo 0)" -gt '"$LIMIT"' ] && echo "{}"')
+
+	if [ -n "$LARGE_FILES" ]; then
+		echo "⚠️  Файлы больше 50 МБ (GitHub отклонит push):"
+		echo "$LARGE_FILES" | sed 's/^/     /'
+		echo "   Используйте Git LFS (git lfs track '*.zip') или .gitignore."
+		# В неинтерактивном запуске (cron) `read` повиснет или прочитает пустоту —
+		# останавливаемся сами, чтобы push не упал на середине.
+		if [ -t 0 ]; then
+			printf "   Продолжить всё равно? (y/N) "
+			read -r choice
+			case "$choice" in
+				[Yy]*) ;;
+				*) echo "⏹️  Остановлено."; git reset >/dev/null; exit 1 ;;
+			esac
+		else
+			echo "⏹️  Остановлено (неинтерактивный запуск)."
+			git reset >/dev/null
+			exit 1
+		fi
+	fi
+
+	# Сообщение можно передать аргументом: ./gitsync "правка формы реализации"
+	git commit -m "${1:-Auto commit: $(date +'%Y-%m-%d %H:%M:%S')}" \
+		|| { echo "❌ Ошибка при коммите"; exit 1; }
+else
+	echo "✅ Локальных изменений нет."
+fi
+
+# ── 2. Подтянуть удалённые изменения ─────────────────────────────────────────
+# ПОСЛЕ коммита: `pull --rebase` отказывается работать при незакоммиченных
+# изменениях («cannot pull with rebase: You have unstaged changes»). В прежней
+# версии pull стоял первым и спотыкался ровно в том случае, ради которого скрипт
+# и запускают — когда есть что коммитить.
+# --rebase, чтобы не плодить merge-коммиты на каждой синхронизации.
+# Если ветки на сервере ещё нет — тянуть нечего, она создастся при push.
+if git ls-remote --exit-code --heads "$REMOTE" "$BRANCH" >/dev/null 2>&1; then
+	if ! git pull --rebase "$REMOTE" "$BRANCH"; then
+		echo "❌ Конфликт при pull --rebase. Разрешите его, затем:"
+		echo "   git rebase --continue    (или git rebase --abort — откатиться)"
+		exit 1
+	fi
+else
+	echo "ℹ️  Ветки $BRANCH на $REMOTE ещё нет — будет создана при push."
+fi
+
+# ── 3. Отправить ─────────────────────────────────────────────────────────────
+# Результат проверяем ПО ФАКТУ, а не по коду возврата: `git push` возвращает успех
+# и когда отправлять было нечего.
+if git ls-remote --exit-code --heads "$REMOTE" "$BRANCH" >/dev/null 2>&1 \
+	&& [ -z "$(git log "$REMOTE/$BRANCH..$BRANCH" --oneline 2>/dev/null)" ]; then
+	echo "✅ Уже синхронизировано — отправлять нечего."
+else
+	echo "🚀 Push $BRANCH → $REMOTE/$BRANCH..."
+	if git push -u "$REMOTE" "$BRANCH"; then
+		AHEAD=$(git log "$REMOTE/$BRANCH..$BRANCH" --oneline | wc -l)
+		if [ "$AHEAD" -eq 0 ]; then
+			echo "✅ Push успешен: $REMOTE/$BRANCH = $(git rev-parse --short HEAD)"
+		else
+			echo "❌ Push прошёл, но $AHEAD коммит(ов) всё ещё не на сервере."
+			exit 1
+		fi
+	else
+		echo "❌ Push провалился. Проверьте доступ/лимиты GitHub или используйте LFS."
+		exit 1
+	fi
+fi
+
+git status -sb | head -1
 echo "🎉 Готово!"
