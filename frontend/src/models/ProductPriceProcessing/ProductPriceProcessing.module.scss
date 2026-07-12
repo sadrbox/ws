@@ -1,4 +1,4 @@
-@import "src/styles/main.module.scss";
+@use "src/styles/main.module.scss" as *;
 
 // Тело вкладки: пояснение → строка параметров/кнопок → таблица.
 .tab {

@@ -1,3 +1,4 @@
+@use "src/styles/variables" as *;
 @function col-width($count, $gap: 0px) {
   @return calc((100% - (#{$count - 1} * #{$gap})) / #{$count});
 }

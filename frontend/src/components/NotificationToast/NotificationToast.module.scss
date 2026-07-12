@@ -1,4 +1,5 @@
-@import "src/styles/variables.scss";
+@use "sass:color";
+@use "src/styles/variables" as *;
 
 .NotificationToast {
 	position: relative;
@@ -194,7 +195,7 @@
 	text-decoration: underline;
 
 	&:hover {
-		color: darken($colorPrimaryLight, 10%);
+		color: color.adjust($colorPrimaryLight, $lightness: -10%);
 	}
 }
 

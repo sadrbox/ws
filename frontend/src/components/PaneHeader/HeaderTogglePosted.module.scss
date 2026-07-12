@@ -1,4 +1,4 @@
-@import "src/styles/variables.scss";
+@use "src/styles/variables" as *;
 
 // Тоггл «Проведён» в стиле тулбара шапки (PaneItemHeaderToolbar / IconButton):
 // прозрачный фон, hover-серый, синий focus-ring; активное состояние —
