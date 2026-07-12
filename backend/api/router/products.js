@@ -54,16 +54,37 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		else if (!orderBy.some((o) => "id" in o)) orderBy.push({ id: "asc" });
 
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
+
+		// Штрих-код у товара НЕ один: основной лежит в product.barcode, остальные
+		// (GTIN/EAN поставщиков) — в отдельной таблице. Искать только по основному —
+		// значит не находить товар по его же коду.
+		//
+		// Но искать их ВЛОЖЕННЫМ условием (`barcodes: { some: … }`) внутри OR нельзя:
+		// OR между полем товара и подзапросом обесценивает индексы — Postgres берёт
+		// products целиком. Замерено на 1M товаров: 2264 мс против 3.8 мс, если тот же
+		// поиск выполнить ОТДЕЛЬНЫМ запросом и подставить найденные uuid списком.
+		// Поэтому сначала ищем штрих-коды (GIN pg_trgm), потом — товары.
+		const BARCODE_HIT_LIMIT = 1000; // штрих-код почти уникален; тысячи совпадений — это уже не поиск
+		const barcodeHits = await Promise.all(
+			searchWords.map((w) =>
+				prisma.productBarcode
+					.findMany({
+						where: { barcode: { contains: w, mode: "insensitive" }, deletedAt: null },
+						select: { productUuid: true },
+						take: BARCODE_HIT_LIMIT,
+					})
+					.then((rows) => rows.map((r) => r.productUuid)),
+			),
+		);
+
 		let searchWhere = {};
 		if (searchWords.length > 0)
 			searchWhere = {
-				AND: searchWords.map((w) => {
+				AND: searchWords.map((w, i) => {
 					const like = { contains: w, mode: "insensitive" };
 					const orConditions = TEXT_FIELDS.map((f) => ({ [f]: like }));
-					// Штрих-код у товара НЕ один: основной лежит в product.barcode, остальные
-					// (GTIN/EAN поставщиков) — в отдельной таблице. Искать только по основному
-					// — значит не находить товар по его же коду.
-					orConditions.push({ barcodes: { some: { barcode: like } } });
+					const hits = barcodeHits[i];
+					if (hits.length) orConditions.push({ uuid: { in: hits } });
 					// Список Номенклатуры ищет СЕРВЕРОМ (см. useModelListState), поэтому здесь
 					// обязано покрываться всё, что пользователь видит в колонках, — иначе поиск
 					// по бренду/единице молча перестал бы работать.

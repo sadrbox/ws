@@ -1034,6 +1034,9 @@ model Product {
   @@index([barcode])
   @@index([updatedAt])
   @@unique([externalSource, externalId])
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "products_name_trgm", type: Gin)
+  @@index([sku(ops: raw("gin_trgm_ops"))], map: "products_sku_trgm", type: Gin)
+  @@index([barcode(ops: raw("gin_trgm_ops"))], map: "products_barcode_trgm", type: Gin)
   @@map("products")
 }
 
@@ -1052,6 +1055,7 @@ model ProductBarcode {
   @@index([productUuid])
   @@index([barcode])
   @@index([updatedAt])
+  @@index([barcode(ops: raw("gin_trgm_ops"))], map: "product_barcodes_barcode_trgm", type: Gin)
   @@map("product_barcodes")
 }
 

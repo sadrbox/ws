@@ -7,7 +7,6 @@ export const ENDPOINT_TO_MODEL: Record<string, string> = {
 	counterparties: "Counterparty",
 	contracts: "Contract",
 	"contract-files": "AttachedFile",
-	contractfiles: "AttachedFile",
 	contacts: "Contact",
 	contactpersons: "ContactPerson",
 	bankaccounts: "BankAccount",
@@ -51,5 +50,4 @@ export const ENDPOINT_TO_MODEL: Record<string, string> = {
 	accounting: "AccountingEntry",
 	users: "User",
 	files: "AttachedFile",
-	todofiles: "Todo",
 };

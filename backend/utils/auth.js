@@ -283,7 +283,6 @@ export const ROUTE_TO_MODEL = {
 	accounting: "AccountingEntry",
 	users: "User",
 	files: "AttachedFile",
-	todofiles: "Todo",
 };
 
 /**
