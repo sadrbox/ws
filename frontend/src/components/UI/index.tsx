@@ -20,101 +20,98 @@ import OrgSwitcher from 'src/components/OrgSwitcher';
 // (Vite: "dynamic import will not move module into another chunk"). displayName
 // ОБЯЗАТЕЛЕН — по нему дедуплицируются панели (getComponentName в app/index.tsx).
 // Рендерятся внутри <React.Suspense> (см. app/index.tsx).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function lazyView(name: string, loader: () => Promise<{ default: React.ComponentType<any> }>): React.FC<any> {
-  const C = React.lazy(loader) as unknown as React.FC<any> & { displayName?: string };
-  C.displayName = name;
-  return C;
-}
-const ContractsList = lazyView("ContractsList", () => import('src/models/Contracts').then(m => ({ default: m.ContractsList })));
-const ActivityHistoriesList = lazyView("ActivityHistoriesList", () => import('src/models/ActivityHistories').then(m => ({ default: m.ActivityHistoriesList })));
-const PipeActivitiesList = lazyView("PipeActivitiesList", () => import('src/models/PipeActivities').then(m => ({ default: m.PipeActivitiesList })));
-const OrganizationsList = lazyView("OrganizationsList", () => import('src/models/Organizations').then(m => ({ default: m.OrganizationsList })));
-const BankAccountsList = lazyView("BankAccountsList", () => import('src/models/BankAccounts').then(m => ({ default: m.BankAccountsList })));
-const CounterpartiesList = lazyView("CounterpartiesList", () => import('src/models/Counterparties').then(m => ({ default: m.CounterpartiesList })));
-const ContactsList = lazyView("ContactsList", () => import('src/models/Contacts').then(m => ({ default: m.ContactsList })));
-const ContactPersonsList = lazyView("ContactPersonsList", () => import('src/models/ContactPersons').then(m => ({ default: m.ContactPersonsList })));
-const UsersList = lazyView("UsersList", () => import('src/models/Users').then(m => ({ default: m.UsersList })));
-const TodosList = lazyView("TodosList", () => import('src/models/Todos').then(m => ({ default: m.TodosList })));
-const NotificationsList = lazyView("NotificationsList", () => import('src/models/Notifications').then(m => ({ default: m.NotificationsList })));
-const WarehousesList = lazyView("WarehousesList", () => import('src/models/Warehouses').then(m => ({ default: m.WarehousesList })));
-const CashboxesList = lazyView("CashboxesList", () => import('src/models/Cashboxes').then(m => ({ default: m.CashboxesList })));
-const PriceTypesList = lazyView("PriceTypesList", () => import('src/models/PriceTypes').then(m => ({ default: m.PriceTypesList })));
-const SalesList = lazyView("SalesList", () => import('src/models/Sales').then(m => ({ default: m.SalesList })));
-const ProductPriceCorrection = lazyView("ProductPriceCorrection", () => import('src/models/ProductPriceProcessing').then(m => ({ default: m.ProductPriceCorrection })));
-const ProductPriceImport = lazyView("ProductPriceImport", () => import('src/models/ProductPriceProcessing').then(m => ({ default: m.ProductPriceImport })));
-const ProductImportExport = lazyView("ProductImportExport", () => import('src/models/ProductImportExport').then(m => ({ default: m.ProductImportExport })));
-const SaleReturnsList = lazyView("SaleReturnsList", () => import('src/models/SaleReturns').then(m => ({ default: m.SaleReturnsList })));
-const PurchasesList = lazyView("PurchasesList", () => import('src/models/Purchases').then(m => ({ default: m.PurchasesList })));
-const PurchaseReturnsList = lazyView("PurchaseReturnsList", () => import('src/models/PurchaseReturns').then(m => ({ default: m.PurchaseReturnsList })));
-const PurchaseRequisitionsList = lazyView("PurchaseRequisitionsList", () => import('src/models/PurchaseRequisitions').then(m => ({ default: m.PurchaseRequisitionsList })));
-const OutgoingInvoicesList = lazyView("OutgoingInvoicesList", () => import('src/models/OutgoingInvoices').then(m => ({ default: m.OutgoingInvoicesList })));
-const EdoInboxList = lazyView("EdoInboxList", () => import('src/models/Edo').then(m => ({ default: m.EdoInboxList })));
-const EdoOutboxList = lazyView("EdoOutboxList", () => import('src/models/Edo').then(m => ({ default: m.EdoOutboxList })));
-const ClassifiersList = lazyView("ClassifiersList", () => import('src/models/Classifiers').then(m => ({ default: m.ClassifiersList })));
-const EsfIncomingList = lazyView("EsfIncomingList", () => import('src/models/EsfIncoming').then(m => ({ default: m.EsfIncomingList })));
-const AwpOutboxList = lazyView("AwpOutboxList", () => import('src/models/GovDocs').then(m => ({ default: m.AwpOutboxList })));
-const SntOutboxList = lazyView("SntOutboxList", () => import('src/models/GovDocs').then(m => ({ default: m.SntOutboxList })));
-const AwpIncomingList = lazyView("AwpIncomingList", () => import('src/models/GovDocs').then(m => ({ default: m.AwpIncomingList })));
-const SntIncomingList = lazyView("SntIncomingList", () => import('src/models/GovDocs').then(m => ({ default: m.SntIncomingList })));
-const IncomingInvoicesList = lazyView("IncomingInvoicesList", () => import('src/models/IncomingInvoices').then(m => ({ default: m.IncomingInvoicesList })));
-const PaymentInvoicesList = lazyView("PaymentInvoicesList", () => import('src/models/PaymentInvoices').then(m => ({ default: m.PaymentInvoicesList })));
-const ScheduledTasksList = lazyView("ScheduledTasksList", () => import('src/models/ScheduledTasks').then(m => ({ default: m.ScheduledTasksList })));
-const InventoryTransfersList = lazyView("InventoryTransfersList", () => import('src/models/InventoryTransfers').then(m => ({ default: m.InventoryTransfersList })));
-const ImportDeclarationsList = lazyView("ImportDeclarationsList", () => import('src/models/ImportDeclarations').then(m => ({ default: m.ImportDeclarationsList })));
-const WriteOffsList = lazyView("WriteOffsList", () => import('src/models/WriteOffs').then(m => ({ default: m.WriteOffsList })));
-const SerialNumbersList = lazyView("SerialNumbersList", () => import('src/models/SerialNumbers').then(m => ({ default: m.SerialNumbersList })));
-const GoodsReceiptsList = lazyView("GoodsReceiptsList", () => import('src/models/GoodsReceipts').then(m => ({ default: m.GoodsReceiptsList })));
-const StockCountsList = lazyView("StockCountsList", () => import('src/models/StockCounts').then(m => ({ default: m.StockCountsList })));
-const CommercialOffersList = lazyView("CommercialOffersList", () => import('src/models/CommercialOffers').then(m => ({ default: m.CommercialOffersList })));
-const SalesOrdersList = lazyView("SalesOrdersList", () => import('src/models/SalesOrders').then(m => ({ default: m.SalesOrdersList })));
-const ReservationsList = lazyView("ReservationsList", () => import('src/models/Reservations').then(m => ({ default: m.ReservationsList })));
-const PurchaseOrdersList = lazyView("PurchaseOrdersList", () => import('src/models/PurchaseOrders').then(m => ({ default: m.PurchaseOrdersList })));
-const BankStatementsList = lazyView("BankStatementsList", () => import('src/models/BankStatements').then(m => ({ default: m.BankStatementsList })));
-const MonthClosesList = lazyView("MonthClosesList", () => import('src/models/MonthCloses').then(m => ({ default: m.MonthClosesList })));
-const FiscalReceiptsList = lazyView("FiscalReceiptsList", () => import('src/models/FiscalReceipts').then(m => ({ default: m.FiscalReceiptsList })));
-const CashReceiptOrdersList = lazyView("CashReceiptOrdersList", () => import('src/models/CashReceiptOrders').then(m => ({ default: m.CashReceiptOrdersList })));
-const CashExpenseOrdersList = lazyView("CashExpenseOrdersList", () => import('src/models/CashExpenseOrders').then(m => ({ default: m.CashExpenseOrdersList })));
-const BrandsList = lazyView("BrandsList", () => import('src/models/Brands').then(m => ({ default: m.BrandsList })));
-const ProductsList = lazyView("ProductsList", () => import('src/models/Products').then(m => ({ default: m.ProductsList })));
-const UnitOfMeasuresList = lazyView("UnitOfMeasuresList", () => import('src/models/UnitOfMeasures').then(m => ({ default: m.UnitOfMeasuresList })));
-const TaxesList = lazyView("TaxesList", () => import('src/models/Taxes').then(m => ({ default: m.TaxesList })));
-const OrganizationAccountingSettingsList = lazyView("OrganizationAccountingSettingsList", () => import('src/models/OrganizationAccountingSettings').then(m => ({ default: m.OrganizationAccountingSettingsList })));
-const GeneralSettings = lazyView("GeneralSettings", () => import('src/models/GeneralSettings').then(m => ({ default: m.default })));
-const DocumentNumberSettings = lazyView("DocumentNumberSettings", () => import('src/models/DocumentNumberSettings').then(m => ({ default: m.default })));
-const FilesList = lazyView("FilesList", () => import('src/models/Files').then(m => ({ default: m.FilesList })));
-const CurrenciesList = lazyView("CurrenciesList", () => import('src/models/Currencies').then(m => ({ default: m.CurrenciesList })));
-const EmployeesList = lazyView("EmployeesList", () => import('src/models/Employees').then(m => ({ default: m.EmployeesList })));
-const PositionsList = lazyView("PositionsList", () => import('src/models/Positions').then(m => ({ default: m.PositionsList })));
-const PayrollCalculationsList = lazyView("PayrollCalculationsList", () => import('src/models/PayrollCalculations').then(m => ({ default: m.PayrollCalculationsList })));
-const PayrollPaymentsList = lazyView("PayrollPaymentsList", () => import('src/models/PayrollPayments').then(m => ({ default: m.PayrollPaymentsList })));
-const SalesReport = lazyView("SalesReport", () => import('src/models/Reports/SalesReport').then(m => ({ default: m.SalesReport })));
-const MaterialStatement = lazyView("MaterialStatement", () => import('src/models/Reports/MaterialStatement').then(m => ({ default: m.MaterialStatement })));
-const CashReport = lazyView("CashReport", () => import('src/models/Reports/CashReport').then(m => ({ default: m.CashReport })));
-const ProductRegisterReport = lazyView("ProductRegisterReport", () => import('src/models/Reports/ProductRegisterReport').then(m => ({ default: m.ProductRegisterReport })));
-const AccountingJournal = lazyView("AccountingJournal", () => import('src/models/Reports/AccountingJournal').then(m => ({ default: m.AccountingJournal })));
-const TurnoverBalanceSheet = lazyView("TurnoverBalanceSheet", () => import('src/models/Reports/TurnoverBalanceSheet').then(m => ({ default: m.TurnoverBalanceSheet })));
-const AccountCard = lazyView("AccountCard", () => import('src/models/Reports/AccountCard').then(m => ({ default: m.AccountCard })));
-const ManagerReport = lazyView("ManagerReport", () => import('src/models/Reports/ManagerReport').then(m => ({ default: m.ManagerReport })));
-const SettlementsReport = lazyView("SettlementsReport", () => import('src/models/Reports/SettlementsReport').then(m => ({ default: m.SettlementsReport })));
-const InventoryTurnoverReport = lazyView("InventoryTurnoverReport", () => import('src/models/Reports/InventoryTurnoverReport').then(m => ({ default: m.InventoryTurnoverReport })));
-const InventoryBatchesReport = lazyView("InventoryBatchesReport", () => import('src/models/Reports/InventoryBatchesReport').then(m => ({ default: m.InventoryBatchesReport })));
-const ABCReport = lazyView("ABCReport", () => import('src/models/Reports/ABCReport').then(m => ({ default: m.ABCReport })));
-const PriceListReport = lazyView("PriceListReport", () => import('src/models/Reports/PriceListReport').then(m => ({ default: m.PriceListReport })));
-const SalesTerminal = lazyView("SalesTerminal", () => import('src/models/SalesTerminal').then(m => ({ default: m.SalesTerminal })));
-const ChartOfAccountsList = lazyView("ChartOfAccountsList", () => import('src/models/ChartOfAccounts').then(m => ({ default: m.ChartOfAccountsList })));
-const SubkontoTypesList = lazyView("SubkontoTypesList", () => import('src/models/SubkontoTypes').then(m => ({ default: m.SubkontoTypesList })));
-const UnsavedFormsList = lazyView("UnsavedFormsList", () => import('src/models/UnsavedForms').then(m => ({ default: m.UnsavedFormsList })));
-const SyncDashboard = lazyView("SyncDashboard", () => import('src/models/SyncDashboard').then(m => ({ default: m.SyncDashboard })));
-const SearchReplaceRefsForm = lazyView("SearchReplaceRefsForm", () => import('src/models/SearchReplaceRefs').then(m => ({ default: m.SearchReplaceRefsForm })));
-const OpeningBalanceForm = lazyView("OpeningBalanceForm", () => import('src/models/OpeningBalance').then(m => ({ default: m.OpeningBalanceForm })));
-const OrphanRefsForm = lazyView("OrphanRefsForm", () => import('src/models/OrphanRefs').then(m => ({ default: m.OrphanRefsForm })));
 // UserSettingsModuleList/UserAccessRightsList загружаются динамически (разрыв цикла UI→models→app→UI)
 import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
 import UIToast from 'src/components/UIToast';
 import { getAccessLevel } from 'src/hooks/useUserAccessRight';
 import { usePersistenceMode } from 'src/services/persistenceMode';
+import {
+	ContractsList,
+	ActivityHistoriesList,
+	PipeActivitiesList,
+	OrganizationsList,
+	BankAccountsList,
+	CounterpartiesList,
+	ContactsList,
+	ContactPersonsList,
+	UsersList,
+	TodosList,
+	NotificationsList,
+	WarehousesList,
+	CashboxesList,
+	PriceTypesList,
+	SalesList,
+	ProductPriceCorrection,
+	ProductPriceImport,
+	ProductImportExport,
+	SaleReturnsList,
+	PurchasesList,
+	PurchaseReturnsList,
+	PurchaseRequisitionsList,
+	OutgoingInvoicesList,
+	EdoInboxList,
+	EdoOutboxList,
+	ClassifiersList,
+	EsfIncomingList,
+	AwpOutboxList,
+	SntOutboxList,
+	AwpIncomingList,
+	SntIncomingList,
+	IncomingInvoicesList,
+	PaymentInvoicesList,
+	ScheduledTasksList,
+	InventoryTransfersList,
+	ImportDeclarationsList,
+	WriteOffsList,
+	SerialNumbersList,
+	GoodsReceiptsList,
+	StockCountsList,
+	CommercialOffersList,
+	SalesOrdersList,
+	ReservationsList,
+	PurchaseOrdersList,
+	BankStatementsList,
+	MonthClosesList,
+	FiscalReceiptsList,
+	CashReceiptOrdersList,
+	CashExpenseOrdersList,
+	BrandsList,
+	ProductsList,
+	UnitOfMeasuresList,
+	TaxesList,
+	OrganizationAccountingSettingsList,
+	GeneralSettings,
+	DocumentNumberSettings,
+	FilesList,
+	CurrenciesList,
+	EmployeesList,
+	PositionsList,
+	PayrollCalculationsList,
+	PayrollPaymentsList,
+	SalesReport,
+	MaterialStatement,
+	CashReport,
+	ProductRegisterReport,
+	AccountingJournal,
+	TurnoverBalanceSheet,
+	AccountCard,
+	ManagerReport,
+	SettlementsReport,
+	InventoryTurnoverReport,
+	InventoryBatchesReport,
+	ABCReport,
+	PriceListReport,
+	SalesTerminal,
+	ChartOfAccountsList,
+	SubkontoTypesList,
+	UnsavedFormsList,
+	SyncDashboard,
+	SearchReplaceRefsForm,
+	OpeningBalanceForm,
+	OrphanRefsForm,
+} from "src/registry/viewRegistry";
+
 
 type TypeGroupProps = {
   align?: 'row' | 'col';
@@ -937,7 +934,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <ul className={styles.NavList}>
               {can("Sale") && <li className={styles.NavListAccent} onClick={() => addPane({ component: SalesTerminal, label: translate("salesTerminal") })}>⚡ {translate("salesTerminal")}</li>}
               {can("Sale") && <li onClick={() => addPane({ component: SalesList, label: translate("saleRealization") })}>{translate("saleRealization")}</li>}
-              {can("SaleReturn") && <li onClick={() => addPane({ component: SaleReturnsList, label: translate("SaleReturnsList") })}>{translate("SaleReturnsList")}</li>}
+              {can("SaleReturn") && <li onClick={() => addPane({ component: SaleReturnsList })}>{translate("SaleReturnsList")}</li>}
               {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("outgoingInvoice") })}>{translate("outgoingInvoice")}</li>}
               {can("PaymentInvoice") && <li onClick={() => addPane({ component: PaymentInvoicesList, label: translate("paymentInvoice") })}>{translate("paymentInvoice")}</li>}
               {can("CommercialOffer") && <li onClick={() => addPane({ component: CommercialOffersList, label: translate("docType_commercial_offer") })}>{translate("docType_commercial_offer")}</li>}
@@ -949,34 +946,34 @@ export const NavList = ({ label }: TypeNavListProps) => {
             <h3>{translate("purchase")}</h3>
             <ul className={styles.NavList}>
               {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList, label: translate("purchaseReceipt") })}>{translate("purchaseReceipt")}</li>}
-              {can("PurchaseReturn") && <li onClick={() => addPane({ component: PurchaseReturnsList, label: translate("PurchaseReturnsList") })}>{translate("PurchaseReturnsList")}</li>}
+              {can("PurchaseReturn") && <li onClick={() => addPane({ component: PurchaseReturnsList })}>{translate("PurchaseReturnsList")}</li>}
               {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList, label: translate("incomingInvoice") })}>{translate("incomingInvoice")}</li>}
-              {can("PurchaseRequisition") && <li onClick={() => addPane({ component: PurchaseRequisitionsList, label: translate("PurchaseRequisitionsList") })}>{translate("PurchaseRequisitionsList")}</li>}
+              {can("PurchaseRequisition") && <li onClick={() => addPane({ component: PurchaseRequisitionsList })}>{translate("PurchaseRequisitionsList")}</li>}
               {can("PurchaseOrder") && <li onClick={() => addPane({ component: PurchaseOrdersList, label: translate("docType_purchase_order") })}>{translate("docType_purchase_order")}</li>}
-              {can("ImportDeclaration") && <li onClick={() => addPane({ component: ImportDeclarationsList, label: translate("ImportDeclarationsList") })}>{translate("ImportDeclarationsList")}</li>}
+              {can("ImportDeclaration") && <li onClick={() => addPane({ component: ImportDeclarationsList })}>{translate("ImportDeclarationsList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
             <h3>{translate("warehouse")}</h3>
             <ul className={styles.NavList}>
-              {can("Warehouse") && <li onClick={() => addPane({ component: WarehousesList, label: translate("WarehousesList") })}>{translate("WarehousesList")}</li>}
-              {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList, label: translate("InventoryTransfersList") })}>{translate("InventoryTransfersList")}</li>}
-              {can("WriteOff") && <li onClick={() => addPane({ component: WriteOffsList, label: translate("WriteOffsList") })}>{translate("WriteOffsList")}</li>}
-              {can("SerialNumber") && <li onClick={() => addPane({ component: SerialNumbersList, label: translate("SerialNumbersList") })}>{translate("SerialNumbersList")}</li>}
+              {can("Warehouse") && <li onClick={() => addPane({ component: WarehousesList })}>{translate("WarehousesList")}</li>}
+              {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList })}>{translate("InventoryTransfersList")}</li>}
+              {can("WriteOff") && <li onClick={() => addPane({ component: WriteOffsList })}>{translate("WriteOffsList")}</li>}
+              {can("SerialNumber") && <li onClick={() => addPane({ component: SerialNumbersList })}>{translate("SerialNumbersList")}</li>}
               {/* Разметка уже имеющегося остатка сериями/партиями — без неё товар с
                   историей нельзя продать после включения учёта. */}
               {can("Product") && <li onClick={() => addPane({ component: OpeningBalanceForm, label: translate("openingBalanceEntry") })}>{translate("openingBalanceEntry")}</li>}
-              {can("GoodsReceipt") && <li onClick={() => addPane({ component: GoodsReceiptsList, label: translate("GoodsReceiptsList") })}>{translate("GoodsReceiptsList")}</li>}
-              {can("StockCount") && <li onClick={() => addPane({ component: StockCountsList, label: translate("StockCountsList") })}>{translate("StockCountsList")}</li>}
+              {can("GoodsReceipt") && <li onClick={() => addPane({ component: GoodsReceiptsList })}>{translate("GoodsReceiptsList")}</li>}
+              {can("StockCount") && <li onClick={() => addPane({ component: StockCountsList })}>{translate("StockCountsList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
             <h3>{translate("cash")}</h3>
             <ul className={styles.NavList}>
-              {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList, label: translate("CashReceiptOrdersList") })}>{translate("CashReceiptOrdersList")}</li>}
-              {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList, label: translate("CashExpenseOrdersList") })}>{translate("CashExpenseOrdersList")}</li>}
+              {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList })}>{translate("CashReceiptOrdersList")}</li>}
+              {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList })}>{translate("CashExpenseOrdersList")}</li>}
               {can("BankStatement") && <li onClick={() => addPane({ component: BankStatementsList, label: translate("docType_bank_statement") })}>{translate("docType_bank_statement")}</li>}
-              {can("FiscalReceipt") && <li onClick={() => addPane({ component: FiscalReceiptsList, label: translate("FiscalReceiptsList") })}>{translate("FiscalReceiptsList")}</li>}
+              {can("FiscalReceipt") && <li onClick={() => addPane({ component: FiscalReceiptsList })}>{translate("FiscalReceiptsList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
@@ -996,19 +993,22 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>{translate("directories")}</h3>
             <ul className={styles.NavList}>
-              {can("Product") && <li onClick={() => addPane({ component: ProductsList, label: translate("ProductsList") })}>{translate("ProductsList")}</li>}
+              {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>{translate("ProductsList")}</li>}
               {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceCorrection, label: translate("ProductPriceProcessing") })}>{translate("ProductPriceProcessing")}</li>}
               {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceImport, label: translate("priceImportForm") })}>{translate("priceImportForm")}</li>}
-              {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceTypesList, label: translate("PriceTypesList") })}>{translate("PriceTypesList")}</li>}
-              {can("Product") && <li onClick={() => addPane({ component: ProductImportExport, label: translate("ProductImportExport") })}>{translate("ProductImportExport")}</li>}
-              {can("Brand") && <li onClick={() => addPane({ component: BrandsList, label: translate("BrandsList") })}>{translate("BrandsList")}</li>}
+              {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceTypesList })}>{translate("PriceTypesList")}</li>}
+              {can("Product") && <li onClick={() => addPane({ component: ProductImportExport })}>{translate("ProductImportExport")}</li>}
+              {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>{translate("BrandsList")}</li>}
               <li onClick={() => addPane({ component: ClassifiersList, label: translate("clsSection") })}>{translate("clsSection")}</li>
             </ul>
           </div>
           <div className={styles.NavGroup}>
             <h3>{translate("govDocsSection")}</h3>
             <ul className={styles.NavList}>
-              {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("esfOutgoingSection") })}>{translate("esfOutgoingSection")}</li>}
+              {/* Исходящие ЭСФ — это те же «Счета-фактуры (исходящие)» из раздела «Документы»:
+                  тот же компонент, тот же неотфильтрованный список. Отдельного пункта здесь
+                  быть не может: панели-списки — синглтоны (uniqId = имя компонента), поэтому
+                  второй пункт лишь активировал уже открытую вкладку, оставляя ЧУЖУЮ подпись. */}
               {can("OutgoingInvoice") && <li onClick={() => addPane({ component: EsfIncomingList, label: translate("esfIncomingSection") })}>{translate("esfIncomingSection")}</li>}
               {can("Sale") && <li onClick={() => addPane({ component: AwpOutboxList, label: translate("awpOutboxSection") })}>{translate("awpOutboxSection")}</li>}
               {can("Sale") && <li onClick={() => addPane({ component: AwpIncomingList, label: translate("awpIncomingSection") })}>{translate("awpIncomingSection")}</li>}
@@ -1044,7 +1044,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>{translate("monthCloseRegulatory")}</h3>
             <ul className={styles.NavList}>
-              {can("MonthClose") && <li onClick={() => addPane({ component: MonthClosesList, label: translate("MonthClosesList") })}>{translate("MonthClosesList")}</li>}
+              {can("MonthClose") && <li onClick={() => addPane({ component: MonthClosesList })}>{translate("MonthClosesList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
@@ -1065,15 +1065,15 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>{translate("documents")}</h3>
             <ul className={styles.NavList}>
-              {can("PayrollCalculation") && <li onClick={() => addPane({ component: PayrollCalculationsList, label: translate("PayrollCalculationsList") })}>{translate("PayrollCalculationsList")}</li>}
-              {can("PayrollPayment") && <li onClick={() => addPane({ component: PayrollPaymentsList, label: translate("PayrollPaymentsList") })}>{translate("PayrollPaymentsList")}</li>}
+              {can("PayrollCalculation") && <li onClick={() => addPane({ component: PayrollCalculationsList })}>{translate("PayrollCalculationsList")}</li>}
+              {can("PayrollPayment") && <li onClick={() => addPane({ component: PayrollPaymentsList })}>{translate("PayrollPaymentsList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
             <h3>{translate("directories")}</h3>
             <ul className={styles.NavList}>
-              {can("Employee") && <li onClick={() => addPane({ component: EmployeesList, label: translate("EmployeesList") })}>{translate("EmployeesList")}</li>}
-              {can("Position") && <li onClick={() => addPane({ component: PositionsList, label: translate("PositionsList") })}>{translate("PositionsList")}</li>}
+              {can("Employee") && <li onClick={() => addPane({ component: EmployeesList })}>{translate("EmployeesList")}</li>}
+              {can("Position") && <li onClick={() => addPane({ component: PositionsList })}>{translate("PositionsList")}</li>}
             </ul>
           </div>
         </div>
@@ -1087,8 +1087,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>{translate("taskManagement")}</h3>
             <ul className={styles.NavList}>
-              {can("Todo") && <li onClick={() => addPane({ component: TodosList, label: translate("TodosList") })}>{translate("TodosList")}</li>}
-              {can("ScheduledTask") && <li onClick={() => addPane({ component: ScheduledTasksList, label: translate("ScheduledTasksList") })}>{translate("ScheduledTasksList")}</li>}
+              {can("Todo") && <li onClick={() => addPane({ component: TodosList })}>{translate("TodosList")}</li>}
+              {can("ScheduledTask") && <li onClick={() => addPane({ component: ScheduledTasksList })}>{translate("ScheduledTasksList")}</li>}
             </ul>
           </div>
         </div>
@@ -1102,22 +1102,22 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>{translate("directories")}</h3>
             <ul className={styles.NavList}>
-              {can("Organization") && <li onClick={() => addPane({ component: OrganizationsList, label: translate("OrganizationsList") })}>{translate("OrganizationsList")}</li>}
-              {can("Counterparty") && <li onClick={() => addPane({ component: CounterpartiesList, label: translate("CounterpartiesList") })}>{translate("CounterpartiesList")}</li>}
-              {can("Contract") && <li onClick={() => addPane({ component: ContractsList, label: translate("ContractsList") })}>{translate("ContractsList")}</li>}
-              {can("BankAccount") && <li onClick={() => addPane({ component: BankAccountsList, label: translate("BankAccountsList") })}>{translate("BankAccountsList")}</li>}
-              {can("Cashbox") && <li onClick={() => addPane({ component: CashboxesList, label: translate("CashboxesList") })}>{translate("CashboxesList")}</li>}
-              {can("Contact") && <li onClick={() => addPane({ component: ContactsList, label: translate("ContactsList") })}>{translate("ContactsList")}</li>}
-              {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList, label: translate("ContactPersonsList") })}>{translate("ContactPersonsList")}</li>}
-              {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList, label: translate("CurrenciesList") })}>{translate("CurrenciesList")}</li>}
+              {can("Organization") && <li onClick={() => addPane({ component: OrganizationsList })}>{translate("OrganizationsList")}</li>}
+              {can("Counterparty") && <li onClick={() => addPane({ component: CounterpartiesList })}>{translate("CounterpartiesList")}</li>}
+              {can("Contract") && <li onClick={() => addPane({ component: ContractsList })}>{translate("ContractsList")}</li>}
+              {can("BankAccount") && <li onClick={() => addPane({ component: BankAccountsList })}>{translate("BankAccountsList")}</li>}
+              {can("Cashbox") && <li onClick={() => addPane({ component: CashboxesList })}>{translate("CashboxesList")}</li>}
+              {can("Contact") && <li onClick={() => addPane({ component: ContactsList })}>{translate("ContactsList")}</li>}
+              {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>{translate("ContactPersonsList")}</li>}
+              {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList })}>{translate("CurrenciesList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
             <h3>{translate("accounting")}</h3>
             <ul className={styles.NavList}>
-              {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList, label: translate("OrganizationAccountingSettingsList") })}>{translate("OrganizationAccountingSettingsList")}</li>}
-              {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList, label: translate("UnitOfMeasuresList") })}>{translate("UnitOfMeasuresList")}</li>}
-              {can("Tax") && <li onClick={() => addPane({ component: TaxesList, label: translate("TaxesList") })}>{translate("TaxesList")}</li>}
+              {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>{translate("OrganizationAccountingSettingsList")}</li>}
+              {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList })}>{translate("UnitOfMeasuresList")}</li>}
+              {can("Tax") && <li onClick={() => addPane({ component: TaxesList })}>{translate("TaxesList")}</li>}
             </ul>
           </div>
           <div className={styles.NavGroup}>
@@ -1130,11 +1130,11 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <div className={styles.NavGroup}>
             <h3>{translate("administration")}</h3>
             <ul className={styles.NavList}>
-              {can("User") && <li onClick={() => addPane({ component: UsersList, label: translate("UsersList") })}>{translate("UsersList")}</li>}
+              {can("User") && <li onClick={() => addPane({ component: UsersList })}>{translate("UsersList")}</li>}
               {can("UserSettings") && <li onClick={async () => { const m = await import("src/models/UserSettings"); addPane({ component: m.UserSettingsModuleList, label: translate("UserSettings") }); }}>{translate("UserSettings")}</li>}
-              {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList, label: translate("ActivityHistoriesList") })}>{translate("ActivityHistoriesList")}</li>}
+              {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>{translate("ActivityHistoriesList")}</li>}
               {/* Входящие события интеграции 1С (POST /pipe) — просмотр «входящего ящика». */}
-              {can("ActivityHistory") && <li onClick={() => addPane({ component: PipeActivitiesList, label: translate("PipeActivitiesList") })}>{translate("PipeActivitiesList")}</li>}
+              {can("ActivityHistory") && <li onClick={() => addPane({ component: PipeActivitiesList })}>{translate("PipeActivitiesList")}</li>}
               {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</li>}
               <li onClick={() => addPane({ component: FilesList, label: translate("files") })}>{translate("files")}</li>
               <li onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</li>

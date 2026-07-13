@@ -93,6 +93,9 @@ export type TPane = {
 
 /** Сериализуемое описание панели для восстановления после перезагрузки. */
 export type TPaneRestore =
+	// Универсальный: панель поднимается по ИМЕНИ компонента через viewRegistry.
+	// Покрывает всё, что открывается из навбара (списки, ЭСФ/СНТ, терминал, обработки).
+	| { kind: "view"; name: string; data?: Record<string, any> }
 	| { kind: "list"; ref: string }
 	| { kind: "form"; endpoint: string; uuid?: string }
 	| { kind: "report"; key: string; data?: Record<string, any> }

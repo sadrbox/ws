@@ -9,6 +9,7 @@
 //   форма    f~<endpoint>~<uuid>
 //   файл     x~<uuid>~<имя файла>
 //   отчёт    r~<key>[~<base64(json data)>]
+//   панель   v~<имя компонента>[~<uuid>]
 // ─────────────────────────────────────────────────────────────────────────────
 import type { TPaneRestore } from "src/app/types";
 import { showToast } from "src/components/UIToast";
@@ -17,6 +18,8 @@ const PARAM = "open";
 
 function encodeRestore(r: TPaneRestore): string {
   switch (r.kind) {
+    // Панель-представление: имя компонента (+ uuid записи для форм).
+    case "view": return r.data?.uuid ? `v~${r.name}~${r.data.uuid}` : `v~${r.name}`;
     case "list": return `l~${r.ref}`;
     case "form": return `f~${r.endpoint}~${r.uuid ?? ""}`;
     case "file": return `x~${r.uuid}~${r.fileName ?? ""}`;
@@ -31,6 +34,11 @@ function decodeRestore(s: string): TPaneRestore | null {
   const i = rest.indexOf("~");      // первый разделитель внутри сегментов
   try {
     switch (type) {
+      case "v": {
+        const name = i < 0 ? rest : rest.slice(0, i);
+        const uuid = i < 0 ? "" : rest.slice(i + 1);
+        return uuid ? { kind: "view", name, data: { uuid } } : { kind: "view", name };
+      }
       case "l":
         return { kind: "list", ref: rest };
       case "f": {

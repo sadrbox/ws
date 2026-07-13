@@ -13,9 +13,38 @@
  * без рецепта (открытые произвольным компонентом), а также формы новых
  * (несохранённых) записей.
  */
+import type { ComponentType } from "react";
+import { VIEWS } from "src/registry/viewRegistry";
+import { getComponentName } from "src/app/getComponentName";
 import type { TPane, TPaneRestore } from "./types";
 
 const STORAGE_KEY = "ui.panes.session";
+
+/**
+ * Рецепт панели — по ИМЕНИ её компонента.
+ *
+ * Живой компонент в localStorage не положить, поэтому сохраняем имя и поднимаем панель
+ * через viewRegistry (там же, где навбар берёт компоненты). Так восстанавливается ВСЁ,
+ * что открывается вкладкой, — не нужно прописывать рецепт в каждый из 120+ вызовов
+ * addPane и не нужно, чтобы панель была моделью из modelRegistry.
+ *
+ * data берём только сериализуемую (uuid/id) — по ней форма сама подтянет запись.
+ */
+export function inferListRestore(
+	component: ComponentType<unknown> | undefined,
+	data?: Record<string, unknown>,
+): TPaneRestore | undefined {
+	if (!component) return undefined;
+	const name = getComponentName(component as never);
+	// Не панель-представление: диалоги выбора, а также ФОРМЫ ЗАПИСЕЙ — последние
+	// открываются через ModelList/formRegistry и приносят свой рецепт (kind: "form",
+	// endpoint + uuid). В VIEWS лежат только панели навбара, включая формы-обработки
+	// («Ввод остатков», «Поиск и замена ссылок») — у них записи нет, и это нормально.
+	if (!VIEWS[name]) return undefined;
+
+	const uuid = data?.uuid ?? data?.id;
+	return { kind: "view", name, ...(uuid ? { data: { uuid: String(uuid) } } : {}) };
+}
 
 export interface PersistedPane {
 	uniqId: string;
@@ -60,6 +89,12 @@ export function savePersistedSession(panes: TPane[], activePaneId: string): void
 export async function restorePane(p: PersistedPane, addPane: AddPane): Promise<void> {
 	const r = p.restore;
 	switch (r.kind) {
+		case "view": {
+			const component = VIEWS[r.name];
+			if (!component) return; // компонент исчез (переименован/удалён) — панель пропускаем
+			addPane({ component, label: p.label, data: r.data, restore: r });
+			return;
+		}
 		case "list": {
 			const { openListByRef } = await import("src/registry/formRegistry");
 			await openListByRef(r.ref, addPane, p.label);

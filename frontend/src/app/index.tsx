@@ -26,7 +26,7 @@ import { startHealthCheck, stopHealthCheck } from "src/services/networkStatus";
 import { clearAllFormStores } from "src/hooks/useFormSessionStore";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { AppContextProvider } from "src/app/context";
-import { loadPersistedSession, savePersistedSession, restorePane, type PersistedSession } from "src/app/paneRestore";
+import { loadPersistedSession, savePersistedSession, restorePane, inferListRestore, type PersistedSession } from "src/app/paneRestore";
 import { readPaneLink, clearPaneLinkParam } from "src/utils/paneLink";
 import { openFormByRef } from "src/utils/openFormByRef";
 import { getComponentName } from "./getComponentName";
@@ -239,6 +239,18 @@ const App: React.FC = () => {
     if (!options.isSelector) {
       const existing = panes.find(p => p.uniqId === uniqId);
       if (existing) {
+        // Списки — синглтоны (uniqId = имя компонента). Если тот же компонент
+        // открывают с ДРУГОЙ подписью, второй вкладки не будет, а заголовок
+        // останется от первого открытия — пункт меню выглядит сломанным. Так уже
+        // было: «ЭСФ: Исходящие» и «Счета-фактуры (исходящие)» делили один список.
+        // Молча это не ловится, поэтому ругаемся в dev.
+        if (import.meta.env.DEV && options.label && options.label !== existing.label) {
+          console.warn(
+            `[addPane] Панель «${uniqId}» уже открыта с подписью «${existing.label}», ` +
+            `а запрошена «${options.label}». Останется прежняя. Нужны две разные вкладки — ` +
+            `различайте их через data (тогда будет разный uniqId), а не подписью.`,
+          );
+        }
         setActivePaneId(uniqId);
         setNavbarItems((prev) => prev.map((n) => ({ ...n, isActive: false })));
         return uniqId;
@@ -255,6 +267,13 @@ const App: React.FC = () => {
     const newPane: TPane = {
       ...options,
       uniqId,
+      // Рецепт восстановления. Панели без него не переживают перезагрузку (см.
+      // paneRestore): сохранить можно только сериализуемое описание, а не живой
+      // компонент. Реестры (openListByRef / openFormByEndpoint / openReport) рецепт
+      // проставляют, а навбар открывает списки НАПРЯМУЮ компонентом — и такие панели
+      // после F5 пропадали. Выводим рецепт из имени компонента, чтобы не дублировать
+      // endpoint в каждом из 120+ вызовов addPane.
+      restore: options.restore ?? inferListRestore(options.component, options.data),
       label,
       component: options.component, // важно сохранить ссылку на компонент
     };
@@ -389,7 +408,7 @@ const App: React.FC = () => {
         }
       } else if (!linked) {
         // Первый визит / пустая сессия (и нет ссылки) — открываем список по умолчанию.
-        openFormByRef({ endpoint: "Sales", uuid: "213" }, addPane);
+        // openFormByRef({ endpoint: "Sales", uuid: "213" }, addPane);
       }
       // Открыть панель по ссылке (поверх восстановленной сессии) и очистить URL.
       if (linked && !cancelled) {
