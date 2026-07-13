@@ -22,6 +22,7 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { getFormatDate } from "src/utils/datetime";
+import { FormLookup } from "src/components/Field/FormLookup";
 
 const MODEL_ENDPOINT = "pipeactivities";
 const LIST_NAME = "PipeActivitiesList";
@@ -68,7 +69,8 @@ interface TFields {
   objectType: string; objectName: string; objectId: string;
   userName: string; organizationShortName: string; bin: string;
   host: string; ip: string;
-  props: string; payload: string;
+  props: string; propsJson: string; payload: string;
+  organizationUuid: string; userUuid: string;
   applyStatus: string; applyMessage: string;
 }
 
@@ -76,7 +78,8 @@ const DEFAULT_FIELDS: TFields = {
   receivedAt: "", actionDate: "", actionType: "",
   objectType: "", objectName: "", objectId: "",
   userName: "", organizationShortName: "", bin: "",
-  host: "", ip: "", props: "", payload: "",
+  host: "", ip: "", props: "", propsJson: "", payload: "",
+  organizationUuid: "", userUuid: "",
   applyStatus: "", applyMessage: "",
 };
 
@@ -94,12 +97,19 @@ const PipeActivitiesForm: FC<Partial<TPane>> = (paneProps) => {
       objectType: d.objectType ?? "",
       objectName: d.objectName ?? "",
       objectId: d.objectId ?? "",
-      userName: d.userName ?? "",
-      organizationShortName: d.organizationShortName ?? "",
+      // Имя показываем НАШЕ (из справочника), если объект сопоставлен: в 1С оно может
+      // быть записано иначе. Если не сопоставлен — то, что прислала 1С.
+      userName: (d.user as { username?: string } | null)?.username ?? d.userName ?? "",
+      organizationShortName: (d.organization as { name?: string } | null)?.name ?? d.organizationShortName ?? "",
+      organizationUuid: (d.organization as { uuid?: string } | null)?.uuid ?? "",
+      userUuid: (d.user as { uuid?: string } | null)?.uuid ?? "",
       bin: d.bin ?? "",
       host: d.host ?? "",
       ip: d.ip ?? "",
       props: formatProps(d.props),
+      // Реквизиты 1С — вложенный объект. Однострочное поле его расплющивало
+      // («ключ: значение; …») и делало нечитаемым; показываем объект-нотацией.
+      propsJson: d.props ? JSON.stringify(d.props, null, 2) : "",
       // Оригинальный JSON от 1С — как есть, для разбора инцидентов интеграции.
       payload: d.payload ? JSON.stringify(d.payload, null, 2) : "",
       applyStatus: applyLabel(d.applyStatus),
@@ -127,18 +137,23 @@ const PipeActivitiesForm: FC<Partial<TPane>> = (paneProps) => {
                 <Field label={translate("objectName")} name={`${form.formUid}_on`} value={form.fields.objectName} disabled />
                 <Field label={translate("objectId")} name={`${form.formUid}_oi`} value={form.fields.objectId} disabled />
               </Group>
+              {/* Организация и пользователь — ССЫЛКИ на объекты справочников, а не текст:
+                  при приёме события они находятся (а если нет — создаются), см.
+                  services/pipeActor.js. disabled — журнал только на чтение, но лукап
+                  показывает связанный объект и открывает его карточку. */}
               <Group>
-                <Field label={translate("userName")} name={`${form.formUid}_un`} value={form.fields.userName} disabled />
-                <Field label={translate("organization")} name={`${form.formUid}_org`} value={form.fields.organizationShortName} disabled />
+                <FormLookup form={form} field="user" endpoint="users" nameField="userName" label={translate("userName")} disabled />
+                <FormLookup form={form} field="organization" endpoint="organizations" nameField="organizationShortName" label={translate("organization")} disabled />
                 <Field label={translate("bin")} name={`${form.formUid}_bin`} value={form.fields.bin} disabled />
               </Group>
               <Group>
                 <Field label={translate("host")} name={`${form.formUid}_h`} value={form.fields.host} disabled />
                 <Field label={translate("ip")} name={`${form.formUid}_ip`} value={form.fields.ip} disabled />
               </Group>
-              <Group>
-                <Field label={translate("pipeProps")} name={`${form.formUid}_props`} value={form.fields.props} disabled />
-              </Group>
+              <GroupCol>
+                <label className={styles.JsonViewLabel}>{translate("pipeProps")}</label>
+                <pre className={styles.JsonView}>{form.fields.propsJson || "—"}</pre>
+              </GroupCol>
               {/* Что событие сделало со справочником: создан / обновлён / привязан /
                   пропущено / ошибка (см. services/pipeReference.js). Отдельного поля
                   «какой справочник» тут НЕТ — это objectName из самого события
@@ -190,6 +205,29 @@ function renderPipeCell(row: TDataItem, col: TColumn): ReactNode | undefined {
   return undefined;
 }
 
+/** JSON объект-нотацией — и в форме, и в предпросмотре (плоская строка нечитаема). */
+const JsonBlock: FC<{ value: unknown }> = ({ value }) => (
+  <pre className={styles.JsonView}>{value ? JSON.stringify(value, null, 2) : "—"}</pre>
+);
+JsonBlock.displayName = "JsonBlock";
+
+/** Реквизиты 1С в предпросмотре — как в форме: объект-нотацией, а не «ключ: значение; …». */
+function renderPipePreviewValue(row: TDataItem, col: TColumn): ReactNode | undefined {
+  if (col.identifier === "props") return <JsonBlock value={row.props} />;
+  if (col.identifier === "actionType") return <span>{actionLabel(row.actionType)}</span>;
+  if (col.identifier === "applyStatus") return <span>{applyLabel(row.applyStatus)}</span>;
+  return undefined;
+}
+
+/** Вкладка «Исходный JSON» — то, что прислала 1С, без наших интерпретаций. */
+function pipePreviewTabs(row: TDataItem) {
+  return [{
+    id: "payload",
+    label: translate("pipePayload"),
+    component: <JsonBlock value={row.payload} />,
+  }];
+}
+
 const PipeActivitiesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = (
   { variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }
 ) => (
@@ -199,9 +237,13 @@ const PipeActivitiesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TD
     variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPipeCell}
-    // События порождает 1С (POST /pipe), а не пользователь: у роутера только GET.
-    // Кнопки «Добавить»/«Удалить» били бы в несуществующие роуты.
-    hideAddDelete
+    // Предпросмотр: «Основное» (с реквизитами объект-нотацией) + «Исходный JSON».
+    renderPreviewValue={renderPipePreviewValue}
+    previewTabs={pipePreviewTabs}
+    // «Добавить» нет: события порождает 1С (POST /pipe), руками их не заводят.
+    // «Удалить» есть: журнал растёт, разобранные и ошибочные записи нужно убирать.
+    // Удаляется только ЗАПИСЬ ЖУРНАЛА — созданный ею элемент справочника остаётся.
+    hideAdd
   />
 );
 PipeActivitiesList.displayName = LIST_NAME;

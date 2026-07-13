@@ -539,7 +539,7 @@ body {
 	overflow: auto;
 	padding: 0 6px;
 	display: none;
-	gap: 6px;
+	gap: 12px;
 }
 
 .PaneItemActive {
@@ -553,9 +553,10 @@ body {
 	gap: 6px;
 	align-items: center;
 	justify-content: flex-start;
-	height: $heightFieldInput + 6px;
+	height: $heightFieldInput;
+
 	flex-shrink: 0;
-	margin: 0 -6px;
+	margin: 0px -6px 0px -6px;
 	padding: 0 6px;
 	background: $color30;
 	user-select: none;
@@ -607,7 +608,8 @@ body {
 	display: flex;
 	flex-direction: row;
 	gap: 6px;
-	justify-content: flex-end;
+	justify-content: flex-start;
+	margin: 0px;
 }
 
 
@@ -1223,6 +1225,7 @@ body {
 	flex: 1 1 auto;
 	place-content: flex-end;
 	flex-wrap: wrap;
+	align-content: flex-end;
 }
 
 
@@ -1510,10 +1513,53 @@ body {
 	pointer-events: none;
 	z-index: 10;
 }
+
 // Пояснение-подпись под полем формы (мелкий приглушённый текст).
 .FieldHint {
 	margin-top: 3px;
 	color: #888;
 	font-size: 12px;
 	line-height: 1.3;
+}
+
+// ── Просмотр JSON (реквизиты 1С в «Событиях 1С») ─────────────────────────────
+// Вложенный объект в однострочном <input> расплющивался в «ключ: значение; …» и
+// становился нечитаемым. Показываем объект-нотацией: моноширинно, с переносами,
+// со скроллом — карточка события не должна растягиваться под длинный payload.
+.JsonViewLabel {
+	font-size: 12px;
+	color: #555;
+	margin-bottom: 3px;
+}
+
+.JsonView {
+	margin: 0;
+	padding: 8px 12px;
+	max-height: 320px;
+	overflow: auto;
+	background: #fafafa;
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+// Значение-ссылка на объект системы (организация/пользователь в «Событиях 1С»).
+.LinkButton {
+	align-self: flex-start;
+	border: none;
+	background: none;
+	padding: 3px 0;
+	color: #1677ff;
+	font-size: 13px;
+	line-height: 1.3;
+	text-decoration: underline;
+	cursor: pointer;
+
+	&:hover {
+		color: #0958d9;
+	}
 }

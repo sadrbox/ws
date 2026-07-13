@@ -4,6 +4,8 @@ import { querySchema } from "../../utils/module.js";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { pruneAuditLog, retentionDays } from "../../services/auditLog.js";
+import { parse1cDate } from "../../utils/parse1cDate.js";
+import { resolveActors } from "../../services/pipeActor.js";
 // import { success } from "zod";
 const router = express.Router();
 
@@ -47,7 +49,10 @@ router.post("/", async (req, res) => {
 		console.log("POST /pipe body:", JSON.stringify(body));
 
 		const actionType = body.actionType ? String(body.actionType) : "create";
-		const actionDate = body.actionDate ? new Date(body.actionDate) : new Date();
+		// 1С шлёт «13.07.2026 23:22:04» — new Date() такое не парсит (Invalid Date →
+		// Prisma отвергала запрос → 500 → 1С ретраила и теряла событие).
+		// Нераспознанная дата не повод терять событие: подставляем время приёма.
+		const actionDate = parse1cDate(body.actionDate) ?? new Date();
 
 		const organizationShortName = body.organization?.shortName ?? null;
 		const bin = body.organization?.bin ?? null;
@@ -73,8 +78,14 @@ router.post("/", async (req, res) => {
 				.json({ success: false, message: "Missing object.id or object.type" });
 		}
 
+		// Организация и пользователь — ССЫЛКАМИ на объекты системы, а не только именами.
+		// Нет объекта — создаём (организацию только при наличии БИН). Сбой резолва не
+		// роняет приём: событие важнее ссылок, они просто останутся пустыми.
+		const actors = await resolveActors(body);
+
 		const item = await prisma.pipeActivity.create({
 			data: {
+				...actors,
 				actionDate,
 				actionType,
 				organizationShortName,

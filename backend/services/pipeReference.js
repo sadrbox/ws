@@ -72,18 +72,31 @@ const REF_BOOKS = {
 	Контрагенты: {
 		model: "counterparty",
 		build: (props, ctx) => {
-			const bin = normalizeBin(pick(props, "БИН", "ИИН", "BIN", "Бин"));
-			if (!bin) return null; // Counterparty.bin — NOT NULL @unique
+			// БИН у контрагента НЕОБЯЗАТЕЛЕН: 1С шлёт физлиц и розницу без него, а раньше
+			// такие события отбивались с «Не хватает обязательных реквизитов» — справочник
+			// из 1С попросту не наполнялся. Обязательно только НАИМЕНОВАНИЕ.
+			const name = pick(props, "Наименование", "Название") ?? ctx.objectName;
+			if (!name) return null; // без имени контрагент бессмыслен
 			return {
-				bin,
-				name: pick(props, "Наименование", "Название") ?? ctx.objectName,
+				bin: normalizeBin(pick(props, "БИН", "ИИН", "BIN", "Бин")) ?? null,
+				name,
 				legalName: pick(props, "НаименованиеПолное", "ЮридическоеНаименование"),
 				organizationUuid: ctx.orgUuid,
 			};
 		},
-		findNatural: async (props) => {
+		findNatural: async (props, ctx) => {
+			// Есть БИН — он и есть надёжный ключ.
 			const bin = normalizeBin(pick(props, "БИН", "ИИН", "BIN", "Бин"));
-			return bin ? prisma.counterparty.findUnique({ where: { bin } }) : null;
+			if (bin) return prisma.counterparty.findUnique({ where: { bin } });
+
+			// Без БИН привязываемся по имени В ПРЕДЕЛАХ организации — иначе интеграция
+			// создала бы второго «Иванова» рядом с уже заведённым вручную. Имя — ключ
+			// слабый, поэтому только точное совпадение и только при отсутствии БИН.
+			const name = pick(props, "Наименование", "Название") ?? ctx.objectName;
+			if (!name) return null;
+			return prisma.counterparty.findFirst({
+				where: { name, bin: null, organizationUuid: ctx.orgUuid ?? undefined, deletedAt: null },
+			});
 		},
 	},
 

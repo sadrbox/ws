@@ -102,7 +102,7 @@ $radius1: 1px;
 $radius2: 2px;
 $radius3: 3px;
 $radius4: 4px;
-$heightFieldInput: 28px;
+$heightFieldInput: 27px;
 
 $fontsize: 13px;
 
@@ -211,8 +211,7 @@ a {
 	background: linear-gradient(180deg, #fff, #aaa);
 }
 
-.secondary:hover {
-}
+.secondary:hover {}
 
 .danger {
 	background-color: #dc3545 !important;

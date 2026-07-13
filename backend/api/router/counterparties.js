@@ -6,15 +6,32 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { tenantFilter } from "../../utils/auth.js";
 const router = express.Router();
 
-// Валидация БИН
-const validateBIN = (bin) => {
-	if (!bin || typeof bin !== "string") {
-		return { valid: false, error: "БИН обязателен и должен быть строкой" };
+// Валидация БИН.
+//
+// БИН у контрагента НЕОБЯЗАТЕЛЕН: контрагентом может быть физлицо или розничный
+// покупатель, а элементы из 1С часто приходят без БИН. Но ЕСЛИ он указан — формат
+// строгий: по БИН идёт сопоставление контрагентов при обмене, и мусор в нём тихо
+// свяжет разные записи.
+//
+// У ОРГАНИЗАЦИИ БИН остаётся обязательным: по нему определяется, к какой организации
+// относится входящее событие 1С.
+const validateBIN = (bin, { required = false } = {}) => {
+	const empty = bin === undefined || bin === null || String(bin).trim() === "";
+	if (empty) {
+		return required
+			? { valid: false, error: "БИН обязателен и должен быть строкой" }
+			: { valid: true };
 	}
-	if (!/^\d{12}$/.test(bin.trim())) {
+	if (typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
 		return { valid: false, error: "БИН должен состоять ровно из 12 цифр" };
 	}
 	return { valid: true };
+};
+
+/** Пустой БИН → null: пустая строка нарушила бы @unique у второго такого контрагента. */
+const normalizeBinOrNull = (bin) => {
+	const t = typeof bin === "string" ? bin.trim() : "";
+	return t === "" ? null : t;
 };
 
 // Валидация данных контрагента
@@ -55,15 +72,8 @@ router.post("/counterparties", async (req, res) => {
 	try {
 		const { bin, name, legalName, countryCode, enterpriseCategory } = req.body;
 
-		// 1. Ранняя проверка наличия
-		if (!bin || typeof bin !== "string") {
-			return res.status(400).json({
-				message: "Поле BIN обязательно и должно быть строкой",
-			});
-		}
-
-		// 2. Нормализация один раз
-		const normalizedBin = bin.trim();
+		// БИН необязателен (физлицо/розница/элемент из 1С). Пустой → null.
+		const normalizedBin = normalizeBinOrNull(bin);
 
 		// 3. Валидация (предполагаем, что validate... теперь принимает уже trimmed значения)
 		const errors = validateCounterpartyData({
@@ -78,12 +88,15 @@ router.post("/counterparties", async (req, res) => {
 
 		// 4. Проверка + создание в одной транзакции (самый надёжный способ)
 		const counterparty = await prisma.$transaction(async (tx) => {
-			const existing = await tx.counterparty.findUnique({
-				where: { bin: normalizedBin },
-			});
-
-			if (existing) {
-				throw Object.assign(new Error("Duplicate BIN"), { status: 409 });
+			// Дубль ищем только по ЗАДАННОМУ БИН: без него контрагенты не уникальны
+			// (двух «Ивановых» без БИН завести можно, и это нормально).
+			if (normalizedBin) {
+				const existing = await tx.counterparty.findUnique({
+					where: { bin: normalizedBin },
+				});
+				if (existing) {
+					throw Object.assign(new Error("Duplicate BIN"), { status: 409 });
+				}
 			}
 
 			return tx.counterparty.create({
@@ -449,7 +462,10 @@ router.put("/counterparties/:uuid", async (req, res) => {
 			updateData.legalName = legalName?.trim() || null;
 		}
 		if (bin !== undefined) {
-			updateData.bin = bin.trim();
+			// Очистка БИН → null, а НЕ "": пустая строка — обычное значение, и второй
+			// контрагент с пустым БИН упал бы на @unique. NULL же в Postgres допускается
+			// многократно.
+			updateData.bin = normalizeBinOrNull(bin);
 		}
 		if (countryCode !== undefined) {
 			updateData.countryCode = countryCode?.trim() || "KZ";
@@ -588,7 +604,7 @@ router.get("/counterparties/search/bin/:bin", async (req, res) => {
 	try {
 		const { bin } = req.params;
 
-		const binValidation = validateBIN(bin);
+		const binValidation = validateBIN(bin, { required: true });
 		if (!binValidation.valid) {
 			return res.status(400).json({
 				message: binValidation.error,

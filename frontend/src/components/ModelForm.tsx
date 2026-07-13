@@ -96,7 +96,7 @@ const ModelForm: FC<ModelFormProps> = ({
     <FormPanel
       onSaveAndClose={onSaveAndClose}
       onSave={onSave}
-      onReload={onReload}
+      // onReload={onReload}
       onClose={onClose}
       readonly={readonly}
       isLoading={isLoading}

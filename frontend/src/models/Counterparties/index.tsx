@@ -87,7 +87,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
                 </Group>
                 <GroupRow>
                   <Group className={styles.w1of2}>
-                    <Field label={`${translate("binIin")}`} name={`${form.formUid}_bin`} minWidth={FIELD_WIDTH.lg} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading} required />
+                    <Field label={`${translate("binIin")}`} name={`${form.formUid}_bin`} minWidth={FIELD_WIDTH.lg} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading} />
                   </Group>
                   <Group className={styles.w1of2}>
                     <ClassifierLookup type="country" label={translate("countryCode")} name={`${form.formUid}_countryCode`} value={form.fields.countryCode} onChange={(code) => form.setField("countryCode", code)} disabled={form.isLoading} width="220px" />
@@ -127,8 +127,11 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
     return result;
   }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts, canWrite, ownerUuid]);
 
+  // БИН НЕ обязателен: контрагентом может быть физлицо или розничный покупатель, а из
+  // 1С элементы приходят без него. Обязательно наименование. У ОРГАНИЗАЦИИ БИН
+  // по-прежнему обязателен — по нему определяется адресат входящих событий 1С.
   return (
-    <FormRequiredScope requiredKeys={["bin"]} active>
+    <FormRequiredScope requiredKeys={["name"]} active>
       <ModelForm paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
         onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
         readonly={!canWrite} />

@@ -91,10 +91,24 @@ test("Первая встреча ПРИВЯЗЫВАЕТСЯ к существу
 	}
 });
 
-test("Контрагент без БИН не создаётся: событие помечается error, данные не портятся", async () => {
+// Раньше контрагент без БИН не создавался (Counterparty.bin был NOT NULL) — и весь
+// справочник из 1С не наполнялся: физлиц и розницу 1С шлёт без БИН. Теперь БИН
+// необязателен, обязательно ИМЯ. Подробности — в counterpartyNoBin.test.js.
+test("Контрагент без БИН СОЗДАЁТСЯ (1С шлёт физлиц и розницу без БИН)", async () => {
 	const r = await applyPipeReference(event({
 		book: "Контрагенты", id: `1c-nobin-${crypto.randomUUID().slice(0, 8)}`,
-		props: { Наименование: "Без БИН" },
+		props: { Наименование: `Без БИН ${crypto.randomUUID().slice(0, 6)}` },
+	}));
+	assert.equal(r.status, "created", r.message);
+	const cp = await prisma.counterparty.findUnique({ where: { uuid: r.uuid } });
+	assert.equal(cp.bin, null);
+	await prisma.counterparty.delete({ where: { uuid: r.uuid } }).catch(() => {});
+});
+
+test("Контрагент без ИМЕНИ не создаётся: событие помечается error, данные не портятся", async () => {
+	const r = await applyPipeReference(event({
+		book: "Контрагенты", id: `1c-noname-${crypto.randomUUID().slice(0, 8)}`,
+		props: { Код: "000000009" },
 	}));
 	assert.equal(r.status, "error");
 	assert.match(r.message, /БИН|Наименование/i);

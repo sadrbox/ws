@@ -445,7 +445,10 @@ const LookupField: FC<LookupFieldProps> = ({
 
   // ── Открыть форму выбранного элемента ─────────────────────────────────
   const handleOpenItemForm = useCallback(() => {
-    if (!value || disabled) return;
+    // disabled НЕ мешает: открыть карточку связанного объекта — это чтение, а не
+    // правка. Иначе в проведённом документе (все поля disabled) нельзя было бы
+    // посмотреть контрагента, а в журнале событий 1С — организацию/пользователя.
+    if (!value) return;
     const entry = getByEndpoint(endpoint);
     if (!entry) return;
     entry.module().then((mod) => {
@@ -594,10 +597,18 @@ const LookupField: FC<LookupFieldProps> = ({
 
   // Действия для кнопок
   const fieldActions = useMemo(() => {
-    if (disabled) return [];
     const acts: { type: LookupActionType; onClick: () => void }[] = [];
     const allowed = visibleActions; // undefined = показывать все
     const show = (t: LookupActionType) => !allowed || allowed.includes(t);
+
+    // Поле заблокировано (проведённый документ, read-only журнал) — менять значение
+    // нельзя, но ПОСМОТРЕТЬ связанный объект можно: это чтение. Остальные действия
+    // (выбор/список/очистка) — мутации, их скрываем.
+    if (disabled) {
+      return show("open") && value && getByEndpoint(endpoint)
+        ? [{ type: "open" as LookupActionType, onClick: handleOpenItemForm }]
+        : [];
+    }
 
     // В table-варианте кнопка «Очистить» избыточна: ячейка таблицы и так
     // редактируется поверх существующего значения, отдельная кнопка только

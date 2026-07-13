@@ -89,6 +89,12 @@ interface ModelListProps {
    */
   previewTabs?: (row: TDataItem) => { id: string; label: string; component: ReactNode }[];
   /**
+   * Свой рендер значения на вкладке «Основное» предпросмотра. Нужен там, где значение
+   * в одну строку не укладывается: JSON-реквизиты 1С плоско превращаются в
+   * «ключ: значение; …» и становятся нечитаемыми. undefined → обычный текст.
+   */
+  renderPreviewValue?: (row: TDataItem, col: TColumn) => ReactNode | undefined;
+  /**
    * Скрыть кнопки «Добавить»/«Удалить» — для СПРАВОЧНИКОВ ТОЛЬКО ДЛЯ ЧТЕНИЯ, записи
    * в которых порождаются документами, а не пользователем (например серийные номера:
    * появляются при приёмке, выбывают при продаже/списании). Без этого кнопки бьют в
@@ -144,16 +150,29 @@ class PreviewBoundary extends Component<{ fallback: ReactNode; children: ReactNo
 }
 
 // Плоский список «поле: значение» по колонкам — лёгкий предпросмотр / фолбэк.
-const FlatFields: FC<{ row: TDataItem; columns: TColumn[] }> = ({ row, columns }) => {
+//
+// renderPreviewValue — точка расширения для значений, которые в одну строку не
+// укладываются: JSON-реквизиты 1С плоско превращаются в «ключ: значение; …» и
+// становятся нечитаемыми. Модель отдаёт свой ReactNode; undefined → обычный текст.
+const FlatFields: FC<{
+  row: TDataItem;
+  columns: TColumn[];
+  renderPreviewValue?: (row: TDataItem, col: TColumn) => ReactNode | undefined;
+}> = ({ row, columns, renderPreviewValue }) => {
   const fields = columns.filter((c) => c.inlist !== false && c.identifier !== "uuid" && c.identifier !== "id");
   return (
     <div className={styles.previewBody}>
-      {fields.map((c) => (
-        <div key={c.identifier} className={styles.previewRow}>
-          <span className={styles.previewLabel}>{c.hint || t(c.identifier)}</span>
-          <span className={styles.previewValue}>{String(getFormatColumnValue(row, c) ?? "")}</span>
-        </div>
-      ))}
+      {fields.map((c) => {
+        const custom = renderPreviewValue?.(row, c);
+        return (
+          <div key={c.identifier} className={styles.previewRow}>
+            <span className={styles.previewLabel}>{c.hint || t(c.identifier)}</span>
+            {custom !== undefined
+              ? <div className={styles.previewValue}>{custom}</div>
+              : <span className={styles.previewValue}>{String(getFormatColumnValue(row, c) ?? "")}</span>}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -170,14 +189,15 @@ const ListPreview: FC<{
   row: TDataItem | null;
   columns: TColumn[];
   previewTabs?: (row: TDataItem) => PreviewTab[];
+  renderPreviewValue?: (row: TDataItem, col: TColumn) => ReactNode | undefined;
   onOpen: () => void;
-}> = ({ row, columns, previewTabs, onOpen }) => {
+}> = ({ row, columns, previewTabs, renderPreviewValue, onOpen }) => {
   if (!row) return <div className={styles.previewEmpty}>{t("viewer.empty") || "Выберите запись"}</div>;
   const uuid = row.uuid ? String(row.uuid) : "";
   const mainTab: PreviewTab = {
     id: "main",
     label: t("general") || "Основное",
-    component: <FlatFields row={row} columns={columns} />,
+    component: <FlatFields row={row} columns={columns} renderPreviewValue={renderPreviewValue} />,
   };
   const extraTabs = uuid && previewTabs ? previewTabs(row) : [];
   const tabs = [mainTab, ...extraTabs];
@@ -213,6 +233,7 @@ const ModelList: FC<ModelListProps> = ({
   enableDateRange = false,
   renderCell,
   previewTabs,
+  renderPreviewValue,
   hideAddDelete = false,
   hideAdd = false,
 }) => {
@@ -398,6 +419,7 @@ const ModelList: FC<ModelListProps> = ({
           row={previewRow}
           columns={previewColumns}
           previewTabs={previewTabs}
+          renderPreviewValue={renderPreviewValue}
           onOpen={() => previewRow && openModelForm({ data: previewRow })}
         />
       </div>

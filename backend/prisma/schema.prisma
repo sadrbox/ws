@@ -59,6 +59,8 @@ model User {
   authoredWriteOffs     WriteOff[]     @relation("WriteOffAuthor")
   authoredGoodsReceipts GoodsReceipt[] @relation("GoodsReceiptAuthor")
   authoredStockCounts   StockCount[]   @relation("StockCountAuthor")
+  pipeActivities               PipeActivity[]        @relation("UserPipeActivities")
+
 
   @@index([employeeUuid])
   @@index([organizationUuid])
@@ -184,6 +186,8 @@ model Organization {
   writeOffs     WriteOff[]     @relation("OrgWriteOffs")
   goodsReceipts GoodsReceipt[] @relation("OrgGoodsReceipts")
   stockCounts   StockCount[]   @relation("OrgStockCounts")
+  pipeActivities       PipeActivity[]                  @relation("OrgPipeActivities")
+
 
   @@index([updatedAt])
   @@unique([externalSource, externalId])
@@ -199,7 +203,10 @@ model Counterparty {
   externalId               String?
   /// Источник внешнего идентификатора ("1C").
   externalSource           String?
-  bin                  String                @unique @db.VarChar(12)
+  // Необязателен: контрагентом может быть физлицо/розница, а 1С шлёт элементы без БИН.
+  // @unique сохраняется — в Postgres он не мешает нескольким NULL, но не даст завести
+  // двух контрагентов с ОДНИМ БИН (по нему идёт сопоставление при обмене).
+  bin                  String?               @unique @db.VarChar(12)
   name                 String?
   legalName            String?
   // Реквизиты для ЭСФ (форма ЭСФ РК, раздел C — получатель).
@@ -424,6 +431,15 @@ model PipeActivity {
   objectId              String
   objectType            String
   objectName            String
+  /// Ссылки на РЕАЛЬНЫЕ объекты системы, а не только их имена из 1С.
+  /// Организация ищется по БИН, пользователь — по имени; если объекта нет, он
+  /// создаётся (см. services/pipeActor.js). Текстовые organizationShortName/bin/
+  /// userName остаются как «что именно прислала 1С» — на случай расхождений.
+  organizationUuid      String?
+  userUuid              String?
+  organization          Organization? @relation("OrgPipeActivities", fields: [organizationUuid], references: [uuid])
+  user                  User?         @relation("UserPipeActivities", fields: [userUuid], references: [uuid])
+
   props                 Json?
   payload               Json? // оригинальный пришедший JSON от 1С
   /// Результат применения события к справочнику: created | updated | linked |
@@ -437,6 +453,8 @@ model PipeActivity {
 
   @@index([receivedAt])
   @@index([objectType, objectId])
+  @@index([organizationUuid])
+  @@index([userUuid])
   @@map("pipe_activity")
 }
 
