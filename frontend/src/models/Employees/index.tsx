@@ -23,6 +23,8 @@ import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 const MODEL_ENDPOINT = "employees";
 const LIST_NAME = "EmployeesList";
@@ -91,6 +93,9 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
     afterSave: invalidateSubTables,
   });
 
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
+
   // При изменении фамилии/имени/отчества — автоматически пересчитывает fullName
   const handleNameFieldChange = useCallback((field: "lastName" | "firstName" | "middleName", value: string) => {
     const current = form.store.getSnapshot().fields;
@@ -136,6 +141,9 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
               </GroupCol>
             </div>
 
+            <GroupCol className={styles.FormNotice}>
+              <Notice items={notices} />
+            </GroupCol>
           </div>
         )
       },

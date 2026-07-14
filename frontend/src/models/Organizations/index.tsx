@@ -22,6 +22,8 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import EgovFillButton from "src/components/EgovFillButton";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 const MODEL_ENDPOINT = "organizations";
 const LIST_NAME = "OrganizationsList";
@@ -131,6 +133,9 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
     afterSave: invalidateSubTables,
   });
 
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
+
   // Гранулярные подписки на вложенные таблицы
   const contacts = form.useTable("contacts");
   const bankAccounts = form.useTable("bankAccounts");
@@ -180,6 +185,9 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
                 </GroupRow>
               </GroupCol>
             </div>
+            <GroupCol className={styles.FormNotice}>
+              <Notice items={notices} />
+            </GroupCol>
           </div>
         ),
       },

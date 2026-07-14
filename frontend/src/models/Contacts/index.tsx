@@ -20,6 +20,8 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 const MODEL_ENDPOINT = "contacts";
 
@@ -107,6 +109,9 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makePaneLabel("ContactsList", translate("ContactsList"), saved, saved.value),
   });
 
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -138,10 +143,13 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
               />
             </GroupCol>
           </div>
+          <GroupCol className={styles.FormNotice}>
+            <Notice items={notices} />
+          </GroupCol>
         </div>
       ),
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, form.uuid, data?.ownerType]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, form.uuid, data?.ownerType, notices]);
 
   return (
     <ModelForm

@@ -31,6 +31,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "src/components/Button";
 import { useAppContext } from "src/app/context";
 import { ProductPriceCorrection } from "src/models/ProductPriceProcessing";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
@@ -84,6 +86,9 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       if (uuid) await invalidateSubTableFor(queryClient, "product-prices", "productUuid", uuid);
     },
   });
+
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
 
   const barcodes = form.useTable("barcodes");
   const prices = form.useTable("prices");
@@ -192,6 +197,9 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
               <ProductImagesField productUuid={form.fields.uuid} disabled={form.isLoading || !canWrite} />
             </GroupCol>
           </div>
+          <GroupCol className={styles.FormNotice}>
+            <Notice items={notices} />
+          </GroupCol>
         </div>
       )
     },
@@ -221,7 +229,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, barcodes.pending, barcodes.onItemsChange, prices?.pending, prices?.onItemsChange, canWrite, esfDict]);
+  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, barcodes.pending, barcodes.onItemsChange, prices?.pending, prices?.onItemsChange, canWrite, esfDict, notices]);
 
   return (
     <FormRequiredScope requiredKeys={["name"]} active>

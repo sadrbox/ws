@@ -15,6 +15,8 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { renderAuditCell, summarizeDiff } from "./renderAuditCell";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 const MODEL_ENDPOINT = "activityhistories";
 
@@ -86,6 +88,9 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makePaneLabel("ActivityHistoriesList", "Журнал", saved, saved.userName || undefined),
   });
 
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -135,10 +140,13 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
               </div>
             )}
           </div>
+          <GroupCol className={styles.FormNotice}>
+            <Notice items={notices} />
+          </GroupCol>
         </div>
       )
     },
-  ], [form.fields, form.isLoading, form.isEditMode, form.formUid]);
+  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, notices]);
 
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} readonly

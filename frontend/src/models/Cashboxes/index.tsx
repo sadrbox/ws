@@ -18,6 +18,8 @@ import ModelList from "src/components/ModelList";
 import { useAppContext } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 
 const MODEL_ENDPOINT = "cashboxes";
@@ -55,6 +57,9 @@ const CashboxesForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Кассы", saved),
   });
 
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -67,10 +72,13 @@ const CashboxesForm: FC<Partial<TPane>> = (paneProps) => {
               </Group>
             </GroupCol>
           </div>
+          <GroupCol className={styles.FormNotice}>
+            <Notice items={notices} />
+          </GroupCol>
         </div>
       ),
     },
-  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields]);
+  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, form.setField, form.setFields, notices]);
 
   return (
     <ModelForm paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}

@@ -22,6 +22,8 @@ import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import columnsJson from "./columns.json";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 interface TFields {
   id?: number; uuid?: string;
@@ -105,6 +107,9 @@ const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makePaneLabel("ChartOfAccountsList", "План счетов", saved),
   });
 
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
+
   const tabs = useMemo(() => [{
     id: "tab-details",
     label: translate("general"),
@@ -144,6 +149,9 @@ const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
             </Group>
           </GroupCol>
         </div>
+        <GroupCol className={styles.FormNotice}>
+          <Notice items={notices} />
+        </GroupCol>
       </div>
     ),
   }], [form.fields, form.formUid, form.isLoading, form.setField, form.setFields, canWrite, subkontoOptions]);

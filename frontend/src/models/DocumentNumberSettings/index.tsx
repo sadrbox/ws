@@ -19,6 +19,7 @@ import SubTable, { type SubTableContext } from "src/components/SubTable";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import columnsJson from "./columns.json";
 import styles from "./DocumentNumberSettings.module.scss";
+import Notice, { type NoticeItem } from "src/components/Notice";
 
 interface Row {
   docType: string;
@@ -27,6 +28,9 @@ interface Row {
   prefix: string;
   isOverridden: boolean;
 }
+
+/** 5xx / нет сети / нет прав — это не про поля формы: такие сбои идут в тост. */
+const isSystemError = (status?: number) => !status || status >= 500 || status === 403;
 
 const QKEY = (org?: string) => ["document-number-settings", org ?? "__global__"];
 
@@ -57,6 +61,7 @@ const DocumentNumberSettings: FC = () => {
   const rows = data ?? [];
 
   const [busy, setBusy] = useState(false);
+  const [notices, setNotices] = useState<NoticeItem[]>([]);
 
   // Редактирование идёт через ВНУТРЕННЕЕ состояние SubTable (ctx.updateLocalRow),
   // как в TradeDocumentItemsTable — иначе внешний state ломает фокус ввода.
@@ -132,6 +137,7 @@ const DocumentNumberSettings: FC = () => {
 
   const save = async () => {
     setBusy(true);
+    setNotices([]);
     try {
       for (const cr of changedRows) {
         const c = cr as unknown as Row;
@@ -141,8 +147,12 @@ const DocumentNumberSettings: FC = () => {
       showToast(translate("saved"), "success");
       qc.invalidateQueries({ queryKey: QKEY(orgKey) });
     } catch (e: any) {
-      // Явная ошибка сохранения (в т.ч. если бэкенд не обновлён / без миграций).
-      showToast(e?.response?.data?.message || translate("numberingSaveError"), "error", 7000);
+      const status = e?.response?.status as number | undefined;
+      const msg = e?.response?.data?.message || translate("numberingSaveError");
+      // Ошибка ДАННЫХ (префикс занят, номер конфликтует) → <Notice /> рядом с полями,
+      // которые её и вызвали. Системный сбой → <UIToast />.
+      if (isSystemError(status)) showToast(msg, "error", 7000);
+      else setNotices([{ type: "error", text: msg }]);
     } finally {
       setBusy(false);
     }
@@ -178,7 +188,10 @@ const DocumentNumberSettings: FC = () => {
       qc.invalidateQueries({ queryKey: QKEY(orgKey) });
       showToast(translate("resetDone"), "success");
     } catch (e: any) {
-      showToast(e?.response?.data?.message || translate("numberingSaveError"), "error", 7000);
+      const status = e?.response?.status as number | undefined;
+      const msg = e?.response?.data?.message || translate("numberingSaveError");
+      if (isSystemError(status)) showToast(msg, "error", 7000);
+      else setNotices([{ type: "error", text: msg }]);
     } finally {
       setBusy(false);
     }
@@ -195,7 +208,10 @@ const DocumentNumberSettings: FC = () => {
       const n = res?.updated ?? 0;
       showToast(n > 0 ? `${translate("renumberDraftsDone")}: ${n}` : translate("renumberDraftsNone"), "success");
     } catch (e: any) {
-      showToast(e?.response?.data?.message || translate("numberingSaveError"), "error", 7000);
+      const status = e?.response?.status as number | undefined;
+      const msg = e?.response?.data?.message || translate("numberingSaveError");
+      if (isSystemError(status)) showToast(msg, "error", 7000);
+      else setNotices([{ type: "error", text: msg }]);
     } finally {
       setBusy(false);
     }
@@ -203,6 +219,7 @@ const DocumentNumberSettings: FC = () => {
 
   return (
     <div className={styles.Root}>
+      <Notice items={notices} />
 
       <div className={styles.OrgPicker}>
         <LookupField label={translate("organization")} name="dns_org" value={selOrgUuid} displayValue={selOrgName}

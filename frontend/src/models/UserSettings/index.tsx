@@ -21,6 +21,8 @@ import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import { UserAccessRightsTable, MODEL_NAME_OPTIONS } from "src/models/UserAccessRights";
 import { UserDefaultsTable, PERMISSION_DEFAULT_TYPE_OPTIONS } from "src/models/UserDefaults";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 const ENDPOINT = "user-settings";
 
@@ -137,6 +139,9 @@ const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
     afterSave: invalidateSubTables,
   });
 
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
+
   const userAccessRights = form.useTable("userAccessRights");
   const userDefaults = form.useTable("userDefaults");
 
@@ -178,6 +183,9 @@ const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                 </GroupRow>
               </GroupCol>
             </div>
+            <GroupCol className={styles.FormNotice}>
+              <Notice items={notices} />
+            </GroupCol>
           </div>
         ),
       },

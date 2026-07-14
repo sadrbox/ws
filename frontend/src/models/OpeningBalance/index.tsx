@@ -119,7 +119,6 @@ const OpeningBalanceForm: FC<Partial<TPane>> = (paneProps) => {
         <div className={styles.Form}>
           <GroupCol>
             <div className={styles.SettingHint}>{translate("openingBalanceNote")}</div>
-            <Notice items={notices} />
 
             <Group>
               <LookupField
@@ -179,6 +178,9 @@ const OpeningBalanceForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupRow>
           </GroupCol>
         </div>
+        <GroupCol className={styles.FormNotice}>
+          <Notice items={notices} />
+        </GroupCol>
       </div>
     ),
   }];

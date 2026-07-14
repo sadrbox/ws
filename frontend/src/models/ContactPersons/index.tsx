@@ -18,6 +18,8 @@ import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 const MODEL_ENDPOINT = "contactpersons";
 
@@ -73,6 +75,9 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
     },
   });
 
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
+
   const contacts = form.useTable("contacts");
 
   const tabs = useMemo(() => {
@@ -102,6 +107,9 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
                 </Group>
               </GroupCol>
             </div>
+            <GroupCol className={styles.FormNotice}>
+              <Notice items={notices} />
+            </GroupCol>
           </div>
         )
       },

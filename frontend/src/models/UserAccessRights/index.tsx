@@ -17,6 +17,8 @@ import { useUserAccessRight } from "src/hooks/useUserAccessRight";
 import { useUniqueOptionRows } from "src/hooks/useUniqueOptionRows";
 import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 const ENDPOINT = "user-access-rights";
 const SUBTABLE_COMPONENT_NAME = "UserAccessRightsTable_part";
@@ -134,6 +136,9 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
       makePaneLabel("UserAccessRightsList", "Право доступа к разделу", saved, MODEL_NAME_OPTIONS.find(o => o.value === saved.modelName)?.label),
   });
 
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -148,10 +153,13 @@ const UserAccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
               </Group>
             </GroupCol>
           </div>
+          <GroupCol className={styles.FormNotice}>
+            <Notice items={notices} />
+          </GroupCol>
         </div>
       ),
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, notices]);
 
   return (
     <ModelForm
