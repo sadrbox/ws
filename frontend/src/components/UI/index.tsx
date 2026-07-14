@@ -913,6 +913,20 @@ type TypeNavListProps = {
   label: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// NavList — меню раздела.
+//
+// Единый порядок групп во ВСЕХ разделах, по ТИПУ данных:
+//   Документы → Отчёты → Справочники → Обработки → Регламентные операции
+// (журналы обмена — гос-документы РК и ЭДО — отдельными группами: это не учётные
+// объекты, а входящие/исходящие очереди интеграции).
+//
+// Раньше группы задавались бизнес-темой вперемешку с типом: «Справочники»
+// повторялись в ЧЕТЫРЁХ разделах, «Отчёты» — в двух, а обработки («Корректировка
+// цен», «Импорт/экспорт») лежали среди справочников. Найти пункт можно было перебором.
+//
+// Внутри «Документов» — порядок бизнес-цепочки: продажа → закупка → склад → деньги.
+// ─────────────────────────────────────────────────────────────────────────────
 export const NavList = ({ label }: TypeNavListProps) => {
 
   const context = useAppContext();
@@ -924,230 +938,286 @@ export const NavList = ({ label }: TypeNavListProps) => {
   /** Проверяет, имеет ли пользователь хотя бы readonly доступ к модели */
   const can = (modelName: string) => getAccessLevel(rights, modelName, isSuperAdmin).canRead;
 
+  const TradeGroups = () => (
+    <>
+      <div className={styles.NavGroup}>
+        <h3>{translate("sales")}</h3>
+        <ul className={styles.NavList}>
+          {can("Sale") && <li onClick={() => addPane({ component: SalesList, label: translate("saleRealization") })}>{translate("saleRealization")}</li>}
+          {can("SaleReturn") && <li onClick={() => addPane({ component: SaleReturnsList })}>{translate("SaleReturnsList")}</li>}
+          {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("outgoingInvoice") })}>{translate("outgoingInvoice")}</li>}
+          {can("PaymentInvoice") && <li onClick={() => addPane({ component: PaymentInvoicesList, label: translate("paymentInvoice") })}>{translate("paymentInvoice")}</li>}
+          {can("CommercialOffer") && <li onClick={() => addPane({ component: CommercialOffersList, label: translate("docType_commercial_offer") })}>{translate("docType_commercial_offer")}</li>}
+          {can("SalesOrder") && <li onClick={() => addPane({ component: SalesOrdersList, label: translate("docType_sales_order") })}>{translate("docType_sales_order")}</li>}
+          {can("Reservation") && <li onClick={() => addPane({ component: ReservationsList, label: translate("docType_reservation") })}>{translate("docType_reservation")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("purchase")}</h3>
+        <ul className={styles.NavList}>
+          {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList, label: translate("purchaseReceipt") })}>{translate("purchaseReceipt")}</li>}
+          {can("PurchaseReturn") && <li onClick={() => addPane({ component: PurchaseReturnsList })}>{translate("PurchaseReturnsList")}</li>}
+          {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList, label: translate("incomingInvoice") })}>{translate("incomingInvoice")}</li>}
+          {can("PurchaseRequisition") && <li onClick={() => addPane({ component: PurchaseRequisitionsList })}>{translate("PurchaseRequisitionsList")}</li>}
+          {can("PurchaseOrder") && <li onClick={() => addPane({ component: PurchaseOrdersList, label: translate("docType_purchase_order") })}>{translate("docType_purchase_order")}</li>}
+          {can("ImportDeclaration") && <li onClick={() => addPane({ component: ImportDeclarationsList })}>{translate("ImportDeclarationsList")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("warehouse")}</h3>
+        <ul className={styles.NavList}>
+          {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList })}>{translate("InventoryTransfersList")}</li>}
+          {can("WriteOff") && <li onClick={() => addPane({ component: WriteOffsList })}>{translate("WriteOffsList")}</li>}
+          {can("GoodsReceipt") && <li onClick={() => addPane({ component: GoodsReceiptsList })}>{translate("GoodsReceiptsList")}</li>}
+          {can("StockCount") && <li onClick={() => addPane({ component: StockCountsList })}>{translate("StockCountsList")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("cash")}</h3>
+        <ul className={styles.NavList}>
+          {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList })}>{translate("CashReceiptOrdersList")}</li>}
+          {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList })}>{translate("CashExpenseOrdersList")}</li>}
+          {can("BankStatement") && <li onClick={() => addPane({ component: BankStatementsList, label: translate("docType_bank_statement") })}>{translate("docType_bank_statement")}</li>}
+          {can("FiscalReceipt") && <li onClick={() => addPane({ component: FiscalReceiptsList })}>{translate("FiscalReceiptsList")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("reports")}</h3>
+        <ul className={styles.NavList}>
+          {can("Sale") && <li onClick={() => addPane({ component: SalesReport, label: translate("SalesReportList") })}>{translate("SalesReportList")}</li>}
+          {can("Sale") && <li onClick={() => addPane({ component: ManagerReport, label: translate("managerReport") })}>{translate("managerReport")}</li>}
+          {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: MaterialStatement, label: translate("MaterialStatementList") })}>{translate("MaterialStatementList")}</li>}
+          {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: ProductRegisterReport, label: translate("ProductRegisterList") })}>{translate("ProductRegisterList")}</li>}
+          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceListReport, label: translate("priceListReport") })}>{translate("priceListReport")}</li>}
+          {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: InventoryTurnoverReport, label: translate("inventoryTurnover") })}>{translate("inventoryTurnover")}</li>}
+          {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: InventoryBatchesReport, label: translate("inventoryBatches") })}>{translate("inventoryBatches")}</li>}
+          {can("Sale") && <li onClick={() => addPane({ component: ABCReport, label: translate("abcAnalysis") })}>{translate("abcAnalysis")}</li>}
+          {(can("CashReceiptOrder") || can("CashExpenseOrder")) && <li onClick={() => addPane({ component: CashReport, label: translate("CashReportList") })}>{translate("CashReportList")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("directories")}</h3>
+        <ul className={styles.NavList}>
+          {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>{translate("ProductsList")}</li>}
+          {can("Warehouse") && <li onClick={() => addPane({ component: WarehousesList })}>{translate("WarehousesList")}</li>}
+          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceTypesList })}>{translate("PriceTypesList")}</li>}
+          {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>{translate("BrandsList")}</li>}
+          {can("SerialNumber") && <li onClick={() => addPane({ component: SerialNumbersList })}>{translate("SerialNumbersList")}</li>}
+          {can("Cashbox") && <li onClick={() => addPane({ component: CashboxesList })}>{translate("CashboxesList")}</li>}
+          <li onClick={() => addPane({ component: ClassifiersList, label: translate("clsSection") })}>{translate("clsSection")}</li>
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("processings")}</h3>
+        <ul className={styles.NavList}>
+          {can("Sale") && <li className={styles.NavListAccent} onClick={() => addPane({ component: SalesTerminal, label: translate("salesTerminal") })}>⚡ {translate("salesTerminal")}</li>}
+          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceCorrection, label: translate("ProductPriceProcessing") })}>{translate("ProductPriceProcessing")}</li>}
+          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceImport, label: translate("priceImportForm") })}>{translate("priceImportForm")}</li>}
+          {can("Product") && <li onClick={() => addPane({ component: ProductImportExport })}>{translate("ProductImportExport")}</li>}
+          {can("Product") && <li onClick={() => addPane({ component: OpeningBalanceForm, label: translate("openingBalanceEntry") })}>{translate("openingBalanceEntry")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("govDocsSection")}</h3>
+        <ul className={styles.NavList}>
+          {can("OutgoingInvoice") && <li onClick={() => addPane({ component: EsfIncomingList, label: translate("esfIncomingSection") })}>{translate("esfIncomingSection")}</li>}
+          {can("Sale") && <li onClick={() => addPane({ component: AwpOutboxList, label: translate("awpOutboxSection") })}>{translate("awpOutboxSection")}</li>}
+          {can("Sale") && <li onClick={() => addPane({ component: AwpIncomingList, label: translate("awpIncomingSection") })}>{translate("awpIncomingSection")}</li>}
+          {can("Sale") && <li onClick={() => addPane({ component: SntOutboxList, label: translate("sntOutboxSection") })}>{translate("sntOutboxSection")}</li>}
+          {can("Sale") && <li onClick={() => addPane({ component: SntIncomingList, label: translate("sntIncomingSection") })}>{translate("sntIncomingSection")}</li>}
+          <li className={styles.NavHint}>{translate("govDocsHint")}</li>
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("edoSection")}</h3>
+        <ul className={styles.NavList}>
+          {can("EdoDocument") && <li onClick={() => addPane({ component: EdoInboxList, label: translate("edoInbox") })}>{translate("edoInbox")}</li>}
+          {can("EdoDocument") && <li onClick={() => addPane({ component: EdoOutboxList, label: translate("edoOutbox") })}>{translate("edoOutbox")}</li>}
+        </ul>
+      </div>
+    </>
+  );
+
+  const AccountingGroups = () => (
+    <>
+      <div className={styles.NavGroup}>
+        <h3>{translate("reports")}</h3>
+        <ul className={styles.NavList}>
+          {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountingJournal, label: translate("accountingJournalTitle") })}>{translate("accountingJournalTitle")}</li>}
+          {can("AccountingEntry") && <li onClick={() => addPane({ component: TurnoverBalanceSheet, label: translate("osvTitle") })}>{translate("osvTitle")}</li>}
+          {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountCard, label: translate("accountCardTitle") })}>{translate("accountCardTitle")}</li>}
+          {can("AccountingEntry") && <li onClick={() => addPane({ component: SettlementsReport, label: translate("settlementsReport") })}>{translate("settlementsReport")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("directories")}</h3>
+        <ul className={styles.NavList}>
+          {can("ChartOfAccount") && <li onClick={() => addPane({ component: ChartOfAccountsList, label: translate("chartOfAccountsTitle") })}>{translate("chartOfAccountsTitle")}</li>}
+          {can("SubkontoType") && <li onClick={() => addPane({ component: SubkontoTypesList, label: translate("subkontoTypesTitle") })}>{translate("subkontoTypesTitle")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("monthCloseRegulatory")}</h3>
+        <ul className={styles.NavList}>
+          {can("MonthClose") && <li onClick={() => addPane({ component: MonthClosesList })}>{translate("MonthClosesList")}</li>}
+        </ul>
+      </div>
+    </>
+  );
+
+  const HRGroups = () => (
+    <>
+      <div className={styles.NavGroup}>
+        <h3>{translate("documents")}</h3>
+        <ul className={styles.NavList}>
+          {can("PayrollCalculation") && <li onClick={() => addPane({ component: PayrollCalculationsList })}>{translate("PayrollCalculationsList")}</li>}
+          {can("PayrollPayment") && <li onClick={() => addPane({ component: PayrollPaymentsList })}>{translate("PayrollPaymentsList")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("directories")}</h3>
+        <ul className={styles.NavList}>
+          {can("Employee") && <li onClick={() => addPane({ component: EmployeesList })}>{translate("EmployeesList")}</li>}
+          {can("Position") && <li onClick={() => addPane({ component: PositionsList })}>{translate("PositionsList")}</li>}
+        </ul>
+      </div>
+    </>
+  );
+
+  const CRMGroups = () => (
+    <>
+      <div className={styles.NavGroup}>
+        <h3>{translate("directories")}</h3>
+        <ul className={styles.NavList}>
+          {can("Counterparty") && <li onClick={() => addPane({ component: CounterpartiesList })}>{translate("CounterpartiesList")}</li>}
+          {can("Contract") && <li onClick={() => addPane({ component: ContractsList })}>{translate("ContractsList")}</li>}
+          {can("Contact") && <li onClick={() => addPane({ component: ContactsList })}>{translate("ContactsList")}</li>}
+          {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>{translate("ContactPersonsList")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("taskManagement")}</h3>
+        <ul className={styles.NavList}>
+          {can("Todo") && <li onClick={() => addPane({ component: TodosList })}>{translate("TodosList")}</li>}
+        </ul>
+      </div>
+    </>
+  );
+
+  const SettingsGroups = () => (
+    <>
+      <div className={styles.NavGroup}>
+        <h3>{translate("directories")}</h3>
+        <ul className={styles.NavList}>
+          {can("Organization") && <li onClick={() => addPane({ component: OrganizationsList })}>{translate("OrganizationsList")}</li>}
+          {can("BankAccount") && <li onClick={() => addPane({ component: BankAccountsList })}>{translate("BankAccountsList")}</li>}
+          {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList })}>{translate("CurrenciesList")}</li>}
+          {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList })}>{translate("UnitOfMeasuresList")}</li>}
+          {can("Tax") && <li onClick={() => addPane({ component: TaxesList })}>{translate("TaxesList")}</li>}
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("settingsGroup")}</h3>
+        <ul className={styles.NavList}>
+          {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>{translate("OrganizationAccountingSettingsList")}</li>}
+          {can("UserSettings") && <li onClick={async () => { const m = await import("src/models/UserSettings"); addPane({ component: m.UserSettingsModuleList, label: translate("UserSettings") }); }}>{translate("UserSettings")}</li>}
+          <li onClick={() => addPane({ component: GeneralSettings, label: translate("generalSettings") })}>{translate("generalSettings")}</li>
+          <li onClick={() => addPane({ component: DocumentNumberSettings, label: translate("documentNumberSettings") })}>{translate("documentNumberSettings")}</li>
+        </ul>
+      </div>
+      <div className={styles.NavGroup}>
+        <h3>{translate("administration")}</h3>
+        <ul className={styles.NavList}>
+          {can("User") && <li onClick={() => addPane({ component: UsersList })}>{translate("UsersList")}</li>}
+          {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>{translate("ActivityHistoriesList")}</li>}
+          {can("ActivityHistory") && <li onClick={() => addPane({ component: PipeActivitiesList })}>{translate("PipeActivitiesList")}</li>}
+          {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</li>}
+          <li onClick={() => addPane({ component: FilesList, label: translate("files") })}>{translate("files")}</li>
+          <li onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</li>
+          {can("ScheduledTask") && <li onClick={() => addPane({ component: ScheduledTasksList })}>{translate("ScheduledTasksList")}</li>}
+          <li onClick={() => addPane({ component: SyncDashboard, label: translate("syncOfflineData") })}>{translate("syncOfflineData")}</li>
+          <li onClick={() => addPane({ component: OrphanRefsForm, label: translate("deletedReferenceControl") })}>{translate("deletedReferenceControl")}</li>
+          <li onClick={() => addPane({ component: SearchReplaceRefsForm, label: translate("searchReplaceReferences") })}>{translate("searchReplaceReferences")}</li>
+        </ul>
+      </div>
+    </>
+  );
+
+  // «Все разделы» — полное меню одним списком: если пользователь не помнит, в каком
+  // разделе учёта лежит пункт, ему не нужно обходить остальные вкладки. Группы здесь
+  // ПЕРЕИСПОЛЬЗУЮТСЯ, поэтому это меню не может разойтись с разделами: новый пункт
+  // добавляется в одном месте и появляется в обоих.
+  if (label.toLocaleLowerCase() === "All".toLocaleLowerCase()) {
+    return (
+      <div className={styles.NavListWrapper}>
+        <h1>{translate("allSections")}</h1>
+        <div className={styles.NavSection}>
+          <TradeGroups />
+          <AccountingGroups />
+          <HRGroups />
+          <CRMGroups />
+          <SettingsGroups />
+        </div>
+      </div>
+    );
+  }
+
   if (label.toLocaleLowerCase() === "Trade".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
         <h1>{translate("trade")}</h1>
         <div className={styles.NavSection}>
-          <div className={styles.NavGroup}>
-            <h3>{translate("sales")}</h3>
-            <ul className={styles.NavList}>
-              {can("Sale") && <li className={styles.NavListAccent} onClick={() => addPane({ component: SalesTerminal, label: translate("salesTerminal") })}>⚡ {translate("salesTerminal")}</li>}
-              {can("Sale") && <li onClick={() => addPane({ component: SalesList, label: translate("saleRealization") })}>{translate("saleRealization")}</li>}
-              {can("SaleReturn") && <li onClick={() => addPane({ component: SaleReturnsList })}>{translate("SaleReturnsList")}</li>}
-              {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("outgoingInvoice") })}>{translate("outgoingInvoice")}</li>}
-              {can("PaymentInvoice") && <li onClick={() => addPane({ component: PaymentInvoicesList, label: translate("paymentInvoice") })}>{translate("paymentInvoice")}</li>}
-              {can("CommercialOffer") && <li onClick={() => addPane({ component: CommercialOffersList, label: translate("docType_commercial_offer") })}>{translate("docType_commercial_offer")}</li>}
-              {can("SalesOrder") && <li onClick={() => addPane({ component: SalesOrdersList, label: translate("docType_sales_order") })}>{translate("docType_sales_order")}</li>}
-              {can("Reservation") && <li onClick={() => addPane({ component: ReservationsList, label: translate("docType_reservation") })}>{translate("docType_reservation")}</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("purchase")}</h3>
-            <ul className={styles.NavList}>
-              {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList, label: translate("purchaseReceipt") })}>{translate("purchaseReceipt")}</li>}
-              {can("PurchaseReturn") && <li onClick={() => addPane({ component: PurchaseReturnsList })}>{translate("PurchaseReturnsList")}</li>}
-              {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList, label: translate("incomingInvoice") })}>{translate("incomingInvoice")}</li>}
-              {can("PurchaseRequisition") && <li onClick={() => addPane({ component: PurchaseRequisitionsList })}>{translate("PurchaseRequisitionsList")}</li>}
-              {can("PurchaseOrder") && <li onClick={() => addPane({ component: PurchaseOrdersList, label: translate("docType_purchase_order") })}>{translate("docType_purchase_order")}</li>}
-              {can("ImportDeclaration") && <li onClick={() => addPane({ component: ImportDeclarationsList })}>{translate("ImportDeclarationsList")}</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("warehouse")}</h3>
-            <ul className={styles.NavList}>
-              {can("Warehouse") && <li onClick={() => addPane({ component: WarehousesList })}>{translate("WarehousesList")}</li>}
-              {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList })}>{translate("InventoryTransfersList")}</li>}
-              {can("WriteOff") && <li onClick={() => addPane({ component: WriteOffsList })}>{translate("WriteOffsList")}</li>}
-              {can("SerialNumber") && <li onClick={() => addPane({ component: SerialNumbersList })}>{translate("SerialNumbersList")}</li>}
-              {/* Разметка уже имеющегося остатка сериями/партиями — без неё товар с
-                  историей нельзя продать после включения учёта. */}
-              {can("Product") && <li onClick={() => addPane({ component: OpeningBalanceForm, label: translate("openingBalanceEntry") })}>{translate("openingBalanceEntry")}</li>}
-              {can("GoodsReceipt") && <li onClick={() => addPane({ component: GoodsReceiptsList })}>{translate("GoodsReceiptsList")}</li>}
-              {can("StockCount") && <li onClick={() => addPane({ component: StockCountsList })}>{translate("StockCountsList")}</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("cash")}</h3>
-            <ul className={styles.NavList}>
-              {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList })}>{translate("CashReceiptOrdersList")}</li>}
-              {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList })}>{translate("CashExpenseOrdersList")}</li>}
-              {can("BankStatement") && <li onClick={() => addPane({ component: BankStatementsList, label: translate("docType_bank_statement") })}>{translate("docType_bank_statement")}</li>}
-              {can("FiscalReceipt") && <li onClick={() => addPane({ component: FiscalReceiptsList })}>{translate("FiscalReceiptsList")}</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("reports")}</h3>
-            <ul className={styles.NavList}>
-              {can("Sale") && <li onClick={() => addPane({ component: SalesReport, label: translate("SalesReportList") })}>{translate("SalesReportList")}</li>}
-              {can("Sale") && <li onClick={() => addPane({ component: ManagerReport, label: translate("managerReport") })}>{translate("managerReport")}</li>}
-              {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: MaterialStatement, label: translate("MaterialStatementList") })}>{translate("MaterialStatementList")}</li>}
-              {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: ProductRegisterReport, label: translate("ProductRegisterList") })}>{translate("ProductRegisterList")}</li>}
-              {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceListReport, label: translate("priceListReport") })}>{translate("priceListReport")}</li>}
-              {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: InventoryTurnoverReport, label: translate("inventoryTurnover") })}>{translate("inventoryTurnover")}</li>}
-              {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: InventoryBatchesReport, label: translate("inventoryBatches") })}>{translate("inventoryBatches")}</li>}
-              {can("Sale") && <li onClick={() => addPane({ component: ABCReport, label: translate("abcAnalysis") })}>{translate("abcAnalysis")}</li>}
-              {(can("CashReceiptOrder") || can("CashExpenseOrder")) && <li onClick={() => addPane({ component: CashReport, label: translate("CashReportList") })}>{translate("CashReportList")}</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("directories")}</h3>
-            <ul className={styles.NavList}>
-              {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>{translate("ProductsList")}</li>}
-              {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceCorrection, label: translate("ProductPriceProcessing") })}>{translate("ProductPriceProcessing")}</li>}
-              {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceImport, label: translate("priceImportForm") })}>{translate("priceImportForm")}</li>}
-              {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceTypesList })}>{translate("PriceTypesList")}</li>}
-              {can("Product") && <li onClick={() => addPane({ component: ProductImportExport })}>{translate("ProductImportExport")}</li>}
-              {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>{translate("BrandsList")}</li>}
-              <li onClick={() => addPane({ component: ClassifiersList, label: translate("clsSection") })}>{translate("clsSection")}</li>
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("govDocsSection")}</h3>
-            <ul className={styles.NavList}>
-              {/* Исходящие ЭСФ — это те же «Счета-фактуры (исходящие)» из раздела «Документы»:
-                  тот же компонент, тот же неотфильтрованный список. Отдельного пункта здесь
-                  быть не может: панели-списки — синглтоны (uniqId = имя компонента), поэтому
-                  второй пункт лишь активировал уже открытую вкладку, оставляя ЧУЖУЮ подпись. */}
-              {can("OutgoingInvoice") && <li onClick={() => addPane({ component: EsfIncomingList, label: translate("esfIncomingSection") })}>{translate("esfIncomingSection")}</li>}
-              {can("Sale") && <li onClick={() => addPane({ component: AwpOutboxList, label: translate("awpOutboxSection") })}>{translate("awpOutboxSection")}</li>}
-              {can("Sale") && <li onClick={() => addPane({ component: AwpIncomingList, label: translate("awpIncomingSection") })}>{translate("awpIncomingSection")}</li>}
-              {can("Sale") && <li onClick={() => addPane({ component: SntOutboxList, label: translate("sntOutboxSection") })}>{translate("sntOutboxSection")}</li>}
-              {can("Sale") && <li onClick={() => addPane({ component: SntIncomingList, label: translate("sntIncomingSection") })}>{translate("sntIncomingSection")}</li>}
-              <li className={styles.NavHint}>{translate("govDocsHint")}</li>
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("edoSection")}</h3>
-            <ul className={styles.NavList}>
-              {can("EdoDocument") && <li onClick={() => addPane({ component: EdoInboxList, label: translate("edoInbox") })}>{translate("edoInbox")}</li>}
-              {can("EdoDocument") && <li onClick={() => addPane({ component: EdoOutboxList, label: translate("edoOutbox") })}>{translate("edoOutbox")}</li>}
-            </ul>
-          </div>
+          <TradeGroups />
         </div>
       </div>
-    )
-  } else if (label.toLocaleLowerCase() === "Accounting".toLocaleLowerCase()) {
+    );
+  }
+
+  if (label.toLocaleLowerCase() === "Accounting".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
-        <h1>{translate("accounting")}</h1>
+        <h1>{translate("accounting2")}</h1>
         <div className={styles.NavSection}>
-          <div className={styles.NavGroup}>
-            <h3>{translate("reports")}</h3>
-            <ul className={styles.NavList}>
-              {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountingJournal, label: translate("accountingJournalTitle") })}>{translate("accountingJournalTitle")}</li>}
-              {can("AccountingEntry") && <li onClick={() => addPane({ component: TurnoverBalanceSheet, label: translate("osvTitle") })}>{translate("osvTitle")}</li>}
-              {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountCard, label: translate("accountCardTitle") })}>{translate("accountCardTitle")}</li>}
-              {can("AccountingEntry") && <li onClick={() => addPane({ component: SettlementsReport, label: translate("settlementsReport") })}>{translate("settlementsReport")}</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("monthCloseRegulatory")}</h3>
-            <ul className={styles.NavList}>
-              {can("MonthClose") && <li onClick={() => addPane({ component: MonthClosesList })}>{translate("MonthClosesList")}</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("directories")}</h3>
-            <ul className={styles.NavList}>
-              {can("ChartOfAccount") && <li onClick={() => addPane({ component: ChartOfAccountsList, label: translate("chartOfAccountsTitle") })}>{translate("chartOfAccountsTitle")}</li>}
-              {can("SubkontoType") && <li onClick={() => addPane({ component: SubkontoTypesList, label: translate("subkontoTypesTitle") })}>{translate("subkontoTypesTitle")}</li>}
-            </ul>
-          </div>
+          <AccountingGroups />
         </div>
       </div>
-    )
-  } else if (label.toLocaleLowerCase() === "HR".toLocaleLowerCase()) {
+    );
+  }
+
+  if (label.toLocaleLowerCase() === "HR".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
         <h1>{translate("hr")}</h1>
         <div className={styles.NavSection}>
-          <div className={styles.NavGroup}>
-            <h3>{translate("documents")}</h3>
-            <ul className={styles.NavList}>
-              {can("PayrollCalculation") && <li onClick={() => addPane({ component: PayrollCalculationsList })}>{translate("PayrollCalculationsList")}</li>}
-              {can("PayrollPayment") && <li onClick={() => addPane({ component: PayrollPaymentsList })}>{translate("PayrollPaymentsList")}</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("directories")}</h3>
-            <ul className={styles.NavList}>
-              {can("Employee") && <li onClick={() => addPane({ component: EmployeesList })}>{translate("EmployeesList")}</li>}
-              {can("Position") && <li onClick={() => addPane({ component: PositionsList })}>{translate("PositionsList")}</li>}
-            </ul>
-          </div>
+          <HRGroups />
         </div>
       </div>
-    )
-  } else if (label.toLocaleLowerCase() === "CRM".toLocaleLowerCase()) {
+    );
+  }
+
+  if (label.toLocaleLowerCase() === "CRM".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
         <h1>{translate("crm")}</h1>
         <div className={styles.NavSection}>
-          <div className={styles.NavGroup}>
-            <h3>{translate("taskManagement")}</h3>
-            <ul className={styles.NavList}>
-              {can("Todo") && <li onClick={() => addPane({ component: TodosList })}>{translate("TodosList")}</li>}
-              {can("ScheduledTask") && <li onClick={() => addPane({ component: ScheduledTasksList })}>{translate("ScheduledTasksList")}</li>}
-            </ul>
-          </div>
+          <CRMGroups />
         </div>
       </div>
-    )
-  } else if (label.toLocaleLowerCase() === "Settings".toLocaleLowerCase()) {
+    );
+  }
+
+  if (label.toLocaleLowerCase() === "Settings".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
         <h1>{translate("settings")}</h1>
         <div className={styles.NavSection}>
-          <div className={styles.NavGroup}>
-            <h3>{translate("directories")}</h3>
-            <ul className={styles.NavList}>
-              {can("Organization") && <li onClick={() => addPane({ component: OrganizationsList })}>{translate("OrganizationsList")}</li>}
-              {can("Counterparty") && <li onClick={() => addPane({ component: CounterpartiesList })}>{translate("CounterpartiesList")}</li>}
-              {can("Contract") && <li onClick={() => addPane({ component: ContractsList })}>{translate("ContractsList")}</li>}
-              {can("BankAccount") && <li onClick={() => addPane({ component: BankAccountsList })}>{translate("BankAccountsList")}</li>}
-              {can("Cashbox") && <li onClick={() => addPane({ component: CashboxesList })}>{translate("CashboxesList")}</li>}
-              {can("Contact") && <li onClick={() => addPane({ component: ContactsList })}>{translate("ContactsList")}</li>}
-              {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>{translate("ContactPersonsList")}</li>}
-              {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList })}>{translate("CurrenciesList")}</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("accounting")}</h3>
-            <ul className={styles.NavList}>
-              {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>{translate("OrganizationAccountingSettingsList")}</li>}
-              {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList })}>{translate("UnitOfMeasuresList")}</li>}
-              {can("Tax") && <li onClick={() => addPane({ component: TaxesList })}>{translate("TaxesList")}</li>}
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("generalSettings")}</h3>
-            <ul className={styles.NavList}>
-              <li onClick={() => addPane({ component: GeneralSettings, label: translate("generalSettings") })}>{translate("generalSettings")}</li>
-              <li onClick={() => addPane({ component: DocumentNumberSettings, label: translate("documentNumberSettings") })}>{translate("documentNumberSettings")}</li>
-            </ul>
-          </div>
-          <div className={styles.NavGroup}>
-            <h3>{translate("administration")}</h3>
-            <ul className={styles.NavList}>
-              {can("User") && <li onClick={() => addPane({ component: UsersList })}>{translate("UsersList")}</li>}
-              {can("UserSettings") && <li onClick={async () => { const m = await import("src/models/UserSettings"); addPane({ component: m.UserSettingsModuleList, label: translate("UserSettings") }); }}>{translate("UserSettings")}</li>}
-              {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>{translate("ActivityHistoriesList")}</li>}
-              {/* Входящие события интеграции 1С (POST /pipe) — просмотр «входящего ящика». */}
-              {can("ActivityHistory") && <li onClick={() => addPane({ component: PipeActivitiesList })}>{translate("PipeActivitiesList")}</li>}
-              {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</li>}
-              <li onClick={() => addPane({ component: FilesList, label: translate("files") })}>{translate("files")}</li>
-              <li onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</li>
-              <li onClick={() => addPane({ component: OrphanRefsForm, label: translate("deletedReferenceControl") })}>{translate("deletedReferenceControl")}</li>
-              <li onClick={() => addPane({ component: SearchReplaceRefsForm, label: translate("searchReplaceReferences") })}>{translate("searchReplaceReferences")}</li>
-              <li onClick={() => addPane({ component: SyncDashboard, label: translate("syncOfflineData") })}>{translate("syncOfflineData")}</li>
-            </ul>
-          </div>
+          <SettingsGroups />
         </div>
       </div>
-    )
+    );
   }
-}
+  return null;
+};
 
 interface Props {
   children: ReactNode;

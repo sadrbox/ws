@@ -210,6 +210,10 @@ const App: React.FC = () => {
   // Навбар (можно вынести в отдельный хук / компонент позже)
   const initialNavbar: TypeNavbarProps[] =
     [
+      // «Все разделы» — полное меню одним списком: пользователю, который не помнит, в
+      // каком разделе учёта лежит нужный пункт, не приходится обходить остальные вкладки.
+      // Содержимое переиспользует те же группы (см. NavList), так что разойтись не может.
+      { id: useUID(), isActive: false, title: translate("allSections"), component: <NavList label="All" /> },
       { id: useUID(), isActive: false, title: translate("trade"), component: <NavList label="Trade" /> },
       { id: useUID(), isActive: false, title: translate("accounting"), component: <NavList label="Accounting" /> },
       { id: useUID(), isActive: false, title: translate("hr"), component: <NavList label="HR" /> },
