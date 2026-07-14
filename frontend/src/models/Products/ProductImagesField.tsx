@@ -52,6 +52,35 @@ interface ProductImagesFieldProps {
   disabled?: boolean;
 }
 
+/** Длинная сторона миниатюры, px. Превью в карточке крупнее не нужно. */
+const THUMB_SIZE = 240;
+
+/**
+ * Уменьшенная копия изображения (JPEG). null — браузер не смог декодировать файл
+ * (тогда просто не шлём миниатюру, сервер отдаст оригинал).
+ */
+async function makeThumbnail(file: File): Promise<Blob | null> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, THUMB_SIZE / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close();
+
+    return await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.72),
+    );
+  } catch {
+    return null; // не картинка / формат не поддержан браузером
+  }
+}
+
 const ProductImagesField: FC<ProductImagesFieldProps> = ({ productUuid, disabled }) => {
   const [images, setImages] = useState<ImgFile[]>([]);
   const [previews, setPreviews] = useState<Record<string, string>>({});
@@ -59,14 +88,18 @@ const ProductImagesField: FC<ProductImagesFieldProps> = ({ productUuid, disabled
   const [dragSlot, setDragSlot] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const urlsRef = useRef<Record<string, string>>({});
+  // Оригиналы (грузятся по клику «Посмотреть») — отдельно от миниатюр.
+  const fullUrlsRef = useRef<Record<string, string>>({});
 
   const ready = !!productUuid && !disabled;
 
-  // Загрузка blob-превью для картинки (через авторизованный клиент).
+  // Превью — МИНИАТЮРА, а не оригинал: карточка товара иначе качает полноразмерные фото
+  // (мегабайты на каждое). У файлов, загруженных до этой правки, миниатюры нет — бэкенд
+  // в этом случае отдаёт оригинал (см. GET /files/thumb/:uuid).
   const ensurePreview = useCallback(async (uuid: string) => {
     if (urlsRef.current[uuid]) return;
     try {
-      const res = await apiClient.get(`/files/download/${uuid}`, { responseType: "blob" });
+      const res = await apiClient.get(`/files/thumb/${uuid}`, { responseType: "blob" });
       const url = URL.createObjectURL(res.data as Blob);
       urlsRef.current[uuid] = url;
       setPreviews((p) => ({ ...p, [uuid]: url }));
@@ -97,7 +130,9 @@ const ProductImagesField: FC<ProductImagesFieldProps> = ({ productUuid, disabled
   // Освобождаем objectURL при размонтировании.
   useEffect(() => () => {
     Object.values(urlsRef.current).forEach((u) => URL.revokeObjectURL(u));
+    Object.values(fullUrlsRef.current).forEach((u) => URL.revokeObjectURL(u));
     urlsRef.current = {};
+    fullUrlsRef.current = {};
   }, []);
 
   const validate = (file: File): string | null => {
@@ -110,6 +145,12 @@ const ProductImagesField: FC<ProductImagesFieldProps> = ({ productUuid, disabled
     if (!productUuid) return;
     const fd = new FormData();
     fd.append("file", file);
+    // Миниатюру делает КЛИЕНТ (canvas) и шлёт вместе с оригиналом: так серверу не нужен
+    // нативный ресайзер (sharp — лишняя нативная зависимость на Alpine), а превью
+    // весит килобайты. Не получилось (экзотический формат) — не беда: сервер отдаст
+    // оригинал.
+    const thumb = await makeThumbnail(file);
+    if (thumb) fd.append("thumbnail", thumb, "thumb.jpg");
     fd.append("ownerType", "product");
     fd.append("ownerUuid", productUuid);
     // Первое изображение автоматически становится главным.
@@ -172,10 +213,22 @@ const ProductImagesField: FC<ProductImagesFieldProps> = ({ productUuid, disabled
     }
   }, [loadImages]);
 
-  const view = (f: ImgFile) => {
-    const url = previews[f.uuid];
-    if (url) window.open(url, "_blank", "noopener");
-  };
+  // Просмотр — ОРИГИНАЛ, и он тянется только сейчас, по клику. В сетке показывается
+  // миниатюра (килобайты), полноразмерное фото сервер отдаёт лишь тогда, когда его
+  // действительно захотели увидеть. Открывать здесь previews[uuid] нельзя: это
+  // миниатюра 240px — пользователь увидел бы мыло вместо оригинала.
+  const view = useCallback(async (f: ImgFile) => {
+    const cached = fullUrlsRef.current[f.uuid];
+    if (cached) { window.open(cached, "_blank", "noopener"); return; }
+    try {
+      const res = await apiClient.get(`/files/download/${f.uuid}`, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data as Blob);
+      fullUrlsRef.current[f.uuid] = url;
+      window.open(url, "_blank", "noopener");
+    } catch (e) {
+      logger.warn("[ProductImages] full image load failed", f.uuid, e);
+    }
+  }, []);
 
   // ── Сборка 4 слотов ──────────────────────────────────────────────────────
   const slots: React.ReactNode[] = [];
@@ -199,7 +252,7 @@ const ProductImagesField: FC<ProductImagesFieldProps> = ({ productUuid, disabled
                 <span className={`${styles.MainToggle} ${styles.MainToggleOn}`}><span className={styles.MainDot} /></span>
               )}
               <div className={styles.Overlay}>
-                <button type="button" className={styles.OverlayBtn} title={translate("view")} onClick={() => view(f)}><IconEye /></button>
+                <button type="button" className={styles.OverlayBtn} title={translate("view")} onClick={() => void view(f)}><IconEye /></button>
                 {ready && (
                   <button type="button" className={`${styles.OverlayBtn} ${styles.OverlayBtnDanger}`} title={translate("delete")} onClick={() => void handleDelete(f)}><IconTrash /></button>
                 )}
