@@ -1,5 +1,5 @@
 .FieldDisabled {
-	background-color: $color31;
+	background-color: $color33;
 }
 
 
@@ -19,6 +19,7 @@
 	box-sizing: content-box;
 	padding: 0px 6px;
 	text-overflow: ellipsis;
+	// background: $color60;
 
 	option {
 		padding: 0px;
@@ -166,7 +167,7 @@
 			background: transparent !important;
 
 			&:focus-within {
-				background-color: #fff9c5;
+				// background-color: #fff9c5;
 				border: 0px solid $color2;
 				box-shadow: 0 0 0 1px $color2;
 			}
@@ -183,13 +184,13 @@
 		.FieldPeriod {
 			border: none;
 			border-radius: 0;
-			background: transparent;
 			outline: none;
 			// height: 100%;
 			font-size: $fontsize;
 			text-overflow: ellipsis;
 			white-space: nowrap;
 			overflow: hidden;
+			background: transparent;
 
 			margin: 0px;
 
@@ -264,23 +265,17 @@
 .FieldActions {
 	box-sizing: content-box;
 	margin-right: 4px;
-	// Скрываем действия поля по умолчанию — показываем только когда поле в фокусе
-	// (фокус на input/select или на самих кнопках действий внутри обёртки).
-	display: none;
+	// background-color: $color60;
+	// Действия поля видны ВСЕГДА. Раньше они показывались только по :focus-within —
+	// пользователь не знал, что у поля вообще есть кнопки («Открыть», «Список»,
+	// «Очистить»), пока случайно не ставил в него фокус.
+	display: flex;
 	flex-direction: row;
 	align-items: center;
 	gap: 3px;
 	// кнопки внутри — общий компонент IconButton (size="sm");
 	// все стили (hover/focus/active/disabled) определены в
 	// src/components/icons/IconButton.module.scss
-}
-
-// Показываем FieldActions только при фокусе внутри обёртки поля (любой вариант).
-.FieldInputWrapper:focus-within .FieldActions,
-.FieldSelectWrapper:focus-within .FieldActions,
-.FieldTextareaInputWrapper:focus-within .FieldActions,
-.FieldPeriodWrapper:focus-within .FieldActions {
-	display: flex;
 }
 
 // ЗАБЛОКИРОВАННОЕ поле: :focus-within недостижим — disabled-инпут не принимает фокус,
