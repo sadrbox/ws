@@ -329,7 +329,8 @@ const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, productN
   const openCorrection = useCallback(() => {
     if (!productUuid) return;
     addPane({
-      label: translate("priceCorrectionTab"),
+      // Подпись не задаём: её даёт имя компонента (ProductPriceCorrection) — иначе одна
+      // и та же панель называлась бы по-разному, смотря откуда её открыли.
       component: ProductPriceCorrection,
       data: { productUuid, productName },
     });
@@ -384,7 +385,7 @@ const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, productN
       renderCell={renderCell}
       defaultNewRow={defaultNewRow}
       onItemsChange={onItemsChange}
-      extraButtons={<Button type="button" onClick={openCorrection} disabled={!productUuid} title={translate("priceCorrectionTab")}>{translate("priceCorrectionTab")}</Button>}
+      extraButtons={<Button type="button" onClick={openCorrection} disabled={!productUuid} title={translate("priceCorrection")}>{translate("priceCorrection")}</Button>}
     />
   );
 };

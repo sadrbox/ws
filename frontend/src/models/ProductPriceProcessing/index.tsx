@@ -119,7 +119,7 @@ const MASS_OPS = [
   { value: "round", label: translate("roundTo") },
 ];
 
-const PriceCorrectionTab: FC<{
+const PriceCorrectionPanel: FC<{
   canWrite: boolean;
   initialProductUuid?: string;
   initialProductName?: string;
@@ -416,7 +416,7 @@ const PriceCorrectionTab: FC<{
     </>
   );
 };
-PriceCorrectionTab.displayName = "PriceCorrectionTab";
+PriceCorrectionPanel.displayName = "PriceCorrectionPanel";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Вкладка «Загрузка цен» (импорт из Excel)
@@ -473,7 +473,11 @@ async function fetchExistingKeySet(): Promise<Set<string>> {
   return set;
 }
 
-const PriceImportTab: FC<{ canWrite: boolean }> = ({ canWrite }) => {
+// ═══════════════════════════════════════════════════════════════════════════
+// «Импорт/экспорт цен номенклатуры» — самостоятельная обработка (без вкладок).
+// ═══════════════════════════════════════════════════════════════════════════
+export const ProductPriceImport: FC<Partial<TPane>> = () => {
+  const canWrite = usePriceCanWrite();
   const { actions: { confirm } } = useAppContext();
   const [priceTypeUuid, setPriceTypeUuid] = useState("");
   const [priceTypeName, setPriceTypeName] = useState("");
@@ -689,75 +693,77 @@ const PriceImportTab: FC<{ canWrite: boolean }> = ({ canWrite }) => {
   };
 
   return (
-    <>
-      <HelpBox title="ℹ️ Загрузка цен из файла Excel (.xlsx, .xls)">
-        <ol>
-          <li>Укажите <b>{translate("priceType")}</b> и <b>{translate("date")}</b> — значения по умолчанию для строк без этих колонок.</li>
-          <li>Выберите файл (кнопка <b>«{translate("downloadTemplate")}»</b> — шаблон; <b>«{translate("downloadBackup")}»</b> — выгрузка всех цен для бэкапа/восстановления).</li>
-          <li>Нажмите <b>«{translate("fill")}»</b> — строки попадут в таблицу, номенклатура сопоставится по артикулу / штрих-коду / наименованию.</li>
-          <li>Строки без товара помечаются <span className={helpMarker.warn}>⚠</span>. Опцией <b>«{translate("hideExisting")}»</b> можно скрыть уже существующие цены.</li>
-          <li>Нажмите <b>«{translate("upload")}»</b> — цены создадутся (повторы и строки без товара пропускаются).</li>
-        </ol>
-        <div className={styles.notice}>
-          Колонки файла: «sku / артикул», «barcode / штрих-код», «name / наименование», «price / цена». Необязательные: «priceType / тип цены», «date / дата» (для восстановления из бэкапа).
-        </div>
-      </HelpBox>
-      <GroupRow>
+    <div className={mainStyles.FormWrapper}>
+      <div className={mainStyles.FormBody}>
+        <HelpBox title="ℹ️ Загрузка цен из файла Excel (.xlsx, .xls)">
+          <ol>
+            <li>Укажите <b>{translate("priceType")}</b> и <b>{translate("date")}</b> — значения по умолчанию для строк без этих колонок.</li>
+            <li>Выберите файл (кнопка <b>«{translate("downloadTemplate")}»</b> — шаблон; <b>«{translate("downloadBackup")}»</b> — выгрузка всех цен для бэкапа/восстановления).</li>
+            <li>Нажмите <b>«{translate("fill")}»</b> — строки попадут в таблицу, номенклатура сопоставится по артикулу / штрих-коду / наименованию.</li>
+            <li>Строки без товара помечаются <span className={helpMarker.warn}>⚠</span>. Опцией <b>«{translate("hideExisting")}»</b> можно скрыть уже существующие цены.</li>
+            <li>Нажмите <b>«{translate("upload")}»</b> — цены создадутся (повторы и строки без товара пропускаются).</li>
+          </ol>
+          <div className={styles.notice}>
+            Колонки файла: «sku / артикул», «barcode / штрих-код», «name / наименование», «price / цена». Необязательные: «priceType / тип цены», «date / дата» (для восстановления из бэкапа).
+          </div>
+        </HelpBox>
         <GroupRow>
-          {/* «Тип цены» формы убран как излишний: тип берётся из колонки файла
-            или задаётся по строкам в таблице (колонка «Тип цены»). */}
-          <FieldDate label={translate("date")} name="imp_date" value={date} onChange={(e) => setDate(e.target.value)} disabled={isLoading} />
-          <FieldFile
-            key={`file-${fillVersion}`} name="imp_file" accept=".xls,.xlsx" disabled={isLoading || !canWrite}
-            loading={isLoading} onSelect={(f) => { setFile(f); setParsed(false); }}
+          <GroupRow>
+            {/* «Тип цены» формы убран как излишний: тип берётся из колонки файла
+              или задаётся по строкам в таблице (колонка «Тип цены»). */}
+            <FieldDate label={translate("date")} name="imp_date" value={date} onChange={(e) => setDate(e.target.value)} disabled={isLoading} />
+            <FieldFile
+              key={`file-${fillVersion}`} name="imp_file" accept=".xls,.xlsx" disabled={isLoading || !canWrite}
+              loading={isLoading} onSelect={(f) => { setFile(f); setParsed(false); }}
+            />
+            <Button onClick={handleFill} disabled={isLoading || !file}>{translate("fill")}</Button>
+
+
+            <label className={styles.checkbox}>
+              <input type="checkbox" checked={hideExisting} onChange={(e) => applyHideExisting(e.target.checked)} disabled={isLoading} />
+              {translate("hideExisting")}
+            </label>
+          </GroupRow>
+          <GroupRow style={{ marginLeft: "auto", gap: "6px" }}>
+            <Button onClick={handleDownloadTemplate} type="button">{translate("downloadTemplate")}</Button>
+            <Button onClick={handleDownloadBackup} type="button" disabled={isLoading}>{translate("downloadBackup")}</Button>
+            <Button variant="primary" onClick={handleUpload} disabled={isLoading || !canWrite || !parsed}>{translate("upload")}</Button>
+          </GroupRow>
+        </GroupRow>
+
+
+
+        {parsed && (
+          <div className={styles.summary}>
+            <span className={`${styles.badge} ${styles.badgeOk}`}>{translate("matched")}: {matchedCount}</span>
+            <span className={`${styles.badge} ${unmatchedCount ? styles.badgeWarn : ""}`}>{translate("notMatched")}: {unmatchedCount}</span>
+            <span className={styles.badge}>{translate("alreadyExists")}: {existingCount}</span>
+            {unmatchedCount > 0 && <Button onClick={handleExportUnmatched} type="button">{translate("exportUnmatched")}</Button>}
+          </div>
+        )}
+
+        <div className={styles.tableWrap}>
+          <SubTable
+            key={`imp-${fillVersion}`}
+            model={ENDPOINT}
+            componentName="ProductPriceImport_part"
+            columnsJson={priceColumns}
+            parentKey="productUuid"
+            parentUuid=""
+            deferRemoteChanges
+            clientSort
+            initialPendingRows={pendingRows}
+            defaultInlineEditing
+            emptyMessage={"Выберите файл и нажмите «Заполнить»"}
+            onAllItemsChange={setCurrentRows}
+            renderCell={priceCellRenderer}
           />
-          <Button onClick={handleFill} disabled={isLoading || !file}>{translate("fill")}</Button>
-
-
-          <label className={styles.checkbox}>
-            <input type="checkbox" checked={hideExisting} onChange={(e) => applyHideExisting(e.target.checked)} disabled={isLoading} />
-            {translate("hideExisting")}
-          </label>
-        </GroupRow>
-        <GroupRow style={{ marginLeft: "auto", gap: "6px" }}>
-          <Button onClick={handleDownloadTemplate} type="button">{translate("downloadTemplate")}</Button>
-          <Button onClick={handleDownloadBackup} type="button" disabled={isLoading}>{translate("downloadBackup")}</Button>
-          <Button variant="primary" onClick={handleUpload} disabled={isLoading || !canWrite || !parsed}>{translate("upload")}</Button>
-        </GroupRow>
-      </GroupRow>
-
-
-
-      {parsed && (
-        <div className={styles.summary}>
-          <span className={`${styles.badge} ${styles.badgeOk}`}>{translate("matched")}: {matchedCount}</span>
-          <span className={`${styles.badge} ${unmatchedCount ? styles.badgeWarn : ""}`}>{translate("notMatched")}: {unmatchedCount}</span>
-          <span className={styles.badge}>{translate("alreadyExists")}: {existingCount}</span>
-          {unmatchedCount > 0 && <Button onClick={handleExportUnmatched} type="button">{translate("exportUnmatched")}</Button>}
-        </div>
-      )}
-
-      <div className={styles.tableWrap}>
-        <SubTable
-          key={`imp-${fillVersion}`}
-          model={ENDPOINT}
-          componentName="ProductPriceImport_part"
-          columnsJson={priceColumns}
-          parentKey="productUuid"
-          parentUuid=""
-          deferRemoteChanges
-          clientSort
-          initialPendingRows={pendingRows}
-          defaultInlineEditing
-          emptyMessage={"Выберите файл и нажмите «Заполнить»"}
-          onAllItemsChange={setCurrentRows}
-          renderCell={priceCellRenderer}
-        />
+          </div>
       </div>
-    </>
+    </div>
   );
 };
-PriceImportTab.displayName = "PriceImportTab";
+ProductPriceImport.displayName = "ProductPriceImport";
 
 // Право на массовое изменение цен; при отсутствии — откат на «Product».
 const usePriceCanWrite = () => {
@@ -776,26 +782,12 @@ export const ProductPriceCorrection: FC<Partial<TPane>> = (paneProps) => {
   return (
     <div className={mainStyles.FormWrapper}>
       <div className={mainStyles.FormBody}>
-        <PriceCorrectionTab canWrite={canWrite} initialProductUuid={data?.productUuid ?? ""} initialProductName={data?.productName ?? ""} />
+        <PriceCorrectionPanel canWrite={canWrite} initialProductUuid={data?.productUuid ?? ""} initialProductName={data?.productName ?? ""} />
       </div>
     </div>
   );
 };
 ProductPriceCorrection.displayName = "ProductPriceCorrection";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Отдельная форма «Импорт/экспорт цен номенклатуры» (импорт из Excel, без вкладок).
-// ═══════════════════════════════════════════════════════════════════════════
-export const ProductPriceImport: FC<Partial<TPane>> = () => {
-  const canWrite = usePriceCanWrite();
-  return (
-    <div className={mainStyles.FormWrapper}>
-      <div className={mainStyles.FormBody}>
-        <PriceImportTab canWrite={canWrite} />
-      </div>
-    </div>
-  );
-};
-ProductPriceImport.displayName = "ProductPriceImport";
 
 export default ProductPriceCorrection;

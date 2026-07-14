@@ -7,7 +7,26 @@
     type="image/svg+xml"
     href="/favicon.svg" />
   <meta name="viewport"
-    content="width=device-width, initial-scale=1.0" />
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- PWA: приложение устанавливается на устройство и открывается в своём окне,
+       без адресной строки. Офлайн уже обеспечен: service worker кэширует статику,
+       данные лежат в IndexedDB (см. services/registerSW + offlineDb). -->
+  <link rel="manifest"
+    href="/manifest.webmanifest" />
+  <meta name="theme-color"
+    content="#1976D2" />
+  <meta name="application-name"
+    content="Учёт" />
+  <!-- iOS манифест не читает: иконку и режим standalone задаём отдельно. -->
+  <link rel="apple-touch-icon"
+    href="/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable"
+    content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style"
+    content="default" />
+  <meta name="apple-mobile-web-app-title"
+    content="Учёт" />
   <title>Система автоматизированного учета</title>
   <link rel="preconnect"
     href="https://fonts.googleapis.com" />

@@ -10,7 +10,7 @@
 
 /// <reference lib="webworker" />
 
-const CACHE_NAME = "app-static-v1";
+const CACHE_NAME = "app-static-v2";
 const RUNTIME_CACHE = "app-runtime-v1";
 
 /**
@@ -20,6 +20,14 @@ const RUNTIME_CACHE = "app-runtime-v1";
 const PRECACHE_URLS = [
   "/",
   "/index.html",
+  // PWA-оболочка: без манифеста и иконок установленное приложение при запуске без сети
+  // покажет пустую иконку и потеряет standalone-режим.
+  "/manifest.webmanifest",
+  "/favicon.svg",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon-maskable-512.png",
+  "/apple-touch-icon.png",
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════

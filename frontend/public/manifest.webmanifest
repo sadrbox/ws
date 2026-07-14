@@ -1,0 +1,49 @@
+{
+	"name": "Система автоматизированного учёта",
+	"short_name": "Учёт",
+	"description": "ERP: торговля, склад, бухгалтерия, ЭСФ/СНТ РК. Работает офлайн.",
+	"id": "/",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "any",
+	"background_color": "#ffffff",
+	"theme_color": "#1976D2",
+	"lang": "ru",
+	"dir": "ltr",
+	"categories": ["business", "finance", "productivity"],
+	"icons": [
+		{
+			"src": "/icon-192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/icon-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/icon-maskable-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	],
+	"shortcuts": [
+		{
+			"name": "Терминал продаж",
+			"short_name": "Продажа",
+			"url": "/?open=v~SalesTerminal",
+			"icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+		},
+		{
+			"name": "Реализация товаров",
+			"short_name": "Реализация",
+			"url": "/?open=v~SalesList",
+			"icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+		}
+	]
+}

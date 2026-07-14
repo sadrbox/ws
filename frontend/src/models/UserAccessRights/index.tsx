@@ -39,7 +39,7 @@ export const MODEL_NAME_OPTIONS = [
     { value: "Warehouse", i18: "WarehousesList" },
     { value: "Cashbox", i18: "CashboxesList" },
     { value: "Product", i18: "ProductsList" },
-    { value: "ProductPrice", i18: "ProductPriceProcessing" },
+    { value: "ProductPrice", i18: "ProductPriceCorrection" },
     { value: "Brand", i18: "BrandsList" },
     { value: "Employee", i18: "EmployeesList" },
     { value: "Contact", i18: "ContactsList" },

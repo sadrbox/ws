@@ -29,3 +29,6 @@ dist-ssr
 *.zip
 *.exe
 *.bin
+# Tauri: артефакты сборки Rust (сотни МБ)
+frontend/src-tauri/target/
+frontend/src-tauri/gen/

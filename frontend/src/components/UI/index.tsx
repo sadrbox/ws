@@ -1011,8 +1011,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
         <h3>{translate("processings")}</h3>
         <ul className={styles.NavList}>
           {can("Sale") && <li className={styles.NavListAccent} onClick={() => addPane({ component: SalesTerminal, label: translate("salesTerminal") })}>⚡ {translate("salesTerminal")}</li>}
-          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceCorrection, label: translate("ProductPriceProcessing") })}>{translate("ProductPriceProcessing")}</li>}
-          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceImport, label: translate("priceImportForm") })}>{translate("priceImportForm")}</li>}
+          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceCorrection })}>{translate("ProductPriceCorrection")}</li>}
+          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceImport })}>{translate("ProductPriceImport")}</li>}
           {can("Product") && <li onClick={() => addPane({ component: ProductImportExport })}>{translate("ProductImportExport")}</li>}
           {can("Product") && <li onClick={() => addPane({ component: OpeningBalanceForm, label: translate("openingBalanceEntry") })}>{translate("openingBalanceEntry")}</li>}
         </ul>

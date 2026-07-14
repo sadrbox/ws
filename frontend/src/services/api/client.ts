@@ -10,7 +10,15 @@ import { showToast } from "src/components/UIToast";
 const LOCAL_API_URL = "http://192.168.1.112:3000/api/v1";
 const REMOTE_API_URL = "https://api.aleppo.kz/api/v1";
 
+/** Десктоп-клиент (Tauri): фронт зашит в бинарник, страница грузится с tauri.localhost. */
+const isTauri = (): boolean =>
+	typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
 function getApiUrl(): string {
+	// В Tauri сервер API — всегда удалённый: локального dev-хоста рядом нет, а полагаться
+	// на hostname нельзя (там tauri.localhost — совпадение, а не намерение).
+	if (isTauri()) return REMOTE_API_URL;
+
 	const { hostname } = window.location;
 	const isLocal =
 		hostname.includes("192.168.") ||
