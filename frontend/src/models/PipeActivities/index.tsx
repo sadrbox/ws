@@ -23,6 +23,8 @@ import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { getFormatDate } from "src/utils/datetime";
 import { FormLookup } from "src/components/Field/FormLookup";
+import Notice from "src/components/Notice";
+import { useFormNotices } from "src/hooks/useFormNotices";
 
 const MODEL_ENDPOINT = "pipeactivities";
 const LIST_NAME = "PipeActivitiesList";
@@ -120,6 +122,9 @@ const PipeActivitiesForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Событие 1С", saved, saved.objectName || undefined),
   });
 
+  // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
+  const notices = useFormNotices(form);
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -164,6 +169,9 @@ const PipeActivitiesForm: FC<Partial<TPane>> = (paneProps) => {
               </Group>
             </GroupCol>
           </div>
+          <GroupCol className={styles.FormNotice}>
+            <Notice items={notices} />
+          </GroupCol>
         </div>
       ),
     },
@@ -171,15 +179,15 @@ const PipeActivitiesForm: FC<Partial<TPane>> = (paneProps) => {
       id: "tab-payload", label: translate("pipePayload"), component: (
         <div className={styles.FormWrapper}>
           <div className={styles.Form}>
-            {/* Сырой JSON, как прислала 1С — источник истины при разборе инцидентов. */}
-            <pre style={{ margin: 0, padding: "8px 12px", overflow: "auto", fontSize: 12, lineHeight: 1.45 }}>
-              {form.fields.payload || "—"}
-            </pre>
+            {/* Сырой JSON, как прислала 1С — источник истины при разборе инцидентов.
+                Notice здесь не нужен: он на вкладке «Основное», дублировать сообщение
+                на каждой вкладке — шум. */}
+            <pre className={styles.JsonView}>{form.fields.payload || "—"}</pre>
           </div>
         </div>
       ),
     },
-  ], [form.fields, form.formUid]);
+  ], [form.fields, form.formUid, notices]);
 
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} readonly
