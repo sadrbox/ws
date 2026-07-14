@@ -456,16 +456,12 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		if (validationError)
 			return res.status(409).json({ success: false, message: validationError });
 
-		const item = await prisma.$transaction(async (tx) => {
-			await tx[MODEL].updateMany({
-				where: {
-					organizationUuid: built.data.organizationUuid,
-					deletedAt: null,
-				},
-				data: { deletedAt: new Date() },
-			});
-			return tx[MODEL].create({ data: built.data, include: INCLUDE });
-		});
+		// Прошлые версии НЕ помечаем deletedAt: это АРХИВ учётной политики, а не мусор.
+		// От них зависят уже проведённые документы (метод себестоимости и признак НДС
+		// берутся на дату документа — см. services/accountingSettings.js). Помечая их
+		// удалёнными, мы вычищали историю из выборки, и прошлое пересчитывалось по
+		// новым правилам. deletedAt остаётся только за настоящим удалением (DELETE).
+		const item = await prisma[MODEL].create({ data: built.data, include: INCLUDE });
 
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -474,7 +470,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 	}
 });
 
-// ── PUT: обновление через создание новой версии ────────────────────────
+// ── PUT: обновление = НОВАЯ ВЕРСИЯ учётной политики ────────────────────────
+// id инкрементируется намеренно: настройки версионируются по startDate, и документы
+// прошлых периодов продолжают считаться по версии, действовавшей на их дату.
 router.put(`/${ROUTE}/:id`, async (req, res) => {
 	try {
 		const p = req.params.id;
@@ -497,27 +495,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (validationError)
 			return res.status(409).json({ success: false, message: validationError });
 
-		const item = await prisma.$transaction(async (tx) => {
-			// Soft-delete текущей активной записи для СТАРОЙ организации
-			await tx[MODEL].updateMany({
-				where: {
-					organizationUuid: existing.organizationUuid,
-					deletedAt: null,
-				},
-				data: { deletedAt: new Date() },
-			});
-			// Если организация изменилась — также soft-delete активной для новой
-			if (built.data.organizationUuid !== existing.organizationUuid) {
-				await tx[MODEL].updateMany({
-					where: {
-						organizationUuid: built.data.organizationUuid,
-						deletedAt: null,
-					},
-					data: { deletedAt: new Date() },
-				});
-			}
-			return tx[MODEL].create({ data: built.data, include: INCLUDE });
-		});
+		// Новая ВЕРСИЯ, прежняя остаётся в истории (см. комментарий в POST).
+		const item = await prisma[MODEL].create({ data: built.data, include: INCLUDE });
 
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

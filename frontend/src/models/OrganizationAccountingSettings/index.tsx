@@ -1,4 +1,4 @@
-import { FC, useEffect, useMemo, useState } from "react";
+import { FC, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "src/services/api/client";
 import { Button } from "src/components/Button";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
@@ -10,9 +10,10 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { FormLookup } from "src/components/Field/FormLookup";
+import { Notice, type NoticeItem } from "src/components/Notice";
 import { FieldDate } from "src/components/Field";
 import { FieldNumber } from "src/components/Field";
-import { GroupRow } from "src/components/UI";
+import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useUserAccessRight } from "src/hooks/useUserAccessRight";
@@ -68,11 +69,17 @@ const DEFAULT_FIELDS: TFields = {
 // числовая Ставка НДС, % и способ расчёта (сверху / в сумме) — активны только при useVat.
 // Справочник «Ставки НДС» удалён — согласно НК РК Ставка НДС, % одна на организацию
 // на дату.
-// При сохранении создаётся новая запись журнала; старая для этой организации
-// помечается deletedAt.
+// При сохранении создаётся новая ВЕРСИЯ параметров (со своей «Датой начала»), а
+// прежняя остаётся в истории: документы прошлых периодов продолжают считаться по
+// версии, действовавшей на их дату (см. backend/services/accountingSettings.js).
+// Поэтому id растёт с каждым сохранением — это версии, а не мусор.
 // ─────────────────────────────────────────────────────────────────────────
 const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useUserAccessRight("OrganizationAccountingSetting");
+  // Снимок ЗАГРУЖЕННОЙ версии параметров: подсказки строятся из сравнения с ним —
+  // «что пользователь изменил», а не «что вообще может быть не так».
+  const savedRef = useRef<TFields | null>(null);
+  const savedSnapshot = (f: TFields): TFields => { savedRef.current = { ...f }; return f; };
   const [recomputing, setRecomputing] = useState(false);
   const queryClient = useQueryClient();
 
@@ -81,7 +88,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
     storageKey: "organization-accounting-settings-form",
     defaultFields: DEFAULT_FIELDS,
     paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d, prev) => savedSnapshot({
       ...(prev ?? DEFAULT_FIELDS),
       ...d,
       organizationUuid: (d.organizationUuid as string) ?? null,
@@ -168,6 +175,69 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
   const lockVat = usageStats.hasPostedVat;
   const lockDiscount = usageStats.hasPostedDiscount;
   const lockExcise = usageStats.hasPostedExcise;
+
+  // ── Последствия правки — объясняем ПО ФАКТУ изменений ────────────────────────
+  //
+  // Параметры учёта версионируются: сохранение создаёт новую версию, а «Дата начала»
+  // решает, С КАКОГО МОМЕНТА действуют новые правила. Отсюда две принципиально разные
+  // ситуации, и пользователь обязан их различать:
+  //
+  //   • дата начала В БУДУЩЕМ или сегодня → уже проведённые документы не затрагиваются:
+  //     они и дальше считаются по версии, действовавшей на их дату. Это БЕЗОПАСНАЯ правка,
+  //     и об этом тоже нужно сказать — иначе пользователь боится трогать настройки;
+  //
+  //   • дата начала В ПРОШЛОМ → новые правила накрывают уже проведённые документы того
+  //     периода: при пересчёте у них изменятся суммы/себестоимость. Это опасно, и молчать
+  //     об этом нельзя.
+  //
+  // Поэтому подсказки строятся не «вообще», а из СРАВНЕНИЯ с загруженной версией.
+  const changed = (k: keyof TFields) =>
+    savedRef.current != null && form.fields[k] !== savedRef.current[k];
+
+  const startsInPast = useMemo(() => {
+    const d = form.fields.startDate;
+    return !!d && d < todayIso();
+  }, [form.fields.startDate]);
+
+  const notices = useMemo<NoticeItem[]>(() => {
+    const items: NoticeItem[] = [];
+
+    // Что именно изменил пользователь и чем это грозит.
+    const touched: string[] = [];
+    if (changed("useVat")) touched.push(translate(form.fields.useVat ? "accChangeVatOn" : "accChangeVatOff"));
+    if (changed("vatRate")) touched.push(translate("accChangeVatRate"));
+    if (changed("vatCalculationMethod")) touched.push(translate("accChangeVatMethod"));
+    if (changed("useDiscount")) touched.push(translate(form.fields.useDiscount ? "accChangeDiscountOn" : "accChangeDiscountOff"));
+    if (changed("useExcise")) touched.push(translate(form.fields.useExcise ? "accChangeExciseOn" : "accChangeExciseOff"));
+    if (changed("costingMethod")) touched.push(translate("accChangeCosting"));
+
+    if (touched.length > 0) {
+      const list = touched.join("; ");
+      if (startsInPast) {
+        // Дата начала в прошлом — правка накрывает уже проведённые документы.
+        items.push({ type: "warning", text: `${list}. ${translate("accImpactPast")}` });
+      } else {
+        // Дата начала сегодня/в будущем — прошлое не пересчитается.
+        items.push({ type: "success", text: `${list}. ${translate("accImpactSafe")}` });
+      }
+    } else if (changed("startDate") && startsInPast) {
+      items.push({ type: "warning", text: translate("accImpactPast") });
+    }
+
+    // Заблокированные параметры: объясняем ПОЧЕМУ, а не просто гасим контрол.
+    if (lockVat || lockDiscount || lockExcise) {
+      items.push({ type: "warning", text: translate("accSettingsLockedNote") });
+    }
+
+    // Как вообще работает сохранение — всегда, это не зависит от правок.
+    items.push({ type: "attention", text: translate("accSettingsVersioningNote") });
+    return items;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    form.fields.useVat, form.fields.vatRate, form.fields.vatCalculationMethod,
+    form.fields.useDiscount, form.fields.useExcise, form.fields.costingMethod,
+    form.fields.startDate, startsInPast, lockVat, lockDiscount, lockExcise,
+  ]);
 
   const tabs = useMemo(
     () => [
@@ -394,6 +464,11 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                 </span>
               </GroupRow>
             </div>
+            {/* Notice — отдельной колонкой справа (эталон: models/Sales). Первым
+                элементом среди полей он разрывал форму и сдвигал их при появлении. */}
+            <GroupCol className={styles.FormNotice}>
+              <Notice items={notices} />
+            </GroupCol>
           </div>
         ),
       },
@@ -408,6 +483,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
       lockVat,
       lockDiscount,
       lockExcise,
+      notices,
     ],
   );
 

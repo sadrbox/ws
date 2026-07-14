@@ -18,6 +18,7 @@
 import { prisma } from "../prisma/prisma-client.js";
 import { allocateImportLandedCost } from "./importLandedCost.js";
 import { getSnapshotFor } from "./costSnapshot.js";
+import { getSettingsAt } from "./accountingSettings.js";
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -153,15 +154,17 @@ function splitVat(it, useVat) {
 	return { amount, vat, net };
 }
 
-/** Признак плательщика НДС организации (OrganizationAccountingSetting.useVat). */
-export async function resolveUseVat(orgUuid, client = prisma) {
+/**
+ * Признак плательщика НДС организации — НА ДАТУ ДОКУМЕНТА.
+ *
+ * Раньше дата игнорировалась: бралась текущая версия настроек. Значит снятие галки
+ * «плательщик НДС» задним числом убирало НДС из проведённых документов прошлых
+ * периодов — по которым уже сдана отчётность.
+ */
+export async function resolveUseVat(orgUuid, date = null, client = prisma) {
 	if (!orgUuid) return false;
 	try {
-		const s = await client.organizationAccountingSetting.findFirst({
-			where: { organizationUuid: orgUuid, deletedAt: null },
-			orderBy: { startDate: "desc" },
-			select: { useVat: true },
-		});
+		const s = await getSettingsAt(orgUuid, date, client);
 		return s?.useVat === true;
 	} catch {
 		return false;
@@ -185,16 +188,7 @@ export async function resolveUseVat(orgUuid, client = prisma) {
 export async function resolveCostingMethod(orgUuid, date = null, client = prisma) {
 	if (!orgUuid) return "AVERAGE";
 	try {
-		const at = date ? new Date(date) : null;
-		const s = await client.organizationAccountingSetting.findFirst({
-			where: {
-				organizationUuid: orgUuid,
-				deletedAt: null,
-				...(at && !isNaN(at.getTime()) ? { startDate: { lte: at } } : {}),
-			},
-			orderBy: { startDate: "desc" },
-			select: { costingMethod: true },
-		});
+		const s = await getSettingsAt(orgUuid, date, client);
 		return s?.costingMethod === "FIFO" ? "FIFO" : "AVERAGE";
 	} catch {
 		return "AVERAGE";
@@ -904,8 +898,10 @@ export async function buildDocumentEntries(documentType, doc, items, client = pr
 	const rule = POSTING_RULES[documentType];
 	if (!rule) return [];
 	const ctx = makeContext(client, doc.organizationUuid ?? null, costCache);
-	// Плательщик НДС? (определяет разнесение НДС на 1420/3130).
-	ctx.useVat = await resolveUseVat(doc.organizationUuid ?? null, client);
+	// Плательщик НДС? (определяет разнесение НДС на 1420/3130) — НА ДАТУ ДОКУМЕНТА,
+	// а не «сейчас»: иначе снятие галки задним числом убрало бы НДС из проводок уже
+	// проведённых документов прошлых периодов.
+	ctx.useVat = await resolveUseVat(doc.organizationUuid ?? null, doc.date ?? null, client);
 	// Метод себестоимости организации (AVERAGE|FIFO) + инициализация ФИФО-состояния.
 	ctx.beginDocument(await resolveCostingMethod(doc.organizationUuid ?? null, doc.date ?? null, client), doc.uuid, doc.id);
 	// Себестоимость движения — из УЖЕ построенного регистра (amount по строке
