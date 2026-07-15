@@ -16,7 +16,7 @@ import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
@@ -56,7 +56,7 @@ function useSubkontoOptions() {
 }
 
 const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useUserAccessRight("ChartOfAccount");
+  const { canWrite } = useAccessPermission("ChartOfAccount");
   const subkontoOptions = useSubkontoOptions();
 
   const accountTypeOptions = [

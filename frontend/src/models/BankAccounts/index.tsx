@@ -19,7 +19,7 @@ import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
@@ -56,7 +56,7 @@ const DEFAULT_FIELDS: TFields = {
 const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
   const data = paneProps.data;
   const defaultOrg = useDefaultOrganization();
-  const { canWrite } = useUserAccessRight("BankAccount");
+  const { canWrite } = useAccessPermission("BankAccount");
 
   const initialFields: TFields | undefined = (() => {
     if (data?.uuid) return undefined;

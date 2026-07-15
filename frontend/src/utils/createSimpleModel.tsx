@@ -7,7 +7,7 @@
  * Каждая модель описывается декларативным конфигом:
  * - endpoint, listName, storageKey, formLabel
  * - fields: массив описаний полей
- * - userAccessRight: ключ для useUserAccessRight (опционально)
+ * - accessPermission: ключ для useAccessPermission (опционально)
  * - getLabel: формат метки в списке
  *
  * Возвращает { Form, List } — готовые компоненты.
@@ -22,7 +22,7 @@ import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FormDirtyScope, FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
@@ -62,8 +62,8 @@ export interface CreateSimpleModelOptions {
   columnsJson: any;
   /** Массив описаний полей формы */
   fields: SimpleFieldDef[];
-  /** Ключ UserAccessRight (напр. "Brand"). Если не указан — readonly не применяется */
-  userAccessRight?: string;
+  /** Ключ AccessPermission (напр. "Brand"). Если не указан — readonly не применяется */
+  accessPermission?: string;
   /** Формирование метки панели из сохранённых данных */
   buildPaneLabel?: (saved: Record<string, any>) => string;
   /** Формирование метки строки в списке */
@@ -84,7 +84,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
     formLabel,
     columnsJson,
     fields,
-    userAccessRight,
+    accessPermission,
     defaultSort,
   } = opts;
 
@@ -108,9 +108,9 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
   // ─── FORM ───────────────────────────────────────────────────────────
 
   const SimpleForm: FC<Partial<TPane>> = (paneProps) => {
-    // Хук всегда вызывается безусловно; если userAccessRight не задан — перекрываем результат
-    const _accessRaw = useUserAccessRight(userAccessRight ?? "");
-    const access = userAccessRight ? _accessRaw : { canWrite: true };
+    // Хук всегда вызывается безусловно; если accessPermission не задан — перекрываем результат
+    const _accessRaw = useAccessPermission(accessPermission ?? "");
+    const access = accessPermission ? _accessRaw : { canWrite: true };
 
     const form = useFormStore<TFields>({
       endpoint,

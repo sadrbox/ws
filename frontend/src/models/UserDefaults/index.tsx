@@ -4,7 +4,7 @@
  * `user-defaults` (модель `userDefault`).
  *
  * Экспортирует подтаблицу `UserDefaultsTable` (используется в форме «Настройки
- * пользователя», src/models/UserSettings) и список видов `PERMISSION_DEFAULT_TYPE_OPTIONS`.
+ * пользователя», src/models/AccessRights) и список видов `PERMISSION_DEFAULT_TYPE_OPTIONS`.
  */
 import { FC, useCallback, useMemo } from "react";
 import { translate } from "src/i18";

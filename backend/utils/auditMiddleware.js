@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // auditMiddleware (E1.2) — автоматический журнал действий на мутирующих запросах.
 //
-// Ставится ПОСЛЕ authMiddleware/tenantMiddleware/userAccessRightMiddleware:
+// Ставится ПОСЛЕ authMiddleware/tenantMiddleware/accessPermissionMiddleware:
 // нужен req.user, и записывать в журнал имеет смысл только разрешённые действия.
 //
 // Что журналируется (по маршруту, через ROUTE_TO_MODEL):

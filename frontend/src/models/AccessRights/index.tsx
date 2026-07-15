@@ -16,15 +16,15 @@ import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
-import { UserAccessRightsTable, MODEL_NAME_OPTIONS } from "src/models/UserAccessRights";
+import { AccessPermissionsTable, MODEL_NAME_OPTIONS } from "src/models/AccessPermissions";
 import { UserDefaultsTable, PERMISSION_DEFAULT_TYPE_OPTIONS } from "src/models/UserDefaults";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
 
-const ENDPOINT = "user-settings";
+const ENDPOINT = "access-rights";
 
 export const ROLE_OPTIONS = [
   { value: "member", label: translate("roleMember") },
@@ -46,14 +46,14 @@ const DEFAULT_FORM_FIELDS: TFormFields = {
   userUuid: "", userDisplayName: "", organizationUuid: "", orgShortName: "", role: "member",
 };
 
-const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useUserAccessRight("UserAccessRight");
+const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
+  const { canWrite } = useAccessPermission("AccessPermission");
   const queryClient = useQueryClient();
 
   const invalidateSubTables = useCallback(async (savedData: any) => {
     const userUuid = savedData?.userUuid ?? "";
     await Promise.all([
-      invalidateSubTableFor(queryClient, "user-access-rights", "userUuid", userUuid),
+      invalidateSubTableFor(queryClient, "access-permissions", "userUuid", userUuid),
       invalidateSubTableFor(queryClient, "user-defaults", "userUuid", userUuid),
     ]);
   }, [queryClient]);
@@ -73,17 +73,17 @@ const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const form = useFormStore<TFormFields>({
     endpoint: ENDPOINT,
-    storageKey: "user-access-rights-form",
+    storageKey: "access-permissions-form",
     defaultFields: DEFAULT_FORM_FIELDS,
     initialFields,
     paneProps,
     tables: {
-      userAccessRights: {
-        endpoint: "user-access-rights",
+      accessPermissions: {
+        endpoint: "access-permissions",
         parentField: "userUuid",
-        label: translate("userSettings"),
+        label: translate("accessRights"),
         skipParentField: true,
-        batchEndpoint: "user-access-rights/batch",
+        batchEndpoint: "access-permissions/batch",
         createPayload: (r: any) => ({
           userUuid: r.userUuid ?? null,
           organizationUuid: r.organizationUuid ?? null,
@@ -134,7 +134,7 @@ const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
       const userName = saved.userDisplayName || (saved).user?.username || "";
       const orgName = saved.orgShortName || (saved).organization?.name || "";
       const detail = [userName, orgName].filter(Boolean).join(" / ");
-      return makePaneLabel("UserSettingsList", translate("userAccessRight"), saved, detail || undefined);
+      return makePaneLabel("AccessRightsList", translate("accessPermission"), saved, detail || undefined);
     },
     afterSave: invalidateSubTables,
   });
@@ -142,16 +142,16 @@ const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
   const notices = useFormNotices(form);
 
-  const userAccessRights = form.useTable("userAccessRights");
+  const accessPermissions = form.useTable("accessPermissions");
   const userDefaults = form.useTable("userDefaults");
 
   // Вычисляем доступность кнопки "Добавить" на основе allRows формы:
   // allRows содержит все строки SubTable (сервер + pending), обновляется через onAllItemsChange.
   const allModelsUsed = useMemo(
     () => MODEL_NAME_OPTIONS.length > 0 && MODEL_NAME_OPTIONS.every(o =>
-      userAccessRights.allRows.some(r => (r as any).modelName === o.value && (r as any)._pendingAction !== "delete")
+      accessPermissions.allRows.some(r => (r as any).modelName === o.value && (r as any)._pendingAction !== "delete")
     ),
-    [userAccessRights.allRows],
+    [accessPermissions.allRows],
   );
   const allTypesUsed = useMemo(
     () => PERMISSION_DEFAULT_TYPE_OPTIONS.length > 0 && PERMISSION_DEFAULT_TYPE_OPTIONS.every(o =>
@@ -193,16 +193,16 @@ const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
 
     if (form.isEditMode && form.fields.userUuid && form.fields.organizationUuid) {
       result.push({
-        id: "userAccessRights",
-        label: translate("userAccessRights"),
+        id: "accessPermissions",
+        label: translate("accessPermissions"),
         component: (
-          <UserAccessRightsTable
+          <AccessPermissionsTable
             userUuid={form.fields.userUuid}
             organizationUuid={form.fields.organizationUuid}
             deferRemoteChanges={true}
-            initialPendingRows={userAccessRights.pending}
-            onItemsChange={userAccessRights.onItemsChange}
-            onAllItemsChange={userAccessRights.onAllItemsChange}
+            initialPendingRows={accessPermissions.pending}
+            onItemsChange={accessPermissions.onItemsChange}
+            onAllItemsChange={accessPermissions.onAllItemsChange}
             disableAdd={allModelsUsed}
           />
         ),
@@ -227,7 +227,7 @@ const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
     }
 
     return result;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, userAccessRights, userDefaults, canWrite, allModelsUsed, allTypesUsed]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, accessPermissions, userDefaults, canWrite, allModelsUsed, allTypesUsed]);
 
   return (
     <ModelForm
@@ -242,17 +242,19 @@ const UserSettingsForm: FC<Partial<TPane>> = (paneProps) => {
     />
   );
 };
-UserSettingsForm.displayName = "UserSettingsForm";
+AccessRightsForm.displayName = "AccessRightsForm";
 
-const UserSettingsList: FC<{
+const AccessRightsList: FC<{
   variant?: TTableVariant;
   onSelectItem?: (item: TDataItem) => void;
-}> = ({ variant, onSelectItem }) => (
+  /** Ограничить список одной организацией (вкладка в форме организации). */
+  organizationUuid?: string;
+}> = ({ variant, onSelectItem, organizationUuid }) => (
   <ModelList
     endpoint={ENDPOINT}
-    listName="UserSettingsList"
+    listName="AccessRightsList"
     columnsJson={listColumnsJson}
-    FormComponent={UserSettingsForm}
+    FormComponent={AccessRightsForm}
     getLabel={(d) => {
       const item = d as any;
       return item?.user?.username
@@ -261,12 +263,14 @@ const UserSettingsList: FC<{
     }}
     variant={variant}
     onSelectItem={onSelectItem}
+    ownerUuid={organizationUuid}
+    ownerField={organizationUuid ? "organizationUuid" : undefined}
     defaultSort={{ id: "desc" }}
   />
 );
-UserSettingsList.displayName = "UserSettingsList";
+AccessRightsList.displayName = "AccessRightsList";
 
-interface UserSettingsTableProps {
+interface AccessRightsTableProps {
   userUuid: string;
   disabled?: boolean;
   deferRemoteChanges?: boolean;
@@ -274,7 +278,7 @@ interface UserSettingsTableProps {
   initialPendingRows?: TDataItem[];
 }
 
-const UserSettingsTable: FC<UserSettingsTableProps> = ({
+const AccessRightsTable: FC<AccessRightsTableProps> = ({
   userUuid,
   disabled = false,
   deferRemoteChanges = true,
@@ -355,8 +359,8 @@ const UserSettingsTable: FC<UserSettingsTableProps> = ({
     addPane({
       label: isEdit
         ? `${orgName ?? orgUuid ?? "Организация"}`
-        : makePaneLabelFromData("UserSettingsTable", "Пользователь / Организация", null),
-      component: UserSettingsForm,
+        : makePaneLabelFromData("AccessRightsTable", "Пользователь / Организация", null),
+      component: AccessRightsForm,
       data: isEdit ? data : newData,
       onSave: refresh,
       onClose: refresh,
@@ -372,7 +376,7 @@ const UserSettingsTable: FC<UserSettingsTableProps> = ({
   return (
     <SubTable
       model={ENDPOINT}
-      componentName="UserSettingsTable_part"
+      componentName="AccessRightsTable_part"
       columnsJson={subColumnsJson}
       parentKey="userUuid"
       parentUuid={userUuid}
@@ -389,7 +393,7 @@ const UserSettingsTable: FC<UserSettingsTableProps> = ({
     />
   );
 };
-UserSettingsTable.displayName = "UserSettingsTable";
+AccessRightsTable.displayName = "AccessRightsTable";
 
-export { UserSettingsForm, UserSettingsList, UserSettingsTable };
-export { UserSettingsList as UserSettingsModuleList };
+export { AccessRightsForm, AccessRightsList, AccessRightsTable };
+export { AccessRightsList as AccessRightsModuleList };

@@ -22,7 +22,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import Notice from "src/components/Notice";
@@ -68,7 +68,7 @@ const BASIS_ALLOWED_TYPES = [{ type: "stock_count", endpoint: "stockcounts" }];
 const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
-  const { canWrite } = useUserAccessRight("WriteOff");
+  const { canWrite } = useAccessPermission("WriteOff");
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;

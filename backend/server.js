@@ -18,7 +18,7 @@ import { getLocalIP } from "./utils/module.js";
 import {
 	authMiddleware,
 	tenantMiddleware,
-	userAccessRightMiddleware,
+	accessPermissionMiddleware,
 } from "./utils/auth.js";
 
 // ── Роутеры ─────────────────────────────────────────────────────────────
@@ -95,8 +95,8 @@ import currenciesRouter from "./api/router/currencies.js";
 import employeesRouter from "./api/router/employees.js";
 import positionsRouter from "./api/router/positions.js";
 import employeeHistoriesRouter from "./api/router/employeehistories.js";
-import userSettingsRouter from "./api/router/usersettings.js";
-import userAccessRightsRouter from "./api/router/useraccessrights.js";
+import accessRightsRouter from "./api/router/accessrights.js";
+import accessPermissionsRouter from "./api/router/accesspermissions.js";
 import userDefaultsRouter from "./api/router/userdefaults.js";
 import payrollCalculationsRouter from "./api/router/payrollcalculations.js";
 import payrollPaymentsRouter from "./api/router/payrollpayments.js";
@@ -312,7 +312,7 @@ app.use("/api/v1", authRouter);
 
 app.use("/api/v1", authMiddleware);
 app.use("/api/v1", tenantMiddleware);
-app.use("/api/v1", userAccessRightMiddleware);
+app.use("/api/v1", accessPermissionMiddleware);
 // Сквозной журнал действий (E1.2): пишет create/update/delete с diff. Строго
 // после проверки прав — незаконные запросы до сюда не доходят.
 app.use("/api/v1", auditMiddleware);
@@ -389,8 +389,8 @@ app.use("/api/v1", currenciesRouter);
 app.use("/api/v1", employeesRouter);
 app.use("/api/v1", positionsRouter);
 app.use("/api/v1", employeeHistoriesRouter);
-app.use("/api/v1", userSettingsRouter);
-app.use("/api/v1", userAccessRightsRouter);
+app.use("/api/v1", accessRightsRouter);
+app.use("/api/v1", accessPermissionsRouter);
 app.use("/api/v1", userDefaultsRouter);
 app.use("/api/v1", payrollCalculationsRouter);
 app.use("/api/v1", payrollPaymentsRouter);
@@ -416,7 +416,7 @@ app.use(
 	"/pipe",
 	pipeAuth,
 	tenantMiddleware,
-	userAccessRightMiddleware,
+	accessPermissionMiddleware,
 	auditMiddleware,
 	activityHistoriesRouter,
 );

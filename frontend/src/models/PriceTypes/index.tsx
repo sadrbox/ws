@@ -8,7 +8,7 @@ const { Form: PriceTypesForm, List: PriceTypesList } = createSimpleModel({
   storageKey: "price-types-form",
   formLabel: "Типы цен",
   columnsJson,
-  userAccessRight: "Product",
+  accessPermission: "Product",
   fields: [
     { key: "name", label: "Наименование типа цены *", required: true, requiredMessage: "Наименование обязательно" },
     { key: "isDefault", label: "По умолчанию", type: "toggle" },

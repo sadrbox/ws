@@ -8,7 +8,7 @@ import { Field, FieldNumber, FieldSelect } from "src/components/Field";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -30,7 +30,7 @@ interface TFields {
 const DEFAULT_FIELDS: TFields = { name: "", code: "", rate: "", calculationMethod: "INCLUDED" };
 
 const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useUserAccessRight("Tax");
+  const { canWrite } = useAccessPermission("Tax");
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT,
     storageKey: "taxes-form",

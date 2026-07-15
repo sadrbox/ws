@@ -21,18 +21,18 @@ model User {
   isSuperAdmin                 Boolean               @default(false)
   avatarPath                   String?
   /// UUID активной (текущей) организации пользователя.
-  /// Должен совпадать с одной из записей в userSettings.
+  /// Должен совпадать с одной из записей в accessRights.
   organizationUuid             String?
   createdAt                    DateTime              @default(now())
   updatedAt                    DateTime              @default(now()) @updatedAt
   deletedAt                    DateTime?
-  userAccessRights             UserAccessRight[]
+  accessPermissions             AccessPermission[]
   curatorTodos                 Todo[]                @relation("TodoCurator")
   executorTodos                Todo[]                @relation("TodoExecutor")
   employee                     Employee?             @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
   organization                 Organization?         @relation("UserOrganization", fields: [organizationUuid], references: [uuid], onDelete: SetNull)
   /// Список организаций, к которым у пользователя есть доступ
-  userSettings                 UserSetting[]
+  accessRights                 AccessRight[]
   userDefaults                 UserDefault[]
   // Авторство документов — заполняется при создании, не редактируется.
   authoredSales                Sale[]                @relation("SaleAuthor")
@@ -71,7 +71,7 @@ model User {
 /// Членство пользователя в организации с ролью.
 /// role: "admin"  — может управлять правами доступа пользователей своей орг.
 /// role: "member" — обычный пользователь.
-model UserSetting {
+model AccessRight {
   id               Int      @id @default(autoincrement())
   uuid             String   @unique @default(uuid())
   userUuid         String
@@ -88,7 +88,7 @@ model UserSetting {
   @@index([userUuid])
   @@index([organizationUuid])
   @@index([updatedAt])
-  @@map("user_settings")
+  @@map("access_rights")
 }
 
 /// Предопределённые значения реквизитов для пользователя в рамках организации.
@@ -157,9 +157,9 @@ model Organization {
   scheduledTasks       ScheduledTask[]
   todos                Todo[]
   users                User[]                          @relation("UserOrganization")
-  userSettings         UserSetting[]
+  accessRights         AccessRight[]
   userDefaults         UserDefault[]
-  userAccessRights     UserAccessRight[]
+  accessPermissions     AccessPermission[]
   warehouses           Warehouse[]
   employeeHistories    EmployeeHistory[]
   counterparties       Counterparty[]                  @relation("OrgCounterparties")
@@ -1387,7 +1387,7 @@ model EmployeeHistory {
   @@map("employee_history")
 }
 
-model UserAccessRight {
+model AccessPermission {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
   modelName        String
@@ -1405,7 +1405,7 @@ model UserAccessRight {
   @@index([userUuid])
   @@index([organizationUuid])
   @@index([updatedAt])
-  @@map("user_access_rights")
+  @@map("access_permissions")
 }
 
 model Currency {

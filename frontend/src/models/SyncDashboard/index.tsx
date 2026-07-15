@@ -83,7 +83,7 @@ const TABLE_LABELS: Record<string, string> = {
   brands: "Бренды", products: "Номенклатура",
   saleitems: "Товары, услуги реализации", employees: "Сотрудники",
   positions: "Должности", "employee-histories": "Кадровая история",
-  "user-access-rights": "Разрешения пользователей", currencies: "Валюты",
+  "access-permissions": "Разрешения пользователей", currencies: "Валюты",
   "payroll-calculations": "Начисление заработной платы", "payroll-payments": "Выплата заработной платы",
 };
 

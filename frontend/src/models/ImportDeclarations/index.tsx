@@ -26,7 +26,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import Notice from "src/components/Notice";
@@ -75,7 +75,7 @@ const DEFAULT_FIELDS: TFields = {
 const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
-  const { canWrite } = useUserAccessRight("ImportDeclaration");
+  const { canWrite } = useAccessPermission("ImportDeclaration");
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;

@@ -12,7 +12,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -47,7 +47,7 @@ const DEFAULT_FIELDS: TFields = {
 
 const TodosForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
-  const { canWrite } = useUserAccessRight("Todo");
+  const { canWrite } = useAccessPermission("Todo");
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;

@@ -7,7 +7,7 @@ const { Form: UnitOfMeasuresForm, List: UnitOfMeasuresList } = createSimpleModel
   storageKey: "unit-of-measures-form",
   formLabel: "Единицы измерения",
   columnsJson,
-  userAccessRight: "UnitOfMeasure",
+  accessPermission: "UnitOfMeasure",
   fields: [
     { key: "name", label: "Наименование", required: true, requiredMessage: "Наименование обязательно" },
     { key: "code", label: "Код" },

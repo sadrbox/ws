@@ -16,7 +16,7 @@ import { BankAccountsTable } from "../BankAccounts";
 import { ContractsTable } from "../Contracts";
 import { ContactsTable } from "../Contacts";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -33,10 +33,10 @@ const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", countryCode:
 
 const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   const esfDict = useEsfDictionaries();
-  const { canWrite } = useUserAccessRight("Counterparty");
-  const { canRead: canReadBankAccounts } = useUserAccessRight("BankAccount");
-  const { canRead: canReadContracts } = useUserAccessRight("Contract");
-  const { canRead: canReadContacts } = useUserAccessRight("Contact");
+  const { canWrite } = useAccessPermission("Counterparty");
+  const { canRead: canReadBankAccounts } = useAccessPermission("BankAccount");
+  const { canRead: canReadContracts } = useAccessPermission("Contract");
+  const { canRead: canReadContacts } = useAccessPermission("Contact");
   const queryClient = useQueryClient();
 
   // refetchType: "active" — invalidateQueries вернёт Promise, который

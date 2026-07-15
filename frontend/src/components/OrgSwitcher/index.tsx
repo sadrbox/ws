@@ -33,11 +33,11 @@ const OrgSwitcher: FC = () => {
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // userSettings — членства пользователя в организациях (бывш. userPermissions).
+  // accessRights — членства пользователя в организациях (бывш. userPermissions).
   // Фоллбэк на старое имя поля — на случай устаревшего кэша пользователя в
   // localStorage (до повторного входа / обновления /auth/me после переименования).
   const orgs: OrgEntry[] =
-    user?.userSettings ?? (user as { userPermissions?: OrgEntry[] } | null)?.userPermissions ?? [];
+    user?.accessRights ?? (user as { userPermissions?: OrgEntry[] } | null)?.userPermissions ?? [];
 
   // Пересчёт позиции портала под кнопкой (правый край совмещён с кнопкой).
   useEffect(() => {

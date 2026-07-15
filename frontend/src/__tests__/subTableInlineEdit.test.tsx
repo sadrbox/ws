@@ -8,7 +8,7 @@
  * 5. ModelRightsTable: filterRows работает правильно
  */
 import { describe, it, expect } from "vitest";
-import { ACCESS_LEVEL_OPTIONS } from "../models/UserAccessRights/index";
+import { ACCESS_LEVEL_OPTIONS } from "../models/AccessPermissions/index";
 
 // ─── Паттерн 1: оптимистичный апдейт handleInlineChange ──────────────────────
 

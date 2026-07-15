@@ -21,7 +21,7 @@ import { HelpBox } from "src/components/HelpBox";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
@@ -68,7 +68,7 @@ export interface InvoiceLikeFormConfig {
   formLabel: string;
   itemsTabLabel: string;
   itemsComponentName: string;
-  userAccessRightModel: string;
+  accessPermissionModel: string;
   formDisplayName: string;
   docType: "outgoing_invoice" | "incoming_invoice" | "payment_invoice" | "purchase_requisition" | "commercial_offer" | "sales_order" | "reservation" | "purchase_order";
   basisConfig?: { allowedTypes: BasisTypeConfig[] };
@@ -221,7 +221,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
   const Form: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
     const queryClient = useQueryClient();
-    const { canWrite } = useUserAccessRight(cfg.userAccessRightModel);
+    const { canWrite } = useAccessPermission(cfg.accessPermissionModel);
     const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
     const initialFields: TFields | undefined = (() => {

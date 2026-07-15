@@ -20,8 +20,8 @@ export interface AuthUser {
 	organizationUuid?: string | null;
 	isSuperAdmin?: boolean;
 	allowedOrgUuids?: string[];
-	userSettings?: OrgEntry[];
-	userAccessRights?: {
+	accessRights?: OrgEntry[];
+	accessPermissions?: {
 		modelName: string;
 		accessLevel: string;
 	}[];
@@ -35,7 +35,7 @@ export interface AuthUser {
 		avatarPath: string | null;
 		organizationUuid: string | null;
 		organization?: { uuid: string; name: string; bin?: string } | null;
-		userAccessRights?: {
+		accessPermissions?: {
 			modelName: string;
 			accessLevel: string;
 		}[];

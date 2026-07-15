@@ -22,7 +22,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import {
@@ -82,7 +82,7 @@ const fmtMoney = (n: number) =>
 
 const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
-  const { canWrite } = useUserAccessRight("MonthClose");
+  const { canWrite } = useAccessPermission("MonthClose");
   const assignNumber = useAssignNumber();
 
   const initialFields: TFields | undefined = (() => {

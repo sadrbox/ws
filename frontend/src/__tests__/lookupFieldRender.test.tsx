@@ -25,8 +25,8 @@ vi.mock("src/registry/modelRegistry", () => ({
 	getByEndpoint: () => null,
 }));
 // Гейт права на кнопку «Создать» — читает пользователя из контекста приложения.
-vi.mock("src/hooks/useUserAccessRight", () => ({
-	useUserAccessRight: () => ({ canWrite: true }),
+vi.mock("src/hooks/useAccessPermission", () => ({
+	useAccessPermission: () => ({ canWrite: true }),
 }));
 
 import LookupField from "src/components/Field/LookupField";

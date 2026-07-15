@@ -14,7 +14,7 @@ import { ContactsTable } from "../Contacts";
 import AvatarUpload from "src/components/AvatarUpload";
 import { resolveOwnerName } from "src/utils/resolveOwnerName";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -37,7 +37,7 @@ const DEFAULT_FIELDS: TFields = {
 
 const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
   const queryClient = useQueryClient();
-  const { canWrite } = useUserAccessRight("ContactPerson");
+  const { canWrite } = useAccessPermission("ContactPerson");
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;

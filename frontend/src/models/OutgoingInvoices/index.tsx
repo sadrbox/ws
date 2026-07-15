@@ -22,7 +22,7 @@ const OutgoingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formLabel: "Счет-фактура исходящая",
   itemsTabLabel: "Товары, услуги",
   itemsComponentName: "OutgoingInvoiceItemsList_part",
-  userAccessRightModel: "OutgoingInvoice",
+  accessPermissionModel: "OutgoingInvoice",
   formDisplayName: "OutgoingInvoicesForm",
   docType: "outgoing_invoice",
   lockFieldsOnBasis: true,

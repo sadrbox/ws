@@ -25,7 +25,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAppContext } from "src/app/context";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
@@ -72,7 +72,7 @@ const DEFAULT_FIELDS: TFields = {
 
 const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
-  const { canWrite } = useUserAccessRight("BankStatement");
+  const { canWrite } = useAccessPermission("BankStatement");
   const { auth: { user: currentUser }, windows: { addPane } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {

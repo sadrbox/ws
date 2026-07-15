@@ -42,8 +42,8 @@ async function cleanup() {
 	const users = await prisma.user.findMany({ where: { username: { startsWith: USER_PREFIX } }, select: { uuid: true } });
 	const userUuids = users.map((u) => u.uuid);
 
-	if (userUuids.length) await prisma.userSetting.deleteMany({ where: { userUuid: { in: userUuids } } });
-	if (orgUuids.length) await prisma.userSetting.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
+	if (userUuids.length) await prisma.accessRight.deleteMany({ where: { userUuid: { in: userUuids } } });
+	if (orgUuids.length) await prisma.accessRight.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
 	// Документы — ДО пользователей (sale/purchase.authorUuid → user). Позиции каскадом.
 	if (orgUuids.length) {
 		await prisma.sale.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
@@ -70,7 +70,7 @@ async function createData() {
 		orgs.push(org);
 	}
 
-	// Сотрудники, контрагенты, пользователи + userSettings по каждой орг.
+	// Сотрудники, контрагенты, пользователи + accessRights по каждой орг.
 	let empSeq = 0, cpSeq = 0;
 	const baseUsers = [];
 	for (let oi = 0; oi < N_ORGS; oi++) {
@@ -101,7 +101,7 @@ async function createData() {
 			const user = await prisma.user.create({
 				data: { username, email: `${username}@test.local`, password: passwordHash, organizationUuid: org.uuid },
 			});
-			await prisma.userSetting.create({
+			await prisma.accessRight.create({
 				data: { userUuid: user.uuid, organizationUuid: org.uuid, role: u === 1 ? "admin" : "member" },
 			});
 			baseUsers.push({ username, user, orgIndex: oi });
@@ -121,7 +121,7 @@ async function createData() {
 			data: { username, email: `${username}@test.local`, password: passwordHash, organizationUuid: activeOrgUuid, isSuperAdmin },
 		});
 		for (const orgUuid of allowedOrgUuids) {
-			await prisma.userSetting.create({ data: { userUuid: user.uuid, organizationUuid: orgUuid, role: "member" } });
+			await prisma.accessRight.create({ data: { userUuid: user.uuid, organizationUuid: orgUuid, role: "member" } });
 		}
 		return user;
 	}
@@ -131,7 +131,7 @@ async function createData() {
 	special.multi = await mkUser(`${USER_PREFIX}multi`, null, [orgs[3].uuid, orgs[4].uuid]);
 	// «Битая» активная: активная орг7 НЕ входит в доступ [орг8] → middleware сбросит активную, видит только орг8.
 	special.badactive = await mkUser(`${USER_PREFIX}badactive`, orgs[6].uuid, [orgs[7].uuid]);
-	// Без доступа: ни активной, ни userSettings → видит только глобальные (org=null).
+	// Без доступа: ни активной, ни accessRights → видит только глобальные (org=null).
 	special.noaccess = await mkUser(`${USER_PREFIX}noaccess`, null, []);
 	// Суперадмин: видит всё.
 	special.super = await mkUser(`${USER_PREFIX}super`, null, [], true);

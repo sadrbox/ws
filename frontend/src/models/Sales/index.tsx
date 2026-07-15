@@ -19,7 +19,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
@@ -170,7 +170,7 @@ interface SaleItemServerRecord {
 const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
-  const { canWrite } = useUserAccessRight("Sale");
+  const { canWrite } = useAccessPermission("Sale");
   const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {

@@ -9,7 +9,7 @@ import { GroupRow } from "src/components/UI";
 import mainStyles from "src/styles/main.module.scss";
 import styles from "./ProductImportExport.module.scss";
 import apiClient from "src/services/api/client";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAppContext } from "src/app/context";
 import { showToast } from "src/components/UIToast";
 import type { TPane } from "src/app/types";
@@ -154,7 +154,7 @@ const makeCellRenderer = (priceDate: string) =>
   };
 
 export const ProductImportExport: FC<Partial<TPane>> = () => {
-  const { canWrite } = useUserAccessRight("Product");
+  const { canWrite } = useAccessPermission("Product");
   const { actions: { confirm } } = useAppContext();
   const [file, setFile] = useState<File | null>(null);
   const [priceDate, setPriceDate] = useState(today());

@@ -28,7 +28,7 @@ const { Form: SaleReturnsForm, List: SaleReturnsList } = createTradeDocForm({
   itemsComponentName: "SaleReturnItemsList_part",
   itemsTableLabel: "Товары возврата",
   parentLabelListKey: "SaleReturnsList",
-  userAccessRightModel: "SaleReturn",
+  accessPermissionModel: "SaleReturn",
   docType: "sale_return",
   columnsJson,
   basisAllowedTypes: [{ type: "sale", endpoint: "sales" }],

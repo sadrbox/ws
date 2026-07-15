@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // T1.4 — Ревизия RBAC: тест-матрица прав.
 //
-// Проверяет userAccessRightMiddleware: пропуск привилегированных ролей, гейт по
+// Проверяет accessPermissionMiddleware: пропуск привилегированных ролей, гейт по
 // уровню (GET → readonly|full, мутации → full, none/нет записи → 403) и покрытие
 // маршрутов документов в ROUTE_TO_MODEL (страж от «забыли зарегистрировать»).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -9,7 +9,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { prisma } from "../prisma/prisma-client.js";
-import { userAccessRightMiddleware, ROUTE_TO_MODEL } from "../utils/auth.js";
+import { accessPermissionMiddleware, ROUTE_TO_MODEL } from "../utils/auth.js";
 
 // Прогон middleware с фейковыми req/res. Возвращает { passed, status, body }.
 async function run({ user, method = "GET", path = "/writeoffs" }) {
@@ -20,7 +20,7 @@ async function run({ user, method = "GET", path = "/writeoffs" }) {
 		status(c) { this.statusCode = c; return this; },
 		json(b) { this.body = b; return this; },
 	};
-	await userAccessRightMiddleware({ user, method, path, ip: "127.0.0.1" }, res, () => { passed = true; });
+	await accessPermissionMiddleware({ user, method, path, ip: "127.0.0.1" }, res, () => { passed = true; });
 	return { passed, status: res.statusCode, body: res.body };
 }
 
@@ -54,15 +54,15 @@ before(async () => {
 });
 after(async () => {
 	if (userUuid) {
-		await prisma.userAccessRight.deleteMany({ where: { userUuid } });
+		await prisma.accessPermission.deleteMany({ where: { userUuid } });
 		await prisma.user.delete({ where: { uuid: userUuid } }).catch(() => {});
 	}
 	await prisma.$disconnect();
 });
 
 async function grant(level) {
-	await prisma.userAccessRight.deleteMany({ where: { userUuid, modelName: "WriteOff" } });
-	if (level) await prisma.userAccessRight.create({ data: { userUuid, modelName: "WriteOff", accessLevel: level, organizationUuid: null } });
+	await prisma.accessPermission.deleteMany({ where: { userUuid, modelName: "WriteOff" } });
+	if (level) await prisma.accessPermission.create({ data: { userUuid, modelName: "WriteOff", accessLevel: level, organizationUuid: null } });
 }
 
 test("уровень full: GET и мутации проходят", async () => {

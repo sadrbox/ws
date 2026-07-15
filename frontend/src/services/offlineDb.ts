@@ -73,7 +73,7 @@ export const SYNCABLE_TABLES = [
 	"employees",
 	"positions",
 	"employee-histories",
-	"user-access-rights",
+	"access-permissions",
 	"currencies",
 	"payroll-calculations",
 	"payroll-payments",
@@ -116,7 +116,7 @@ class OfflineDatabase extends Dexie {
 	employees!: EntityTable<SyncRecord, "id">;
 	positions!: EntityTable<SyncRecord, "id">;
 	"employee-histories"!: EntityTable<SyncRecord, "id">;
-	"user-access-rights"!: EntityTable<SyncRecord, "id">;
+	"access-permissions"!: EntityTable<SyncRecord, "id">;
 	currencies!: EntityTable<SyncRecord, "id">;
 	"payroll-calculations"!: EntityTable<SyncRecord, "id">;
 	"payroll-payments"!: EntityTable<SyncRecord, "id">;
@@ -194,6 +194,14 @@ class OfflineDatabase extends Dexie {
 		this.version(4).stores({
 			"access-rights": null,
 			"user-access-rights": "++id, &uuid, updatedAt, deletedAt, userUuid, modelName",
+		});
+
+		// v5: модель UserAccessRight → AccessPermission (стор "user-access-rights" →
+		// "access-permissions"). Старый стор удаляется, данные пересинхронизируются
+		// с сервера — как при переименовании в v4.
+		this.version(5).stores({
+			"user-access-rights": null,
+			"access-permissions": "++id, &uuid, updatedAt, deletedAt, userUuid, modelName",
 		});
 	}
 

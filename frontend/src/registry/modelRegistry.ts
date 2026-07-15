@@ -396,11 +396,11 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Регламентные задачи",
 	},
 	{
-		endpoint: "user-settings",
-		module: () => import("src/models/UserSettings"),
-		formName: "UserSettingsForm",
-		listName: "UserSettingsList",
-		storageKey: "user-access-rights-form",
+		endpoint: "access-rights",
+		module: () => import("src/models/AccessRights"),
+		formName: "AccessRightsForm",
+		listName: "AccessRightsList",
+		storageKey: "access-permissions-form",
 		label: "Права доступа",
 	},
 	{

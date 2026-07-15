@@ -24,7 +24,7 @@ const PurchaseRequisitionsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formLabel: "Заявка на закупку",
   itemsTabLabel: "Товары, услуги",
   itemsComponentName: "PurchaseRequisitionItemsList_part",
-  userAccessRightModel: "PurchaseRequisition",
+  accessPermissionModel: "PurchaseRequisition",
   formDisplayName: "PurchaseRequisitionsForm",
   docType: "purchase_requisition",
   printConfig: {

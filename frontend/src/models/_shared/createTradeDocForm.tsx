@@ -26,7 +26,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
@@ -78,7 +78,7 @@ export interface TradeDocConfig {
   itemsTableLabel: string;          // подпись таблицы в useFormStore
   itemsTabLabelKey?: string;        // i18-ключ вкладки позиций (default "SaleItemsList")
   parentLabelListKey: string;       // i18-ключ для parentLabel позиций ("PurchasesList")
-  userAccessRightModel: string;     // "Purchase"
+  accessPermissionModel: string;     // "Purchase"
   docType: DocumentType;            // "purchase" (validate/scope/chain/entries)
   columnsJson: unknown;
   basisAllowedTypes: BasisTypeConfig[];
@@ -188,7 +188,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
   const Form: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
     const queryClient = useQueryClient();
-    const { canWrite } = useUserAccessRight(cfg.userAccessRightModel);
+    const { canWrite } = useAccessPermission(cfg.accessPermissionModel);
     const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
 
     const initialFields: TFields | undefined = (() => {

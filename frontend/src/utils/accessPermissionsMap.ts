@@ -1,5 +1,5 @@
 /**
- * Маппинг API-endpoint модели → имя модели в UserAccessRight (PascalCase).
+ * Маппинг API-endpoint модели → имя модели в AccessPermission (PascalCase).
  * Используется для проверки прав на фронтенде.
  */
 export const ENDPOINT_TO_MODEL: Record<string, string> = {
@@ -43,7 +43,7 @@ export const ENDPOINT_TO_MODEL: Record<string, string> = {
 	employees: "Employee",
 	positions: "Position",
 	"employee-histories": "EmployeeHistory",
-	"user-access-rights": "UserAccessRight",
+	"access-permissions": "AccessPermission",
 	currencies: "Currency",
 	"chart-of-accounts": "ChartOfAccount",
 	"subkonto-types": "SubkontoType",

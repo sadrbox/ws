@@ -21,8 +21,8 @@ import type {
 	TypeTableTypes,
 } from "src/components/Table/types";
 import type { TTableVariant } from "src/components/Table";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
-import { ENDPOINT_TO_MODEL } from "src/utils/userAccessRightsMap";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
+import { ENDPOINT_TO_MODEL } from "src/utils/accessPermissionsMap";
 
 // Модели, где свободные слова ищет СЕРВЕР, а не клиент по видимым колонкам.
 // Признак: искомое не сводится к колонкам списка (у товара — несколько штрих-кодов,
@@ -73,7 +73,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
 
 	// ── Разрешения пользователей ─────────────────────────────────────────────────────
 	const modelName = ENDPOINT_TO_MODEL[model] ?? "";
-	const { canRead, canWrite } = useUserAccessRight(modelName);
+	const { canRead, canWrite } = useAccessPermission(modelName);
 
 	const [columns, setColumns] = useState<TColumn[]>(() =>
 		getModelColumns(opts.columnsJson, componentName, columnsVariant),

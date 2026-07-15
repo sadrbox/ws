@@ -5,7 +5,7 @@ import { fetchList } from "src/services/offlineDataService";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
 import { useCellFieldState } from "src/hooks/useDirtyHighlight";
 import { useFormRequiredScope } from "src/hooks/useFormRequired";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAppContext } from "src/app/context";
 import SelectPaneWrapper from "./SelectPaneWrapper";
 import { setPendingHighlight } from "src/utils/listHighlight";
@@ -138,7 +138,7 @@ const defaultSecondaryFieldsMap: Record<string, string[]> = {
 // ── Ленивая загрузка Form-компонента по endpoint (через единый реестр) ──
 import { getByEndpoint } from "src/registry/modelRegistry";
 
-// endpoint → имя модели прав (UserAccessRight.modelName) для гейтинга кнопки
+// endpoint → имя модели прав (AccessPermission.modelName) для гейтинга кнопки
 // «Создать»: показываем её только если у пользователя есть право на запись
 // (создание) этого справочника. Неизвестный endpoint → права не подтверждены →
 // кнопка скрыта (для не-суперадмина).
@@ -482,7 +482,7 @@ const LookupField: FC<LookupFieldProps> = ({
 
   // Есть ли форма создания для этого справочника (реестр моделей).
   // Право на создание нового элемента справочника (гейт кнопки «Создать»).
-  const { canWrite: canCreateByRight } = useUserAccessRight(ENDPOINT_ACCESS_MODEL[endpoint] ?? "");
+  const { canWrite: canCreateByRight } = useAccessPermission(ENDPOINT_ACCESS_MODEL[endpoint] ?? "");
   const canCreate = allowCreate && !disabled && !!getByEndpoint(endpoint) && canCreateByRight;
   // Название справочника для кнопки «Создать» (не введённый текст — он не
   // подставляется в форму создания, поэтому показывать его в label некорректно).

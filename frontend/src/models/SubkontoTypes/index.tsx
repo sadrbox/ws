@@ -13,7 +13,7 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
@@ -36,7 +36,7 @@ const DEFAULT_FIELDS: TFields = {
 const ENDPOINT = "subkonto-types";
 
 const SubkontoTypesForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useUserAccessRight("SubkontoType");
+  const { canWrite } = useAccessPermission("SubkontoType");
 
   const form = useFormStore<TFields>({
     endpoint: ENDPOINT,

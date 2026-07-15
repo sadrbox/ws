@@ -23,7 +23,7 @@ const ReservationsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formLabel: "Резервирование товара",
   itemsTabLabel: "Товары, услуги",
   itemsComponentName: "ReservationItemsList_part",
-  userAccessRightModel: "Reservation",
+  accessPermissionModel: "Reservation",
   formDisplayName: "ReservationsForm",
   docType: "reservation",
   // Резерв ПРОВОДИТСЯ: только проведённый двигает регистр резервов (уменьшает

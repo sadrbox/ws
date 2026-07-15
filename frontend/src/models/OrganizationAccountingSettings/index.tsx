@@ -16,7 +16,7 @@ import { FieldNumber } from "src/components/Field";
 import { GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingUsageStats from "src/hooks/useOrgAccountingUsageStats";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
@@ -75,7 +75,7 @@ const DEFAULT_FIELDS: TFields = {
 // Поэтому id растёт с каждым сохранением — это версии, а не мусор.
 // ─────────────────────────────────────────────────────────────────────────
 const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useUserAccessRight("OrganizationAccountingSetting");
+  const { canWrite } = useAccessPermission("OrganizationAccountingSetting");
   // Снимок ЗАГРУЖЕННОЙ версии параметров: подсказки строятся из сравнения с ним —
   // «что пользователь изменил», а не «что вообще может быть не так».
   const savedRef = useRef<TFields | null>(null);
@@ -550,7 +550,9 @@ const renderListCell = (row: TDataItem, col: TColumn) => {
 const OrganizationAccountingSettingsList: FC<{
   variant?: TTableVariant;
   onSelectItem?: (item: TDataItem) => void;
-}> = ({ variant, onSelectItem }) => {
+  /** Ограничить список одной организацией (вкладка в форме организации). */
+  organizationUuid?: string;
+}> = ({ variant, onSelectItem, organizationUuid }) => {
   // При монтировании списка инвалидируем кэш «активных», чтобы SaleItemsTable
   // увидел свежие настройки сразу.
   const qc = useQueryClient();
@@ -572,6 +574,8 @@ const OrganizationAccountingSettingsList: FC<{
       }
       variant={variant}
       onSelectItem={onSelectItem}
+      ownerUuid={organizationUuid}
+      ownerField={organizationUuid ? "organizationUuid" : undefined}
       renderCell={renderListCell}
     />
   );

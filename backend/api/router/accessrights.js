@@ -2,9 +2,9 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 
 const router = express.Router();
-const ROUTE = "user-settings";
+const ROUTE = "access-rights";
 
-// ── GET /user-settings?userUuid=xxx — список с курсорной пагинацией ──
+// ── GET /access-rights?userUuid=xxx — список с курсорной пагинацией ──
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
 		const { userUuid } = req.query;
@@ -71,7 +71,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			if (!hasId) orderBy.push({ id: "asc" });
 		}
 
-		const items = await prisma.userSetting.findMany({
+		const items = await prisma.accessRight.findMany({
 			where: {
 				...where,
 				...(cursorNumber ? { id: { gt: cursorNumber } } : {}),
@@ -99,7 +99,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 	}
 });
 
-// ── GET /user-settings/:id — одна запись ─────────────────────────────
+// ── GET /access-rights/:id — одна запись ─────────────────────────────
 router.get(`/${ROUTE}/:id`, async (req, res) => {
 	try {
 		const p = req.params.id;
@@ -107,7 +107,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 
-		const item = await prisma.userSetting.findUnique({
+		const item = await prisma.accessRight.findUnique({
 			where: w,
 			include: {
 				organization: {
@@ -130,7 +130,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
-// ── POST /user-settings — добавить организацию пользователю ──────────
+// ── POST /access-rights — добавить организацию пользователю ──────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
 		const { userUuid, organizationUuid, role = "member" } = req.body;
@@ -162,7 +162,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 
-		const item = await prisma.userSetting.upsert({
+		const item = await prisma.accessRight.upsert({
 			where: { userUuid_organizationUuid: { userUuid, organizationUuid } },
 			update: { role },
 			create: { userUuid, organizationUuid, role },
@@ -188,7 +188,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 	}
 });
 
-// ── PUT /user-settings/:id — изменить запись ────────────────────────
+// ── PUT /access-rights/:id — изменить запись ────────────────────────
 // Поддерживает: только role (простое обновление) ИЛИ смену organizationUuid/userUuid
 // (составной уникальный ключ) — в этом случае выполняется транзакция delete+create.
 router.put(`/${ROUTE}/:id`, async (req, res) => {
@@ -209,7 +209,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const callerOrgUuid = req.user?.organizationUuid;
 
 		// Загружаем существующую запись
-		const existing = await prisma.userSetting.findUnique({ where: w });
+		const existing = await prisma.accessRight.findUnique({ where: w });
 		if (!existing)
 			return res
 				.status(404)
@@ -248,7 +248,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 
 		if (keyChanged) {
 			// Ищем конфликтующую запись (та же пара userUuid+organizationUuid)
-			const conflict = await prisma.userSetting.findUnique({
+			const conflict = await prisma.accessRight.findUnique({
 				where: {
 					userUuid_organizationUuid: {
 						userUuid: finalUserUuid,
@@ -260,19 +260,19 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			if (conflict && conflict.id !== existing.id) {
 				// Конфликт с другой записью — обновляем её и удаляем текущую (merge)
 				const [mergedItem] = await prisma.$transaction([
-					prisma.userSetting.update({
+					prisma.accessRight.update({
 						where: { id: conflict.id },
 						data: { role: finalRole },
 						include,
 					}),
-					prisma.userSetting.delete({ where: { id: existing.id } }),
+					prisma.accessRight.delete({ where: { id: existing.id } }),
 				]);
 				return res.json({ success: true, item: mergedItem });
 			}
 
 			// Нет конфликта — создаём новую запись, удаляем старую
 			const [newItem] = await prisma.$transaction([
-				prisma.userSetting.create({
+				prisma.accessRight.create({
 					data: {
 						userUuid: finalUserUuid,
 						organizationUuid: finalOrgUuid,
@@ -280,14 +280,14 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 					},
 					include,
 				}),
-				prisma.userSetting.delete({ where: { id: existing.id } }),
+				prisma.accessRight.delete({ where: { id: existing.id } }),
 			]);
 
 			return res.json({ success: true, item: newItem });
 		}
 
 		// Только роль изменилась — простое обновление
-		const item = await prisma.userSetting.update({
+		const item = await prisma.accessRight.update({
 			where: { id: existing.id },
 			data: { role: finalRole },
 			include,
@@ -308,7 +308,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
-// ── DELETE /user-settings/:id ───────────────────────────────────────
+// ── DELETE /access-rights/:id ───────────────────────────────────────
 router.delete(`/${ROUTE}/:id`, async (req, res) => {
 	try {
 		const p = req.params.id;
@@ -320,7 +320,7 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 		const isOrgAdmin = req.user?.isOrgAdmin;
 
 		// Находим запись для проверки доступа
-		const record = await prisma.userSetting.findUnique({ where: w });
+		const record = await prisma.accessRight.findUnique({ where: w });
 		if (!record)
 			return res
 				.status(404)
@@ -333,7 +333,7 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 			return res.status(403).json({ success: false, message: "Нет доступа" });
 		}
 
-		await prisma.userSetting.delete({ where: { id: record.id } });
+		await prisma.accessRight.delete({ where: { id: record.id } });
 
 		// Если удалили активную орг — сбрасываем
 		const targetUser = await prisma.user.findUnique({
@@ -358,7 +358,7 @@ router.delete(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
-// ── POST /user-settings/batch ──────────────────────────────────────────
+// ── POST /access-rights/batch ──────────────────────────────────────────
 router.post(`/${ROUTE}/batch`, async (req, res) => {
 	try {
 		const { operations } = req.body;
@@ -367,16 +367,16 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 		await prisma.$transaction(async (tx) => {
 			for (const { action, uuid, data } of operations) {
 				if (action === "create" && data) {
-					await tx.userSetting.upsert({
+					await tx.accessRight.upsert({
 						where: { userUuid_organizationUuid: { userUuid: data.userUuid, organizationUuid: data.organizationUuid } },
 						update: { role: data.role ?? "member" },
 						create: { userUuid: data.userUuid, organizationUuid: data.organizationUuid, role: data.role ?? "member" },
 					});
 				} else if (action === "update" && uuid && data) {
 					if (data.role !== undefined)
-						await tx.userSetting.update({ where: { uuid }, data: { role: data.role } });
+						await tx.accessRight.update({ where: { uuid }, data: { role: data.role } });
 				} else if (action === "delete" && uuid) {
-					try { await tx.userSetting.delete({ where: { uuid } }); } catch {}
+					try { await tx.accessRight.delete({ where: { uuid } }); } catch {}
 				}
 			}
 		});

@@ -17,7 +17,7 @@ import { ContactsTable } from "../Contacts";
 import EmployeeHistoryForm from "./EmployeeHistoryForm";
 import AvatarUpload from "src/components/AvatarUpload";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
@@ -40,9 +40,9 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useUserAccessRight("Employee");
-  const { canRead: canReadContacts } = useUserAccessRight("Contact");
-  const { canRead: canReadEmployeeHistory } = useUserAccessRight("EmployeeHistory");
+  const { canWrite } = useAccessPermission("Employee");
+  const { canRead: canReadContacts } = useAccessPermission("Contact");
+  const { canRead: canReadEmployeeHistory } = useAccessPermission("EmployeeHistory");
   const queryClient = useQueryClient();
 
   // refetchType: "active" — ждём завершение refetch смонтированных

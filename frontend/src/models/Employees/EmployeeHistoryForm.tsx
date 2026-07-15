@@ -8,7 +8,7 @@ import { translate } from "src/i18";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 
@@ -45,7 +45,7 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useUserAccessRight("EmployeeHistory");
+  const { canWrite } = useAccessPermission("EmployeeHistory");
   const data = paneProps.data;
   const employeeUuid = (data as any)?.employeeUuid as string | undefined;
 

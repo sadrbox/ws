@@ -25,7 +25,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { useUserDefaults } from "src/hooks/useUserDefaults";
 import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
@@ -53,7 +53,7 @@ export interface CashOrderFormConfig {
   listName: string;
   formLabel: string;
   storageKey: string;
-  userAccessRightModel: string;
+  accessPermissionModel: string;
   docType: DocumentType;
   formDisplayName: string;
   columnsJson: any;
@@ -148,7 +148,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
 
   const Form: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
-    const { canWrite } = useUserAccessRight(cfg.userAccessRightModel);
+    const { canWrite } = useAccessPermission(cfg.accessPermissionModel);
     const { auth: { user: currentUser }, windows: { addPane } } = useAppContext();
     const [isRefilling, setIsRefilling] = useState(false);
     const assignNumber = useAssignNumber();

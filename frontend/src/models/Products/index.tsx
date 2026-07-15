@@ -18,7 +18,7 @@ import { isoToLocalInput, getFormatDateOnly } from "src/utils/datetime";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
@@ -41,7 +41,7 @@ interface TFields { id?: number; uuid?: string; name: string; sku: string; barco
 const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, trackSerialNumbers: false, trackBatches: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "", tnvedCode: "", truOriginCode: "", catalogTruId: "" };
 
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
-  const { canWrite } = useUserAccessRight("Product");
+  const { canWrite } = useAccessPermission("Product");
   const queryClient = useQueryClient();
   const esfDict = useEsfDictionaries();
   const form = useFormStore<TFields>({

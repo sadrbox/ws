@@ -13,7 +13,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
@@ -61,7 +61,7 @@ const DEFAULT_FIELDS: TFields = {
 
 const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
-  const { canWrite } = useUserAccessRight("PayrollPayment");
+  const { canWrite } = useAccessPermission("PayrollPayment");
   const assignNumber = useAssignNumber();
 
   const initialFields: TFields | undefined = (() => {

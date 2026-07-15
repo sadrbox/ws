@@ -20,11 +20,11 @@ import OrgSwitcher from 'src/components/OrgSwitcher';
 // (Vite: "dynamic import will not move module into another chunk"). displayName
 // ОБЯЗАТЕЛЕН — по нему дедуплицируются панели (getComponentName в app/index.tsx).
 // Рендерятся внутри <React.Suspense> (см. app/index.tsx).
-// UserSettingsModuleList/UserAccessRightsList загружаются динамически (разрыв цикла UI→models→app→UI)
+// AccessRightsModuleList/AccessPermissionsList загружаются динамически (разрыв цикла UI→models→app→UI)
 import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
 import UIToast from 'src/components/UIToast';
-import { getAccessLevel } from 'src/hooks/useUserAccessRight';
+import { getAccessLevel } from 'src/hooks/useAccessPermission';
 import { usePersistenceMode } from 'src/services/persistenceMode';
 import {
   ContractsList,
@@ -932,7 +932,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
   const context = useAppContext();
   const addPane = context.windows.addPane;
   const user = context.auth.user;
-  const rights = user?.userAccessRights ?? user?.employee?.userAccessRights ?? [];
+  const rights = user?.accessPermissions ?? user?.employee?.accessPermissions ?? [];
   const isSuperAdmin = user?.isSuperAdmin;
 
   /** Проверяет, имеет ли пользователь хотя бы readonly доступ к модели */
@@ -1120,7 +1120,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
         <h3>{translate("settingsGroup")}</h3>
         <ul className={styles.NavList}>
           {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>{translate("OrganizationAccountingSettingsList")}</li>}
-          {can("UserSettings") && <li onClick={async () => { const m = await import("src/models/UserSettings"); addPane({ component: m.UserSettingsModuleList, label: translate("UserSettings") }); }}>{translate("UserSettings")}</li>}
+          {can("AccessRights") && <li onClick={async () => { const m = await import("src/models/AccessRights"); addPane({ component: m.AccessRightsModuleList, label: translate("AccessRights") }); }}>{translate("AccessRights")}</li>}
           <li onClick={() => addPane({ component: GeneralSettings, label: translate("generalSettings") })}>{translate("generalSettings")}</li>
           <li onClick={() => addPane({ component: DocumentNumberSettings, label: translate("documentNumberSettings") })}>{translate("documentNumberSettings")}</li>
         </ul>

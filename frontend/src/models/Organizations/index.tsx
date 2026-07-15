@@ -15,8 +15,10 @@ import { ContractsTable } from "../Contracts";
 import { ContactsTable } from "../Contacts";
 import { WarehousesTable } from "../Warehouses";
 import { CashboxesTable } from "../Cashboxes";
+import { OrganizationAccountingSettingsList } from "../OrganizationAccountingSettings";
+import { AccessRightsList } from "../AccessRights";
 import { useFormStore } from "src/hooks/useFormStore";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -47,12 +49,14 @@ const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", vatSeries: "
 
 const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const esfDict = useEsfDictionaries();
-  const { canWrite } = useUserAccessRight("Organization");
-  const { canRead: canReadBankAccounts } = useUserAccessRight("BankAccount");
-  const { canRead: canReadContracts } = useUserAccessRight("Contract");
-  const { canRead: canReadContacts } = useUserAccessRight("Contact");
-  const { canRead: canReadWarehouses } = useUserAccessRight("Warehouse");
-  const { canRead: canReadCashboxes } = useUserAccessRight("Cashbox");
+  const { canWrite } = useAccessPermission("Organization");
+  const { canRead: canReadBankAccounts } = useAccessPermission("BankAccount");
+  const { canRead: canReadContracts } = useAccessPermission("Contract");
+  const { canRead: canReadContacts } = useAccessPermission("Contact");
+  const { canRead: canReadWarehouses } = useAccessPermission("Warehouse");
+  const { canRead: canReadCashboxes } = useAccessPermission("Cashbox");
+  const { canRead: canReadAccSettings } = useAccessPermission("OrganizationAccountingSetting");
+  const { canRead: canReadAccessRights } = useAccessPermission("AccessRight");
   const queryClient = useQueryClient();
 
   // refetchType: "active" — ждём завершение refetch смонтированных
@@ -252,8 +256,21 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
         />
       ),
     });
+
+    // Вкладки-СПИСКИ (не редактируемые SubTable): показывают записи, отфильтрованные
+    // по этой организации. Доступны только у сохранённой организации — фильтр по uuid.
+    if (form.isEditMode && ownerUuid && canReadAccSettings) result.push({
+      id: "tab-acc-settings", label: translate("OrganizationAccountingSettingsList"), component: (
+        <OrganizationAccountingSettingsList variant="default" organizationUuid={ownerUuid} />
+      ),
+    });
+    if (form.isEditMode && ownerUuid && canReadAccessRights) result.push({
+      id: "tab-access-rights", label: translate("AccessRightsList"), component: (
+        <AccessRightsList variant="default" organizationUuid={ownerUuid} />
+      ),
+    });
     return result;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, warehouses, cashboxes, canReadBankAccounts, canReadContracts, canReadContacts, canReadWarehouses, canReadCashboxes, canWrite, ownerUuid]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, warehouses, cashboxes, canReadBankAccounts, canReadContracts, canReadContacts, canReadWarehouses, canReadCashboxes, canReadAccSettings, canReadAccessRights, canWrite, ownerUuid]);
 
   return (
     <FormRequiredScope requiredKeys={["bin"]} active>

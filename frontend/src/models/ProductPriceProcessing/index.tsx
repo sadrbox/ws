@@ -10,7 +10,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import mainStyles from "src/styles/main.module.scss";
 import styles from "./ProductPriceProcessing.module.scss";
 import apiClient from "src/services/api/client";
-import { useUserAccessRight } from "src/hooks/useUserAccessRight";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAppContext } from "src/app/context";
 import { showToast } from "src/components/UIToast";
 import type { TPane } from "src/app/types";
@@ -767,8 +767,8 @@ ProductPriceImport.displayName = "ProductPriceImport";
 
 // Право на массовое изменение цен; при отсутствии — откат на «Product».
 const usePriceCanWrite = () => {
-  const priceRight = useUserAccessRight("ProductPrice");
-  const productRight = useUserAccessRight("Product");
+  const priceRight = useAccessPermission("ProductPrice");
+  const productRight = useAccessPermission("Product");
   return priceRight.accessLevel !== "none" ? priceRight.canWrite : productRight.canWrite;
 };
 
