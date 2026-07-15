@@ -10,8 +10,8 @@
 
 /// <reference lib="webworker" />
 
-const CACHE_NAME = "app-static-v2";
-const RUNTIME_CACHE = "app-runtime-v1";
+const CACHE_NAME = "app-static-v3";
+const RUNTIME_CACHE = "app-runtime-v2";
 
 /**
  * Ресурсы, которые кэшируем при установке (precache).
@@ -71,6 +71,22 @@ self.addEventListener("activate", (event) => {
 // FETCH — стратегии кэширования
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Модули Vite DEV-СЕРВЕРА: их URL волатильны — Vite меняет хеши (?v=/?t=) при каждом
+// перезапуске и переоптимизации зависимостей. Кэшировать их нельзя: после рестарта
+// Vite кэш ссылается на исчезнувшие хеши → "Failed to fetch dynamically imported
+// module", падают ленивые панели. SW рассчитан на ПРОД-сборку (неизменные /assets/
+// index-[hash].js); в dev он должен полностью уходить с дороги.
+function isViteDev(url) {
+  return (
+    url.pathname.startsWith("/src/") ||
+    url.pathname.startsWith("/@") ||          // /@vite /@fs /@id /@react-refresh
+    url.pathname.startsWith("/node_modules/") ||
+    url.searchParams.has("v") ||              // ?v=<hash> — версия депа
+    url.searchParams.has("t") ||              // ?t=<ts>  — таймстамп HMR
+    /\.(tsx?|jsx)$/.test(url.pathname)
+  );
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
@@ -79,12 +95,14 @@ self.addEventListener("fetch", (event) => {
   // - API запросы (данные синхронизируются через syncManager)
   // - WebSocket
   // - chrome-extension и прочее
+  // - модули Vite dev-сервера (см. isViteDev)
   if (
     event.request.method !== "GET" ||
     url.pathname.startsWith("/api/") ||
     url.protocol === "ws:" ||
     url.protocol === "wss:" ||
-    !url.protocol.startsWith("http")
+    !url.protocol.startsWith("http") ||
+    isViteDev(url)
   ) {
     return;
   }
