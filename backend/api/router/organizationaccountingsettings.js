@@ -1,6 +1,9 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import {
+	handleDelete,
+	handleBatchDelete,
+} from "../../utils/checkReferences.js";
 
 const router = express.Router();
 
@@ -53,7 +56,14 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				const s = JSON.parse(sortParam);
 				if (s && typeof s === "object")
 					for (const [f, d] of Object.entries(s)) {
-						if (d === "asc" || d === "desc") { const parts = f.split("."); orderBy.push(parts.length === 2 ? { [parts[0]]: { [parts[1]]: d } } : { [f]: d }); }
+						if (d === "asc" || d === "desc") {
+							const parts = f.split(".");
+							orderBy.push(
+								parts.length === 2
+									? { [parts[0]]: { [parts[1]]: d } }
+									: { [f]: d },
+							);
+						}
 					}
 			} catch {}
 		}
@@ -308,6 +318,22 @@ async function buildBodyData(body, existing = null) {
 		? Boolean(body.useExcise)
 		: Boolean(existing?.useExcise);
 
+	// useSerialsInTable — включить колонки «Серии» в таблице строк документов.
+	const useSerialsInTable = Object.prototype.hasOwnProperty.call(
+		body,
+		"useSerialsInTable",
+	)
+		? Boolean(body.useSerialsInTable)
+		: Boolean(existing?.useSerialsInTable);
+
+	// useBatchesInTable — включить колонки «Партии» в таблице строк документов.
+	const useBatchesInTable = Object.prototype.hasOwnProperty.call(
+		body,
+		"useBatchesInTable",
+	)
+		? Boolean(body.useBatchesInTable)
+		: Boolean(existing?.useBatchesInTable);
+
 	// exciseRate — ставка акциза по умолчанию (% от стоимости после скидки).
 	// Используется как значение по умолчанию при добавлении новых строк
 	// документов продажи. Если useExcise=false — обнуляется.
@@ -326,9 +352,15 @@ async function buildBodyData(body, existing = null) {
 	// costingMethod — метод себестоимости списания: "AVERAGE" (средняя) | "FIFO".
 	let costingMethod;
 	if (Object.prototype.hasOwnProperty.call(body, "costingMethod")) {
-		costingMethod = String(body.costingMethod ?? "AVERAGE").toUpperCase() === "FIFO" ? "FIFO" : "AVERAGE";
+		costingMethod =
+			String(body.costingMethod ?? "AVERAGE").toUpperCase() === "FIFO"
+				? "FIFO"
+				: "AVERAGE";
 	} else {
-		costingMethod = String(existing?.costingMethod ?? "AVERAGE").toUpperCase() === "FIFO" ? "FIFO" : "AVERAGE";
+		costingMethod =
+			String(existing?.costingMethod ?? "AVERAGE").toUpperCase() === "FIFO"
+				? "FIFO"
+				: "AVERAGE";
 	}
 
 	// startDate
@@ -350,6 +382,8 @@ async function buildBodyData(body, existing = null) {
 			vatCalculationMethod,
 			useDiscount,
 			useExcise,
+			useSerialsInTable,
+			useBatchesInTable,
 			exciseRate,
 			costingMethod,
 			startDate,
@@ -461,7 +495,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		// берутся на дату документа — см. services/accountingSettings.js). Помечая их
 		// удалёнными, мы вычищали историю из выборки, и прошлое пересчитывалось по
 		// новым правилам. deletedAt остаётся только за настоящим удалением (DELETE).
-		const item = await prisma[MODEL].create({ data: built.data, include: INCLUDE });
+		const item = await prisma[MODEL].create({
+			data: built.data,
+			include: INCLUDE,
+		});
 
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -496,7 +533,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			return res.status(409).json({ success: false, message: validationError });
 
 		// Новая ВЕРСИЯ, прежняя остаётся в истории (см. комментарий в POST).
-		const item = await prisma[MODEL].create({ data: built.data, include: INCLUDE });
+		const item = await prisma[MODEL].create({
+			data: built.data,
+			include: INCLUDE,
+		});
 
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

@@ -19,6 +19,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
+import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
@@ -42,6 +43,11 @@ const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: fal
 
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("Product");
+  // Учёт по сериям/партиям включается на уровне организации (параметры учёта).
+  // Переключатели в карточке показываем, только если организация их включила — иначе
+  // товар нельзя пометить тем, чего в учёте нет. Уже помеченный товар оставляем
+  // управляемым (|| текущее значение), чтобы флаг не «завис» скрытым.
+  const orgSettings = useOrgAccountingSettings(null, null);
   const queryClient = useQueryClient();
   const esfDict = useEsfDictionaries();
   const form = useFormStore<TFields>({
@@ -89,6 +95,10 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
   const notices = useFormNotices(form);
+  // Переключатели показываем только при включённой настройке организации; уже
+  // помеченный товар оставляем управляемым (|| текущее значение).
+  const showSerialToggle = orgSettings.useSerialsInTable || form.fields.trackSerialNumbers;
+  const showBatchToggle = orgSettings.useBatchesInTable || form.fields.trackBatches;
 
   const barcodes = form.useTable("barcodes");
   const prices = form.useTable("prices");
@@ -169,14 +179,18 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
                       form.setFields(patch);
                     }} />
                 </Group>
-                <Group className={styles.w1of2}>
-                  <FieldToggle label={translate("trackSerialNumbers")} value={form.fields.trackSerialNumbers} disabled={form.isLoading}
-                    onChange={(v) => { form.setField("trackSerialNumbers", v); void warnTrackingToggle("serial", v); }} />
-                </Group>
-                <Group className={styles.w1of2}>
-                  <FieldToggle label={translate("trackBatches")} value={form.fields.trackBatches} disabled={form.isLoading}
-                    onChange={(v) => { form.setField("trackBatches", v); void warnTrackingToggle("batch", v); }} />
-                </Group>
+                {showSerialToggle && (
+                  <Group className={styles.w1of2}>
+                    <FieldToggle label={translate("trackSerialNumbers")} value={form.fields.trackSerialNumbers} disabled={form.isLoading}
+                      onChange={(v) => { form.setField("trackSerialNumbers", v); void warnTrackingToggle("serial", v); }} />
+                  </Group>
+                )}
+                {showBatchToggle && (
+                  <Group className={styles.w1of2}>
+                    <FieldToggle label={translate("trackBatches")} value={form.fields.trackBatches} disabled={form.isLoading}
+                      onChange={(v) => { form.setField("trackBatches", v); void warnTrackingToggle("batch", v); }} />
+                  </Group>
+                )}
               </GroupRow>
               {/* Реквизиты для гос-документов (СНТ): ТН ВЭД ЕАЭС + признак происхождения ТРУ */}
               <GroupRow>

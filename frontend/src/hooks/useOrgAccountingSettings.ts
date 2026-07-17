@@ -23,6 +23,10 @@ export interface OrgAccountingSettingItem {
 	useDiscount: boolean;
 	/** Включает колонки акциза в SaleItemsTable (exciseRate, exciseAmount). НК РК ст. 463. */
 	useExcise: boolean;
+	/** Включает колонки «Серии» в таблице строк документов. */
+	useSerialsInTable: boolean;
+	/** Включает колонки «Партии» в таблице строк документов. */
+	useBatchesInTable: boolean;
 	/** Ставка акциза по умолчанию, % (используется при добавлении новых строк). */
 	exciseRate: number | string | null;
 	updatedAt: string;
@@ -117,6 +121,8 @@ export function useOrgAccountingSettings(
 			vatRate,
 			useDiscount: Boolean(item?.useDiscount),
 			useExcise: Boolean(item?.useExcise),
+			useSerialsInTable: Boolean(item?.useSerialsInTable),
+			useBatchesInTable: Boolean(item?.useBatchesInTable),
 			/** Дефолтная Ставка акциза, % (число). 0 при отключённом useExcise. */
 			exciseRate: item?.useExcise ? Number(item?.exciseRate ?? 0) || 0 : 0,
 			isLoading: query.isLoading,
@@ -124,7 +130,7 @@ export function useOrgAccountingSettings(
 			 *  отображаются и при ставке 0% (валидно по НК РК). */
 			isVatEnabled: useVat,
 			/** "INCLUDED" — НДС в сумме; "ADDED" — НДС сверху. */
-			vatCalculationMethod: (calcMethod === "ADDED" ? "ADDED" : "INCLUDED"),
+			vatCalculationMethod: calcMethod === "ADDED" ? "ADDED" : "INCLUDED",
 		};
 	}, [query.data, query.isLoading]);
 }

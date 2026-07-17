@@ -26,7 +26,7 @@ model User {
   createdAt                    DateTime              @default(now())
   updatedAt                    DateTime              @default(now()) @updatedAt
   deletedAt                    DateTime?
-  accessPermissions             AccessPermission[]
+  accessPermissions            AccessPermission[]
   curatorTodos                 Todo[]                @relation("TodoCurator")
   executorTodos                Todo[]                @relation("TodoExecutor")
   employee                     Employee?             @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
@@ -59,8 +59,7 @@ model User {
   authoredWriteOffs     WriteOff[]     @relation("WriteOffAuthor")
   authoredGoodsReceipts GoodsReceipt[] @relation("GoodsReceiptAuthor")
   authoredStockCounts   StockCount[]   @relation("StockCountAuthor")
-  pipeActivities               PipeActivity[]        @relation("UserPipeActivities")
-
+  pipeActivities        PipeActivity[] @relation("UserPipeActivities")
 
   @@index([employeeUuid])
   @@index([organizationUuid])
@@ -121,9 +120,9 @@ model Organization {
   /// Идентификатор элемента во ВНЕШНЕЙ системе (1С: object.id). Вместе с
   /// externalSource — ключ сопоставления при приёме событий /pipe: по нему элемент
   /// находится повторно, поэтому переименование в 1С не создаёт дубль.
-  externalId               String?
+  externalId           String?
   /// Источник внешнего идентификатора ("1C").
-  externalSource           String?
+  externalSource       String?
   bin                  String                          @unique @db.VarChar(12)
   name                 String?
   legalName            String?
@@ -159,7 +158,7 @@ model Organization {
   users                User[]                          @relation("UserOrganization")
   accessRights         AccessRight[]
   userDefaults         UserDefault[]
-  accessPermissions     AccessPermission[]
+  accessPermissions    AccessPermission[]
   warehouses           Warehouse[]
   employeeHistories    EmployeeHistory[]
   counterparties       Counterparty[]                  @relation("OrgCounterparties")
@@ -183,14 +182,13 @@ model Organization {
   accountingEntries    AccountingEntry[]               @relation("OrgAccountingEntries")
   fiscalReceipts       FiscalReceipt[]                 @relation("OrgFiscalReceipts")
 
-  writeOffs     WriteOff[]     @relation("OrgWriteOffs")
-  goodsReceipts GoodsReceipt[] @relation("OrgGoodsReceipts")
-  stockCounts   StockCount[]   @relation("OrgStockCounts")
-  pipeActivities       PipeActivity[]                  @relation("OrgPipeActivities")
+  writeOffs      WriteOff[]     @relation("OrgWriteOffs")
+  goodsReceipts  GoodsReceipt[] @relation("OrgGoodsReceipts")
+  stockCounts    StockCount[]   @relation("OrgStockCounts")
+  pipeActivities PipeActivity[] @relation("OrgPipeActivities")
 
-
-  @@index([updatedAt])
   @@unique([externalSource, externalId])
+  @@index([updatedAt])
   @@map("organizations")
 }
 
@@ -200,9 +198,9 @@ model Counterparty {
   /// Идентификатор элемента во ВНЕШНЕЙ системе (1С: object.id). Вместе с
   /// externalSource — ключ сопоставления при приёме событий /pipe: по нему элемент
   /// находится повторно, поэтому переименование в 1С не создаёт дубль.
-  externalId               String?
+  externalId           String?
   /// Источник внешнего идентификатора ("1C").
-  externalSource           String?
+  externalSource       String?
   // Необязателен: контрагентом может быть физлицо/розница, а 1С шлёт элементы без БИН.
   // @unique сохраняется — в Postgres он не мешает нескольким NULL, но не даст завести
   // двух контрагентов с ОДНИМ БИН (по нему идёт сопоставление при обмене).
@@ -238,9 +236,9 @@ model Counterparty {
   purchaseOrders       PurchaseOrder[]
   bankStatements       BankStatement[]
 
+  @@unique([externalSource, externalId])
   @@index([organizationUuid])
   @@index([updatedAt])
-  @@unique([externalSource, externalId])
   @@map("counterparties")
 }
 
@@ -418,10 +416,10 @@ model ActivityHistory {
 
 // Специальная таблица для событий, приходящих от внешних интеграций (1С -> /pipe)
 model PipeActivity {
-  id                    Int      @id @default(autoincrement())
-  uuid                  String   @unique @default(uuid())
-  receivedAt            DateTime @default(now())
-  actionDate            DateTime @default(now())
+  id                    Int           @id @default(autoincrement())
+  uuid                  String        @unique @default(uuid())
+  receivedAt            DateTime      @default(now())
+  actionDate            DateTime      @default(now())
   actionType            String
   organizationShortName String?
   bin                   String?
@@ -440,16 +438,16 @@ model PipeActivity {
   organization          Organization? @relation("OrgPipeActivities", fields: [organizationUuid], references: [uuid])
   user                  User?         @relation("UserPipeActivities", fields: [userUuid], references: [uuid])
 
-  props                 Json?
-  payload               Json? // оригинальный пришедший JSON от 1С
+  props        Json?
+  payload      Json? // оригинальный пришедший JSON от 1С
   /// Результат применения события к справочнику: created | updated | linked |
   /// skipped (не справочник / не поддержан) | error. null — событие ещё не обработано.
-  applyStatus           String?
+  applyStatus  String?
   /// Какой справочник затронут (prisma-модель) и какая запись получилась.
-  applyModel            String?
-  applyUuid             String?
+  applyModel   String?
+  applyUuid    String?
   /// Причина, если applyStatus = error/skipped (напр. «нет БИН — создать нельзя»).
-  applyMessage          String?
+  applyMessage String?
 
   @@index([receivedAt])
   @@index([objectType, objectId])
@@ -493,9 +491,9 @@ model Warehouse {
   /// Идентификатор элемента во ВНЕШНЕЙ системе (1С: object.id). Вместе с
   /// externalSource — ключ сопоставления при приёме событий /pipe: по нему элемент
   /// находится повторно, поэтому переименование в 1С не создаёт дубль.
-  externalId               String?
+  externalId             String?
   /// Источник внешнего идентификатора ("1C").
-  externalSource           String?
+  externalSource         String?
   name                   String
   address                String?
   comment                String?
@@ -520,9 +518,9 @@ model Warehouse {
   goodsReceipts GoodsReceipt[] @relation("WhGoodsReceipts")
   stockCounts   StockCount[]   @relation("WhStockCounts")
 
+  @@unique([externalSource, externalId])
   @@index([organizationUuid])
   @@index([updatedAt])
-  @@unique([externalSource, externalId])
   @@map("warehouses")
 }
 
@@ -1046,12 +1044,12 @@ model Product {
   serialNumbers     SerialNumber[]
   productBatches    ProductBatch[]
 
+  @@unique([externalSource, externalId])
   @@index([brandUuid])
   @@index([unitOfMeasureUuid])
   @@index([organizationUuid])
   @@index([barcode])
   @@index([updatedAt])
-  @@unique([externalSource, externalId])
   @@index([name(ops: raw("gin_trgm_ops"))], map: "products_name_trgm", type: Gin)
   @@index([sku(ops: raw("gin_trgm_ops"))], map: "products_sku_trgm", type: Gin)
   @@index([barcode(ops: raw("gin_trgm_ops"))], map: "products_barcode_trgm", type: Gin)
@@ -1522,8 +1520,8 @@ model UnitOfMeasure {
   goodsReceiptItems GoodsReceiptItem[]
   stockCountItems   StockCountItem[]
 
-  @@index([updatedAt])
   @@unique([externalSource, externalId])
+  @@index([updatedAt])
   @@map("units_of_measure")
 }
 
@@ -1568,6 +1566,10 @@ model OrganizationAccountingSetting {
   /// Использовать акциз (НК РК ст. 463). При true в SaleItemsTable
   /// отображается колонка «Ставка акциза, %» и «Сумма акциза».
   useExcise            Boolean       @default(false)
+  /// Включить колонки «Серии» в таблице строк документов.
+  useSerialsInTable    Boolean       @default(false)
+  /// Включить колонки «Партии» в таблице строк документов.
+  useBatchesInTable    Boolean       @default(false)
   /// Ставка акциза по умолчанию, % (используется как значение по умолчанию
   /// для новых строк документов продажи при useExcise=true).
   exciseRate           Decimal       @default(0) @db.Decimal(8, 4)

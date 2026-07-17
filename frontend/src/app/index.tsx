@@ -30,20 +30,12 @@ import { loadPersistedSession, savePersistedSession, restorePane, inferListResto
 import { readPaneLink, clearPaneLinkParam } from "src/utils/paneLink";
 import { openFormByRef } from "src/utils/openFormByRef";
 import { getComponentName } from "./getComponentName";
+import { buildPaneUniqId } from "./paneUniqId";
 
 // getUniqId — внутренняя утилита (не экспортируется, чтобы модуль оставался
 // Fast-Refresh-совместимым: единственный value-export здесь — компонент App).
-const getUniqId = (component: TComponentNode, data?: Partial<TDataItem>): string => {
-  const name = getComponentName(component);
-  // Синглтоны: *List
-  if (name.endsWith("List")) return name;
-  // Формы с конкретной записью: один pane на uuid/id
-  if (data?.uuid || data?.id) return `${name}-${data.uuid ?? data.id}`;
-  // Формы с явным токеном (например, открытые из основания) — уникальный pane
-  if ((data as any)?._paneToken) return `${name}-${(data as any)._paneToken}`;
-  // Прочие новые формы: синглтон
-  return name;
-};
+const getUniqId = (component: TComponentNode, data?: Partial<TDataItem>): string =>
+  buildPaneUniqId(component, data);
 
 
 // ────────────────────────────────────────────────

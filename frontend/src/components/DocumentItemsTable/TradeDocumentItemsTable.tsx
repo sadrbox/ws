@@ -216,8 +216,8 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       if (!isVatEnabled && AMOUNT_WITHOUT_VAT_IDS.has(id)) return false;
       if (!showEsfColumns && ESF_COLUMN_IDS.has(id)) return false;
       if (!showStockCountColumns && STOCKCOUNT_COLUMN_IDS.has(id)) return false;
-      if (!serialMode && SERIAL_COLUMN_IDS.has(id)) return false;
-      if (!batchMode && BATCH_COLUMN_IDS.has(id)) return false;
+      if ((!serialMode || !settings.useSerialsInTable) && SERIAL_COLUMN_IDS.has(id)) return false;
+      if ((!batchMode || !settings.useBatchesInTable) && BATCH_COLUMN_IDS.has(id)) return false;
       return true;
     });
 
@@ -302,7 +302,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       base = base.map((c) => hidden.has(c.identifier) ? { ...c, visible: false } : c);
     }
     return base;
-  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing, showEsfColumns, showStockCountColumns, serialMode]);
+  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing, showEsfColumns, showStockCountColumns, serialMode, batchMode, settings.useSerialsInTable, settings.useBatchesInTable]);
 
   const taxSig = useMemo(
     () => "vat:" + (isVatEnabled ? "1" : "0") + "|disc:" + (useDiscount ? "1" : "0") + "|exc:" + (useExcise ? "1" : "0") + "|m:" + vatCalculationMethod + "|r:" + String(orgVatRate ?? ""),
