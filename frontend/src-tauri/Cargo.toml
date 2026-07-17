@@ -15,27 +15,13 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-<<<<<<< HEAD
+
 tauri-build = { version = "2.6.3", features = [] }
-=======
-<<<<<<< HEAD
-tauri-build = { version = "2.6.3", features = [] }
-=======
-tauri-build = { version = "2.6.3" }
->>>>>>> 3640b9b62bda9e04ac41bb6bf76bb5ec242964fc
->>>>>>> 6b44c4ae49daf230e23859eb27585102a703bf9a
+
 
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-<<<<<<< HEAD
 tauri = { version = "2.11.3", features = [] }
-=======
-<<<<<<< HEAD
-tauri = { version = "2.11.3", features = [] }
-=======
-tauri = { version = "2.11.3" }
->>>>>>> 3640b9b62bda9e04ac41bb6bf76bb5ec242964fc
->>>>>>> 6b44c4ae49daf230e23859eb27585102a703bf9a
 tauri-plugin-log = "2"
