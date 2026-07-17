@@ -23,6 +23,10 @@ $colorPrimaryDark: #1c5fcb;
 $color80: #f1f5f9;
 $color81: #9aa7b6;
 
+
+
+$heightFieldInput: 26px;
+$fontsize: 12px;
 // ──────────────────────────────────────────────────────────────────────────
 // Семантическая палитра (фон + бордер для каждой роли).
 // Используется в: тостах, badge-ах, статусах, плашках уведомлений и т.п.
@@ -102,12 +106,20 @@ $radius1: 1px;
 $radius2: 2px;
 $radius3: 3px;
 $radius4: 4px;
-$heightFieldInput: 28px;
 
-$fontsize: 13px;
 
 input[disabled] {
 	background-color: transparent;
+}
+
+input[type="checkbox"] {
+	margin: 0;
+	accent-color: $colorPrimaryDark;
+	cursor: default;
+
+	&:focus {
+		outline: none;
+	}
 }
 
 .Error {

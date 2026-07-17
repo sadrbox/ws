@@ -30,6 +30,9 @@ function parseDateOrNull(v) {
 	return isNaN(d.getTime()) ? undefined : d;
 }
 
+/** День записи (YYYY-MM-DD) — для сравнения «та же дата начала действия». */
+const isoDay = (d) => new Date(d).toISOString().slice(0, 10);
+
 // ── GET list ────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -490,15 +493,19 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		if (validationError)
 			return res.status(409).json({ success: false, message: validationError });
 
-		// Прошлые версии НЕ помечаем deletedAt: это АРХИВ учётной политики, а не мусор.
-		// От них зависят уже проведённые документы (метод себестоимости и признак НДС
-		// берутся на дату документа — см. services/accountingSettings.js). Помечая их
-		// удалёнными, мы вычищали историю из выборки, и прошлое пересчитывалось по
-		// новым правилам. deletedAt остаётся только за настоящим удалением (DELETE).
-		const item = await prisma[MODEL].create({
-			data: built.data,
-			include: INCLUDE,
-		});
+		// Версионирование по «Дате начала действия» (стандарт effective-dated записей):
+		//   • та же дата, что у текущей версии → это КОРРЕКТИРОВКА текущего периода →
+		//     UPDATE на месте, без плодения версий (частый случай — правка опечатки/флага);
+		//   • новая дата → новый период действия → НОВАЯ версия, прежние в истории
+		//     (документы прошлых периодов считаются по версии, действовавшей на их дату).
+		// Опасные изменения (НДС/скидка/акциз при наличии проведённых документов) уже
+		// заблокированы validateAgainstPostedDocs выше — и для правки на месте тоже.
+		let item;
+		if (prev && isoDay(prev.startDate) === isoDay(built.data.startDate)) {
+			item = await prisma[MODEL].update({ where: { id: prev.id }, data: built.data, include: INCLUDE });
+		} else {
+			item = await prisma[MODEL].create({ data: built.data, include: INCLUDE });
+		}
 
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -507,9 +514,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 	}
 });
 
-// ── PUT: обновление = НОВАЯ ВЕРСИЯ учётной политики ────────────────────────
-// id инкрементируется намеренно: настройки версионируются по startDate, и документы
-// прошлых периодов продолжают считаться по версии, действовавшей на их дату.
+// ── PUT: КОРРЕКТИРОВКА версии или НОВАЯ версия ────────────────────────────
+// Та же «Дата начала» → правка текущей версии на месте (id сохраняется). Новая дата →
+// новая версия. Так исправление опечатки не плодит записи, а смена политики с новой
+// даты — версионируется (документы прошлых периодов считаются по своей версии).
 router.put(`/${ROUTE}/:id`, async (req, res) => {
 	try {
 		const p = req.params.id;
@@ -532,11 +540,14 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (validationError)
 			return res.status(409).json({ success: false, message: validationError });
 
-		// Новая ВЕРСИЯ, прежняя остаётся в истории (см. комментарий в POST).
-		const item = await prisma[MODEL].create({
-			data: built.data,
-			include: INCLUDE,
-		});
+		// Та же «Дата начала» → корректируем ЭТУ версию на месте; изменили дату →
+		// новый период → новая версия, редактируемая остаётся в истории (см. POST).
+		let item;
+		if (isoDay(existing.startDate) === isoDay(built.data.startDate)) {
+			item = await prisma[MODEL].update({ where: { id: existing.id }, data: built.data, include: INCLUDE });
+		} else {
+			item = await prisma[MODEL].create({ data: built.data, include: INCLUDE });
+		}
 
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

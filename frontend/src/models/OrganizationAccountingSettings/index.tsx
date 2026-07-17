@@ -44,10 +44,6 @@ interface TFields {
   useExcise: boolean;
   /** Ставка акциза по умолчанию, % (ввод в форме как строка). */
   exciseRate: string;
-  /** Учёт по серийным номерам включён для организации (колонка «Серии» в документах). */
-  useSerialsInTable: boolean;
-  /** Учёт по партиям/срокам годности включён (колонка «Партии»). */
-  useBatchesInTable: boolean;
   /** Метод расчёта себестоимости списания: AVERAGE — средняя; FIFO — по партиям. */
   costingMethod: "AVERAGE" | "FIFO";
 }
@@ -64,8 +60,6 @@ const DEFAULT_FIELDS: TFields = {
   useDiscount: false,
   useExcise: false,
   exciseRate: "0",
-  useSerialsInTable: false,
-  useBatchesInTable: false,
   costingMethod: "AVERAGE",
 };
 
@@ -117,8 +111,6 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
         d.exciseRate != null && d.exciseRate !== ""
           ? String(d.exciseRate)
           : "0",
-      useSerialsInTable: Boolean(d.useSerialsInTable),
-      useBatchesInTable: Boolean(d.useBatchesInTable),
       costingMethod:
         String(d.costingMethod ?? "AVERAGE").toUpperCase() === "FIFO"
           ? "FIFO"
@@ -147,8 +139,6 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
         useDiscount: Boolean(fd.useDiscount),
         useExcise: Boolean(fd.useExcise),
         exciseRate: fd.useExcise ? exciseRateNum : 0,
-        useSerialsInTable: Boolean(fd.useSerialsInTable),
-        useBatchesInTable: Boolean(fd.useBatchesInTable),
         costingMethod: fd.costingMethod === "FIFO" ? "FIFO" : "AVERAGE",
       };
     },
@@ -471,35 +461,6 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                 <span className={styles.SettingHint}>
                   Подставляется в новые строки документов продажи как значение
                   по умолчанию (можно скорректировать в каждой строке).
-                </span>
-              </GroupRow>
-
-              {/* Учёт по серийным номерам / партиям — как НДС/скидка/акциз: флаг
-                  организации, который показывает соответствующие колонки в документах
-                  и разрешает переключатели учёта в карточке номенклатуры. */}
-              <GroupRow className={styles.SectionGap}>
-                <label className={[styles.SettingChip, form.fields.useSerialsInTable && styles.SettingChipActive, !canWrite && styles.SettingChipReadonly].filter(Boolean).join(" ")}>
-                  <input type="checkbox" checked={Boolean(form.fields.useSerialsInTable)}
-                    onChange={(e) => form.setField("useSerialsInTable", e.target.checked)}
-                    disabled={form.isLoading || !canWrite} />
-                  <span className={styles.SettingLabelStrong}>{translate("useSerialsInTable")}</span>
-                </label>
-                <span className={styles.SettingHint}>
-                  При включении в строках документов появляется колонка «Серии», а в
-                  карточке номенклатуры — переключатель «Учёт по серийным номерам».
-                </span>
-              </GroupRow>
-
-              <GroupRow className={styles.SectionGap}>
-                <label className={[styles.SettingChip, form.fields.useBatchesInTable && styles.SettingChipActive, !canWrite && styles.SettingChipReadonly].filter(Boolean).join(" ")}>
-                  <input type="checkbox" checked={Boolean(form.fields.useBatchesInTable)}
-                    onChange={(e) => form.setField("useBatchesInTable", e.target.checked)}
-                    disabled={form.isLoading || !canWrite} />
-                  <span className={styles.SettingLabelStrong}>{translate("useBatchesInTable")}</span>
-                </label>
-                <span className={styles.SettingHint}>
-                  При включении появляется колонка «Партии» (номер, срок годности), а в
-                  карточке номенклатуры — переключатель «Учёт по партиям».
                 </span>
               </GroupRow>
             </div>

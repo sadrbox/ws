@@ -289,7 +289,9 @@
 					// Поля ввода без фокуса наследуют pointer от tr;
 					// при получении фокуса — cursor меняется на text мгновенно через :focus
 					&>input[type="checkbox"] {
-						margin: 0 6px;
+						height: $heightFieldInput - 9px;
+						width: $heightFieldInput - 9px;
+						// margin: 0 6px;
 					}
 
 					input:not([type="checkbox"]),
@@ -352,7 +354,8 @@
 						// задаётся в main.module.scss через @layer table-cell-activeRow.
 						// Здесь оставлены только структурные/контентные правила.
 						&>input[type="checkbox"] {
-							margin: 0 6px;
+							height: $heightFieldInput - 9px;
+							width: $heightFieldInput - 9px;
 						}
 
 						&>input[type="text"] {
@@ -505,18 +508,7 @@
 
 /* Active / focused states */
 
-/* Checkbox styling */
-input[type="checkbox"] {
-	height: 16px;
-	width: 16px;
-	margin: 0;
-	accent-color: $colorPrimaryDark;
-	cursor: default;
 
-	&:focus {
-		outline: none;
-	}
-}
 
 /* Context menu */
 .contextMenu {
@@ -666,8 +658,8 @@ input[type="checkbox"] {
 	}
 
 	input[type="checkbox"] {
-		height: 16px;
-		width: 16px;
+		height: $heightFieldInput - 9px;
+		width: $heightFieldInput - 9px;
 		margin: 0;
 		accent-color: $colorPrimaryDark;
 	}
@@ -885,6 +877,11 @@ input[type="checkbox"] {
 .HeaderCheckboxCell {
 	width: 30px;
 	text-align: center;
+
+	input[type="checkbox"] {
+		height: $heightFieldInput - 9px;
+		width: $heightFieldInput - 9px;
+	}
 }
 
 .CenterContent {

@@ -206,7 +206,20 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     });
   }, [initialPendingRows, vatCalculationMethod]);
 
+  // Живые строки документа — чтобы решать видимость колонок «Серии»/«Партии»
+  // ПО ФАКТУ: колонка нужна, только если в документе есть товар с таким учётом
+  // (источник истины — сам товар, не настройка организации).
+  const [liveRows, setLiveRows] = useState<TDataItem[]>([]);
+  const handleAllItems = useCallback((rows: TDataItem[]) => {
+    setLiveRows(rows);
+    onAllItemsChange?.(rows);
+  }, [onAllItemsChange]);
+
   const dynamicColumns = useMemo(() => {
+    // Колонка серий/партий видна, если ДОКУМЕНТ поддерживает режим (serialMode/batchMode)
+    // И хотя бы один товар в строках ведётся с таким учётом (row.product.track*).
+    const anySerialTracked = liveRows.some((r) => (r.product as { trackSerialNumbers?: boolean } | undefined)?.trackSerialNumbers === true);
+    const anyBatchTracked = liveRows.some((r) => (r.product as { trackBatches?: boolean } | undefined)?.trackBatches === true);
     let base = (columnsJson as unknown as TColumn[]).filter((c) => {
       const id = c.identifier;
       if (!hasPricing && PRICING_COLUMN_IDS.has(id)) return false;
@@ -216,8 +229,8 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       if (!isVatEnabled && AMOUNT_WITHOUT_VAT_IDS.has(id)) return false;
       if (!showEsfColumns && ESF_COLUMN_IDS.has(id)) return false;
       if (!showStockCountColumns && STOCKCOUNT_COLUMN_IDS.has(id)) return false;
-      if ((!serialMode || !settings.useSerialsInTable) && SERIAL_COLUMN_IDS.has(id)) return false;
-      if ((!batchMode || !settings.useBatchesInTable) && BATCH_COLUMN_IDS.has(id)) return false;
+      if ((!serialMode || !anySerialTracked) && SERIAL_COLUMN_IDS.has(id)) return false;
+      if ((!batchMode || !anyBatchTracked) && BATCH_COLUMN_IDS.has(id)) return false;
       return true;
     });
 
@@ -302,7 +315,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       base = base.map((c) => hidden.has(c.identifier) ? { ...c, visible: false } : c);
     }
     return base;
-  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing, showEsfColumns, showStockCountColumns, serialMode, batchMode, settings.useSerialsInTable, settings.useBatchesInTable]);
+  }, [isVatEnabled, useDiscount, useExcise, orgVatRate, vatCalculationMethod, defaultHiddenColumns, hasPricing, showEsfColumns, showStockCountColumns, serialMode, batchMode, liveRows]);
 
   const taxSig = useMemo(
     () => "vat:" + (isVatEnabled ? "1" : "0") + "|disc:" + (useDiscount ? "1" : "0") + "|exc:" + (useExcise ? "1" : "0") + "|m:" + vatCalculationMethod + "|r:" + String(orgVatRate ?? ""),
@@ -774,7 +787,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       renderCell={renderCell}
       defaultNewRow={defaultNewRow}
       onItemsChange={handleItemsChange}
-      onAllItemsChange={onAllItemsChange}
+      onAllItemsChange={handleAllItems}
       customInlineChange={customInlineChange}
       validationRules={validationRules}
       requiredFields={requiredFields}
