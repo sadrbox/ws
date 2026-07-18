@@ -53,19 +53,21 @@ export const BatchNumbersCell: FC<BatchCellProps> = ({ productUuid, mode, batchU
   // Учитывается ли товар по партиям НА ДАТУ ЭТОГО ДОКУМЕНТА. Учёт не применяется
   // задним числом: контроль действует только с batchTrackingSince (момент включения
   // флага) — тот же инвариант держит бэкенд (services/batches.js → batchTrackedProducts).
-  const { data: tracked } = useQuery({
+  const { data: trackState } = useQuery({
     queryKey: ["product-batch-flag", productUuid, documentDate ?? ""],
-    queryFn: async () => {
+    queryFn: async (): Promise<{ ok: boolean; since: string | null }> => {
       const r = await apiClient.get<{ item?: { trackBatches?: boolean; batchTrackingSince?: string | null } }>(`products/${productUuid}`);
       const item = r.data?.item;
-      if (item?.trackBatches !== true) return false;
+      if (item?.trackBatches !== true) return { ok: false, since: null };
       const since = item.batchTrackingSince ? new Date(item.batchTrackingSince) : null;
-      if (!since) return true;
+      if (!since) return { ok: true, since: null };
       const docAt = documentDate ? new Date(documentDate) : new Date();
-      return docAt >= since;
+      // since возвращаем только для «документ старше включения учёта» — на нём строится подсказка.
+      return docAt >= since ? { ok: true, since: null } : { ok: false, since: item.batchTrackingSince ?? null };
     },
     enabled: !!productUuid, staleTime: 5 * 60_000,
   });
+  const tracked = trackState?.ok === true;
 
   // Метка выбранной партии (номер + срок).
   const { data: current } = useQuery({
@@ -74,7 +76,13 @@ export const BatchNumbersCell: FC<BatchCellProps> = ({ productUuid, mode, batchU
     enabled: !!batchUuid && tracked === true, staleTime: 60_000,
   });
 
-  if (tracked !== true) return <span className={styles.Dash}>—</span>;
+  // Прочерк был немой: непонятно, товар не на учёте или документ старше включения учёта.
+  if (!tracked) {
+    const title = trackState?.since
+      ? `${translate("batchSinceHint")} ${fmtDate(trackState.since)} ${translate("trackingSinceSuffix")}`
+      : translate("batchNotTracked");
+    return <span className={styles.Dash} title={title}>—</span>;
+  }
 
   const label = current ? `${current.batchNumber}${current.expiryDate ? ` · ${fmtDate(current.expiryDate)}` : ""}` : translate("batchChoose");
 

@@ -12,6 +12,7 @@ import Notice, { type NoticeItem } from "src/components/Notice";
 import apiClient from "src/services/api/client";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
+import { getFormatDateOnly } from "src/utils/datetime";
 import styles from "./SerialNumbersCell.module.scss";
 
 export interface SerialCellProps {
@@ -48,21 +49,23 @@ export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, 
   // держит бэкенд (services/serialNumbers.js → serialTrackedProducts). Без этой
   // проверки старый документ показывал бы красное «0/150» и требовал серии, хотя
   // сохранению это уже не мешает — UI пугал бы несуществующей проблемой.
-  const { data: tracked } = useQuery({
+  const { data: trackState } = useQuery({
     queryKey: [...qkFlag(productUuid), documentDate ?? ""],
-    queryFn: async () => {
+    queryFn: async (): Promise<{ ok: boolean; since: string | null }> => {
       const r = await apiClient.get<{ item?: { trackSerialNumbers?: boolean; serialTrackingSince?: string | null } }>(`products/${productUuid}`);
       const item = r.data?.item;
-      if (item?.trackSerialNumbers !== true) return false;
+      if (item?.trackSerialNumbers !== true) return { ok: false, since: null };
       const since = item.serialTrackingSince ? new Date(item.serialTrackingSince) : null;
-      if (!since) return true;
+      if (!since) return { ok: true, since: null };
       // Новый документ (даты ещё нет) — считаем «сейчас»: учёт действует.
       const docAt = documentDate ? new Date(documentDate) : new Date();
-      return docAt >= since;
+      // since возвращаем только для «документ старше включения учёта» — на нём строится подсказка.
+      return docAt >= since ? { ok: true, since: null } : { ok: false, since: item.serialTrackingSince ?? null };
     },
     enabled: !!productUuid,
     staleTime: 5 * 60_000,
   });
+  const tracked = trackState?.ok === true;
 
   // Текущее число серий, привязанных к строке (для бейджа).
   const { data: count = 0 } = useQuery({
@@ -83,7 +86,14 @@ export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, 
     void queryClient.invalidateQueries({ queryKey: qkCount(docUuid, productUuid, mode) });
   }, [queryClient, docUuid, productUuid, mode]);
 
-  if (tracked !== true) return <span className={styles.Dash}>—</span>;
+  // Прочерк означал три разные вещи и ни одну не объяснял: товар не на учёте,
+  // документ старше момента включения учёта, документ ещё не записан. Подсказываем.
+  if (!tracked) {
+    const title = trackState?.since
+      ? `${translate("serialSinceHint")} ${getFormatDateOnly(String(trackState.since)) ?? ""} ${translate("trackingSinceSuffix")}`
+      : translate("serialNotTracked");
+    return <span className={styles.Dash} title={title}>—</span>;
+  }
   if (!docUuid) return <span className={styles.Hint} title={translate("serialSaveFirst")}>—</span>;
 
   const qty = Number(quantity) || 0;
