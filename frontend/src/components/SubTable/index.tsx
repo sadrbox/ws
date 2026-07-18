@@ -31,7 +31,7 @@ import Toolbar from "src/components/Toolbar";
 import { useQueryClient } from "@tanstack/react-query";
 import styles from "./SubTable.module.scss";
 import {
-  applyEditMarker, computeDisplayRows, isSameRow, type PendingRow,
+  applyEditMarker, computeDisplayRows, isSameRow, mergeColumnDefs, type PendingRow,
 } from "./rowModel";
 import { useSubTableRows } from "./useSubTableRows";
 
@@ -450,6 +450,23 @@ const SubTable: FC<SubTableProps> = ({
   }, []);
 
   const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(colJson, componentName, "part"));
+
+  // Состав колонок может меняться на лету: напр. «Серии»/«Партии» появляются, когда
+  // в строках оказывается товар с таким учётом. useState считает колонки ОДИН раз, а
+  // перемонтировать таблицу (как делает key={taxSig} для НДС) здесь нельзя — потерялись
+  // бы незаписанные строки. Поэтому синхронизируем состав вручную.
+  //
+  // Через getModelColumns не идём намеренно: при смене набора идентификаторов он
+  // считает кэш устаревшим и стирает сохранённые ширины/видимость. Для редких настроек
+  // организации это терпимо, а тут набор меняется на каждый подбор товара — вместо
+  // этого переносим ширину/видимость с уже настроенных колонок сами.
+  const colSig = useMemo(() => colJson.map((c) => c.identifier).join(","), [colJson]);
+  const prevColSigRef = useRef(colSig);
+  useEffect(() => {
+    if (prevColSigRef.current === colSig) return;
+    prevColSigRef.current = colSig;
+    setColumns((prev) => mergeColumnDefs(prev, colJson));
+  }, [colSig, colJson]);
   const [sort, setSort] = useState<Record<string, "asc" | "desc">>(defaultSort);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Record<string, { value: unknown; operator: string }> | undefined>(undefined);

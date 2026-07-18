@@ -159,3 +159,26 @@ export function mergeServerWithPending(serverItems: TDataItem[], pendingRows: TD
 
   return merged;
 }
+
+/**
+ * Слияние нового состава колонок с текущим.
+ *
+ * Нужно, когда набор колонок меняется на лету (напр. «Серии»/«Партии» появляются,
+ * как только в строках оказывается товар с таким учётом). Пересчитать колонки через
+ * getModelColumns нельзя: при смене набора идентификаторов он считает кэш устаревшим
+ * и стирает сохранённые пользователем ширины и видимость.
+ *
+ * Правила:
+ *   • колонка была — сохраняем её ширину и видимость (настройки пользователя);
+ *   • колонка новая — берём дефолты из JSON-определения;
+ *   • служебные колонки (`__*`) инжектируются в рантайме, в defs их нет — переносим
+ *     из текущего состава в конец.
+ */
+export function mergeColumnDefs(prev: TColumn[], defs: TColumn[]): TColumn[] {
+  const prevById = new Map(prev.map((c) => [c.identifier, c]));
+  const merged = defs.map((def) => {
+    const kept = prevById.get(def.identifier);
+    return kept ? { ...def, width: kept.width, visible: kept.visible } : def;
+  });
+  return [...merged, ...prev.filter((c) => c.identifier.startsWith("__"))];
+}
