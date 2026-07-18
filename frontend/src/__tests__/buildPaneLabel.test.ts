@@ -120,4 +120,25 @@ describe("makePaneLabelFromData", () => {
 			}),
 		).toBe("Товары реализации: ID 1 - Альфа");
 	});
+
+	// Регрессия: список строил «ID 965 - 15.07.2026», а форма после загрузки
+	// переименовывала панель в «№ РЕАЛ-2 - 15.07.2026». Заголовок вкладки прыгал,
+	// а повторное открытие той же строки выглядело для addPane как конфликт подписей.
+	it("у документа с номером ссылка — номер, а не ID (как в makeDocLabel)", () => {
+		const doc = { id: 965, uuid: "u", number: "РЕАЛ-2", date: "2026-07-15" };
+
+		expect(makePaneLabelFromData("SalesList", "fallback", doc, "15.07.2026")).toBe(
+			"Реализация товара и услуг: № РЕАЛ-2 - 15.07.2026",
+		);
+		// Обе функции обязаны давать одну и ту же подпись — иначе панель переименуется.
+		expect(makePaneLabelFromData("SalesList", "fallback", doc, "15.07.2026")).toBe(
+			makeDocLabel("SalesList", "fallback", doc),
+		);
+	});
+
+	it("без номера — прежний вид с ID", () => {
+		expect(
+			makePaneLabelFromData("SalesList", "fallback", { id: 965, uuid: "u" }, "15.07.2026"),
+		).toBe("Реализация товара и услуг: ID 965 - 15.07.2026");
+	});
 });

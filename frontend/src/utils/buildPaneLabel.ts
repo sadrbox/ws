@@ -80,7 +80,13 @@ export function makeDocLabel(
 
 /**
  * Метка при открытии панели из списка/таблицы (до загрузки данных).
- * Единый паттерн: "Label: ID id - detail" / "Label: ID id" / "Label: Новый"
+ * Единый паттерн: "Label: № number|ID id - detail" / "Label: Новый"
+ *
+ * Ссылку на запись строим по тому же правилу, что и makeDocLabel (номер, если он
+ * есть, иначе ID). Иначе список открывал документ как «ID 965 - 15.07.2026», форма
+ * после загрузки переименовывала панель в «№ РЕАЛ-2 - 15.07.2026» — заголовок вкладки
+ * прыгал, а повторный клик по той же строке выглядел для addPane как попытка открыть
+ * панель с другой подписью и сыпал предупреждением о конфликте на ровном месте.
  */
 export function makePaneLabelFromData(
 	listName: string,
@@ -90,7 +96,7 @@ export function makePaneLabelFromData(
 ): string {
 	const name = resolveFormName(listName, fallback);
 	if (!data?.uuid && !data?.id) return `${name}: ${translate("new")}`;
-	const id = data.id ?? "?";
+	const ref = data.number ? `№ ${data.number}` : `ID ${data.id ?? "?"}`;
 	const detail = displayValue ?? data.name;
-	return detail ? `${name}: ID ${id} - ${detail}` : `${name}: ID ${id}`;
+	return detail ? `${name}: ${ref} - ${detail}` : `${name}: ${ref}`;
 }
