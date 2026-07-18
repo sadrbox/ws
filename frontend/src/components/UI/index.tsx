@@ -913,6 +913,38 @@ type TypeNavListProps = {
   label: string;
 }
 
+/**
+ * Пункт меню, доступный с КЛАВИАТУРЫ.
+ *
+ * Раньше пункты были обычными li с onClick — кликабельны только мышью: ни Tab-навигации,
+ * ни Enter/Space, ни объявления скринридером. Здесь li получает role="button",
+ * tabIndex и обработку Enter/Space.
+ *
+ * Почему role на самом <li>, а не вложенная <button>: вся вёрстка меню (отступы,
+ * ховер, акцент) завязана на селекторы `li` — вложенная кнопка потребовала бы
+ * переписать стили всех 80+ пунктов. Роль на li даёт доступность без риска для вёрстки.
+ */
+const NavItem: FC<PropsWithChildren<{ onClick: () => void; className?: string; title?: string }>> = ({
+  onClick, className, title, children,
+}) => (
+  <li
+    className={className}
+    title={title}
+    role="button"
+    tabIndex={0}
+    onClick={onClick}
+    onKeyDown={(e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault(); // Space иначе прокручивает страницу
+        onClick();
+      }
+    }}
+  >
+    {children}
+  </li>
+);
+NavItem.displayName = "NavItem";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // NavList — меню раздела.
 //
@@ -943,96 +975,96 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavGroup}>
         <h3>{translate("sales")}</h3>
         <ul className={styles.NavList}>
-          {can("Sale") && <li onClick={() => addPane({ component: SalesList, label: translate("saleRealization") })}>{translate("saleRealization")}</li>}
-          {can("SaleReturn") && <li onClick={() => addPane({ component: SaleReturnsList })}>{translate("SaleReturnsList")}</li>}
-          {can("OutgoingInvoice") && <li onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("outgoingInvoice") })}>{translate("outgoingInvoice")}</li>}
-          {can("PaymentInvoice") && <li onClick={() => addPane({ component: PaymentInvoicesList, label: translate("paymentInvoice") })}>{translate("paymentInvoice")}</li>}
-          {can("CommercialOffer") && <li onClick={() => addPane({ component: CommercialOffersList, label: translate("docType_commercial_offer") })}>{translate("docType_commercial_offer")}</li>}
-          {can("SalesOrder") && <li onClick={() => addPane({ component: SalesOrdersList, label: translate("docType_sales_order") })}>{translate("docType_sales_order")}</li>}
-          {can("Reservation") && <li onClick={() => addPane({ component: ReservationsList, label: translate("docType_reservation") })}>{translate("docType_reservation")}</li>}
+          {can("Sale") && <NavItem onClick={() => addPane({ component: SalesList, label: translate("saleRealization") })}>{translate("saleRealization")}</NavItem>}
+          {can("SaleReturn") && <NavItem onClick={() => addPane({ component: SaleReturnsList })}>{translate("SaleReturnsList")}</NavItem>}
+          {can("OutgoingInvoice") && <NavItem onClick={() => addPane({ component: OutgoingInvoicesList, label: translate("outgoingInvoice") })}>{translate("outgoingInvoice")}</NavItem>}
+          {can("PaymentInvoice") && <NavItem onClick={() => addPane({ component: PaymentInvoicesList, label: translate("paymentInvoice") })}>{translate("paymentInvoice")}</NavItem>}
+          {can("CommercialOffer") && <NavItem onClick={() => addPane({ component: CommercialOffersList, label: translate("docType_commercial_offer") })}>{translate("docType_commercial_offer")}</NavItem>}
+          {can("SalesOrder") && <NavItem onClick={() => addPane({ component: SalesOrdersList, label: translate("docType_sales_order") })}>{translate("docType_sales_order")}</NavItem>}
+          {can("Reservation") && <NavItem onClick={() => addPane({ component: ReservationsList, label: translate("docType_reservation") })}>{translate("docType_reservation")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("purchase")}</h3>
         <ul className={styles.NavList}>
-          {can("Purchase") && <li onClick={() => addPane({ component: PurchasesList, label: translate("purchaseReceipt") })}>{translate("purchaseReceipt")}</li>}
-          {can("PurchaseReturn") && <li onClick={() => addPane({ component: PurchaseReturnsList })}>{translate("PurchaseReturnsList")}</li>}
-          {can("IncomingInvoice") && <li onClick={() => addPane({ component: IncomingInvoicesList, label: translate("incomingInvoice") })}>{translate("incomingInvoice")}</li>}
-          {can("PurchaseRequisition") && <li onClick={() => addPane({ component: PurchaseRequisitionsList })}>{translate("PurchaseRequisitionsList")}</li>}
-          {can("PurchaseOrder") && <li onClick={() => addPane({ component: PurchaseOrdersList, label: translate("docType_purchase_order") })}>{translate("docType_purchase_order")}</li>}
-          {can("ImportDeclaration") && <li onClick={() => addPane({ component: ImportDeclarationsList })}>{translate("ImportDeclarationsList")}</li>}
+          {can("Purchase") && <NavItem onClick={() => addPane({ component: PurchasesList, label: translate("purchaseReceipt") })}>{translate("purchaseReceipt")}</NavItem>}
+          {can("PurchaseReturn") && <NavItem onClick={() => addPane({ component: PurchaseReturnsList })}>{translate("PurchaseReturnsList")}</NavItem>}
+          {can("IncomingInvoice") && <NavItem onClick={() => addPane({ component: IncomingInvoicesList, label: translate("incomingInvoice") })}>{translate("incomingInvoice")}</NavItem>}
+          {can("PurchaseRequisition") && <NavItem onClick={() => addPane({ component: PurchaseRequisitionsList })}>{translate("PurchaseRequisitionsList")}</NavItem>}
+          {can("PurchaseOrder") && <NavItem onClick={() => addPane({ component: PurchaseOrdersList, label: translate("docType_purchase_order") })}>{translate("docType_purchase_order")}</NavItem>}
+          {can("ImportDeclaration") && <NavItem onClick={() => addPane({ component: ImportDeclarationsList })}>{translate("ImportDeclarationsList")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("warehouse")}</h3>
         <ul className={styles.NavList}>
-          {can("InventoryTransfer") && <li onClick={() => addPane({ component: InventoryTransfersList })}>{translate("InventoryTransfersList")}</li>}
-          {can("WriteOff") && <li onClick={() => addPane({ component: WriteOffsList })}>{translate("WriteOffsList")}</li>}
-          {can("GoodsReceipt") && <li onClick={() => addPane({ component: GoodsReceiptsList })}>{translate("GoodsReceiptsList")}</li>}
-          {can("StockCount") && <li onClick={() => addPane({ component: StockCountsList })}>{translate("StockCountsList")}</li>}
+          {can("InventoryTransfer") && <NavItem onClick={() => addPane({ component: InventoryTransfersList })}>{translate("InventoryTransfersList")}</NavItem>}
+          {can("WriteOff") && <NavItem onClick={() => addPane({ component: WriteOffsList })}>{translate("WriteOffsList")}</NavItem>}
+          {can("GoodsReceipt") && <NavItem onClick={() => addPane({ component: GoodsReceiptsList })}>{translate("GoodsReceiptsList")}</NavItem>}
+          {can("StockCount") && <NavItem onClick={() => addPane({ component: StockCountsList })}>{translate("StockCountsList")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("cash")}</h3>
         <ul className={styles.NavList}>
-          {can("CashReceiptOrder") && <li onClick={() => addPane({ component: CashReceiptOrdersList })}>{translate("CashReceiptOrdersList")}</li>}
-          {can("CashExpenseOrder") && <li onClick={() => addPane({ component: CashExpenseOrdersList })}>{translate("CashExpenseOrdersList")}</li>}
-          {can("BankStatement") && <li onClick={() => addPane({ component: BankStatementsList, label: translate("docType_bank_statement") })}>{translate("docType_bank_statement")}</li>}
-          {can("FiscalReceipt") && <li onClick={() => addPane({ component: FiscalReceiptsList })}>{translate("FiscalReceiptsList")}</li>}
+          {can("CashReceiptOrder") && <NavItem onClick={() => addPane({ component: CashReceiptOrdersList })}>{translate("CashReceiptOrdersList")}</NavItem>}
+          {can("CashExpenseOrder") && <NavItem onClick={() => addPane({ component: CashExpenseOrdersList })}>{translate("CashExpenseOrdersList")}</NavItem>}
+          {can("BankStatement") && <NavItem onClick={() => addPane({ component: BankStatementsList, label: translate("docType_bank_statement") })}>{translate("docType_bank_statement")}</NavItem>}
+          {can("FiscalReceipt") && <NavItem onClick={() => addPane({ component: FiscalReceiptsList })}>{translate("FiscalReceiptsList")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("reports")}</h3>
         <ul className={styles.NavList}>
-          {can("Sale") && <li onClick={() => addPane({ component: SalesReport, label: translate("SalesReportList") })}>{translate("SalesReportList")}</li>}
-          {can("Sale") && <li onClick={() => addPane({ component: ManagerReport, label: translate("managerReport") })}>{translate("managerReport")}</li>}
-          {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: MaterialStatement, label: translate("MaterialStatementList") })}>{translate("MaterialStatementList")}</li>}
-          {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: ProductRegisterReport, label: translate("ProductRegisterList") })}>{translate("ProductRegisterList")}</li>}
-          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceListReport, label: translate("priceListReport") })}>{translate("priceListReport")}</li>}
-          {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: InventoryTurnoverReport, label: translate("inventoryTurnover") })}>{translate("inventoryTurnover")}</li>}
-          {(can("Purchase") || can("Sale")) && <li onClick={() => addPane({ component: InventoryBatchesReport, label: translate("inventoryBatches") })}>{translate("inventoryBatches")}</li>}
-          {can("Sale") && <li onClick={() => addPane({ component: ABCReport, label: translate("abcAnalysis") })}>{translate("abcAnalysis")}</li>}
-          {(can("CashReceiptOrder") || can("CashExpenseOrder")) && <li onClick={() => addPane({ component: CashReport, label: translate("CashReportList") })}>{translate("CashReportList")}</li>}
+          {can("Sale") && <NavItem onClick={() => addPane({ component: SalesReport, label: translate("SalesReportList") })}>{translate("SalesReportList")}</NavItem>}
+          {can("Sale") && <NavItem onClick={() => addPane({ component: ManagerReport, label: translate("managerReport") })}>{translate("managerReport")}</NavItem>}
+          {(can("Purchase") || can("Sale")) && <NavItem onClick={() => addPane({ component: MaterialStatement, label: translate("MaterialStatementList") })}>{translate("MaterialStatementList")}</NavItem>}
+          {(can("Purchase") || can("Sale")) && <NavItem onClick={() => addPane({ component: ProductRegisterReport, label: translate("ProductRegisterList") })}>{translate("ProductRegisterList")}</NavItem>}
+          {(can("ProductPrice") || can("Product")) && <NavItem onClick={() => addPane({ component: PriceListReport, label: translate("priceListReport") })}>{translate("priceListReport")}</NavItem>}
+          {(can("Purchase") || can("Sale")) && <NavItem onClick={() => addPane({ component: InventoryTurnoverReport, label: translate("inventoryTurnover") })}>{translate("inventoryTurnover")}</NavItem>}
+          {(can("Purchase") || can("Sale")) && <NavItem onClick={() => addPane({ component: InventoryBatchesReport, label: translate("inventoryBatches") })}>{translate("inventoryBatches")}</NavItem>}
+          {can("Sale") && <NavItem onClick={() => addPane({ component: ABCReport, label: translate("abcAnalysis") })}>{translate("abcAnalysis")}</NavItem>}
+          {(can("CashReceiptOrder") || can("CashExpenseOrder")) && <NavItem onClick={() => addPane({ component: CashReport, label: translate("CashReportList") })}>{translate("CashReportList")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("directories")}</h3>
         <ul className={styles.NavList}>
-          {can("Product") && <li onClick={() => addPane({ component: ProductsList })}>{translate("ProductsList")}</li>}
-          {can("Warehouse") && <li onClick={() => addPane({ component: WarehousesList })}>{translate("WarehousesList")}</li>}
-          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: PriceTypesList })}>{translate("PriceTypesList")}</li>}
-          {can("Brand") && <li onClick={() => addPane({ component: BrandsList })}>{translate("BrandsList")}</li>}
-          {can("SerialNumber") && <li onClick={() => addPane({ component: SerialNumbersList })}>{translate("SerialNumbersList")}</li>}
-          {can("Cashbox") && <li onClick={() => addPane({ component: CashboxesList })}>{translate("CashboxesList")}</li>}
-          <li onClick={() => addPane({ component: ClassifiersList, label: translate("clsSection") })}>{translate("clsSection")}</li>
+          {can("Product") && <NavItem onClick={() => addPane({ component: ProductsList })}>{translate("ProductsList")}</NavItem>}
+          {can("Warehouse") && <NavItem onClick={() => addPane({ component: WarehousesList })}>{translate("WarehousesList")}</NavItem>}
+          {(can("ProductPrice") || can("Product")) && <NavItem onClick={() => addPane({ component: PriceTypesList })}>{translate("PriceTypesList")}</NavItem>}
+          {can("Brand") && <NavItem onClick={() => addPane({ component: BrandsList })}>{translate("BrandsList")}</NavItem>}
+          {can("SerialNumber") && <NavItem onClick={() => addPane({ component: SerialNumbersList })}>{translate("SerialNumbersList")}</NavItem>}
+          {can("Cashbox") && <NavItem onClick={() => addPane({ component: CashboxesList })}>{translate("CashboxesList")}</NavItem>}
+          <NavItem onClick={() => addPane({ component: ClassifiersList, label: translate("clsSection") })}>{translate("clsSection")}</NavItem>
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("processings")}</h3>
         <ul className={styles.NavList}>
-          {can("Sale") && <li className={styles.NavListAccent} onClick={() => addPane({ component: SalesTerminal, label: translate("salesTerminal") })}>⚡ {translate("salesTerminal")}</li>}
-          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceCorrection })}>{translate("ProductPriceCorrection")}</li>}
-          {(can("ProductPrice") || can("Product")) && <li onClick={() => addPane({ component: ProductPriceImport })}>{translate("ProductPriceImport")}</li>}
-          {can("Product") && <li onClick={() => addPane({ component: ProductImportExport })}>{translate("ProductImportExport")}</li>}
-          {can("Product") && <li onClick={() => addPane({ component: OpeningBalanceForm, label: translate("openingBalanceEntry") })}>{translate("openingBalanceEntry")}</li>}
+          {can("Sale") && <NavItem className={styles.NavListAccent} onClick={() => addPane({ component: SalesTerminal, label: translate("salesTerminal") })}>⚡ {translate("salesTerminal")}</NavItem>}
+          {(can("ProductPrice") || can("Product")) && <NavItem onClick={() => addPane({ component: ProductPriceCorrection })}>{translate("ProductPriceCorrection")}</NavItem>}
+          {(can("ProductPrice") || can("Product")) && <NavItem onClick={() => addPane({ component: ProductPriceImport })}>{translate("ProductPriceImport")}</NavItem>}
+          {can("Product") && <NavItem onClick={() => addPane({ component: ProductImportExport })}>{translate("ProductImportExport")}</NavItem>}
+          {can("Product") && <NavItem onClick={() => addPane({ component: OpeningBalanceForm, label: translate("openingBalanceEntry") })}>{translate("openingBalanceEntry")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("govDocsSection")}</h3>
         <ul className={styles.NavList}>
-          {can("OutgoingInvoice") && <li onClick={() => addPane({ component: EsfIncomingList, label: translate("esfIncomingSection") })}>{translate("esfIncomingSection")}</li>}
-          {can("Sale") && <li onClick={() => addPane({ component: AwpOutboxList, label: translate("awpOutboxSection") })}>{translate("awpOutboxSection")}</li>}
-          {can("Sale") && <li onClick={() => addPane({ component: AwpIncomingList, label: translate("awpIncomingSection") })}>{translate("awpIncomingSection")}</li>}
-          {can("Sale") && <li onClick={() => addPane({ component: SntOutboxList, label: translate("sntOutboxSection") })}>{translate("sntOutboxSection")}</li>}
-          {can("Sale") && <li onClick={() => addPane({ component: SntIncomingList, label: translate("sntIncomingSection") })}>{translate("sntIncomingSection")}</li>}
+          {can("OutgoingInvoice") && <NavItem onClick={() => addPane({ component: EsfIncomingList, label: translate("esfIncomingSection") })}>{translate("esfIncomingSection")}</NavItem>}
+          {can("Sale") && <NavItem onClick={() => addPane({ component: AwpOutboxList, label: translate("awpOutboxSection") })}>{translate("awpOutboxSection")}</NavItem>}
+          {can("Sale") && <NavItem onClick={() => addPane({ component: AwpIncomingList, label: translate("awpIncomingSection") })}>{translate("awpIncomingSection")}</NavItem>}
+          {can("Sale") && <NavItem onClick={() => addPane({ component: SntOutboxList, label: translate("sntOutboxSection") })}>{translate("sntOutboxSection")}</NavItem>}
+          {can("Sale") && <NavItem onClick={() => addPane({ component: SntIncomingList, label: translate("sntIncomingSection") })}>{translate("sntIncomingSection")}</NavItem>}
           <li className={styles.NavHint}>{translate("govDocsHint")}</li>
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("edoSection")}</h3>
         <ul className={styles.NavList}>
-          {can("EdoDocument") && <li onClick={() => addPane({ component: EdoInboxList, label: translate("edoInbox") })}>{translate("edoInbox")}</li>}
-          {can("EdoDocument") && <li onClick={() => addPane({ component: EdoOutboxList, label: translate("edoOutbox") })}>{translate("edoOutbox")}</li>}
+          {can("EdoDocument") && <NavItem onClick={() => addPane({ component: EdoInboxList, label: translate("edoInbox") })}>{translate("edoInbox")}</NavItem>}
+          {can("EdoDocument") && <NavItem onClick={() => addPane({ component: EdoOutboxList, label: translate("edoOutbox") })}>{translate("edoOutbox")}</NavItem>}
         </ul>
       </div>
     </>
@@ -1043,23 +1075,23 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavGroup}>
         <h3>{translate("reports")}</h3>
         <ul className={styles.NavList}>
-          {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountingJournal, label: translate("accountingJournalTitle") })}>{translate("accountingJournalTitle")}</li>}
-          {can("AccountingEntry") && <li onClick={() => addPane({ component: TurnoverBalanceSheet, label: translate("osvTitle") })}>{translate("osvTitle")}</li>}
-          {can("AccountingEntry") && <li onClick={() => addPane({ component: AccountCard, label: translate("accountCardTitle") })}>{translate("accountCardTitle")}</li>}
-          {can("AccountingEntry") && <li onClick={() => addPane({ component: SettlementsReport, label: translate("settlementsReport") })}>{translate("settlementsReport")}</li>}
+          {can("AccountingEntry") && <NavItem onClick={() => addPane({ component: AccountingJournal, label: translate("accountingJournalTitle") })}>{translate("accountingJournalTitle")}</NavItem>}
+          {can("AccountingEntry") && <NavItem onClick={() => addPane({ component: TurnoverBalanceSheet, label: translate("osvTitle") })}>{translate("osvTitle")}</NavItem>}
+          {can("AccountingEntry") && <NavItem onClick={() => addPane({ component: AccountCard, label: translate("accountCardTitle") })}>{translate("accountCardTitle")}</NavItem>}
+          {can("AccountingEntry") && <NavItem onClick={() => addPane({ component: SettlementsReport, label: translate("settlementsReport") })}>{translate("settlementsReport")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("directories")}</h3>
         <ul className={styles.NavList}>
-          {can("ChartOfAccount") && <li onClick={() => addPane({ component: ChartOfAccountsList, label: translate("chartOfAccountsTitle") })}>{translate("chartOfAccountsTitle")}</li>}
-          {can("SubkontoType") && <li onClick={() => addPane({ component: SubkontoTypesList, label: translate("subkontoTypesTitle") })}>{translate("subkontoTypesTitle")}</li>}
+          {can("ChartOfAccount") && <NavItem onClick={() => addPane({ component: ChartOfAccountsList, label: translate("chartOfAccountsTitle") })}>{translate("chartOfAccountsTitle")}</NavItem>}
+          {can("SubkontoType") && <NavItem onClick={() => addPane({ component: SubkontoTypesList, label: translate("subkontoTypesTitle") })}>{translate("subkontoTypesTitle")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("monthCloseRegulatory")}</h3>
         <ul className={styles.NavList}>
-          {can("MonthClose") && <li onClick={() => addPane({ component: MonthClosesList })}>{translate("MonthClosesList")}</li>}
+          {can("MonthClose") && <NavItem onClick={() => addPane({ component: MonthClosesList })}>{translate("MonthClosesList")}</NavItem>}
         </ul>
       </div>
     </>
@@ -1070,15 +1102,15 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavGroup}>
         <h3>{translate("documents")}</h3>
         <ul className={styles.NavList}>
-          {can("PayrollCalculation") && <li onClick={() => addPane({ component: PayrollCalculationsList })}>{translate("PayrollCalculationsList")}</li>}
-          {can("PayrollPayment") && <li onClick={() => addPane({ component: PayrollPaymentsList })}>{translate("PayrollPaymentsList")}</li>}
+          {can("PayrollCalculation") && <NavItem onClick={() => addPane({ component: PayrollCalculationsList })}>{translate("PayrollCalculationsList")}</NavItem>}
+          {can("PayrollPayment") && <NavItem onClick={() => addPane({ component: PayrollPaymentsList })}>{translate("PayrollPaymentsList")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("directories")}</h3>
         <ul className={styles.NavList}>
-          {can("Employee") && <li onClick={() => addPane({ component: EmployeesList })}>{translate("EmployeesList")}</li>}
-          {can("Position") && <li onClick={() => addPane({ component: PositionsList })}>{translate("PositionsList")}</li>}
+          {can("Employee") && <NavItem onClick={() => addPane({ component: EmployeesList })}>{translate("EmployeesList")}</NavItem>}
+          {can("Position") && <NavItem onClick={() => addPane({ component: PositionsList })}>{translate("PositionsList")}</NavItem>}
         </ul>
       </div>
     </>
@@ -1089,16 +1121,16 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavGroup}>
         <h3>{translate("directories")}</h3>
         <ul className={styles.NavList}>
-          {can("Counterparty") && <li onClick={() => addPane({ component: CounterpartiesList })}>{translate("CounterpartiesList")}</li>}
-          {can("Contract") && <li onClick={() => addPane({ component: ContractsList })}>{translate("ContractsList")}</li>}
-          {can("Contact") && <li onClick={() => addPane({ component: ContactsList })}>{translate("ContactsList")}</li>}
-          {can("ContactPerson") && <li onClick={() => addPane({ component: ContactPersonsList })}>{translate("ContactPersonsList")}</li>}
+          {can("Counterparty") && <NavItem onClick={() => addPane({ component: CounterpartiesList })}>{translate("CounterpartiesList")}</NavItem>}
+          {can("Contract") && <NavItem onClick={() => addPane({ component: ContractsList })}>{translate("ContractsList")}</NavItem>}
+          {can("Contact") && <NavItem onClick={() => addPane({ component: ContactsList })}>{translate("ContactsList")}</NavItem>}
+          {can("ContactPerson") && <NavItem onClick={() => addPane({ component: ContactPersonsList })}>{translate("ContactPersonsList")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("taskManagement")}</h3>
         <ul className={styles.NavList}>
-          {can("Todo") && <li onClick={() => addPane({ component: TodosList })}>{translate("TodosList")}</li>}
+          {can("Todo") && <NavItem onClick={() => addPane({ component: TodosList })}>{translate("TodosList")}</NavItem>}
         </ul>
       </div>
     </>
@@ -1109,35 +1141,35 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavGroup}>
         <h3>{translate("directories")}</h3>
         <ul className={styles.NavList}>
-          {can("Organization") && <li onClick={() => addPane({ component: OrganizationsList })}>{translate("OrganizationsList")}</li>}
-          {can("BankAccount") && <li onClick={() => addPane({ component: BankAccountsList })}>{translate("BankAccountsList")}</li>}
-          {can("Currency") && <li onClick={() => addPane({ component: CurrenciesList })}>{translate("CurrenciesList")}</li>}
-          {can("UnitOfMeasure") && <li onClick={() => addPane({ component: UnitOfMeasuresList })}>{translate("UnitOfMeasuresList")}</li>}
-          {can("Tax") && <li onClick={() => addPane({ component: TaxesList })}>{translate("TaxesList")}</li>}
+          {can("Organization") && <NavItem onClick={() => addPane({ component: OrganizationsList })}>{translate("OrganizationsList")}</NavItem>}
+          {can("BankAccount") && <NavItem onClick={() => addPane({ component: BankAccountsList })}>{translate("BankAccountsList")}</NavItem>}
+          {can("Currency") && <NavItem onClick={() => addPane({ component: CurrenciesList })}>{translate("CurrenciesList")}</NavItem>}
+          {can("UnitOfMeasure") && <NavItem onClick={() => addPane({ component: UnitOfMeasuresList })}>{translate("UnitOfMeasuresList")}</NavItem>}
+          {can("Tax") && <NavItem onClick={() => addPane({ component: TaxesList })}>{translate("TaxesList")}</NavItem>}
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("settingsGroup")}</h3>
         <ul className={styles.NavList}>
-          {can("OrganizationAccountingSetting") && <li onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>{translate("OrganizationAccountingSettingsList")}</li>}
-          {can("AccessRights") && <li onClick={async () => { const m = await import("src/models/AccessRights"); addPane({ component: m.AccessRightsModuleList, label: translate("AccessRights") }); }}>{translate("AccessRights")}</li>}
-          <li onClick={() => addPane({ component: GeneralSettings, label: translate("generalSettings") })}>{translate("generalSettings")}</li>
-          <li onClick={() => addPane({ component: DocumentNumberSettings, label: translate("documentNumberSettings") })}>{translate("documentNumberSettings")}</li>
+          {can("OrganizationAccountingSetting") && <NavItem onClick={() => addPane({ component: OrganizationAccountingSettingsList })}>{translate("OrganizationAccountingSettingsList")}</NavItem>}
+          {can("AccessRights") && <NavItem onClick={async () => { const m = await import("src/models/AccessRights"); addPane({ component: m.AccessRightsModuleList, label: translate("AccessRights") }); }}>{translate("AccessRights")}</NavItem>}
+          <NavItem onClick={() => addPane({ component: GeneralSettings, label: translate("generalSettings") })}>{translate("generalSettings")}</NavItem>
+          <NavItem onClick={() => addPane({ component: DocumentNumberSettings, label: translate("documentNumberSettings") })}>{translate("documentNumberSettings")}</NavItem>
         </ul>
       </div>
       <div className={styles.NavGroup}>
         <h3>{translate("administration")}</h3>
         <ul className={styles.NavList}>
-          {can("User") && <li onClick={() => addPane({ component: UsersList })}>{translate("UsersList")}</li>}
-          {can("ActivityHistory") && <li onClick={() => addPane({ component: ActivityHistoriesList })}>{translate("ActivityHistoriesList")}</li>}
-          {can("ActivityHistory") && <li onClick={() => addPane({ component: PipeActivitiesList })}>{translate("PipeActivitiesList")}</li>}
-          {can("Notification") && <li onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</li>}
-          <li onClick={() => addPane({ component: FilesList, label: translate("files") })}>{translate("files")}</li>
-          <li onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</li>
-          {can("ScheduledTask") && <li onClick={() => addPane({ component: ScheduledTasksList })}>{translate("ScheduledTasksList")}</li>}
-          <li onClick={() => addPane({ component: SyncDashboard, label: translate("syncOfflineData") })}>{translate("syncOfflineData")}</li>
-          <li onClick={() => addPane({ component: OrphanRefsForm, label: translate("deletedReferenceControl") })}>{translate("deletedReferenceControl")}</li>
-          <li onClick={() => addPane({ component: SearchReplaceRefsForm, label: translate("searchReplaceReferences") })}>{translate("searchReplaceReferences")}</li>
+          {can("User") && <NavItem onClick={() => addPane({ component: UsersList })}>{translate("UsersList")}</NavItem>}
+          {can("ActivityHistory") && <NavItem onClick={() => addPane({ component: ActivityHistoriesList })}>{translate("ActivityHistoriesList")}</NavItem>}
+          {can("ActivityHistory") && <NavItem onClick={() => addPane({ component: PipeActivitiesList })}>{translate("PipeActivitiesList")}</NavItem>}
+          {can("Notification") && <NavItem onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</NavItem>}
+          <NavItem onClick={() => addPane({ component: FilesList, label: translate("files") })}>{translate("files")}</NavItem>
+          <NavItem onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</NavItem>
+          {can("ScheduledTask") && <NavItem onClick={() => addPane({ component: ScheduledTasksList })}>{translate("ScheduledTasksList")}</NavItem>}
+          <NavItem onClick={() => addPane({ component: SyncDashboard, label: translate("syncOfflineData") })}>{translate("syncOfflineData")}</NavItem>
+          <NavItem onClick={() => addPane({ component: OrphanRefsForm, label: translate("deletedReferenceControl") })}>{translate("deletedReferenceControl")}</NavItem>
+          <NavItem onClick={() => addPane({ component: SearchReplaceRefsForm, label: translate("searchReplaceReferences") })}>{translate("searchReplaceReferences")}</NavItem>
         </ul>
       </div>
     </>

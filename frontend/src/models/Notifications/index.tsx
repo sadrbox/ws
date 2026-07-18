@@ -5,6 +5,7 @@ import {
   clearNotificationJournal,
 } from "src/hooks/useFormStore";
 import type { NotificationJournalEntry } from "src/hooks/useFormStore";
+import { translate } from "src/i18";
 import styles from "./Notifications.module.scss";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -42,7 +43,7 @@ const NotificationsList: FC<NotificationsListProps> = () => {
   return (
     <div className={styles.JournalWrap}>
       <div className={styles.JournalHeader}>
-        <h3 className={styles.JournalTitle}>Центр уведомлений</h3>
+        <h3 className={styles.JournalTitle}>{translate("notificationsCenter")}</h3>
         {journal.length > 0 && (
           <button className={styles.JournalClear} onClick={clearNotificationJournal} type="button">
             Очистить журнал
@@ -50,7 +51,7 @@ const NotificationsList: FC<NotificationsListProps> = () => {
         )}
       </div>
       {reversed.length === 0 ? (
-        <div className={styles.JournalEmpty}>Нет уведомлений</div>
+        <div className={styles.JournalEmpty}>{translate("noNotifications")}</div>
       ) : (
         <div className={styles.JournalList}>
           {reversed.map((entry) => (

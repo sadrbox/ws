@@ -12,6 +12,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { SubTableInternalContext } from "./context";
+import { translate } from "src/i18";
 import { getModelColumns, getFormatColumnValue, getColumnAlignment } from "src/components/Table/services";
 import {
   CHECKBOX_COL_ID,
@@ -800,7 +801,7 @@ const SubTable: FC<SubTableProps> = ({
     if (col.identifier === "__rowActions") return rowActions ? rowActions(row, ctx) : null;
     // Для несохранённых (temp) строк скрываем служебные поля id / uuid
     if (deferRemoteChanges && typeof row.id === "number" && row.id < 0) {
-      if (col.identifier === "id") return <span className={styles.TempIdBadge}>Новый</span>;
+      if (col.identifier === "id") return <span className={styles.TempIdBadge}>{translate("new")}</span>;
       if (col.identifier === "uuid") return <span className={styles.TempIdBadge}>—</span>;
     }
 
@@ -1367,9 +1368,9 @@ const SubTable: FC<SubTableProps> = ({
   if (error) {
     return (
       <div className="error-container"><div className="error-message">
-        <h3>Ошибка загрузки</h3>
+        <h3>{translate("errorTitle")}</h3>
         <p>{error?.message || "Неизвестная ошибка"}</p>
-        <button onClick={() => refetch()} className="retry-button">Повторить</button>
+        <button onClick={() => refetch()} className="retry-button">{translate("retry")}</button>
       </div></div>
     );
   }

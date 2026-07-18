@@ -5,7 +5,7 @@
 	"identifier": "aleppo.kz",
 	"build": {
 		"frontendDist": "../build",
-		"devUrl": "http://api.aleppo.kz",
+		"devUrl": "https://aleppo.kz",
 		"beforeDevCommand": "npm run dev",
 		"beforeBuildCommand": "npm run build"
 	},

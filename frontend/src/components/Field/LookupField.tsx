@@ -768,7 +768,7 @@ const LookupField: FC<LookupFieldProps> = ({
         {isDropdownOpen && (suggestions.length > 0 || isLoading || (canCreate && (qsOpened || (inputText.trim() !== "" && inputText !== displayValue)))) && !isTable && (
           <div className={styles.LookupDropdown} ref={dropdownRef}>
             {isLoading && suggestions.length === 0 && (
-              <div className={styles.LookupDropdownLoading}>Поиск...</div>
+              <div className={styles.LookupDropdownLoading}>{translate("searching")}</div>
             )}
             {suggestions.map((item, idx) => {
               const primary = getItemDisplay(item);
@@ -790,7 +790,7 @@ const LookupField: FC<LookupFieldProps> = ({
               );
             })}
             {!isLoading && suggestions.length === 0 && (
-              <div className={styles.LookupDropdownLoading}>Ничего не найдено</div>
+              <div className={styles.LookupDropdownLoading}>{translate("nothingFound")}</div>
             )}
             {canCreate && (
               <div className={styles.LookupDropdownCreateWrapper}>
@@ -821,7 +821,7 @@ const LookupField: FC<LookupFieldProps> = ({
           }}
         >
           {isLoading && suggestions.length === 0 && (
-            <div className={styles.LookupDropdownLoading}>Поиск...</div>
+            <div className={styles.LookupDropdownLoading}>{translate("searching")}</div>
           )}
           {suggestions.map((item, idx) => {
             const primary = getItemDisplay(item);
@@ -843,7 +843,7 @@ const LookupField: FC<LookupFieldProps> = ({
             );
           })}
           {!isLoading && suggestions.length === 0 && (
-            <div className={styles.LookupDropdownLoading}>Ничего не найдено</div>
+            <div className={styles.LookupDropdownLoading}>{translate("nothingFound")}</div>
           )}
           {canCreate && (
             <div className={styles.LookupDropdownCreateWrapper}>
