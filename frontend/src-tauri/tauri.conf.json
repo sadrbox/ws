@@ -4,7 +4,7 @@
 	"version": "0.1.0",
 	"identifier": "aleppo.kz",
 	"build": {
-		"frontendDist": "../build",
+		"frontendDist": "../dist",
 		"devUrl": "https://aleppo.kz",
 		"beforeDevCommand": "npm run dev",
 		"beforeBuildCommand": "npm run build"
