@@ -1566,10 +1566,6 @@ model OrganizationAccountingSetting {
   /// Использовать акциз (НК РК ст. 463). При true в SaleItemsTable
   /// отображается колонка «Ставка акциза, %» и «Сумма акциза».
   useExcise            Boolean       @default(false)
-  /// Включить колонки «Серии» в таблице строк документов.
-  useSerialsInTable    Boolean       @default(false)
-  /// Включить колонки «Партии» в таблице строк документов.
-  useBatchesInTable    Boolean       @default(false)
   /// Ставка акциза по умолчанию, % (используется как значение по умолчанию
   /// для новых строк документов продажи при useExcise=true).
   exciseRate           Decimal       @default(0) @db.Decimal(8, 4)

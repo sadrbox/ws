@@ -35,8 +35,6 @@ const buildItem = (
   vatCalculationMethod: "INCLUDED",
   useDiscount: false,
   useExcise: false,
-  useSerialsInTable: false,
-  useBatchesInTable: false,
   exciseRate: 0,
   updatedAt: "2026-05-05T00:00:00Z",
   deletedAt: null,
@@ -145,20 +143,6 @@ describe("useOrgAccountingSettings", () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.useDiscount).toBe(true);
-  });
-
-  it("новые флаги серий и партий пробрасываются из item", async () => {
-    mockGet.mockResolvedValue({
-      success: true,
-      item: buildItem({ useSerialsInTable: true, useBatchesInTable: false }),
-    });
-    const { result } = renderHook(() => useOrgAccountingSettings(), {
-      wrapper: makeWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.useSerialsInTable).toBe(true);
-    expect(result.current.useBatchesInTable).toBe(false);
   });
 
   it("вызывает GET /organization-accounting-settings/active с organizationUuid", async () => {

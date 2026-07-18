@@ -321,22 +321,6 @@ async function buildBodyData(body, existing = null) {
 		? Boolean(body.useExcise)
 		: Boolean(existing?.useExcise);
 
-	// useSerialsInTable — включить колонки «Серии» в таблице строк документов.
-	const useSerialsInTable = Object.prototype.hasOwnProperty.call(
-		body,
-		"useSerialsInTable",
-	)
-		? Boolean(body.useSerialsInTable)
-		: Boolean(existing?.useSerialsInTable);
-
-	// useBatchesInTable — включить колонки «Партии» в таблице строк документов.
-	const useBatchesInTable = Object.prototype.hasOwnProperty.call(
-		body,
-		"useBatchesInTable",
-	)
-		? Boolean(body.useBatchesInTable)
-		: Boolean(existing?.useBatchesInTable);
-
 	// exciseRate — ставка акциза по умолчанию (% от стоимости после скидки).
 	// Используется как значение по умолчанию при добавлении новых строк
 	// документов продажи. Если useExcise=false — обнуляется.
@@ -385,8 +369,6 @@ async function buildBodyData(body, existing = null) {
 			vatCalculationMethod,
 			useDiscount,
 			useExcise,
-			useSerialsInTable,
-			useBatchesInTable,
 			exciseRate,
 			costingMethod,
 			startDate,
@@ -502,7 +484,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		// заблокированы validateAgainstPostedDocs выше — и для правки на месте тоже.
 		let item;
 		if (prev && isoDay(prev.startDate) === isoDay(built.data.startDate)) {
-			item = await prisma[MODEL].update({ where: { id: prev.id }, data: built.data, include: INCLUDE });
+			// organizationUuid при корректировке не меняется; Prisma update-инпут его
+			// как скаляр не принимает (только связь organization) — исключаем.
+			const { organizationUuid: _org, ...updatable } = built.data;
+			item = await prisma[MODEL].update({ where: { id: prev.id }, data: updatable, include: INCLUDE });
 		} else {
 			item = await prisma[MODEL].create({ data: built.data, include: INCLUDE });
 		}
@@ -544,7 +529,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		// новый период → новая версия, редактируемая остаётся в истории (см. POST).
 		let item;
 		if (isoDay(existing.startDate) === isoDay(built.data.startDate)) {
-			item = await prisma[MODEL].update({ where: { id: existing.id }, data: built.data, include: INCLUDE });
+			// organizationUuid как скаляр Prisma update не принимает (только связь);
+			// при корректировке он не меняется — исключаем.
+			const { organizationUuid: _org, ...updatable } = built.data;
+			item = await prisma[MODEL].update({ where: { id: existing.id }, data: updatable, include: INCLUDE });
 		} else {
 			item = await prisma[MODEL].create({ data: built.data, include: INCLUDE });
 		}

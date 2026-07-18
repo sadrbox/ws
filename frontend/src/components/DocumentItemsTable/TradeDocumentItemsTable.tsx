@@ -592,7 +592,11 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           ]}
           onSelect={(uuid, _dv, item) => {
             const extra: Record<string, unknown> = {
-              product: item && uuid ? { uuid, name: item.name ?? "" } : null,
+              // track-флаги кладём в строку сразу: по ним колонки «Серии»/«Партии»
+              // появляются в момент выбора товара, не дожидаясь сохранения+перезагрузки.
+              product: item && uuid
+                ? { uuid, name: item.name ?? "", trackSerialNumbers: item.trackSerialNumbers === true, trackBatches: item.trackBatches === true }
+                : null,
             };
             const umUuid = item?.unitOfMeasureUuid as string | undefined;
             const um = item?.unitOfMeasure as { uuid?: string; name?: string } | undefined;
