@@ -7,6 +7,7 @@ import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { idSearchCondition } from "../../utils/searchId.js";
+import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
 const router = express.Router();
 const MODEL = "purchaseRequisition";
 const ROUTE = "purchase-requisitions";
@@ -78,6 +79,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
+		const nestedConds = buildNestedItemsConditions(MODEL, req.query.nested);
+		if (nestedConds.length) baseWhere.AND = [...(baseWhere.AND ?? []), ...nestedConds];
 		const opts = {
 			take: limitNumber,
 			where: baseWhere,
