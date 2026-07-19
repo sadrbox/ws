@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "./prisma-client.js";
 import { reconcileDocumentRegister } from "../services/productRegister.js";
+import { reconcileDocumentEntries } from "../services/accountingPosting.js";
 import { findOrCreateBatch, availableBatchesFEFO } from "../services/batches.js";
 import { setReceiptSerials, issueSerials } from "../services/serialNumbers.js";
 import { serialGap, batchGap } from "../services/openingBalance.js";
@@ -22,6 +23,37 @@ async function ensureProduct(name, data) {
 	const ex = await prisma.product.findFirst({ where: { name } });
 	if (ex) return prisma.product.update({ where: { uuid: ex.uuid }, data });
 	return prisma.product.create({ data: { name, ...data } });
+}
+
+/**
+ * Суммы строки по параметрам учёта организации на дату документа.
+ *
+ * Скрипт пишет в БД напрямую, минуя роутер, поэтому НДС нужно посчитать самим —
+ * иначе строка уходит с amountWithoutVat=0 и документ ломает отчётность.
+ * Формула — из боевого расчёта (frontend saleItemDraft.ts → recalcSaleItemAmounts).
+ */
+async function lineAmounts(organizationUuid, date, quantity, price) {
+	const s = await prisma.organizationAccountingSetting.findFirst({
+		where: { organizationUuid, startDate: { lte: date ?? new Date() } },
+		orderBy: { startDate: "desc" },
+	});
+	const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+	const base = r2(quantity * price);
+	const er = s?.useExcise ? Number(s.exciseRate) || 0 : 0;
+	const exciseAmount = er > 0 ? r2((base * er) / 100) : 0;
+	const vatBase = r2(base + exciseAmount);
+	const vr = s?.useVat ? Number(s.vatRate) || 0 : 0;
+	const added = s?.vatCalculationMethod === "ADDED";
+	const vatAmount = vr > 0 ? (added ? r2((vatBase * vr) / 100) : r2((vatBase * vr) / (100 + vr))) : 0;
+	const amount = added ? r2(vatBase + vatAmount) : vatBase;
+	return {
+		amount,
+		amountWithoutVat: r2(amount - vatAmount),
+		vatRate: vr,
+		vatAmount,
+		exciseRate: er,
+		exciseAmount,
+	};
 }
 
 async function main() {
@@ -123,15 +155,21 @@ async function main() {
 	const fefoBefore = await availableBatchesFEFO({ organizationUuid: org.uuid, warehouseUuid: wh.uuid, productUuid: milk.uuid });
 	const firstBatch = fefoBefore[0];
 	await prisma.saleItem.create({ data: {
-		saleUuid: sale.uuid, productUuid: milk.uuid, quantity: 30, price: 600, amount: 18000,
+		saleUuid: sale.uuid, productUuid: milk.uuid, quantity: 30, price: 600,
+		...(await lineAmounts(org.uuid, sale.date, 30, 600)),
 		unitOfMeasureUuid: uom?.uuid ?? null, organizationUuid: org.uuid, batchUuid: firstBatch?.uuid ?? null,
 	} });
 	// Серии: продаём 1 ноутбук.
 	await prisma.saleItem.create({ data: {
-		saleUuid: sale.uuid, productUuid: laptop.uuid, quantity: 1, price: 450000, amount: 450000,
+		saleUuid: sale.uuid, productUuid: laptop.uuid, quantity: 1, price: 450000,
+		...(await lineAmounts(org.uuid, sale.date, 1, 450000)),
 		unitOfMeasureUuid: uom?.uuid ?? null, organizationUuid: org.uuid,
 	} });
 	await reconcileDocumentRegister("sale", sale.uuid);
+	// Документ помечен проведённым — значит обязан иметь проводки. Раньше здесь
+	// разносился только регистр ТМЗ, и проведённая реализация висела без проводок:
+	// в ОСВ её не было, а в отчёте о продажах база НДС выходила нулевой.
+	await reconcileDocumentEntries("sale", sale.uuid);
 	const nb1 = await prisma.serialNumber.findFirst({ where: { productUuid: laptop.uuid, serialNumber: "NB-0001" } });
 	if (nb1) await issueSerials({ docType: "sale", docUuid: sale.uuid, serialUuids: [nb1.uuid] });
 	console.log(`Реализация «${saleNumber}»: 30 молока (партия ${firstBatch?.batchNumber ?? "—"}) + 1 ноутбук (серия NB-0001).`);
