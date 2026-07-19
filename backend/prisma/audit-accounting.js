@@ -153,6 +153,34 @@ async function main() {
 		Math.abs(diff) >= 1 ? "Отчёт о продажах и ОСВ покажут разные суммы." : "",
 	);
 
+	// ── 10. Инвариант регистра: out.amount реализации = COGS, а не выручка ───
+	// Именно на неоднозначности этого поля сломалась «Ведомость по материалам»:
+	// движок себестоимости принимал amount за выручку и показывал прибыль 0.
+	// Проводка реализации ПРОЕЦИРУЕТ значение регистра (Дт 7010 Кт 1330), поэтому
+	// суммы обязаны совпадать — расхождение означает, что смысл поля снова уехал.
+	console.log("\n▸ 10. Инвариант регистра (out.amount реализации = себестоимость)");
+	const inv = await prisma.$queryRaw`
+		SELECT
+			(SELECT COALESCE(SUM("amount"),0) FROM product_register
+			  WHERE "documentType" = 'sale' AND "movementType" = 'out')::numeric AS register,
+			(SELECT COALESCE(SUM("amount"),0) FROM accounting_entries
+			  WHERE "documentType" = 'sale' AND "debitAccountCode" LIKE '7010%')::numeric AS cogs,
+			(SELECT COALESCE(SUM(si."amountWithoutVat" - COALESCE(si."exciseAmount",0)),0)
+			   FROM sale_items si JOIN sales s ON s.uuid = si."saleUuid"
+			  WHERE s.posted = true)::numeric AS revenue
+	`;
+	const regSum = r2(inv[0].register), cogsSum = r2(inv[0].cogs), revSum = r2(inv[0].revenue);
+	check(
+		Math.abs(regSum - cogsSum) < 1,
+		`Регистр ${regSum} = COGS в проводках ${cogsSum}`,
+		Math.abs(regSum - cogsSum) >= 1 ? "Проводка и регистр разошлись — ОСВ не сойдётся с отчётами." : "",
+	);
+	check(
+		Math.abs(regSum - revSum) > 1,
+		`Регистр (${regSum}) отличается от выручки (${revSum}) — значит в нём себестоимость`,
+		Math.abs(regSum - revSum) <= 1 ? "Похоже, в регистр снова кладут выручку вместо себестоимости." : "",
+	);
+
 	// ── Итог ─────────────────────────────────────────────────────────────────
 	console.log(`\n${"═".repeat(62)}`);
 	console.log(`Проверок пройдено: ${ok.length}, замечаний: ${findings.length}`);

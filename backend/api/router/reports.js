@@ -117,6 +117,8 @@ router.get("/reports/sales-by-product", async (req, res) => {
 				row.qtyReturn += Number(item.quantity);
 				row.amountReturn += Number(item.amount);
 				row.amountNoTaxReturn = (row.amountNoTaxReturn ?? 0) + Number(item.amountWithoutVat ?? item.amount);
+				// Акциз возврата — чтобы вычесть его симметрично акцизу реализации.
+				row.exciseAmountReturn = (row.exciseAmountReturn ?? 0) + Number(item.exciseAmount ?? 0);
 			}
 		}
 
@@ -151,8 +153,19 @@ router.get("/reports/sales-by-product", async (req, res) => {
 			.map((r) => {
 				const costNoVat = r2(costByProduct.get(r.productUuid) ?? 0);
 				const amountNoTaxReturn = r2(r.amountNoTaxReturn ?? 0);
-				// Прибыль = чистая выручка без НДС − чистая себестоимость.
-				const profit = r2(r.amountNoTaxSale - amountNoTaxReturn - costNoVat);
+				const exciseAmountReturn = r2(r.exciseAmountReturn ?? 0);
+				// ВЫРУЧКА = amountWithoutVat − акциз.
+				//
+				// amountWithoutVat — это БАЗА НДС, а она по НК РК ст.381 включает акциз
+				// (см. recalcSaleItemAmounts: vatBase = afterDiscount + exciseAmount).
+				// Акциз — косвенный налог в пользу государства, выручкой он не является:
+				// раньше он попадал в прибыль и завышал её ровно на свою сумму. То же
+				// самое приложение считает верно в других местах — «Сумма без налогов»
+				// графы 13 ЭСФ = amountWithoutVat − exciseAmount.
+				const revenueSale = r2(r.amountNoTaxSale - r2(r.exciseAmountSale));
+				const revenueReturn = r2(amountNoTaxReturn - exciseAmountReturn);
+				// Прибыль = чистая выручка без налогов − чистая себестоимость.
+				const profit = r2(revenueSale - revenueReturn - costNoVat);
 				return {
 					...r,
 					qtySale: Math.round(r.qtySale * 10000) / 10000,
@@ -165,6 +178,9 @@ router.get("/reports/sales-by-product", async (req, res) => {
 					vatAmountSale: r2(r.vatAmountSale),
 					amountNoTaxSale: r2(r.amountNoTaxSale),
 					amountNoTaxReturn,
+					exciseAmountReturn,
+					// Выручка без косвенных налогов — то, из чего считается прибыль.
+					revenueSale,
 					costNoVat,
 					profit,
 				};
@@ -217,6 +233,38 @@ router.get("/reports/material-statement", async (req, res) => {
 		// Метод — тот, что действовал на конец периода (учётная политика по дате).
 		const method = await resolveCostingMethod(organizationUuid || null, dateTo ? new Date(dateTo) : null);
 
+		// ── Выручка периода по товарам — ИЗ СТРОК ДОКУМЕНТОВ ────────────────────
+		// Из регистра её взять нельзя: у расхода реализации amount — это
+		// СЕБЕСТОИМОСТЬ (инвариант productRegister). Раньше отчёт брал её оттуда и
+		// показывал прибыль 0 у всех позиций, а COGS — под подписью «сумма реализации».
+		//
+		// Выручка = amountWithoutVat − акциз: amountWithoutVat это база НДС, а она
+		// включает акциз (НК РК ст.381), который выручкой не является.
+		const revenueByProduct = new Map();
+		const saleRows = await prisma.saleItem.findMany({
+			where: {
+				deletedAt: null,
+				sale: {
+					posted: true,
+					deletedAt: null,
+					...(organizationUuid ? { organizationUuid } : {}),
+					...(warehouseUuid ? { warehouseUuid } : {}),
+					...(from || dateTo
+						? { date: { ...(from ? { gte: from } : {}), ...(dateTo ? { lte: new Date(dateTo + "T23:59:59.999Z") } : {}) } }
+						: {}),
+				},
+			},
+			select: { productUuid: true, quantity: true, amountWithoutVat: true, exciseAmount: true },
+		});
+		for (const it of saleRows) {
+			if (!it.productUuid) continue;
+			const net = Number(it.amountWithoutVat ?? 0) - Number(it.exciseAmount ?? 0);
+			const acc = revenueByProduct.get(it.productUuid) ?? { revenue: 0, qty: 0 };
+			acc.revenue += net;
+			acc.qty += Number(it.quantity ?? 0);
+			revenueByProduct.set(it.productUuid, acc);
+		}
+
 		// Группируем движения по товару (порядок внутри группы сохраняется).
 		const byProduct = new Map();
 		for (const mv of movements) {
@@ -228,9 +276,10 @@ router.get("/reports/material-statement", async (req, res) => {
 		const items = [];
 		for (const mvs of byProduct.values()) {
 			const c = replayProductCosting(mvs, { method, from, costBearingInDocs: COST_BEARING_IN_DOCS });
+			const rev = revenueByProduct.get(mvs[0]?.productUuid) ?? { revenue: 0, qty: 0 };
 			const hasActivity =
 				c.openQty || c.openAmount || c.closeQty || c.closeAmount ||
-				c.inQty || c.outQty || c.salesRevenue;
+				c.inQty || c.outQty || rev.revenue;
 			if (!hasActivity) continue;
 
 			const product = mvs.find((m) => m.product)?.product ?? null;
@@ -248,9 +297,11 @@ router.get("/reports/material-statement", async (req, res) => {
 				inAmount: c.inAmount,
 				outQty: c.outQty,
 				cogsOut: c.cogsOut,
-				salePrice: r2(c.salesQty > 0 ? c.salesRevenue / c.salesQty : 0),
-				saleAmount: c.salesRevenue,
-				profit: r2(c.salesRevenue - c.salesCogs),
+				// Цена реализации — по количеству ПРОДАННОМУ (из строк), а не по
+				// расходу регистра: в расход входят ещё перемещения и списания.
+				salePrice: r2(rev.qty > 0 ? rev.revenue / rev.qty : 0),
+				saleAmount: r2(rev.revenue),
+				profit: r2(rev.revenue - c.salesCogs),
 				closeQty: c.closeQty,
 				closeAmount: c.closeAmount,
 			});

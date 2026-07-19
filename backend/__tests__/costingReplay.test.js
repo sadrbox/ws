@@ -32,15 +32,22 @@ test("AVERAGE: расход по скользящей средней", () => {
 	assert.equal(r.closeAmount, 450);
 });
 
-test("реализация: выручка из amount, COGS из метода; прибыль сходится", () => {
+test("реализация: COGS считается методом, ВЫРУЧКИ движок не возвращает", () => {
+	// Инвариант регистра (productRegister.js): у расхода реализации amount — это
+	// СЕБЕСТОИМОСТЬ, а не выручка. Здесь amount=600 намеренно ОТЛИЧАЕТСЯ от COGS по
+	// ФИФО (400), чтобы поймать движок, если он снова начнёт принимать amount за
+	// себестоимость или за выручку.
 	const movements = [
 		mv("2026-01-01", "in", 10, 1000, "purchase"), // 100/шт
-		mv("2026-01-05", "out", 4, 600, "sale"),      // выручка 600, COGS 400
+		mv("2026-01-05", "out", 4, 600, "sale"),
 	];
 	const r = replayProductCosting(movements, { method: "FIFO", costBearingInDocs: COST_IN });
-	assert.equal(r.salesRevenue, 600);
-	assert.equal(r.salesCogs, 400);
-	assert.equal(r.salesRevenue - r.salesCogs, 200);
+	assert.equal(r.salesQty, 4);
+	assert.equal(r.salesCogs, 400, "COGS берётся из проигрывания слоёв, а не из amount");
+	// Выручки в агрегатах быть не должно: регистр её не хранит. Раньше движок
+	// возвращал salesRevenue = amount, и «Ведомость по материалам» показывала
+	// прибыль 0 у всех позиций, а себестоимость — как «цену реализации».
+	assert.equal(r.salesRevenue, undefined, "движок не должен выдумывать выручку из регистра");
 });
 
 test("себестоимость ведётся ПО СКЛАДУ (расход с дорогого склада ≠ с дешёвого)", () => {

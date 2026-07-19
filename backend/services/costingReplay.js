@@ -37,7 +37,15 @@ function totals(states) {
  * @param {"AVERAGE"|"FIFO"} opts.method
  * @param {Date|null} opts.from — начало периода (для opening); null → без начального остатка.
  * @param {Set<string>} opts.costBearingInDocs — типы, у которых in.amount = фактическая стоимость.
- * @returns {{openQty,openAmount,inQty,inAmount,outQty,cogsOut,salesQty,salesRevenue,salesCogs,closeQty,closeAmount,unitCost}}
+ * ВЫРУЧКИ здесь НЕТ и быть не может: регистр её не хранит. У расхода реализации
+ * `amount` — это СЕБЕСТОИМОСТЬ выбытия (инвариант productRegister.js: out.amount ==
+ * кредит 1330 в проводке). Раньше движок возвращал salesRevenue, накапливая туда
+ * этот же amount, и потребитель («Ведомость по материалам») показывал прибыль
+ * salesRevenue − salesCogs ≡ 0 у всех позиций, а себестоимость единицы — под
+ * подписью «цена реализации». Выручку берите из строк документа (sale_items) или
+ * из проводок по 6010.
+ *
+ * @returns {{openQty,openAmount,inQty,inAmount,outQty,cogsOut,salesQty,salesCogs,closeQty,closeAmount,unitCost}}
  */
 export function replayProductCosting(movements, { method = "AVERAGE", from = null, costBearingInDocs } = {}) {
 	const fifo = method === "FIFO";
@@ -50,7 +58,7 @@ export function replayProductCosting(movements, { method = "AVERAGE", from = nul
 	};
 
 	let openQty = 0, openAmount = 0, openCaptured = !from;
-	const p = { inQty: 0, inAmount: 0, outQty: 0, cogsOut: 0, salesQty: 0, salesRevenue: 0, salesCogs: 0 };
+	const p = { inQty: 0, inAmount: 0, outQty: 0, cogsOut: 0, salesQty: 0, salesCogs: 0 };
 
 	for (const mv of movements) {
 		// Начальный остаток = состояние (по всем складам) перед первым движением периода.
@@ -99,7 +107,6 @@ export function replayProductCosting(movements, { method = "AVERAGE", from = nul
 				p.cogsOut += outCost;
 				if (mv.documentType === "sale") {
 					p.salesQty += q;
-					p.salesRevenue += amt; // у расхода реализации amount — это ВЫРУЧКА
 					p.salesCogs += outCost;
 				}
 			}
@@ -112,7 +119,7 @@ export function replayProductCosting(movements, { method = "AVERAGE", from = nul
 		openQty: r(openQty, 1000), openAmount: r(openAmount),
 		inQty: r(p.inQty, 1000), inAmount: r(p.inAmount),
 		outQty: r(p.outQty, 1000), cogsOut: r(p.cogsOut),
-		salesQty: r(p.salesQty, 1000), salesRevenue: r(p.salesRevenue), salesCogs: r(p.salesCogs),
+		salesQty: r(p.salesQty, 1000), salesCogs: r(p.salesCogs),
 		closeQty: r(close.qty, 1000), closeAmount: r(close.value),
 		unitCost: r(close.qty > 0 ? close.value / close.qty : 0),
 	};
