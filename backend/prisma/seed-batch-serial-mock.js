@@ -25,8 +25,16 @@ async function ensureProduct(name, data) {
 }
 
 async function main() {
-	const org = await prisma.organization.findFirst({ where: { deletedAt: null }, select: { uuid: true, name: true } });
-	const wh = await prisma.warehouse.findFirst({ where: { deletedAt: null, ...(org ? { organizationUuid: org.uuid } : {}) }, select: { uuid: true, name: true } });
+	// Берём организацию, У КОТОРОЙ ЕСТЬ СКЛАД, а не первую попавшуюся: организации
+	// из интеграции с 1С складов не имеют, и скрипт молча падал на «нужен склад».
+	const wh = await prisma.warehouse.findFirst({
+		where: { deletedAt: null, organizationUuid: { not: null } },
+		select: { uuid: true, name: true, organizationUuid: true },
+		orderBy: { id: "asc" },
+	});
+	const org = wh
+		? await prisma.organization.findUnique({ where: { uuid: wh.organizationUuid }, select: { uuid: true, name: true } })
+		: null;
 	const uom = await prisma.unitOfMeasure.findFirst({ select: { uuid: true } });
 	const user = await prisma.user.findFirst({ select: { uuid: true } });
 	if (!org || !wh || !user) { console.error("Нужны организация, склад и пользователь в БД."); process.exit(1); }

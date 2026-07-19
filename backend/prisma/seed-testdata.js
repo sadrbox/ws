@@ -27,7 +27,9 @@ import {
 
 // ─── Конфигурация объёма ─────────────────────────────────────────────────────
 const CONFIG = {
-	organizations: 3,
+	// По одной организации на профиль параметров учёта (см. vatProfiles ниже):
+	// каждый вариант НДС/акциза/скидок/себестоимости проверяется на живых документах.
+	organizations: 5,
 	counterparties: 100, // распределяются по орг.: ~33 на организацию
 	goods: 100,
 	materials: 30,
@@ -80,6 +82,8 @@ let ADMIN = null;
 // НДС в строке начисляется только если useVat=true, ставка>0 И дата документа
 // не раньше даты начала действия настроек (startDate).
 const orgVatSettings = new Map();
+// orgUuid → название, только для итогового отчёта.
+const orgNameByUuid = new Map();
 
 function recordDoc(type, parent, header) {
 	stats.docs[type] = (stats.docs[type] || 0) + 1;
@@ -172,36 +176,50 @@ const DOC_DEFS = {
 	},
 };
 
-// НДС строки по настройкам учёта организации, действующим на дату документа.
-// Зеркалит api/router/_documentItemsFactory.js (INCLUDED/ADDED).
-function vatForLine(orgUuid, date, base) {
+// Суммы строки по настройкам учёта организации, действующим на дату документа.
+//
+// Формула перенесена ДОСЛОВНО из боевого расчёта — frontend/src/models/Sales/
+// saleItemDraft.ts → recalcSaleItemAmounts. Считать здесь «по-своему» нельзя:
+// тогда сверка отчётов на этих данных проверяла бы генератор против самого себя,
+// а не приложение.
+//
+//   base           = quantity × price
+//   discountAmount = base × discountPercent / 100
+//   afterDiscount  = base − discountAmount
+//   exciseAmount   = afterDiscount × exciseRate / 100    (акциз всегда «сверху»)
+//   vatBase        = afterDiscount + exciseAmount        (акциз входит в оборот по НДС, НК РК ст.381)
+//   INCLUDED: vatAmount = vatBase × rate / (100 + rate); amount = vatBase
+//   ADDED:    vatAmount = vatBase × rate / 100;          amount = vatBase + vatAmount
+function recalcLine(orgUuid, date, quantity, price, discountPercent) {
 	const s = orgVatSettings.get(orgUuid);
-	const effective = !!(
-		s &&
-		s.useVat &&
-		Number(s.vatRate) > 0 &&
-		date &&
-		date >= s.startDate
-	);
-	const rate = effective ? Number(s.vatRate) : 0;
-	const method = s?.method === "ADDED" ? "ADDED" : "INCLUDED";
-	if (!rate)
-		return { amount: base, vatAmount: 0, amountWithoutVat: base, vatRate: 0 };
-	if (method === "ADDED") {
-		const vatAmount = round2((base * rate) / 100);
-		return {
-			amount: round2(base + vatAmount),
-			vatAmount,
-			amountWithoutVat: base,
-			vatRate: rate,
-		};
+	// Настройки датированы: до startDate профиль не действует (проверка версионности).
+	const active = !!(s && date && date >= s.startDate);
+	const vatOn = !!(active && s.useVat && Number(s.vatRate) > 0);
+	const vr = vatOn ? Number(s.vatRate) : 0;
+	const m = s?.method === "ADDED" ? "ADDED" : "INCLUDED";
+	const dp = active && s?.useDiscount ? Number(discountPercent) || 0 : 0;
+	const er = active && s?.useExcise ? Number(s.exciseRate) || 0 : 0;
+
+	const base = round2(Number(quantity) * Number(price));
+	const discountAmount = round2((base * dp) / 100);
+	const afterDiscount = round2(base - discountAmount);
+	const exciseAmount = er > 0 ? round2((afterDiscount * er) / 100) : 0;
+	const vatBase = round2(afterDiscount + exciseAmount);
+
+	let vatAmount = 0;
+	if (vr > 0) {
+		vatAmount = m === "ADDED" ? round2((vatBase * vr) / 100) : round2((vatBase * vr) / (100 + vr));
 	}
-	const vatAmount = round2((base * rate) / (100 + rate));
+	const amount = m === "ADDED" ? round2(vatBase + vatAmount) : vatBase;
 	return {
-		amount: base,
+		amount,
+		amountWithoutVat: round2(amount - vatAmount),
+		vatRate: vr,
 		vatAmount,
-		amountWithoutVat: round2(base - vatAmount),
-		vatRate: rate,
+		exciseRate: er,
+		exciseAmount,
+		discountPercent: dp,
+		discountAmount,
 	};
 }
 
@@ -217,7 +235,15 @@ function buildLine(def, line, header) {
 			unitOfMeasureUuid: line.uom,
 		};
 	}
-	const v = vatForLine(header.organizationUuid, header.date, base);
+	// Скидка задаётся строкой (line.discountPercent); если организация скидки не
+	// ведёт, recalcLine её обнулит — как это делает форма (recalcWithFlags).
+	const v = recalcLine(
+		header.organizationUuid,
+		header.date,
+		line.qty,
+		line.price,
+		line.discountPercent ?? 0,
+	);
 	return {
 		quantity: line.qty,
 		price: line.price,
@@ -225,10 +251,10 @@ function buildLine(def, line, header) {
 		amountWithoutVat: v.amountWithoutVat,
 		vatRate: v.vatRate,
 		vatAmount: v.vatAmount,
-		exciseRate: 0,
-		exciseAmount: 0,
-		discountPercent: 0,
-		discountAmount: 0,
+		exciseRate: v.exciseRate,
+		exciseAmount: v.exciseAmount,
+		discountPercent: v.discountPercent,
+		discountAmount: v.discountAmount,
 		productUuid: line.product.uuid,
 		unitOfMeasureUuid: line.uom,
 		organizationUuid: header.organizationUuid ?? null,
@@ -452,26 +478,36 @@ async function createReferenceData(globals) {
 				legalName: `Товарищество с ограниченной ответственностью «${orgNames[i]}»`,
 			},
 		});
-		// Разные профили учёта НДС — чтобы проверить INCLUDED / ADDED / без НДС
-		// и дату начала действия. У «Беты» НДС включается только с 01.03.2026,
-		// поэтому её февральские закупки попадают в период без НДС.
+		// Профили ПАРАМЕТРОВ УЧЁТА — по одному на организацию, чтобы каждый вариант
+		// проверялся на живых документах, а не только на форме настроек.
+		//
+		// Матрица намеренно неполная: перебирать все 2×2×2×2 комбинации незачем —
+		// НДС и акциз считаются независимо, и достаточно, чтобы каждый флаг побывал
+		// и включённым, и выключенным в сочетании с обоими методами (INCLUDED/ADDED)
+		// и обоими способами себестоимости (AVERAGE/FIFO).
+		//
+		// У «Беты» НДС начинается с 01.03.2026 — её февральские документы попадают
+		// в период без НДС, это проверка датированности настроек.
 		const vatProfiles = [
-			{
-				useVat: true,
-				vatRate: 12,
-				method: "INCLUDED",
-				startDate: D(2026, 0, 1),
-			},
-			{ useVat: true, vatRate: 12, method: "ADDED", startDate: D(2026, 2, 1) },
-			{
-				useVat: false,
-				vatRate: 0,
-				method: "INCLUDED",
-				startDate: D(2026, 0, 1),
-			},
+			// Базовый: НДС в цене, средняя себестоимость, без скидок и акциза.
+			{ useVat: true,  vatRate: 12, method: "INCLUDED", startDate: D(2026, 0, 1),
+			  costingMethod: "AVERAGE", useDiscount: false, useExcise: false, exciseRate: 0 },
+			// НДС сверху + скидки, ФИФО: скидка обязана уменьшать базу НДС.
+			{ useVat: true,  vatRate: 12, method: "ADDED",    startDate: D(2026, 2, 1),
+			  costingMethod: "FIFO",    useDiscount: true,  useExcise: false, exciseRate: 0 },
+			// Без НДС, но с акцизом: акциз должен считаться независимо от НДС.
+			{ useVat: false, vatRate: 0,  method: "INCLUDED", startDate: D(2026, 0, 1),
+			  costingMethod: "AVERAGE", useDiscount: false, useExcise: true,  exciseRate: 5 },
+			// Всё включено, НДС сверху: скидка уменьшает базу и НДС, и акциза.
+			{ useVat: true,  vatRate: 12, method: "ADDED",    startDate: D(2026, 0, 1),
+			  costingMethod: "FIFO",    useDiscount: true,  useExcise: true,  exciseRate: 3 },
+			// НДС в цене + акциз, средняя: акциз внутри цены с НДС.
+			{ useVat: true,  vatRate: 12, method: "INCLUDED", startDate: D(2026, 0, 1),
+			  costingMethod: "AVERAGE", useDiscount: true,  useExcise: true,  exciseRate: 2 },
 		];
 		const vp = vatProfiles[i % vatProfiles.length];
 		orgVatSettings.set(org.uuid, vp);
+		orgNameByUuid.set(org.uuid, org.name);
 		await prisma.organizationAccountingSetting.create({
 			data: {
 				organizationUuid: org.uuid,
@@ -479,8 +515,10 @@ async function createReferenceData(globals) {
 				vatRate: vp.vatRate,
 				vatCalculationMethod: vp.method,
 				startDate: vp.startDate,
-				useDiscount: false,
-				useExcise: false,
+				costingMethod: vp.costingMethod,
+				useDiscount: vp.useDiscount,
+				useExcise: vp.useExcise,
+				exciseRate: vp.exciseRate,
 			},
 		});
 
@@ -789,11 +827,14 @@ async function purchaseChain(org, idx) {
 		counterpartyUuid: supplier.rec.uuid,
 		contractUuid: contract.uuid,
 	};
+	// discountPercent варьируем (0/3/5/10): у организаций со скидками получим и
+	// строки без скидки, и со скидкой — иначе проверялся бы один сценарий.
 	const lines = products.map((p) => ({
 		product: p,
 		uom: p.uom,
 		qty: randint(80, 200),
 		price: randint(300, 5000),
+		discountPercent: pick([0, 3, 5, 10]),
 	}));
 
 	// 1. Запрос поставщику (заявка).
@@ -888,7 +929,7 @@ async function saleChain(org, idx) {
 	const lines = products.map((p) => {
 		const avail = getStock(org.rec.uuid, wh.uuid, p.uuid);
 		const qty = Math.max(1, Math.min(randint(5, 40), Math.floor(avail * 0.5)));
-		return { product: p, uom: p.uom, qty, price: randint(1500, 9000) };
+		return { product: p, uom: p.uom, qty, price: randint(1500, 9000), discountPercent: pick([0, 5, 10]) };
 	});
 	// Услуги/работы в КП/ЭСФ (не двигают ТМЗ) — для разнообразия номенклатуры.
 	const serviceLines = pickN(
@@ -899,6 +940,7 @@ async function saleChain(org, idx) {
 		uom: p.uom,
 		qty: randint(1, 5),
 		price: randint(5000, 30000),
+		discountPercent: pick([0, 5]),
 	}));
 
 	// 1. Коммерческое предложение (с услугами).
@@ -1444,12 +1486,22 @@ function printReport(post, integrity) {
 	line(
 		`    Остатков (товар+склад): ${integrity.balances}, отрицательных: ${integrity.negatives}`,
 	);
-	line("\n▸ НДС по настройкам учёта (профили организаций):");
-	line("    Альфа: 12% «в т.ч.» (INCLUDED) с 01.01.2026");
-	line(
-		"    Бета:  12% «сверху» (ADDED) с 01.03.2026 — февральские закупки без НДС",
-	);
-	line("    Гамма: без НДС");
+	// Профили печатаем ИЗ ФАКТИЧЕСКИХ настроек, а не текстом: раньше здесь были
+	// намертво вписаны три организации, и после расширения матрицы отчёт врал.
+	line("\n▸ Параметры учёта (профили организаций):");
+	for (const [orgUuid, s] of orgVatSettings) {
+		const name = (orgNameByUuid.get(orgUuid) ?? orgUuid).replace(/^ТОО | \(ТЕСТ\)$/g, "");
+		const vat = s.useVat
+			? `НДС ${s.vatRate}% ${s.method === "ADDED" ? "«сверху»" : "«в т.ч.»"}`
+			: "без НДС";
+		const extras = [
+			s.useDiscount ? "скидки" : null,
+			s.useExcise ? `акциз ${s.exciseRate}%` : null,
+			s.costingMethod,
+		].filter(Boolean);
+		const since = new Date(s.startDate).toISOString().slice(0, 10);
+		line(`    ${name.padEnd(9)} ${vat}, ${extras.join(", ")} — с ${since}`);
+	}
 	line(
 		`    Строк закупок с НДС: ${integrity.vatLines}, без НДС: ${integrity.noVatLines}`,
 	);
