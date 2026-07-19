@@ -1515,6 +1515,64 @@ function printReport(post, integrity) {
 }
 
 // ─── Точка входа ─────────────────────────────────────────────────────────────
+// ─── Входящие остатки: уставный капитал деньгами ─────────────────────────────
+//
+// Без этого набор описывает предприятие, которое платит зарплату и поставщикам
+// деньгами, которых у него никогда не было: касса и банк уходили в минус на
+// десятки миллионов, а ОСВ показывала кредитовое сальдо у активных счетов.
+//
+// Сумму берём НЕ на глаз, а по данным: проигрываем движение денег по хронологии
+// и находим самый глубокий провал. Фиксированная «щедрая» сумма закрыла бы минус
+// на конец периода, но могла оставить его в середине.
+//
+// Проводка: Дт 1010/1030 Кт 5030 «Вклады и паи» (уставный капитал ТОО по типовому
+// плану счетов РК) — датой раньше первого документа.
+async function seedOpeningCapital(orgs) {
+	const CASH = "1010", BANK = "1030", CAPITAL = "5030";
+	const openingDate = D(2025, 11, 31);
+	let created = 0, total = 0;
+
+	for (const org of orgs) {
+		const orgUuid = org.rec.uuid;
+		for (const account of [CASH, BANK]) {
+			const entries = await prisma.accountingEntry.findMany({
+				where: {
+					organizationUuid: orgUuid,
+					OR: [{ debitAccountCode: account }, { creditAccountCode: account }],
+				},
+				select: { date: true, documentId: true, id: true, amount: true, debitAccountCode: true },
+				orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
+			});
+			// Самый глубокий провал остатка за всю историю.
+			let balance = 0, min = 0;
+			for (const e of entries) {
+				balance += (e.debitAccountCode === account ? 1 : -1) * Number(e.amount);
+				if (balance < min) min = balance;
+			}
+			if (min >= 0) continue; // провала не было — капитал не нужен
+
+			// Округляем вверх до 100 000 и добавляем запас: остаток не должен
+			// садиться в ноль ровно на дне, это выглядит подгонкой.
+			const need = Math.ceil((Math.abs(min) * 1.1) / 100000) * 100000;
+			await prisma.accountingEntry.create({
+				data: {
+					organizationUuid: orgUuid,
+					documentType: "opening_balance",
+					documentUuid: `opening-${orgUuid}-${account}`,
+					date: openingDate,
+					debitAccountCode: account,
+					creditAccountCode: CAPITAL,
+					amount: need,
+					description: `Входящий остаток: взнос в уставный капитал (${account === CASH ? "касса" : "банк"})`,
+				},
+			});
+			created++;
+			total += need;
+		}
+	}
+	return { created, total };
+}
+
 async function main() {
 	const t0 = Date.now();
 	console.log("🧹 Очистка прежних тестовых данных…");
@@ -1533,6 +1591,11 @@ async function main() {
 
 	console.log("⚙️  Автопроведение (проводки + движения ТМЗ)…");
 	const post = await postAll();
+
+	// После проведения — иначе не из чего считать глубину денежного провала.
+	console.log("💰 Входящие остатки (уставный капитал)…");
+	const capital = await seedOpeningCapital(orgs);
+	console.log(`   проводок капитала: ${capital.created}, сумма: ${capital.total.toLocaleString("ru-RU")} ₸`);
 
 	console.log("🔎 Проверка целостности…");
 	const [entriesTotal, registerTotal] = await Promise.all([

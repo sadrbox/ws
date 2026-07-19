@@ -56,6 +56,24 @@ async function lineAmounts(organizationUuid, date, quantity, price) {
 	};
 }
 
+/**
+ * Найти документ по номеру ЛИБО создать — и обязательно перепривязать к текущим
+ * организации и складу.
+ *
+ * Идемпотентность по одному лишь номеру ломается, когда seed-testdata пересоздаёт
+ * организации: документ переживает чистку, но его organizationUuid/warehouseUuid
+ * указывают на удалённые записи. Скрипт находил такой документ, переиспользовал
+ * его, и reconcileDocumentRegister не писал движений (склада-то нет) — приход
+ * получался нулевым, а продажа проводилась, загоняя остаток в минус.
+ */
+async function ensureDoc(model, number, data) {
+	const found = await prisma[model].findFirst({ where: { number } });
+	if (!found) return prisma[model].create({ data: { number, ...data } });
+	const stale = found.organizationUuid !== data.organizationUuid || found.warehouseUuid !== data.warehouseUuid;
+	if (!stale) return found;
+	return prisma[model].update({ where: { uuid: found.uuid }, data });
+}
+
 async function main() {
 	// Берём организацию, У КОТОРОЙ ЕСТЬ СКЛАД, а не первую попавшуюся: организации
 	// из интеграции с 1С складов не имеют, и скрипт молча падал на «нужен склад».
@@ -86,10 +104,7 @@ async function main() {
 
 	// ── Оприходование партий молока ─────────────────────────────────────────────
 	const grNumber = "ОПРХ-ДЕМО-МОЛОКО";
-	let gr = await prisma.goodsReceipt.findFirst({ where: { number: grNumber } });
-	if (!gr) {
-		gr = await prisma.goodsReceipt.create({ data: { number: grNumber, date: day(-1), organizationUuid: org.uuid, warehouseUuid: wh.uuid, authorUuid: user.uuid, posted: true } });
-	}
+	const gr = await ensureDoc("goodsReceipt", grNumber, { date: day(-1), organizationUuid: org.uuid, warehouseUuid: wh.uuid, authorUuid: user.uuid, posted: true });
 	// строки под каждую партию (идемпотентно: пересоздаём строки документа)
 	await prisma.goodsReceiptItem.deleteMany({ where: { goodsReceiptUuid: gr.uuid } });
 	for (const b of batchDefs) {
@@ -104,10 +119,7 @@ async function main() {
 
 	// ── Оприходование ноутбуков + серийные номера ───────────────────────────────
 	const grLap = "ОПРХ-ДЕМО-НОУТ";
-	let grL = await prisma.goodsReceipt.findFirst({ where: { number: grLap } });
-	if (!grL) {
-		grL = await prisma.goodsReceipt.create({ data: { number: grLap, date: day(-1), organizationUuid: org.uuid, warehouseUuid: wh.uuid, authorUuid: user.uuid, posted: true } });
-	}
+	const grL = await ensureDoc("goodsReceipt", grLap, { date: day(-1), organizationUuid: org.uuid, warehouseUuid: wh.uuid, authorUuid: user.uuid, posted: true });
 	await prisma.goodsReceiptItem.deleteMany({ where: { goodsReceiptUuid: grL.uuid } });
 	await prisma.goodsReceiptItem.create({ data: {
 		goodsReceiptUuid: grL.uuid, productUuid: laptop.uuid, quantity: 3, price: 350000, amount: 1050000,
@@ -128,10 +140,7 @@ async function main() {
 		organizationUuid: org.uuid,
 	});
 	const grOld = "ОПРХ-ДЕМО-ДРЕЛЬ";
-	let grO = await prisma.goodsReceipt.findFirst({ where: { number: grOld } });
-	if (!grO) {
-		grO = await prisma.goodsReceipt.create({ data: { number: grOld, date: day(-30), organizationUuid: org.uuid, warehouseUuid: wh.uuid, authorUuid: user.uuid, posted: true } });
-	}
+	const grO = await ensureDoc("goodsReceipt", grOld, { date: day(-30), organizationUuid: org.uuid, warehouseUuid: wh.uuid, authorUuid: user.uuid, posted: true });
 	await prisma.goodsReceiptItem.deleteMany({ where: { goodsReceiptUuid: grO.uuid } });
 	await prisma.goodsReceiptItem.create({ data: {
 		goodsReceiptUuid: grO.uuid, productUuid: legacy.uuid, quantity: 5, price: 20000, amount: 100000,
@@ -141,14 +150,15 @@ async function main() {
 
 	// ── РАСХОД: продажа с сериями + FEFO-списанием партий ───────────────────────
 	const saleNumber = "РЕАЛ-ДЕМО-СЕРИИ-ПАРТИИ";
-	let sale = await prisma.sale.findFirst({ where: { number: saleNumber } });
-	if (!sale) {
-		sale = await prisma.sale.create({ data: {
-			number: saleNumber, date: new Date(), organizationUuid: org.uuid, warehouseUuid: wh.uuid,
-			counterpartyUuid: (await prisma.counterparty.findFirst({ select: { uuid: true } }))?.uuid ?? null,
-			authorUuid: user.uuid, posted: true,
-		} });
-	}
+	// Контрагент — обязательно ТОЙ ЖЕ организации: чужой даст висячую ссылку в форме.
+	const cp = await prisma.counterparty.findFirst({
+		where: { organizationUuid: org.uuid, deletedAt: null },
+		select: { uuid: true },
+	});
+	const sale = await ensureDoc("sale", saleNumber, {
+		date: new Date(), organizationUuid: org.uuid, warehouseUuid: wh.uuid,
+		counterpartyUuid: cp?.uuid ?? null, authorUuid: user.uuid, posted: true,
+	});
 	await prisma.saleItem.deleteMany({ where: { saleUuid: sale.uuid } });
 
 	// Партии: продаём 45 молока → FEFO должен взять M-2609 (30) и добить M-2620 (15).

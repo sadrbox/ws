@@ -181,6 +181,54 @@ async function main() {
 		Math.abs(regSum - revSum) <= 1 ? "Похоже, в регистр снова кладут выручку вместо себестоимости." : "",
 	);
 
+	// ── 11. Деньги не уходят в минус НИ В ОДИН момент периода ────────────────
+	// Отрицательная касса невозможна физически. Проверяем не конечное сальдо, а
+	// минимум по хронологии: конечный плюс легко скрывает провал в середине.
+	console.log("\n▸ 11. Касса и банк не уходят в минус");
+	let worstCash = { min: Infinity, org: null, acc: null };
+	for (const o of orgs) {
+		for (const acc of ["1010", "1030"]) {
+			const es = await prisma.accountingEntry.findMany({
+				where: { organizationUuid: o.uuid, OR: [{ debitAccountCode: acc }, { creditAccountCode: acc }] },
+				select: { amount: true, debitAccountCode: true, date: true, documentId: true, id: true },
+				orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
+			});
+			if (!es.length) continue;
+			let b = 0, min = Infinity;
+			for (const e of es) {
+				b += (e.debitAccountCode === acc ? 1 : -1) * Number(e.amount);
+				if (b < min) min = b;
+			}
+			if (min < worstCash.min) worstCash = { min, org: o.name, acc };
+		}
+	}
+	if (worstCash.org) {
+		check(
+			worstCash.min >= 0,
+			`Минимальный остаток денег за период: ${r2(worstCash.min)} (${worstCash.org.replace(/^ТОО | \(ТЕСТ\)$/g, "")}, счёт ${worstCash.acc})`,
+			worstCash.min < 0 ? "Предприятие платит деньгами, которых у него нет — нужны входящие остатки (капитал)." : "",
+		);
+	}
+
+	// ── 12. Актив не имеет кредитового сальдо ────────────────────────────────
+	console.log("\n▸ 12. Активные счета с кредитовым сальдо");
+	const activeCredit = await prisma.$queryRaw`
+		WITH s AS (
+			SELECT code, SUM(dt) - SUM(kt) AS saldo FROM (
+				SELECT "debitAccountCode" AS code, "amount" AS dt, 0 AS kt FROM accounting_entries
+				UNION ALL SELECT "creditAccountCode", 0, "amount" FROM accounting_entries
+			) t GROUP BY code
+		)
+		SELECT s.code, a.name, ROUND(s.saldo, 2) AS saldo
+		FROM s JOIN chart_of_accounts a ON a.code = s.code
+		WHERE a."accountType" = 'active' AND s.saldo < -0.01
+	`;
+	check(
+		activeCredit.length === 0,
+		`Активных счетов с кредитовым сальдо: ${activeCredit.length}`,
+		activeCredit.map((a) => `${a.code} ${a.name}: ${a.saldo}`).join("\n       "),
+	);
+
 	// ── Итог ─────────────────────────────────────────────────────────────────
 	console.log(`\n${"═".repeat(62)}`);
 	console.log(`Проверок пройдено: ${ok.length}, замечаний: ${findings.length}`);
