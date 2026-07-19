@@ -13,6 +13,7 @@ import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgF
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
+import { assertCashForPosting, respondCashError } from "../../services/cashBalance.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
@@ -144,6 +145,8 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			// Блокировка закрытого периода: нельзя создавать кассовый ордер в закрытом месяце.
 			await assertPeriodOpen(docData.organizationUuid, docData.date);
 			if (willPost) await validatePosting(docType, docData, []);
+			// Касса не может уйти в минус (как склад — assertStockForPosting).
+			if (willPost) await assertCashForPosting(docType, null, docData);
 			// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
 			docData.number = await ensureDocumentNumber({ docType, modelName: MODEL, manual: req.body.number, organizationUuid: docData.organizationUuid, date: docData.date, uniqueWhere: { direction } });
 			const item = await prisma[MODEL].create({ data: docData, include: INCLUDE });
@@ -154,6 +157,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
 			if (respondDuplicateNumberError(error, res)) return;
+			if (respondCashError(error, res)) return;
 			if (respondPostingError(error, res)) return;
 			console.error(`POST /${route} error:`, error);
 			return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -176,7 +180,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			// Номер из payload (ручной ввод / переприсвоение) — иначе он терялся при PUT.
 			if (req.body.number !== undefined) data.number = req.body.number?.trim?.() || null;
 			// Проверяем существование И принадлежность маршруту (direction).
-			const existing = await prisma[MODEL].findFirst({ where: { ...w, direction }, select: { uuid: true, organizationUuid: true, posted: true, number: true, contractUuid: true, cashboxUuid: true, date: true, basisDocumentType: true } });
+			const existing = await prisma[MODEL].findFirst({ where: { ...w, direction }, select: { uuid: true, organizationUuid: true, posted: true, number: true, contractUuid: true, cashboxUuid: true, date: true, basisDocumentType: true, amount: true } });
 			if (!existing || !checkOwnership(existing, req))
 				return res.status(404).json({ success: false, message: "Не найдено" });
 			// Запрещаем ссылку «в никуда»: проверяем только при ЗАДАНИИ нового основания.
@@ -191,6 +195,14 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			}, prisma);
 			const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 			if (willBePosted) await assertPostable(docType, existing.uuid, { ...data, posted: true });
+			// Собственные проводки документа исключаем — иначе расход посчитается дважды.
+			if (willBePosted) {
+				await assertCashForPosting(docType, existing.uuid, {
+					organizationUuid: data.organizationUuid ?? existing.organizationUuid,
+					date: data.date ?? existing.date,
+					amount: data.amount ?? existing.amount,
+				});
+			}
 			// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
 			{
 				const _num = await ensureDocumentNumber({ docType, modelName: MODEL, manual: data.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid, uniqueWhere: { direction } });
@@ -203,6 +215,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
+			if (respondCashError(error, res)) return;
 			if (respondPostingError(error, res)) return;
 			if (respondDuplicateNumberError(error, res)) return;
 			if (error.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
