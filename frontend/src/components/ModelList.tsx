@@ -24,6 +24,7 @@ import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { Button } from "src/components/Button";
 
 // 7. Стили
+import { SplitResizer, useSplitResize } from "src/components/SplitPane";
 import styles from "./ModelList.module.scss";
 
 // ─── Стабильный хелпер перевода ───────────────────────────────────────────────
@@ -250,36 +251,20 @@ const ModelList: FC<ModelListProps> = ({
   );
   const [previewRow, setPreviewRow] = useState<TDataItem | null>(null);
 
-  // Ширина панели предпросмотра (в % от split-контейнера), перетаскивается
-  // разделителем; персист per-list. Кламп 20–70% чтобы обе части оставались видимы.
-  const widthKey = `listSplitWidth:${componentName}`;
-  const [previewWidth, setPreviewWidth] = useState<number>(() => {
-    const v = Number(localStorage.getItem(widthKey));
-    return v >= 20 && v <= 70 ? v : 38;
+  // Ширина панели предпросмотра (% от split-контейнера) — общий механизм
+  // SplitPane, тот же, что у панели фильтров в формах отчётов.
+  const {
+    percent: previewWidth,
+    containerRef: splitViewRef,
+    startResize,
+    reset: resetPreviewWidth,
+  } = useSplitResize({
+    storageKey: `listSplitWidth:${componentName}`,
+    side: "right",
+    defaultPercent: 38,
+    min: 20,
+    max: 70,
   });
-  const splitViewRef = useRef<HTMLDivElement>(null);
-  const startResize = useCallback((e: ReactPointerEvent) => {
-    e.preventDefault();
-    const move = (ev: PointerEvent) => {
-      const box = splitViewRef.current?.getBoundingClientRect();
-      if (!box || box.width === 0) return;
-      const pct = ((box.right - ev.clientX) / box.width) * 100;
-      setPreviewWidth(Math.min(70, Math.max(20, pct)));
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      document.body.style.userSelect = "";
-      document.body.style.cursor = "";
-    };
-    document.body.style.userSelect = "none";
-    document.body.style.cursor = "col-resize";
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  }, []);
-  useEffect(() => {
-    localStorage.setItem(widthKey, String(Math.round(previewWidth)));
-  }, [widthKey, previewWidth]);
 
   useEffect(() => {
     const onToggle = (e: Event) => {
@@ -406,14 +391,7 @@ const ModelList: FC<ModelListProps> = ({
   return (
     <div className={styles.splitView} ref={splitViewRef}>
       <div className={styles.splitList}>{table}</div>
-      <div
-        className={styles.splitResizer}
-        role="separator"
-        aria-orientation="vertical"
-        title={t("resizePanels") || "Потяните, чтобы изменить размер"}
-        onPointerDown={startResize}
-        onDoubleClick={() => setPreviewWidth(38)}
-      />
+      <SplitResizer onPointerDown={startResize} onDoubleClick={resetPreviewWidth} />
       <div className={styles.splitPreview} style={{ flexBasis: `${previewWidth}%` }}>
         <ListPreview
           row={previewRow}

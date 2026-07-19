@@ -33,6 +33,8 @@ import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
 import { DocViewport, DocSheet, DocStatus } from "src/components/DocViewport";
+import { SplitResizer, useSplitResize } from "src/components/SplitPane";
+import { GroupCol } from "src/components/UI";
 import styles from "./ReportPane.module.scss";
 
 // ── Типы ────────────────────────────────────────────────────────────────────
@@ -143,6 +145,22 @@ const ReportPane: FC<ReportPaneProps> = ({
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const { print: printNode } = usePrintDocument();
 
+  // Ширина панели фильтров — общий механизм SplitPane (тот же, что делит список
+  // и предпросмотр). Ключ по названию файла отчёта: у разных отчётов разное
+  // число фильтров, и удобная ширина у каждого своя.
+  const {
+    percent: formWidth,
+    containerRef: paneRef,
+    startResize,
+    reset: resetFormWidth,
+  } = useSplitResize({
+    storageKey: `reportSplitWidth:${fileBaseName}`,
+    side: "left",
+    defaultPercent: 24,
+    min: 12,
+    max: 55,
+  });
+
   const canExport = !isLoading && !isEmpty;
 
   // ── Печать через изолированный iframe ────────────────────────────────────
@@ -208,21 +226,27 @@ const ReportPane: FC<ReportPaneProps> = ({
 
   // ── Рендер ───────────────────────────────────────────────────────────────
   return (
-    <div className={styles.ReportPane}>
+    <div className={styles.ReportPane} ref={paneRef}>
       {headerPortal}
 
 
       {(form || onGenerate) && (
-        <div className={styles.ReportForm}>
-          {form}
-          {onGenerate && (
-            <div className={styles.ReportFormActions}>
-              <Button variant="primary" onClick={onGenerate} disabled={generateDisabled}>
-                {translate("reportGenerate")}
-              </Button>
-            </div>
-          )}
-        </div>
+        <>
+          <div className={styles.ReportForm} style={{ flexBasis: `${formWidth}%` }}>
+            {/* Поля отчёта — ОДНОЙ колонкой: раньше форма была row wrap, поля
+                растекались в строку, а кнопка «Сформировать» уезжала вправо от
+                них вместо того, чтобы стоять под ними. */}
+            <GroupCol className={styles.ReportFormFields}>{form}</GroupCol>
+            {onGenerate && (
+              <div className={styles.ReportFormActions}>
+                <Button variant="primary" onClick={onGenerate} disabled={generateDisabled}>
+                  {translate("reportGenerate")}
+                </Button>
+              </div>
+            )}
+          </div>
+          <SplitResizer onPointerDown={startResize} onDoubleClick={resetFormWidth} />
+        </>
       )}
 
       <DocViewport>
