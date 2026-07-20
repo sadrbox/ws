@@ -422,7 +422,7 @@
 
 .SyncProgressFill {
   height: 100%;
-  background: #1976d2;
+  background: $colorPrimaryDark;
   border-radius: 3px;
   transition: width .3s;
 }
@@ -459,9 +459,9 @@
 }
 
 .SyncModeCard_on {
-  border-color: #1976d2;
+  border-color: $colorPrimaryDark;
   background: #e3f2fd;
-  box-shadow: 0 0 0 1px #1976d2;
+  box-shadow: 0 0 0 1px $colorPrimaryDark;
 }
 
 .SyncModeCardIcon {

@@ -1231,9 +1231,9 @@ body {
 // содержимое прижато вниз. Замена inline-стиля в *Form.
 .FormNotice {
 	flex: 1 1 auto;
-	place-content: flex-end;
+	// place-content: flex-end;
 	flex-wrap: wrap;
-	// align-content: flex-end;
+	align-content: flex-end;
 }
 
 
