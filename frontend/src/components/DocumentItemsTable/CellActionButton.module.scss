@@ -1,0 +1,59 @@
+// CellActionButton — ghost-кнопка ячейки, единый стиль с FieldActions/IconButton.
+// Значения hover/focus/disabled намеренно те же, что в IconButton.module.scss.
+
+.CellActionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 7px;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: $radius3;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+
+  svg {
+    display: block;
+    flex-shrink: 0;
+  }
+
+  &:hover:not(:disabled) {
+    background: rgba(#555, 0.1);
+    border-color: rgba(#555, 0.18);
+    color: #222;
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: $color3;
+    box-shadow: 0 0 0 2px rgba($color3, 0.25);
+  }
+
+  &:active:not(:disabled) {
+    background: rgba(#555, 0.18);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+    pointer-events: none;
+  }
+}
+
+// Статус читается цветом даже на ghost-кнопке: зелёный — заполнено верно,
+// янтарный — требует внимания (не хватает серий / не выбрана партия).
+.StatusOk {
+  color: #1a7f37;
+  font-weight: 600;
+}
+
+.StatusBad {
+  color: #b35900;
+  font-weight: 600;
+}

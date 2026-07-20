@@ -184,12 +184,18 @@ export const QuickSelectIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
-/** Открыть список (multi-line list). */
+/** Выбрать из списка — маркированный список (точка + строка ×3).
+ *  Раньше были три голые линии: неотличимо от «гамбургер-меню» и не читалось как
+ *  «список, из которого выбирают». Маркеры делают смысл однозначным, а сам глиф —
+ *  лаконичнее по восприятию. */
 export const ListIcon: FC<SvgProps> = (props) => (
   <svg {...baseProps} {...props}>
-    <path d="M2.5 4h11" />
-    <path d="M2.5 8h11" />
-    <path d="M2.5 12h11" />
+    <circle cx="3.25" cy="4" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="3.25" cy="8" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="3.25" cy="12" r="0.9" fill="currentColor" stroke="none" />
+    <path d="M6.5 4h7" />
+    <path d="M6.5 8h7" />
+    <path d="M6.5 12h7" />
   </svg>
 );
 
@@ -213,14 +219,14 @@ export const ViewSingleIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
-/** Открыть элемент — лаконичная «external link»:
- *  миниатюрный прямоугольник в левом-нижнем углу + диагональная стрелка
- *  наружу в правый-верхний. Минимум линий, максимум смысла. */
+/** Открыть элемент — классическая «external link»: рамка с открытым правым-верхним
+ *  углом и стрелка, выходящая наружу. Углы скруглены, линии выровнены по сетке —
+ *  читается мгновенно и не спорит с рамкой поля вокруг. */
 export const OpenIcon: FC<SvgProps> = (props) => (
   <svg {...baseProps} {...props}>
-    <rect x="2.5" y="6.5" width="7" height="7" rx="1" />
-    <path d="M9 3h4v4" />
-    <path d="M13 3l-5 5" />
+    <path d="M8 3.5H4.5A1.5 1.5 0 0 0 3 5v6.5A1.5 1.5 0 0 0 4.5 13H11a1.5 1.5 0 0 0 1.5-1.5V8" />
+    <path d="M9.5 3.5H13V7" />
+    <path d="M13 3.5L7.75 8.75" />
   </svg>
 );
 
@@ -350,8 +356,29 @@ export const DownloadIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+/** Серийные номера — знак «№» (hash). Читается как «номер единицы». */
+export const SerialIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M6.25 2.75L4.75 13.25" />
+    <path d="M11.25 2.75L9.75 13.25" />
+    <path d="M3.25 6.25H13" />
+    <path d="M3 9.75H12.75" />
+  </svg>
+);
+
+/** Партия — картонная коробка (3D): партия/лот товара со сроком годности. */
+export const BatchIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M8 2.5l5.25 2.75v5.5L8 13.5 2.75 10.75v-5.5L8 2.5Z" />
+    <path d="M2.75 5.25L8 8l5.25-2.75" />
+    <path d="M8 8v5.5" />
+  </svg>
+);
+
 export const ICONS = {
   recalc: RecalcIcon,
+  serial: SerialIcon,
+  batch: BatchIcon,
   trash: TrashIcon,
   link: LinkIcon,
   download: DownloadIcon,

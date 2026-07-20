@@ -11,7 +11,7 @@ import { translate } from "src/i18";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import apiClient from "src/services/api/client";
 import Modal from "src/components/Modal";
-import { Button } from "src/components/Button";
+import CellActionButton from "./CellActionButton";
 import { getFormatDateOnly } from "src/utils/datetime";
 import styles from "./SerialNumbersCell.module.scss";
 
@@ -101,10 +101,15 @@ export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, 
 
   return (
     <div className={styles.Cell}>
-      <Button variant="secondary" onClick={() => setOpen(true)} disabled={disabled}>
-        <span className={ok ? styles.CountOk : styles.CountBad}>{count}/{qty}</span>
-        <span className={styles.BtnLabel}>{translate("serialNumbersShort")}</span>
-      </Button>
+      <CellActionButton
+        icon="serial"
+        status={`${count}/${qty}`}
+        ok={ok}
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        title={translate("serialNumbersShort")}
+        aria-label={translate("serialNumbersShort")}
+      />
       {open && (
         <SerialModal
           onClose={() => setOpen(false)}

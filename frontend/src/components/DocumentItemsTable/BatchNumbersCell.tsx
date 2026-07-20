@@ -9,7 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import apiClient from "src/services/api/client";
 import Modal from "src/components/Modal";
-import { Button } from "src/components/Button";
+import CellActionButton from "./CellActionButton";
 import { Field } from "src/components/Field";
 import styles from "./SerialNumbersCell.module.scss";
 import { getFormatDateOnly } from "src/utils/datetime";
@@ -88,9 +88,15 @@ export const BatchNumbersCell: FC<BatchCellProps> = ({ productUuid, mode, batchU
 
   return (
     <div className={styles.Cell}>
-      <Button variant="secondary" onClick={() => setOpen(true)} disabled={disabled}>
-        <span className={batchUuid ? styles.CountOk : styles.CountBad}>{label}</span>
-      </Button>
+      <CellActionButton
+        icon="batch"
+        status={label}
+        ok={!!batchUuid}
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        title={translate("batchChoose")}
+        aria-label={translate("batchChoose")}
+      />
       {open && (
         <BatchModal
           onClose={() => setOpen(false)}
