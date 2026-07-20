@@ -75,7 +75,7 @@ const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId })
   if (loadError) {
     return (
       <div style={{ padding: "24px" }}>
-        <div style={{ color: "red", padding: "16px", background: "#ffebee", borderRadius: 4 }}>{loadError}</div>
+        <div style={{ color: "var(--danger)", padding: "16px", background: "var(--danger-bg)", borderRadius: 4 }}>{loadError}</div>
         <button onClick={handleCancel} style={{ marginTop: 12, padding: "6px 16px", cursor: "pointer" }}>Закрыть</button>
       </div>
     );

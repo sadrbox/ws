@@ -37,9 +37,54 @@
     rel="stylesheet" />
 </head>
 <style>
-  /* Единый интерактивный синий для инлайновых стилей (var(--color-link)).
-     Совпадает с $colorPrimaryDark из styles/variables.scss — источник один. */
-  :root { --color-link: #1c5fcb; }
+  /* ── Семантические токены цвета для инлайновых стилей ──────────────────────
+     Раньше эти намерения были разбросаны хардкодом: три разных «ошибочных»
+     красных (#e53935/#dc3545/#dc2626), два «успешных» зелёных, два «внимание»
+     оранжевых, плюс россыпь серых. Здесь — единый источник; инлайновые style={{}}
+     ссылаются через var(--…). Значения тем задаются ниже (light по умолчанию,
+     dark — под prefers-color-scheme; когда дойдёт черёд полной тёмной темы,
+     останется только выверить контраст).
+     --color-link совпадает с $colorPrimaryDark из styles/variables.scss. */
+  :root {
+    --color-link: #1c5fcb;      /* интерактивный акцент (= $colorPrimaryDark) */
+    --text-secondary: #555555;  /* приглушённый основной текст */
+    --text-muted: #999999;      /* подписи, плейсхолдеры */
+    --text-faint: #bbbbbb;      /* самый тихий текст, «—» */
+    --success: #1a7f37;         /* успех, положительная дельта */
+    --success-fg: #145523;      /* текст на светло-зелёном фоне */
+    --success-bg: #e6f4ea;
+    --warning: #b35900;         /* внимание (акциз/незаполнено) */
+    --warning-strong: #e65100;
+    --danger: #d32f2f;          /* ошибка/удаление */
+    --danger-fg: #6b1119;       /* текст на светло-красном фоне */
+    --danger-bg: #fde2e4;
+    --surface-muted: #f5f5f5;   /* нейтральная подложка блока */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-link: #6ea8ff;
+      --text-secondary: #c2c8d0;
+      --text-muted: #8b93a1;
+      --text-faint: #5f6773;
+      --success: #4ade80;
+      --success-fg: #bbf7d0;
+      --success-bg: #123222;
+      --warning: #f59e0b;
+      --warning-strong: #fbbf24;
+      --danger: #f87171;
+      --danger-fg: #fecdd3;
+      --danger-bg: #3b1113;
+      --surface-muted: #1c2431;
+    }
+  }
+  :root[data-theme="dark"] {
+    --color-link: #6ea8ff;
+    --text-secondary: #c2c8d0; --text-muted: #8b93a1; --text-faint: #5f6773;
+    --success: #4ade80; --success-fg: #bbf7d0; --success-bg: #123222;
+    --warning: #f59e0b; --warning-strong: #fbbf24;
+    --danger: #f87171; --danger-fg: #fecdd3; --danger-bg: #3b1113;
+    --surface-muted: #1c2431;
+  }
 
   @keyframes spin {
     to {

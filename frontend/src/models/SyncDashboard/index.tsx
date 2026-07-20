@@ -223,10 +223,10 @@ const MainTab: FC<{
             <span>Загружено</span><span>{syncState.lastResult.pulled} записей</span>
             <span>Отправлено</span><span>{syncState.lastResult.pushed} записей</span>
             {syncState.lastResult.conflicts.length > 0 && (
-              <><span>Конфликтов</span><span style={{ color: "#e65100" }}>{syncState.lastResult.conflicts.length}</span></>
+              <><span>Конфликтов</span><span style={{ color: "var(--warning-strong)" }}>{syncState.lastResult.conflicts.length}</span></>
             )}
             {syncState.lastResult.errors.length > 0 && (
-              <><span>Ошибок</span><span style={{ color: "#e53935" }}>{syncState.lastResult.errors.length}</span></>
+              <><span>Ошибок</span><span style={{ color: "var(--danger)" }}>{syncState.lastResult.errors.length}</span></>
             )}
             <span>Длительность</span><span>{(syncState.lastResult.durationMs / 1000).toFixed(1)} сек.</span>
           </div>
@@ -279,7 +279,7 @@ const QueueTab: FC<{
           <Button onClick={() => setConfirmClear(true)}><span>🗑 Очистить очередь</span></Button>
         ) : (
           <>
-            <span style={{ color: "#e53935", fontSize: 13 }}>Удалить все? Данные будут потеряны.</span>
+            <span style={{ color: "var(--danger)", fontSize: 13 }}>Удалить все? Данные будут потеряны.</span>
             <Button onClick={handleClearAll}><span>Да</span></Button>
             <Button onClick={() => setConfirmClear(false)}><span>Отмена</span></Button>
           </>
@@ -462,7 +462,7 @@ const StorageTab: FC<{
           <Button onClick={() => setConfirmClear(true)}><span>🗑 Очистить хранилище</span></Button>
         ) : (
           <>
-            <span style={{ color: "#e53935", fontSize: 13 }}>Удалить все локальные данные?</span>
+            <span style={{ color: "var(--danger)", fontSize: 13 }}>Удалить все локальные данные?</span>
             <Button onClick={handleClearAll}><span>Да</span></Button>
             <Button onClick={() => setConfirmClear(false)}><span>Отмена</span></Button>
           </>
@@ -497,7 +497,7 @@ const StorageTab: FC<{
                 <input type="checkbox" checked={selected.has(table)} onChange={() => toggle(table)} disabled={downloading} />
               </span>
               <span style={{ flex: 1 }}>{label}</span>
-              <span style={{ width: 70, textAlign: "right", color: count ? "#333" : "#bbb" }}>{count || "—"}</span>
+              <span style={{ width: 70, textAlign: "right", color: count ? "#333" : "var(--text-faint)" }}>{count || "—"}</span>
               <span style={{ width: 40, textAlign: "center" }}>
                 {count > 0 && (
                   <button

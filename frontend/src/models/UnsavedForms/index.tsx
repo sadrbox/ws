@@ -239,9 +239,9 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
       );
     }
     if (col.identifier === "pendingSummary") {
-      if (!unsavedRow.pendingSummary) return <span style={{ color: "#bbb" }}>—</span>;
+      if (!unsavedRow.pendingSummary) return <span style={{ color: "var(--text-faint)" }}>—</span>;
       return (
-        <span style={{ fontSize: "12px", color: "#e65100" }} title={unsavedRow.pendingSummary}>
+        <span style={{ fontSize: "12px", color: "var(--warning-strong)" }} title={unsavedRow.pendingSummary}>
           {unsavedRow.pendingSummary}
         </span>
       );
@@ -294,10 +294,10 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
       </Toolbar>
 
       {total === 0 ? (
-        <div style={{ padding: "48px 24px", textAlign: "center", color: "#999", fontSize: "14px" }}>
+        <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
           <div style={{ fontSize: "32px", marginBottom: "12px" }}>✓</div>
           <div>Нет несохранённых данных форм</div>
-          <div style={{ marginTop: "8px", fontSize: "12px", color: "#bbb" }}>
+          <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-faint)" }}>
             Здесь появятся формы, данные которых не были сохранены (например, после обновления страницы)
           </div>
         </div>

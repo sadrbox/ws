@@ -88,35 +88,35 @@ const FiscalReceiptPane: FC<Partial<TPane>> = (paneProps) => {
 
       {isPending && (
         <>
-          <div style={{ color: "#555", textAlign: "center" }}>{translate("fiscalKaspiShowQr")}</div>
+          <div style={{ color: "var(--text-secondary)", textAlign: "center" }}>{translate("fiscalKaspiShowQr")}</div>
           {receipt.qrImage
             ? <img src={receipt.qrImage} alt="Kaspi QR" style={{ width: 220, height: 220 }} />
             : <div style={{ wordBreak: "break-all", fontFamily: "monospace", fontSize: 12 }}>{receipt.qrPayload}</div>}
           <div style={{ fontWeight: 700, fontSize: 22 }}>{fmt(receipt.amount)} ₸</div>
-          <div style={{ color: "#888" }}>{translate("fiscalKaspiWaiting")}…</div>
+          <div style={{ color: "var(--text-muted)" }}>{translate("fiscalKaspiWaiting")}…</div>
           <Button variant="secondary" onClick={() => void checkPayment()}>{translate("fiscalCheckPayment")}</Button>
         </>
       )}
 
       {isFiscalized && (
         <>
-          <div style={{ color: "#1a7f37", fontSize: 40 }}>✓</div>
+          <div style={{ color: "var(--success)", fontSize: 40 }}>✓</div>
           <div style={{ fontWeight: 700 }}>{translate("fiscalReceiptFiscalized")}</div>
           {receipt.qrImage && <img src={receipt.qrImage} alt="QR" style={{ width: 180, height: 180 }} />}
-          <div style={{ fontSize: 13, color: "#444", textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", textAlign: "center" }}>
             <div>{translate("fiscalReceiptNumber")}: {receipt.fiscalNumber ?? "—"}</div>
             <div>{translate("fiscalReceiptSign")}: {receipt.fiscalSign ?? "—"}</div>
             <div style={{ marginTop: 4, fontWeight: 700 }}>{fmt(receipt.amount)} ₸</div>
           </div>
           {(receipt.provider ?? "stub") === "stub" && (
-            <div style={{ color: "#b00", fontSize: 12, textAlign: "center" }}>{translate("fiscalReceiptStubWarning")}</div>
+            <div style={{ color: "var(--danger)", fontSize: 12, textAlign: "center" }}>{translate("fiscalReceiptStubWarning")}</div>
           )}
           <Button onClick={handlePrint}>{translate("print")}</Button>
         </>
       )}
 
       {isFailed && (
-        <div style={{ color: "#b00", textAlign: "center" }}>
+        <div style={{ color: "var(--danger)", textAlign: "center" }}>
           {translate("fiscalPaymentFailed")}
         </div>
       )}

@@ -143,7 +143,7 @@ const OwnerLookupField: FC<OwnerLookupFieldProps> = ({
             background: "transparent",
             fontSize: "inherit",
             fontFamily: "inherit",
-            color: "#555",
+            color: "var(--text-secondary)",
             cursor: disabled ? "default" : "pointer",
             padding: "0 2px",
             outline: "none",

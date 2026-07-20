@@ -78,15 +78,15 @@ const OrphanGroupBlock: FC<{
     <div style={{ border: "1px solid #f0c0c0", borderRadius: 4, overflow: "hidden" }}>
       {/* Group header */}
       <div style={{
-        background: "#fde2e4", padding: "6px 12px",
+        background: "var(--danger-bg)", padding: "6px 12px",
         display: "flex", alignItems: "center", gap: 8,
         borderBottom: "1px solid #f0c0c0",
       }}>
-        <span style={{ fontWeight: 600, fontSize: 13, color: "#6b1119" }}>{group.tableLabel}</span>
-        <span style={{ fontSize: 11, color: "#888" }}>→ поле «{group.columnLabel}»</span>
-        <span style={{ fontSize: 11, color: "#888" }}>→ удалено из «{group.refTableLabel}»</span>
+        <span style={{ fontWeight: 600, fontSize: 13, color: "var(--danger-fg)" }}>{group.tableLabel}</span>
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>→ поле «{group.columnLabel}»</span>
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>→ удалено из «{group.refTableLabel}»</span>
         <span style={{
-          marginLeft: "auto", background: "#b02a37", color: "#fff",
+          marginLeft: "auto", background: "var(--danger)", color: "#fff",
           borderRadius: 10, fontSize: 11, fontWeight: 600,
           padding: "1px 7px", whiteSpace: "nowrap",
         }}>
@@ -98,13 +98,13 @@ const OrphanGroupBlock: FC<{
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
           <tr style={{ background: "#fdf0f0", borderBottom: "1px solid #f0e0e0" }}>
-            <th style={{ textAlign: "left", padding: "3px 12px", fontWeight: 500, color: "#555" }}>
+            <th style={{ textAlign: "left", padding: "3px 12px", fontWeight: 500, color: "var(--text-secondary)" }}>
               Запись ({group.tableLabel})
             </th>
-            <th style={{ textAlign: "left", padding: "3px 12px", fontWeight: 500, color: "#555" }}>
+            <th style={{ textAlign: "left", padding: "3px 12px", fontWeight: 500, color: "var(--text-secondary)" }}>
               Удалённое значение ({group.refTableLabel})
             </th>
-            <th style={{ textAlign: "left", padding: "3px 12px", fontWeight: 400, color: "#aaa", fontSize: 10 }}>
+            <th style={{ textAlign: "left", padding: "3px 12px", fontWeight: 400, color: "var(--text-muted)", fontSize: 10 }}>
               Удалено
             </th>
             <th style={{ width: 70 }} />
@@ -115,16 +115,16 @@ const OrphanGroupBlock: FC<{
             <tr key={i} style={{ borderBottom: "1px solid #f8f0f0" }}>
               <td style={{ padding: "4px 12px" }}>
                 <span style={{ fontWeight: 500 }}>{rec.label || rec.uuid}</span>
-                <span style={{ color: "#ccc", fontSize: 10, marginLeft: 6, fontFamily: "monospace" }}>
+                <span style={{ color: "var(--text-faint)", fontSize: 10, marginLeft: 6, fontFamily: "monospace" }}>
                   #{rec.id}
                 </span>
               </td>
               <td style={{ padding: "4px 12px" }}>
-                <span style={{ color: "#b02a37", textDecoration: "line-through" }}>
+                <span style={{ color: "var(--danger)", textDecoration: "line-through" }}>
                   {rec.refLabel || rec.refUuid}
                 </span>
               </td>
-              <td style={{ padding: "4px 12px", color: "#aaa", fontSize: 10, whiteSpace: "nowrap" }}>
+              <td style={{ padding: "4px 12px", color: "var(--text-muted)", fontSize: 10, whiteSpace: "nowrap" }}>
                 {rec.refDeletedAt ? fmtDate(rec.refDeletedAt) : "—"}
               </td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>
@@ -138,7 +138,7 @@ const OrphanGroupBlock: FC<{
                     {opening === rec.uuid ? "…" : "Открыть"}
                   </Button>
                 ) : (
-                  <span style={{ fontSize: 10, color: "#ccc" }}>н/д</span>
+                  <span style={{ fontSize: 10, color: "var(--text-faint)" }}>н/д</span>
                 )}
               </td>
             </tr>
@@ -147,7 +147,7 @@ const OrphanGroupBlock: FC<{
       </table>
 
       {group.hasMore && (
-        <div style={{ background: "#fdf8f8", padding: "4px 12px", fontSize: 11, color: "#888", borderTop: "1px solid #f0e0e0" }}>
+        <div style={{ background: "#fdf8f8", padding: "4px 12px", fontSize: 11, color: "var(--text-muted)", borderTop: "1px solid #f0e0e0" }}>
           Показаны первые {group.totalFound}+. Используйте «Поиск и замена ссылок» для исправления.
         </div>
       )}
@@ -223,7 +223,7 @@ const OrphanRefsForm: FC<Partial<TPane>> = () => {
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 3 }}>
                 Контроль удалённых ссылок
               </div>
-              <div style={{ fontSize: 12, color: "#666", lineHeight: 1.5 }}>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>
                 Находит активные записи, у которых поле ссылается на удалённую запись справочника.
                 Для исправления откройте запись и замените значение, либо используйте обработку
                 «Поиск и замена ссылок».
@@ -240,12 +240,12 @@ const OrphanRefsForm: FC<Partial<TPane>> = () => {
 
           {/* Error */}
           {error && (
-            <div style={{ color: "#dc3545", fontSize: 12, padding: "2px 4px" }}>{error}</div>
+            <div style={{ color: "var(--danger)", fontSize: 12, padding: "2px 4px" }}>{error}</div>
           )}
 
           {/* Loading */}
           {isScanning && (
-            <div style={{ fontSize: 12, color: "#888", padding: "8px 4px" }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "8px 4px" }}>
               Сканирование всех таблиц, это может занять несколько секунд…
             </div>
           )}
@@ -254,8 +254,8 @@ const OrphanRefsForm: FC<Partial<TPane>> = () => {
           {isClean && (
             <div style={{
               border: "1px solid #c8e6c9", borderRadius: 4,
-              background: "#e6f4ea", padding: "10px 14px",
-              fontSize: 13, color: "#145523", fontWeight: 500,
+              background: "var(--success-bg)", padding: "10px 14px",
+              fontSize: 13, color: "var(--success-fg)", fontWeight: 500,
             }}>
               Нарушений не найдено — все ссылки корректны.
             </div>
@@ -266,16 +266,16 @@ const OrphanRefsForm: FC<Partial<TPane>> = () => {
             <>
               <div style={{
                 border: "1px solid #f0c0c0", borderRadius: 4,
-                background: "#fde2e4", padding: "8px 14px",
+                background: "var(--danger-bg)", padding: "8px 14px",
                 display: "flex", alignItems: "center", gap: 10,
               }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#6b1119" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--danger-fg)" }}>
                   Найдено нарушений: {totalViolations}
                 </span>
-                <span style={{ fontSize: 12, color: "#888" }}>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                   в {groups.length} {groups.length === 1 ? "группе" : "группах"}
                 </span>
-                <span style={{ marginLeft: "auto", fontSize: 12, color: "#888" }}>
+                <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)" }}>
                   Откройте запись чтобы исправить ссылку вручную,
                   или используйте «Поиск и замена ссылок» для массовой замены.
                 </span>

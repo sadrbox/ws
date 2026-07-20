@@ -125,7 +125,7 @@ const XlsxReportPane: FC<XlsxReportPaneProps> = ({
   const isEmpty   = !isLoading && !fetchError && !html;
 
   const layout = fetchError ? (
-    <div style={{ color: "#dc2626", padding: "16px", fontFamily: "sans-serif" }}>
+    <div style={{ color: "var(--danger)", padding: "16px", fontFamily: "sans-serif" }}>
       {fetchError}
     </div>
   ) : (

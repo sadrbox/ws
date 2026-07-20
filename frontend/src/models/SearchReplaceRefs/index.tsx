@@ -35,9 +35,9 @@ const StepCard: FC<{ step: number; title: string; active: boolean; children: Rea
       <span style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center",
         width: 20, height: 20, borderRadius: "50%", fontSize: 11, fontWeight: 600,
-        background: active ? "#6aa3ff" : "#c8c8c8", color: "#fff", flexShrink: 0,
+        background: active ? "var(--color-link)" : "#c8c8c8", color: "#fff", flexShrink: 0,
       }}>{step}</span>
-      <span style={{ fontSize: 12, fontWeight: 500, color: active ? "#1c5fcb" : "#888" }}>{title}</span>
+      <span style={{ fontSize: 12, fontWeight: 500, color: active ? "var(--color-link)" : "var(--text-muted)" }}>{title}</span>
     </div>
     {children}
   </div>
@@ -74,9 +74,9 @@ const RefsTable: FC<{ refs: RefEntry[] }> = ({ refs }) => {
     <div style={{ border: "1px solid #ddd", borderRadius: 3, overflow: "hidden", marginTop: 6 }}>
       <div style={{
         padding: "5px 10px", fontWeight: 500, fontSize: 11,
-        background: totalCount > 0 ? "#fdf3e1" : "#e6f4ea",
+        background: totalCount > 0 ? "#fdf3e1" : "var(--success-bg)",
         borderBottom: rows.length > 0 ? "1px solid #e8e8e8" : undefined,
-        color: totalCount > 0 ? "#7a4d12" : "#145523",
+        color: totalCount > 0 ? "#7a4d12" : "var(--success-fg)",
       }}>
         {totalCount > 0 ? `Найдено ссылок: ${totalCount}` : "Ссылок не найдено — запись не используется"}
       </div>
@@ -112,14 +112,14 @@ const ProtocolBlock: FC<{ summary: ExecuteSummary; entries: ProtocolEntry[] }> =
   }
   return (
     <div style={{ border: "1px solid #c8e6c9", borderRadius: 3, overflow: "hidden", fontSize: 12 }}>
-      <div style={{ background: "#e6f4ea", padding: "5px 10px", borderBottom: entries.length > 0 ? "1px solid #c8e6c9" : undefined, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ color: "#888", fontSize: 11 }}>{fmtDate(summary.executedAt)}</span>
+      <div style={{ background: "var(--success-bg)", padding: "5px 10px", borderBottom: entries.length > 0 ? "1px solid #c8e6c9" : undefined, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ color: "var(--text-muted)", fontSize: 11 }}>{fmtDate(summary.executedAt)}</span>
         <strong>{summary.modelLabel}</strong>
-        <span style={{ color: "#888" }}>—</span>
-        <span style={{ color: summary.sourceIsDeleted ? "#b02a37" : "#555", textDecoration: summary.sourceIsDeleted ? "line-through" : undefined }}>«{summary.sourceLabel}»</span>
+        <span style={{ color: "var(--text-muted)" }}>—</span>
+        <span style={{ color: summary.sourceIsDeleted ? "#b02a37" : "var(--text-secondary)", textDecoration: summary.sourceIsDeleted ? "line-through" : undefined }}>«{summary.sourceLabel}»</span>
         <span>→</span>
-        <span style={{ color: "#1c5fcb", fontWeight: 500 }}>«{summary.targetLabel}»</span>
-        <span style={{ marginLeft: "auto", color: summary.totalAffected > 0 ? "#145523" : "#888", fontWeight: 500 }}>
+        <span style={{ color: "var(--color-link)", fontWeight: 500 }}>«{summary.targetLabel}»</span>
+        <span style={{ marginLeft: "auto", color: summary.totalAffected > 0 ? "var(--success-fg)" : "var(--text-muted)", fontWeight: 500 }}>
           Обновлено: {summary.totalAffected}
         </span>
       </div>
@@ -129,8 +129,8 @@ const ProtocolBlock: FC<{ summary: ExecuteSummary; entries: ProtocolEntry[] }> =
             {entries.filter(e => e.affected > 0).map((e, i) => (
               <tr key={i} style={{ borderBottom: "1px solid #f0f0f0" }}>
                 <td style={{ padding: "3px 10px", fontSize: 12 }}>{e.label}</td>
-                <td style={{ padding: "3px 10px", color: "#bbb", fontFamily: "monospace", fontSize: 10 }}>{e.table}.{e.column}</td>
-                <td style={{ padding: "3px 10px", textAlign: "right", fontWeight: 600, color: "#28a745", fontSize: 12 }}>+{e.affected}</td>
+                <td style={{ padding: "3px 10px", color: "var(--text-faint)", fontFamily: "monospace", fontSize: 10 }}>{e.table}.{e.column}</td>
+                <td style={{ padding: "3px 10px", textAlign: "right", fontWeight: 600, color: "var(--success)", fontSize: 12 }}>+{e.affected}</td>
               </tr>
             ))}
           </tbody>
@@ -259,7 +259,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
           <StepCard step={1} title="Тип справочника" active={!selectedModel}>
             {modelsError ? (
               <GroupRow style={{ alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 12, color: "#dc3545" }}>Ошибка: {modelsError}</span>
+                <span style={{ fontSize: 12, color: "var(--danger)" }}>Ошибка: {modelsError}</span>
                 <Button variant="secondary" onClick={() => {
                   setModelsError(null);
                   apiClient.get("/ref-replace/models").then(r => setModels(r.data.models ?? [])).catch(e => setModelsError(e?.message ?? "Ошибка"));
@@ -300,7 +300,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
                 </div>
               </GroupRow>
             ) : (
-              <span style={{ fontSize: 12, color: "#aaa" }}>{translate("selectRefFirst")}</span>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{translate("selectRefFirst")}</span>
             )}
             {refs !== null && <RefsTable refs={refs} />}
           </StepCard>
@@ -323,7 +323,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
                 </div>
               </GroupRow>
             ) : (
-              <span style={{ fontSize: 12, color: "#aaa" }}>Выполните поиск ссылок на шаге 2</span>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Выполните поиск ссылок на шаге 2</span>
             )}
           </StepCard>
 
@@ -331,7 +331,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
           <StepCard step={4} title="Безопасное удаление" active={step4Active}>
             {step4Active ? (
               <GroupRow style={{ alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 12, color: "#145523", flex: 1 }}>
+                <span style={{ fontSize: 12, color: "var(--success-fg)", flex: 1 }}>
                   Запись <strong>«{sourceInfo.label}»</strong> не используется — её можно безопасно удалить.
                 </span>
                 <Button onClick={handleDelete} disabled={isDeleting} variant="danger">
@@ -339,7 +339,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
                 </Button>
               </GroupRow>
             ) : (
-              <span style={{ fontSize: 12, color: "#aaa" }}>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                 {refs === null
                   ? "Выполните поиск ссылок на шаге 2 — если ссылок нет, здесь появится кнопка удаления"
                   : totalRefs > 0
@@ -356,20 +356,20 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
           {deleted && (
             <div style={{
               border: "1px solid #c8e6c9", borderRadius: 4,
-              background: "#e6f4ea", padding: "8px 14px",
-              fontSize: 13, color: "#145523", fontWeight: 500,
+              background: "var(--success-bg)", padding: "8px 14px",
+              fontSize: 13, color: "var(--success-fg)", fontWeight: 500,
             }}>
               Запись «{deleted.label}» успешно удалена.
             </div>
           )}
 
           {/* Ошибка */}
-          {error && <div style={{ fontSize: 12, color: "#dc3545", padding: "2px 4px" }}>{error}</div>}
+          {error && <div style={{ fontSize: 12, color: "var(--danger)", padding: "2px 4px" }}>{error}</div>}
 
           {/* Протокол */}
           {protocol.length > 0 && (
             <div style={{ borderTop: "1px solid #e8e8e8", paddingTop: 10, marginTop: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 500, color: "#555", marginBottom: 6 }}>{translate("replaceLog")}</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>{translate("replaceLog")}</div>
               <GroupCol style={{ gap: 6 }}>
                 {protocol.map((p, i) => <ProtocolBlock key={i} summary={p.summary} entries={p.entries} />)}
               </GroupCol>

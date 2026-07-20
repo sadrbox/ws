@@ -110,7 +110,7 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ conflict, onClose }) => {
               );
             })
           ) : (
-            <div style={{ fontSize: 12, color: "#999" }}>{translate("conflictResolverNoData")}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{translate("conflictResolverNoData")}</div>
           )}
         </div>
 
@@ -132,14 +132,14 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ conflict, onClose }) => {
               );
             })
           ) : (
-            <div style={{ fontSize: 12, color: "#999" }}>{translate("conflictResolverServerLoadError")}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{translate("conflictResolverServerLoadError")}</div>
           )}
         </div>
       </div>
 
       {/* Result message */}
       {result && (
-        <div style={{ fontSize: 13, padding: "8px 12px", borderRadius: 4, background: "#f5f5f5" }}>
+        <div style={{ fontSize: 13, padding: "8px 12px", borderRadius: 4, background: "var(--surface-muted)" }}>
           {result}
         </div>
       )}
