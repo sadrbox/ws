@@ -91,7 +91,7 @@
 
   &.StatusSyncing {
     background: #e3f2fd;
-    color: #1976d2;
+    color: $colorPrimaryDark;
   }
 
   &.StatusSynced {

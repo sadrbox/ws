@@ -47,8 +47,8 @@
 }
 
 .modeActive {
-	color: #1976d2 !important;
-	border-bottom-color: #1976d2 !important;
+	color: $colorPrimaryDark !important;
+	border-bottom-color: $colorPrimaryDark !important;
 }
 
 .title {
@@ -97,7 +97,7 @@
 		transition: border-color 0.15s;
 
 		&:focus {
-			border-color: #1976d2;
+			border-color: $colorPrimaryDark;
 			box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
 		}
 
@@ -110,7 +110,7 @@
 
 .submitBtn {
 	padding: 10px 20px;
-	background: #1976d2;
+	background: $colorPrimaryDark;
 	color: #fff;
 	border: none;
 	border-radius: 4px;

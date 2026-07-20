@@ -149,7 +149,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
         LIST_NAME,
         "Настройки учёта организации",
         saved,
-        orgName ?? "Глобальные",
+        orgName ?? translate("settingsGlobal"),
       );
     },
     afterSave: () => {
@@ -308,7 +308,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                 <label
                   className={[styles.SettingChip, !(canWrite && form.fields.useVat) && styles.SettingChipReadonly].filter(Boolean).join(" ")}
                 >
-                  <span className={styles.SettingSubLabel}>Способ расчёта:</span>
+                  <span className={styles.SettingSubLabel}>{translate("calcMethodLabel")}</span>
                   <select
                     value={form.fields.vatCalculationMethod}
                     onChange={(e) => {
@@ -325,8 +325,8 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     }}
                     disabled={form.isLoading || !canWrite || !form.fields.useVat || lockVat}
                   >
-                    <option value="INCLUDED">В сумме (в т.ч.)</option>
-                    <option value="ADDED">Сверху</option>
+                    <option value="INCLUDED">{translate("vatIncludedOpt")}</option>
+                    <option value="ADDED">{translate("vatAddedOpt")}</option>
                   </select>
                 </label>
                 <span className={styles.SettingHint}>
@@ -339,7 +339,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                 <label
                   className={[styles.SettingChip, !canWrite && styles.SettingChipReadonly].filter(Boolean).join(" ")}
                 >
-                  <span className={styles.SettingSubLabel}>Метод себестоимости:</span>
+                  <span className={styles.SettingSubLabel}>{translate("costingMethodLabel")}</span>
                   <select
                     value={form.fields.costingMethod}
                     onChange={(e) => {
@@ -357,8 +357,8 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     }}
                     disabled={form.isLoading || !canWrite}
                   >
-                    <option value="AVERAGE">Средняя (скользящая)</option>
-                    <option value="FIFO">ФИФО (по партиям)</option>
+                    <option value="AVERAGE">{translate("costingAverageOpt")}</option>
+                    <option value="FIFO">{translate("costingFifoOpt")}</option>
                   </select>
                 </label>
                 <span className={styles.SettingHint}>
@@ -510,7 +510,7 @@ const renderListCell = (row: TDataItem, col: TColumn) => {
     const org = row.organization as { name?: string } | null | undefined;
     if (!org?.name)
       return (
-        <span className={styles.MutedItalic}>Глобальные</span>
+        <span className={styles.MutedItalic}>{translate("settingsGlobal")}</span>
       );
     return <span>{org.name}</span>;
   }

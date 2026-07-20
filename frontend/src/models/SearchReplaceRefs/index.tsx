@@ -3,6 +3,7 @@ import { FieldSelect } from "src/components/Field";
 import { GroupRow, GroupCol } from "src/components/UI";
 import { Button } from "src/components/Button";
 import { getFormatDate } from "src/utils/datetime";
+import { translate } from "src/i18";
 import Table from "src/components/Table";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import apiClient from "src/services/api/client";
@@ -262,7 +263,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
                 <Button variant="secondary" onClick={() => {
                   setModelsError(null);
                   apiClient.get("/ref-replace/models").then(r => setModels(r.data.models ?? [])).catch(e => setModelsError(e?.message ?? "Ошибка"));
-                }}>Повторить</Button>
+                }}>{translate("retry")}</Button>
               </GroupRow>
             ) : (
               <FieldSelect
@@ -299,7 +300,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
                 </div>
               </GroupRow>
             ) : (
-              <span style={{ fontSize: 12, color: "#aaa" }}>Сначала выберите справочник</span>
+              <span style={{ fontSize: 12, color: "#aaa" }}>{translate("selectRefFirst")}</span>
             )}
             {refs !== null && <RefsTable refs={refs} />}
           </StepCard>
@@ -368,7 +369,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
           {/* Протокол */}
           {protocol.length > 0 && (
             <div style={{ borderTop: "1px solid #e8e8e8", paddingTop: 10, marginTop: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 500, color: "#555", marginBottom: 6 }}>Протокол замен</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "#555", marginBottom: 6 }}>{translate("replaceLog")}</div>
               <GroupCol style={{ gap: 6 }}>
                 {protocol.map((p, i) => <ProtocolBlock key={i} summary={p.summary} entries={p.entries} />)}
               </GroupCol>

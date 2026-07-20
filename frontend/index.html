@@ -37,6 +37,10 @@
     rel="stylesheet" />
 </head>
 <style>
+  /* Единый интерактивный синий для инлайновых стилей (var(--color-link)).
+     Совпадает с $colorPrimaryDark из styles/variables.scss — источник один. */
+  :root { --color-link: #1c5fcb; }
+
   @keyframes spin {
     to {
       transform: rotate(360deg);

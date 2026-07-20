@@ -81,7 +81,7 @@
 // Лёгкая подсветка label синим, без изменения border (не путать с required/error).
 .FieldDirty:not(.tableVariant) {
 	.FieldLabel {
-		color: #1976d2;
+		color: $colorPrimaryDark;
 		font-weight: 500;
 	}
 
@@ -89,7 +89,7 @@
 	.FieldSelectWrapper,
 	.FieldTextareaInputWrapper {
 		border-color: #90caf9;
-		background-color: rgba(#1976d2, 0.04);
+		background-color: rgba($colorPrimaryDark, 0.04);
 	}
 }
 

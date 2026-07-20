@@ -22,7 +22,7 @@
   flex-shrink: 0;
 
   &:hover {
-    border-color: #1976d2;
+    border-color: $colorPrimaryDark;
     box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
   }
 
@@ -52,7 +52,7 @@
   width: calc(var(--avatar-size, 128px) * 0.25);
   height: calc(var(--avatar-size, 128px) * 0.25);
   border: 3px solid #e0e0e0;
-  border-top-color: #1976d2;
+  border-top-color: $colorPrimaryDark;
   border-radius: 50%;
   animation: avatarSpin 0.6s linear infinite;
 }

@@ -236,7 +236,6 @@ const ReportPane: FC<ReportPaneProps> = ({
             {/* Поля отчёта — ОДНОЙ колонкой: раньше форма была row wrap, поля
                 растекались в строку, а кнопка «Сформировать» уезжала вправо от
                 них вместо того, чтобы стоять под ними. */}
-            <GroupCol className={styles.ReportFormFields}>{form}</GroupCol>
             {onGenerate && (
               <div className={styles.ReportFormActions}>
                 <Button variant="primary" onClick={onGenerate} disabled={generateDisabled}>
@@ -244,6 +243,8 @@ const ReportPane: FC<ReportPaneProps> = ({
                 </Button>
               </div>
             )}
+            <GroupCol className={styles.ReportFormFields}>{form}</GroupCol>
+
           </div>
           <SplitResizer onPointerDown={startResize} onDoubleClick={resetFormWidth} />
         </>
