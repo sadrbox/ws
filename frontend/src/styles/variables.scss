@@ -1,32 +1,32 @@
-$color60: var(--color60, #ffffff);
-$color30: var(--color30, #eee);
-$color31: var(--color31, #dfdfdf);
-$color33: var(--color33, #ddd);
-$color34: var(--color34, #bbb);
-$color10: var(--color10, #aaa);
-$color5: var(--color5, #888); // $color5: #aaaaaa;rgba(51, 51, 51, 0.1);
-$color51: var(--color51, #666);
-$color6: var(--color6, #222);
-$colorTheme: var(--colorTheme, #6aa3ff);
-$color1: var(--color1, #6aa3ff);
-$color2: var(--color2, #bcd6ff);
-$color3: var(--color3, #073989);
+$color60: var(--sv-color60, #ffffff);
+$color30: var(--sv-color30, #eee);
+$color31: var(--sv-color31, #dfdfdf);
+$color33: var(--sv-color33, #ddd);
+$color34: var(--sv-color34, #bbb);
+$color10: var(--sv-color10, #aaa);
+$color5: var(--sv-color5, #888); // $color5: #aaaaaa;rgba(51, 51, 51, 0.1);
+$color51: var(--sv-color51, #666);
+$color6: var(--sv-color6, #222);
+$colorTheme: var(--sv-colorTheme, #6aa3ff);
+$color1: var(--sv-color1, #6aa3ff);
+$color2: var(--sv-color2, #bcd6ff);
+$color3: var(--sv-color3, #073989);
 
-$silverLightest: var(--silverLightest, #f5f5f5);
-$silverLight: var(--silverLight, #dcdcdc);
-$silver: var(--silver, #c0c0c0);
-$silverDark: var(--silverDark, #a9a9a9);
-$silverDarkest: var(--silverDarkest, #808080);
+$silverLightest: var(--sv-silverLightest, #f5f5f5);
+$silverLight: var(--sv-silverLight, #dcdcdc);
+$silver: var(--sv-silver, #c0c0c0);
+$silverDark: var(--sv-silverDark, #a9a9a9);
+$silverDarkest: var(--sv-silverDarkest, #808080);
 
 // Две РАЗНЫЕ роли синего (не путать, не сводить друг к другу):
 //   $color3          — брендовый тёмно-синий: focus-ring, границы, первичные кнопки.
 //   $colorPrimaryDark — интерактивный акцент: ссылки, активные вкладки, спиннеры,
 //                       подсветка «изменено». Сюда сведён бывший хардкод #1976d2
 //                       (он был почти тем же цветом, но дублировался в 6 файлах).
-$colorPrimaryLight: var(--colorPrimaryLight, #2c77ef);
-$colorPrimaryDark: var(--colorPrimaryDark, #1c5fcb);
-$color80: var(--color80, #f1f5f9);
-$color81: var(--color81, #9aa7b6);
+$colorPrimaryLight: var(--sv-colorPrimaryLight, #2c77ef);
+$colorPrimaryDark: var(--sv-colorPrimaryDark, #1c5fcb);
+$color80: var(--sv-color80, #f1f5f9);
+$color81: var(--sv-color81, #9aa7b6);
 
 
 
@@ -42,34 +42,34 @@ $fontsize: 13px;
 // ──────────────────────────────────────────────────────────────────────────
 
 // primary — действие, фокус, основной CTA (синий)
-$primary: var(--primary, #2c77ef);
-$primaryBg: var(--primaryBg, #eaf2ff);
-$primaryBorder: var(--primaryBorder, #1c5fcb);
-$primaryText: var(--primaryText, #0b3a82);
+$primary: var(--sv-primary, #2c77ef);
+$primaryBg: var(--sv-primaryBg, #eaf2ff);
+$primaryBorder: var(--sv-primaryBorder, #1c5fcb);
+$primaryText: var(--sv-primaryText, #0b3a82);
 
 // info — нейтральная информация (бирюзовый)
-$info: var(--info, #17a2b8);
-$infoBg: var(--infoBg, #e4f6f9);
-$infoBorder: var(--infoBorder, #117a8b);
-$infoText: var(--infoText, #0b525c);
+$info: var(--sv-info, #17a2b8);
+$infoBg: var(--sv-infoBg, #e4f6f9);
+$infoBorder: var(--sv-infoBorder, #117a8b);
+$infoText: var(--sv-infoText, #0b525c);
 
 // success — успех, подтверждение (зелёный)
-$success: var(--success, #28a745);
-$successBg: var(--successBg, #e6f4ea);
-$successBorder: var(--successBorder, #1e7e34);
-$successText: var(--successText, #145523);
+$success: var(--sv-success, #28a745);
+$successBg: var(--sv-successBg, #e6f4ea);
+$successBorder: var(--sv-successBorder, #1e7e34);
+$successText: var(--sv-successText, #145523);
 
 // warning — предупреждение (жёлто-оранжевый)
-$warning: var(--warning, #f0ad4e);
-$warningBg: var(--warningBg, #fdf3e1);
-$warningBorder: var(--warningBorder, #c98a2e);
-$warningText: var(--warningText, #7a4d12);
+$warning: var(--sv-warning, #f0ad4e);
+$warningBg: var(--sv-warningBg, #fdf3e1);
+$warningBorder: var(--sv-warningBorder, #c98a2e);
+$warningText: var(--sv-warningText, #7a4d12);
 
 // attention — критическое предупреждение / ошибка (красный)
-$attention: var(--attention, #dc3545);
-$attentionBg: var(--attentionBg, #fde2e4);
-$attentionBorder: var(--attentionBorder, #b02a37);
-$attentionText: var(--attentionText, #6b1119);
+$attention: var(--sv-attention, #dc3545);
+$attentionBg: var(--sv-attentionBg, #fde2e4);
+$attentionBorder: var(--sv-attentionBorder, #b02a37);
+$attentionText: var(--sv-attentionText, #6b1119);
 
 // silver — нейтральный / выключенный
 $silverPrimary: $silver;
@@ -81,31 +81,31 @@ $silverText: $color6;
 // UI-токены (нейтральная серая шкала + мягкие акценты).
 // Единый источник для форм/плашек/индикаторов — заменяет magic-hex в модулях.
 // ──────────────────────────────────────────────────────────────────────────
-$gray900: var(--gray900, #111827);
-$gray700: var(--gray700, #374151);
-$gray600: var(--gray600, #555555);
-$gray500: var(--gray500, #6b7280);
-$gray400: var(--gray400, #9ca3af);
-$gray300: var(--gray300, #999999);
-$gray200: var(--gray200, #e5e7eb);
-$gray100: var(--gray100, #f3f3f3);
-$gray50: var(--gray50, #f8f9fa);
+$gray900: var(--sv-gray900, #111827);
+$gray700: var(--sv-gray700, #374151);
+$gray600: var(--sv-gray600, #555555);
+$gray500: var(--sv-gray500, #6b7280);
+$gray400: var(--sv-gray400, #9ca3af);
+$gray300: var(--sv-gray300, #999999);
+$gray200: var(--sv-gray200, #e5e7eb);
+$gray100: var(--sv-gray100, #f3f3f3);
+$gray50: var(--sv-gray50, #f8f9fa);
 
-$accentBlueSoft: var(--accentBlueSoft, #eff6ff); // активная подсветка / чип «вкл»
-$accentBlueHover: var(--accentBlueHover, #f0f7ff); // hover строки/узла
-$accentBlueBorder: var(--accentBlueBorder, #bfdbfe);
+$accentBlueSoft: var(--sv-accentBlueSoft, #eff6ff); // активная подсветка / чип «вкл»
+$accentBlueHover: var(--sv-accentBlueHover, #f0f7ff); // hover строки/узла
+$accentBlueBorder: var(--sv-accentBlueBorder, #bfdbfe);
 
-$indicatorPosted: var(--indicatorPosted, #10b981); // проведён
-$indicatorMuted: var(--indicatorMuted, #9ca3af); // не проведён / прочерк
-$successGradFrom: var(--successGradFrom, #34d399); // верх градиента «проведён»-бейджа
-$successGradTo: var(--successGradTo, #10b981); // низ градиента (= $indicatorPosted)
-$successSoftBg: var(--successSoftBg, #f0fdf4); // мягкий зелёный фон пилюли
-$successSoftBorder: var(--successSoftBorder, #bbf7d0); // мягкий зелёный бордер пилюли
+$indicatorPosted: var(--sv-indicatorPosted, #10b981); // проведён
+$indicatorMuted: var(--sv-indicatorMuted, #9ca3af); // не проведён / прочерк
+$successGradFrom: var(--sv-successGradFrom, #34d399); // верх градиента «проведён»-бейджа
+$successGradTo: var(--sv-successGradTo, #10b981); // низ градиента (= $indicatorPosted)
+$successSoftBg: var(--sv-successSoftBg, #f0fdf4); // мягкий зелёный фон пилюли
+$successSoftBorder: var(--sv-successSoftBorder, #bbf7d0); // мягкий зелёный бордер пилюли
 
-$warnAccent: var(--warnAccent, #d97706); // маркер расхождения с основанием
-$warnSoftBg: var(--warnSoftBg, #fffbeb);
-$warnSoftBorder: var(--warnSoftBorder, #fde68a);
-$warnSoftText: var(--warnSoftText, #92400e);
+$warnAccent: var(--sv-warnAccent, #d97706); // маркер расхождения с основанием
+$warnSoftBg: var(--sv-warnSoftBg, #fffbeb);
+$warnSoftBorder: var(--sv-warnSoftBorder, #fde68a);
+$warnSoftText: var(--sv-warnSoftText, #92400e);
 
 $radius1: 1px;
 $radius2: 2px;
