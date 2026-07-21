@@ -73,6 +73,8 @@
 	"chatOnline": "На связи",
 	"chatOffline": "Нет соединения",
 	"taskAssignedToast": "Вам назначена задача",
+	"switchToDark": "Тёмная тема",
+	"switchToLight": "Светлая тема",
 	"searching": "Поиск...",
 	"nothingFound": "Ничего не найдено",
 	"loginTitle": "Вход в систему",

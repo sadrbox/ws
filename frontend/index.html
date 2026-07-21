@@ -3,6 +3,17 @@
 
 <head>
   <meta charset="UTF-8" />
+  <!-- Применяем выбранную тему ДО первой отрисовки — иначе вспышка светлой темы
+       у пользователя, выбравшего тёмную. Без темы в localStorage — по системной
+       (prefers-color-scheme отрабатывает сам в CSS). -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { }
+    })();
+  </script>
   <link rel="icon"
     type="image/svg+xml"
     href="/favicon.svg" />
@@ -75,6 +86,70 @@
       --danger-fg: #fecdd3;
       --danger-bg: #3b1113;
       --surface-muted: #1c2431;
+      --color60: #12161d;
+      --color30: #1a212b;
+      --color31: #232b36;
+      --color33: #2a333f;
+      --color34: #3a4553;
+      --color10: #4a5563;
+      --color5: #8b93a1;
+      --color51: #a3abb8;
+      --color6: #e7ebf1;
+      --color80: #1a212b;
+      --color81: #7e8a99;
+      --silverLightest: #171d26;
+      --silverLight: #2a333f;
+      --silver: #3a4553;
+      --silverDark: #5a6472;
+      --silverDarkest: #8b93a1;
+      --colorTheme: #7db0ff;
+      --color1: #7db0ff;
+      --color2: #24405f;
+      --color3: #6ea8ff;
+      --colorPrimaryLight: #5b9bff;
+      --colorPrimaryDark: #6ea8ff;
+      --primary: #5b9bff;
+      --primaryBg: #14243a;
+      --primaryBorder: #3a6bb5;
+      --primaryText: #bcd6ff;
+      --info: #3bc4da;
+      --infoBg: #0e2a30;
+      --infoBorder: #1c6b78;
+      --infoText: #a5e5ee;
+      --success: #3fbf5f;
+      --successBg: #12291a;
+      --successBorder: #2e7d46;
+      --successText: #a7e0b8;
+      --warning: #f5b95c;
+      --warningBg: #2e2410;
+      --warningBorder: #a5721f;
+      --warningText: #f0d29a;
+      --attention: #f26b74;
+      --attentionBg: #2e1215;
+      --attentionBorder: #a83843;
+      --attentionText: #f7c3c8;
+      --gray900: #e7ebf1;
+      --gray700: #c2c8d0;
+      --gray600: #aab1bd;
+      --gray500: #949cab;
+      --gray400: #7e8794;
+      --gray300: #6d7684;
+      --gray200: #2a333f;
+      --gray100: #1c232d;
+      --gray50: #161c24;
+      --accentBlueSoft: #16273d;
+      --accentBlueHover: #14202f;
+      --accentBlueBorder: #2f4b6b;
+      --indicatorPosted: #2dd4a0;
+      --indicatorMuted: #6d7684;
+      --successGradFrom: #34d399;
+      --successGradTo: #10b981;
+      --successSoftBg: #0f2a1c;
+      --successSoftBorder: #2e7d52;
+      --warnAccent: #f59e0b;
+      --warnSoftBg: #2a2410;
+      --warnSoftBorder: #6b5a1f;
+      --warnSoftText: #f0c088;
     }
   }
   :root[data-theme="dark"] {
@@ -84,6 +159,70 @@
     --warning: #f59e0b; --warning-strong: #fbbf24;
     --danger: #f87171; --danger-fg: #fecdd3; --danger-bg: #3b1113;
     --surface-muted: #1c2431;
+    --color60: #12161d;
+    --color30: #1a212b;
+    --color31: #232b36;
+    --color33: #2a333f;
+    --color34: #3a4553;
+    --color10: #4a5563;
+    --color5: #8b93a1;
+    --color51: #a3abb8;
+    --color6: #e7ebf1;
+    --color80: #1a212b;
+    --color81: #7e8a99;
+    --silverLightest: #171d26;
+    --silverLight: #2a333f;
+    --silver: #3a4553;
+    --silverDark: #5a6472;
+    --silverDarkest: #8b93a1;
+    --colorTheme: #7db0ff;
+    --color1: #7db0ff;
+    --color2: #24405f;
+    --color3: #6ea8ff;
+    --colorPrimaryLight: #5b9bff;
+    --colorPrimaryDark: #6ea8ff;
+    --primary: #5b9bff;
+    --primaryBg: #14243a;
+    --primaryBorder: #3a6bb5;
+    --primaryText: #bcd6ff;
+    --info: #3bc4da;
+    --infoBg: #0e2a30;
+    --infoBorder: #1c6b78;
+    --infoText: #a5e5ee;
+    --success: #3fbf5f;
+    --successBg: #12291a;
+    --successBorder: #2e7d46;
+    --successText: #a7e0b8;
+    --warning: #f5b95c;
+    --warningBg: #2e2410;
+    --warningBorder: #a5721f;
+    --warningText: #f0d29a;
+    --attention: #f26b74;
+    --attentionBg: #2e1215;
+    --attentionBorder: #a83843;
+    --attentionText: #f7c3c8;
+    --gray900: #e7ebf1;
+    --gray700: #c2c8d0;
+    --gray600: #aab1bd;
+    --gray500: #949cab;
+    --gray400: #7e8794;
+    --gray300: #6d7684;
+    --gray200: #2a333f;
+    --gray100: #1c232d;
+    --gray50: #161c24;
+    --accentBlueSoft: #16273d;
+    --accentBlueHover: #14202f;
+    --accentBlueBorder: #2f4b6b;
+    --indicatorPosted: #2dd4a0;
+    --indicatorMuted: #6d7684;
+    --successGradFrom: #34d399;
+    --successGradTo: #10b981;
+    --successSoftBg: #0f2a1c;
+    --successSoftBorder: #2e7d52;
+    --warnAccent: #f59e0b;
+    --warnSoftBg: #2a2410;
+    --warnSoftBorder: #6b5a1f;
+    --warnSoftText: #f0c088;
   }
 
   @keyframes spin {

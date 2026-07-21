@@ -4,6 +4,7 @@ import modalManager from 'src/components/Modal/modalManager';
 import { createPortal } from 'react-dom';
 // Divider is imported in components that use it; not used here
 import { translate, getLanguage, setLanguage } from 'src/i18';
+import { getEffectiveTheme, toggleTheme } from 'src/services/theme';
 import { useAppContext } from 'src/app/context';
 import { ReloadButton, ClearButton, IconButton } from 'src/components/Toolbar';
 import { copyPaneLink } from 'src/utils/paneLink';
@@ -618,6 +619,22 @@ const LanguageSwitcher: FC = () => {
   );
 };
 
+// Переключатель светлой/тёмной темы (E5). Иконка отражает ДЕЙСТВИЕ по клику.
+const ThemeSwitcher: FC = () => {
+  const [dark, setDark] = useState(() => getEffectiveTheme() === "dark");
+  return (
+    <button
+      type="button"
+      className={styles.PersistenceToggle}
+      onClick={() => setDark(toggleTheme() === "dark")}
+      title={dark ? translate("switchToLight") : translate("switchToDark")}
+      aria-label={dark ? translate("switchToLight") : translate("switchToDark")}
+    >
+      {dark ? "☾" : "☀"}
+    </button>
+  );
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PersistenceModeToggle — переключатель offline-first / transactional в Navbar
 // ═══════════════════════════════════════════════════════════════════════════
@@ -859,6 +876,7 @@ export const Navbar: React.FC = () => {
         {/* Правая часть: индикаторы, имя, выход */}
         <div className={styles.NavbarRight}>
           <LanguageSwitcher />
+          <ThemeSwitcher />
           <PersistenceModeToggle />
           <NavbarPaneBell />
           <OfflineIndicator />
