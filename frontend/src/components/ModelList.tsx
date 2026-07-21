@@ -25,6 +25,7 @@ import { Button } from "src/components/Button";
 
 // 7. Стили
 import { SplitResizer, useSplitResize } from "src/components/SplitPane";
+import { isUnsavedRow } from "src/components/SubTable/rowModel";
 import styles from "./ModelList.module.scss";
 
 // ─── Стабильный хелпер перевода ───────────────────────────────────────────────
@@ -325,7 +326,9 @@ const ModelList: FC<ModelListProps> = ({
   const openModelForm = useCallback(
     (formProps: TOpenModelFormProps) => {
       const d = formProps.data;
-      const isEdit = !!d?.uuid;
+      // Реальный uuid — но не временный «tmp-…» и не отрицательный id: иначе форма
+      // грузила бы несохранённую строку по фейковому uuid (GET /…/tmp-… → 404).
+      const isEdit = !!d?.uuid && !isUnsavedRow(d);
 
       // Несохранённая (temp) строка из inline-режима несёт отрицательный id и
       // служебные поля (_pendingAction/_paneToken/_untouched). Спред их в новую
@@ -338,6 +341,9 @@ const ModelList: FC<ModelListProps> = ({
         for (const [k, v] of Object.entries(d as Record<string, unknown>)) {
           if (k.startsWith("_")) continue;
           if (k === "id" && typeof v === "number" && v < 0) continue;
+          // Временный uuid «tmp-…» не должен попасть в новую форму — иначе она
+          // сочтёт запись существующей и загрузит по фейку.
+          if (k === "uuid" && typeof v === "string" && v.startsWith("tmp-")) continue;
           out[k] = v;
         }
         return out;

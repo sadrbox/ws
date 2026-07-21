@@ -12,6 +12,7 @@ import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupFie
 import { useAppContext } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { isUnsavedRow } from "src/components/SubTable/rowModel";
 import PrimaryToolbarButton from "src/components/PrimaryToolbarButton";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
@@ -263,7 +264,8 @@ const ContactsTable: FC<ContactsTableProps> = ({
   }, []);
 
   const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
-    const isEdit = !!data?.uuid;
+    // Не считать temp-строку (uuid «tmp-…») существующей — иначе GET по фейку → 404.
+    const isEdit = !!data?.uuid && !isUnsavedRow(data);
     const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
       ctx.refetch();

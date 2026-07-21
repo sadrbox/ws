@@ -31,7 +31,7 @@ import Toolbar from "src/components/Toolbar";
 import { useQueryClient } from "@tanstack/react-query";
 import styles from "./SubTable.module.scss";
 import {
-  applyEditMarker, computeDisplayRows, isSameRow, mergeColumnDefs, type PendingRow,
+  applyEditMarker, computeDisplayRows, isSameRow, isUnsavedRow, mergeColumnDefs, type PendingRow,
 } from "./rowModel";
 import { useSubTableRows } from "./useSubTableRows";
 
@@ -812,11 +812,12 @@ const SubTable: FC<SubTableProps> = ({
     // ошибка при попытке открыть «Новую» строку в форменном режиме). Снимаем
     // служебные поля и отрицательный id, оставляя введённые значения, — форма
     // откроется как новая, с уже набранными данными.
-    if (data && !data.uuid) {
+    if (isUnsavedRow(data)) {
       const clean: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(data)) {
+      for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
         if (k.startsWith("_")) continue;               // служебные _pendingAction/_paneToken/…
         if (k === "id" && typeof v === "number" && v < 0) continue; // temp-id
+        if (k === "uuid" && typeof v === "string" && v.startsWith("tmp-")) continue; // temp-uuid
         clean[k] = v;
       }
       data = clean as TDataItem;

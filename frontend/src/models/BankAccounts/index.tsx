@@ -16,6 +16,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { isUnsavedRow } from "src/components/SubTable/rowModel";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
@@ -283,7 +284,9 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
   }, []);
 
   const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
-    const isEdit = !!data?.uuid;
+    // isEdit по НАЛИЧИЮ реального uuid — но не временного «tmp-…»: иначе форма
+    // грузила бы несохранённую строку по фейковому uuid (GET /…/tmp-… → 404).
+    const isEdit = !!data?.uuid && !isUnsavedRow(data);
     const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: [BA_TABLE_ENDPOINT] });
       _ctx.refetch();

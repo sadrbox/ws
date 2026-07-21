@@ -30,6 +30,22 @@ export type PendingRow = TDataItem & {
 /** Хелпер: безопасный каст к PendingRow (TDataItem уже типизирован, но без приватных полей) */
 export const asPending = (r: TDataItem): PendingRow => r as PendingRow;
 
+/**
+ * Строка ещё НЕ сохранена на сервере (добавлена inline и не закоммичена).
+ * Признаки: маркер _pendingAction:"create", отрицательный числовой id ИЛИ
+ * uuid вида "tmp-…" (SubTable выдаёт временной строке и то, и другое).
+ *
+ * ВАЖНО: наличие uuid НЕ означает «существует на сервере» — временный uuid
+ * тоже "tmp-…". Поэтому isEdit нельзя вычислять как `!!uuid`: иначе форма
+ * попытается загрузить запись по фейковому uuid (GET /…/tmp-… → 404).
+ */
+export const isUnsavedRow = (r: { id?: unknown; uuid?: unknown; _pendingAction?: unknown } | null | undefined): boolean =>
+  !!r && (
+    r._pendingAction === "create" ||
+    (typeof r.id === "number" && r.id < 0) ||
+    (typeof r.uuid === "string" && r.uuid.startsWith("tmp-"))
+  );
+
 // Производные (вычисляемые) поля строки — функции от редактируемых значений,
 // на сервер напрямую не пишутся. Исключаем из сравнения, иначе расхождение
 // округления сервер/клиент мешало бы распознать возврат к исходным значениям.
