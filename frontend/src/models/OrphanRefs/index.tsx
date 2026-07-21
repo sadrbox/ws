@@ -40,24 +40,34 @@ interface OrphanGroup {
 // ── Table → form lazy-import map ──────────────────────────────────────────────
 // Для каждой таблицы: функция динамического импорта и имя экспортируемого Form-компонента.
 
-type FormLoader = { load: () => Promise<Record<string, FC<any>>>; key: string };
+// Form-компонент модели: принимает частичный Pane (как все формы в реестре видов).
+type FormComponent = FC<Partial<TPane>>;
+type FormLoader = { load: () => Promise<Record<string, FormComponent>>; key: string };
+
+// Хелпер: модуль резолвится к словарю компонентов ОДНИМ типизированным кастом
+// (вместо `as any` на каждой строке). Приведение локализовано и не `any`, а к
+// конкретному Record — рантайм не меняется (ниже берётся mod[key]).
+const lazyForm = (load: () => Promise<unknown>, key: string): FormLoader => ({
+  load: async () => (await load()) as Record<string, FormComponent>,
+  key,
+});
 
 const TABLE_FORM_MAP: Record<string, FormLoader> = {
-  products:             { load: () => import("src/models/Products")            as any, key: "ProductsForm" },
-  sales:                { load: () => import("src/models/Sales")               as any, key: "SalesForm" },
-  purchases:            { load: () => import("src/models/Purchases")           as any, key: "PurchasesForm" },
-  outgoing_invoices:    { load: () => import("src/models/OutgoingInvoices")    as any, key: "OutgoingInvoicesForm" },
-  incoming_invoices:    { load: () => import("src/models/IncomingInvoices")    as any, key: "IncomingInvoicesForm" },
-  payment_invoices:     { load: () => import("src/models/PaymentInvoices")     as any, key: "PaymentInvoicesForm" },
-  inventory_transfers:  { load: () => import("src/models/InventoryTransfers")  as any, key: "InventoryTransfersForm" },
-  cash_receipt_orders:  { load: () => import("src/models/CashReceiptOrders")   as any, key: "CashReceiptOrdersForm" },
-  cash_expense_orders:  { load: () => import("src/models/CashExpenseOrders")   as any, key: "CashExpenseOrdersForm" },
-  payroll_calculations: { load: () => import("src/models/PayrollCalculations") as any, key: "PayrollCalculationsForm" },
-  payroll_payments:     { load: () => import("src/models/PayrollPayments")     as any, key: "PayrollPaymentsForm" },
-  employees:            { load: () => import("src/models/Employees")           as any, key: "EmployeesForm" },
-  contracts:            { load: () => import("src/models/Contracts")           as any, key: "ContractsForm" },
-  counterparties:       { load: () => import("src/models/Counterparties")      as any, key: "CounterpartiesForm" },
-  contacts:             { load: () => import("src/models/Contacts")            as any, key: "ContactsForm" },
+  products:             lazyForm(() => import("src/models/Products"),            "ProductsForm"),
+  sales:                lazyForm(() => import("src/models/Sales"),               "SalesForm"),
+  purchases:            lazyForm(() => import("src/models/Purchases"),           "PurchasesForm"),
+  outgoing_invoices:    lazyForm(() => import("src/models/OutgoingInvoices"),    "OutgoingInvoicesForm"),
+  incoming_invoices:    lazyForm(() => import("src/models/IncomingInvoices"),    "IncomingInvoicesForm"),
+  payment_invoices:     lazyForm(() => import("src/models/PaymentInvoices"),     "PaymentInvoicesForm"),
+  inventory_transfers:  lazyForm(() => import("src/models/InventoryTransfers"),  "InventoryTransfersForm"),
+  cash_receipt_orders:  lazyForm(() => import("src/models/CashReceiptOrders"),   "CashReceiptOrdersForm"),
+  cash_expense_orders:  lazyForm(() => import("src/models/CashExpenseOrders"),   "CashExpenseOrdersForm"),
+  payroll_calculations: lazyForm(() => import("src/models/PayrollCalculations"), "PayrollCalculationsForm"),
+  payroll_payments:     lazyForm(() => import("src/models/PayrollPayments"),     "PayrollPaymentsForm"),
+  employees:            lazyForm(() => import("src/models/Employees"),           "EmployeesForm"),
+  contracts:            lazyForm(() => import("src/models/Contracts"),           "ContractsForm"),
+  counterparties:       lazyForm(() => import("src/models/Counterparties"),      "CounterpartiesForm"),
+  contacts:             lazyForm(() => import("src/models/Contacts"),            "ContactsForm"),
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
