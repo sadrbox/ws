@@ -62,6 +62,12 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
   const initialFields: TFields | undefined = (() => {
     if (data?.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
+    // Перенос значений, введённых inline в temp-строке (iban/name/…): берём только
+    // известные поля формы. Иначе набранное в таблице открывалось бы пустым.
+    for (const k of Object.keys(DEFAULT_FIELDS) as (keyof TFields)[]) {
+      const v = (data as Record<string, unknown> | undefined)?.[k as string];
+      if (v != null && v !== "") (init as unknown as Record<string, unknown>)[k] = v;
+    }
     if (data?.ownerType) {
       init.ownerType = data?.ownerType as OwnerType;
       init.ownerUuid = (data?.ownerUuid as string) || "";
@@ -294,7 +300,10 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
     addPane({
       label: makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? data as any : null, (data?.name || data?.iban) as string),
       component: BankAccountsForm,
-      data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
+      // Для НОВОЙ строки пробрасываем введённые inline значения (data после
+      // санитизации SubTable несёт их) + контекст владельца. Раньше отдавали
+      // только owner, и набранные в таблице поля терялись.
+      data: isEdit ? data : { ...(data as Record<string, unknown>), ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
       onSave: refresh,
       onClose: refresh,
     });

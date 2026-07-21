@@ -67,12 +67,18 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
   const initialFields: TContactFields | undefined = (() => {
     if (data?.uuid) return undefined;
     if (data?.ownerType) {
-      return {
+      const init: TContactFields = {
         ...DEFAULT_FIELDS,
         ownerType: data?.ownerType as OwnerType,
         ownerUuid: (data?.ownerUuid as string) || "",
         ownerName: (data?.ownerName as string) || "",
       };
+      // Перенос введённых inline значений (value/contactType) из temp-строки.
+      for (const k of Object.keys(DEFAULT_FIELDS) as (keyof TContactFields)[]) {
+        const v = (data as Record<string, unknown>)[k as string];
+        if (v != null && v !== "") (init as unknown as Record<string, unknown>)[k] = v;
+      }
+      return init;
     }
     return undefined;
   })();
@@ -273,7 +279,9 @@ const ContactsTable: FC<ContactsTableProps> = ({
     addPane({
       label: makePaneLabelFromData("ContactsList", translate("ContactsList"), isEdit ? data as any : null),
       component: ContactsForm,
-      data: isEdit ? data : { ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
+      // Новая строка: пробрасываем введённые inline значения (data после
+      // санитизации SubTable) + владельца — иначе набранное в таблице теряется.
+      data: isEdit ? data : { ...(data as Record<string, unknown>), ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
       onSave: refresh,
       onClose: refresh,
     });
