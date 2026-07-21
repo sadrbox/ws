@@ -1,4 +1,5 @@
 import styles from './Table.module.scss';
+import { TableConfigColumns } from './TableConfigColumns';
 import { GLOBAL_ADAPTIVE_LIMIT_REF } from 'src/hooks/useInfiniteModelList';
 import { CellFieldStateScope } from 'src/hooks/useDirtyHighlight';
 
@@ -27,10 +28,7 @@ import Toolbar from 'src/components/Toolbar';
 import { Field, FieldDateTime } from 'src/components/Field';
 import { Group } from 'src/components/UI';
 
-import { DndContext, closestCenter, type DragStartEvent, type DragEndEvent } from '@dnd-kit/core';
-import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { PiDotsThreeVerticalDuotone } from 'react-icons/pi';
+// dnd-kit / PiDots переехали в ./TableConfigColumns вместе с компонентами настройки.
 
 /**
  * Гарантирует, что последняя видимая колонка имеет width: 'auto',
@@ -1816,101 +1814,8 @@ const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
   );
 };
 
-// ────────────────────────────────────────────────
-// TableConfigColumns
-// ────────────────────────────────────────────────
-
-type TypeTableConfigColumnsProps = {
-  columns: TColumn[];
-  setColumns: Dispatch<SetStateAction<TColumn[]>>;
-};
-
-const TableConfigColumns: FC<TypeTableConfigColumnsProps> = ({ columns, setColumns }) => {
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-
-  const updateColumnVisibility = useCallback((identifier: string, visible: boolean) => {
-    setColumns(prev => prev.map(col =>
-      col.identifier === identifier ? { ...col, visible } : col
-    ));
-  }, [setColumns]);
-
-  const onDragStart = useCallback((event: DragStartEvent) => setDraggingId(String(event.active.id)), []);
-
-  const onDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event;
-    setDraggingId(null);
-    if (active.id !== over?.id) {
-      setColumns(prev => {
-        const oldIndex = prev.findIndex(col => col.identifier === active.id);
-        const newIndex = prev.findIndex(col => col.identifier === over?.id);
-        return arrayMove(prev, oldIndex, newIndex);
-      });
-    }
-  }, [setColumns]);
-
-  const dndItems = useMemo(() => columns.map(col => col.identifier), [columns]);
-
-  return (
-    <>
-      {/* <div className={styles.TableConfigListHeader}>
-        <div className={styles.TableConfigListHeaderTitle}>Видимость</div>
-      </div> */}
-      <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd} onDragStart={onDragStart}>
-        <SortableContext items={dndItems} strategy={verticalListSortingStrategy}>
-          <ul className={styles.CheckboxList}>
-            {columns.filter(col => col.inlist !== false).map(column => (
-              <TableConfigColumnsItem
-                key={column.identifier}
-                column={column}
-                isDragging={column.identifier === draggingId}
-                toggleVisibility={updateColumnVisibility}
-              />
-            ))}
-          </ul>
-        </SortableContext>
-      </DndContext>
-    </>
-  );
-};
-
-// ────────────────────────────────────────────────
-// TableConfigColumnsItem
-// ────────────────────────────────────────────────
-
-type TypeTableConfigColumnsItemProps = {
-  column: TColumn;
-  isDragging: boolean;
-  toggleVisibility: (identifier: string, visible: boolean) => void;
-};
-
-const TableConfigColumnsItem: FC<TypeTableConfigColumnsItemProps> = memo(({ column, isDragging, toggleVisibility }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: column.identifier });
-
-  const handleVisibilityChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    toggleVisibility(column.identifier, e.target.checked);
-  }, [column.identifier, toggleVisibility]);
-
-  return (
-    <li
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`${styles.ListItem} ${isDragging ? styles.dragging : ''}`}
-    >
-      <div {...listeners} {...attributes} className={styles.DragAndDrop} title={translate("move")}>
-        <PiDotsThreeVerticalDuotone size={17} strokeWidth={5} />
-      </div>
-      <div className={styles.CheckboxWrapper}>
-        <input
-          type="checkbox"
-          id={`column-visibility-${column.identifier}`}
-          checked={column.visible}
-          onChange={handleVisibilityChange}
-        />
-        <label htmlFor={`column-visibility-${column.identifier}`}>{getTranslateColumn(column)}</label>
-      </div>
-    </li>
-  );
-});
+// TableConfigColumns / TableConfigColumnsItem вынесены в ./TableConfigColumns
+// (чистые props-компоненты — T4). TableConfigModalForm выше рендерит их.
 
 // ────────────────────────────────────────────────
 // FieldDateRange - модальный компонент фильтра по датам
