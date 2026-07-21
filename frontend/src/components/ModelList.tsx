@@ -335,6 +335,13 @@ const ModelList: FC<ModelListProps> = ({
         ? d
         : ({
             ...(d as object | undefined),
+            // Контекст родителя/владельца в новую форму: extraQueryParams несут
+            // ownerType/ownerUuid (или иной scope), по которым отфильтрован список
+            // — по ним же и создаём. Так «Добавить» из sub-списка/формы Выбора
+            // предзаполняет «Владелец» (напр. Контакт с ownerType+ownerUuid).
+            // Форма читает только известные ей поля, лишние ключи игнорируются.
+            ...(extraQueryParams ?? {}),
+            // Явный ownerField/ownerUuid имеет приоритет над extraQueryParams.
             ...(ownerUuid && ownerField ? { [ownerField]: ownerUuid } : {}),
             _paneToken: `new-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
           } as unknown as TDataItem);
@@ -355,7 +362,7 @@ const ModelList: FC<ModelListProps> = ({
         onClose: async () => { await refetch(); },
       });
     },
-    [addPane, refetch, componentName, ownerUuid, ownerField, FormComponent, getLabel, endpoint],
+    [addPane, refetch, componentName, ownerUuid, ownerField, extraQueryParams, FormComponent, getLabel, endpoint],
   );
 
   if (error) {

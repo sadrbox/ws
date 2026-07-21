@@ -474,11 +474,14 @@ const LookupField: FC<LookupFieldProps> = ({
       addPane({
         label: translate(entry.formName) || entry.label || endpoint,
         component: FormComp,
-        data: {} as any, // новая запись
+        // Новая запись, НО с контекстом родителя: extraParams несут ownerType/
+        // ownerUuid (или иной scope) — чтобы форма нового элемента предзаполнила
+        // «Владелец». Раньше здесь был пустой {} и контекст терялся.
+        data: { ...(extraParams ?? {}) } as any,
       });
       setIsDropdownOpen(false);
     }).catch(() => { /* тихо игнорируем ошибку загрузки */ });
-  }, [disabled, endpoint, addPane]);
+  }, [disabled, endpoint, addPane, extraParams]);
 
   // Есть ли форма создания для этого справочника (реестр моделей).
   // Право на создание нового элемента справочника (гейт кнопки «Создать»).

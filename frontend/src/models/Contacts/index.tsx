@@ -1,4 +1,4 @@
-import { FC, useCallback, useMemo } from "react";
+import { FC, useCallback, useMemo, useEffect } from "react";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -108,6 +108,20 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
     },
     buildPaneLabel: (saved) => makePaneLabel("ContactsList", translate("ContactsList"), saved, saved.value),
   });
+
+  // Владелец пришёл из родителя (extraParams: ownerType+ownerUuid), но без имени —
+  // дорезолвим его, чтобы поле «Владелец» показывало название, а не пустоту.
+  const { ownerType: fOwnerType, ownerUuid: fOwnerUuid, ownerName: fOwnerName } = form.fields;
+  useEffect(() => {
+    if (!fOwnerType || !fOwnerUuid || fOwnerName) return;
+    let alive = true;
+    import("src/utils/resolveOwnerName").then(async ({ resolveOwnerName }) => {
+      const name = await resolveOwnerName(fOwnerType, fOwnerUuid);
+      if (alive && name) form.setField("ownerName", name);
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fOwnerType, fOwnerUuid, fOwnerName]);
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
   const notices = useFormNotices(form);
