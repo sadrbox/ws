@@ -34,6 +34,8 @@ export const ContactsList = lazyView("ContactsList", () => import('src/models/Co
 export const ContactPersonsList = lazyView("ContactPersonsList", () => import('src/models/ContactPersons').then(m => ({ default: m.ContactPersonsList })));
 export const UsersList = lazyView("UsersList", () => import('src/models/Users').then(m => ({ default: m.UsersList })));
 export const TodosList = lazyView("TodosList", () => import('src/models/Todos').then(m => ({ default: m.TodosList })));
+export const TaskBoardList = lazyView("TaskBoardList", () => import('src/models/TaskBoard').then(m => ({ default: m.TaskBoardList })));
+export const UserPerformanceList = lazyView("UserPerformanceList", () => import('src/models/UserPerformance').then(m => ({ default: m.UserPerformanceList })));
 export const NotificationsList = lazyView("NotificationsList", () => import('src/models/Notifications').then(m => ({ default: m.NotificationsList })));
 export const WarehousesList = lazyView("WarehousesList", () => import('src/models/Warehouses').then(m => ({ default: m.WarehousesList })));
 export const CashboxesList = lazyView("CashboxesList", () => import('src/models/Cashboxes').then(m => ({ default: m.CashboxesList })));
@@ -121,6 +123,8 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	ContactPersonsList: ContactPersonsList,
 	UsersList: UsersList,
 	TodosList: TodosList,
+	TaskBoardList: TaskBoardList,
+	UserPerformanceList: UserPerformanceList,
 	NotificationsList: NotificationsList,
 	WarehousesList: WarehousesList,
 	CashboxesList: CashboxesList,

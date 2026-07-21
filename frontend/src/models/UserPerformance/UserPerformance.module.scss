@@ -1,0 +1,134 @@
+// Дашборд эффективности пользователей. Цвета — семантические токены (тема-независимо).
+
+.Wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+  padding: 14px 16px;
+  box-sizing: border-box;
+}
+
+.Toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.Field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.Field input {
+  font: inherit;
+  padding: 3px 6px;
+  border: 1px solid var(--line, #ccc);
+  border-radius: 5px;
+  background: var(--panel, #fff);
+  color: var(--ink, #1a2230);
+}
+
+.Hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+// ── Таблица показателей ──────────────────────────────────────────────────────
+.Table {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--line, #e4e7ec);
+  border-radius: 10px;
+}
+
+.Row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.4fr) minmax(180px, 2fr) repeat(3, minmax(72px, 0.7fr));
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line, #eef0f3);
+
+  &:last-child { border-bottom: 0; }
+}
+
+.Row.head {
+  position: sticky;
+  top: 0;
+  background: var(--surface-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.User {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink, #1a2230);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// ── Полоса «документов» (сравнение между пользователями) ────────────────────
+.DocBarCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.DocBarTrack {
+  flex: 1 1 auto;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-link) 12%, transparent);
+  overflow: hidden;
+}
+
+.DocBarFill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--color-link);
+}
+
+.DocValue {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 42px;
+  text-align: right;
+}
+
+// ── Числовые показатели задач ───────────────────────────────────────────────
+.Metric {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.Metric.done { color: var(--success); }
+.Metric.active { color: var(--text-secondary); }
+.Metric.overdue { color: var(--danger); }
+.Metric.zero { color: var(--text-faint); font-weight: 400; }
+
+.Status {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}

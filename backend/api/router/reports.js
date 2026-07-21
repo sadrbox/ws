@@ -597,4 +597,102 @@ router.get("/reports/sales-by-manager", async (req, res) => {
 	}
 });
 
+// ─── GET /reports/user-performance ───────────────────────────────────────────
+// Показатели эффективности пользователей (E9, collaboration): сколько документов
+// каждый провёл/создал за период + состояние его задач. Источник документов —
+// союз таблиц с единой формой (authorUuid + date + organizationUuid); задачи — из
+// Todo (executor). Мультитенант-изоляция та же, что везде (доступные организации).
+//
+// Имена таблиц — жёсткий константный список (инъекции нет); фильтры параметризованы.
+const PERF_DOC_TABLES = [
+	"sales", "purchases", "sale_returns", "purchase_returns",
+	"outgoing_invoices", "incoming_invoices", "payment_invoices",
+	"purchase_requisitions", "purchase_orders", "sales_orders",
+	"commercial_offers", "reservations", "inventory_transfers",
+	"write_offs", "goods_receipts", "stock_counts", "import_declarations",
+	"cash_orders", "bank_statements", "month_closes",
+	"payroll_calculations", "payroll_payments",
+];
+
+/** Массив uuid организаций для raw-SQL изоляции (null = суперадмин, видит всё). */
+function allowedOrgArray(req) {
+	if (req.user?.isSuperAdmin) return null;
+	if (req.user?.organizationUuid) return [req.user.organizationUuid];
+	if (req.user?.allowedOrgUuids?.length) return req.user.allowedOrgUuids;
+	return []; // ни активной, ни разрешённых — не видит ничего
+}
+
+router.get("/reports/user-performance", async (req, res) => {
+	try {
+		const { dateFrom, dateTo, organizationUuid } = req.query;
+		const from = dateFrom ? new Date(dateFrom) : null;
+		const to = dateTo ? new Date(dateTo + "T23:59:59.999Z") : null;
+
+		// Изоляция: явная орг из фильтра ∩ доступные пользователю.
+		let orgs = allowedOrgArray(req);
+		if (organizationUuid) {
+			orgs = orgs === null ? [organizationUuid] : orgs.filter((o) => o === organizationUuid);
+		}
+
+		// ── Документы по автору (союз таблиц) ──────────────────────────────────
+		// $1 dateFrom, $2 dateTo, $3 orgs[] — переиспользуются во всех подзапросах.
+		const subquery = (t) =>
+			`SELECT "authorUuid" AS uid FROM "${t}" WHERE "deletedAt" IS NULL
+			   AND ($1::timestamp IS NULL OR "date" >= $1)
+			   AND ($2::timestamp IS NULL OR "date" <= $2)
+			   AND ($3::text[] IS NULL OR "organizationUuid" = ANY($3))`;
+		const docSql =
+			`SELECT uid, COUNT(*)::int AS docs FROM (
+				${PERF_DOC_TABLES.map(subquery).join("\n\t\t\t\tUNION ALL\n\t\t\t\t")}
+			) u WHERE uid IS NOT NULL GROUP BY uid`;
+		const docRows = await prisma.$queryRawUnsafe(docSql, from, to, orgs);
+
+		// ── Задачи по исполнителю ──────────────────────────────────────────────
+		const taskWhere = { deletedAt: null };
+		if (orgs !== null) taskWhere.organizationUuid = { in: orgs };
+		if (from || to) taskWhere.createdAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
+		const tasks = await prisma.todo.findMany({
+			where: taskWhere,
+			select: { executorUuid: true, status: true, deadline: true },
+		});
+
+		// ── Свод по пользователю ───────────────────────────────────────────────
+		const byUser = new Map();
+		const ensure = (uid) => {
+			if (!uid) return null;
+			if (!byUser.has(uid)) byUser.set(uid, { userUuid: uid, docs: 0, tasksTotal: 0, tasksDone: 0, tasksOverdue: 0, tasksActive: 0 });
+			return byUser.get(uid);
+		};
+		for (const r of docRows) { const u = ensure(r.uid); if (u) u.docs = r.docs; }
+		const now = Date.now();
+		for (const t of tasks) {
+			const u = ensure(t.executorUuid);
+			if (!u) continue;
+			u.tasksTotal++;
+			const closed = t.status === "done" || t.status === "cancelled";
+			if (t.status === "done") u.tasksDone++;
+			if (!closed) {
+				u.tasksActive++;
+				if (t.deadline && new Date(t.deadline).getTime() < now) u.tasksOverdue++;
+			}
+		}
+
+		// Имена пользователей.
+		const uids = [...byUser.keys()];
+		const users = uids.length
+			? await prisma.user.findMany({ where: { uuid: { in: uids } }, select: { uuid: true, username: true, employee: { select: { fullName: true } } } })
+			: [];
+		const nameOf = new Map(users.map((u) => [u.uuid, u.employee?.fullName || u.username || u.uuid]));
+
+		const items = [...byUser.values()]
+			.map((u) => ({ ...u, userName: nameOf.get(u.userUuid) ?? u.userUuid }))
+			.sort((a, b) => b.docs - a.docs || b.tasksDone - a.tasksDone);
+
+		return res.json({ success: true, items });
+	} catch (err) {
+		console.error("GET /reports/user-performance error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 export default router;

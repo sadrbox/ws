@@ -37,6 +37,8 @@ import {
   ContactPersonsList,
   UsersList,
   TodosList,
+  TaskBoardList,
+  UserPerformanceList,
   NotificationsList,
   WarehousesList,
   CashboxesList,
@@ -1130,7 +1132,9 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavGroup}>
         <h3>{translate("taskManagement")}</h3>
         <ul className={styles.NavList}>
+          {can("Todo") && <NavItem onClick={() => addPane({ component: TaskBoardList, label: translate("TaskBoard") })}>{translate("TaskBoard")}</NavItem>}
           {can("Todo") && <NavItem onClick={() => addPane({ component: TodosList })}>{translate("TodosList")}</NavItem>}
+          {can("Todo") && <NavItem onClick={() => addPane({ component: UserPerformanceList, label: translate("UserPerformance") })}>{translate("UserPerformance")}</NavItem>}
         </ul>
       </div>
     </>
