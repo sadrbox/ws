@@ -1550,7 +1550,28 @@ export function useFormStore<F extends object>(
 	const fullStorageKey =
 		((data as any)?._formStorageKey as string) ||
 		`${STORAGE_PREFIX}${userId}:${storageKey}:${uuid ?? uniqId ?? "new"}`;
-	const effectiveDefaults = initialFields ?? defaultFields;
+	// ── Предзаполнение НОВОЙ формы значениями из paneProps.data ──────────────
+	// Общий паттерн для ВСЕХ форм: открываешь новый элемент из контекста
+	// (родитель/владелец, «Создать» из лукапа, temp-строка inline-таблицы) —
+	// поля предзаполняются пришедшими в data значениями. Раньше это делала каждая
+	// форма в своём initialFields, и большинство брали лишь owner — набранные
+	// значения терялись.
+	//
+	// Берём ТОЛЬКО известные поля формы (ключи defaultFields) с непустым значением;
+	// служебные (_paneToken/_pendingAction), id, uuid и лишние ключи игнорируются.
+	// Только для НОВОЙ записи (без uuid): в режиме правки форма грузит с сервера.
+	const baseDefaults = initialFields ?? defaultFields;
+	const effectiveDefaults: F = (uuid || !data)
+		? baseDefaults
+		: (() => {
+			const merged = { ...baseDefaults } as Record<string, unknown>;
+			for (const k of Object.keys(defaultFields as Record<string, unknown>)) {
+				if (k.startsWith("_") || k === "id" || k === "uuid") continue; // служебные/идентификаторы не переносим
+				const v = (data as Record<string, unknown>)[k];
+				if (v != null && v !== "") merged[k] = v;
+			}
+			return merged as F;
+		})();
 	// Открыта через "Несохранённые записи" — нужно автоматически применить stash
 	// и подсветить поля с изменёнными значениями.
 	const isFromUnsaved = !!(data as any)?._formStorageKey;

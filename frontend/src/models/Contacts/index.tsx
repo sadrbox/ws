@@ -67,18 +67,14 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
   const initialFields: TContactFields | undefined = (() => {
     if (data?.uuid) return undefined;
     if (data?.ownerType) {
-      const init: TContactFields = {
+      // Введённые inline значения (value/contactType) переносит общий useFormStore
+      // (слияние известных полей из paneProps.data) — здесь только владелец.
+      return {
         ...DEFAULT_FIELDS,
         ownerType: data?.ownerType as OwnerType,
         ownerUuid: (data?.ownerUuid as string) || "",
         ownerName: (data?.ownerName as string) || "",
       };
-      // Перенос введённых inline значений (value/contactType) из temp-строки.
-      for (const k of Object.keys(DEFAULT_FIELDS) as (keyof TContactFields)[]) {
-        const v = (data as Record<string, unknown>)[k as string];
-        if (v != null && v !== "") (init as unknown as Record<string, unknown>)[k] = v;
-      }
-      return init;
     }
     return undefined;
   })();

@@ -62,12 +62,8 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
   const initialFields: TFields | undefined = (() => {
     if (data?.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
-    // Перенос значений, введённых inline в temp-строке (iban/name/…): берём только
-    // известные поля формы. Иначе набранное в таблице открывалось бы пустым.
-    for (const k of Object.keys(DEFAULT_FIELDS) as (keyof TFields)[]) {
-      const v = (data as Record<string, unknown> | undefined)?.[k as string];
-      if (v != null && v !== "") (init as unknown as Record<string, unknown>)[k] = v;
-    }
+    // Перенос введённых inline значений (iban/name/…) делает общий useFormStore
+    // (слияние известных полей из paneProps.data) — здесь только владелец.
     if (data?.ownerType) {
       init.ownerType = data?.ownerType as OwnerType;
       init.ownerUuid = (data?.ownerUuid as string) || "";
