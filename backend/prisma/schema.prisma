@@ -60,6 +60,7 @@ model User {
   authoredGoodsReceipts GoodsReceipt[] @relation("GoodsReceiptAuthor")
   authoredStockCounts   StockCount[]   @relation("StockCountAuthor")
   pipeActivities        PipeActivity[] @relation("UserPipeActivities")
+  chatMessages          ChatMessage[]  @relation("UserChatMessages")
 
   @@index([employeeUuid])
   @@index([organizationUuid])
@@ -186,6 +187,7 @@ model Organization {
   goodsReceipts  GoodsReceipt[] @relation("OrgGoodsReceipts")
   stockCounts    StockCount[]   @relation("OrgStockCounts")
   pipeActivities PipeActivity[] @relation("OrgPipeActivities")
+  chatMessages   ChatMessage[]  @relation("OrgChatMessages")
 
   @@unique([externalSource, externalId])
   @@index([updatedAt])
@@ -412,6 +414,27 @@ model ActivityHistory {
   @@index([objectType, objectId])
   @@index([userUuid])
   @@map("activity_history")
+}
+
+// Чат между пользователями в пределах организации (E4, collaboration).
+// Канал = организация: сообщение видят только пользователи с доступом к ней (тот
+// же tenantFilter, что и везде). authorName денормализован — чтобы история читалась
+// даже после переименования/удаления пользователя. Прямые диалоги 1:1 — на будущее.
+model ChatMessage {
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  organizationUuid String
+  authorUuid       String
+  authorName       String
+  body             String
+  createdAt        DateTime      @default(now())
+  deletedAt        DateTime?
+  organization     Organization  @relation("OrgChatMessages", fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  author           User          @relation("UserChatMessages", fields: [authorUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([organizationUuid, createdAt])
+  @@index([authorUuid])
+  @@map("chat_messages")
 }
 
 // Специальная таблица для событий, приходящих от внешних интеграций (1С -> /pipe)

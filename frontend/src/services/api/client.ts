@@ -27,6 +27,9 @@ function getApiUrl(): string {
 	return isLocal ? LOCAL_API_URL : REMOTE_API_URL;
 }
 
+/** Базовый URL API (…/api/v1). Нужен для EventSource (SSE): axios его не обслуживает. */
+export const API_BASE_URL = getApiUrl();
+
 export interface ApiError {
 	message: string;
 	statusCode: number;

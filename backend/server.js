@@ -34,6 +34,8 @@ import contactsRouter from "./api/router/contacts.js";
 import contactPersonsRouter from "./api/router/contactpersons.js";
 import usersRouter from "./api/router/users.js";
 import todosRouter from "./api/router/todos.js";
+import chatRouter from "./api/router/chat.js";
+import chatStreamRouter from "./api/router/chatStream.js";
 import warehousesRouter from "./api/router/warehouses.js";
 import cashboxesRouter from "./api/router/cashboxes.js";
 import salesRouter from "./api/router/sales.js";
@@ -306,6 +308,10 @@ app.head("/api/health", (_req, res) => {
 
 app.use("/api/v1", authRouter);
 
+// SSE-поток чата — ДО общего authMiddleware: EventSource не шлёт заголовок
+// Authorization, у маршрута своя проверка токена из query (см. chatStream.js).
+app.use("/api/v1", chatStreamRouter);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 6. ЗАЩИЩЁННЫЕ МАРШРУТЫ (требуют JWT)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -328,6 +334,7 @@ app.use("/api/v1", contactsRouter);
 app.use("/api/v1", contactPersonsRouter);
 app.use("/api/v1", usersRouter);
 app.use("/api/v1", todosRouter);
+app.use("/api/v1", chatRouter);
 app.use("/api/v1", warehousesRouter);
 app.use("/api/v1", cashboxesRouter);
 app.use("/api/v1", documentChainRouter);
