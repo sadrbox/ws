@@ -8,4 +8,5 @@ export default createDocumentItemsRouter({
 	PARENT_MODEL: "inventoryTransfer",
 	PARENT_FIELD: "inventoryTransferUuid",
 	hasTaxes: false,
+	extraStringFields: ["batchUuid"], // партия перемещаемого ТМЗ (T6.1 Stage 3)
 });

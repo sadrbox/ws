@@ -7,7 +7,7 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { buildOrderBy } from "../../utils/sortOrder.js";
 import {
-	setReceiptSerials, issueSerials, SERIAL_STATUS,
+	setReceiptSerials, issueSerials, transferSerials, SERIAL_STATUS,
 } from "../../services/serialNumbers.js";
 
 const router = express.Router();
@@ -149,6 +149,20 @@ router.post(`/${ROUTE}/receipt`, async (req, res) => {
 		return res.status(200).json({ success: true, ...result });
 	} catch (error) {
 		console.error(`POST /${ROUTE}/receipt error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// Перенести выбранные серии на склад-получатель (перемещение ТМЗ). Полный
+// пересбор выбора: прежние возвращаются на источник, выбранные переносятся.
+router.post(`/${ROUTE}/transfer`, async (req, res) => {
+	try {
+		const { docUuid, serialUuids, fromWarehouseUuid, toWarehouseUuid } = req.body;
+		if (!docUuid) return res.status(400).json({ success: false, message: "docUuid обязателен" });
+		const count = await transferSerials({ docUuid, serialUuids, fromWarehouseUuid: fromWarehouseUuid || null, toWarehouseUuid: toWarehouseUuid || null });
+		return res.status(200).json({ success: true, count });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/transfer error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

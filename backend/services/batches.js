@@ -117,6 +117,11 @@ export function assertBatchStock(lines) {
 // Документы-приёмки и документы-выбытия для партий (те же, что для серий/склада).
 export const BATCH_RECEIPT_DOCS = new Set(["purchase", "goods_receipt", "import_declaration"]);
 export const BATCH_ISSUE_DOCS = new Set(["sale", "write_off"]);
+// Перемещение (T6.1 Stage 3): партия списывается с источника (issue-логика по
+// fromWarehouseUuid) и той же партией приходует на получатель. Партия не привязана
+// к складу — её остаток по складу выводится из регистра (batchUuid+warehouseUuid),
+// поэтому обе ноги перемещения несут один batchUuid, и получатель наследует срок.
+export const BATCH_TRANSFER_DOCS = new Set(["inventory_transfer"]);
 
 /** Товары с учётом по партиям среди переданных. */
 export async function batchTrackedProducts(productUuids, client = prisma, docDate = null) {
@@ -154,7 +159,11 @@ export class BatchValidationError extends Error {
  * Бросает BatchValidationError при нарушении.
  */
 export async function assertDocumentBatches({ docType, docUuid, itemModel, parentField, warehouseField = "warehouseUuid", docDate = null }, client = prisma) {
-	const mode = BATCH_ISSUE_DOCS.has(docType) ? "issue" : BATCH_RECEIPT_DOCS.has(docType) ? "receipt" : null;
+	// Перемещение проверяется как выбытие (партия назначена + остаток на источнике),
+	// но со своим warehouseField (fromWarehouseUuid передаёт вызывающий).
+	const mode = BATCH_ISSUE_DOCS.has(docType) || BATCH_TRANSFER_DOCS.has(docType)
+		? "issue"
+		: BATCH_RECEIPT_DOCS.has(docType) ? "receipt" : null;
 	if (!mode) return;
 
 	const parentModel = docParentModel(docType);
@@ -224,7 +233,7 @@ async function batchAvailableExcludingDoc({ batchUuid, warehouseUuid, organizati
 
 /** docType → prisma-модель документа (для загрузки склада/организации). */
 function docParentModel(docType) {
-	return { goods_receipt: "goodsReceipt", write_off: "writeOff", purchase: "purchase", import_declaration: "importDeclaration", sale: "sale" }[docType];
+	return { goods_receipt: "goodsReceipt", write_off: "writeOff", purchase: "purchase", import_declaration: "importDeclaration", sale: "sale", inventory_transfer: "inventoryTransfer" }[docType];
 }
 
 /** Express-хелпер: BatchValidationError → 422. */

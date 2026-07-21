@@ -19,6 +19,11 @@ export const SERIAL_STATUS = { IN_STOCK: "in_stock", ISSUED: "issued", WRITTEN_O
 // Документы-приёмники и документы-выбытия для серий (те же, что двигают склад «+»/«−»).
 export const SERIAL_RECEIPT_DOCS = new Set(["purchase", "goods_receipt", "import_declaration"]);
 export const SERIAL_ISSUE_DOCS = new Set(["sale", "write_off"]);
+// Перемещение (T6.1 Stage 3): серия НЕ выбывает — меняется её склад (warehouseUuid)
+// с источника на получатель, статус остаётся in_stock. Связь перемещения с сериями
+// пишем в issueDoc* (issueDocType="inventory_transfer") — отдельных колонок не
+// заводим; статус in_stock отличает «перемещённую» серию от реально выбывшей.
+export const SERIAL_TRANSFER_DOCS = new Set(["inventory_transfer"]);
 
 /**
  * Нормализовать ввод серий: строка (по одной на строку/через запятую/пробел) или
@@ -166,6 +171,43 @@ export async function issueSerials({ docType, docUuid, serialUuids, status = SER
 	return res.count;
 }
 
+/**
+ * Перемещение серий между складами (T6.1 Stage 3). Идемпотентный пересбор:
+ * сначала все ранее перемещённые ЭТИМ документом серии возвращаем на источник,
+ * затем выбранные in_stock-серии переносим на получатель. Серия остаётся in_stock
+ * (не выбывает) — меняется только склад; связь пишем в issueDoc*.
+ *
+ * @returns {Promise<number>} число перемещённых серий
+ */
+export async function transferSerials({ docUuid, serialUuids, fromWarehouseUuid, toWarehouseUuid }, client = prisma) {
+	// 1. Откат прежнего выбора этого перемещения на источник (полный пересбор).
+	await client.serialNumber.updateMany({
+		where: { issueDocType: "inventory_transfer", issueDocUuid: docUuid, status: SERIAL_STATUS.IN_STOCK, deletedAt: null },
+		data: { warehouseUuid: fromWarehouseUuid ?? null, issueDocType: null, issueDocUuid: null },
+	});
+	// 2. Перенос выбранных серий на получатель. Двигаем только in_stock и реально
+	// лежащие на складе-источнике — чужие/уже перемещённые не трогаем.
+	const ids = [...new Set((serialUuids ?? []).filter(Boolean))];
+	if (!ids.length) return 0;
+	const res = await client.serialNumber.updateMany({
+		where: {
+			uuid: { in: ids }, status: SERIAL_STATUS.IN_STOCK, deletedAt: null,
+			...(fromWarehouseUuid ? { warehouseUuid: fromWarehouseUuid } : {}),
+		},
+		data: { warehouseUuid: toWarehouseUuid ?? null, issueDocType: "inventory_transfer", issueDocUuid: docUuid },
+	});
+	return res.count;
+}
+
+/** Откат перемещения документа: серии возвращаются на склад-источник (при удалении). */
+export async function releaseTransferSerials(docUuid, fromWarehouseUuid, client = prisma) {
+	const res = await client.serialNumber.updateMany({
+		where: { issueDocType: "inventory_transfer", issueDocUuid: docUuid, status: SERIAL_STATUS.IN_STOCK, deletedAt: null },
+		data: { warehouseUuid: fromWarehouseUuid ?? null, issueDocType: null, issueDocUuid: null },
+	});
+	return res.count;
+}
+
 /** Откат выбытия документа: серии возвращаются в in_stock (при отмене/удалении). */
 export async function releaseIssuedSerials(docType, docUuid, client = prisma) {
 	const res = await client.serialNumber.updateMany({
@@ -203,7 +245,11 @@ export class SerialCountError extends Error {
  * @param {string} p.parentField — FK-поле строки на документ (writeOffUuid, …)
  */
 export async function assertDocumentSerials({ docType, docUuid, itemModel, parentField, docDate = null }, client = prisma) {
-	const mode = SERIAL_ISSUE_DOCS.has(docType) ? "issue" : SERIAL_RECEIPT_DOCS.has(docType) ? "receipt" : null;
+	// Перемещение считаем как выбытие (число перенесённых серий = количеству),
+	// связь — в issueDoc* (см. transferSerials).
+	const mode = SERIAL_ISSUE_DOCS.has(docType) || SERIAL_TRANSFER_DOCS.has(docType)
+		? "issue"
+		: SERIAL_RECEIPT_DOCS.has(docType) ? "receipt" : null;
 	if (!mode) return; // документ не относится к серийному учёту
 
 	// Дата документа нужна, чтобы НЕ применять серийный учёт задним числом
@@ -270,8 +316,9 @@ export function respondSerialError(err, res) {
 }
 
 export default {
-	SERIAL_STATUS, SERIAL_RECEIPT_DOCS, SERIAL_ISSUE_DOCS,
+	SERIAL_STATUS, SERIAL_RECEIPT_DOCS, SERIAL_ISSUE_DOCS, SERIAL_TRANSFER_DOCS,
 	normalizeSerials, assertSerialCount, serialTrackedProducts,
 	setReceiptSerials, countReceiptSerials, issueSerials, releaseIssuedSerials, removeReceiptSerials,
+	transferSerials, releaseTransferSerials,
 	assertDocumentSerials, respondSerialError, SerialCountError,
 };

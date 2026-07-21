@@ -7,6 +7,8 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
+import { assertDocumentSerials, respondSerialError, releaseTransferSerials } from "../../services/serialNumbers.js";
+import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
@@ -246,6 +248,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				data.fromWarehouseUuid !== undefined
 					? data.fromWarehouseUuid
 					: existing.fromWarehouseUuid;
+			// Серии: число перенесённых серий строки = её количеству; партии:
+			// партия назначена и её остаток на складе-ИСТОЧНИКЕ достаточен.
+			await assertDocumentSerials({ docType: "inventory_transfer", docUuid: existing.uuid, itemModel: "inventoryTransferItem", parentField: "inventoryTransferUuid" });
+			await assertDocumentBatches({ docType: "inventory_transfer", docUuid: existing.uuid, itemModel: "inventoryTransferItem", parentField: "inventoryTransferUuid", warehouseField: "fromWarehouseUuid" });
 			await assertStockForPosting("inventory_transfer", existing.uuid, {
 				fromWarehouseUuid,
 			});
@@ -273,6 +279,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondOrgFieldError(error, res)) return;
 		if (respondStockError(error, res)) return;
 		if (respondPostingError(error, res)) return;
+		if (respondSerialError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025")
@@ -284,6 +292,14 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 const onTransferDeleted = async (doc) => {
 	await removeDocumentRegister("inventory_transfer", doc.uuid);
 	await removeDocumentEntries("inventory_transfer", doc.uuid);
+	// Перемещённые серии возвращаем на склад-источник (в doc может не быть склада —
+	// дочитываем из БД, чтобы вернуть warehouseUuid, а не занулить).
+	let fromWh = doc.fromWarehouseUuid;
+	if (fromWh === undefined) {
+		const d = await prisma[MODEL].findUnique({ where: { uuid: doc.uuid }, select: { fromWarehouseUuid: true } });
+		fromWh = d?.fromWarehouseUuid ?? null;
+	}
+	await releaseTransferSerials(doc.uuid, fromWh ?? null);
 };
 router.delete(`/${ROUTE}/:id`, (req, res) =>
 	handleDelete({ req, res, prisma, modelName: MODEL, numberDocType: "inventory_transfer", onDeleted: onTransferDeleted }),

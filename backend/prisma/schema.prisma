@@ -1330,6 +1330,7 @@ model InventoryTransferItem {
   unitOfMeasureUuid     String?
   productUuid           String?
   inventoryTransferUuid String
+  batchUuid             String? // партия перемещаемого ТМЗ (T6.1 Stage 3): FEFO-выбор с источника, та же партия у получателя
   updatedAt             DateTime          @default(now()) @updatedAt
   deletedAt             DateTime?
   product               Product?          @relation(fields: [productUuid], references: [uuid])
@@ -1340,6 +1341,7 @@ model InventoryTransferItem {
   @@index([productUuid])
   @@index([unitOfMeasureUuid])
   @@index([updatedAt])
+  @@index([batchUuid])
   @@map("inventory_transfer_items")
 }
 
