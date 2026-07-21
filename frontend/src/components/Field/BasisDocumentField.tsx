@@ -37,6 +37,8 @@ export interface BasisDocumentFieldProps {
   organizationName?: string;
   counterpartyUuid?: string;
   counterpartyName?: string;
+  warehouseUuid?: string;
+  warehouseName?: string;
   /** Документ-основание не совпадает с текущим (организация/контрагент/строки). */
   mismatch?: boolean;
   /** Перечень расхождений с основанием (для подсказки). */
@@ -84,6 +86,8 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   organizationName,
   counterpartyUuid,
   counterpartyName,
+  warehouseUuid,
+  warehouseName,
 }) => {
   const [selectedType, setSelectedType] = useState<string>(
     basisDocumentType || allowedTypes[0]?.type || "",
@@ -106,8 +110,9 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     const d: Record<string, unknown> = {};
     if (organizationUuid) { d.organizationUuid = organizationUuid; if (organizationName) d.organizationName = organizationName; }
     if (counterpartyUuid) { d.counterpartyUuid = counterpartyUuid; if (counterpartyName) d.counterpartyName = counterpartyName; }
+    if (warehouseUuid) { d.warehouseUuid = warehouseUuid; if (warehouseName) d.warehouseName = warehouseName; }
     return Object.keys(d).length ? d : undefined;
-  }, [organizationUuid, organizationName, counterpartyUuid, counterpartyName]);
+  }, [organizationUuid, organizationName, counterpartyUuid, counterpartyName, warehouseUuid, warehouseName]);
 
   useEffect(() => {
     if (basisDocumentType && basisDocumentType !== selectedType) {

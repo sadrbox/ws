@@ -203,6 +203,8 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
                   // Подбор основания — только документы организации этого документа.
                   organizationUuid={form.fields.organizationUuid}
                   organizationName={form.fields.organizationName}
+                  warehouseUuid={form.fields.warehouseUuid}
+                  warehouseName={form.fields.warehouseName}
                   basisDocumentUuid={form.fields.basisDocumentUuid}
                   basisDocumentLabel={form.fields.basisDocumentLabel}
                   formUid={form.formUid}

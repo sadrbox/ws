@@ -519,6 +519,8 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
                     organizationName={form.fields.organizationName}
                     counterpartyUuid={form.fields.counterpartyUuid}
                     counterpartyName={form.fields.counterpartyName}
+                    warehouseUuid={form.fields.warehouseUuid}
+                    warehouseName={form.fields.warehouseName}
                     basisDocumentUuid={form.fields.basisDocumentUuid}
                     basisDocumentLabel={form.fields.basisDocumentLabel}
                     formUid={form.formUid}
