@@ -308,7 +308,12 @@ const App: React.FC = () => {
       if (opener) newPane.openerPaneId = opener;
     }
 
-    setPanes((prev) => [...prev, newPane]);
+    // Дедуп внутри функционального апдейтера — надёжная защита от дублей uniqId.
+    // Проверки `existing` выше (строка ~252) недостаточно: при восстановлении сессии
+    // асинхронный цикл держит ОДНУ ссылку на addPane с устаревшим снимком `panes`
+    // (пустым), поэтому несколько restorePane для одного списка не видят друг друга
+    // и дают два ключа `Panes-SalesList`. Здесь `prev` — всегда актуальный.
+    setPanes((prev) => (prev.some((p) => p.uniqId === uniqId) ? prev : [...prev, newPane]));
     setActivePaneId(uniqId);
 
     // Скрываем навбар после открытия панели
