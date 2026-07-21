@@ -265,12 +265,18 @@ const ContactsTable: FC<ContactsTableProps> = ({
     return undefined;
   }, []);
 
-  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
+  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext, sourceRow?: TDataItem) => {
     // Не считать temp-строку (uuid «tmp-…») существующей — иначе GET по фейку → 404.
     const isEdit = !!data?.uuid && !isUnsavedRow(data);
     const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] });
       ctx.refetch();
+    };
+    // ТОЛЬКО при сохранении убираем исходную temp-строку (дубль). На отмене
+    // (onClose) НЕ трогаем — иначе потеряли бы черновик при простом закрытии.
+    const onSaved = () => {
+      if (sourceRow) void ctx.removeRow(sourceRow);
+      refresh();
     };
     addPane({
       label: makePaneLabelFromData("ContactsList", translate("ContactsList"), isEdit ? data as any : null),
@@ -278,7 +284,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
       // Новая строка: пробрасываем введённые inline значения (data после
       // санитизации SubTable) + владельца — иначе набранное в таблице теряется.
       data: isEdit ? data : { ...(data as Record<string, unknown>), ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
-      onSave: refresh,
+      onSave: onSaved,
       onClose: refresh,
     });
   }, [addPane, ownerType, parentUuid, parentName, queryClient]);

@@ -285,13 +285,20 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
     return undefined;
   }, []);
 
-  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
+  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext, sourceRow?: TDataItem) => {
     // isEdit по НАЛИЧИЮ реального uuid — но не временного «tmp-…»: иначе форма
     // грузила бы несохранённую строку по фейковому uuid (GET /…/tmp-… → 404).
     const isEdit = !!data?.uuid && !isUnsavedRow(data);
     const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: [BA_TABLE_ENDPOINT] });
       _ctx.refetch();
+    };
+    // ТОЛЬКО при сохранении: форма создала реальный элемент — убираем исходную
+    // temp-строку, иначе она осталась бы дублем. На отмене (onClose) НЕ трогаем,
+    // чтобы не потерять черновик, если пользователь просто закрыл форму.
+    const onSaved = () => {
+      if (sourceRow) void _ctx.removeRow(sourceRow);
+      refresh();
     };
     addPane({
       label: makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? data as any : null, (data?.name || data?.iban) as string),
@@ -300,7 +307,7 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
       // санитизации SubTable несёт их) + контекст владельца. Раньше отдавали
       // только owner, и набранные в таблице поля терялись.
       data: isEdit ? data : { ...(data as Record<string, unknown>), ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
-      onSave: refresh,
+      onSave: onSaved,
       onClose: refresh,
     });
   }, [addPane, ownerType, parentUuid, parentName, queryClient]);

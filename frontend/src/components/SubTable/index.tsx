@@ -94,7 +94,10 @@ export interface SubTableProps {
   /** Кастомный renderCell — полностью контролирует рендер ячеек */
   renderCell?: (row: TDataItem, col: TColumn, ctx: SubTableContext) => ReactNode | undefined;
   /** Колбэк для открытия формы записи. Если не задан — форма не открывается */
-  openFormFor?: (data: TDataItem | undefined, ctx: SubTableContext) => void;
+  // sourceRow — исходная НЕСОХРАНЁННАЯ строка (если форму открыли из temp-строки
+  // inline-таблицы). После успешного сохранения формы её нужно убрать из таблицы
+  // (ctx.removeRow(sourceRow)), иначе останется дублем рядом с созданным элементом.
+  openFormFor?: (data: TDataItem | undefined, ctx: SubTableContext, sourceRow?: TDataItem) => void;
   /** Колбэк для создания новой inline-записи */
   onInlineAdd?: (ctx: SubTableContext) => void | Promise<void>;
   /**
@@ -806,6 +809,10 @@ const SubTable: FC<SubTableProps> = ({
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
     if (!openFormFor) return;
     let data = (formProps.data as TDataItem | undefined) ?? undefined;
+    // Ссылку на ИСХОДНУЮ temp-строку сохраняем ДО санитизации: когда форма создаст
+    // реальный элемент, эту несохранённую строку надо убрать из таблицы, иначе она
+    // останется дублем рядом с сохранённым элементом (см. sourceRow → onSave).
+    const sourceRow = isUnsavedRow(data) ? data : undefined;
     // Несохранённая (temp) строка, добавленная inline: у неё отрицательный id и
     // служебные поля (_pendingAction/_paneToken/_untouched), а uuid ещё нет.
     // Открывать её как СУЩЕСТВУЮЩУЮ запись нельзя — сервер её не знает (отсюда
@@ -822,7 +829,7 @@ const SubTable: FC<SubTableProps> = ({
       }
       data = clean as TDataItem;
     }
-    openFormFor(data, ctx);
+    openFormFor(data, ctx, sourceRow);
   }, [openFormFor, ctx]);
 
   // ── renderCell wrapper ─────────────────────────────────────────────────
