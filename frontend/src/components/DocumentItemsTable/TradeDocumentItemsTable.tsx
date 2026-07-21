@@ -114,15 +114,19 @@ export interface TradeDocumentItemsTableProps {
   showEsfColumns?: boolean;
   /** Показывать колонки Инвентаризации: «Кол-во по учёту» и «Отклонение» (обе — только чтение). */
   showStockCountColumns?: boolean;
-  /** Роль документа для серийных номеров: "receipt" (приёмка) | "issue" (выбытие).
+  /** Роль документа для серийных номеров: "receipt" (приёмка) | "issue" (выбытие) |
+   *  "transfer" (перемещение: выбор на источнике, перенос на получатель).
    *  Включает колонку «Серии» для товаров с учётом по серийным номерам. */
-  serialMode?: "receipt" | "issue";
+  serialMode?: "receipt" | "issue" | "transfer";
   /** documentType для операций с сериями (goods_receipt/purchase/sale/write_off/…). */
   serialDocType?: string;
-  /** Роль документа для партий: "receipt" (ввод партии+срок) | "issue" (выбор FEFO). */
+  /** Роль документа для партий: "receipt" (ввод партии+срок) | "issue" (выбор FEFO).
+   *  Перемещение использует "issue" (FEFO-выбор с источника). */
   batchMode?: "receipt" | "issue";
-  /** Склад документа — нужен для приёмки/выбора серий и партий. */
+  /** Склад документа — нужен для приёмки/выбора серий и партий (для перемещения — ИСТОЧНИК). */
   warehouseUuid?: string;
+  /** Склад-получатель (только перемещение, serialMode="transfer"). */
+  toWarehouseUuid?: string;
   /** Переопределяет кнопку «Обновить» в тулбаре SubTable (вместо handleCleanRefresh). */
   onRefresh?: () => void;
   /** Запретить добавление строк (независимо от disabled). */
@@ -171,6 +175,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   serialDocType,
   batchMode,
   warehouseUuid,
+  toWarehouseUuid,
   onRefresh,
   disableAddRows = false,
   disableDeleteRows = false,
@@ -512,6 +517,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           mode={serialMode}
           organizationUuid={organizationUuid ?? undefined}
           warehouseUuid={warehouseUuid ?? undefined}
+          toWarehouseUuid={toWarehouseUuid ?? undefined}
           documentDate={documentDate ?? null}
           disabled={ctx.disabled}
         />
@@ -756,7 +762,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     // Серийные номера/партии: без этих зависимостей renderCell замораживает
     // parentUuid="" (документ ещё не сохранён на первом рендере), и ячейка «Серии»
     // навсегда показывает «сначала сохраните» даже после записи документа.
-    serialMode, serialDocType, batchMode, warehouseUuid, parentUuid, organizationUuid]);
+    serialMode, serialDocType, batchMode, warehouseUuid, toWarehouseUuid, parentUuid, organizationUuid]);
 
   const defaultNewRow = useMemo(() => ({
     productUuid: null,

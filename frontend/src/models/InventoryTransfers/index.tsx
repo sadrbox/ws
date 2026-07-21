@@ -232,6 +232,8 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           endpoint="inventorytransferitems" componentName="InventoryTransferItemsList_part"
           hasTaxes={false} hasPricing={false}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
+          serialMode="transfer" serialDocType="inventory_transfer" batchMode="issue"
+          warehouseUuid={form.fields.fromWarehouseUuid} toWarehouseUuid={form.fields.toWarehouseUuid}
           disabled={form.isLoading} deferRemoteChanges
           parentLabel={`${translate("InventoryTransfersList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           initialPendingRows={items.pending}
@@ -306,6 +308,9 @@ const InventoryTransfersList: FC<{ variant?: TTableVariant; onSelectItem?: (item
           hasTaxes={false} hasPricing={false}
           organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
           documentDate={row.date ? String(row.date) : null}
+          serialMode="transfer" serialDocType="inventory_transfer" batchMode="issue"
+          warehouseUuid={row.fromWarehouseUuid ? String(row.fromWarehouseUuid) : undefined}
+          toWarehouseUuid={row.toWarehouseUuid ? String(row.toWarehouseUuid) : undefined}
           disabled disableAddRows disableDeleteRows
           emptyMessage={translate("noItems") || "Нет позиций"}
         />

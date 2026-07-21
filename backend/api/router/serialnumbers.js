@@ -119,15 +119,18 @@ router.get(`/${ROUTE}/available`, async (req, res) => {
 	try {
 		const { productUuid, warehouseUuid, issueDocUuid } = req.query;
 		if (!productUuid) return res.status(400).json({ success: false, message: "productUuid обязателен" });
+		// Склад ограничивает ТОЛЬКО ветку in_stock (доступные на складе-источнике), но
+		// НЕ ветку «уже выбрано этим документом»: при перемещении выбранная серия уже
+		// перенесена на склад-получатель, и жёсткий AND warehouseUuid=источник скрыл бы
+		// её из пикера. Для выбытия склад серии не меняется — поведение прежнее.
 		const where = {
 			productUuid: String(productUuid), deletedAt: null, ...tenantFilter(req),
 			OR: [
-				{ status: SERIAL_STATUS.IN_STOCK },
+				{ status: SERIAL_STATUS.IN_STOCK, ...(warehouseUuid ? { warehouseUuid: String(warehouseUuid) } : {}) },
 				// уже выбранные ЭТИМ документом (чтобы показать их в пикере как отмеченные)
 				...(issueDocUuid ? [{ issueDocUuid: String(issueDocUuid) }] : []),
 			],
 		};
-		if (warehouseUuid) where.warehouseUuid = String(warehouseUuid);
 		const items = await prisma.serialNumber.findMany({ where, orderBy: [{ serialNumber: "asc" }], take: 1000 });
 		// ПРОИСХОЖДЕНИЕ серии: каким документом принята, его номер и дата. Без этого
 		// пользователь выбирает серию вслепую — а серии физически различимы, и «не та
