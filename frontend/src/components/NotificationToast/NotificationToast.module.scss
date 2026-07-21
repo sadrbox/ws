@@ -195,7 +195,10 @@
 	text-decoration: underline;
 
 	&:hover {
-		color: color.adjust($colorPrimaryLight, $lightness: -10%);
+		// color-mix (CSS-рантайм) вместо Sass color.adjust — чтобы $colorPrimaryLight
+		// можно было проецировать в var() для тёмной темы (E5). Тот же эффект:
+		// затемнение на ~10% подмешиванием чёрного.
+		color: color-mix(in srgb, #{$colorPrimaryLight} 90%, black);
 	}
 }
 
