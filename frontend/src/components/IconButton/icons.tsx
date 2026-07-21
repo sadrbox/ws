@@ -373,8 +373,18 @@ export const BatchIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+/** Заметка — лист с загнутым уголком и строками текста. */
+export const NoteIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M4 2.25h5L12.25 5.5V13a.75.75 0 0 1-.75.75h-7A.75.75 0 0 1 3.75 13V3A.75.75 0 0 1 4 2.25Z" />
+    <path d="M9 2.5v3h3" />
+    <path d="M5.5 8.5h5M5.5 10.75h3.5" />
+  </svg>
+);
+
 export const ICONS = {
   recalc: RecalcIcon,
+  note: NoteIcon,
   serial: SerialIcon,
   batch: BatchIcon,
   trash: TrashIcon,

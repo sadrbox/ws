@@ -437,6 +437,30 @@ model ChatMessage {
   @@map("chat_messages")
 }
 
+// Заметки к записи (документ/справочник). Привязка по (entityType, entityUuid) —
+// entityType = endpoint модели (sales, counterparties, …). Заметка может стать
+// основанием задачи (Todo): форма задачи предзаполняется из связанной записи.
+// Автор/организация — СКАЛЯРЫ (без FK, как SerialNumber), чтобы не плодить
+// обратные связи; authorName денормализован (как в ChatMessage).
+model Note {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  entityType       String // endpoint/модель записи, к которой привязана заметка
+  entityUuid       String // uuid записи
+  body             String
+  organizationUuid String?
+  authorUuid       String?
+  authorName       String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+  deletedAt        DateTime?
+
+  @@index([entityType, entityUuid])
+  @@index([organizationUuid])
+  @@index([authorUuid])
+  @@map("notes")
+}
+
 // Специальная таблица для событий, приходящих от внешних интеграций (1С -> /pipe)
 model PipeActivity {
   id                    Int           @id @default(autoincrement())

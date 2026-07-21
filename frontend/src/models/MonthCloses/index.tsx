@@ -17,6 +17,7 @@ import { Field, FieldDateTime, FieldPeriod } from "src/components/Field";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
 import ShowInJournalButton from "src/components/ShowInJournalButton";
+import NotesButton from "src/components/Notes/NotesButton";
 import DeleteDocumentButton from "src/components/DeleteDocumentButton";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -228,7 +229,7 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
       <>
         {/* Единый порядок шапки: Проведён → Проводки → Показать в списке → Удалить. */}
         <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
-        {isSavedDoc && <><DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} /> <ShowInJournalButton endpoint={ENDPOINT} uuid={form.fields.uuid} /> <DeleteDocumentButton endpoint={ENDPOINT} uuid={form.fields.uuid} paneId={form.paneId} /></>}
+        {isSavedDoc && <><DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} /> <NotesButton endpoint={ENDPOINT} uuid={form.fields.uuid} /> <ShowInJournalButton endpoint={ENDPOINT} uuid={form.fields.uuid} /> <DeleteDocumentButton endpoint={ENDPOINT} uuid={form.fields.uuid} paneId={form.paneId} /></>}
       </>
     ),
   );

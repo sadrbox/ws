@@ -4,6 +4,7 @@ import FormPanel from "src/components/FormPanel";
 import Tabs from "src/components/Tabs";
 import { usePaneToolbar, usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import ShowInJournalButton from "src/components/ShowInJournalButton";
+import NotesButton from "src/components/Notes/NotesButton";
 import skeletonStyles from "./ModelForm.module.scss";
 
 /**
@@ -109,7 +110,12 @@ const ModelForm: FC<ModelFormProps> = ({
   // эту кнопку самостоятельно вместе с прочими действиями.
   const headerActionsPortal = usePaneHeaderActions(
     paneId,
-    endpoint && recordUuid ? <ShowInJournalButton endpoint={endpoint} uuid={recordUuid} /> : null,
+    endpoint && recordUuid ? (
+      <>
+        <NotesButton endpoint={endpoint} uuid={recordUuid} />
+        <ShowInJournalButton endpoint={endpoint} uuid={recordUuid} />
+      </>
+    ) : null,
   );
 
   // ── Skeleton для первой загрузки ─────────────────────────────────────
