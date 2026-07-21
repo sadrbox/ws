@@ -18,6 +18,7 @@ import ModelList from "src/components/ModelList";
 import { useAppContext } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { openSubFormPane } from "src/components/SubTable/subFormOpener";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
 
@@ -121,19 +122,14 @@ const WarehousesTable: FC<WarehousesTableProps> = ({
     return undefined;
   }, []);
 
-  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
-    const isEdit = !!data?.uuid;
-    const refresh = () => {
-      void queryClient.invalidateQueries({ queryKey: [WH_TABLE_ENDPOINT] });
-      _ctx.refetch();
-    };
-    addPane({
-      label: makePaneLabelFromData("WarehousesList", "Склады", isEdit ? data as any : null, data?.name as string),
+  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext, sourceRow?: TDataItem) => {
+    openSubFormPane({
+      addPane,
+      invalidate: () => void queryClient.invalidateQueries({ queryKey: [WH_TABLE_ENDPOINT] }),
       component: WarehousesForm,
-      data: isEdit ? data : { organizationUuid: parentUuid, organizationName: parentName } as any,
-      onSave: refresh,
-      onClose: refresh,
-    });
+      label: (d, isEdit) => makePaneLabelFromData("WarehousesList", "Склады", isEdit ? d as any : null, d?.name as string),
+      newContext: () => ({ organizationUuid: parentUuid, organizationName: parentName }),
+    }, data, ctx, sourceRow);
   }, [addPane, parentUuid, parentName, queryClient]);
 
   const defaultNewRow = useMemo(() => ({ name: "", address: "" }), []);

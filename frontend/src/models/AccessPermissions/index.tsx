@@ -10,6 +10,7 @@ import { FieldSelect } from "src/components/Field";
 import { Group, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { openSubFormPane } from "src/components/SubTable/subFormOpener";
 import ModelList from "src/components/ModelList";
 
 import { useFormStore } from "src/hooks/useFormStore";
@@ -291,23 +292,15 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
     return undefined;
   }, [modelNameMap, accessLevelMap, getAvailableOptions]);
 
-  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
-    const isEdit = !!data?.uuid;
-    if (!isEdit && (disableAddProp ?? false)) return;
-    const newData = !isEdit && userUuid
-      ? { userUuid, ...(organizationUuid ? { organizationUuid } : {}) } as unknown as TDataItem
-      : data;
-    const refresh = () => {
-      void queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
-      _ctx.refetch();
-    };
-    addPane({
-      label: makePaneLabelFromData("AccessPermissionsTable", "Право доступа к разделу", isEdit ? data as any : null),
+  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext, sourceRow?: TDataItem) => {
+    openSubFormPane({
+      addPane,
+      invalidate: () => void queryClient.invalidateQueries({ queryKey: [ENDPOINT] }),
       component: AccessPermissionsForm,
-      data: newData,
-      onSave: refresh,
-      onClose: refresh,
-    });
+      label: (d, isEdit) => makePaneLabelFromData("AccessPermissionsTable", "Право доступа к разделу", isEdit ? d as any : null),
+      newContext: () => ({ userUuid, ...(organizationUuid ? { organizationUuid } : {}) }),
+      blockNew: () => disableAddProp ?? false,
+    }, data, ctx, sourceRow);
   }, [addPane, userUuid, organizationUuid, queryClient, disableAddProp]);
 
   const defaultNewRow = useMemo(() => {

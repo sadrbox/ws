@@ -13,6 +13,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { openSubFormPane } from "src/components/SubTable/subFormOpener";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -342,29 +343,16 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
     return undefined;
   }, [roleMap]);
 
-  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext) => {
-    const orgName = (data?.organization as any)?.name as string | undefined;
-    const orgUuid = data?.organizationUuid as string | undefined;
-    const isEdit = !!data?.uuid;
-
-    const newData = !isEdit && userUuid
-      ? { userUuid } as unknown as TDataItem
-      : data;
-
-    const refresh = () => {
-      void queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
-      ctx.refetch();
-    };
-
-    addPane({
-      label: isEdit
-        ? `${orgName ?? orgUuid ?? "Организация"}`
-        : makePaneLabelFromData("AccessRightsTable", "Пользователь / Организация", null),
+  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext, sourceRow?: TDataItem) => {
+    openSubFormPane({
+      addPane,
+      invalidate: () => void queryClient.invalidateQueries({ queryKey: [ENDPOINT] }),
       component: AccessRightsForm,
-      data: isEdit ? data : newData,
-      onSave: refresh,
-      onClose: refresh,
-    });
+      label: (d, isEdit) => isEdit
+        ? `${((d?.organization as any)?.name as string | undefined) ?? (d?.organizationUuid as string | undefined) ?? "Организация"}`
+        : makePaneLabelFromData("AccessRightsTable", "Пользователь / Организация", null),
+      newContext: () => (userUuid ? { userUuid } : {}),
+    }, data, ctx, sourceRow);
   }, [addPane, userUuid, queryClient]);
 
   const defaultNewRow = useMemo(() => ({

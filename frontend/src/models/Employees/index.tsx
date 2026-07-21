@@ -23,6 +23,7 @@ import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import SubTable, { type SubTableContext, type TCellValidator } from "src/components/SubTable";
+import { openSubFormPane } from "src/components/SubTable/subFormOpener";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
 
@@ -267,19 +268,14 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
     eventDate: (value) => (!value ? "Дата обязательна" : undefined),
   }), []);
 
-  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
-    const isEdit = !!data?.uuid;
-    const refresh = () => {
-      void queryClient.invalidateQueries({ queryKey: [EH_MODEL] });
-      _ctx.refetch();
-    };
-    addPane({
-      label: makePaneLabelFromData("EmployeeHistoriesList", "Кадровая история", isEdit ? data as any : null),
+  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext, sourceRow?: TDataItem) => {
+    openSubFormPane({
+      addPane,
+      invalidate: () => void queryClient.invalidateQueries({ queryKey: [EH_MODEL] }),
       component: EmployeeHistoryForm,
-      data: { ...(data ?? {}), employeeUuid } as any,
-      onSave: refresh,
-      onClose: refresh,
-    });
+      label: (d, isEdit) => makePaneLabelFromData("EmployeeHistoriesList", "Кадровая история", isEdit ? d as any : null),
+      newContext: () => ({ employeeUuid }),
+    }, data, ctx, sourceRow);
   }, [addPane, employeeUuid, queryClient]);
 
   const defaultNewRow = useMemo(() => ({

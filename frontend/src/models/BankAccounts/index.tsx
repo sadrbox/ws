@@ -16,7 +16,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
-import { isUnsavedRow } from "src/components/SubTable/rowModel";
+import { openSubFormPane } from "src/components/SubTable/subFormOpener";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
 import { useFormStore } from "src/hooks/useFormStore";
@@ -285,31 +285,14 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
     return undefined;
   }, []);
 
-  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext, sourceRow?: TDataItem) => {
-    // isEdit по НАЛИЧИЮ реального uuid — но не временного «tmp-…»: иначе форма
-    // грузила бы несохранённую строку по фейковому uuid (GET /…/tmp-… → 404).
-    const isEdit = !!data?.uuid && !isUnsavedRow(data);
-    const refresh = () => {
-      void queryClient.invalidateQueries({ queryKey: [BA_TABLE_ENDPOINT] });
-      _ctx.refetch();
-    };
-    // ТОЛЬКО при сохранении: форма создала реальный элемент — убираем исходную
-    // temp-строку, иначе она осталась бы дублем. На отмене (onClose) НЕ трогаем,
-    // чтобы не потерять черновик, если пользователь просто закрыл форму.
-    const onSaved = () => {
-      if (sourceRow) void _ctx.removeRow(sourceRow);
-      refresh();
-    };
-    addPane({
-      label: makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? data as any : null, (data?.name || data?.iban) as string),
+  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext, sourceRow?: TDataItem) => {
+    openSubFormPane({
+      addPane,
+      invalidate: () => void queryClient.invalidateQueries({ queryKey: [BA_TABLE_ENDPOINT] }),
       component: BankAccountsForm,
-      // Для НОВОЙ строки пробрасываем введённые inline значения (data после
-      // санитизации SubTable несёт их) + контекст владельца. Раньше отдавали
-      // только owner, и набранные в таблице поля терялись.
-      data: isEdit ? data : { ...(data as Record<string, unknown>), ownerType, ownerUuid: parentUuid, ownerName: parentName } as any,
-      onSave: onSaved,
-      onClose: refresh,
-    });
+      label: (d, isEdit) => makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? d as any : null, (d?.name || d?.iban) as string),
+      newContext: () => ({ ownerType, ownerUuid: parentUuid, ownerName: parentName }),
+    }, data, ctx, sourceRow);
   }, [addPane, ownerType, parentUuid, parentName, queryClient]);
 
   const defaultNewRow = useMemo(() => ({

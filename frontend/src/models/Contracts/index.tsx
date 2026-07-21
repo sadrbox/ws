@@ -16,6 +16,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAppContext } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
+import { openSubFormPane } from "src/components/SubTable/subFormOpener";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 
@@ -274,20 +275,15 @@ const ContractsTable: FC<ContractsTableProps> = ({
     return undefined;
   }, []);
 
-  const openFormFor = useCallback((data: TDataItem | undefined, _ctx: SubTableContext) => {
-    const isEdit = !!data?.uuid;
-    const refresh = () => {
-      void queryClient.invalidateQueries({ queryKey: [CR_TABLE_ENDPOINT] });
-      _ctx.refetch();
-    };
+  const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext, sourceRow?: TDataItem) => {
     const nameKey = parentKey.replace(/Uuid$/, "Name");
-    addPane({
-      label: makePaneLabelFromData("ContractsList", "Договора", isEdit ? data as any : null, (data?.name || data?.contractNumber) as string),
+    openSubFormPane({
+      addPane,
+      invalidate: () => void queryClient.invalidateQueries({ queryKey: [CR_TABLE_ENDPOINT] }),
       component: ContractsForm,
-      data: isEdit ? data : { [parentKey]: parentUuid, [nameKey]: parentName } as any,
-      onSave: refresh,
-      onClose: refresh,
-    });
+      label: (d, isEdit) => makePaneLabelFromData("ContractsList", "Договора", isEdit ? d as any : null, (d?.name || d?.contractNumber) as string),
+      newContext: () => ({ [parentKey]: parentUuid, [nameKey]: parentName }),
+    }, data, ctx, sourceRow);
   }, [addPane, parentKey, parentUuid, parentName, queryClient]);
 
   const defaultNewRow = useMemo(() => ({
