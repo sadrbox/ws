@@ -717,7 +717,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                   {cfg.hasWarehouse && (
                     <FormLookup form={form} field="warehouse" endpoint="warehouses"
                       disabled={form.isLoading || basisLock}
-                      extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                      extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined}
+                      createDefaults={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid, organizationName: form.fields.organizationName } : undefined} />
                   )}
                 </Group>
 
@@ -731,6 +732,10 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                     extraParams={{
                       ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
                       ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
+                    }}
+                    createDefaults={{
+                      ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid, organizationName: form.fields.organizationName } : {}),
+                      ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid, counterpartyName: form.fields.counterpartyName } : {}),
                     }} />
                 </Group>
 
@@ -821,7 +826,11 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                   onChange={(e) => form.setFields({ esfInvoiceType: e.target.value, ...(e.target.value === "" || e.target.value === "ORDINARY_INVOICE" ? { esfRelatedInvoiceUuid: "", esfRelatedInvoiceName: "" } : {}) } as Partial<TFields>)}
                   options={[{ value: "", label: "—" }, ...(esfDict?.invoiceType ?? []).map((o) => ({ value: o.code, label: o.label || o.code }))]} />
                 {form.fields.esfInvoiceType && form.fields.esfInvoiceType !== "ORDINARY_INVOICE" && (
-                  <FormLookup form={form} field="esfRelatedInvoice" endpoint="outgoing-invoices" displayField="number" disabled={form.isLoading} />
+                  <FormLookup form={form} field="esfRelatedInvoice" endpoint="outgoing-invoices" displayField="number" disabled={form.isLoading}
+                    createDefaults={{
+                      organizationUuid: form.fields.organizationUuid, organizationName: form.fields.organizationName,
+                      counterpartyUuid: form.fields.counterpartyUuid, counterpartyName: form.fields.counterpartyName,
+                    }} />
                 )}
               </Group>
               <Group>

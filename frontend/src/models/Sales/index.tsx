@@ -746,13 +746,18 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                 {/* Организация — во всю ширину */}
                 <FormLookup form={form} field="organization" endpoint="organizations" onSelect={handleOrganizationSelect} />
 
-                <FormLookup form={form} field="warehouse" endpoint="warehouses" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                <FormLookup form={form} field="warehouse" endpoint="warehouses" extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined}
+                  createDefaults={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid, organizationName: form.fields.organizationName } : undefined} />
               </Group>
 
               <Group>
                 {/* Контрагент — во всю ширину */}
                 <FormLookup form={form} field="counterparty" endpoint="counterparties" onSelect={handleCounterpartySelect} />
-                <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect} extraParams={contractExtraParams} />
+                <FormLookup form={form} field="contract" endpoint="contracts" onSelect={handleContractSelect} extraParams={contractExtraParams}
+                  createDefaults={{
+                    ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid, organizationName: form.fields.organizationName } : {}),
+                    ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid, counterpartyName: form.fields.counterpartyName } : {}),
+                  }} />
               </Group>
 
               <GroupRow>

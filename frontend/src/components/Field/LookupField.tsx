@@ -86,6 +86,12 @@ export interface LookupFieldProps {
   /** Дополнительные query-параметры для фильтрации (передаются в autocomplete и SelectPaneWrapper).
    *  Например: { organizationUuid: "abc-123" } → ?organizationUuid=abc-123 */
   extraParams?: Record<string, string>;
+  /** Поля для ПРЕДЗАПОЛНЕНИЯ формы нового элемента при «Создать новый» (в отличие
+   *  от extraParams — это НЕ фильтр запроса, а начальные значения формы). Несёт
+   *  и uuid, и отображаемое имя, чтобы поле-лукап в новой форме показывало текст,
+   *  а не пустоту. Мёржится ПОВЕРХ extraParams. Пример для нового документа:
+   *  { organizationUuid, organizationName, counterpartyUuid, counterpartyName }. */
+  createDefaults?: Record<string, unknown>;
   /** Какие кнопки показывать. По умолчанию — все доступные.
    *  Пример: ["quickselect"] — только кнопка быстрого выбора. */
   visibleActions?: LookupActionType[];
@@ -199,6 +205,7 @@ const LookupField: FC<LookupFieldProps> = ({
   variant = 'default',
   secondaryFields,
   extraParams,
+  createDefaults,
   visibleActions,
   onEnterKey,
   onAfterSelect,
@@ -475,13 +482,14 @@ const LookupField: FC<LookupFieldProps> = ({
         label: translate(entry.formName) || entry.label || endpoint,
         component: FormComp,
         // Новая запись, НО с контекстом родителя: extraParams несут ownerType/
-        // ownerUuid (или иной scope) — чтобы форма нового элемента предзаполнила
-        // «Владелец». Раньше здесь был пустой {} и контекст терялся.
-        data: { ...(extraParams ?? {}) } as any,
+        // ownerUuid (или иной scope), а createDefaults — явные начальные значения
+        // (uuid+имя) для предзаполнения. Раньше здесь был пустой {} и контекст
+        // терялся. createDefaults мёржится ПОВЕРХ extraParams (приоритет предзаполнению).
+        data: { ...(extraParams ?? {}), ...(createDefaults ?? {}) } as any,
       });
       setIsDropdownOpen(false);
     }).catch(() => { /* тихо игнорируем ошибку загрузки */ });
-  }, [disabled, endpoint, addPane, extraParams]);
+  }, [disabled, endpoint, addPane, extraParams, createDefaults]);
 
   // Есть ли форма создания для этого справочника (реестр моделей).
   // Право на создание нового элемента справочника (гейт кнопки «Создать»).

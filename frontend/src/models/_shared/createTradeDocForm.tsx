@@ -485,7 +485,8 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
                 <Group>
                   <FormLookup form={form} field="organization" endpoint="organizations" onSelect={handleOrganizationSelect} />
                   <FormLookup form={form} field="warehouse" endpoint="warehouses"
-                    extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
+                    extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined}
+                    createDefaults={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid, organizationName: form.fields.organizationName } : undefined} />
                 </Group>
 
                 <Group>
@@ -494,6 +495,10 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
                     extraParams={{
                       ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : {}),
                       ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid } : {}),
+                    }}
+                    createDefaults={{
+                      ...(form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid, organizationName: form.fields.organizationName } : {}),
+                      ...(form.fields.counterpartyUuid ? { counterpartyUuid: form.fields.counterpartyUuid, counterpartyName: form.fields.counterpartyName } : {}),
                     }} />
                 </Group>
 
