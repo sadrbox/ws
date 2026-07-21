@@ -215,6 +215,7 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
                   basisDocumentType={form.fields.basisDocumentType}
                   // Подбор основания — только документы организации этого документа.
                   organizationUuid={form.fields.organizationUuid}
+                  organizationName={form.fields.organizationName}
                   basisDocumentUuid={form.fields.basisDocumentUuid}
                   basisDocumentLabel={form.fields.basisDocumentLabel}
                   formUid={form.formUid}

@@ -31,6 +31,12 @@ export interface BasisDocumentFieldProps {
    * Не задана → фильтра нет (показываем все доступные пользователю документы).
    */
   organizationUuid?: string;
+  /** Контекст для ПРЕДЗАПОЛНЕНИЯ формы нового документа-основания при «Создать
+   *  новый» (в отличие от фильтра по организации выше). Имена нужны, чтобы поля-
+   *  лукапы новой формы показывали текст, а не только uuid. */
+  organizationName?: string;
+  counterpartyUuid?: string;
+  counterpartyName?: string;
   /** Документ-основание не совпадает с текущим (организация/контрагент/строки). */
   mismatch?: boolean;
   /** Перечень расхождений с основанием (для подсказки). */
@@ -75,6 +81,9 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   mismatchDetails,
   hint,
   organizationUuid,
+  organizationName,
+  counterpartyUuid,
+  counterpartyName,
 }) => {
   const [selectedType, setSelectedType] = useState<string>(
     basisDocumentType || allowedTypes[0]?.type || "",
@@ -88,6 +97,17 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     () => (organizationUuid ? { "filter[organizationUuid][equals]": organizationUuid } : undefined),
     [organizationUuid],
   );
+
+  // Предзаполнение формы НОВОГО документа-основания («Создать новый» в лукапе):
+  // организация + контрагент этого документа. Общий мёрж useFormStore перенесёт
+  // лишь те ключи, что есть в defaultFields целевой формы, поэтому передавать оба
+  // безопасно даже для типов основания без контрагента.
+  const createDefaults = useMemo(() => {
+    const d: Record<string, unknown> = {};
+    if (organizationUuid) { d.organizationUuid = organizationUuid; if (organizationName) d.organizationName = organizationName; }
+    if (counterpartyUuid) { d.counterpartyUuid = counterpartyUuid; if (counterpartyName) d.counterpartyName = counterpartyName; }
+    return Object.keys(d).length ? d : undefined;
+  }, [organizationUuid, organizationName, counterpartyUuid, counterpartyName]);
 
   useEffect(() => {
     if (basisDocumentType && basisDocumentType !== selectedType) {
@@ -220,6 +240,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           variant="default"
           searchTransform={extractBasisSearch}
           extraParams={extraParams}
+          createDefaults={createDefaults}
         />
       </div>
     );
@@ -249,6 +270,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
         disabled={disabled || !activeType}
         searchTransform={extractBasisSearch}
         extraParams={extraParams}
+        createDefaults={createDefaults}
       />
     </div>
   );

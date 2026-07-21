@@ -746,6 +746,9 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                       basisDocumentType={form.fields.basisDocumentType}
                       // Подбор основания — только документы организации этого документа.
                       organizationUuid={form.fields.organizationUuid}
+                      organizationName={form.fields.organizationName}
+                      counterpartyUuid={form.fields.counterpartyUuid}
+                      counterpartyName={form.fields.counterpartyName}
                       basisDocumentUuid={form.fields.basisDocumentUuid}
                       basisDocumentLabel={form.fields.basisDocumentLabel}
                       formUid={form.formUid}
