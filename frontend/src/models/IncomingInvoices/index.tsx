@@ -1,4 +1,5 @@
 import { FC } from "react";
+import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -9,8 +10,10 @@ import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { createInvoiceLikeForm } from "src/models/_shared/createInvoiceLikeForm";
 import OutgoingInvoicePrint from "src/models/OutgoingInvoices/OutgoingInvoicePrint";
 import type { SaleInvoicePrintColumns } from "src/models/Sales/SaleInvoicePrint";
-import { mapCommonTradeFields } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, mapPaymentFromBasis } from "src/utils/createFromBasis";
 import { PurchasesForm } from "src/models/Purchases";
+import { BankStatementsForm } from "src/models/BankStatements";
+import { CashExpenseOrdersForm } from "src/models/CashExpenseOrders";
 
 const MODEL_ENDPOINT = "incoming-invoices";
 const LIST_NAME = "IncomingInvoicesList";
@@ -70,6 +73,26 @@ const IncomingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsParentField: "incomingInvoiceUuid",
       mapFields: mapCommonTradeFields,
       existingCheckEndpoint: "purchases",
+    },
+    {
+      docLabel: translate("BankStatementsList"),
+      FormComponent: BankStatementsForm,
+      basisType: "incoming_invoice",
+      sourceItemsEndpoint: "incominginvoiceitems",
+      sourceItemsParentField: "incomingInvoiceUuid",
+      mapFields: mapPaymentFromBasis,
+      mapItems: () => [],
+      existingCheckEndpoint: "bankstatements",
+    },
+    {
+      docLabel: translate("CashExpenseOrdersList"),
+      FormComponent: CashExpenseOrdersForm,
+      basisType: "incoming_invoice",
+      sourceItemsEndpoint: "incominginvoiceitems",
+      sourceItemsParentField: "incomingInvoiceUuid",
+      mapFields: mapPaymentFromBasis,
+      mapItems: () => [],
+      existingCheckEndpoint: "cash-expense-orders",
     },
   ],
 });

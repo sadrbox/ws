@@ -7,7 +7,9 @@ import { getFormatDateOnly } from "src/utils/datetime";
 import ModelList from "src/components/ModelList";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { createInvoiceLikeForm } from "src/models/_shared/createInvoiceLikeForm";
-import { mapCommonTradeFields } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, mapPaymentFromBasis } from "src/utils/createFromBasis";
+import { CashExpenseOrdersForm } from "src/models/CashExpenseOrders";
+import { translate } from "src/i18";
 import TradeDocumentPrint from "src/models/_shared/TradeDocumentPrint";
 import { PurchasesForm } from "src/models/Purchases";
 
@@ -59,6 +61,16 @@ const PurchaseOrdersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsParentField: "purchaseOrderUuid",
       mapFields: mapCommonTradeFields,
       existingCheckEndpoint: "purchases",
+    },
+    {
+      docLabel: translate("CashExpenseOrdersList"),
+      FormComponent: CashExpenseOrdersForm,
+      basisType: "purchase_order",
+      sourceItemsEndpoint: "purchase-order-items",
+      sourceItemsParentField: "purchaseOrderUuid",
+      mapFields: mapPaymentFromBasis,
+      mapItems: () => [],
+      existingCheckEndpoint: "cash-expense-orders",
     },
   ],
 });

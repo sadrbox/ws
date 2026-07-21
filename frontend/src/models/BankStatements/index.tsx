@@ -58,6 +58,11 @@ interface TFields {
   basisDocumentType: string; basisDocumentUuid: string; basisDocumentLabel: string;
 }
 
+// Типы основания, по которым деньги УХОДЯТ (расход): документы закупки. Остальные
+// разрешённые основания (продажа/счёт покупателю) — приход. Используется при
+// создании выписки «на основании» для авто-выбора направления.
+const OUTFLOW_BASIS = new Set(["incoming_invoice", "purchase", "purchase_order"]);
+
 const DEFAULT_FIELDS: TFields = {
   number: "",
   date: "", comment: "", amount: "", direction: "bankStatementIn",
@@ -78,6 +83,15 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data as any;
     if (data?.uuid) return undefined;
+    // Создание «на основании» (толчок из счёта/накладной): переносим шапку целиком
+    // (включая линк основания и сумму), а НАПРАВЛЕНИЕ выводим из типа основания —
+    // приход денег по документам продажи, расход по документам закупки.
+    if (data?.fromBasisFields) {
+      const merged = { ...DEFAULT_FIELDS, ...data.fromBasisFields } as TFields;
+      merged.date = isoToLocalInput(new Date().toISOString());
+      merged.direction = OUTFLOW_BASIS.has(merged.basisDocumentType) ? "bankStatementOut" : "bankStatementIn";
+      return merged;
+    }
     const init = { ...DEFAULT_FIELDS };
     init.date = isoToLocalInput(new Date().toISOString());
     if (data?.organizationUuid) {

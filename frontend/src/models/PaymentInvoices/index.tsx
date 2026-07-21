@@ -1,6 +1,9 @@
 import { FC } from "react";
-import { mapCommonTradeFields } from "src/utils/createFromBasis";
+import { translate } from "src/i18";
+import { mapCommonTradeFields, mapPaymentFromBasis } from "src/utils/createFromBasis";
 import { SalesForm } from "src/models/Sales";
+import { BankStatementsForm } from "src/models/BankStatements";
+import { CashReceiptOrdersForm } from "src/models/CashReceiptOrders";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -60,6 +63,26 @@ const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsParentField: "paymentInvoiceUuid",
       mapFields: mapCommonTradeFields,
       existingCheckEndpoint: "sales",
+    },
+    {
+      docLabel: translate("BankStatementsList"),
+      FormComponent: BankStatementsForm,
+      basisType: "payment_invoice",
+      sourceItemsEndpoint: "paymentinvoiceitems",
+      sourceItemsParentField: "paymentInvoiceUuid",
+      mapFields: mapPaymentFromBasis,
+      mapItems: () => [],
+      existingCheckEndpoint: "bankstatements",
+    },
+    {
+      docLabel: translate("CashReceiptOrdersList"),
+      FormComponent: CashReceiptOrdersForm,
+      basisType: "payment_invoice",
+      sourceItemsEndpoint: "paymentinvoiceitems",
+      sourceItemsParentField: "paymentInvoiceUuid",
+      mapFields: mapPaymentFromBasis,
+      mapItems: () => [],
+      existingCheckEndpoint: "cash-receipt-orders",
     },
   ],
   hidePosted: true,

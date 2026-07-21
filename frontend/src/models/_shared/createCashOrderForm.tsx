@@ -157,6 +157,17 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
     const initialFields: TFields | undefined = (() => {
       const data = paneProps.data;
       if (data?.uuid) return undefined;
+      // Создание «на основании» (толчок из счёта/реализации/поступления): переносим
+      // шапку целиком (линк основания + сумма), а ВИД ОПЕРАЦИИ выводим из типа
+      // основания — берём операцию этого направления (ПКО/РКО), в чьих basisTypes
+      // есть данный тип. Так «Счёт покупателю → ПКО» даёт «оплата от покупателя».
+      if (data?.fromBasisFields) {
+        const merged = { ...DEFAULT_FIELDS, ...(data.fromBasisFields as Partial<TFields>) } as TFields;
+        merged.date = isoToLocalInput(new Date().toISOString());
+        const op = cashOperationTypes(direction).find((o) => o.basisTypes.some((b) => b.type === merged.basisDocumentType));
+        merged.operationType = op?.value || defaultCashOperationType(direction);
+        return merged;
+      }
       const init = { ...DEFAULT_FIELDS };
       init.operationType = defaultCashOperationType(direction);
       init.date = isoToLocalInput(new Date().toISOString());

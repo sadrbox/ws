@@ -5,8 +5,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { translate } from "src/i18";
 import { createTradeDocForm } from "src/models/_shared/createTradeDocForm";
-import { mapCommonTradeFields } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, mapPaymentFromBasis } from "src/utils/createFromBasis";
 import { PurchaseReturnsForm } from "src/models/PurchaseReturns";
+import { CashExpenseOrdersForm } from "src/models/CashExpenseOrders";
 import columnsJson from "./columns.json";
 
 const { Form: PurchasesForm, List: PurchasesList } = createTradeDocForm({
@@ -48,6 +49,20 @@ const { Form: PurchasesForm, List: PurchasesList } = createTradeDocForm({
         sourceItemsParentField: "purchaseUuid",
         mapFields: mapCommonTradeFields,
         existingCheckEndpoint: "purchase-returns",
+      },
+    },
+    {
+      id: "cashExpenseOrder",
+      optionLabelKey: "CashExpenseOrdersList",
+      target: {
+        docLabel: translate("CashExpenseOrdersList"),
+        FormComponent: CashExpenseOrdersForm,
+        basisType: "purchase",
+        sourceItemsEndpoint: "purchaseitems",
+        sourceItemsParentField: "purchaseUuid",
+        mapFields: mapPaymentFromBasis,
+        mapItems: () => [],
+        existingCheckEndpoint: "cash-expense-orders",
       },
     },
   ],

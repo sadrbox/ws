@@ -1,4 +1,5 @@
 import { FC } from "react";
+import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -7,6 +8,9 @@ import { getFormatDateOnly } from "src/utils/datetime";
 import ModelList from "src/components/ModelList";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { createInvoiceLikeForm } from "src/models/_shared/createInvoiceLikeForm";
+import { mapPaymentFromBasis } from "src/utils/createFromBasis";
+import { BankStatementsForm } from "src/models/BankStatements";
+import { CashReceiptOrdersForm } from "src/models/CashReceiptOrders";
 import OutgoingInvoicePrint from "./OutgoingInvoicePrint";
 import type { SaleInvoicePrintColumns } from "src/models/Sales/SaleInvoicePrint";
 
@@ -31,6 +35,28 @@ const OutgoingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   basisConfig: {
     allowedTypes: [{ type: "sale", endpoint: "sales" }],
   },
+  createFromBasisTargets: [
+    {
+      docLabel: translate("BankStatementsList"),
+      FormComponent: BankStatementsForm,
+      basisType: "outgoing_invoice",
+      sourceItemsEndpoint: "outgoinginvoiceitems",
+      sourceItemsParentField: "outgoingInvoiceUuid",
+      mapFields: mapPaymentFromBasis,
+      mapItems: () => [],
+      existingCheckEndpoint: "bankstatements",
+    },
+    {
+      docLabel: translate("CashReceiptOrdersList"),
+      FormComponent: CashReceiptOrdersForm,
+      basisType: "outgoing_invoice",
+      sourceItemsEndpoint: "outgoinginvoiceitems",
+      sourceItemsParentField: "outgoingInvoiceUuid",
+      mapFields: mapPaymentFromBasis,
+      mapItems: () => [],
+      existingCheckEndpoint: "cash-receipt-orders",
+    },
+  ],
   printConfig: {
     buildLayout: (fields, items, cols) => (
       <OutgoingInvoicePrint data={{

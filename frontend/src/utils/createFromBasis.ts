@@ -707,6 +707,18 @@ export async function resolveOrgChangeFields(
  * результата — тогда «Перезаполнить по основанию» (merge) не затирает значение
  * соответствующего поля в зависимом документе.
  */
+/**
+ * Маппер для ПЛАТЁЖНЫХ документов (банковская выписка, кассовый ордер), создаваемых
+ * «на основании» счёта/накладной/реализации. Переносит организацию, контрагента,
+ * договор и СУММУ документа-основания (его итог). Направление/вид операции платёжная
+ * форма выводит сама из типа основания. Позиции не переносятся (у платежа их нет).
+ */
+export function mapPaymentFromBasis(src: any): Record<string, any> {
+	const out = mapCommonTradeFields(src);
+	if (src.amount != null && src.amount !== "") out.amount = String(src.amount);
+	return out;
+}
+
 export function mapCommonTradeFields(src: any): Record<string, any> {
 	const out: Record<string, any> = {};
 	if (src.organizationUuid) {

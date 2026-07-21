@@ -44,7 +44,8 @@ import { useGovDocs } from "src/hooks/useGovDocs";
 import { useAppContext } from "src/app/context";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
-import { openDocumentFromBasis, mapCommonTradeFields, fetchDocumentItems, resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, mapPaymentFromBasis, fetchDocumentItems, resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { CashReceiptOrdersForm } from "src/models/CashReceiptOrders";
 import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
@@ -59,7 +60,7 @@ import DocumentTotals from "src/components/DocumentTotals";
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
 const FORM_LABEL = "Реализация товара и услуг";
-const SALES_DEPENDENT_ENDPOINTS = ["outgoing-invoices", "sale-returns"];
+const SALES_DEPENDENT_ENDPOINTS = ["outgoing-invoices", "sale-returns", "cash-receipt-orders"];
 
 
 interface TFields {
@@ -630,6 +631,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     basisType: string,
     itemsEndpoint: string,
     existingCheckEndpoint?: string,
+    // Платёжный документ (ПКО) не переносит позиции, а сумму берёт из итога
+    // реализации — переопределяем маппер и обнуляем перенос строк.
+    mapFieldsFn: (src: any) => Record<string, any> = mapCommonTradeFields,
+    mapItemsFn?: (items: any[]) => any[],
   ) => {
     await openDocumentFromBasis(
       form.fields as any,
@@ -640,7 +645,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         basisType,
         sourceItemsEndpoint: itemsEndpoint,
         sourceItemsParentField: "saleUuid",
-        mapFields: mapCommonTradeFields,
+        mapFields: mapFieldsFn,
+        ...(mapItemsFn ? { mapItems: mapItemsFn } : {}),
         existingCheckEndpoint,
         knownExisting: existingCheckEndpoint ? (existingDeps[existingCheckEndpoint] ?? null) : null,
       },
@@ -677,10 +683,12 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             options={[
               { id: "outgoing", label: formatDependentOption(translate("outgoingInvoice"), existingDeps["outgoing-invoices"]) },
               { id: "saleReturn", label: formatDependentOption(translate("SaleReturnsList"), existingDeps["sale-returns"]) },
+              { id: "cashReceipt", label: formatDependentOption(translate("CashReceiptOrdersList"), existingDeps["cash-receipt-orders"]) },
             ]}
             onSelect={(id) => {
               if (id === "outgoing") void handleCreateFromBasis(OutgoingInvoicesForm, translate("outgoingInvoice"), "sale", "saleitems", "outgoing-invoices");
               if (id === "saleReturn") void handleCreateFromBasis(SaleReturnsForm, translate("SaleReturnsList"), "sale", "saleitems", "sale-returns");
+              if (id === "cashReceipt") void handleCreateFromBasis(CashReceiptOrdersForm, translate("CashReceiptOrdersList"), "sale", "saleitems", "cash-receipt-orders", mapPaymentFromBasis, () => []);
             }}
           />
         )}

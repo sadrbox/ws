@@ -7,10 +7,12 @@ import { getFormatDateOnly } from "src/utils/datetime";
 import ModelList from "src/components/ModelList";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { createInvoiceLikeForm } from "src/models/_shared/createInvoiceLikeForm";
-import { mapCommonTradeFields } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, mapPaymentFromBasis } from "src/utils/createFromBasis";
 import TradeDocumentPrint from "src/models/_shared/TradeDocumentPrint";
 import { ReservationsForm } from "src/models/Reservations";
 import { SalesForm } from "src/models/Sales";
+import { CashReceiptOrdersForm } from "src/models/CashReceiptOrders";
+import { translate } from "src/i18";
 
 const MODEL_ENDPOINT = "sales-orders";
 const LIST_NAME = "SalesOrdersList";
@@ -69,6 +71,16 @@ const SalesOrdersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsParentField: "salesOrderUuid",
       mapFields: mapCommonTradeFields,
       existingCheckEndpoint: "sales",
+    },
+    {
+      docLabel: translate("CashReceiptOrdersList"),
+      FormComponent: CashReceiptOrdersForm,
+      basisType: "sales_order",
+      sourceItemsEndpoint: "sales-order-items",
+      sourceItemsParentField: "salesOrderUuid",
+      mapFields: mapPaymentFromBasis,
+      mapItems: () => [],
+      existingCheckEndpoint: "cash-receipt-orders",
     },
   ],
 });
