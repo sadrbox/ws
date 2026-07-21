@@ -327,6 +327,22 @@ const ModelList: FC<ModelListProps> = ({
       const d = formProps.data;
       const isEdit = !!d?.uuid;
 
+      // Несохранённая (temp) строка из inline-режима несёт отрицательный id и
+      // служебные поля (_pendingAction/_paneToken/_untouched). Спред их в новую
+      // форму заставлял её принять запись за существующую (или сохранять по
+      // несуществующему id) — отсюда ошибка при попытке открыть «Новую» строку.
+      // Оставляем только пользовательские значения.
+      const cleanD = ((): Record<string, unknown> => {
+        if (!d || isEdit) return (d as Record<string, unknown>) ?? {};
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(d as Record<string, unknown>)) {
+          if (k.startsWith("_")) continue;
+          if (k === "id" && typeof v === "number" && v < 0) continue;
+          out[k] = v;
+        }
+        return out;
+      })();
+
       // При создании новой записи в контексте владельца — проставляем FK автоматически.
       // Для каждой новой записи добавляем уникальный _paneToken, чтобы повторное
       // «Добавить» открывало НОВЫЙ Pane (*Form), а не активировало уже открытый
@@ -334,7 +350,7 @@ const ModelList: FC<ModelListProps> = ({
       const newData = isEdit
         ? d
         : ({
-            ...(d as object | undefined),
+            ...cleanD,
             // Контекст родителя/владельца в новую форму: extraQueryParams несут
             // ownerType/ownerUuid (или иной scope), по которым отфильтрован список
             // — по ним же и создаём. Так «Добавить» из sub-списка/формы Выбора

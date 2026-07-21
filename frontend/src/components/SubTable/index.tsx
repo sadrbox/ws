@@ -804,9 +804,24 @@ const SubTable: FC<SubTableProps> = ({
 
   // ── openModelForm ─────────────────────────────────────────────────────
   const openModelForm = useCallback((formProps: TOpenModelFormProps) => {
-    if (openFormFor) {
-      openFormFor((formProps.data as TDataItem | undefined) ?? undefined, ctx);
+    if (!openFormFor) return;
+    let data = (formProps.data as TDataItem | undefined) ?? undefined;
+    // Несохранённая (temp) строка, добавленная inline: у неё отрицательный id и
+    // служебные поля (_pendingAction/_paneToken/_untouched), а uuid ещё нет.
+    // Открывать её как СУЩЕСТВУЮЩУЮ запись нельзя — сервер её не знает (отсюда
+    // ошибка при попытке открыть «Новую» строку в форменном режиме). Снимаем
+    // служебные поля и отрицательный id, оставляя введённые значения, — форма
+    // откроется как новая, с уже набранными данными.
+    if (data && !data.uuid) {
+      const clean: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(data)) {
+        if (k.startsWith("_")) continue;               // служебные _pendingAction/_paneToken/…
+        if (k === "id" && typeof v === "number" && v < 0) continue; // temp-id
+        clean[k] = v;
+      }
+      data = clean as TDataItem;
     }
+    openFormFor(data, ctx);
   }, [openFormFor, ctx]);
 
   // ── renderCell wrapper ─────────────────────────────────────────────────
