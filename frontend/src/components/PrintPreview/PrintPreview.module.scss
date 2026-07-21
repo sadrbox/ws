@@ -161,7 +161,7 @@
   user-select: none;
 
   &:hover {
-    background: rgba($color1, 0.08);
+    background: color-mix(in srgb, $color1 8%, transparent);
   }
 
   input[type="checkbox"] {

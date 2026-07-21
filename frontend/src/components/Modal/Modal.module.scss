@@ -14,7 +14,7 @@
 .ModalWrapper {
 	background: $color30;
 	border-radius: $radius2;
-	box-shadow: 0 32px 32px rgba($color6, 0.5);
+	box-shadow: 0 32px 32px color-mix(in srgb, $color6 50%, transparent);
 	animation: fadeIn 0.3s ease;
 	overflow: auto;
 }

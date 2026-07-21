@@ -64,7 +64,7 @@
 
 // 	// justify-content: space-around;
 
-// 		// box-shadow: 0px 0px 2px 0px rgba($color3, 0.3);
+// 		// box-shadow: 0px 0px 2px 0px color-mix(in srgb, $color3 30%, transparent);
 
 .FieldLabel {
 	user-select: none;
@@ -89,7 +89,7 @@
 	.FieldSelectWrapper,
 	.FieldTextareaInputWrapper {
 		border-color: #90caf9;
-		background-color: rgba($colorPrimaryDark, 0.04);
+		background-color: color-mix(in srgb, $colorPrimaryDark 4%, transparent);
 	}
 }
 
@@ -387,7 +387,7 @@
 	right: 0;
 	bottom: 0;
 	height: 3px;
-	background: rgba($color3, 0.12);
+	background: color-mix(in srgb, $color3 12%, transparent);
 	overflow: hidden;
 	pointer-events: none;
 }
@@ -659,12 +659,12 @@
 
 .FieldPeriodMonthBtnSelected {
 	border-color: $color1;
-	background: rgba($color1, 0.12);
+	background: color-mix(in srgb, $color1 12%, transparent);
 	color: $color3;
 	font-weight: 600;
 
 	&:hover {
-		background: rgba($color1, 0.2);
+		background: color-mix(in srgb, $color1 20%, transparent);
 	}
 }
 

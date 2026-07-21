@@ -208,17 +208,17 @@ a {
 }
 
 .BG_EASY {
-	background: rgba($silver, 0);
+	background: color-mix(in srgb, $silver 0%, transparent);
 	padding: 12px;
 }
 
 .BG_MEDIUM {
-	background: rgba($silver, 0.2);
+	background: color-mix(in srgb, $silver 20%, transparent);
 	padding: 12px;
 }
 
 .BG_HARD {
-	background: rgba($silver, 0.3);
+	background: color-mix(in srgb, $silver 30%, transparent);
 	padding: 12px;
 }
 

@@ -59,12 +59,12 @@
 
   // Hover/Focus.
   &:hover:not(.disabled) .track {
-    box-shadow: 0 0 0 4px rgba($color1, 0.12);
+    box-shadow: 0 0 0 4px color-mix(in srgb, $color1 12%, transparent);
   }
 
   .input:focus-visible+.track {
     outline: none;
-    box-shadow: 0 0 0 3px rgba($color3, 0.25);
+    box-shadow: 0 0 0 3px color-mix(in srgb, $color3 25%, transparent);
   }
 
   // Состояние «включено».

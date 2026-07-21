@@ -35,7 +35,7 @@
   &:focus-visible {
     outline: none;
     border-color: $color3;
-    box-shadow: 0 0 0 2px rgba($color3, 0.25);
+    box-shadow: 0 0 0 2px color-mix(in srgb, $color3 25%, transparent);
   }
 
   &:active:not(:disabled) {

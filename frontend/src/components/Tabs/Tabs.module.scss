@@ -50,7 +50,7 @@
 }
 
 .TabsLabel:hover {
-	background-color: rgba($color3, 0.1);
+	background-color: color-mix(in srgb, $color3 10%, transparent);
 }
 
 .labelText {
