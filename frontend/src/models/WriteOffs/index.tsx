@@ -39,7 +39,7 @@ import { checkStockAvailability, formatStockShortages } from "src/utils/stockCon
 
 const MODEL_ENDPOINT = "writeoffs";
 const LIST_NAME = "WriteOffsList";
-const FORM_LABEL = "Списание товара";
+const FORM_LABEL = "Списание ТМЗ";
 
 interface TFields {
   id?: number; uuid?: string;

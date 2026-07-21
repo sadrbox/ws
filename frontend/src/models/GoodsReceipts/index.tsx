@@ -37,7 +37,7 @@ import BasisDocumentField from "src/components/Field/BasisDocumentField";
 
 const MODEL_ENDPOINT = "goodsreceipts";
 const LIST_NAME = "GoodsReceiptsList";
-const FORM_LABEL = "Оприходование товара";
+const FORM_LABEL = "Оприходование ТМЗ";
 
 interface TFields {
   id?: number; uuid?: string;
