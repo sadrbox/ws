@@ -172,4 +172,27 @@ router.post(`/${ROUTE}/issue`, async (req, res) => {
 	}
 });
 
+// Карточка одной серии (только чтение) — форма-просмотр открывается двойным
+// кликом/из ссылки по id или uuid. Регистрируем ПОСЛЕ /receipt и /available,
+// иначе `:id` перехватил бы их. Раньше маршрута не было вовсе → GET по uuid
+// давал 404, и карточка серии не открывалась.
+router.get(`/${ROUTE}/:id`, async (req, res) => {
+	try {
+		const param = req.params.id;
+		const numId = Number(param);
+		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
+		const idClause = isNumeric ? { id: numId } : { uuid: param };
+		const item = await prisma.serialNumber.findFirst({
+			where: { ...idClause, deletedAt: null, ...tenantFilter(req) },
+			include: INCLUDE,
+		});
+		if (!item) return res.status(404).json({ success: false, message: "Серия не найдена" });
+		const [enriched] = await withReceiptOrigin([item]);
+		return res.status(200).json({ success: true, item: enriched });
+	} catch (error) {
+		console.error(`GET /${ROUTE}/:id error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 export default router;
