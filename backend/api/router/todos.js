@@ -1,8 +1,28 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
+import { publish } from "../../services/chatBus.js";
 
 const router = express.Router();
+
+/**
+ * Уведомить исполнителя о назначенной задаче через ту же SSE-шину, что и чат.
+ * Событие уходит в канал организации; на клиенте бейдж покажется только тому, чей
+ * executorUuid совпал. Себе задачу назначил (executor == актор) — не беспокоим.
+ */
+function notifyTaskAssigned(item, actorUuid) {
+	if (!item?.executorUuid || !item.organizationUuid) return;
+	if (item.executorUuid === actorUuid) return;
+	publish(item.organizationUuid, {
+		type: "task",
+		todo: {
+			uuid: item.uuid,
+			title: item.description || item.name || `#${item.id}`,
+			executorUuid: item.executorUuid,
+			deadline: item.deadline,
+		},
+	});
+}
 
 const TEXT_FIELDS = ["name", "description", "status"];
 
@@ -222,7 +242,8 @@ router.post("/todos", async (req, res) => {
 			include: INCLUDE,
 		});
 
-		// Уведомления хранятся только на клиенте (localStorage), сервер их не пишет.
+		// Назначенному исполнителю — уведомление в реальном времени (E9/E4-шина).
+		notifyTaskAssigned(item, req.user?.uuid);
 
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
@@ -282,7 +303,11 @@ router.put("/todos/:id", async (req, res) => {
 			include: INCLUDE,
 		});
 
-		// Уведомления хранятся только на клиенте (localStorage), сервер их не пишет.
+		// Уведомляем только при СМЕНЕ исполнителя на нового — иначе правка статуса
+		// (drag на доске) слала бы уведомление на каждый чих.
+		if (item.executorUuid && item.executorUuid !== existing.executorUuid) {
+			notifyTaskAssigned(item, req.user?.uuid);
+		}
 
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

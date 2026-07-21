@@ -12,6 +12,8 @@ import { clearOfflineDb } from "src/services/offlineDb";
 import { registerServiceWorker } from "src/services/registerSW";
 
 import { translate, getTranslation } from "src/i18";
+import { onLiveEvent } from "src/services/liveEvents";
+import { showToast } from "src/components/UIToast";
 import { Navbar, NavList, ErrorBoundary, Screen, LoadingSpinner, Container } from "../components/UI";
 import { TComponentNode, TPane, TypeAppContextProps, TypeNavbarProps } from "./types";
 import useUID from "src/hooks/useUID";
@@ -139,6 +141,20 @@ const App: React.FC = () => {
         stopPeriodicSync();
       };
     }
+  }, [isLoggedIn]);
+
+  // ── Уведомления о назначенных задачах (E9/E4 collaboration) ──
+  // Подписка на общий SSE-канал; тост показываем, только если исполнитель — я.
+  // Работает независимо от того, открыт ли чат — соединение живёт на уровне App.
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const off = onLiveEvent("task", (ev) => {
+      const todo = (ev as { todo?: { title?: string; executorUuid?: string } }).todo;
+      const me = getCurrentUser();
+      if (!todo || !me || todo.executorUuid !== me.uuid) return;
+      showToast(`${translate("taskAssignedToast")}: ${todo.title ?? ""}`.trim(), "info");
+    });
+    return off;
   }, [isLoggedIn]);
 
   // ── Регистрация Service Worker (один раз при монтировании) ──

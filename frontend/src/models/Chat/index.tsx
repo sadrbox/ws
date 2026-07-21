@@ -11,8 +11,9 @@
  */
 import { FC, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient, API_BASE_URL } from "src/services/api/client";
-import { getToken, getCurrentUser } from "src/services/auth";
+import { apiClient } from "src/services/api/client";
+import { getCurrentUser } from "src/services/auth";
+import { onLiveEvent } from "src/services/liveEvents";
 import { useAppContext } from "src/app/context";
 import { translate } from "src/i18";
 import { getFormatDate } from "src/utils/datetime";
@@ -73,31 +74,20 @@ export const ChatList: FC = () => {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
-  // ── SSE-подписка ───────────────────────────────────────────────────────────
+  // ── Подписка на общий SSE-канал (чат-события) ────────────────────────────
   useEffect(() => {
     if (!orgUuid) return;
-    const token = getToken();
-    if (!token) return;
-    const es = new EventSource(`${API_BASE_URL}/chat/stream?token=${encodeURIComponent(token)}`);
-
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false); // EventSource реконнектится сам
-    es.onmessage = (e) => {
-      try {
-        const ev = JSON.parse(e.data) as { type: string; message?: ChatMessage };
-        if (ev.type === "chat" && ev.message && ev.message.organizationUuid === orgUuid) {
-          const msg = ev.message;
-          queryClient.setQueryData<ChatMessage[]>(queryKey, (old) => {
-            const list = old ?? [];
-            if (list.some((m) => m.uuid === msg.uuid)) return list; // дедуп (своё эхо)
-            return [...list, msg];
-          });
-        }
-      } catch { /* игнорируем некорректный кадр */ }
-    };
-
-    return () => es.close();
-    // queryKey стабилен при том же orgUuid; пересоздаём подписку при смене канала.
+    setConnected(true); // соединение единое и живёт на уровне приложения
+    const off = onLiveEvent("chat", (ev) => {
+      const msg = (ev as { message?: ChatMessage }).message;
+      if (!msg || msg.organizationUuid !== orgUuid) return;
+      queryClient.setQueryData<ChatMessage[]>(queryKey, (old) => {
+        const list = old ?? [];
+        if (list.some((m) => m.uuid === msg.uuid)) return list; // дедуп (своё эхо)
+        return [...list, msg];
+      });
+    });
+    return () => { off(); setConnected(false); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgUuid]);
 
