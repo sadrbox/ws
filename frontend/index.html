@@ -3,14 +3,18 @@
 
 <head>
   <meta charset="UTF-8" />
-  <!-- Применяем выбранную тему ДО первой отрисовки — иначе вспышка светлой темы
-       у пользователя, выбравшего тёмную. Без темы в localStorage — по системной
-       (prefers-color-scheme отрабатывает сам в CSS). -->
+  <!-- ТЁМНАЯ ТЕМА ВРЕМЕННО ОТКЛЮЧЕНА (WIP, см. E5): в module.scss ещё ~390
+       хардкод-цветов не переключаются → невидимый текст. Форсим светлую тему для
+       ВСЕХ: data-theme="light" перекрывает и @media(prefers-color-scheme:dark)
+       (селектор :root:not([data-theme="light"])), и застрявший выбор в localStorage.
+       Когда тема будет готова — вернуть чтение localStorage (закомментировано ниже)
+       и раскомментировать <ThemeSwitcher/> в навбаре. -->
   <script>
     (function () {
       try {
-        var t = localStorage.getItem("theme");
-        if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+        document.documentElement.setAttribute("data-theme", "light");
+        // var t = localStorage.getItem("theme");
+        // if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
       } catch (e) { }
     })();
   </script>

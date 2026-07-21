@@ -876,7 +876,13 @@ export const Navbar: React.FC = () => {
         {/* Правая часть: индикаторы, имя, выход */}
         <div className={styles.NavbarRight}>
           <LanguageSwitcher />
-          <ThemeSwitcher />
+          {/* Тумблер тёмной темы СКРЫТ до готовности: инфраструктура (проекция
+              SCSS→CSS-переменные, токены, dark-палитра, сам ThemeSwitcher) на
+              месте, НО в module.scss ещё ~390 хардкод-цветов (244 текста + 148
+              фонов в 46 файлах), которые не переключаются — отсюда невидимый текст
+              и «светлые заплатки» в тёмной теме. Вернуть, когда цвета переведены на
+              токены и dark-значения выверены визуально. См. E5 в ROADMAP. */}
+          {/* <ThemeSwitcher /> */}
           <PersistenceModeToggle />
           <NavbarPaneBell />
           <OfflineIndicator />
