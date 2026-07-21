@@ -152,27 +152,34 @@ export interface TableContextProps {
   /** Функция для рендера содержимого раскрытой строки */
   renderExpandedRow?: (row: TDataItem) => React.ReactNode;
 
+  // ТОЛЬКО сеттеры (стабильная идентичность). Сами ЗНАЧЕНИЯ выделения/навигации
+  // вынесены в отдельный TableVolatileContext — иначе смена activeCell на КАЖДОЕ
+  // нажатие стрелки меняла бы contextValue и перерисовывала ВСЕ строки в обход
+  // memo (P1: шторм перерисовок). Теперь основной контекст стабилен при навигации.
   states: {
-    selectedRows: Set<number>;
     setSelectedRows: Dispatch<SetStateAction<Set<number>>>;
-    // ── Режим "выбрать всё" ───────────────────────────────────────────────
-    // true = выбраны ВСЕ строки в БД (кроме excludedRows)
-    isAllSelectedMode: boolean;
     setIsAllSelectedMode: Dispatch<SetStateAction<boolean>>;
-    // Строки исключённые из режима "выбрать всё"
-    excludedRows: Set<number>;
     setExcludedRows: Dispatch<SetStateAction<Set<number>>>;
-    activeRow: number | null;
     setActiveRow: Dispatch<SetStateAction<number | null>>;
-    /** Идентификатор активной (выделенной) колонки в строке activeRow. */
-    activeCell: string | null;
     setActiveCell: Dispatch<SetStateAction<string | null>>;
   };
 
   scrollRef: React.RefObject<HTMLDivElement | null>;
 }
 
+/** Высокочастотное состояние выделения/навигации — отдельный контекст. */
+export interface TableVolatileState {
+  selectedRows: Set<number>;
+  // true = выбраны ВСЕ строки в БД (кроме excludedRows).
+  isAllSelectedMode: boolean;
+  excludedRows: Set<number>;
+  activeRow: number | null;
+  /** Идентификатор активной (выделенной) колонки в строке activeRow. */
+  activeCell: string | null;
+}
+
 const TableContext = createContext<TableContextProps | undefined>(undefined);
+const TableVolatileContext = createContext<TableVolatileState | undefined>(undefined);
 
 export const useTableContext = () => {
   const context = useContext(TableContext);
@@ -180,8 +187,20 @@ export const useTableContext = () => {
   return context;
 };
 
-const TableContextProvider: FC<PropsWithChildren<{ value: TableContextProps }>> = ({ children, value }) => (
-  <TableContext.Provider value={value}>{children}</TableContext.Provider>
+/** Доступ к состоянию выделения/навигации. Меняется часто — подписчики
+ *  (TableHeader-чекбокс) перерисовываются на каждую навигацию, но их единицы.
+ *  Строки (TableBodyRow) НЕ подписываются на него — получают производные булевы
+ *  пропсами, поэтому перерисовываются только затронутые. */
+export const useTableVolatile = () => {
+  const context = useContext(TableVolatileContext);
+  if (!context) throw new Error('useTableVolatile must be used within TableContextProvider');
+  return context;
+};
+
+const TableContextProvider: FC<PropsWithChildren<{ value: TableContextProps; volatile: TableVolatileState }>> = ({ children, value, volatile }) => (
+  <TableContext.Provider value={value}>
+    <TableVolatileContext.Provider value={volatile}>{children}</TableVolatileContext.Provider>
+  </TableContext.Provider>
 );
 
 // ────────────────────────────────────────────────
@@ -611,12 +630,13 @@ const Table: FC<TableProps> = memo((props) => {
       scrollRef,
       expandedRowIds,
       renderExpandedRow,
+      // Только сеттеры — стабильны, поэтому contextValue НЕ меняется при навигации.
       states: {
-        selectedRows, setSelectedRows,
-        isAllSelectedMode, setIsAllSelectedMode,
-        excludedRows, setExcludedRows,
-        activeRow, setActiveRow,
-        activeCell, setActiveCell,
+        setSelectedRows,
+        setIsAllSelectedMode,
+        setExcludedRows,
+        setActiveRow,
+        setActiveCell,
       },
     }),
     [
@@ -626,8 +646,17 @@ const Table: FC<TableProps> = memo((props) => {
       pagination, sorting, filtering, search, extendedActions,
       hasNextPage, isFetchingNextPage,
       onInlineAdd, onDelete,
-      selectedRows, isAllSelectedMode, excludedRows, activeRow, activeCell,
+      // сеттеры стабильны (useState) — в deps не нужны; волатильные ЗНАЧЕНИЯ ушли
+      // в отдельный контекст (см. volatileValue ниже).
+      setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow, setActiveCell,
     ]
+  );
+
+  // Высокочастотное состояние — отдельный контекст. Меняется на каждую навигацию/
+  // выделение, но на него подписаны единицы (TableHeader), а не N строк.
+  const volatileValue = useMemo<TableVolatileState>(
+    () => ({ selectedRows, isAllSelectedMode, excludedRows, activeRow, activeCell }),
+    [selectedRows, isAllSelectedMode, excludedRows, activeRow, activeCell],
   );
 
   const handleCreate = useCallback(() => {
@@ -883,7 +912,7 @@ const Table: FC<TableProps> = memo((props) => {
   }, []);
 
   return (
-    <TableContextProvider value={contextValue}>
+    <TableContextProvider value={contextValue} volatile={volatileValue}>
       {configModalAction === 'open' && (
         <TableConfigModalForm method={{ get: configModalAction, set: setConfigModalAction }} />
       )}
@@ -1028,13 +1057,11 @@ const TableHeader = memo(() => {
     variant, selectable,
     columns, rows, componentName,
     sorting: { sort, onSortChange },
-    states: {
-      selectedRows, setSelectedRows,
-      isAllSelectedMode, setIsAllSelectedMode,
-      excludedRows, setExcludedRows,
-    },
+    states: { setSelectedRows, setIsAllSelectedMode, setExcludedRows },
     isLoading, canDelete,
   } = useTableContext();
+  // Значения выделения — из волатильного контекста (чекбокс «выбрать все»).
+  const { selectedRows, isAllSelectedMode, excludedRows } = useTableVolatile();
 
   const isSelect = variant === 'select';
   const showCheckbox = !isSelect && selectable;
@@ -1214,6 +1241,10 @@ const TableBody = memo(() => {
     isFetchingNextPage, hasNextPage,
     actions, scrollRef, search,
   } = useTableContext();
+  // Волатильное состояние читаем ЗДЕСЬ (TableBody перерисуется на навигацию/выделение
+  // — это один компонент), а в строки отдаём готовые булевы пропсами. Тогда memo на
+  // TableBodyRow сравнивает примитивы и перерисовывает только затронутые строки.
+  const { activeRow, activeCell, selectedRows, isAllSelectedMode, excludedRows } = useTableVolatile();
   const extraCol = variant !== 'select' && selectable ? 1 : 0; // +1 колонка под чекбокс
 
   // scrollRenderTick используется ТОЛЬКО как триггер ре-рендера при скролле.
@@ -1421,13 +1452,23 @@ const TableBody = memo(() => {
         </tr>
       )}
 
-      {visibleRows.map((row) => (
-        <TableBodyRow
-          key={row.id}
-          row={row}
-          columns={visibleColumns}
-        />
-      ))}
+      {visibleRows.map((row) => {
+        const isActive = activeRow === row.id;
+        const isSelected = isAllSelectedMode ? !excludedRows.has(row.id) : selectedRows.has(row.id);
+        return (
+          <TableBodyRow
+            key={row.id}
+            row={row}
+            columns={visibleColumns}
+            isActive={isActive}
+            isSelected={isSelected}
+            // Активную ячейку передаём ТОЛЬКО активной строке — тогда переезд
+            // активной ячейки внутри другой строки не трогает остальные.
+            activeCellId={isActive ? activeCell : null}
+            isAllSelectedMode={isAllSelectedMode}
+          />
+        );
+      })}
 
       {bottomPaddingAll > 0 && (
         <tr className={styles.VirtualPaddingRow} style={{ height: `${bottomPaddingAll}px` }} aria-hidden="true" role="presentation">
@@ -1454,10 +1495,19 @@ const TableBody = memo(() => {
 interface TableBodyRowProps {
   row: TDataItem;
   columns: TColumn[];
+  /** Активна ли строка. Приходит пропсом от TableBody — строка НЕ подписана на
+   *  волатильный контекст, поэтому memo перерисовывает только затронутые строки. */
+  isActive: boolean;
+  /** Выбрана ли строка (чекбокс). */
+  isSelected: boolean;
+  /** Активная ячейка — только если активна ЭТА строка, иначе null. */
+  activeCellId: string | null;
+  /** Режим «выбрать все» — нужен в обработчике чекбокса. Меняется редко. */
+  isAllSelectedMode: boolean;
 }
 
 
-const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
+const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSelected, activeCellId, isAllSelectedMode }) => {
   const {
     variant, selectable,
     onSelectItem,
@@ -1468,12 +1518,13 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
     expandedRowIds,
     renderExpandedRow,
     canDelete,
+    // Только сеттеры — значения выделения/навигации приходят пропсами.
     states: {
-      activeRow, setActiveRow,
-      activeCell, setActiveCell,
-      selectedRows, setSelectedRows,
-      isAllSelectedMode, setIsAllSelectedMode,
-      excludedRows, setExcludedRows,
+      setActiveRow,
+      setActiveCell,
+      setSelectedRows,
+      setIsAllSelectedMode,
+      setExcludedRows,
     },
     actions: { openModelForm, refetch },
     isLoading,
@@ -1481,15 +1532,8 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
   } = useTableContext();
 
   const showCheckbox = variant !== 'select' && selectable;
-  const isActive = activeRow === row.id;
-  const isCheckboxCellActive = showCheckbox && isActive && activeCell === CHECKBOX_COL_ID;
-
-  // Строка выбрана если:
-  // 1. Режим "все" И строка НЕ в исключениях
-  // 2. Или обычный режим И строка в selectedRows
-  const isSelected = isAllSelectedMode
-    ? !excludedRows.has(row.id)
-    : selectedRows.has(row.id);
+  // isActive/isSelected/activeCellId — пропсы (см. TableBodyRowProps).
+  const isCheckboxCellActive = showCheckbox && isActive && activeCellId === CHECKBOX_COL_ID;
 
   const toggleSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
@@ -1682,7 +1726,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns }) => {
         {columns.map(col => {
           // Кастомный рендер ячейки (переводы, спецзначения) — работает в любом режиме
           const currentRenderCell = renderCellRef?.current;
-          const isCellActive = isActive && activeCell === col.identifier;
+          const isCellActive = isActive && activeCellId === col.identifier;
 
           const cellMeta = getCellMetaRef?.current?.(row, col) ?? null;
 

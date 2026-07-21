@@ -1,6 +1,6 @@
 import { FC, useCallback, useState } from "react";
 import { Toolbar } from "src/components/Toolbar";
-import { useTableContext } from "src/components/Table";
+import { useTableContext, useTableVolatile } from "src/components/Table";
 import { useSubTableContext } from "src/components/SubTable/context";
 import { api } from "src/services/api/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -25,11 +25,11 @@ export const PrimaryToolbarButton: FC<PrimaryToolbarButtonProps> = ({
   onDone,
 }) => {
   const ctx = useTableContext();
+  const { activeRow: activeId } = useTableVolatile();
   const subCtx = useSubTableContext();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
 
-  const activeId = ctx.states.activeRow;
   const rows = subCtx?.rows ?? ctx.rows;
   const activeRow = activeId != null ? rows.find((r) => r.id === activeId) : null;
   const activeUuid = (activeRow?.uuid) ?? "";
