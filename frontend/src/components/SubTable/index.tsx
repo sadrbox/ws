@@ -38,6 +38,7 @@ import {
 } from "./rowModel";
 import { useSubTableRows } from "./useSubTableRows";
 import { useSubTableColumns } from "./useSubTableColumns";
+import { useSubTableToolbar } from "./useSubTableToolbar";
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -359,7 +360,12 @@ const SubTable: FC<SubTableProps> = ({
   const [sort, setSort] = useState<Record<string, "asc" | "desc">>(defaultSort);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Record<string, { value: unknown; operator: string }> | undefined>(undefined);
-  const [inlineEditing, setInlineEditing] = useState(readonly ? false : defaultInlineEditing);
+  // Inline-режим (редактирование в таблице ↔ через форму) + доп-кнопки тулбара —
+  // в useSubTableToolbar.
+  const { inlineEditing, extraButtons } = useSubTableToolbar({
+    readonly, disabled, showEditModeToggle, hasFormMode: !!openFormFor,
+    defaultInlineEditing, extraButtons: extraButtonsProp,
+  });
   // Счётчик активных операций (add / inline-change / delete)
   const [opCount, setOpCount] = useState(0);
   const opLoading = opCount > 0;
@@ -560,7 +566,6 @@ const SubTable: FC<SubTableProps> = ({
     }
   }, [model, refetch, customInlineChange, deferRemoteChanges, validateCell, setCellError, cachedRowsRef, setCacheVersion, notifyParent]);
 
-  const toggleInlineEditing = useCallback(() => setInlineEditing(prev => !prev), []);
 
   // ── updateLocalRow — патч нескольких полей строки локально ──────────────
   const updateLocalRow = useCallback((row: TDataItem, patch: Record<string, unknown>) => {
@@ -1210,25 +1215,6 @@ const SubTable: FC<SubTableProps> = ({
   }, [readonly, inlineEditing, onInlineAddProp, defaultNewRow, handleInlineAdd, handleDelete, confirm, columns, openModelForm]);
 
   // ── Кнопки ─────────────────────────────────────────────────────────────
-  const extraButtons = useMemo(() => (
-    <>
-      {/* Переключатель «Редактирование через форму / в таблице» показываем
-          только если форменный режим реально доступен (задан openFormFor) —
-          без него режим бесполезен (Enter не открывает форму). */}
-      {!readonly && !disabled && showEditModeToggle && openFormFor && (
-        <>
-          <Toolbar.Divider />
-          <Toolbar.InlineEditButton
-            onClick={toggleInlineEditing}
-            active={inlineEditing}
-            title={inlineEditing ? "Редактирование через форму" : "Редактирование в таблице"} />
-        </>
-      )}
-      {extraButtonsProp && extraButtonsProp}
-    </>
-  ), [toggleInlineEditing, inlineEditing, extraButtonsProp, readonly, disabled, showEditModeToggle, openFormFor]);
-
-
   // ── Table props ────────────────────────────────────────────────────────
   const combinedLoading = isAnythingLoading || opLoading;
   const tableProps = useMemo(() => ({
