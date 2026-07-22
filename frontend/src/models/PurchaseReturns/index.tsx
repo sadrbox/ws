@@ -31,6 +31,10 @@ const { Form: PurchaseReturnsForm, List: PurchaseReturnsList } = createTradeDocF
   accessPermissionModel: "PurchaseReturn",
   docType: "purchase_return",
   columnsJson,
+  // Возврат поставщику — расход со склада: серии и партии выбывают (issue).
+  serialMode: "issue",
+  serialDocType: "purchase_return",
+  batchMode: "issue",
   basisAllowedTypes: [{ type: "purchase", endpoint: "purchases" }],
   hasPriceType: false,
   defaultHiddenColumns: ["amountNetOfIndirectTaxes", "amountWithoutVat"],

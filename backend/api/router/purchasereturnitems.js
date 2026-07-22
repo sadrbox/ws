@@ -7,4 +7,5 @@ export default createDocumentItemsRouter({
 	PARENT_FIELD: "purchaseReturnUuid",
 	hasTaxes: true,
 	hasSourceRowId: true,
+	extraStringFields: ["batchUuid"], // партия возврата (T6.1)
 });

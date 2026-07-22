@@ -1690,6 +1690,7 @@ model SaleReturnItem {
   discountPercent   Decimal        @default(0) @db.Decimal(7, 4)
   discountAmount    Decimal        @default(0) @db.Decimal(18, 2)
   productUuid       String?
+  batchUuid          String? // партия (T6.1 возвраты)
   saleReturnUuid    String
   taxes             Json?
   date              DateTime?
@@ -1713,6 +1714,7 @@ model SaleReturnItem {
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([updatedAt])
+  @@index([batchUuid])
   @@map("sale_return_items")
 }
 
@@ -1771,6 +1773,7 @@ model PurchaseReturnItem {
   discountPercent    Decimal        @default(0) @db.Decimal(7, 4)
   discountAmount     Decimal        @default(0) @db.Decimal(18, 2)
   productUuid        String?
+  batchUuid          String? // партия (T6.1 возвраты)
   purchaseReturnUuid String
   taxes              Json?
   date               DateTime?
@@ -1794,6 +1797,7 @@ model PurchaseReturnItem {
   @@index([organizationUuid])
   @@index([counterpartyUuid])
   @@index([updatedAt])
+  @@index([batchUuid])
   @@map("purchase_return_items")
 }
 

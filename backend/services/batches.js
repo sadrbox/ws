@@ -115,8 +115,10 @@ export function assertBatchStock(lines) {
 }
 
 // Документы-приёмки и документы-выбытия для партий (те же, что для серий/склада).
-export const BATCH_RECEIPT_DOCS = new Set(["purchase", "goods_receipt", "import_declaration"]);
-export const BATCH_ISSUE_DOCS = new Set(["sale", "write_off"]);
+// sale_return (возврат от покупателя) — приход партии на склад (как приёмка);
+// purchase_return (возврат поставщику) — расход партии по FEFO (как выбытие).
+export const BATCH_RECEIPT_DOCS = new Set(["purchase", "goods_receipt", "import_declaration", "sale_return"]);
+export const BATCH_ISSUE_DOCS = new Set(["sale", "write_off", "purchase_return"]);
 // Перемещение (T6.1 Stage 3): партия списывается с источника (issue-логика по
 // fromWarehouseUuid) и той же партией приходует на получатель. Партия не привязана
 // к складу — её остаток по складу выводится из регистра (batchUuid+warehouseUuid),
@@ -233,7 +235,7 @@ async function batchAvailableExcludingDoc({ batchUuid, warehouseUuid, organizati
 
 /** docType → prisma-модель документа (для загрузки склада/организации). */
 function docParentModel(docType) {
-	return { goods_receipt: "goodsReceipt", write_off: "writeOff", purchase: "purchase", import_declaration: "importDeclaration", sale: "sale", inventory_transfer: "inventoryTransfer" }[docType];
+	return { goods_receipt: "goodsReceipt", write_off: "writeOff", purchase: "purchase", import_declaration: "importDeclaration", sale: "sale", inventory_transfer: "inventoryTransfer", sale_return: "saleReturn", purchase_return: "purchaseReturn" }[docType];
 }
 
 /** Express-хелпер: BatchValidationError → 422. */

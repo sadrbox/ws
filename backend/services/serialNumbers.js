@@ -18,7 +18,8 @@ export const SERIAL_STATUS = { IN_STOCK: "in_stock", ISSUED: "issued", WRITTEN_O
 
 // Документы-приёмники и документы-выбытия для серий (те же, что двигают склад «+»/«−»).
 export const SERIAL_RECEIPT_DOCS = new Set(["purchase", "goods_receipt", "import_declaration"]);
-export const SERIAL_ISSUE_DOCS = new Set(["sale", "write_off"]);
+// purchase_return (возврат поставщику) — расход серий со склада (как выбытие).
+export const SERIAL_ISSUE_DOCS = new Set(["sale", "write_off", "purchase_return"]);
 // Перемещение (T6.1 Stage 3): серия НЕ выбывает — меняется её склад (warehouseUuid)
 // с источника на получатель, статус остаётся in_stock. Связь перемещения с сериями
 // пишем в issueDoc* (issueDocType="inventory_transfer") — отдельных колонок не

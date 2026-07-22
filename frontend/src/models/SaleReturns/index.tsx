@@ -31,6 +31,10 @@ const { Form: SaleReturnsForm, List: SaleReturnsList } = createTradeDocForm({
   accessPermissionModel: "SaleReturn",
   docType: "sale_return",
   columnsJson,
+  // Возврат от покупателя — приход на склад: партия задаётся (receipt). Серии на
+  // возврате от покупателя пока не поддержаны (нужен реинстейт конкретных
+  // проданных серий — отдельный трек), поэтому serialMode не задаём.
+  batchMode: "receipt",
   basisAllowedTypes: [{ type: "sale", endpoint: "sales" }],
   hasPriceType: false,
   defaultHiddenColumns: ["amountNetOfIndirectTaxes", "amountWithoutVat"],

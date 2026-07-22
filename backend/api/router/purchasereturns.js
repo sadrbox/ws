@@ -8,6 +8,8 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { assertDocumentSerials, respondSerialError, releaseIssuedSerials } from "../../services/serialNumbers.js";
+import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
@@ -289,6 +291,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (willBePosted) {
 			const warehouseUuid =
 				data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid;
+			// Серии/партии выбытия (возврат поставщику расходует со склада).
+			await assertDocumentSerials({ docType: "purchase_return", docUuid: existing.uuid, itemModel: "purchaseReturnItem", parentField: "purchaseReturnUuid" });
+			await assertDocumentBatches({ docType: "purchase_return", docUuid: existing.uuid, itemModel: "purchaseReturnItem", parentField: "purchaseReturnUuid" });
 			await assertStockForPosting("purchase_return", existing.uuid, { warehouseUuid });
 			await assertPostable("purchase_return", existing.uuid, { ...data, posted: true });
 		}
@@ -315,6 +320,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondOrgFieldError(error, res)) return;
 		if (respondStockError(error, res)) return;
 		if (respondPostingError(error, res)) return;
+		if (respondSerialError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025")
@@ -327,6 +334,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 const onPurchaseReturnDeleted = async (doc) => {
 	await removeDocumentRegister("purchase_return", doc.uuid);
 	await removeDocumentEntries("purchase_return", doc.uuid);
+	await releaseIssuedSerials("purchase_return", doc.uuid); // серии возврата → назад в in_stock
 };
 
 router.delete(`/${ROUTE}/:id`, (req, res) =>

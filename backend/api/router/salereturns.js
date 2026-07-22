@@ -8,6 +8,7 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
@@ -288,7 +289,12 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			contractUuid: data.contractUuid !== undefined ? data.contractUuid : existing.contractUuid,
 		}, prisma);
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
-		if (willBePosted) await assertPostable("sale_return", existing.uuid, { ...data, posted: true });
+		if (willBePosted) {
+			// Партия прихода (возврат от покупателя): партия должна быть назначена
+			// (receipt-режим — остаток не проверяем, товар возвращается на склад).
+			await assertDocumentBatches({ docType: "sale_return", docUuid: existing.uuid, itemModel: "saleReturnItem", parentField: "saleReturnUuid" });
+			await assertPostable("sale_return", existing.uuid, { ...data, posted: true });
+		}
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -312,6 +318,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondPostingError(error, res)) return;
+		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
 		if (error.code === "P2025")
