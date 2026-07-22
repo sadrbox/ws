@@ -492,3 +492,19 @@ export function computeFooterValue(col: TColumn, rows: TDataItem[]): string | nu
 		default: return null;
 	}
 }
+
+/**
+ * Гарантирует, что последняя видимая колонка имеет width: 'auto' (растягивается на
+ * оставшееся место), а не-последние 'auto' сбрасываются в minWidth. Вынесено из
+ * Table/index.tsx (T4) — используется и главным Table, и TableHeader (ресайз).
+ */
+export function normalizeLastColumnWidth(cols: TColumn[]): TColumn[] {
+	const visibleIds = cols.filter(c => c.visible).map(c => c.identifier);
+	if (visibleIds.length === 0) return cols;
+	const lastVisibleId = visibleIds[visibleIds.length - 1];
+	return cols.map(c => {
+		if (c.identifier === lastVisibleId) return { ...c, width: 'auto' };
+		if (c.visible && c.width === 'auto') return { ...c, width: c.minWidth ?? '150px' };
+		return c;
+	});
+}
