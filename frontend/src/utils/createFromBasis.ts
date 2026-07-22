@@ -1,13 +1,33 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FC } from "react";
 import type { TPane } from "src/app/types";
-import type { TDataItem } from "src/components/Table/types";
+import type { TDataItem, DocRow } from "src/components/Table/types";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { unwrapItem, unwrapList } from "src/utils/apiUnwrap";
 import type { UserDefaultsMap } from "src/hooks/useUserDefaults";
 import { isEquivalent } from "src/utils/normalize";
+
+/** Именованная ссылка на связанный объект ({name}) — организация/контрагент/договор. */
+type NamedRef = { name?: string | null } | null | undefined;
+
+/**
+ * Шапка документа-основания для маппинга «На основании». Известные поля
+ * типизированы, произвольные доступны через индекс-сигнатуру как `unknown`.
+ * Заменяет `any` в сигнатурах mapFields/sourceFields (T3).
+ */
+export interface BasisSource {
+	id?: number | string;
+	uuid?: string;
+	number?: string | number | null;
+	date?: string;
+	amount?: unknown;
+	organizationUuid?: string | null; organization?: NamedRef; organizationName?: string | null;
+	counterpartyUuid?: string | null; counterparty?: NamedRef; counterpartyName?: string | null;
+	contractUuid?: string | null; contract?: NamedRef; contractName?: string | null;
+	warehouseUuid?: string | null; warehouse?: NamedRef; warehouseName?: string | null;
+	[key: string]: unknown;
+}
 
 export interface BasisFromTarget {
 	/** Название создаваемого документа, напр. "Счёт-фактуру исходящую" */
@@ -105,9 +125,9 @@ const BASIS_SOURCE_CONFIGS: Record<string, BasisSourceConfig> = {
 };
 
 /** Конвертирует позиции исходного документа в pending-строки для нового. */
-export function mapItemsForBasis(sourceItems: any[]): any[] {
+export function mapItemsForBasis(sourceItems: DocRow[]): DocRow[] {
 	const ts = Date.now();
-	return sourceItems.map((r: any, i: number) => ({
+	return sourceItems.map((r: DocRow, i: number) => ({
 		id: -(i + 1),
 		uuid: `tmp-basis-${ts}-${i}`,
 		_pendingAction: "create",
@@ -162,7 +182,7 @@ function refillFieldEqual(key: string, a: unknown, b: unknown): boolean {
 }
 
 /** Является ли строка серверной (сохранена в БД), а не локальным tmp-черновиком. */
-function isServerRow(r: any): boolean {
+function isServerRow(r: DocRow): boolean {
 	return (
 		!(typeof r.uuid === "string" && r.uuid.startsWith("tmp-")) &&
 		!(typeof r.id === "number" && r.id < 0)
@@ -170,7 +190,7 @@ function isServerRow(r: any): boolean {
 }
 
 /** Значения строки-основания, которыми обновляется/создаётся строка документа. */
-function basisRowValues(b: any): Record<string, any> {
+function basisRowValues(b: DocRow): Record<string, unknown> {
 	return {
 		productUuid: b.productUuid ?? null,
 		product: b.product ?? null,
@@ -210,12 +230,12 @@ function basisRowValues(b: any): Record<string, any> {
  * @param basisRows  строки основания после mapItemsForBasis (несут sourceRowId)
  */
 export function buildRefillBasisItems(
-	displayed: any[],
-	basisRows: any[],
-): any[] {
+	displayed: DocRow[],
+	basisRows: DocRow[],
+): DocRow[] {
 	// Пулы для сопоставления. Усыновление по товару — только строки без sourceRowId.
-	const bySource = new Map<string, any>();
-	const legacyByProduct = new Map<string, any[]>();
+	const bySource = new Map<string, DocRow>();
+	const legacyByProduct = new Map<string, DocRow[]>();
 	for (const r of displayed) {
 		const srcId = r?.sourceRowId != null ? String(r.sourceRowId) : "";
 		if (srcId) {
@@ -229,8 +249,8 @@ export function buildRefillBasisItems(
 		}
 	}
 
-	const consumed = new Set<any>();
-	const result: any[] = [];
+	const consumed = new Set<DocRow>();
+	const result: DocRow[] = [];
 	let changed = false;
 
 	for (const b of basisRows) {
@@ -243,7 +263,7 @@ export function buildRefillBasisItems(
 		if (!existing) {
 			const pool = legacyByProduct.get(String(b.productUuid ?? ""));
 			while (pool && pool.length) {
-				const cand = pool.shift();
+				const cand = pool.shift()!;
 				if (!consumed.has(cand)) {
 					existing = cand;
 					break;
@@ -263,7 +283,7 @@ export function buildRefillBasisItems(
 		// иначе «усыновление» строки по товару проставляло бы ключ и помечало форму
 		// Dirty, хотя фактические значения не менялись (см. вопрос про ложный Dirty).
 		const valuesChanged = REFILL_COMPARE_KEYS.some(
-			(k) => !refillFieldEqual(k, existing[k], (newValues as any)[k]),
+			(k) => !refillFieldEqual(k, existing[k], newValues[k]),
 		);
 
 		if (isServerRow(existing)) {
@@ -394,27 +414,27 @@ export async function runBasisRefill(opts: {
 
 	// Текущее отображаемое состояние таблицы (сервер + pending, без delete).
 	const live = opts.allItemsRef.current.filter(
-		(r: any) => r._pendingAction !== "delete",
+		(r: DocRow) => r._pendingAction !== "delete",
 	);
 
-	let merged: any[];
+	let merged: DocRow[];
 	if (basisChanged) {
 		// ОСНОВАНИЕ СМЕНИЛОСЬ → ЧИСТОЕ перезаполнение из НОВОГО основания: не мержим
 		// со старыми строками (которые в allItemsRef могут быть устаревшими на 1 рендер
 		// после remount — отсюда «нужен второй клик»). Старые серверные строки помечаем
 		// на удаление, черновики заменяются строками нового основания.
-		let serverRows = live.filter((r: any) => isServerRow(r));
+		let serverRows = live.filter((r: DocRow) => isServerRow(r));
 		if (serverRows.length === 0 && snap.uuid) {
 			const fetched = await fetchDocumentItems(
 				opts.itemsEndpoint,
 				opts.itemsParentField,
 				snap.uuid,
 			);
-			serverRows = fetched.filter((r: any) => isServerRow(r));
+			serverRows = fetched.filter((r: DocRow) => isServerRow(r));
 		}
 		merged = [
 			...result.items,
-			...serverRows.map((r: any) => ({ ...r, _pendingAction: "delete" })),
+			...serverRows.map((r: DocRow) => ({ ...r, _pendingAction: "delete" })),
 		];
 	} else {
 		// То же основание → идемпотентный merge по sourceRowId (без дублей, серверные
@@ -446,8 +466,8 @@ export async function runBasisRefill(opts: {
 export async function refillFromBasisSource(
 	basisType: string,
 	basisUuid: string,
-	mapFields: (src: any) => Record<string, any>,
-): Promise<{ fields: Record<string, any>; items: any[] } | null> {
+	mapFields: (src: BasisSource) => Record<string, unknown>,
+): Promise<{ fields: Record<string, unknown>; items: DocRow[] } | null> {
 	const config = BASIS_SOURCE_CONFIGS[basisType];
 	if (!config) {
 		// Тип основания не настроен в BASIS_SOURCE_CONFIGS → refill невозможен.
@@ -467,8 +487,8 @@ export async function refillFromBasisSource(
 	]);
 
 	return {
-		fields: mapFields(unwrapItem(docResp)),
-		items: mapItemsForBasis(unwrapList(itemsResp)),
+		fields: mapFields(unwrapItem<BasisSource>(docResp)),
+		items: mapItemsForBasis(unwrapList<DocRow>(itemsResp)),
 	};
 }
 
@@ -517,7 +537,7 @@ export async function openDocumentFromBasis(
 	// Проверка: уже есть зависимый документ этого типа? (fallback, если меню не знало)
 	if (target.existingCheckEndpoint && sourceFields.uuid) {
 		try {
-			const resp: any = await api.get(`/${target.existingCheckEndpoint}`, {
+			const resp = await api.get<{ items?: DocRow[] }>(`/${target.existingCheckEndpoint}`, {
 				params: {
 					filter: { basisDocumentUuid: { equals: sourceFields.uuid } },
 					limit: 1,
@@ -545,10 +565,10 @@ export async function openDocumentFromBasis(
 		}
 	}
 
-	let sourceItems: any[] = [];
+	let sourceItems: DocRow[] = [];
 	if (sourceFields.uuid) {
 		try {
-			const resp: any = await api.get(`/${target.sourceItemsEndpoint}`, {
+			const resp = await api.get<{ items?: DocRow[] }>(`/${target.sourceItemsEndpoint}`, {
 				params: {
 					[target.sourceItemsParentField]: sourceFields.uuid,
 					limit: 1000,
@@ -587,6 +607,9 @@ export async function openDocumentFromBasis(
 	});
 }
 
+/** Сырое значение userDefaults с сервера. */
+interface RawUserDefault { valueType?: string; valueUuid?: string; valueName?: string | null }
+
 /** Загружает основные значения пользователя (userDefaults) для организации. */
 async function fetchOrgUserDefaults(
 	userUuid: string,
@@ -594,20 +617,17 @@ async function fetchOrgUserDefaults(
 ): Promise<UserDefaultsMap> {
 	if (!userUuid || !organizationUuid) return {};
 	try {
-		const resp = await api.get<any>("/user-defaults", {
+		const resp = await api.get<{ items?: RawUserDefault[] } | RawUserDefault[]>("/user-defaults", {
 			params: { userUuid, organizationUuid, limit: 100 },
 		});
-		const items: any[] = Array.isArray(resp) ? resp : (resp?.items ?? []);
-		const map: UserDefaultsMap = {};
+		const items: RawUserDefault[] = Array.isArray(resp) ? resp : (resp?.items ?? []);
+		const map = {} as Record<string, { uuid: string; name: string }>;
 		for (const it of items) {
 			if (it.valueType && it.valueUuid) {
-				(map as any)[it.valueType] = {
-					uuid: it.valueUuid,
-					name: it.valueName ?? "",
-				};
+				map[it.valueType] = { uuid: it.valueUuid, name: it.valueName ?? "" };
 			}
 		}
-		return map;
+		return map as UserDefaultsMap;
 	} catch {
 		return {};
 	}
@@ -713,14 +733,14 @@ export async function resolveOrgChangeFields(
  * договор и СУММУ документа-основания (его итог). Направление/вид операции платёжная
  * форма выводит сама из типа основания. Позиции не переносятся (у платежа их нет).
  */
-export function mapPaymentFromBasis(src: any): Record<string, any> {
+export function mapPaymentFromBasis(src: BasisSource): Record<string, unknown> {
 	const out = mapCommonTradeFields(src);
 	if (src.amount != null && src.amount !== "") out.amount = String(src.amount);
 	return out;
 }
 
-export function mapCommonTradeFields(src: any): Record<string, any> {
-	const out: Record<string, any> = {};
+export function mapCommonTradeFields(src: BasisSource): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
 	if (src.organizationUuid) {
 		out.organizationUuid = src.organizationUuid;
 		out.organizationName = src.organization?.name ?? src.organizationName ?? "";

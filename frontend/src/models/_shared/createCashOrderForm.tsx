@@ -13,7 +13,7 @@ import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
-import { refillFromBasisSource } from "src/utils/createFromBasis";
+import { refillFromBasisSource, type BasisSource } from "src/utils/createFromBasis";
 import { cashOperationTypes, defaultCashOperationType, findCashOperationType, type CashDirection } from "src/models/_shared/cashOperationTypes";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
@@ -111,12 +111,6 @@ interface CashOrderServerRecord {
 }
 
 // Серверная запись документа-основания → поля шапки кассового ордера.
-interface BasisSource {
-  organizationUuid?: string | null; organization?: { name?: string | null } | null; organizationName?: string | null;
-  counterpartyUuid?: string | null; counterparty?: { name?: string | null } | null; counterpartyName?: string | null;
-  contractUuid?: string | null; contract?: { name?: string | null } | null; contractName?: string | null;
-  amount?: number | string | null;
-}
 // Шапка для СРАВНЕНИЯ с основанием (без суммы — сумма может отличаться при частичной оплате).
 function mapCashHeader(src: BasisSource): Record<string, unknown> {
   const out: Record<string, unknown> = {};
