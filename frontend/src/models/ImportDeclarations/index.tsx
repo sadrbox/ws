@@ -87,7 +87,7 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
     return init;
   })();
 
-  const invalidateSubTables = useCallback(async (savedData: any) => {
+  const invalidateSubTables = useCallback(async (savedData: { uuid?: string } | undefined) => {
     await invalidateSubTableFor(queryClient, "importdeclarationitems", "importDeclarationUuid", savedData?.uuid ?? "");
   }, [queryClient]);
 
@@ -102,7 +102,7 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
         batchEndpoint: "importdeclarationitems/batch",
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
-        createPayload: (r: any) => ({
+        createPayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
@@ -110,7 +110,7 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
           positionNumber: r.positionNumber ?? null,
           batchUuid: r.batchUuid ?? null,
         }),
-        updatePayload: (r: any) => ({
+        updatePayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,

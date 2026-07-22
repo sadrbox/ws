@@ -49,7 +49,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   // refetchType: "active" — ждём завершение refetch смонтированных
   // SubTable, чтобы useFormStore.submit() очистил pending-строки
   // только после появления свежих серверных данных.
-  const invalidateSubTables = useCallback(async (savedData: any) => {
+  const invalidateSubTables = useCallback(async (savedData: { uuid?: string } | undefined) => {
     const uuid = savedData?.uuid ?? "";
     await Promise.all([
       invalidateSubTableFor(queryClient, "contacts", "ownerUuid", uuid),
@@ -64,16 +64,16 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
         endpoint: "contacts", parentField: "ownerUuid",
         label: translate("ContactsList"),
         batchEndpoint: "contacts/batch",
-        createPayload: (r: any) => ({ value: r.value ?? "", contactType: r.contactType ?? null }),
-        updatePayload: (r: any) => ({ value: r.value ?? "", contactType: r.contactType ?? null }),
+        createPayload: (r: TDataItem) => ({ value: r.value ?? "", contactType: r.contactType ?? null }),
+        updatePayload: (r: TDataItem) => ({ value: r.value ?? "", contactType: r.contactType ?? null }),
         extraFields: { ownerType: "employee" },
       },
       history: {
         endpoint: "employee-histories", parentField: "employeeUuid",
         label: translate("EmployeeHistoriesList"),
         batchEndpoint: "employee-histories/batch",
-        createPayload: (r: any) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
-        updatePayload: (r: any) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
+        createPayload: (r: TDataItem) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
+        updatePayload: (r: TDataItem) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
       },
     },
     mapServerToForm: (d, prev) => ({

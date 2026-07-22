@@ -41,8 +41,8 @@ const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
         counterpartyBin: fields.counterparty?.bin ?? fields.counterparty?.iin ?? undefined,
         contractName: fields.contractName,
         items: items.map((r) => ({ number: r.number, name: r.name, unit: r.unit, quantity: r.quantity, price: r.price, vatRate: r.vatRate, vatAmount: r.vatAmount, amount: r.amount })),
-        totalAmount: items.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
-        totalVatAmount: items.reduce((s: number, r: any) => s + Number(r.vatAmount ?? 0), 0),
+        totalAmount: items.reduce((s: number, r: TDataItem) => s + Number(r.amount ?? 0), 0),
+        totalVatAmount: items.reduce((s: number, r: TDataItem) => s + Number(r.vatAmount ?? 0), 0),
         columns: cols,
       }} />
     ),

@@ -46,10 +46,10 @@ import { WriteOffsForm } from "src/models/WriteOffs";
 import { GoodsReceiptsForm } from "src/models/GoodsReceipts";
 
 /** Отклонение строки инвентаризации: факт − учёт. */
-const deviationOf = (r: any) => (Number(r.quantity) || 0) - (Number(r.accountingQuantity) || 0);
+const deviationOf = (r: TDataItem) => (Number(r.quantity) || 0) - (Number(r.accountingQuantity) || 0);
 
 /** Шапка Списания/Оприходования наследует организацию и склад инвентаризации. */
-const mapStockCountFields = (src: any) => ({
+const mapStockCountFields = (src: TDataItem) => ({
   organizationUuid: src.organizationUuid ?? "",
   organizationName: src.organizationName ?? "",
   warehouseUuid: src.warehouseUuid ?? "",
@@ -61,7 +61,7 @@ const mapStockCountFields = (src: any) => ({
  * знака отклонения, количество = модуль отклонения (а не факт и не учёт).
  * sourceRowId сохраняем — он делает «Перезаполнить по основанию» идемпотентным.
  */
-const mapDeviationItems = (sign: 1 | -1) => (sourceItems: any[]) => {
+const mapDeviationItems = (sign: 1 | -1) => (sourceItems: TDataItem[]) => {
   const ts = Date.now();
   return sourceItems
     .map((r) => ({ r, dev: deviationOf(r) }))
@@ -109,7 +109,7 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("StockCount");
   const [isFilling, setIsFilling] = useState(false);
   const [itemsTableKey, setItemsTableKey] = useState(0);
-  const allItemsRef = useRef<any[]>([]);
+  const allItemsRef = useRef<TDataItem[]>([]);
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;
@@ -121,7 +121,7 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
     return init;
   })();
 
-  const invalidateSubTables = useCallback(async (savedData: any) => {
+  const invalidateSubTables = useCallback(async (savedData: { uuid?: string } | undefined) => {
     await invalidateSubTableFor(queryClient, "stockcountitems", "stockCountUuid", savedData?.uuid ?? "");
   }, [queryClient]);
 
@@ -135,13 +135,13 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
         batchEndpoint: "stockcountitems/batch",
         requiredItemFields: ["productUuid", "unitOfMeasureUuid"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм." },
-        createPayload: (r: any) => ({
+        createPayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           accountingQuantity: r.accountingQuantity ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
         }),
-        updatePayload: (r: any) => ({
+        updatePayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           accountingQuantity: r.accountingQuantity ?? 0,
@@ -211,8 +211,8 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
           .replace("{updated}", String(resp?.updated ?? 0)),
         "success",
       );
-    } catch (e: any) {
-      showToast(e?.response?.data?.message ?? translate("error"), "error");
+    } catch (e: unknown) {
+      showToast((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? translate("error"), "error");
     } finally {
       setIsFilling(false);
     }

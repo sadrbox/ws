@@ -51,7 +51,7 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("AccessPermission");
   const queryClient = useQueryClient();
 
-  const invalidateSubTables = useCallback(async (savedData: any) => {
+  const invalidateSubTables = useCallback(async (savedData: { uuid?: string; userUuid?: string } | undefined) => {
     const userUuid = savedData?.userUuid ?? "";
     await Promise.all([
       invalidateSubTableFor(queryClient, "access-permissions", "userUuid", userUuid),
@@ -85,13 +85,13 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
         label: translate("accessRights"),
         skipParentField: true,
         batchEndpoint: "access-permissions/batch",
-        createPayload: (r: any) => ({
+        createPayload: (r: TDataItem) => ({
           userUuid: r.userUuid ?? null,
           organizationUuid: r.organizationUuid ?? null,
           modelName: r.modelName ?? "",
           accessLevel: r.accessLevel || "none",
         }),
-        updatePayload: (r: any) => ({
+        updatePayload: (r: TDataItem) => ({
           modelName: r.modelName ?? "",
           accessLevel: r.accessLevel || "none",
         }),
@@ -102,14 +102,14 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
         label: translate("userDefaults"),
         skipParentField: true,
         batchEndpoint: "user-defaults/batch",
-        createPayload: (r: any) => ({
+        createPayload: (r: TDataItem) => ({
           userUuid: r.userUuid ?? null,
           organizationUuid: r.organizationUuid ?? null,
           valueType: r.valueType ?? "",
           valueUuid: r.valueUuid ?? "",
           valueName: r.valueName ?? "",
         }),
-        updatePayload: (r: any) => ({
+        updatePayload: (r: TDataItem) => ({
           valueType: r.valueType ?? "",
           valueUuid: r.valueUuid ?? "",
           valueName: r.valueName ?? "",
