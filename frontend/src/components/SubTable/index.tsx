@@ -13,7 +13,6 @@ import {
 } from "react";
 import { SubTableInternalContext } from "./context";
 import { translate } from "src/i18";
-import { getModelColumns } from "src/components/Table/services";
 import {
   CHECKBOX_COL_ID,
   computeNextActiveColId,
@@ -35,9 +34,10 @@ import { getRowId, extractServerError, ReadOnlyCell, type ReadOnlyCellProps } fr
 export { ReadOnlyCell };
 export type { ReadOnlyCellProps };
 import {
-  applyEditMarker, computeDisplayRows, isSameRow, isUnsavedRow, mergeColumnDefs, type PendingRow,
+  applyEditMarker, computeDisplayRows, isSameRow, isUnsavedRow, type PendingRow,
 } from "./rowModel";
 import { useSubTableRows } from "./useSubTableRows";
+import { useSubTableColumns } from "./useSubTableColumns";
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -353,24 +353,9 @@ const SubTable: FC<SubTableProps> = ({
     return rules[field](value, row);
   }, []);
 
-  const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(colJson, componentName, "part"));
-
-  // Состав колонок может меняться на лету: напр. «Серии»/«Партии» появляются, когда
-  // в строках оказывается товар с таким учётом. useState считает колонки ОДИН раз, а
-  // перемонтировать таблицу (как делает key={taxSig} для НДС) здесь нельзя — потерялись
-  // бы незаписанные строки. Поэтому синхронизируем состав вручную.
-  //
-  // Через getModelColumns не идём намеренно: при смене набора идентификаторов он
-  // считает кэш устаревшим и стирает сохранённые ширины/видимость. Для редких настроек
-  // организации это терпимо, а тут набор меняется на каждый подбор товара — вместо
-  // этого переносим ширину/видимость с уже настроенных колонок сами.
-  const colSig = useMemo(() => colJson.map((c) => c.identifier).join(","), [colJson]);
-  const prevColSigRef = useRef(colSig);
-  useEffect(() => {
-    if (prevColSigRef.current === colSig) return;
-    prevColSigRef.current = colSig;
-    setColumns((prev) => mergeColumnDefs(prev, colJson));
-  }, [colSig, colJson]);
+  // Состав колонок (Серии/Партии появляются на лету) + служебная обёртка сеттера —
+  // в хуке useSubTableColumns (синхронизация через mergeColumnDefs).
+  const { columns, setColumns, setColumnsForTable } = useSubTableColumns(colJson, componentName);
   const [sort, setSort] = useState<Record<string, "asc" | "desc">>(defaultSort);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Record<string, { value: unknown; operator: string }> | undefined>(undefined);
@@ -1243,14 +1228,6 @@ const SubTable: FC<SubTableProps> = ({
     </>
   ), [toggleInlineEditing, inlineEditing, extraButtonsProp, readonly, disabled, showEditModeToggle, openFormFor]);
 
-  // Обёртка setColumns: не даём служебной колонке `__rowActions` попасть в
-  // сохраняемые настройки/state (Table при resize/настройке пишет columns целиком).
-  const setColumnsForTable = useCallback((next: React.SetStateAction<TColumn[]>) => {
-    setColumns((prev) => {
-      const resolved = typeof next === "function" ? (next as (p: TColumn[]) => TColumn[])(prev) : next;
-      return resolved.filter((c) => c.identifier !== "__rowActions");
-    });
-  }, [setColumns]);
 
   // ── Table props ────────────────────────────────────────────────────────
   const combinedLoading = isAnythingLoading || opLoading;
