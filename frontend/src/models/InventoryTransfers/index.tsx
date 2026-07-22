@@ -78,12 +78,12 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     return init;
   })();
 
-  const invalidateSubTables = useCallback(async (savedData: any) => {
+  const invalidateSubTables = useCallback(async (savedData: { uuid?: string } | undefined) => {
     await invalidateSubTableFor(queryClient, "inventorytransferitems", "inventoryTransferUuid", savedData?.uuid ?? "");
   }, [queryClient]);
 
   // Текущие строки таблицы (server + pending) — для контроля остатка в onBeforeSave.
-  const allItemsRef = useRef<any[]>([]);
+  const allItemsRef = useRef<TDataItem[]>([]);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "inventory-transfers-form",
@@ -96,13 +96,13 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         batchEndpoint: "inventorytransferitems/batch",
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
-        createPayload: (r: any) => ({
+        createPayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
         }),
-        updatePayload: (r: any) => ({
+        updatePayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
@@ -146,7 +146,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     // Контроль остатка перед проведением (расход со склада-источника fromWarehouse).
     onBeforeSave: async (fd) => {
       if (fd.posted !== true) return null;
-      let rows = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+      let rows = allItemsRef.current.filter((r: TDataItem) => r._pendingAction !== "delete");
       if (rows.length === 0 && fd.uuid) {
         rows = await fetchDocumentItems("inventorytransferitems", "inventoryTransferUuid", fd.uuid);
       }
@@ -154,7 +154,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         documentType: "inventory_transfer",
         documentUuid: fd.uuid || undefined,
         fromWarehouseUuid: fd.fromWarehouseUuid || null,
-        items: rows.map((r: any) => ({ productUuid: r.productUuid, quantity: r.quantity })),
+        items: rows.map((r: TDataItem) => ({ productUuid: r.productUuid as string | null, quantity: r.quantity as number | string | null })),
       });
       return shortages.length ? formatStockShortages(shortages) : null;
     },

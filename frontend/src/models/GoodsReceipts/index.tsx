@@ -85,7 +85,7 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
     return Array.isArray(rows) ? rows : [];
   }, [paneProps.data]);
 
-  const invalidateSubTables = useCallback(async (savedData: any) => {
+  const invalidateSubTables = useCallback(async (savedData: { uuid?: string } | undefined) => {
     await invalidateSubTableFor(queryClient, "goodsreceiptitems", "goodsReceiptUuid", savedData?.uuid ?? "");
   }, [queryClient]);
 
@@ -100,14 +100,14 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
         batchEndpoint: "goodsreceiptitems/batch",
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
-        createPayload: (r: any) => ({
+        createPayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
           batchUuid: r.batchUuid ?? null,
         }),
-        updatePayload: (r: any) => ({
+        updatePayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,

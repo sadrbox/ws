@@ -12,6 +12,30 @@ export type TDataItem = {
   // name?: string;
   [key: string | number]: unknown;
 };
+
+/**
+ * Строка документа (позиция) для ДЖЕНЕРИК-обработки, где точный тип неизвестен:
+ * маппинг «На основании», payload-мапперы item-таблиц, сравнение с основанием.
+ * Замена `any` (T3) — известные поля типизированы, произвольные доступны через
+ * индекс-сигнатуру как `unknown` (компилятор заставляет сузить перед использованием).
+ * В отличие от TDataItem, id/uuid опциональны (черновики/tmp-строки).
+ */
+export interface DocRow {
+  id?: number;
+  uuid?: string;
+  _pendingAction?: string;
+  sourceRowId?: string | null;
+  productUuid?: string | null;
+  product?: unknown;
+  unitOfMeasureUuid?: string | null;
+  unitOfMeasure?: unknown;
+  quantity?: unknown;
+  price?: unknown;
+  vatRate?: unknown;
+  exciseRate?: unknown;
+  discountPercent?: unknown;
+  [key: string]: unknown;
+}
 export type TColumnFooter = 'sum' | 'avg' | 'min' | 'max' | 'count' | 'none';
 
 export type TColumn = {

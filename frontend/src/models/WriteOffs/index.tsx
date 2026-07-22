@@ -87,12 +87,12 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
     return Array.isArray(rows) ? rows : [];
   }, [paneProps.data]);
 
-  const invalidateSubTables = useCallback(async (savedData: any) => {
+  const invalidateSubTables = useCallback(async (savedData: { uuid?: string } | undefined) => {
     await invalidateSubTableFor(queryClient, "writeoffitems", "writeOffUuid", savedData?.uuid ?? "");
   }, [queryClient]);
 
   // Текущие строки таблицы (server + pending) — для контроля остатка в onBeforeSave.
-  const allItemsRef = useRef<any[]>([]);
+  const allItemsRef = useRef<TDataItem[]>([]);
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "write-offs-form",
@@ -105,13 +105,13 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
         batchEndpoint: "writeoffitems/batch",
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
-        createPayload: (r: any) => ({
+        createPayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
           batchUuid: r.batchUuid ?? null,
         }),
-        updatePayload: (r: any) => ({
+        updatePayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
@@ -157,7 +157,7 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
     // Контроль остатка перед проведением (расход со склада).
     onBeforeSave: async (fd) => {
       if (fd.posted !== true) return null;
-      let rows = allItemsRef.current.filter((r: any) => r._pendingAction !== "delete");
+      let rows = allItemsRef.current.filter((r: TDataItem) => r._pendingAction !== "delete");
       if (rows.length === 0 && fd.uuid) {
         rows = await fetchDocumentItems("writeoffitems", "writeOffUuid", fd.uuid);
       }
@@ -165,7 +165,7 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
         documentType: "write_off",
         documentUuid: fd.uuid || undefined,
         warehouseUuid: fd.warehouseUuid || null,
-        items: rows.map((r: any) => ({ productUuid: r.productUuid, quantity: r.quantity })),
+        items: rows.map((r: TDataItem) => ({ productUuid: r.productUuid as string | null, quantity: r.quantity as number | string | null })),
       });
       return shortages.length ? formatStockShortages(shortages) : null;
     },
