@@ -6,11 +6,15 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { buildOrderBy } from "../../utils/sortOrder.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { invalidateRefCache } from "../../services/refCache.js";
 
 const router = express.Router();
 const MODEL = "chartOfAccount";
 const ROUTE = "chart-of-accounts";
 const TEXT_FIELDS = ["code", "name", "description"];
+
+// E3: любая запись в план счетов сбрасывает L2-кэш resolveAccount (постинг).
+router.use((req, _res, next) => { if (req.method !== "GET") invalidateRefCache("chartOfAccount"); next(); });
 
 // Область видимости: типовые (org=null) + доступные организации.
 function scopeWhere(req) {

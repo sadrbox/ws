@@ -646,6 +646,7 @@ model Sale {
   @@index([date])
   @@index([updatedAt])
   @@index([basisDocumentUuid])
+  @@index([organizationUuid, id])
   @@map("sales")
 }
 
@@ -691,6 +692,7 @@ model Purchase {
   @@index([date])
   @@index([updatedAt])
   @@index([basisDocumentUuid])
+  @@index([organizationUuid, id])
   @@map("purchases")
 }
 
@@ -944,6 +946,7 @@ model CashOrder {
   @@index([date])
   @@index([updatedAt])
   @@index([basisDocumentUuid])
+  @@index([organizationUuid, id])
   @@map("cash_orders")
 }
 
@@ -1919,6 +1922,10 @@ model ProductRegister {
   @@index([documentType, documentUuid])
   @@index([date])
   @@index([batchUuid])
+  // E3: горячий путь себестоимости/остатков/партий — история товара на складе по
+  // дате (balanceFor, warehouseBatchBalances, costSnapshot, costCache). Заменяет
+  // отдельные сканы productUuid/warehouseUuid + сортировку по date одним индексом.
+  @@index([productUuid, warehouseUuid, date])
   @@map("product_register")
 }
 
@@ -2071,6 +2078,8 @@ model AccountingEntry {
   @@index([date])
   @@index([debitAccountCode])
   @@index([creditAccountCode])
+  // E3: отчёты (ОСВ/карточка/журнал) фильтруют по организации и диапазону дат.
+  @@index([organizationUuid, date])
   @@map("accounting_entries")
 }
 
@@ -2447,6 +2456,7 @@ model BankStatement {
   @@index([date])
   @@index([basisDocumentUuid])
   @@index([updatedAt])
+  @@index([organizationUuid, id])
   @@map("bank_statements")
 }
 

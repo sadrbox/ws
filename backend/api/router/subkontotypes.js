@@ -4,10 +4,14 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { buildOrderBy } from "../../utils/sortOrder.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { invalidateRefCache } from "../../services/refCache.js";
 
 const router = express.Router();
 const MODEL = "subkontoType";
 const ROUTE = "subkonto-types";
+
+// E3: запись в справочник субконто сбрасывает L2-кэш resolveSubkontoType.
+router.use((req, _res, next) => { if (req.method !== "GET") invalidateRefCache("subkontoType"); next(); });
 const TEXT_FIELDS = ["code", "name"];
 
 router.get(`/${ROUTE}`, async (req, res) => {

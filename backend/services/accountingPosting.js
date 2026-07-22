@@ -19,6 +19,7 @@ import { prisma } from "../prisma/prisma-client.js";
 import { allocateImportLandedCost } from "./importLandedCost.js";
 import { getSnapshotFor } from "./costSnapshot.js";
 import { getSettingsAt } from "./accountingSettings.js";
+import { getCached } from "./refCache.js";
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -723,26 +724,26 @@ function makeContext(client, orgUuid, costCache = new Map(), boundary = null) {
 	}
 
 	async function resolveAccount(code) {
-		if (accCache.has(code)) return accCache.get(code);
-		// Приоритет: счёт организации, затем типовой (organizationUuid=null).
-		let acc = null;
-		if (orgUuid) {
-			acc = await client.chartOfAccount.findFirst({
-				where: { code, organizationUuid: orgUuid, deletedAt: null },
-			});
-		}
-		if (!acc) {
-			acc = await client.chartOfAccount.findFirst({
-				where: { code, organizationUuid: null, deletedAt: null },
-			});
-		}
+		if (accCache.has(code)) return accCache.get(code); // L1: в пределах документа
+		// L2 (E3): пере-запросный TTL-кэш — счёт по (организация, код). Приоритет:
+		// счёт организации, затем типовой (organizationUuid=null).
+		const acc = await getCached("chartOfAccount", `${orgUuid ?? ""}::${code}`, async () => {
+			let a = null;
+			if (orgUuid) {
+				a = await client.chartOfAccount.findFirst({ where: { code, organizationUuid: orgUuid, deletedAt: null } });
+			}
+			if (!a) {
+				a = await client.chartOfAccount.findFirst({ where: { code, organizationUuid: null, deletedAt: null } });
+			}
+			return a;
+		});
 		accCache.set(code, acc);
 		return acc;
 	}
 
 	async function resolveSubkontoType(code) {
 		if (subkontoCache.has(code)) return subkontoCache.get(code);
-		const st = await client.subkontoType.findUnique({ where: { code } });
+		const st = await getCached("subkontoType", code, () => client.subkontoType.findUnique({ where: { code } }));
 		subkontoCache.set(code, st);
 		return st;
 	}
