@@ -1,6 +1,7 @@
 import styles from './Table.module.scss';
 import { TableConfigColumns } from './TableConfigColumns';
 import { DateRangeBar, FieldDateRangeModal, FieldFastSearchInternal } from './TableToolbarControls';
+import { TableFooter } from './TableFooter';
 import { GLOBAL_ADAPTIVE_LIMIT_REF } from 'src/hooks/useInfiniteModelList';
 import { CellFieldStateScope } from 'src/hooks/useDirtyHighlight';
 
@@ -13,7 +14,7 @@ import {
 } from './types';
 
 import { getTranslateColumn, translate } from 'src/i18';
-import { getFormatColumnValue, computeFooterValue } from './services';
+import { getFormatColumnValue } from './services';
 import {
   CHECKBOX_COL_ID,
   computeNextActiveColId,
@@ -892,33 +893,6 @@ const TableArea = memo(() => {
 // TableFooter — tfoot с итогами колонок (sticky bottom внутри скролла)
 // ────────────────────────────────────────────────
 
-const TableFooter = memo(() => {
-  const { columns, rows } = useTableContext();
-  const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
-
-  // Проверяем есть ли хоть одна колонка с footer-итогом
-  const hasFooter = visibleColumns.some(c => c.footer && c.footer !== 'none');
-  if (!hasFooter) return null;
-
-  return (
-    <tfoot>
-      <tr>
-        {/* Колонка чекбокса */}
-        <td />
-        {visibleColumns.map(col => {
-          const value = computeFooterValue(col, rows);
-          return (
-            <td key={col.identifier}>
-              <div className={styles.TableFooterCell}>
-                {value !== null && <span>{value}</span>}
-              </div>
-            </td>
-          );
-        })}
-      </tr>
-    </tfoot>
-  );
-});
 
 TableFooter.displayName = 'TableFooter';
 
