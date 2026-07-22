@@ -1,5 +1,5 @@
 import styles from './Table.module.scss';
-import { TableConfigColumns } from './TableConfigColumns';
+import { TableConfigModalForm } from './TableConfigModalForm';
 import { DateRangeBar, FieldDateRangeModal, FieldFastSearchInternal } from './TableToolbarControls';
 import { TableFooter } from './TableFooter';
 import { TableHeader } from './TableHeader';
@@ -11,11 +11,10 @@ import {
   TDataItem,
   TypeFormAction,
   TypeFormMethod,
-  TypeModalFormProps,
 } from './types';
 
 import { getTranslateColumn, translate } from 'src/i18';
-import { getFormatColumnValue, normalizeLastColumnWidth } from './services';
+import { getFormatColumnValue } from './services';
 import {
   CHECKBOX_COL_ID,
   computeNextActiveColId,
@@ -1450,25 +1449,6 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
 // TableConfigModalForm
 // ────────────────────────────────────────────────
 
-const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
-  const { columns, componentName, actions } = useTableContext();
-  // Служебные колонки (__*) скрываем из настроек и не сохраняем.
-  const [columnsConfig, setColumnsConfig] = useState<TColumn[]>(columns.filter(c => !c.identifier.startsWith("__")));
-
-  const onApply = useCallback(() => {
-    const normalized = normalizeLastColumnWidth(columnsConfig.filter(c => !c.identifier.startsWith("__")));
-    localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(normalized));
-    actions?.setColumns?.(normalized);
-  }, [columnsConfig, componentName, actions]);
-
-  useEffect(() => { setColumnsConfig(columns.filter(c => !c.identifier.startsWith("__"))); }, [columns]);
-
-  return (
-    <Modal title={translate("tableColumns")} method={method} onApply={onApply} className={styles.ColumnsModal}>
-      <TableConfigColumns columns={columnsConfig} setColumns={setColumnsConfig} />
-    </Modal>
-  );
-};
 
 // TableConfigColumns / TableConfigColumnsItem вынесены в ./TableConfigColumns
 // (чистые props-компоненты — T4). TableConfigModalForm выше рендерит их.
