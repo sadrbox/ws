@@ -40,6 +40,19 @@ const DEFAULT_FIELDS: TFields = {
   lastName: "", firstName: "", middleName: "", fullName: "", iin: "", avatarPath: "",
 };
 
+
+/** Серверная запись сотрудника — вход mapServerToForm (T3). */
+interface EmployeeServerRecord {
+  id?: number;
+  uuid?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  middleName?: string | null;
+  fullName?: string | null;
+  iin?: string | null;
+  avatarPath?: string | null;
+}
+
 const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("Employee");
   const { canRead: canReadContacts } = useAccessPermission("Contact");
@@ -76,7 +89,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
         updatePayload: (r: TDataItem) => ({ eventDate: r.eventDate ?? null, eventType: r.eventType ?? "hire", salary: r.salary ?? null, positionUuid: r.positionUuid ?? null, organizationUuid: r.organizationUuid ?? null }),
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: EmployeeServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       lastName: d.lastName ?? "", firstName: d.firstName ?? "",
       middleName: d.middleName ?? "", fullName: d.fullName ?? "", iin: d.iin ?? "",

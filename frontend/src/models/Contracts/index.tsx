@@ -54,6 +54,23 @@ const DEFAULT_FIELDS: TFields = {
   counterpartyUuid: "", counterpartyName: "",
 };
 
+
+/** Серверная запись договора — вход mapServerToForm (T3).
+ *  Даты приходят строкой ISO (в форме режутся до YYYY-MM-DD). */
+interface ContractServerRecord {
+  id?: number;
+  uuid?: string;
+  name?: string | null;
+  contractNumber?: string | null;
+  contractText?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  counterpartyUuid?: string | null;
+  organizationUuid?: string | null;
+  counterparty?: { name?: string | null } | null;
+  organization?: { name?: string | null } | null;
+}
+
 const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("Contract");
   const data = paneProps.data;
@@ -82,7 +99,7 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
     defaultFields: DEFAULT_FIELDS,
     initialFields,
     paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: ContractServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       name: d.name ?? "",
       contractNumber: d.contractNumber ?? "",

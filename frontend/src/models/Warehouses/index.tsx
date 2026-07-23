@@ -29,6 +29,18 @@ const LIST_NAME = "WarehousesList";
 interface TFields { id?: number; uuid?: string; name: string; address: string; comment: string; organizationUuid: string; organizationName: string; }
 const DEFAULT_FIELDS: TFields = { name: "", address: "", comment: "", organizationUuid: "", organizationName: "" };
 
+
+/** Серверная запись склада — вход mapServerToForm (T3: вместо неявного any). */
+interface WarehouseServerRecord {
+  id?: number;
+  uuid?: string;
+  name?: string | null;
+  address?: string | null;
+  comment?: string | null;
+  organizationUuid?: string | null;
+  organization?: { name?: string | null } | null;
+}
+
 const WarehousesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const { canWrite } = useAccessPermission("Warehouse");
@@ -36,7 +48,7 @@ const WarehousesForm: FC<Partial<TPane>> = (paneProps) => {
     endpoint: MODEL_ENDPOINT, storageKey: "warehouses-form", paneProps,
     defaultFields: DEFAULT_FIELDS,
     initialFields: { ...DEFAULT_FIELDS, organizationUuid: defaultOrg.organizationUuid, organizationName: defaultOrg.organizationName },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: WarehouseServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), name: d.name ?? "", address: d.address ?? "", comment: d.comment ?? "",
       organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.name ?? "",
       id: d.id, uuid: d.uuid,

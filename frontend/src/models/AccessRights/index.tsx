@@ -47,6 +47,18 @@ const DEFAULT_FORM_FIELDS: TFormFields = {
   userUuid: "", userDisplayName: "", organizationUuid: "", orgShortName: "", role: "member",
 };
 
+
+/** Серверная запись права доступа — вход mapServerToForm (T3). */
+interface AccessRightServerRecord {
+  id?: number;
+  uuid?: string;
+  role?: string | null;
+  userUuid?: string | null;
+  organizationUuid?: string | null;
+  user?: { username?: string | null } | null;
+  organization?: { name?: string | null } | null;
+}
+
 const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("AccessPermission");
   const queryClient = useQueryClient();
@@ -116,7 +128,7 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
         }),
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: AccessRightServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FORM_FIELDS),
       id: d.id,
       uuid: d.uuid ?? String(d.id),

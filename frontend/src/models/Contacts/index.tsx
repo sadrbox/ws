@@ -60,6 +60,17 @@ const DEFAULT_FIELDS: TContactFields = {
   ownerType: "", ownerUuid: "", ownerName: "",
 };
 
+
+/** Серверная запись контакта — вход mapServerToForm (T3). */
+interface ContactServerRecord {
+  id?: number;
+  uuid?: string;
+  value?: string | null;
+  contactType?: string | null;
+  ownerType?: string | null;
+  ownerUuid?: string | null;
+}
+
 const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("Contact");
   const data = paneProps.data;
@@ -85,7 +96,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
     defaultFields: DEFAULT_FIELDS,
     initialFields,
     paneProps,
-    mapServerToForm: async (d, prev) => {
+    mapServerToForm: async (d: ContactServerRecord, prev) => {
       const { resolveOwnerName } = await import("src/utils/resolveOwnerName");
       const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
       return {

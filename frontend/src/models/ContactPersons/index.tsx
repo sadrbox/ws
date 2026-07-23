@@ -35,6 +35,21 @@ const DEFAULT_FIELDS: TFields = {
   ownerType: "", ownerUuid: "", ownerName: "",
 };
 
+
+/** Серверная запись контактного лица — вход mapServerToForm (T3). */
+interface ContactPersonServerRecord {
+  id?: number;
+  uuid?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  middleName?: string | null;
+  fullName?: string | null;
+  comment?: string | null;
+  avatarPath?: string | null;
+  ownerType?: string | null;
+  ownerUuid?: string | null;
+}
+
 const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
   const queryClient = useQueryClient();
   const { canWrite } = useAccessPermission("ContactPerson");
@@ -52,7 +67,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
     tables: {
       contacts: { endpoint: "contacts", parentField: "ownerUuid", label: translate("ContactsList"), batchEndpoint: "contacts/batch", extraFields: { ownerType: "contactperson" } },
     },
-    mapServerToForm: async (d, prev) => {
+    mapServerToForm: async (d: ContactPersonServerRecord, prev) => {
       const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
       return {
         ...(prev ?? DEFAULT_FIELDS),

@@ -35,6 +35,17 @@ const DEFAULT_FIELDS: TFields = {
   username: "", password: "", employeeUuid: "", employeeName: "", avatarPath: "",
 };
 
+
+/** Серверная запись пользователя — вход mapServerToForm (T3). */
+interface UserServerRecord {
+  id?: number;
+  uuid?: string;
+  username?: string | null;
+  avatarPath?: string | null;
+  employeeUuid?: string | null;
+  employee?: { uuid?: string | null; fullName?: string | null } | null;
+}
+
 const UsersForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("User");
   const queryClient = useQueryClient();
@@ -56,7 +67,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
         batchEndpoint: "access-rights/batch",
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: UserServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       username: d.username ?? "", password: "",
       employeeUuid: d.employeeUuid ?? d.employee?.uuid ?? "",

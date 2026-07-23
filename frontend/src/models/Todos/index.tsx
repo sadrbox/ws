@@ -45,6 +45,28 @@ const DEFAULT_FIELDS: TFields = {
   sourceType: "", sourceUuid: "", sourceLabel: "",
 };
 
+
+/** Серверная запись задачи — вход mapServerToForm (T3).
+ *  curator/executor — пользователи, у которых может быть связанный сотрудник. */
+interface TodoServerRecord {
+  id?: number;
+  uuid?: string;
+  description?: string | null;
+  status?: string | null;
+  organizationUuid?: string | null;
+  curatorUuid?: string | null;
+  executorUuid?: string | null;
+  sourceType?: string | null;
+  sourceUuid?: string | null;
+  sourceLabel?: string | null;
+  createdAt?: string | null;
+  deadline?: string | null;
+  deadlineDays?: number | null;
+  organization?: { name?: string | null } | null;
+  curator?: { username?: string | null; employee?: { fullName?: string | null } | null } | null;
+  executor?: { username?: string | null; employee?: { fullName?: string | null } | null } | null;
+}
+
 const TodosForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const { canWrite } = useAccessPermission("Todo");
@@ -67,7 +89,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "todos-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: TodoServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       description: d.description ?? "", status: d.status ?? "new",
       organizationUuid: d.organizationUuid ?? "", organizationName: d.organization?.name ?? "",

@@ -54,6 +54,22 @@ const DEFAULT_FIELDS: TFields = {
   ownerType: "", ownerUuid: "", ownerName: "",
 };
 
+
+/** Серверная запись банковского счёта — вход mapServerToForm (T3). */
+interface BankAccountServerRecord {
+  id?: number;
+  uuid?: string;
+  name?: string | null;
+  iban?: string | null;
+  bik?: string | null;
+  bankName?: string | null;
+  kbe?: string | null;
+  currencyUuid?: string | null;
+  currency?: { code?: string | null; name?: string | null } | null;
+  ownerType?: string | null;
+  ownerUuid?: string | null;
+}
+
 const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
   const data = paneProps.data;
   const defaultOrg = useDefaultOrganization();
@@ -82,7 +98,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
     defaultFields: DEFAULT_FIELDS,
     initialFields,
     paneProps,
-    mapServerToForm: async (d, prev) => {
+    mapServerToForm: async (d: BankAccountServerRecord, prev) => {
       const { resolveOwnerName } = await import("src/utils/resolveOwnerName");
       const oName = await resolveOwnerName(d.ownerType, d.ownerUuid);
       return {

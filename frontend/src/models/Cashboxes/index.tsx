@@ -40,6 +40,16 @@ interface TFields {
 
 const DEFAULT_FIELDS: TFields = { name: "", organizationUuid: "", organizationName: "" };
 
+
+/** Серверная запись кассы — вход mapServerToForm (T3: вместо неявного any). */
+interface CashboxServerRecord {
+  id?: number;
+  uuid?: string;
+  name?: string | null;
+  organizationUuid?: string | null;
+  organization?: { name?: string | null } | null;
+}
+
 const CashboxesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const { canWrite } = useAccessPermission("Cashbox");
@@ -47,7 +57,7 @@ const CashboxesForm: FC<Partial<TPane>> = (paneProps) => {
     endpoint: MODEL_ENDPOINT, storageKey: "cashboxes-form", paneProps,
     defaultFields: DEFAULT_FIELDS,
     initialFields: { ...DEFAULT_FIELDS, organizationUuid: defaultOrg.organizationUuid, organizationName: defaultOrg.organizationName },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: CashboxServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       name: d.name ?? "",
       organizationUuid: d.organizationUuid ?? "",
