@@ -3,9 +3,13 @@ import { getFormatDate } from "src/utils/datetime";
 import { TColumn, TDataItem, TypeTableTypes } from "./types";
 import { getTranslateColumn } from "src/i18";
 
-const getNestedValue = <T>(obj: T, path: string): any => {
-	return path.split(".").reduce((acc: any, key) => acc?.[key], obj);
-};
+/** Значение по точечному пути (user.employee.fullName). Возвращает unknown —
+ *  вызывающий сам решает, как трактовать (форматирование/сравнение). */
+const getNestedValue = <T>(obj: T, path: string): unknown =>
+	path.split(".").reduce<unknown>(
+		(acc, key) => (acc as Record<string, unknown> | null | undefined)?.[key],
+		obj,
+	);
 /**
  * Сортирует массив строк таблицы по указанной конфигурации сортировки
  * @param arr - массив элементов для сортировки
@@ -173,7 +177,7 @@ export function getFormatColumnValue(
 	column: TColumn,
 ): string | number {
 	// Разрешаем значение: точечная нотация (user.username) → вложенный объект
-	let rawValue: any;
+	let rawValue: unknown;
 	if (column.identifier.includes(".")) {
 		rawValue = getNestedValue(row, column.identifier);
 	} else {

@@ -1,3 +1,4 @@
+import type { SyncRecord } from "src/services/offlineDb";
 import {
 	useInfiniteQuery,
 	type UseInfiniteQueryOptions,
@@ -250,7 +251,7 @@ export function useInfiniteModelList<TData = unknown>({
 									if (entries.length > 0) [sortField, sortDir] = entries[0];
 								}
 
-								let items: any[];
+								let items: SyncRecord[];
 								let total: number;
 								const limit = query.limit ?? 200;
 								const offset = pageParam ?? 0;
@@ -258,7 +259,7 @@ export function useInfiniteModelList<TData = unknown>({
 								if (currentParams.search) {
 									items = await searchRecords(model, currentParams.search);
 									total = items.length;
-								items.sort((a: any, b: any) => {
+								items.sort((a: SyncRecord, b: SyncRecord) => {
 									const va = a[sortField],
 										vb = b[sortField];
 									if (va == null && vb == null) return 0;
@@ -337,9 +338,10 @@ export function useInfiniteModelList<TData = unknown>({
 		queryFn: wrappedQueryFn,
 		staleTime: 2 * 60 * 1000,
 		gcTime: 30 * 60 * 1000,
-		retry: (failureCount, error: any) => {
+		retry: (failureCount, error: unknown) => {
 			// Не ретраить при сетевых ошибках
-			if (error?.code === "ERR_NETWORK" || error?.message === "Network Error")
+			const e = error as { code?: string; message?: string };
+			if (e?.code === "ERR_NETWORK" || e?.message === "Network Error")
 				return false;
 			return failureCount < 1;
 		},

@@ -17,10 +17,14 @@ async function fetchDependent(
 	ep: string,
 ): Promise<ExistingDependent | null> {
 	const filter = { basisDocumentUuid: { equals: sourceUuid } };
-	const resp: any = await api.get(`/${ep}`, { params: { filter, limit: 1 } });
-	const items: any[] = Array.isArray(resp)
+	// Ответ приходит либо массивом, либо обёрткой {items}/{data} — нормализуем.
+	// Берём ровно те поля, из которых собирается ExistingDependent.
+	type DependentRow = { uuid: string; id: number; number?: string | null; date: string };
+	type ListResponse = { items?: DependentRow[]; data?: DependentRow[] };
+	const resp = await api.get<DependentRow[] | ListResponse>(`/${ep}`, { params: { filter, limit: 1 } });
+	const items: DependentRow[] = Array.isArray(resp)
 		? resp
-		: (resp?.items ?? resp?.data ?? []);
+		: ((resp as ListResponse)?.items ?? (resp as ListResponse)?.data ?? []);
 	if (!items[0]) return null;
 	return { uuid: items[0].uuid, id: items[0].id, number: items[0].number ?? null, date: items[0].date };
 }
