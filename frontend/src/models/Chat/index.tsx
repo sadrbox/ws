@@ -17,6 +17,9 @@ import { onLiveEvent } from "src/services/liveEvents";
 import { useAppContext } from "src/app/context";
 import { translate } from "src/i18";
 import { getFormatDate } from "src/utils/datetime";
+import RefText from "src/components/ObjectLink/RefText";
+import { formatRefToken } from "src/utils/objectRef";
+import { refFromAppLink } from "src/utils/objectRefResolve";
 import styles from "./Chat.module.scss";
 
 interface ChatMessage {
@@ -111,6 +114,27 @@ export const ChatList: FC = () => {
     }
   };
 
+  /**
+   * Вставка ссылки на объект: если вставляют ссылку приложения (её даёт кнопка
+   * «Копировать ссылку на эту форму»), подменяем её компактным токеном с
+   * названием объекта — в ленте он отрисуется кликабельным чипом.
+   * Любой другой текст вставляется как обычно.
+   */
+  const onPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = e.clipboardData.getData("text");
+    if (!pasted || !pasted.includes("open=")) return;
+    const el = e.currentTarget;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    // Подпись объекта дочитывается асинхронно, поэтому вставку выполняем сами.
+    e.preventDefault();
+    void (async () => {
+      const ref = await refFromAppLink(pasted);
+      const insert = ref ? formatRefToken(ref) : pasted;
+      setText((prev) => prev.slice(0, start) + insert + prev.slice(end));
+    })();
+  }, []);
+
   return (
     <div className={styles.Wrap}>
       <div className={styles.Header}>
@@ -138,7 +162,8 @@ export const ChatList: FC = () => {
                 <span className={styles.Author}>{m.authorName}</span>
                 <span className={styles.Time}>{timeOf(m.createdAt)}</span>
               </div>
-              <div className={styles.Body}>{m.body}</div>
+              {/* Ссылки на объекты (токены [[ref:…]]) рисуются кликабельными чипами. */}
+              <div className={styles.Body}><RefText text={m.body} /></div>
             </div>
           ))
         )}
@@ -151,6 +176,7 @@ export const ChatList: FC = () => {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           placeholder={translate("chatPlaceholder")}
           disabled={!orgUuid}
         />
