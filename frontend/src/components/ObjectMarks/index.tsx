@@ -18,14 +18,25 @@ import { FieldSelect } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import ObjectLink from "src/components/ObjectLink";
 import { refFromRestore } from "src/utils/objectRef";
+import { describeRestore } from "src/utils/objectRefResolve";
 import { showToast } from "src/components/UIToast";
 import styles from "./ObjectMarks.module.scss";
 
 interface MarkRow {
   uuid: string;
+  ownerType: string;
+  ownerUuid: string;
   targetType: string;
   targetUuid: string;
   targetLabel?: string | null;
+}
+
+interface TodoRow {
+  uuid: string;
+  id: number;
+  description?: string | null;
+  name?: string | null;
+  status?: string | null;
 }
 
 interface ObjectMarksProps {
@@ -64,6 +75,44 @@ const ObjectMarks: FC<ObjectMarksProps> = ({ endpoint, uuid, organizationUuid, r
     },
     enabled: !!uuid,
     staleTime: 30_000,
+  });
+
+  // ── Обратные ссылки: КТО ссылается на эту запись ──────────────────────────
+  // Подпись владельца не хранится (храним только подпись цели), поэтому
+  // дочитываем её тем же describeRestore, что и вставка ссылки в чат. Заодно
+  // подпись всегда актуальная, а не «как было на момент отметки».
+  const { data: incoming = [] } = useQuery({
+    queryKey: ["object-marks-incoming", endpoint, uuid ?? ""],
+    queryFn: async () => {
+      const r = await apiClient.get<{ items?: MarkRow[] }>("object-marks", {
+        params: { targetType: endpoint, targetUuid: uuid },
+      });
+      const items = r.data?.items ?? [];
+      return Promise.all(items.map(async (m) => ({
+        uuid: m.uuid,
+        ownerType: m.ownerType,
+        ownerUuid: m.ownerUuid,
+        label: await describeRestore({ kind: "form", endpoint: m.ownerType, uuid: m.ownerUuid }),
+      })));
+    },
+    enabled: !!uuid,
+    staleTime: 60_000,
+  });
+
+  // ── Задачи, созданные по этому объекту (Todo.sourceType/sourceUuid) ───────
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["object-tasks", endpoint, uuid ?? ""],
+    queryFn: async () => {
+      const r = await apiClient.get<{ items?: TodoRow[] }>("todos", {
+        params: {
+          filter: { sourceType: { equals: endpoint }, sourceUuid: { equals: uuid } },
+          limit: 50,
+        },
+      });
+      return r.data?.items ?? [];
+    },
+    enabled: !!uuid,
+    staleTime: 60_000,
   });
 
   const refresh = useCallback(() => {
@@ -162,6 +211,43 @@ const ObjectMarks: FC<ObjectMarksProps> = ({ endpoint, uuid, organizationUuid, r
           <button type="button" className={styles.CancelBtn} onClick={() => { setAdding(false); setTargetType(""); }}>
             {translate("cancel")}
           </button>
+        </div>
+      )}
+
+      {/* Обратные ссылки: где эту запись пометили. Только чтение — снимать метку
+          нужно там, где её поставили. */}
+      {incoming.length > 0 && (
+        <div className={styles.Section}>
+          <span className={styles.Title}>{translate("referencedBy")}</span>
+          <div className={styles.Chips}>
+            {incoming.map((m) => (
+              <ObjectLink
+                key={m.uuid}
+                objectRef={refFromRestore(
+                  { kind: "form", endpoint: m.ownerType, uuid: m.ownerUuid },
+                  m.label || m.ownerType,
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Задачи, поставленные по этому объекту (создание «из заметки» и т.п.). */}
+      {tasks.length > 0 && (
+        <div className={styles.Section}>
+          <span className={styles.Title}>{translate("TodosList")}</span>
+          <div className={styles.Chips}>
+            {tasks.map((t) => (
+              <ObjectLink
+                key={t.uuid}
+                objectRef={refFromRestore(
+                  { kind: "form", endpoint: "todos", uuid: t.uuid },
+                  (t.description || t.name || `#${t.id}`).slice(0, 60),
+                )}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

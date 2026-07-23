@@ -92,3 +92,12 @@
 	padding-top: 4px;
 	border-top: 1px dashed #e0e0e0;
 }
+
+// Секции «ссылаются на эту запись» / «задачи по объекту» — только чтение.
+.Section {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding-top: 6px;
+	border-top: 1px dashed var(--sv-color33);
+}
