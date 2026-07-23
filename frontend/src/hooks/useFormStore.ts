@@ -26,6 +26,15 @@ import useUID from "./useUID";
 import { stableStringify } from "src/utils/normalize";
 import { setPendingHighlight } from "src/utils/listHighlight";
 
+/**
+ * Axios-подобная ошибка запроса — для сужения `unknown` в catch (T3).
+ * Позволяет читать response.status/data.message без `any`.
+ */
+type ApiError = {
+	response?: { status?: number; data?: { message?: string } };
+	message?: string;
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // ═══════════════════════════════════════════════════════════════════════════
@@ -585,7 +594,7 @@ function createFormStore<F extends object>(
 		setMeta({ isLoading: true });
 		setError(null);
 		try {
-			let d: any;
+			let d: Record<string, unknown>;
 			let fromCache = false;
 
 			if (isOfflineFirst()) {
@@ -648,7 +657,7 @@ function createFormStore<F extends object>(
 			}
 			setMeta({ isLoading: false });
 			markInitialFetchDone();
-		} catch (err: any) {
+		} catch (err: unknown) {
 			if (isNetworkError(err)) {
 				// Различаем «по-настоящему» offline и разовый сбой сервера: если
 				// индикатор сети = Online (`getIsOnline()`), было бы ложью говорить
@@ -659,7 +668,7 @@ function createFormStore<F extends object>(
 				setError(offMsg, "warning");
 			} else {
 				setError(
-					translateError(err.response?.data?.message) ||
+					translateError((err as ApiError).response?.data?.message ?? "") ||
 						"Не удалось загрузить данные",
 				);
 			}
@@ -690,7 +699,7 @@ function createFormStore<F extends object>(
 		updatePaneLabel: (uniqId: string, label: string) => void,
 		uniqId?: string,
 		keepLoadingOnSuccess: boolean = false,
-	): Promise<{ success: boolean; savedData?: any }> {
+	): Promise<{ success: boolean; savedData?: Record<string, unknown> }> {
 		setMeta({ isLoading: true });
 		setError(null);
 		_paneLabel = buildPaneLabel(state.fields);
@@ -708,7 +717,7 @@ function createFormStore<F extends object>(
 				(state.meta.uuid || (state.fields as any).uuid);
 			const entityUuid = state.meta.uuid || (state.fields as any).uuid;
 
-			let saved: any;
+			let saved: Record<string, unknown>;
 			let wasOffline = false;
 
 			if (isEdit && entityUuid) {
@@ -747,14 +756,14 @@ function createFormStore<F extends object>(
 				updatePaneLabel(uniqId, label);
 			}
 			return { success: true, savedData: saved };
-		} catch (err: any) {
+		} catch (err: unknown) {
 			let msg = "Не удалось сохранить";
 			let noteType: PaneNotification["type"] = "error";
 			// Класс ошибки решает, где её показать: данные формы → <Notice /> в форме,
 			// системный сбой → <UIToast />.
 			let kind: "form" | "system" = "system";
-			const status = err.response?.status;
-			const serverMsg = translateError(err.response?.data?.message);
+			const status = (err as ApiError).response?.status;
+			const serverMsg = translateError((err as ApiError).response?.data?.message ?? "");
 
 			if (isNetworkError(err)) {
 				msg = getIsOnline()
@@ -778,8 +787,8 @@ function createFormStore<F extends object>(
 				// Закрытый период: показываем серверное сообщение «Период закрыт…».
 				msg = serverMsg || "Период закрыт для изменений";
 				kind = "form";
-			} else if (err.message) {
-				msg = serverMsg || translateError(err.message);
+			} else if ((err as ApiError).message) {
+				msg = serverMsg || translateError((err as ApiError).message ?? "");
 			}
 			setError(msg, noteType, kind);
 			setMeta({ isLoading: false });
@@ -1386,11 +1395,20 @@ export interface UseFormStoreOptions<F extends object> {
 	/** Начальные значения формы (если не из server, а из paneProps.data). Перезаписывают defaultFields. */
 	initialFields?: F;
 
-	/** Маппинг ответа сервера → fields. Может быть async. */
+	/**
+	 * Маппинг ответа сервера → fields. Может быть async.
+	 *
+	 * `data: any` — СУЩЕСТВЕННЫЙ any (T3, проверено эмпирически): серверная запись
+	 * имеет свою форму у каждой модели, и все ~30 форм читают её точечно
+	 * (`d.number ?? ""`, `d.warehouse?.name`). Замена на `Record<string, unknown>`
+	 * даёт 246 ошибок — каждое присваивание в TFields (unknown → string).
+	 * Убрать его можно только введя ОТДЕЛЬНЫЙ серверный тип на каждую модель
+	 * (второй дженерик `S`) — это самостоятельная крупная задача, не «типизация».
+	 */
 	mapServerToForm: (data: any, prev?: F) => F | Promise<F>;
 	/** Формирование payload для POST/PUT. Возвращает string при ошибке валидации. */
 	buildPayload: (fields: F) => Record<string, unknown> | string;
-	/** Метка панели после сохранения */
+	/** Метка панели после сохранения. `saved: any` — та же серверная запись (см. выше). */
 	buildPaneLabel: (saved: any) => string;
 	/** Доп. логика после load. Может быть async — форма остаётся
 	 * disabled до резолва Promise. */
@@ -1787,7 +1805,7 @@ export function useFormStore<F extends object>(
 			const onItemsChange = useCallback(
 				(items: TDataItem[] | undefined) => {
 					const all = items ?? [];
-					const pending = all.filter((r: any) => r._pendingAction);
+					const pending = all.filter((r: TDataItem) => r._pendingAction);
 					store.setTablePending(tableKey, pending);
 					if (store.getSnapshot().meta.tablesValidationFailed) {
 						const def = tableDefs[tableKey];
@@ -1795,8 +1813,8 @@ export function useFormStore<F extends object>(
 							store.setMeta({ tablesValidationFailed: false });
 							return;
 						}
-						const toCheck = pending.filter((r: any) => r._pendingAction !== "delete");
-						const allFilled = toCheck.every((r: any) =>
+						const toCheck = pending.filter((r: TDataItem) => r._pendingAction !== "delete");
+						const allFilled = toCheck.every((r: TDataItem) =>
 							def.requiredItemFields!.every(f => !isItemFieldEmpty(r[f]))
 						);
 						if (allFilled) {
@@ -1871,10 +1889,10 @@ export function useFormStore<F extends object>(
 			if (!isDraftDoc) for (const [tableKey, def] of Object.entries(tableDefs)) {
 				if (!def.requiredItemFields?.length) continue;
 				const { pending } = store.getSnapshot().tables[tableKey] ?? { pending: [] };
-				const toSave = pending.filter((r: any) => r._pendingAction !== "delete");
+				const toSave = pending.filter((r: TDataItem) => r._pendingAction !== "delete");
 				// Группируем по полю: { fieldKey → [lineNum, ...] }
 				const fieldToLines: Record<string, number[]> = {};
-				toSave.forEach((r: any, idx: number) => {
+				toSave.forEach((r: TDataItem, idx: number) => {
 					const lineNum: number = (r._lineNumber as number | undefined) ?? idx + 1;
 					for (const f of def.requiredItemFields!) {
 						if (isItemFieldEmpty(r[f])) {
@@ -1931,12 +1949,12 @@ export function useFormStore<F extends object>(
 			// (initialPendingRows → []) до того, как afterSave дождётся refetch.
 			// Когда refetch прилетит, SubTable увидит пустой pending и выполнит
 			// чистую замену кэша без мержа — дубликаты исключены.
-			const parentUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid ?? "";
+			const parentUuid = (savedData?.uuid as string | undefined) ?? store.getSnapshot().meta.uuid ?? "";
 			if (Object.keys(tableDefs).length > 0 && parentUuid) {
 				try {
 					await store.commitAllTables(parentUuid, { clear: true });
-				} catch (e: any) {
-					store.setError(e?.message || "Не удалось сохранить вложенные данные");
+				} catch (e: unknown) {
+					store.setError((e as ApiError)?.message || "Не удалось сохранить вложенные данные");
 					if (!keepLoading) store.setMeta({ isLoading: false });
 					return false;
 				}
@@ -1946,8 +1964,8 @@ export function useFormStore<F extends object>(
 			if (afterSaveRef.current) {
 				try {
 					await afterSaveRef.current(savedData);
-				} catch (e: any) {
-					store.setError(e?.message || "Ошибка после сохранения");
+				} catch (e: unknown) {
+					store.setError((e as ApiError)?.message || "Ошибка после сохранения");
 					if (!keepLoading) store.setMeta({ isLoading: false });
 					return false;
 				}
