@@ -41,6 +41,7 @@ import {
   TodosList,
   TaskBoardList,
   UserPerformanceList,
+  TodoStatusesList,
   ChatList,
   NotificationsList,
   WarehousesList,
@@ -1164,6 +1165,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("Todo") && <NavItem onClick={() => addPane({ component: TaskBoardList, label: translate("TaskBoard") })}>{translate("TaskBoard")}</NavItem>}
           {can("Todo") && <NavItem onClick={() => addPane({ component: TodosList })}>{translate("TodosList")}</NavItem>}
           {can("Todo") && <NavItem onClick={() => addPane({ component: UserPerformanceList, label: translate("UserPerformance") })}>{translate("UserPerformance")}</NavItem>}
+          {can("Todo") && <NavItem onClick={() => addPane({ component: TodoStatusesList, label: translate("TodoStatusesList") })}>{translate("TodoStatusesList")}</NavItem>}
           <NavItem onClick={() => addPane({ component: ChatList, label: translate("Chat") })}>
             {translate("Chat")}
             {/* Бейдж непрочитанного (E4.1): чужие сообщения позже отметки прочтения. */}

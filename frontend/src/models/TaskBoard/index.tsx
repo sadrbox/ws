@@ -18,18 +18,13 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "src/services/api/client";
 import { getCurrentUser } from "src/services/auth";
+import { useTodoStatuses } from "src/hooks/useTodoStatuses";
 import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
 import type { TDataItem } from "src/components/Table/types";
 import styles from "./TaskBoard.module.scss";
 
 // Статусы = колонки. Порядок значим (слева направо по жизненному циклу).
-const COLUMNS: { status: string; labelKey: string }[] = [
-  { status: "new", labelKey: "taskStatusNew" },
-  { status: "in_progress", labelKey: "taskStatusInProgress" },
-  { status: "done", labelKey: "taskStatusDone" },
-  { status: "cancelled", labelKey: "taskStatusCancelled" },
-];
 
 type Filter = "all" | "mine" | "assigned" | "overdue";
 
@@ -49,16 +44,16 @@ interface TodoItem {
 const userName = (t: TodoItem): string =>
   t.executor?.employee?.fullName || t.executor?.username || "";
 
-const isOverdue = (t: TodoItem): boolean =>
-  !!t.deadline && t.status !== "done" && t.status !== "cancelled" &&
+/** Просрочена: срок прошёл, а статус НЕ завершающий (isFinal из справочника). */
+const isOverdue = (t: TodoItem, finalCodes: Set<string>): boolean =>
+  !!t.deadline && !finalCodes.has(t.status) &&
   new Date(t.deadline).getTime() < Date.now();
 
 // ── Карточка ─────────────────────────────────────────────────────────────────
-const TaskCard: FC<{ todo: TodoItem }> = ({ todo }) => {
+const TaskCard: FC<{ todo: TodoItem; overdue: boolean }> = ({ todo, overdue }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: todo.uuid });
   const title = (todo.description || todo.name || `#${todo.id}`).trim();
   const exec = userName(todo);
-  const overdue = isOverdue(todo);
 
   return (
     <div
@@ -87,18 +82,18 @@ const TaskCard: FC<{ todo: TodoItem }> = ({ todo }) => {
 };
 
 // ── Колонка ──────────────────────────────────────────────────────────────────
-const Column: FC<{ status: string; labelKey: string; items: TodoItem[] }> = ({ status, labelKey, items }) => {
+const Column: FC<{ status: string; label: string; items: TodoItem[]; finalCodes: Set<string> }> = ({ status, label, items, finalCodes }) => {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
     <div ref={setNodeRef} className={`${styles.Column}${isOver ? ` ${styles.over}` : ""}`}>
       <div className={styles.ColumnHead}>
-        <span>{translate(labelKey)}</span>
+        <span>{label}</span>
         <span className={styles.ColumnCount}>{items.length}</span>
       </div>
       <div className={styles.ColumnBody}>
         {items.length === 0
           ? <div className={styles.ColumnEmpty}>{translate("taskColumnEmpty")}</div>
-          : items.map((t) => <TaskCard key={t.uuid} todo={t} />)}
+          : items.map((t) => <TaskCard key={t.uuid} todo={t} overdue={isOverdue(t, finalCodes)} />)}
       </div>
     </div>
   );
@@ -108,6 +103,8 @@ const Column: FC<{ status: string; labelKey: string; items: TodoItem[] }> = ({ s
 export const TaskBoardList: FC = () => {
   const me = getCurrentUser();
   const queryClient = useQueryClient();
+  // Колонки и признак «завершающий статус» — из справочника (E9.5).
+  const { statuses, finalCodes } = useTodoStatuses();
   const [filter, setFilter] = useState<Filter>("all");
   const [dragId, setDragId] = useState<string | null>(null);
 
@@ -148,19 +145,21 @@ export const TaskBoardList: FC = () => {
     switch (filter) {
       case "mine": return all.filter((t) => t.executorUuid === uid);
       case "assigned": return all.filter((t) => t.curatorUuid === uid);
-      case "overdue": return all.filter(isOverdue);
+      case "overdue": return all.filter((t) => isOverdue(t, finalCodes));
       default: return all;
     }
-  }, [all, filter, me?.uuid]);
+  }, [all, filter, me?.uuid, finalCodes]);
 
   const byStatus = useMemo(() => {
     const map: Record<string, TodoItem[]> = {};
-    for (const c of COLUMNS) map[c.status] = [];
+    // Колонки — из справочника; статусы задач вне справочника (напр. удалённый
+    // статус) всё равно получают колонку через ??=, чтобы задачи не пропали.
+    for (const s of statuses) map[s.code] = [];
     for (const t of filtered) (map[t.status] ??= []).push(t);
     return map;
-  }, [filtered]);
+  }, [filtered, statuses]);
 
-  const overdueCount = useMemo(() => all.filter(isOverdue).length, [all]);
+  const overdueCount = useMemo(() => all.filter((t) => isOverdue(t, finalCodes)).length, [all, finalCodes]);
 
   const onDragStart = useCallback((e: DragStartEvent) => setDragId(String(e.active.id)), []);
   const onDragEnd = useCallback((e: DragEndEvent) => {
@@ -204,8 +203,8 @@ export const TaskBoardList: FC = () => {
       ) : (
         <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
           <div className={styles.Columns}>
-            {COLUMNS.map((c) => (
-              <Column key={c.status} status={c.status} labelKey={c.labelKey} items={byStatus[c.status] ?? []} />
+            {statuses.map((st) => (
+              <Column key={st.code} status={st.code} label={st.name} items={byStatus[st.code] ?? []} finalCodes={finalCodes} />
             ))}
           </div>
         </DndContext>

@@ -41,6 +41,7 @@ export const NotificationsList = lazyView("NotificationsList", () => import('src
 export const WarehousesList = lazyView("WarehousesList", () => import('src/models/Warehouses').then(m => ({ default: m.WarehousesList })));
 export const CashboxesList = lazyView("CashboxesList", () => import('src/models/Cashboxes').then(m => ({ default: m.CashboxesList })));
 export const PriceTypesList = lazyView("PriceTypesList", () => import('src/models/PriceTypes').then(m => ({ default: m.PriceTypesList })));
+export const TodoStatusesList = lazyView("TodoStatusesList", () => import('src/models/TodoStatuses').then(m => ({ default: m.TodoStatusesList })));
 export const SalesList = lazyView("SalesList", () => import('src/models/Sales').then(m => ({ default: m.SalesList })));
 export const ProductPriceCorrection = lazyView("ProductPriceCorrection", () => import('src/models/ProductPriceProcessing').then(m => ({ default: m.ProductPriceCorrection })));
 export const ProductPriceImport = lazyView("ProductPriceImport", () => import('src/models/ProductPriceProcessing').then(m => ({ default: m.ProductPriceImport })));
@@ -131,6 +132,7 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	WarehousesList: WarehousesList,
 	CashboxesList: CashboxesList,
 	PriceTypesList: PriceTypesList,
+	TodoStatusesList: TodoStatusesList,
 	SalesList: SalesList,
 	ProductPriceCorrection: ProductPriceCorrection,
 	ProductPriceImport: ProductPriceImport,

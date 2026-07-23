@@ -15,6 +15,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
+import { useTodoStatuses } from "src/hooks/useTodoStatuses";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -23,12 +24,6 @@ import { useFormNotices } from "src/hooks/useFormNotices";
 
 const MODEL_ENDPOINT = "todos";
 
-const STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: "new", label: "Новая" },
-  { value: "in_progress", label: "В работе" },
-  { value: "done", label: "Выполнена" },
-  { value: "cancelled", label: "Отменена" },
-];
 
 interface TFields {
   id?: number; uuid?: string;
@@ -53,6 +48,8 @@ const DEFAULT_FIELDS: TFields = {
 const TodosForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const { canWrite } = useAccessPermission("Todo");
+  // Статусы — из справочника (E9.5), а не захардкоженный набор.
+  const { options: statusOptions } = useTodoStatuses();
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data;
@@ -114,7 +111,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupCol>
                 <GroupRow>
                   <Group className={styles.w1of2}>
-                    <FieldSelect label={translate("status")} name={`${form.formUid}_status`} options={STATUS_OPTIONS} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} style={{ minWidth: 200 }} />
+                    <FieldSelect label={translate("status")} name={`${form.formUid}_status`} options={statusOptions} value={form.fields.status} onChange={e => form.setField("status", e.target.value)} disabled={form.isLoading} style={{ minWidth: 200 }} />
                   </Group>
                 </GroupRow>
                 <Group>

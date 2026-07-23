@@ -1,0 +1,62 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Номер",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "uuid",
+		"type": "string",
+		"width": "0px",
+		"minWidth": "0px",
+		"alignment": "left",
+		"hint": "UUID",
+		"visible": false,
+		"inlist": false
+	},
+	{
+		"identifier": "name",
+		"type": "string",
+		"width": "220px",
+		"minWidth": "220px",
+		"alignment": "left",
+		"hint": "Наименование",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "code",
+		"type": "string",
+		"width": "160px",
+		"minWidth": "160px",
+		"alignment": "left",
+		"hint": "Код",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "sortOrder",
+		"type": "number",
+		"width": "120px",
+		"minWidth": "120px",
+		"alignment": "right",
+		"hint": "Порядок",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "isFinal",
+		"type": "boolean",
+		"width": "140px",
+		"minWidth": "140px",
+		"alignment": "center",
+		"hint": "Завершающий",
+		"visible": true,
+		"inlist": true
+	}
+]

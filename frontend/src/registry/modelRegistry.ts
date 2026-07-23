@@ -164,6 +164,14 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Типы цен",
 	},
 	{
+		endpoint: "todo-statuses",
+		module: () => import("src/models/TodoStatuses"),
+		formName: "TodoStatusesForm",
+		listName: "TodoStatusesList",
+		storageKey: "todo-statuses-form",
+		label: "Статусы задач",
+	},
+	{
 		endpoint: "currencies",
 		module: () => import("src/models/Currencies"),
 		formName: "CurrenciesForm",

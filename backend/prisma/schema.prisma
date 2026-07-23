@@ -548,6 +548,24 @@ model PipeActivity {
   @@map("pipe_activity")
 }
 
+/// Статус задачи — НАСТРАИВАЕМЫЙ справочник (E9.5), а не хардкод-enum: команды
+/// ведут учёт по-своему. `code` хранится в Todo.status (поэтому существующие
+/// задачи продолжают работать), `name` — то, что видит пользователь,
+/// `sortOrder` задаёт порядок колонок доски, `isFinal` помечает завершающие
+/// статусы (по нему считается просрочка — раньше это был список "done"/"cancelled").
+model TodoStatus {
+  id        Int       @id @default(autoincrement())
+  uuid      String    @unique @default(uuid())
+  code      String    @unique
+  name      String
+  sortOrder Int       @default(100)
+  isFinal   Boolean   @default(false)
+  updatedAt DateTime  @default(now()) @updatedAt
+  deletedAt DateTime?
+
+  @@map("todo_statuses")
+}
+
 model Todo {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())
