@@ -8,6 +8,7 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { assertDocumentSerials, respondSerialError } from "../../services/serialNumbers.js";
 import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
@@ -292,6 +293,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (willBePosted) {
 			// Партия прихода (возврат от покупателя): партия должна быть назначена
 			// (receipt-режим — остаток не проверяем, товар возвращается на склад).
+			// Серии возврата: их количество должно совпасть с количеством в строках
+			// (реинстейт проданных серий — см. reinstateSerials).
+			await assertDocumentSerials({ docType: "sale_return", docUuid: existing.uuid, itemModel: "saleReturnItem", parentField: "saleReturnUuid" });
 			await assertDocumentBatches({ docType: "sale_return", docUuid: existing.uuid, itemModel: "saleReturnItem", parentField: "saleReturnUuid" });
 			await assertPostable("sale_return", existing.uuid, { ...data, posted: true });
 		}
@@ -318,6 +322,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondPostingError(error, res)) return;
+		if (respondSerialError(error, res)) return;
 		if (respondBatchError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;

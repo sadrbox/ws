@@ -26,6 +26,12 @@ export const SERIAL_ISSUE_DOCS = new Set(["sale", "write_off", "purchase_return"
 // заводим; статус in_stock отличает «перемещённую» серию от реально выбывшей.
 export const SERIAL_TRANSFER_DOCS = new Set(["inventory_transfer"]);
 
+// Возврат ОТ ПОКУПАТЕЛЯ: серия не появляется заново — ВОЗВРАЩАЕТСЯ ранее проданная
+// (issued → in_stock). Поэтому это не приёмка (setReceiptSerials создал бы дубль и
+// счёл существующую серию конфликтом), а РЕИНСТЕЙТ. Связь с документом пишем в
+// issueDoc* при status=in_stock — та же конвенция, что у перемещения.
+export const SERIAL_RETURN_DOCS = new Set(["sale_return"]);
+
 /**
  * Нормализовать ввод серий: строка (по одной на строку/через запятую/пробел) или
  * массив → массив уникальных непустых серий, порядок сохраняется. Чистая функция.
@@ -200,6 +206,65 @@ export async function transferSerials({ docUuid, serialUuids, fromWarehouseUuid,
 	return res.count;
 }
 
+/**
+ * Возврат ОТ ПОКУПАТЕЛЯ: ранее проданные серии возвращаются на склад.
+ * Идемпотентный пересбор (как transferSerials): сначала откатываем прежний выбор
+ * этого возврата обратно в issued, затем выбранные issued-серии переводим в
+ * in_stock на склад возврата.
+ *
+ * Возвращаются ТОЛЬКО реально выбывшие (issued) серии — вернуть лежащую на складе
+ * или несуществующую серию нельзя (она просто не попадёт в updateMany).
+ *
+ * originIssueDoc* — куда вернуть ссылку при откате: обычно исходная реализация
+ * (документ-основание возврата). Если основания нет — ссылка обнуляется, статус
+ * issued сохраняется.
+ *
+ * @returns {Promise<number>} число возвращённых серий
+ */
+export async function reinstateSerials(
+	{ docUuid, serialUuids, warehouseUuid = null, originIssueDocType = "sale", originIssueDocUuid = null },
+	client = prisma,
+) {
+	// 1. Откат прежнего выбора этого возврата: серии снова считаются выбывшими.
+	await client.serialNumber.updateMany({
+		where: {
+			issueDocType: "sale_return", issueDocUuid: docUuid,
+			status: SERIAL_STATUS.IN_STOCK, deletedAt: null,
+		},
+		data: {
+			status: SERIAL_STATUS.ISSUED,
+			issueDocType: originIssueDocUuid ? originIssueDocType : null,
+			issueDocUuid: originIssueDocUuid,
+		},
+	});
+
+	// 2. Возврат выбранных серий на склад.
+	const ids = [...new Set((serialUuids ?? []).filter(Boolean))];
+	if (!ids.length) return 0;
+	const res = await client.serialNumber.updateMany({
+		where: { uuid: { in: ids }, status: SERIAL_STATUS.ISSUED, deletedAt: null },
+		data: {
+			status: SERIAL_STATUS.IN_STOCK,
+			warehouseUuid: warehouseUuid ?? null,
+			issueDocType: "sale_return", issueDocUuid: docUuid,
+		},
+	});
+	return res.count;
+}
+
+/** Число серий, возвращённых документом, по товару (для проверки инварианта). */
+export async function countReturnedSerials(docUuid, client = prisma) {
+	const rows = await client.serialNumber.groupBy({
+		by: ["productUuid"],
+		where: {
+			issueDocType: "sale_return", issueDocUuid: docUuid,
+			status: SERIAL_STATUS.IN_STOCK, deletedAt: null,
+		},
+		_count: { _all: true },
+	});
+	return new Map(rows.map((r) => [r.productUuid, r._count._all]));
+}
+
 /** Откат перемещения документа: серии возвращаются на склад-источник (при удалении). */
 export async function releaseTransferSerials(docUuid, fromWarehouseUuid, client = prisma) {
 	const res = await client.serialNumber.updateMany({
@@ -247,8 +312,10 @@ export class SerialCountError extends Error {
  */
 export async function assertDocumentSerials({ docType, docUuid, itemModel, parentField, docDate = null }, client = prisma) {
 	// Перемещение считаем как выбытие (число перенесённых серий = количеству),
-	// связь — в issueDoc* (см. transferSerials).
-	const mode = SERIAL_ISSUE_DOCS.has(docType) || SERIAL_TRANSFER_DOCS.has(docType)
+	// связь — в issueDoc* (см. transferSerials). Возврат от покупателя тоже пишет
+	// связь в issueDoc* (см. reinstateSerials), поэтому проверка та же: число
+	// привязанных к документу серий должно совпасть с количеством в строках.
+	const mode = SERIAL_ISSUE_DOCS.has(docType) || SERIAL_TRANSFER_DOCS.has(docType) || SERIAL_RETURN_DOCS.has(docType)
 		? "issue"
 		: SERIAL_RECEIPT_DOCS.has(docType) ? "receipt" : null;
 	if (!mode) return; // документ не относится к серийному учёту

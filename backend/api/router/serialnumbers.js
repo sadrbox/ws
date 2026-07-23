@@ -7,7 +7,7 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { buildOrderBy } from "../../utils/sortOrder.js";
 import {
-	setReceiptSerials, issueSerials, transferSerials, SERIAL_STATUS,
+	setReceiptSerials, issueSerials, transferSerials, reinstateSerials, SERIAL_STATUS,
 } from "../../services/serialNumbers.js";
 
 const router = express.Router();
@@ -166,6 +166,52 @@ router.post(`/${ROUTE}/transfer`, async (req, res) => {
 		return res.status(200).json({ success: true, count });
 	} catch (error) {
 		console.error(`POST /${ROUTE}/transfer error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// Серии, ДОСТУПНЫЕ К ВОЗВРАТУ от покупателя: реально проданные (issued). Если
+// возврат сделан на основании реализации — показываем только её серии, иначе все
+// проданные по товару. Уже выбранные этим возвратом добавляем, чтобы пикер
+// отмечал их (они уже in_stock и в первую ветку не попадают).
+router.get(`/${ROUTE}/returnable`, async (req, res) => {
+	try {
+		const { productUuid, issueDocUuid, originIssueDocUuid } = req.query;
+		if (!productUuid) return res.status(400).json({ success: false, message: "productUuid обязателен" });
+		const where = {
+			productUuid: String(productUuid), deletedAt: null, ...tenantFilter(req),
+			OR: [
+				{
+					status: SERIAL_STATUS.ISSUED,
+					...(originIssueDocUuid ? { issueDocUuid: String(originIssueDocUuid) } : {}),
+				},
+				...(issueDocUuid ? [{ issueDocUuid: String(issueDocUuid) }] : []),
+			],
+		};
+		const items = await prisma.serialNumber.findMany({ where, orderBy: [{ serialNumber: "asc" }], take: 1000 });
+		const enriched = await withReceiptOrigin(items);
+		return res.status(200).json({ success: true, items: enriched });
+	} catch (error) {
+		console.error(`GET /${ROUTE}/returnable error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// Вернуть выбранные проданные серии на склад (возврат от покупателя).
+// Полный пересбор выбора: прежние снова считаются выбывшими.
+router.post(`/${ROUTE}/return`, async (req, res) => {
+	try {
+		const { docUuid, serialUuids, warehouseUuid, originIssueDocUuid } = req.body;
+		if (!docUuid) return res.status(400).json({ success: false, message: "docUuid обязателен" });
+		const count = await reinstateSerials({
+			docUuid,
+			serialUuids,
+			warehouseUuid: warehouseUuid || null,
+			originIssueDocUuid: originIssueDocUuid || null,
+		});
+		return res.status(200).json({ success: true, count });
+	} catch (error) {
+		console.error(`POST /${ROUTE}/return error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

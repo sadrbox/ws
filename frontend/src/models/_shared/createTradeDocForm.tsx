@@ -86,7 +86,7 @@ export interface TradeDocConfig {
   /** Рендерить лукап «Тип цены» (default true) + valueType для дефолтов пользователя. */
   hasPriceType?: boolean;
   /** Серийные номера: роль документа (receipt/issue) + docType. Включает колонку «Серии». */
-  serialMode?: "receipt" | "issue";
+  serialMode?: "receipt" | "issue" | "return";
   serialDocType?: string;
   /** Партии: роль документа (receipt/issue). Включает колонку «Партия» (FEFO). */
   batchMode?: "receipt" | "issue";
@@ -560,7 +560,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           <TradeDocumentItemsTable
             parentUuid={form.fields.uuid ?? ""} parentField={cfg.itemsParentField}
             endpoint={cfg.itemsEndpoint} componentName={cfg.itemsComponentName}
-            serialMode={cfg.serialMode} serialDocType={cfg.serialDocType} batchMode={cfg.batchMode} warehouseUuid={form.fields.warehouseUuid}
+            serialMode={cfg.serialMode} serialDocType={cfg.serialDocType} batchMode={cfg.batchMode} originIssueDocUuid={form.fields.basisDocumentUuid} warehouseUuid={form.fields.warehouseUuid}
             organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
             priceTypeUuid={form.fields.priceTypeUuid}
             disabled={form.isLoading} deferRemoteChanges
@@ -694,7 +694,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           <TradeDocumentItemsTable
             parentUuid={String(row.uuid ?? "")} parentField={cfg.itemsParentField}
             endpoint={cfg.itemsEndpoint} componentName={cfg.itemsComponentName}
-            serialMode={cfg.serialMode} serialDocType={cfg.serialDocType} batchMode={cfg.batchMode}
+            serialMode={cfg.serialMode} serialDocType={cfg.serialDocType} batchMode={cfg.batchMode} originIssueDocUuid={row.basisDocumentUuid ? String(row.basisDocumentUuid) : undefined}
             warehouseUuid={row.warehouseUuid ? String(row.warehouseUuid) : undefined}
             organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
             documentDate={row.date ? String(row.date) : null}

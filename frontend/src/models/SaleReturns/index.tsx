@@ -31,9 +31,12 @@ const { Form: SaleReturnsForm, List: SaleReturnsList } = createTradeDocForm({
   accessPermissionModel: "SaleReturn",
   docType: "sale_return",
   columnsJson,
-  // Возврат от покупателя — приход на склад: партия задаётся (receipt). Серии на
-  // возврате от покупателя пока не поддержаны (нужен реинстейт конкретных
-  // проданных серий — отдельный трек), поэтому serialMode не задаём.
+  // Возврат от покупателя — приход на склад: партия задаётся (receipt).
+  // Серии: режим "return" — не приёмка (серия не появляется заново), а РЕИНСТЕЙТ
+  // ранее проданной: пользователь выбирает из проданных серий (при наличии
+  // документа-основания — именно из его серий), и они возвращаются в in_stock.
+  serialMode: "return",
+  serialDocType: "sale_return",
   batchMode: "receipt",
   basisAllowedTypes: [{ type: "sale", endpoint: "sales" }],
   hasPriceType: false,

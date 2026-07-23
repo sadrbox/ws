@@ -22,12 +22,17 @@ export interface SerialCellProps {
   docUuid: string;
   // transfer (перемещение ТМЗ): выбор серий на складе-ИСТОЧНИКЕ (как issue), но при
   // сохранении серии не выбывают — переносятся на toWarehouseUuid (POST .../transfer).
-  mode: "receipt" | "issue" | "transfer";
+  // return (возврат ОТ ПОКУПАТЕЛЯ): выбор среди ПРОДАННЫХ (issued) серий; при
+  // сохранении они возвращаются на склад (in_stock) — POST .../return.
+  mode: "receipt" | "issue" | "transfer" | "return";
   organizationUuid?: string;
-  /** Склад-источник (для issue/transfer — откуда доступны серии). */
+  /** Склад-источник (для issue/transfer — откуда доступны серии; для return — куда вернуть). */
   warehouseUuid?: string;
   /** Склад-получатель (только transfer — куда переносим). */
   toWarehouseUuid?: string;
+  /** Документ-основание возврата (реализация): сужает список возвращаемых серий
+   *  до проданных именно по нему и восстанавливает ссылку при снятии выбора. */
+  originIssueDocUuid?: string;
   /** Дата документа — учёт по сериям не применяется задним числом (serialTrackingSince). */
   documentDate?: string | null;
   disabled?: boolean;
@@ -43,7 +48,7 @@ interface SerialRow {
 const qkFlag = (uuid: string) => ["product-serial-flag", uuid];
 const qkCount = (docUuid: string, productUuid: string, mode: string) => ["serial-count", mode, docUuid, productUuid];
 
-export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, docType, docUuid, mode, organizationUuid, warehouseUuid, toWarehouseUuid, documentDate, disabled }) => {
+export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, docType, docUuid, mode, organizationUuid, warehouseUuid, toWarehouseUuid, originIssueDocUuid, documentDate, disabled }) => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
 
@@ -80,7 +85,11 @@ export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, 
         const r = await apiClient.get<{ items?: SerialRow[] }>("serialnumbers/receipt", { params: { docType, docUuid, productUuid } });
         return (r.data?.items ?? []).length;
       }
-      const r = await apiClient.get<{ items?: SerialRow[] }>("serialnumbers/available", { params: { productUuid, warehouseUuid, issueDocUuid: docUuid } });
+      // Возврат берёт список из другого эндпоинта (проданные серии), но признак
+      // «привязана к этому документу» тот же — issueDocUuid.
+      const r = mode === "return"
+        ? await apiClient.get<{ items?: SerialRow[] }>("serialnumbers/returnable", { params: { productUuid, issueDocUuid: docUuid, originIssueDocUuid } })
+        : await apiClient.get<{ items?: SerialRow[] }>("serialnumbers/available", { params: { productUuid, warehouseUuid, issueDocUuid: docUuid } });
       return (r.data?.items ?? []).filter((s) => s.issueDocUuid === docUuid).length;
     },
     enabled: !!productUuid && !!docUuid && tracked === true,
@@ -119,7 +128,7 @@ export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, 
         <SerialModal
           onClose={() => setOpen(false)}
           onSaved={() => { invalidate(); setOpen(false); }}
-          {...{ productUuid, quantity: qty, docType, docUuid, mode, organizationUuid, warehouseUuid, toWarehouseUuid }}
+          {...{ productUuid, quantity: qty, docType, docUuid, mode, organizationUuid, warehouseUuid, toWarehouseUuid, originIssueDocUuid }}
         />
       )}
     </div>
@@ -128,7 +137,7 @@ export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, 
 
 // ── Модалка ввода/выбора серий ───────────────────────────────────────────────
 const SerialModal: FC<Omit<SerialCellProps, "disabled"> & { onClose: () => void; onSaved: () => void }> = ({
-  productUuid, quantity, docType, docUuid, mode, organizationUuid, warehouseUuid, toWarehouseUuid, onClose, onSaved,
+  productUuid, quantity, docType, docUuid, mode, organizationUuid, warehouseUuid, toWarehouseUuid, originIssueDocUuid, onClose, onSaved,
 }) => {
   const [text, setText] = useState<string | null>(null);
   const [picked, setPicked] = useState<Set<string> | null>(null);
@@ -148,13 +157,21 @@ const SerialModal: FC<Omit<SerialCellProps, "disabled"> & { onClose: () => void;
   });
 
   // Выбытие: доступные in_stock + уже выбранные этим документом.
+  // Возврат от покупателя — зеркально: ПРОДАННЫЕ (issued) серии, при наличии
+  // основания — только по нему (другой эндпоинт, та же форма ответа и логика выбора).
   const available = useQuery({
-    queryKey: ["serial-available", docUuid, productUuid, warehouseUuid],
+    queryKey: ["serial-available", mode, docUuid, productUuid, warehouseUuid, originIssueDocUuid],
     queryFn: async () => {
-      const r = await apiClient.get<{ items?: SerialRow[] }>("serialnumbers/available", { params: { productUuid, warehouseUuid, issueDocUuid: docUuid } });
+      const r = mode === "return"
+        ? await apiClient.get<{ items?: SerialRow[] }>("serialnumbers/returnable", {
+          params: { productUuid, issueDocUuid: docUuid, originIssueDocUuid },
+        })
+        : await apiClient.get<{ items?: SerialRow[] }>("serialnumbers/available", {
+          params: { productUuid, warehouseUuid, issueDocUuid: docUuid },
+        });
       return r.data?.items ?? [];
     },
-    enabled: mode === "issue" || mode === "transfer",
+    enabled: mode === "issue" || mode === "transfer" || mode === "return",
     staleTime: 0,
   });
 
@@ -173,6 +190,11 @@ const SerialModal: FC<Omit<SerialCellProps, "disabled"> & { onClose: () => void;
       } else if (mode === "transfer") {
         // Серии не выбывают — переносятся на склад-получатель (warehouseUuid = источник).
         await apiClient.post("serialnumbers/transfer", { docUuid, serialUuids: [...pickedSet], fromWarehouseUuid: warehouseUuid, toWarehouseUuid });
+      } else if (mode === "return") {
+        // Проданные серии возвращаются на склад (issued → in_stock).
+        await apiClient.post("serialnumbers/return", {
+          docUuid, serialUuids: [...pickedSet], warehouseUuid, originIssueDocUuid,
+        });
       } else {
         await apiClient.post("serialnumbers/issue", { docType, docUuid, serialUuids: [...pickedSet] });
       }
@@ -182,7 +204,7 @@ const SerialModal: FC<Omit<SerialCellProps, "disabled"> & { onClose: () => void;
       setError(msg || translate("error"));
       setSaving(false);
     }
-  }, [mode, docType, docUuid, productUuid, organizationUuid, warehouseUuid, toWarehouseUuid, textValue, pickedSet, onSaved]);
+  }, [mode, docType, docUuid, productUuid, organizationUuid, warehouseUuid, toWarehouseUuid, originIssueDocUuid, textValue, pickedSet, onSaved]);
 
   const currentCount = mode === "receipt"
     ? textValue.split(/[\n,;]+/).map((v) => v.trim()).filter(Boolean).length

@@ -117,7 +117,7 @@ export interface TradeDocumentItemsTableProps {
   /** Роль документа для серийных номеров: "receipt" (приёмка) | "issue" (выбытие) |
    *  "transfer" (перемещение: выбор на источнике, перенос на получатель).
    *  Включает колонку «Серии» для товаров с учётом по серийным номерам. */
-  serialMode?: "receipt" | "issue" | "transfer";
+  serialMode?: "receipt" | "issue" | "transfer" | "return";
   /** documentType для операций с сериями (goods_receipt/purchase/sale/write_off/…). */
   serialDocType?: string;
   /** Роль документа для партий: "receipt" (ввод партии+срок) | "issue" (выбор FEFO).
@@ -127,6 +127,8 @@ export interface TradeDocumentItemsTableProps {
   warehouseUuid?: string;
   /** Склад-получатель (только перемещение, serialMode="transfer"). */
   toWarehouseUuid?: string;
+  /** Документ-основание возврата (реализация) — для serialMode="return". */
+  originIssueDocUuid?: string;
   /** Переопределяет кнопку «Обновить» в тулбаре SubTable (вместо handleCleanRefresh). */
   onRefresh?: () => void;
   /** Запретить добавление строк (независимо от disabled). */
@@ -176,6 +178,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
   batchMode,
   warehouseUuid,
   toWarehouseUuid,
+  originIssueDocUuid,
   onRefresh,
   disableAddRows = false,
   disableDeleteRows = false,
@@ -518,6 +521,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           organizationUuid={organizationUuid ?? undefined}
           warehouseUuid={warehouseUuid ?? undefined}
           toWarehouseUuid={toWarehouseUuid ?? undefined}
+          originIssueDocUuid={originIssueDocUuid ?? undefined}
           documentDate={documentDate ?? null}
           disabled={ctx.disabled}
         />
