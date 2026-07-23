@@ -27,7 +27,7 @@
   font: inherit;
   border: 1px solid var(--border-color, #d0d5dd);
   border-radius: 6px;
-  background: var(--surface, #fff);
+  background: var(--surface, var(--sv-color60));
   color: inherit;
 }
 
@@ -36,7 +36,7 @@
   border: none;
   border-radius: 6px;
   background: var(--color-link, #2563eb);
-  color: #fff;
+  color: var(--sv-color60);
   font: inherit;
   cursor: pointer;
 

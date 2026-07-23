@@ -36,7 +36,7 @@
   display: flex;
   gap: 12px;
   font-size: $fontsize - 2px;
-  color: #888;
+  color: var(--sv-color5);
 }
 
 .SyncJournalActions {
@@ -55,7 +55,7 @@
   align-items: center;
   justify-content: center;
   padding: 40px;
-  color: #999;
+  color: var(--text-muted);
   font-size: $fontsize;
 }
 
@@ -123,7 +123,7 @@
 
 .SyncEntryMeta {
   font-size: $fontsize - 2px;
-  color: #999;
+  color: var(--text-muted);
   margin-top: 2px;
 }
 
@@ -155,12 +155,12 @@
 .ConflictHeader {
   font-size: $fontsize + 1px;
   font-weight: 600;
-  color: #e65100;
+  color: var(--warning-strong);
 }
 
 .ConflictDescription {
   font-size: $fontsize;
-  color: #555;
+  color: var(--text-secondary);
   line-height: 1.4;
 }
 
@@ -184,7 +184,7 @@
   font-size: $fontsize - 1px;
   font-weight: 600;
   text-transform: uppercase;
-  color: #666;
+  color: var(--sv-color51);
   letter-spacing: 0.5px;
 }
 
@@ -197,7 +197,7 @@
 }
 
 .ConflictKey {
-  color: #888;
+  color: var(--sv-color5);
   flex-shrink: 0;
 }
 

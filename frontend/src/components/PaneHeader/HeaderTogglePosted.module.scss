@@ -12,7 +12,7 @@
   border: 1px solid transparent;
   border-radius: $radius3;
   background: transparent;
-  color: #555;
+  color: var(--text-secondary);
   font-size: $fontsize;
   line-height: 1;
   cursor: pointer;
@@ -42,7 +42,7 @@
 
   &:hover:not(.disabled) {
     background: rgba(#555, 0.12);
-    color: #222;
+    color: var(--sv-color6);
   }
 
   // Фокус с клавиатуры — синий ring, как у IconButton.

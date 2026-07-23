@@ -86,7 +86,7 @@
 .PrintLoading {
   padding: 8px 12px;
   margin: 0 0 4px;
-  background: #eff6ff;
+  background: var(--sv-accentBlueSoft);
   border: 1px solid #93c5fd;
   border-radius: $radius2;
   color: $color3;
@@ -101,7 +101,7 @@
   border-radius: $radius3;
   text-align: center;
   align-content: center;
-  color: #FFF;
+  color: var(--sv-color60);
   flex: 1;
   width: 100%;
   height: 100%;
@@ -121,7 +121,7 @@
     width: 300px;
     height: 30px;
     display: flex;
-    color: #999;
+    color: var(--text-muted);
     font-size: 14px;
     z-index: 3;
   }
@@ -132,7 +132,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #999;
+  color: var(--text-muted);
   font-size: 14px;
   font-style: italic;
   text-align: center;
@@ -140,7 +140,7 @@
 
 // ── Настройка колонок печатной формы ─────────────────────────────────────
 .ColSettingsPanel {
-  background: #fff;
+  background: var(--sv-color60);
   border: 1px solid $color5;
   border-radius: $radius2;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);

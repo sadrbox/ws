@@ -11,7 +11,7 @@
   border: 1px solid transparent;
   border-radius: $radius3;
   background: transparent;
-  color: #555;
+  color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
   line-height: 1;
@@ -26,7 +26,7 @@
   &:hover:not(:disabled) {
     background: rgba(#555, 0.1);
     border-color: rgba(#555, 0.18);
-    color: #222;
+    color: var(--sv-color6);
   }
 
   &:focus-visible {
@@ -49,11 +49,11 @@
 // Статус читается цветом даже на ghost-кнопке: зелёный — заполнено верно,
 // янтарный — требует внимания (не хватает серий / не выбрана партия).
 .StatusOk {
-  color: #1a7f37;
+  color: var(--success);
   font-weight: 600;
 }
 
 .StatusBad {
-  color: #b35900;
+  color: var(--warning);
   font-weight: 600;
 }

@@ -112,7 +112,7 @@
 
 // ── Карточка ─────────────────────────────────────────────────────────────────
 .Card {
-  background: var(--panel, #fff);
+  background: var(--panel, var(--sv-color60));
   border: 1px solid var(--line, #e4e7ec);
   border-radius: 8px;
   padding: 9px 11px;

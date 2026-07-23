@@ -8,7 +8,7 @@
 
 .notice {
   margin-top: 6px;
-  color: #6b7280;
+  color: var(--sv-gray500);
   font-size: 12px;
 }
 
@@ -39,7 +39,7 @@
   color: #3949ab;
 }
 
-.badgeOk { background: #e6f4ea; color: #137333; }
+.badgeOk { background: var(--success-bg); color: #137333; }
 .badgeWarn { background: #fce8e6; color: #c5221f; }
 
 // ── Ячейки таблицы импорта (вместо inline-styles в renderCell) ─────────────
@@ -47,7 +47,7 @@
 .matchOk { color: #137333; font-size: 12px; }
 .matchNew { color: #1a73e8; font-size: 12px; }
 
-.pricesCell { color: #555; }
+.pricesCell { color: var(--text-secondary); }
 
 .checkbox {
   display: inline-flex;

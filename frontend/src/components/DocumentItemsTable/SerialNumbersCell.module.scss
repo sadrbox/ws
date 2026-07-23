@@ -5,7 +5,7 @@
 
 .Dash,
 .Hint {
-	color: #999;
+	color: var(--text-muted);
 }
 
 .ModalBody {
@@ -16,12 +16,12 @@
 }
 
 .CounterOk {
-	color: #1a7f37;
+	color: var(--success);
 	font-weight: 600;
 }
 
 .CounterBad {
-	color: #b35900;
+	color: var(--warning);
 	font-weight: 600;
 }
 
@@ -39,7 +39,7 @@
 .PickList {
 	max-height: 320px;
 	overflow-y: auto;
-	border: 1px solid #eee;
+	border: 1px solid var(--sv-color30);
 	border-radius: 4px;
 	padding: 4px 8px;
 }
@@ -77,7 +77,7 @@
 .PickOrigin {
 	margin-left: auto;
 	padding-left: 12px;
-	color: #6b7280;
+	color: var(--sv-gray500);
 	font-size: 12px;
 	white-space: nowrap;
 }

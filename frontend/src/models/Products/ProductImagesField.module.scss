@@ -3,10 +3,10 @@
 // Без inline-стилей: всё через классы; прогресс — нативный <progress value>.
 
 $accent: #2563eb;
-$accent-soft: #eff6ff;
-$border: #e5e7eb;
+$accent-soft: var(--sv-accentBlueSoft);
+$border: var(--sv-gray200);
 $border-dash: #cbd5e1;
-$muted: #9ca3af;
+$muted: var(--sv-gray400);
 $danger: #dc2626;
 $danger-border: #fca5a5;
 $danger-soft: #fef2f2;
@@ -20,7 +20,7 @@ $slot: 120px;
 .Label {
   display: block;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--sv-gray500);
   margin-bottom: 6px;
 }
 
@@ -122,7 +122,7 @@ $slot: 120px;
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.9);
-  color: #374151;
+  color: var(--sv-gray700);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -131,7 +131,7 @@ $slot: 120px;
   transition: background 0.12s ease, color 0.12s ease;
 
   &:hover {
-    background: #fff;
+    background: var(--sv-color60);
     color: $accent;
   }
 }
@@ -152,7 +152,7 @@ $slot: 120px;
   left: 6px;
   z-index: 2;
   background: $accent;
-  color: #fff;
+  color: var(--sv-color60);
   font-size: 11px;
   font-weight: 600;
   padding: 2px 8px;
@@ -169,7 +169,7 @@ $slot: 120px;
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 2px solid var(--sv-color60);
   background: rgba(255, 255, 255, 0.35);
   cursor: pointer;
   padding: 0;
@@ -179,20 +179,20 @@ $slot: 120px;
 
   &:hover {
     border-color: $accent;
-    background: #fff;
+    background: var(--sv-color60);
   }
 }
 
 .MainToggleOn {
   background: $accent;
-  border-color: #fff;
+  border-color: var(--sv-color60);
 }
 
 .MainDot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--sv-color60);
 }
 
 // ── Загрузка ─────────────────────────────────────────────────────────────────
@@ -248,7 +248,7 @@ $slot: 120px;
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.85);
-  color: #6b7280;
+  color: var(--sv-gray500);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -257,7 +257,7 @@ $slot: 120px;
 
   &:hover {
     color: $danger;
-    background: #fff;
+    background: var(--sv-color60);
   }
 }
 

@@ -12,7 +12,7 @@
 	align-items: center;
 	justify-content: space-between;
 	padding: 12px 16px;
-	border-bottom: 1px solid #eee;
+	border-bottom: 1px solid var(--sv-color30);
 	flex-shrink: 0;
 }
 
@@ -26,7 +26,7 @@
 .JournalClear {
 	border: none;
 	background: transparent;
-	color: #999;
+	color: var(--text-muted);
 	font-size: 12px;
 	cursor: pointer;
 	padding: 4px 8px;
@@ -42,7 +42,7 @@
 	align-items: center;
 	justify-content: center;
 	flex: 1;
-	color: #999;
+	color: var(--text-muted);
 	font-size: 13px;
 	padding: 40px;
 }
@@ -107,11 +107,11 @@
 }
 
 .JournalText {
-	color: #555;
+	color: var(--text-secondary);
 }
 
 .JournalDate {
-	color: #aaa;
+	color: var(--sv-color10);
 	font-size: 11px;
 	margin-top: 4px;
 }

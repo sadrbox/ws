@@ -13,7 +13,7 @@
 	flex-direction: column;
 	gap: 16px;
 	padding: 32px;
-	background: #fff;
+	background: var(--sv-color60);
 	border-radius: 8px;
 	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
 	min-width: 360px;
@@ -35,7 +35,7 @@
 		cursor: pointer;
 		font-size: 13px;
 		font-weight: 500;
-		color: #666;
+		color: var(--sv-color51);
 		border-bottom: 2px solid transparent;
 		margin-bottom: -2px;
 		transition: color 0.15s, border-color 0.15s;
@@ -55,7 +55,7 @@
 	margin: 0 0 4px;
 	font-size: 18px;
 	font-weight: 600;
-	color: #222;
+	color: var(--sv-color6);
 	text-align: center;
 }
 
@@ -111,7 +111,7 @@
 .submitBtn {
 	padding: 10px 20px;
 	background: $colorPrimaryDark;
-	color: #fff;
+	color: var(--sv-color60);
 	border: none;
 	border-radius: 4px;
 	font-size: 15px;

@@ -322,7 +322,7 @@
 	font-family: inherit;
 	font-size: $fontsize - 1px;
 	color: $color6;
-	background: linear-gradient(180deg, #fff, $color30);
+	background: linear-gradient(180deg, var(--sv-color60), $color30);
 	border: 1px solid $color10;
 	border-radius: $radius2;
 	cursor: pointer;
@@ -432,7 +432,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
-	background: #fff;
+	background: var(--sv-color60);
 	border: 1px solid $color10;
 	border-radius: $radius3;
 	padding: 3px 3px 3px 3px;
@@ -500,7 +500,7 @@
 	// margin-top: 9px;
 	padding: 12px 12px 12px 0px;
 	margin-top: 9px;
-	background: #fff;
+	background: var(--sv-color60);
 	border-top: 1px solid $color10;
 	box-shadow: 0 -12px 12px 3px rgb(255, 255, 255, 0.8);
 }
@@ -515,7 +515,7 @@
 	// padding: 9px;
 	border: none;
 	// border-top: 0px solid $color10;
-	background: #fff;
+	background: var(--sv-color60);
 	border-radius: $radius3;
 	color: $primary;
 	font-family: inherit;

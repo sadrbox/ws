@@ -30,7 +30,7 @@
 .TabsLabel {
 	user-select: none;
 	font-size: $fontsize;
-	color: #6b7280;
+	color: var(--sv-gray500);
 	cursor: pointer;
 	border: none;
 	background: transparent;
@@ -46,7 +46,7 @@
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	background-color: #fff;
+	background-color: var(--sv-color60);
 }
 
 .TabsLabel:hover {
@@ -68,7 +68,7 @@
 /* Активный таб */
 .TabsLabel[aria-selected="true"],
 .TabsLabel.active {
-	color: #ffffff;
+	color: var(--sv-color60);
 	background-color: $color3;
 	text-decoration: none;
 }

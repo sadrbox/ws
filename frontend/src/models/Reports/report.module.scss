@@ -149,10 +149,10 @@
 
 .SubtotalRow {
   font-weight: 600;
-  background: #f5f5f5;
+  background: var(--surface-muted);
 
   td {
-    border-top: 1px solid #c0c0c0;
+    border-top: 1px solid var(--sv-silver);
     font-style: italic;
   }
 }
@@ -194,7 +194,7 @@
 // ── Утилиты ───────────────────────────────────────────────────────────────────
 
 .Unposted {
-  color: #9ca3af;
+  color: var(--sv-gray400);
 }
 
 .Negative {
@@ -203,7 +203,7 @@
 
 // ── Цветовые акценты «Материальной ведомости» ────────────────────────────────
 .Cost {
-  color: #6b7280 !important; // себестоимость — серый
+  color: var(--sv-gray500) !important; // себестоимость — серый
 }
 
 .SalePrice {

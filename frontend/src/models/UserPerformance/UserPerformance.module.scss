@@ -31,7 +31,7 @@
   padding: 3px 6px;
   border: 1px solid var(--line, #ccc);
   border-radius: 5px;
-  background: var(--panel, #fff);
+  background: var(--panel, var(--sv-color60));
   color: var(--ink, #1a2230);
 }
 

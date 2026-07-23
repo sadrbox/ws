@@ -12,11 +12,11 @@
   height: var(--avatar-size);
   border-radius: 50%;
   overflow: hidden;
-  border: 2px solid #ddd;
+  border: 2px solid var(--sv-color33);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f5f5f5;
+  background: var(--surface-muted);
   cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s;
   flex-shrink: 0;
@@ -30,7 +30,7 @@
     cursor: default;
     opacity: 0.6;
     &:hover {
-      border-color: #ddd;
+      border-color: var(--sv-color33);
       box-shadow: none;
     }
   }
@@ -44,7 +44,7 @@
 
 .AvatarPlaceholder {
   font-size: calc(var(--avatar-size, 128px) * 0.375);
-  color: #bbb;
+  color: var(--sv-color34);
   user-select: none;
 }
 
@@ -74,7 +74,7 @@
   padding: 2px 8px;
   border: 1px solid #ccc;
   border-radius: 3px;
-  background: #fff;
+  background: var(--sv-color60);
   color: inherit;
   white-space: nowrap;
   transition: background 0.15s;

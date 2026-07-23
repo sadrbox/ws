@@ -8,7 +8,7 @@
 .Msg {
   padding: 32px;
   text-align: center;
-  color: #6b7280;
+  color: var(--sv-gray500);
   font-size: 14px;
 }
 
@@ -18,7 +18,7 @@
   max-width: 100%;
   height: auto;
   margin: 0 auto;
-  background: #fff;
+  background: var(--sv-color60);
 }
 
 // PDF: страницы-канвасы по центру, друг под другом
@@ -32,12 +32,12 @@
 .PdfPage {
   display: block;
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
-  background: #fff;
+  background: var(--sv-color60);
 }
 
 // HTML-контент (xlsx / docx) — белый «лист»
 .HtmlDoc {
-  background: #fff;
+  background: var(--sv-color60);
   color: #111;
   padding: 24px 28px;
   margin: 0 auto;

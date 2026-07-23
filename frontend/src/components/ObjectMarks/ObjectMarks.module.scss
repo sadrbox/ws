@@ -18,7 +18,7 @@
 .Title {
 	font-size: 12px;
 	font-weight: 600;
-	color: #555;
+	color: var(--text-secondary);
 }
 
 .AddBtn,
@@ -26,7 +26,7 @@
 	padding: 1px 8px;
 	border: 1px solid #c7d7ee;
 	border-radius: 3px;
-	background: #fff;
+	background: var(--sv-color60);
 	color: #1a4f8a;
 	font-size: 12px;
 	line-height: 1.6;
@@ -39,8 +39,8 @@
 
 .CancelBtn {
 	align-self: flex-end;
-	border-color: #ddd;
-	color: #666;
+	border-color: var(--sv-color33);
+	color: var(--sv-color51);
 }
 
 .Chips {
@@ -67,7 +67,7 @@
 	border: none;
 	border-radius: 50%;
 	background: transparent;
-	color: #999;
+	color: var(--text-muted);
 	font-size: 14px;
 	line-height: 1;
 	cursor: pointer;
@@ -80,7 +80,7 @@
 
 .Empty {
 	font-size: 12px;
-	color: #999;
+	color: var(--text-muted);
 }
 
 // Строка добавления: тип объекта + выбор записи.

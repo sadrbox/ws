@@ -11,7 +11,7 @@
 .PropsSummary {
 	cursor: pointer;
 	font-size: 13px;
-	color: #666;
+	color: var(--sv-color51);
 	user-select: none;
 	white-space: nowrap;
 	overflow: hidden;
@@ -22,7 +22,7 @@
 	white-space: pre-wrap;
 	word-break: break-all;
 	font-size: 12px;
-	background: #f5f5f5;
+	background: var(--surface-muted);
 	padding: 8px;
 	border-radius: 4px;
 	margin-top: 6px;

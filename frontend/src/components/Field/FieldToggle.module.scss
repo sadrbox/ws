@@ -51,7 +51,7 @@
     transform: translateY(-50%);
     width: 16px;
     height: 16px;
-    background: #fff;
+    background: var(--sv-color60);
     border-radius: 50%;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04);
     transition: left 0.18s ease, transform 0.18s ease, background-color 0.18s ease;

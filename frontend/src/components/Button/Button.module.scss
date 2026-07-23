@@ -21,7 +21,7 @@
 	// Цвет текста по умолчанию
 	cursor: pointer;
 	color: $color6;
-	background: linear-gradient(180deg, #fff, #aaa);
+	background: linear-gradient(180deg, var(--sv-color60), var(--sv-color10));
 
 	&:hover {
 		box-shadow: 1px 1px 6px 0px rgba(0, 0, 0, 0.2) !important;

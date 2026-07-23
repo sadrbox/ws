@@ -22,7 +22,7 @@
   padding: 4px 8px;
   border: 1px solid var(--line, #ccc);
   border-radius: 6px;
-  background: var(--panel, #fff);
+  background: var(--panel, var(--sv-color60));
   color: var(--ink, #1a2230);
   max-width: 320px;
 }
@@ -125,7 +125,7 @@
   padding: 8px 10px;
   border: 1px solid var(--line, #ccc);
   border-radius: 8px;
-  background: var(--panel, #fff);
+  background: var(--panel, var(--sv-color60));
   color: var(--ink, #1a2230);
   max-height: 120px;
 
@@ -144,7 +144,7 @@
   border: 0;
   border-radius: 8px;
   background: var(--color-link);
-  color: #fff;
+  color: var(--sv-color60);
   cursor: pointer;
 
   &:disabled {

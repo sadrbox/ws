@@ -53,7 +53,7 @@ body {
 	min-width: 300px;
 	margin: 0 auto;
 	position: relative;
-	background-color: #fff;
+	background-color: var(--sv-color60);
 }
 
 .NavbarLogo {
@@ -74,7 +74,7 @@ body {
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
-		color: #fff;
+		color: var(--sv-color60);
 		font-size: 13px;
 		font-weight: 800;
 		letter-spacing: -0.5px;
@@ -292,7 +292,7 @@ body {
 		left: 0;
 		right: 0;
 		z-index: 10;
-		background-color: #fff;
+		background-color: var(--sv-color60);
 		border-top: 1px solid $color33;
 		box-shadow: 0 4px 12px rgba(#000, 0.12);
 		animation: navSlideDown 0.2s ease;
@@ -319,7 +319,7 @@ body {
 
 		.Active {
 			background-color: color-mix(in srgb, $color3 80%, transparent);
-			color: #fff;
+			color: var(--sv-color60);
 		}
 	}
 
@@ -408,7 +408,7 @@ body {
 	display: flex;
 	padding: 0 6px;
 	z-index: 4;
-	background-color: #fff;
+	background-color: var(--sv-color60);
 	overflow-y: auto;
 	-webkit-overflow-scrolling: touch;
 }
@@ -518,7 +518,7 @@ body {
 
 	li.NavHint {
 		font-size: 11px;
-		color: #888;
+		color: var(--sv-color5);
 		cursor: default;
 		white-space: normal;
 		line-height: 1.3;
@@ -660,7 +660,7 @@ body {
 	height: 14px;
 	border-radius: 7px;
 	background: #d48806;
-	color: #fff;
+	color: var(--sv-color60);
 	font-size: $fontsize - 2px;
 	font-weight: 700;
 	line-height: 14px;
@@ -677,7 +677,7 @@ body {
 	width: 360px;
 	max-height: 320px;
 	overflow-y: auto;
-	background: #fff;
+	background: var(--sv-color60);
 	border: 1px solid #e0e0e0;
 	border-radius: $radius2;
 	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
@@ -692,7 +692,7 @@ body {
 	font-size: $fontsize - 1px;
 	line-height: 1.3;
 	color: $gray600;
-	border-bottom: 1px solid #eee;
+	border-bottom: 1px solid var(--sv-color30);
 }
 
 .PaneNoteJournalLink {
@@ -718,7 +718,7 @@ body {
 	font-size: $fontsize - 1px;
 	line-height: 1.3;
 	color: #333;
-	border-bottom: 1px solid #f5f5f5;
+	border-bottom: 1px solid var(--surface-muted);
 
 	&:last-child {
 		border-bottom: none;
@@ -842,7 +842,7 @@ body {
 	/* Для корректного позиционирования вкладок */
 	flex-direction: row;
 	flex-wrap: nowrap;
-	background-color: #fff;
+	background-color: var(--sv-color60);
 	// ВАЖНО: .Panes (z-index:3) идёт в DOM раньше и перекрывал бы строку
 	// вкладок и её выпадающее меню «ещё», которое раскрывается ВВЕРХ в область
 	// панелей. Поэтому z-index строки вкладок должен быть выше .Panes.
@@ -867,7 +867,7 @@ body {
 		border-bottom: 1px solid $color10;
 		border-bottom-left-radius: 3px;
 		border-bottom-right-radius: 3px;
-		background: #fff;
+		background: var(--sv-color60);
 		color: $color51;
 		display: flex;
 		justify-content: left;
@@ -1000,7 +1000,7 @@ body {
 	padding: 0 8px 0 6px;
 	border: 1px solid $gray200;
 	border-radius: 7px;
-	background: #fff;
+	background: var(--sv-color60);
 	color: $gray500;
 	cursor: pointer;
 	white-space: nowrap;
@@ -1062,7 +1062,7 @@ body {
 
 	.PaneTabsMoreCount {
 		background: $primary;
-		color: #fff;
+		color: var(--sv-color60);
 	}
 }
 
@@ -1077,7 +1077,7 @@ body {
 	max-width: 380px;
 	max-height: 62vh;
 	padding: 5px;
-	background: #fff;
+	background: var(--sv-color60);
 	border: 1px solid $gray200;
 	border-radius: 10px;
 	box-shadow: 0 -12px 28px rgba(#000, 0.16), 0 -3px 8px rgba(#000, 0.08);
@@ -1092,7 +1092,7 @@ body {
 		right: 14px;
 		width: 9px;
 		height: 9px;
-		background: #fff;
+		background: var(--sv-color60);
 		border-right: 1px solid $gray200;
 		border-bottom: 1px solid $gray200;
 		transform: rotate(45deg);
@@ -1109,7 +1109,7 @@ body {
 	&::-webkit-scrollbar-thumb {
 		background: $gray300;
 		border-radius: 4px;
-		border: 2px solid #fff;
+		border: 2px solid var(--sv-color60);
 	}
 }
 
@@ -1350,7 +1350,7 @@ body {
 	padding: 6px 10px;
 	border: 1px solid $gray200;
 	border-radius: 6px;
-	background: #fff;
+	background: var(--sv-color60);
 	cursor: pointer;
 	user-select: none;
 }
@@ -1493,7 +1493,7 @@ body {
 	width: 36px;
 	height: 36px;
 	border: 3px solid #e0e0e0;
-	border-top-color: #1c5fcb;
+	border-top-color: var(--color-link);
 	border-radius: 50%;
 	animation: spin 0.7s linear infinite;
 }
@@ -1508,7 +1508,7 @@ body {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	background: #fff;
+	background: var(--sv-color60);
 	transition: opacity 0.1s ease-in;
 }
 
@@ -1525,7 +1525,7 @@ body {
 // Пояснение-подпись под полем формы (мелкий приглушённый текст).
 .FieldHint {
 	margin-top: 3px;
-	color: #888;
+	color: var(--sv-color5);
 	font-size: 12px;
 	line-height: 1.3;
 }
@@ -1536,7 +1536,7 @@ body {
 // со скроллом — карточка события не должна растягиваться под длинный payload.
 .JsonViewLabel {
 	font-size: 12px;
-	color: #555;
+	color: var(--text-secondary);
 	margin-bottom: 3px;
 }
 
@@ -1546,7 +1546,7 @@ body {
 	max-height: 320px;
 	overflow: auto;
 	background: #fafafa;
-	border: 1px solid #ddd;
+	border: 1px solid var(--sv-color33);
 	border-radius: 3px;
 	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	font-size: 12px;

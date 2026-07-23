@@ -13,7 +13,7 @@
 // Подсказка про колонки файла.
 .notice {
   margin-top: 6px;
-  color: #6b7280;
+  color: var(--sv-gray500);
   font-size: 12px;
 }
 
@@ -32,14 +32,14 @@
   gap: 8px;
   padding: 8px 10px;
   background: #fafafa;
-  border: 1px solid #eee;
+  border: 1px solid var(--sv-color30);
   border-radius: 6px;
 }
 
 .massOpsTitle {
   font-size: 12px;
   font-weight: 600;
-  color: #555;
+  color: var(--text-secondary);
   align-self: center;
   margin-right: 2px;
 }
@@ -74,7 +74,7 @@
 }
 
 .badgeOk {
-  background: #e6f4ea;
+  background: var(--success-bg);
   color: #137333;
 }
 
@@ -89,7 +89,7 @@
 }
 
 .oldPrice {
-  color: #888;
+  color: var(--sv-color5);
 }
 
 .deltaUp {
@@ -103,7 +103,7 @@
 }
 
 .deltaZero {
-  color: #666;
+  color: var(--sv-color51);
   font-weight: 600;
 }
 

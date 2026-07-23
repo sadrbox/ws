@@ -45,14 +45,14 @@
 
 	&:hover {
 		background-color: $colorTheme;
-		color: #fff;
+		color: var(--sv-color60);
 	}
 
 	&:focus-visible {
 		outline: 2px solid $colorTheme;
 		outline-offset: 2px;
 		background-color: $colorTheme;
-		color: #fff;
+		color: var(--sv-color60);
 	}
 }
 
