@@ -230,15 +230,17 @@ export async function ensureOfflineDb(): Promise<OfflineDatabase> {
 	if (offlineDb.isOpen()) return offlineDb;
 	try {
 		await offlineDb.open();
-	} catch (err: any) {
+	} catch (err: unknown) {
+		// Ошибка Dexie: несёт name и вложенную inner-ошибку (не axios-форма).
+		const dexieErr = err as { name?: string; message?: string; inner?: { name?: string } };
 		if (
-			err?.name === "UpgradeError" ||
-			err?.name === "DatabaseClosedError" ||
-			err?.inner?.name === "UpgradeError"
+			dexieErr?.name === "UpgradeError" ||
+			dexieErr?.name === "DatabaseClosedError" ||
+			dexieErr?.inner?.name === "UpgradeError"
 		) {
 			console.warn(
 				"[OfflineDB] Upgrade error — deleting and recreating database...",
-				err.message,
+				dexieErr.message,
 			);
 			try {
 				await Dexie.delete("app_offline_db");

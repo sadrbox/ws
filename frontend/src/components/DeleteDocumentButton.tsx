@@ -11,7 +11,7 @@ import { translate } from "src/i18";
 import { useQueryClient } from "@tanstack/react-query";
 import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app/context";
-import apiClient from "src/services/api/client";
+import apiClient, { type RequestError } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { isSyncableEndpoint } from "src/services/offlineDataService";
 import { upsertRecords, getRecordByUuid } from "src/services/offlineDb";
@@ -46,10 +46,10 @@ const DeleteDocumentButton: FC<{
       onDeleted?.();
       // Закрываем форму удалённого документа (force — сохранять нечего).
       if (paneId) await requestClose(paneId, { force: true });
-    } catch (err: any) {
-      const data = err?.response?.data;
+    } catch (err: unknown) {
+      const data = (err as RequestError)?.response?.data;
       const msg =
-        err?.response?.status === 409 && typeof data?.message === "string"
+        (err as RequestError)?.response?.status === 409 && typeof data?.message === "string"
           ? data.message
           : data?.message || "Не удалось удалить документ";
       showToast(msg, "error", 8000);

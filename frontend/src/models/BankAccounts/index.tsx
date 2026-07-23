@@ -300,7 +300,7 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
   }), []);
 
   const adjustedColumns = useMemo(
-    () => (columnsJson as any[]).map((col: any) => {
+    () => (columnsJson as TColumn[]).map((col) => {
       if (col.identifier === "ownerName") return { ...col, visible: false, inlist: false };
       return col;
     }),

@@ -35,8 +35,8 @@ const ReservationsForm: FC<Partial<TPane>> = createInvoiceLikeForm({
         documentId: fields.id, documentNumber: fields.number || undefined, documentDate: fields.date,
         organizationName: fields.organizationName, counterpartyName: fields.counterpartyName, contractName: fields.contractName,
         items: items.map((r, i) => ({ number: i + 1, name: r.name, unit: r.unit, quantity: r.quantity, price: r.price, vatRate: r.vatRate, vatAmount: r.vatAmount, amount: r.amount })),
-        totalAmount: items.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
-        totalVatAmount: items.reduce((s: number, r: any) => s + Number(r.vatAmount ?? 0), 0),
+        totalAmount: items.reduce((s: number, r: TDataItem) => s + Number(r.amount ?? 0), 0),
+        totalVatAmount: items.reduce((s: number, r: TDataItem) => s + Number(r.vatAmount ?? 0), 0),
         columns: cols,
       }} />
     ),

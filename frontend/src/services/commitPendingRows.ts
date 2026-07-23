@@ -1,4 +1,4 @@
-import apiClient from "src/services/api/client";
+import apiClient, { type RequestError } from "src/services/api/client";
 import { translateError } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 
@@ -76,8 +76,8 @@ export async function commitPendingRows(
 		if (!operations.length) return;
 		try {
 			await apiClient.post(`/${options.batchEndpoint}`, { operations });
-		} catch (err: any) {
-			const serverMsg = translateError(err.response?.data?.message) || translateError(err.message);
+		} catch (err: unknown) {
+			const serverMsg = translateError((err as RequestError).response?.data?.message ?? "") || translateError((err as RequestError).message ?? "");
 			throw new Error(serverMsg ? `${tableName}: ${serverMsg}` : `Ошибка сохранения (${tableName})`);
 		}
 		return;
@@ -131,10 +131,10 @@ export async function commitPendingRows(
 				if (!row.uuid) continue;
 				await apiClient.delete(`/${endpoint}/${row.uuid}`);
 			}
-		} catch (err: any) {
+		} catch (err: unknown) {
 			const serverMsg =
-				translateError(err.response?.data?.message) ||
-				translateError(err.message);
+				translateError((err as RequestError).response?.data?.message ?? "") ||
+				translateError((err as RequestError).message ?? "");
 			throw new Error(
 				serverMsg
 					? `${tableName}: ${serverMsg}`

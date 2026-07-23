@@ -44,7 +44,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   // Критично для submit-flow useFormStore: он очищает pending-строки
   // ТОЛЬКО после завершения afterSave (иначе SubTable покажет
   // устаревшие серверные строки из локального кэша react-query).
-  const invalidateSubTables = useCallback(async (savedData: any) => {
+  const invalidateSubTables = useCallback(async (savedData: { uuid?: string } | undefined) => {
     const uuid = savedData?.uuid ?? "";
     await Promise.all([
       invalidateSubTableFor(queryClient, "contacts", "ownerUuid", uuid),

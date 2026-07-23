@@ -7,7 +7,7 @@
 import { FC, useState, useMemo, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
-import { api } from "src/services/api/client";
+import { api, type RequestError } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
@@ -146,9 +146,9 @@ const DocumentNumberSettings: FC = () => {
       }
       showToast(translate("saved"), "success");
       qc.invalidateQueries({ queryKey: QKEY(orgKey) });
-    } catch (e: any) {
-      const status = e?.response?.status as number | undefined;
-      const msg = e?.response?.data?.message || translate("numberingSaveError");
+    } catch (e: unknown) {
+      const status = (e as RequestError)?.response?.status as number | undefined;
+      const msg = (e as RequestError)?.response?.data?.message || translate("numberingSaveError");
       // Ошибка ДАННЫХ (префикс занят, номер конфликтует) → <Notice /> рядом с полями,
       // которые её и вызвали. Системный сбой → <UIToast />.
       if (isSystemError(status)) showToast(msg, "error", 7000);
@@ -187,9 +187,9 @@ const DocumentNumberSettings: FC = () => {
       }
       qc.invalidateQueries({ queryKey: QKEY(orgKey) });
       showToast(translate("resetDone"), "success");
-    } catch (e: any) {
-      const status = e?.response?.status as number | undefined;
-      const msg = e?.response?.data?.message || translate("numberingSaveError");
+    } catch (e: unknown) {
+      const status = (e as RequestError)?.response?.status as number | undefined;
+      const msg = (e as RequestError)?.response?.data?.message || translate("numberingSaveError");
       if (isSystemError(status)) showToast(msg, "error", 7000);
       else setNotices([{ type: "error", text: msg }]);
     } finally {
@@ -207,9 +207,9 @@ const DocumentNumberSettings: FC = () => {
       const res = await api.post<{ updated?: number }>("document-number-settings/renumber-drafts", { organizationUuid: orgKey });
       const n = res?.updated ?? 0;
       showToast(n > 0 ? `${translate("renumberDraftsDone")}: ${n}` : translate("renumberDraftsNone"), "success");
-    } catch (e: any) {
-      const status = e?.response?.status as number | undefined;
-      const msg = e?.response?.data?.message || translate("numberingSaveError");
+    } catch (e: unknown) {
+      const status = (e as RequestError)?.response?.status as number | undefined;
+      const msg = (e as RequestError)?.response?.data?.message || translate("numberingSaveError");
       if (isSystemError(status)) showToast(msg, "error", 7000);
       else setNotices([{ type: "error", text: msg }]);
     } finally {

@@ -42,7 +42,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
   // refetchType: "active" — ждём завершение refetch смонтированной SubTable,
   // чтобы useFormStore.submit() очистил pending-строки только после
   // появления свежих серверных данных (см. useFormStore.ts → submit).
-  const invalidateSubTables = useCallback(async (savedData: any) => {
+  const invalidateSubTables = useCallback(async (savedData: { uuid?: string } | undefined) => {
     await invalidateSubTableFor(queryClient, "access-rights", "userUuid", savedData?.uuid ?? "");
   }, [queryClient]);
 

@@ -135,7 +135,7 @@ const WarehousesTable: FC<WarehousesTableProps> = ({
   const defaultNewRow = useMemo(() => ({ name: "", address: "" }), []);
 
   const adjustedColumns = useMemo(
-    () => (columnsJson as any[]).map((col: any) => {
+    () => (columnsJson as TColumn[]).map((col) => {
       if (col.identifier === "organization.name") return { ...col, visible: false, inlist: false };
       return col;
     }),

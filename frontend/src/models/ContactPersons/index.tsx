@@ -69,7 +69,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
       ownerType: fd.ownerType || null, ownerUuid: fd.ownerUuid || null,
     }),
     buildPaneLabel: (saved) => makePaneLabel("ContactPersonsList", "Контактные лица", saved, saved.fullName),
-    afterSave: async (savedData: any) => {
+    afterSave: async (savedData: { uuid?: string } | undefined) => {
       await invalidateSubTableFor(queryClient, "contacts", "ownerUuid", savedData?.uuid ?? "");
       await queryClient.invalidateQueries({ queryKey: ["contactpersons"] });
     },

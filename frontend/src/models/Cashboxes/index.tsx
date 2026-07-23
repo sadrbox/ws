@@ -144,7 +144,7 @@ const CashboxesTable: FC<CashboxesTableProps> = ({
   const defaultNewRow = useMemo(() => ({ name: "" }), []);
 
   const adjustedColumns = useMemo(
-    () => (columnsJson as any[]).map((col: any) => {
+    () => (columnsJson as TColumn[]).map((col) => {
       if (col.identifier === "organization.name") return { ...col, visible: false, inlist: false };
       return col;
     }),

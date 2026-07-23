@@ -294,7 +294,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
   const adjustedColumns = useMemo(() => {
     const hideId = parentKey === "organizationUuid" ? "organization.name" : "counterparty.name";
     const showId = parentKey === "organizationUuid" ? "counterparty.name" : "organization.name";
-    return (columnsJson as any[]).map((col: any) => {
+    return (columnsJson as TColumn[]).map((col) => {
       if (col.identifier === hideId) return { ...col, visible: false, inlist: false };
       if (col.identifier === showId) return { ...col, visible: true, inlist: true };
       return col;

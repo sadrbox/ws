@@ -278,7 +278,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
   const defaultNewRow = useMemo(() => ({ value: "", contactType: "" }), []);
 
   const adjustedColumns = useMemo(
-    () => (columnsJson as any[]).map((col: any) =>
+    () => (columnsJson as TColumn[]).map((col) =>
       col.identifier === "ownerName" ? { ...col, visible: false, inlist: false } : col,
     ),
     [],
