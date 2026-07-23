@@ -2,6 +2,11 @@ import { FC, useCallback, useEffect, useId, useMemo, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import styles from "./Field.module.scss";
 import { fetchList } from "src/services/offlineDataService";
+import {
+  LOOKUP_CREATE_TOKEN_KEY,
+  newLookupCreateToken,
+  subscribeLookupCreated,
+} from "src/utils/lookupCreateBus";
 import { useDebounceValue } from "src/hooks/useDebounceValue";
 import { useCellFieldState } from "src/hooks/useDirtyHighlight";
 import { useFormRequiredScope } from "src/hooks/useFormRequired";
@@ -471,6 +476,10 @@ const LookupField: FC<LookupFieldProps> = ({
   }, [value, disabled, endpoint, displayValue, addPane]);
 
   // ── Создать новый элемент справочника (открывает форму создания) ─────────
+  // Токен ждущего создания: по нему созданный объект вернётся ИМЕННО в это поле
+  // (write-back). Панель-владельца активирует сам requestClose по openerPaneId.
+  const [pendingCreateToken, setPendingCreateToken] = useState<string | null>(null);
+
   const handleCreateItem = useCallback(() => {
     if (disabled) return;
     const entry = getByEndpoint(endpoint);
@@ -478,6 +487,8 @@ const LookupField: FC<LookupFieldProps> = ({
     entry.module().then((mod) => {
       const FormComp: FC<any> | undefined = mod[entry.formName] || mod.default;
       if (!FormComp) return;
+      const token = newLookupCreateToken();
+      setPendingCreateToken(token);
       addPane({
         label: translate(entry.formName) || entry.label || endpoint,
         component: FormComp,
@@ -485,11 +496,30 @@ const LookupField: FC<LookupFieldProps> = ({
         // ownerUuid (или иной scope), а createDefaults — явные начальные значения
         // (uuid+имя) для предзаполнения. Раньше здесь был пустой {} и контекст
         // терялся. createDefaults мёржится ПОВЕРХ extraParams (приоритет предзаполнению).
-        data: { ...(extraParams ?? {}), ...(createDefaults ?? {}) } as any,
+        // [LOOKUP_CREATE_TOKEN_KEY] — обратный канал: форма вернёт созданный объект сюда.
+        data: {
+          ...(extraParams ?? {}),
+          ...(createDefaults ?? {}),
+          [LOOKUP_CREATE_TOKEN_KEY]: token,
+        } as any,
       });
       setIsDropdownOpen(false);
     }).catch(() => { /* тихо игнорируем ошибку загрузки */ });
   }, [disabled, endpoint, addPane, extraParams, createDefaults]);
+
+  // Ждём созданный объект по токену и подставляем его в поле (тем же путём, что и
+  // обычный выбор — handleSelectItem считает отображаемое значение и зовёт onSelect).
+  useEffect(() => {
+    if (!pendingCreateToken) return;
+    const unsubscribe = subscribeLookupCreated(pendingCreateToken, (detail) => {
+      setPendingCreateToken(null);
+      // Страховка: эндпоинт созданной записи должен совпадать с полем.
+      if (detail.endpoint && detail.endpoint !== endpoint) return;
+      const item = detail.item ?? {};
+      handleSelectItem({ ...item, uuid: detail.uuid });
+    });
+    return unsubscribe;
+  }, [pendingCreateToken, endpoint, handleSelectItem]);
 
   // Есть ли форма создания для этого справочника (реестр моделей).
   // Право на создание нового элемента справочника (гейт кнопки «Создать»).

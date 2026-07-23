@@ -25,6 +25,7 @@ import type { TPane } from "src/app/types";
 import useUID from "./useUID";
 import { stableStringify } from "src/utils/normalize";
 import { setPendingHighlight } from "src/utils/listHighlight";
+import { LOOKUP_CREATE_TOKEN_KEY, emitLookupCreated } from "src/utils/lookupCreateBus";
 
 /**
  * Axios-подобная ошибка запроса — для сужения `unknown` в catch (T3).
@@ -1674,6 +1675,9 @@ export function useFormStore<F extends object>(
 	const onCloseRef = useRef(onClose);
 	onCloseRef.current = onClose;
 
+	/** Последняя сохранённая сервером запись — для write-back в поле-лукап. */
+	const lastSavedDataRef = useRef<Record<string, unknown> | undefined>(undefined);
+
 	// Обновляет заголовок панели из текущих полей формы. Вызывается после загрузки
 	// записи (а не только после сохранения), чтобы метка формировалась единообразно
 	// независимо от точки входа (ModelList, openFormByRef, уведомления и т.д.).
@@ -1938,6 +1942,9 @@ export function useFormStore<F extends object>(
 				uniqId,
 				true,
 			);
+			// Запоминаем сохранённую запись: нужна в handleSaveAndClose для write-back
+			// в поле-лукап, из которого была инициирована форма создания.
+			lastSavedDataRef.current = savedData;
 			if (!success) {
 				if (!keepLoading) store.setMeta({ isLoading: false });
 				return false;
@@ -2080,13 +2087,27 @@ export function useFormStore<F extends object>(
 			// и если он уже был открыт (subscribeHighlight, см. utils/listHighlight).
 			const snap = store.getSnapshot();
 			if (snap.meta.uuid) setPendingHighlight(snap.meta.endpoint, snap.meta.uuid);
+
+			// Write-back: форма была открыта из поля-лукапа («Создать новый») —
+			// возвращаем созданный объект в это поле. Панель-владельца активирует
+			// requestClose по openerPaneId, так что достаточно опубликовать запись.
+			const createToken = (data as Record<string, unknown> | undefined)?.[LOOKUP_CREATE_TOKEN_KEY];
+			const createdUuid = (lastSavedDataRef.current?.uuid as string | undefined) ?? snap.meta.uuid;
+			if (typeof createToken === "string" && createdUuid) {
+				emitLookupCreated({
+					requestId: createToken,
+					uuid: createdUuid,
+					endpoint: snap.meta.endpoint,
+					item: lastSavedDataRef.current,
+				});
+			}
 			const currentKey = store.getStorageKey();
 			store.clearStorage();
 			storeCache.delete(currentKey);
 			void onCloseRef.current?.();
 			if (uniqId) void requestClose(uniqId, { force: true });
 		}
-	}, [submit, store, uniqId, requestClose]);
+	}, [submit, store, uniqId, requestClose, data]);
 
 	const handleClose = useCallback(async () => {
 		if (uniqId) {
