@@ -2,6 +2,15 @@ import apiClient from "./api/client";
 import { logger } from "src/utils/logger";
 import { isNetworkError } from "./networkUtils";
 
+/**
+ * Ошибка запроса авторизации — для сужения `unknown` в catch (T3).
+ * Помимо обычного message несёт признак twoFactorRequired из тела ответа.
+ */
+interface AuthRequestError {
+	response?: { data?: { message?: string; twoFactorRequired?: boolean } };
+	message?: string;
+}
+
 export interface OrgEntry {
 	organizationUuid: string;
 	role: string;
@@ -126,10 +135,10 @@ export async function login(
 		}
 
 		return { success: false, message: data.message || "Ошибка авторизации" };
-	} catch (err: any) {
+	} catch (err: unknown) {
 		// Требуется код 2FA — сообщаем форме, чтобы показать поле ввода кода.
-		if (err.response?.data?.twoFactorRequired) {
-			return { success: false, twoFactorRequired: true, message: err.response.data.message || "Введите код двухфакторной аутентификации" };
+		if ((err as AuthRequestError).response?.data?.twoFactorRequired) {
+			return { success: false, twoFactorRequired: true, message: (err as AuthRequestError).response?.data?.message || "Введите код двухфакторной аутентификации" };
 		}
 		// ── Offline fallback ──
 		// Если ошибка сети и у нас есть кэшированные credentials — проверяем
@@ -153,7 +162,7 @@ export async function login(
 		}
 
 		const msg =
-			err.response?.data?.message || err.message || "Ошибка соединения";
+			(err as AuthRequestError).response?.data?.message || (err as AuthRequestError).message || "Ошибка соединения";
 		return { success: false, message: msg };
 	}
 }
@@ -216,8 +225,8 @@ export async function registerOrganization(data: {
 			return { success: true, user: d.user, inviteCode: (d as any).inviteCode };
 		}
 		return { success: false, message: d.message || "Ошибка регистрации" };
-	} catch (err: any) {
-		return { success: false, message: err.response?.data?.message || err.message || "Ошибка соединения" };
+	} catch (err: unknown) {
+		return { success: false, message: (err as AuthRequestError).response?.data?.message || (err as AuthRequestError).message || "Ошибка соединения" };
 	}
 }
 
@@ -239,8 +248,8 @@ export async function joinOrganization(data: {
 			return { success: true, user: d.user };
 		}
 		return { success: false, message: d.message || "Ошибка присоединения" };
-	} catch (err: any) {
-		return { success: false, message: err.response?.data?.message || err.message || "Ошибка соединения" };
+	} catch (err: unknown) {
+		return { success: false, message: (err as AuthRequestError).response?.data?.message || (err as AuthRequestError).message || "Ошибка соединения" };
 	}
 }
 
@@ -262,7 +271,7 @@ export async function verifyToken(): Promise<AuthUser | null> {
 		localStorage.removeItem(AUTH_TOKEN_KEY);
 		localStorage.removeItem(AUTH_USER_KEY);
 		return null;
-	} catch (err: any) {
+	} catch (err: unknown) {
 		// ── Ошибка сети → offline-режим ──
 		// Не удаляем токен! Пользователь сможет работать с кэшированными данными.
 		if (isNetworkError(err)) {
@@ -298,8 +307,8 @@ export async function switchOrganization(
 			return { success: true, user: d.user };
 		}
 		return { success: false, message: d.message || "Ошибка переключения организации" };
-	} catch (err: any) {
-		return { success: false, message: err.response?.data?.message || err.message || "Ошибка соединения" };
+	} catch (err: unknown) {
+		return { success: false, message: (err as AuthRequestError).response?.data?.message || (err as AuthRequestError).message || "Ошибка соединения" };
 	}
 }
 

@@ -99,7 +99,7 @@ export async function fetchList<T = SyncRecord>(
 				total: data.total ?? data.items?.length ?? 0,
 				fromCache: false,
 			};
-		} catch (err: any) {
+		} catch (err: unknown) {
 			// Если сеть упала во время запроса — fallback на Dexie
 			if (isNetworkLike(err) && syncable) {
 				console.warn(`[OfflineData] Fallback на кэш для ${ep}`);
@@ -228,7 +228,7 @@ export async function fetchOne<T = SyncRecord>(
 			}
 
 			return { item: item as T, fromCache: false };
-		} catch (err: any) {
+		} catch (err: unknown) {
 			if (isNetworkLike(err) && syncable) {
 				console.warn(`[OfflineData] Fallback на кэш для ${ep}/${uuid}`);
 				const cached = await getRecordByUuid(ep, uuid);
@@ -283,7 +283,7 @@ export async function createRecord<T = SyncRecord>(
 			}
 
 			return { item: item as T, offline: false };
-		} catch (err: any) {
+		} catch (err: unknown) {
 			if (isNetworkLike(err) && syncable) {
 				return handleOfflineCreate(ep, syncable, uuid, data, now);
 			}
@@ -356,7 +356,7 @@ export async function updateRecord<T = SyncRecord>(
 			}
 
 			return { item: item as T, offline: false };
-		} catch (err: any) {
+		} catch (err: unknown) {
 			if (isNetworkLike(err) && syncable) {
 				return handleOfflineUpdate(ep, syncable, uuid, data, now);
 			}
@@ -452,7 +452,7 @@ export async function deleteRecord(
 			}
 
 			return { offline: false };
-		} catch (err: any) {
+		} catch (err: unknown) {
 			if (isNetworkLike(err) && syncable) {
 				return handleOfflineDelete(ep, syncable, uuid, now);
 			}

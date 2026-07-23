@@ -205,8 +205,8 @@ export async function fullSync(
 
     return result;
 
-  } catch (err: any) {
-    if (err.name === "AbortError") {
+  } catch (err: unknown) {
+    if ((err as Error)?.name === "AbortError") {
       return emptyResult();
     }
     // При сетевых ошибках — тихо переключаемся в idle, не пугаем пользователя
@@ -221,7 +221,7 @@ export async function fullSync(
       setState({
         status: "error",
         progress: 0,
-        message: err.message || "Ошибка синхронизации",
+        message: (err as Error)?.message || "Ошибка синхронизации",
         lastResult: result,
       });
     }
@@ -244,6 +244,12 @@ export async function fullSync(
 // ═══════════════════════════════════════════════════════════════════════════
 // PUSH — отправка локальных изменений на сервер
 // ═══════════════════════════════════════════════════════════════════════════
+
+/** Ссылка на строку в ответе синхронизации (конфликт/ошибка): таблица + uuid. */
+interface SyncRowRef {
+  table: string;
+  uuid: string;
+}
 
 interface PushResult {
   applied: number;
@@ -281,10 +287,10 @@ async function pushChanges(): Promise<PushResult> {
     if (body.applied > 0) {
       // Удаляем все pending, кроме тех, что попали в conflicts/errors
       const conflictUuids = new Set(
-        (body.conflicts ?? []).map((c: any) => `${c.table}:${c.uuid}`),
+        (body.conflicts ?? []).map((c: SyncRowRef) => `${c.table}:${c.uuid}`),
       );
       const errorUuids = new Set(
-        (body.errors ?? []).map((e: any) => `${e.table}:${e.uuid}`),
+        (body.errors ?? []).map((e: SyncRowRef) => `${e.table}:${e.uuid}`),
       );
 
       for (const p of pending) {
@@ -300,8 +306,8 @@ async function pushChanges(): Promise<PushResult> {
       conflicts: body.conflicts ?? [],
       errors: body.errors ?? [],
     };
-  } catch (err: any) {
-    if (err.name === "AbortError") throw err;
+  } catch (err: unknown) {
+    if ((err as Error)?.name === "AbortError") throw err;
     // Если сеть пропала во время push — оставляем pending как есть (тихо)
     const isNetwork = isNetworkError(err);
     if (!isNetwork) {
@@ -312,7 +318,7 @@ async function pushChanges(): Promise<PushResult> {
       conflicts: [],
       errors: isNetwork
         ? [] // Сетевые ошибки — не ошибки приложения, просто нет связи
-        : [{ uuid: "", table: "*", error: err.message || "Push failed" }],
+        : [{ uuid: "", table: "*", error: (err as Error)?.message || "Push failed" }],
     };
   }
 }
@@ -390,8 +396,8 @@ async function pullChanges(tables: SyncableTable[]): Promise<PullResult> {
 
     return { totalRecords, tablesUpdated };
 
-  } catch (err: any) {
-    if (err.name === "AbortError") throw err;
+  } catch (err: unknown) {
+    if ((err as Error)?.name === "AbortError") throw err;
     // Сетевые ошибки при pull — тихо, это нормальная ситуация при оффлайне
     if (!isNetworkError(err)) {
       console.error("[SyncManager] Pull failed:", err);
