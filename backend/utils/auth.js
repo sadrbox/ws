@@ -302,18 +302,61 @@ export const ROUTE_TO_MODEL = {
  *
  * ДОЛЖЕН вызываться ПОСЛЕ authMiddleware + tenantMiddleware.
  */
+/**
+ * Есть ли у пользователя безусловный полный доступ (минуя таблицу прав):
+ * суперадмин, админ организации, а в dev-режиме — пользователь admin.
+ * Вынесено, чтобы точечные проверки в роутерах вели себя ТАК ЖЕ, как middleware.
+ */
+export function hasUnconditionalAccess(req) {
+	if (req.user?.isSuperAdmin) return true;
+	if (req.user?.isOrgAdmin || req.user?.isAnyOrgAdmin) return true;
+	const isDev = process.env.NODE_ENV !== "production";
+	return Boolean(isDev && req.user?.username?.toLowerCase() === "admin");
+}
+
+/**
+ * Проверка права на модель ДЛЯ ОТДЕЛЬНОГО МАРШРУТА.
+ *
+ * Нужна там, где модель нельзя вывести из URL и карты ROUTE_TO_MODEL: например
+ * `/documents/:type/:uuid/clear-basis` работает над РАЗНЫМИ моделями в
+ * зависимости от :type. Middleware такие маршруты пропускает (модель не найдена),
+ * поэтому право проверяется вручную — этой функцией, чтобы правила совпадали.
+ *
+ * @returns {Promise<boolean>} true — доступ есть; false — отказать (403).
+ */
+export async function canAccessModel(req, modelName, { write = false } = {}) {
+	if (!modelName) return false;
+	if (hasUnconditionalAccess(req)) return true;
+
+	const orgUuid = req.user?.organizationUuid || null;
+	const allowedOrgUuids = req.user?.allowedOrgUuids || [];
+	const orgsToCheck = orgUuid
+		? [orgUuid, ...allowedOrgUuids.filter((u) => u !== orgUuid)]
+		: allowedOrgUuids;
+
+	const [orgRight, globalRight] = await Promise.all([
+		orgsToCheck.length > 0
+			? prisma.accessPermission.findFirst({
+					where: { userUuid: req.user.uuid, modelName, organizationUuid: { in: orgsToCheck } },
+					select: { accessLevel: true },
+				})
+			: null,
+		prisma.accessPermission.findFirst({
+			where: { userUuid: req.user.uuid, modelName, organizationUuid: null },
+			select: { accessLevel: true },
+		}),
+	]);
+
+	const level = orgRight?.accessLevel ?? globalRight?.accessLevel ?? "none";
+	return write ? level === "full" : level === "readonly" || level === "full";
+}
+
 export async function accessPermissionMiddleware(req, res, next) {
 	if (req.method === "OPTIONS") return next();
 
-	// Суперадмин — пропускаем
-	if (req.user?.isSuperAdmin) return next();
-
-	// Org admin — полный доступ ко всем разделам своей организации
-	if (req.user?.isOrgAdmin || req.user?.isAnyOrgAdmin) return next();
-
-	// Dev-режим: admin пропускается
-	const isDev = process.env.NODE_ENV !== "production";
-	if (isDev && req.user?.username?.toLowerCase() === "admin") return next();
+	// Безусловный доступ (суперадмин / админ орг / dev-admin) — те же правила,
+	// что и у точечных проверок в роутерах (canAccessModel).
+	if (hasUnconditionalAccess(req)) return next();
 
 	// Определяем имя модели из URL
 	const pathSegments = req.path.replace(/^\/+/, "").split("/");

@@ -3,12 +3,28 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { buildDocumentChain, DOC_REGISTRY } from "../../services/documentChain.js";
+import { canAccessModel } from "../../utils/auth.js";
+
+/**
+ * Имя модели ПРАВ по типу документа: cash_receipt_order → CashReceiptOrder.
+ *
+ * Берём именно тип, а не DOC_REGISTRY[type].model: кассовые ордера лежат в ОДНОЙ
+ * таблице (cashOrder), но права у прихода и расхода РАЗНЫЕ. Проверено на всех 18
+ * типах реестра — каждый даёт существующее имя права.
+ */
+const permissionFor = (type) =>
+	type.split("_").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join("");
 
 const router = express.Router();
 
 router.get("/documents/:type/:uuid/document-chain", async (req, res) => {
 	try {
 		const { type, uuid } = req.params;
+		// Маршрут работает над РАЗНЫМИ моделями (зависит от :type), поэтому карта
+		// ROUTE_TO_MODEL его не покрывает и middleware пропускает — проверяем сами.
+		if (DOC_REGISTRY[type] && !(await canAccessModel(req, permissionFor(type)))) {
+			return res.status(403).json({ success: false, message: "Нет доступа к документу" });
+		}
 		if (!DOC_REGISTRY[type]) {
 			return res.status(400).json({ success: false, message: `Неизвестный тип документа: ${type}` });
 		}
@@ -32,6 +48,10 @@ router.post("/documents/:type/:uuid/clear-basis", async (req, res) => {
 		const def = DOC_REGISTRY[type];
 		if (!def) {
 			return res.status(400).json({ success: false, message: `Неизвестный тип документа: ${type}` });
+		}
+		// Очистка основания МЕНЯЕТ документ → требуется право на запись.
+		if (!(await canAccessModel(req, permissionFor(type), { write: true }))) {
+			return res.status(403).json({ success: false, message: "Нет прав на изменение документа" });
 		}
 		if (!def.hasBasis) {
 			return res.status(400).json({ success: false, message: "Документ не может иметь основания" });

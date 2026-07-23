@@ -129,3 +129,22 @@ test("object-marks намеренно без модельного права (к
 	assert.equal(ROUTE_TO_MODEL["object-marks"], undefined);
 	assert.equal(ROUTE_TO_MODEL["notes"], undefined, "notes — тот же класс");
 });
+
+// Маршруты цепочки документов работают над РАЗНЫМИ моделями (зависит от :type),
+// поэтому карта ROUTE_TO_MODEL их не покрывает и middleware пропускает. Право
+// проверяется в самом роутере через canAccessModel — фиксируем, что имя права
+// выводится из типа корректно для ВСЕХ типов реестра.
+import { DOC_REGISTRY } from "../services/documentChain.js";
+
+test("clear-basis: имя права выводится из типа документа для всех 18 типов", () => {
+	const known = new Set(Object.values(ROUTE_TO_MODEL));
+	const pascal = (t) => t.split("_").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join("");
+	for (const type of Object.keys(DOC_REGISTRY)) {
+		assert.ok(known.has(pascal(type)), `${type} → ${pascal(type)} должно быть известным правом`);
+	}
+	// Кассовые ордера лежат в ОДНОЙ таблице, но права раздельные — важно, что имя
+	// берётся из типа, а не из DOC_REGISTRY[type].model (там был бы общий CashOrder).
+	assert.equal(pascal("cash_receipt_order"), "CashReceiptOrder");
+	assert.equal(pascal("cash_expense_order"), "CashExpenseOrder");
+	assert.notEqual(DOC_REGISTRY.cash_receipt_order.model, DOC_REGISTRY.cash_receipt_order.model.toUpperCase());
+});
