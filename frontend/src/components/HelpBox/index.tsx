@@ -26,4 +26,35 @@ export const HelpBox: FC<HelpBoxProps> = ({ title, footnote, className, children
 /** Классы цветных маркеров для использования внутри текста подсказок. */
 export const helpMarker = { ok: styles.Ok, add: styles.Add, warn: styles.Warn };
 
+/**
+ * HelpText — проза подсказки ИЗ СЛОВАРЯ (U3: справка тоже должна переводиться).
+ *
+ * Раньше текст подсказок был вшит в JSX по-русски и в казахской локали оставался
+ * русским. Выносить каждое слово отдельным ключом нельзя — переводчик потеряет
+ * контекст фразы, поэтому ключ хранит ПРЕДЛОЖЕНИЕ ЦЕЛИКОМ с лёгкой разметкой:
+ *   **жирный**            — выделение;
+ *   {ok} {add} {warn}     — цветные маркеры ✓ ＋ ⚠;
+ *   {0} {1} …             — подстановки (названия полей из того же словаря).
+ */
+export const HelpText: FC<{ text: string; values?: ReactNode[] }> = ({ text, values = [] }) => {
+  // Разбираем по всем спец-токенам сразу, сохраняя порядок фрагментов.
+  const parts = text.split(/(\*\*[^*]+\*\*|\{ok\}|\{add\}|\{warn\}|\{\d+\})/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (!part) return null;
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <b key={i}>{part.slice(2, -2)}</b>;
+        }
+        if (part === "{ok}") return <span key={i} className={styles.Ok}>✓</span>;
+        if (part === "{add}") return <span key={i} className={styles.Add}>＋</span>;
+        if (part === "{warn}") return <span key={i} className={styles.Warn}>⚠</span>;
+        const m = /^\{(\d+)\}$/.exec(part);
+        if (m) return <span key={i}>{values[Number(m[1])] ?? ""}</span>;
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+};
+
 export default HelpBox;

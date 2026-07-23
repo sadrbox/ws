@@ -2,7 +2,7 @@ import React, { FC, useEffect, useMemo, useRef, useState } from "react";
 import { translate } from "src/i18";
 import { FieldDate, FieldNumber, FieldSelect, FieldFile } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
-import { HelpBox, helpMarker } from "src/components/HelpBox";
+import { HelpBox, HelpText } from "src/components/HelpBox";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { Button } from "src/components/Button";
 import priceColumns from "../Products/priceColumns.json";
@@ -332,12 +332,12 @@ const PriceCorrectionPanel: FC<{
 
   return (
     <>
-      <HelpBox title="ℹ️ Корректировка действующих цен номенклатуры">
+      <HelpBox title={translate("helpPriceAdjTitle")}>
         <ol>
-          <li>Условия отбора необязательны: <b>{translate("priceType")}</b>, <b>{translate("nomenclature")}</b>, <b>{translate("date")}</b>. Без фильтров загрузятся все цены; выбор номенклатуры покажет историю её цен.</li>
-          <li>Нажмите <b>«{translate("fill")}»</b> — в таблицу подгрузятся существующие цены (колонка «{translate("oldPrice")}» хранит исходное значение).</li>
-          <li>Измените цены вручную или массово (панель ниже): «{translate("changePercent")}», «{translate("multiplyFactor")}», «{translate("roundTo")}», «{translate("fromPriceType")}». Колонка «{translate("priceDelta")}» покажет отклонение.</li>
-          <li>Выберите <b>{translate("writeMode")}</b> и нажмите <b>«{translate("writePrices")}»</b>. Перед записью покажем сводку и предупреждения.</li>
+          <li><HelpText text={translate("helpPriceAdj1")} values={[translate("priceType"), translate("nomenclature"), translate("date")]} /></li>
+          <li><HelpText text={translate("helpPriceAdj2")} values={[translate("fill"), translate("oldPrice")]} /></li>
+          <li><HelpText text={translate("helpPriceAdj3")} values={[translate("changePercent"), translate("multiplyFactor"), translate("roundTo"), translate("fromPriceType"), translate("priceDelta")]} /></li>
+          <li><HelpText text={translate("helpPriceAdj4")} values={[translate("writeMode"), translate("writePrices")]} /></li>
         </ol>
       </HelpBox>
 
@@ -695,16 +695,16 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
   return (
     <div className={mainStyles.FormWrapper}>
       <div className={mainStyles.FormBody}>
-        <HelpBox title="ℹ️ Загрузка цен из файла Excel (.xlsx, .xls)">
+        <HelpBox title={translate("helpPriceImpTitle")}>
           <ol>
-            <li>Укажите <b>{translate("priceType")}</b> и <b>{translate("date")}</b> — значения по умолчанию для строк без этих колонок.</li>
-            <li>Выберите файл (кнопка <b>«{translate("downloadTemplate")}»</b> — шаблон; <b>«{translate("downloadBackup")}»</b> — выгрузка всех цен для бэкапа/восстановления).</li>
-            <li>Нажмите <b>«{translate("fill")}»</b> — строки попадут в таблицу, номенклатура сопоставится по артикулу / штрих-коду / наименованию.</li>
-            <li>Строки без товара помечаются <span className={helpMarker.warn}>⚠</span>. Опцией <b>«{translate("hideExisting")}»</b> можно скрыть уже существующие цены.</li>
-            <li>Нажмите <b>«{translate("upload")}»</b> — цены создадутся (повторы и строки без товара пропускаются).</li>
+            <li><HelpText text={translate("helpPriceImp1")} values={[translate("priceType"), translate("date")]} /></li>
+            <li><HelpText text={translate("helpPriceImp2")} values={[translate("downloadTemplate"), translate("downloadBackup")]} /></li>
+            <li><HelpText text={translate("helpPriceImp3")} values={[translate("fill")]} /></li>
+            <li><HelpText text={translate("helpPriceImp4")} values={[translate("hideExisting")]} /></li>
+            <li><HelpText text={translate("helpPriceImp5")} values={[translate("upload")]} /></li>
           </ol>
           <div className={styles.notice}>
-            Колонки файла: «sku / артикул», «barcode / штрих-код», «name / наименование», «price / цена». Необязательные: «priceType / тип цены», «date / дата» (для восстановления из бэкапа).
+            <HelpText text={translate("helpPriceImpCols")} />
           </div>
         </HelpBox>
         <GroupRow>
