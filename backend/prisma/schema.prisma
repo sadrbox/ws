@@ -442,6 +442,35 @@ model ChatMessage {
 // основанием задачи (Todo): форма задачи предзаполняется из связанной записи.
 // Автор/организация — СКАЛЯРЫ (без FK, как SerialNumber), чтобы не плодить
 // обратные связи; authorName денормализован (как в ChatMessage).
+/// Метка — ССЫЛКА НА ОБЪЕКТ, прикреплённая к записи. У одной записи меток может
+/// быть несколько (справочник, документ, задача, отчёт…). Пара «владелец → цель»
+/// уникальна: повторная отметка того же объекта не плодит дубли.
+/// targetLabel хранится намеренно — метка читается, даже если объект удалён или
+/// недоступен по правам (та же логика, что у Todo.sourceLabel).
+model ObjectMark {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  ownerType        String // endpoint/модель записи, к которой прикреплена метка
+  ownerUuid        String // uuid записи-владельца
+  targetType       String // endpoint/модель объекта, на который ссылается метка
+  targetUuid       String // uuid объекта-цели
+  targetLabel      String? // подпись цели на момент отметки
+  organizationUuid String?
+  authorUuid       String?
+  authorName       String?
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
+
+  // map — имя индекса в БД задано миграцией явно (иначе Prisma ждала бы длинное
+  // дефолтное имя и датасорс-diff показывал бы ложный дрейф схемы).
+  @@unique([ownerType, ownerUuid, targetType, targetUuid], map: "object_marks_owner_target_key")
+  @@index([ownerType, ownerUuid])
+  // Обратный поиск «кто ссылается на этот объект».
+  @@index([targetType, targetUuid])
+  @@index([organizationUuid])
+  @@map("object_marks")
+}
+
 model Note {
   id               Int       @id @default(autoincrement())
   uuid             String    @unique @default(uuid())

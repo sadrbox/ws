@@ -1250,5 +1250,8 @@
 	"ProductPriceImport": "Номенклатура бағаларын жүктеу",
 	"priceCorrection": "Бағаларды түзету",
 	"useSerialsInTable": "Сериялық нөмірлер бойынша есеп",
-	"useBatchesInTable": "Топтамалар бойынша есеп (жарамдылық мерзімі)"
+	"useBatchesInTable": "Топтамалар бойынша есеп (жарамдылық мерзімі)",
+	"marks": "Белгілер",
+	"marksEmpty": "Белгілер жоқ",
+	"object": "Нысан"
 }

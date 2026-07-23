@@ -1250,5 +1250,8 @@
 	"ProductPriceImport": "Импорт/экспорт цен номенклатуры",
 	"priceCorrection": "Корректировка цен",
 	"useSerialsInTable": "Учёт по серийным номерам",
-	"useBatchesInTable": "Учёт по партиям (срок годности)"
+	"useBatchesInTable": "Учёт по партиям (срок годности)",
+	"marks": "Метки",
+	"marksEmpty": "Меток нет",
+	"object": "Объект"
 }

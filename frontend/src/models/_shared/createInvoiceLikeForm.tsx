@@ -875,7 +875,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
             onReload={form.isEditMode ? form.handleReload : undefined}
             isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-            readonly={effectiveReadonly} />
+            readonly={effectiveReadonly}
+            marksEndpoint={cfg.endpoint} marksUuid={form.fields.uuid} marksOrganizationUuid={form.fields.organizationUuid} />
         </FormDirtyScope>
       </FormRequiredScope>
     );

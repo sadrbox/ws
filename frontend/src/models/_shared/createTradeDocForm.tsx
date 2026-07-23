@@ -670,7 +670,8 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
             onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
             onReload={form.isEditMode ? form.handleReload : undefined}
             isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-            readonly={!canWrite} />
+            readonly={!canWrite}
+            marksEndpoint={cfg.endpoint} marksUuid={form.fields.uuid} marksOrganizationUuid={form.fields.organizationUuid} />
         </FormDirtyScope>
       </FormRequiredScope>
     );

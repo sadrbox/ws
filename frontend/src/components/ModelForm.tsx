@@ -5,6 +5,7 @@ import Tabs from "src/components/Tabs";
 import { usePaneToolbar, usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import ShowInJournalButton from "src/components/ShowInJournalButton";
 import NotesButton from "src/components/Notes/NotesButton";
+import ObjectMarks from "src/components/ObjectMarks";
 import skeletonStyles from "./ModelForm.module.scss";
 
 /**
@@ -75,6 +76,13 @@ interface ModelFormProps {
    *  (для справочников; в формах документов кнопка добавляется вручную). */
   endpoint?: string;
   recordUuid?: string;
+  /** Область МЕТОК (ссылок на объекты) под табами. По умолчанию берёт
+   *  endpoint/recordUuid; документные формы задают отдельно, т.к. кнопки шапки
+   *  добавляют сами (иначе NotesButton/«Показать в списке» задвоились бы). */
+  marksEndpoint?: string;
+  marksUuid?: string;
+  /** Организация записи — для орг-изоляции меток. */
+  marksOrganizationUuid?: string;
 }
 
 const ModelForm: FC<ModelFormProps> = ({
@@ -90,6 +98,9 @@ const ModelForm: FC<ModelFormProps> = ({
   paneId,
   endpoint,
   recordUuid,
+  marksEndpoint,
+  marksUuid,
+  marksOrganizationUuid,
 }) => {
   // Рендерим кнопки формы в заголовок панели через портал
   const toolbarPortal = usePaneToolbar(
@@ -131,9 +142,26 @@ const ModelForm: FC<ModelFormProps> = ({
     ? isInitialLoading
     : (isLoading && !hasLoadedOnceRef.current);
 
+  // Область меток — под табами, у сохранённой записи. Метка = ссылка на любой
+  // объект системы; их может быть несколько (см. components/ObjectMarks).
+  const marksFor = marksEndpoint ?? endpoint;
+  const marksFrom = marksUuid ?? recordUuid;
+
   return (
     <>
-      {showSkeleton ? <FormSkeleton /> : <Tabs tabs={tabs} />}
+      {showSkeleton ? <FormSkeleton /> : (
+        <>
+          <Tabs tabs={tabs} />
+          {marksFor && marksFrom && (
+            <ObjectMarks
+              endpoint={marksFor}
+              uuid={marksFrom}
+              organizationUuid={marksOrganizationUuid}
+              readonly={readonly}
+            />
+          )}
+        </>
+      )}
       {toolbarPortal}
       {headerActionsPortal}
     </>

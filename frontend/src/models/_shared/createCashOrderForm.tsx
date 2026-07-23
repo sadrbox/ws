@@ -528,6 +528,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
             onReload={form.isEditMode ? form.handleReload : undefined}
             isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
             readonly={!canWrite}
+            marksEndpoint={cfg.endpoint} marksUuid={form.fields.uuid} marksOrganizationUuid={form.fields.organizationUuid}
           />
           {headerActionsPortal}
         </FormDirtyScope>
