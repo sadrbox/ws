@@ -497,12 +497,12 @@
 
 	.TableStatusSelected {
 		font-weight: 600;
-		color: #2563eb;
+		color: var(--c-blue-53);
 	}
 
 	.TableStatusExcluded {
 		font-weight: 600;
-		color: #dc2626;
+		color: var(--c-red-51);
 	}
 }
 
@@ -735,7 +735,7 @@
 	width: 20px;
 	height: 20px;
 	border: 3px solid var(--sv-gray100);
-	border-top: 3px solid #3498db;
+	border-top: 3px solid var(--c-cyan-53);
 	border-radius: 50%;
 	animation: spin 1s linear infinite;
 }
@@ -794,7 +794,7 @@
 
 	&:focus {
 		outline: none;
-		border-color: #3498db;
+		border-color: var(--c-cyan-53);
 		box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
 	}
 

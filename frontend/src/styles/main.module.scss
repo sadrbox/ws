@@ -606,7 +606,7 @@ body {
 	width: 8px;
 	height: 8px;
 	border-radius: 50%;
-	background: #e8a030;
+	background: var(--c-orange-55);
 	flex-shrink: 0;
 	margin-left: 4px;
 	vertical-align: middle;
@@ -627,7 +627,7 @@ body {
 }
 
 .PaneNoteBell {
-	color: #d48806 !important;
+	color: var(--c-orange-43) !important;
 
 	&:hover {
 		background: rgba(#d48806, 0.12) !important;
@@ -641,7 +641,7 @@ body {
 	border: none;
 	background: transparent;
 	cursor: pointer;
-	color: #d48806;
+	color: var(--c-orange-43);
 	width: 30px;
 	height: 30px;
 	border-radius: $radius2;
@@ -659,7 +659,7 @@ body {
 	min-width: 14px;
 	height: 14px;
 	border-radius: 7px;
-	background: #d48806;
+	background: var(--c-orange-43);
 	color: var(--sv-color60);
 	font-size: $fontsize - 2px;
 	font-weight: 700;
@@ -698,7 +698,7 @@ body {
 .PaneNoteJournalLink {
 	border: none;
 	background: transparent;
-	color: #1677ff;
+	color: var(--c-blue-54);
 	cursor: pointer;
 	font-size: $fontsize - 2px;
 	line-height: 1.3;
@@ -726,15 +726,15 @@ body {
 }
 
 .PaneNoteWarning {
-	background: #fffbe6;
+	background: var(--c-amber-95);
 }
 
 .PaneNoteError {
-	background: #fff2f0;
+	background: var(--c-red-97a);
 }
 
 .PaneNoteInfo {
-	background: #f6ffed;
+	background: var(--c-yellow-96);
 }
 
 .PaneNoteResolved {
@@ -783,7 +783,7 @@ body {
 	align-self: flex-start;
 	border: none;
 	background: none;
-	color: #1677ff;
+	color: var(--c-blue-54);
 	font-size: $fontsize - 2px;
 	line-height: 1.3;
 	padding: 3px 0;
@@ -792,14 +792,14 @@ body {
 	font-weight: 500;
 
 	&:hover {
-		color: #0958d9;
+		color: var(--c-blue-44);
 	}
 }
 
 .PaneNoteActionBtn {
-	border: 1px solid #d48806;
-	background: #fffbe6;
-	color: #ad6800;
+	border: 1px solid var(--c-orange-43);
+	background: var(--c-amber-95);
+	color: var(--c-orange-34);
 	font-size: $fontsize - 2px;
 	line-height: 1.3;
 	padding: 3px 6px;
@@ -808,7 +808,7 @@ body {
 	font-weight: 500;
 
 	&:hover {
-		background: #fff1b8;
+		background: var(--c-amber-86);
 	}
 }
 
@@ -1561,14 +1561,14 @@ body {
 	border: none;
 	background: none;
 	padding: 3px 0;
-	color: #1677ff;
+	color: var(--c-blue-54);
 	font-size: 13px;
 	line-height: 1.3;
 	text-decoration: underline;
 	cursor: pointer;
 
 	&:hover {
-		color: #0958d9;
+		color: var(--c-blue-44);
 	}
 }
 // Бейдж непрочитанного в пункте навбара (E4.1) — компактный счётчик рядом с текстом.

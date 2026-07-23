@@ -3,7 +3,7 @@
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
-  color: var(--color-link, #2563eb);
+  color: var(--color-link, var(--c-blue-53));
 }
 
 .Body {
@@ -25,7 +25,7 @@
   min-height: 52px;
   padding: 6px 8px;
   font: inherit;
-  border: 1px solid var(--border-color, #d0d5dd);
+  border: 1px solid var(--border-color, var(--c-blue-84));
   border-radius: 6px;
   background: var(--surface, var(--sv-color60));
   color: inherit;
@@ -35,7 +35,7 @@
   padding: 7px 14px;
   border: none;
   border-radius: 6px;
-  background: var(--color-link, #2563eb);
+  background: var(--color-link, var(--c-blue-53));
   color: var(--sv-color60);
   font: inherit;
   cursor: pointer;
@@ -52,7 +52,7 @@
 }
 
 .Hint {
-  color: var(--text-secondary, #667085);
+  color: var(--text-secondary, var(--c-blue-46));
   padding: 10px 2px;
   font-size: 13px;
 }
@@ -76,7 +76,7 @@
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: var(--text-secondary, #667085);
+  color: var(--text-secondary, var(--c-blue-46));
 }
 
 .ItemActions {
@@ -93,7 +93,7 @@
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  color: var(--color-link, #2563eb);
+  color: var(--color-link, var(--c-blue-53));
 }
 
-.LinkBtnDanger { color: var(--danger, #d92d20); }
+.LinkBtnDanger { color: var(--danger, var(--c-red-49)); }

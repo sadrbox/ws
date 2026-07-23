@@ -2,13 +2,13 @@
 // пустой / hover / загрузка / заполненный / заполненный+hover / ошибка.
 // Без inline-стилей: всё через классы; прогресс — нативный <progress value>.
 
-$accent: #2563eb;
+$accent: var(--c-blue-53);
 $accent-soft: var(--sv-accentBlueSoft);
 $border: var(--sv-gray200);
-$border-dash: #cbd5e1;
+$border-dash: var(--c-cyan-84a);
 $muted: var(--sv-gray400);
-$danger: #dc2626;
-$danger-border: #fca5a5;
+$danger: var(--c-red-51);
+$danger-border: var(--c-red-82);
 $danger-soft: var(--n-97a);
 $slot: 120px;
 

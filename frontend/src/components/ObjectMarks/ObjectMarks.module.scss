@@ -24,16 +24,16 @@
 .AddBtn,
 .CancelBtn {
 	padding: 1px 8px;
-	border: 1px solid #c7d7ee;
+	border: 1px solid var(--c-blue-86);
 	border-radius: 3px;
 	background: var(--sv-color60);
-	color: #1a4f8a;
+	color: var(--c-cyan-32);
 	font-size: 12px;
 	line-height: 1.6;
 	cursor: pointer;
 
 	&:hover {
-		background: #eef4fc;
+		background: var(--c-cyan-96);
 	}
 }
 
@@ -73,8 +73,8 @@
 	cursor: pointer;
 
 	&:hover {
-		background: #f0d5d5;
-		color: #a33;
+		background: var(--c-red-89);
+		color: var(--c-red-43);
 	}
 }
 

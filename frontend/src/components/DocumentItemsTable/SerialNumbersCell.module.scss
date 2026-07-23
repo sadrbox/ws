@@ -54,7 +54,7 @@
 }
 
 .Error {
-	color: #c0392b;
+	color: var(--c-red-46);
 	font-size: 13px;
 }
 
@@ -63,7 +63,7 @@
 	width: 100%;
 	padding: 6px 8px;
 	margin-bottom: 6px;
-	border: 1px solid #d0d7de;
+	border: 1px solid var(--c-cyan-84);
 	border-radius: 4px;
 	font: inherit;
 	font-size: 13px;
@@ -91,7 +91,7 @@
 /* Первоисточник партии — кликабелен, только если документ существует
    («Ввод остатков» документа не имеет). */
 .PickOriginLink {
-	color: #0969da;
+	color: var(--c-cyan-45);
 	cursor: pointer;
 	text-decoration: underline dotted;
 

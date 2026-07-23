@@ -32,7 +32,7 @@
   border: 1px solid var(--line, var(--n-80));
   border-radius: 5px;
   background: var(--panel, var(--sv-color60));
-  color: var(--ink, #1a2230);
+  color: var(--ink, var(--c-blue-15));
 }
 
 .Hint {
@@ -74,7 +74,7 @@
 .User {
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink, #1a2230);
+  color: var(--ink, var(--c-blue-15));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

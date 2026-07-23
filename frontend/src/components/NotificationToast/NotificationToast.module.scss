@@ -27,7 +27,7 @@
 	position: absolute;
 	top: -2px;
 	right: -2px;
-	background: #e74c3c;
+	background: var(--c-red-57);
 	color: var(--sv-color60);
 	font-size: 10px;
 	font-weight: 700;
@@ -143,10 +143,10 @@
 	background: $color33;
 	color: $color6;
 
-	&.type_error   { background: #fde8e8; color: #c0392b; }
-	&.type_warning { background: #fef3cd; color: #9a6700; }
-	&.type_info    { background: #dbeafe; color: #1d4ed8; }
-	&.type_success { background: #d1fae5; color: #065f46; }
+	&.type_error   { background: var(--c-red-95a); color: var(--c-red-46); }
+	&.type_warning { background: var(--c-amber-90); color: var(--c-orange-30); }
+	&.type_info    { background: var(--c-cyan-93); color: var(--c-blue-48); }
+	&.type_success { background: var(--c-green-90); color: var(--c-teal-20); }
 }
 
 .PaneLabel {
@@ -217,7 +217,7 @@
 		background 0.15s;
 
 	&:hover {
-		color: #27ae60;
+		color: var(--c-green-42);
 		background: rgba(#27ae60, 0.1);
 	}
 }

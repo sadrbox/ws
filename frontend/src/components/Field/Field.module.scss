@@ -88,7 +88,7 @@
 	.FieldInputWrapper,
 	.FieldSelectWrapper,
 	.FieldTextareaInputWrapper {
-		border-color: #90caf9;
+		border-color: var(--c-cyan-77);
 		background-color: color-mix(in srgb, $colorPrimaryDark 4%, transparent);
 	}
 }
@@ -167,7 +167,7 @@
 			background: transparent !important;
 
 			&:focus-within {
-				// background-color: #fff9c5;
+				// background-color: var(--c-amber-89);
 				border: 0px solid $color2;
 				box-shadow: 0 0 0 1px $color2;
 			}

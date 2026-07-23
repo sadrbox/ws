@@ -28,7 +28,7 @@
 	}
 
 	&:active {
-		border: 1px solid #3d3400;
+		border: 1px solid var(--c-amber-12);
 	}
 
 	&:not(:last-child) {}

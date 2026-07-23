@@ -51,13 +51,13 @@
   left: 0;
   font-size: 11px;
   line-height: 14px;
-  color: #e53935;
+  color: var(--c-red-55);
   white-space: nowrap;
   pointer-events: none;
   padding: 1px 4px;
   background: var(--n-98);
   border-radius: 3px 3px 0 0;
-  border: 1px solid #e53935;
+  border: 1px solid var(--c-red-55);
   border-bottom: none;
   z-index: 10;
   max-width: 250px;

@@ -51,7 +51,7 @@
 .CloseButton {
 	&:hover:not(:disabled) {
 		background: rgba(#c00, 0.1) !important;
-		color: #c00 !important;
+		color: var(--c-red-40) !important;
 	}
 }
 

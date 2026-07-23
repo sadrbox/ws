@@ -23,7 +23,7 @@
 .Size {
   flex: 0 0 auto;
   white-space: nowrap;
-  color: #4b5563;
+  color: var(--c-blue-34);
   font-variant-numeric: tabular-nums;
 }
 
@@ -31,7 +31,7 @@
   flex: 1 1 140px;
   min-width: 80px;
   height: 6px;
-  background: #dbeafe;
+  background: var(--c-cyan-93);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -39,7 +39,7 @@
 .Fill {
   width: var(--percent, 0%);
   height: 100%;
-  background: #3b82f6;
+  background: var(--c-blue-60);
   transition: width 0.15s ease;
 }
 

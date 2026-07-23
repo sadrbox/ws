@@ -48,8 +48,8 @@
 	font-weight: 600;
 }
 .ok { background: rgba(#1a7f37, 0.12); color: var(--success); }
-.pending { background: rgba(#9a6700, 0.14); color: #9a6700; }
-.bad { background: rgba(#c00, 0.1); color: #c00; }
+.pending { background: rgba(#9a6700, 0.14); color: var(--c-orange-30); }
+.bad { background: rgba(#c00, 0.1); color: var(--c-red-40); }
 
 /* Форма документа */
 .DocHeader {
@@ -90,13 +90,13 @@
 	&:disabled { opacity: 0.5; cursor: default; }
 }
 .BtnPrimary {
-	border-color: #0077cc;
-	color: #0077cc;
+	border-color: var(--c-cyan-40);
+	color: var(--c-cyan-40);
 	&:hover:not(:disabled) { background: rgba(#0077cc, 0.08); }
 }
 .BtnDanger {
-	border-color: #c00;
-	color: #c00;
+	border-color: var(--c-red-40);
+	color: var(--c-red-40);
 	&:hover:not(:disabled) { background: rgba(#c00, 0.06); }
 }
 

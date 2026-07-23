@@ -23,7 +23,7 @@
   border: 1px solid var(--line, var(--n-80));
   border-radius: 6px;
   background: var(--panel, var(--sv-color60));
-  color: var(--ink, #1a2230);
+  color: var(--ink, var(--c-blue-15));
   max-width: 320px;
 }
 
@@ -104,7 +104,7 @@
 .Body {
   font-size: 13px;
   line-height: 1.4;
-  color: var(--ink, #1a2230);
+  color: var(--ink, var(--c-blue-15));
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -126,7 +126,7 @@
   border: 1px solid var(--line, var(--n-80));
   border-radius: 8px;
   background: var(--panel, var(--sv-color60));
-  color: var(--ink, #1a2230);
+  color: var(--ink, var(--c-blue-15));
   max-height: 120px;
 
   &:focus {

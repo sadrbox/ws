@@ -140,7 +140,7 @@
 .CardTitle {
   font-size: 13px;
   line-height: 1.35;
-  color: var(--ink, #1a2230);
+  color: var(--ink, var(--c-blue-15));
   word-break: break-word;
 }
 

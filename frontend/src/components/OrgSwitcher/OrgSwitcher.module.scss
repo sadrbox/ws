@@ -120,7 +120,7 @@
 }
 
 .OrgActiveCheck {
-  color: #2e7d32;
+  color: var(--c-green-34);
   font-size: 14px;
   flex-shrink: 0;
   margin-left: 2px;
@@ -129,6 +129,6 @@
 .OrgError {
   padding: 8px 12px;
   font-size: 12px;
-  color: #c5221f;
+  color: var(--c-red-45);
   border-top: 1px solid rgba(0, 0, 0, 0.08);
 }

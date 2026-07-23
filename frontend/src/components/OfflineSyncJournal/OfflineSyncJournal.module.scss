@@ -85,28 +85,28 @@
   font-size: $fontsize;
 
   &.StatusPending {
-    background: #fff3e0;
-    color: #fb8c00;
+    background: var(--c-orange-94);
+    color: var(--c-orange-49);
   }
 
   &.StatusSyncing {
-    background: #e3f2fd;
+    background: var(--c-cyan-94);
     color: $colorPrimaryDark;
   }
 
   &.StatusSynced {
-    background: #e8f5e9;
-    color: #43a047;
+    background: var(--c-green-94);
+    color: var(--c-green-45);
   }
 
   &.StatusFailed {
-    background: #fce4ec;
-    color: #e53935;
+    background: var(--c-pink-94);
+    color: var(--c-red-55);
   }
 
   &.StatusConflict {
-    background: #fff8e1;
-    color: #f9a825;
+    background: var(--c-amber-94);
+    color: var(--c-orange-56);
   }
 }
 
@@ -129,7 +129,7 @@
 
 .SyncEntryError {
   font-size: $fontsize - 2px;
-  color: #e53935;
+  color: var(--c-red-55);
   margin-top: 4px;
   padding: 4px 8px;
   background: var(--n-98e);
@@ -209,7 +209,7 @@
 }
 
 .ConflictDiff {
-  background: #fff9c4;
+  background: var(--c-amber-88);
   padding: 1px 4px;
   border-radius: 2px;
 }

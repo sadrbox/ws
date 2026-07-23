@@ -35,17 +35,17 @@
   border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
-  background: #eef2ff;
-  color: #3949ab;
+  background: var(--c-blue-97);
+  color: var(--c-blue-45);
 }
 
-.badgeOk { background: var(--success-bg); color: #137333; }
-.badgeWarn { background: #fce8e6; color: #c5221f; }
+.badgeOk { background: var(--success-bg); color: var(--c-green-26); }
+.badgeWarn { background: var(--c-red-95); color: var(--c-red-45); }
 
 // ── Ячейки таблицы импорта (вместо inline-styles в renderCell) ─────────────
 // Индикатор сопоставления номенклатуры: ✓ — найден, ＋ — новый (будет создан).
-.matchOk { color: #137333; font-size: 12px; }
-.matchNew { color: #1a73e8; font-size: 12px; }
+.matchOk { color: var(--c-green-26); font-size: 12px; }
+.matchNew { color: var(--c-cyan-51); font-size: 12px; }
 
 .pricesCell { color: var(--text-secondary); }
 

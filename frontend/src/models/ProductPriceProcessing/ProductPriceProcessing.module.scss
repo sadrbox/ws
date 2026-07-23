@@ -69,23 +69,23 @@
   border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
-  background: #eef2ff;
-  color: #3949ab;
+  background: var(--c-blue-97);
+  color: var(--c-blue-45);
 }
 
 .badgeOk {
   background: var(--success-bg);
-  color: #137333;
+  color: var(--c-green-26);
 }
 
 .badgeWarn {
-  background: #fce8e6;
-  color: #c5221f;
+  background: var(--c-red-95);
+  color: var(--c-red-45);
 }
 
 // ── Ячейки таблицы цен (вместо inline-styles в priceCellRenderer) ──────────
 .warn {
-  color: #c5221f;
+  color: var(--c-red-45);
 }
 
 .oldPrice {
@@ -93,12 +93,12 @@
 }
 
 .deltaUp {
-  color: #137333;
+  color: var(--c-green-26);
   font-weight: 600;
 }
 
 .deltaDown {
-  color: #c5221f;
+  color: var(--c-red-45);
   font-weight: 600;
 }
 
@@ -109,7 +109,7 @@
 
 .priceChanged {
   font-weight: 700;
-  color: #137333;
+  color: var(--c-green-26);
 }
 
 // Чекбокс в строке параметров (выравнивание по нижнему краю как у полей).

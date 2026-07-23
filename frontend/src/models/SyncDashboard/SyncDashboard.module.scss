@@ -47,7 +47,7 @@
 }
 
 .SyncDashTabActive {
-  color: #1565c0;
+  color: var(--c-cyan-42);
 
   &::after {
     content: "";
@@ -56,7 +56,7 @@
     left: 0;
     right: 0;
     height: 2px;
-    background: #1565c0;
+    background: var(--c-cyan-42);
     border-radius: 1px 1px 0 0;
   }
 }
@@ -69,7 +69,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: #e53935;
+  background: var(--c-red-55);
   color: var(--sv-color60);
   font-size: $fontsize - 2px;
   font-weight: 600;
@@ -128,12 +128,12 @@
 }
 
 .SyncDashOnline {
-  color: #43a047;
+  color: var(--c-green-45);
   font-weight: 600;
 }
 
 .SyncDashOffline {
-  color: #e53935;
+  color: var(--c-red-55);
   font-weight: 600;
 }
 
@@ -165,7 +165,7 @@
     top: 0;
     bottom: 0;
     width: 100%;
-    background: #1565c0;
+    background: var(--c-cyan-42);
     border-radius: 3px;
     transition: width 0.3s ease;
   }
@@ -360,19 +360,19 @@
 }
 
 .SyncBanner_ok {
-  background: #e8f5e9;
+  background: var(--c-green-94);
 }
 
 .SyncBanner_warn {
-  background: #fff8e1;
+  background: var(--c-amber-94);
 }
 
 .SyncBanner_error {
-  background: #fbe9e7;
+  background: var(--c-red-95b);
 }
 
 .SyncBanner_syncing {
-  background: #e3f2fd;
+  background: var(--c-cyan-94);
 }
 
 .SyncBannerIcon {
@@ -454,13 +454,13 @@
   transition: border-color .2s, background .2s;
 
   &:hover {
-    border-color: #90caf9;
+    border-color: var(--c-cyan-77);
   }
 }
 
 .SyncModeCard_on {
   border-color: $colorPrimaryDark;
-  background: #e3f2fd;
+  background: var(--c-cyan-94);
   box-shadow: 0 0 0 1px $colorPrimaryDark;
 }
 
@@ -527,7 +527,7 @@
 
 .SyncInfoBox {
   background: var(--n-97);
-  border-left: 3px solid #90caf9;
+  border-left: 3px solid var(--c-cyan-77);
   padding: 10px 14px;
   font-size: 13px;
   color: var(--text-secondary);
@@ -585,8 +585,8 @@
   border-radius: 4px;
 
   &:hover {
-    color: #e53935;
-    background: #fce4ec;
+    color: var(--c-red-55);
+    background: var(--c-pink-94);
   }
 }
 
@@ -618,10 +618,10 @@
 }
 
 .SyncConflictCard {
-  border: 1px solid #ffcc80;
+  border: 1px solid var(--c-orange-75);
   border-radius: 8px;
   padding: 16px;
-  background: #fffde7;
+  background: var(--c-amber-95a);
 
   &+& {
     margin-top: 12px;
@@ -706,7 +706,7 @@
 
   &:hover {
     opacity: 1;
-    background: #fce4ec;
+    background: var(--c-pink-94);
   }
 
   &:disabled {

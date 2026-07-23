@@ -28,7 +28,7 @@
 
 // Кнопка «Провести возврат» — оранжевый градиент вместо зелёного.
 .PayBtnReturn {
-	background: linear-gradient(180deg, #fb923c, $warnAccent);
+	background: linear-gradient(180deg, var(--c-orange-61), $warnAccent);
 }
 
 // Структурный контейнер корзины: только flex-размер (рамку рисует сам SubTable).

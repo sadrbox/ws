@@ -4,10 +4,10 @@
   gap: 8px;
   padding: 10px 14px;
   margin: 0;
-  background: #fff0f0;
+  background: var(--c-red-97);
   border-left: 3px solid var(--danger);
   border-radius: 4px;
-  color: #b71c1c;
+  color: var(--c-red-41);
   font-size: 13px;
   line-height: 1.45;
   animation: slideIn 0.2s ease-out;
@@ -31,7 +31,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #b71c1c;
+  color: var(--c-red-41);
   opacity: 0.6;
   padding: 0;
   margin: -2px -4px 0 4px;

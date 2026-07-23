@@ -84,7 +84,7 @@
     }
 
     &:hover td {
-      background: #eef5ff !important;
+      background: var(--c-blue-97a) !important;
     }
   }
 }
@@ -143,7 +143,7 @@
     font-weight: 600;
     background: var(--n-96);
     padding: 4px 6px;
-    border-top: 1px solid #c0c8d4;
+    border-top: 1px solid var(--c-blue-79);
   }
 }
 
@@ -166,11 +166,11 @@
   }
 
   &:hover td {
-    background: #eef5ff !important;
+    background: var(--c-blue-97a) !important;
   }
   // тонкий акцент слева на первой ячейке при наведении
   &:hover td:first-child {
-    box-shadow: inset 2px 0 0 0 #2563eb;
+    box-shadow: inset 2px 0 0 0 var(--c-blue-53);
   }
 }
 
@@ -198,7 +198,7 @@
 }
 
 .Negative {
-  color: #dc2626 !important;
+  color: var(--c-red-51) !important;
 }
 
 // ── Цветовые акценты «Материальной ведомости» ────────────────────────────────
@@ -207,15 +207,15 @@
 }
 
 .SalePrice {
-  color: #2563eb !important; // цена/сумма реализации — синий
+  color: var(--c-blue-53) !important; // цена/сумма реализации — синий
 }
 
 .Profit {
-  color: #16a34a !important; // прибыль — зелёный
+  color: var(--c-green-36) !important; // прибыль — зелёный
 }
 
 .Loss {
-  color: #dc2626 !important; // убыток — красный
+  color: var(--c-red-51) !important; // убыток — красный
 }
 
 .TagReceipt {
@@ -224,8 +224,8 @@
   border-radius: 2pt;
   font-size: 7.5pt;
   font-weight: 600;
-  background: #dcfce7;
-  color: #166534;
+  background: var(--c-green-93);
+  color: var(--c-green-24);
 }
 
 .TagExpense {
@@ -234,8 +234,8 @@
   border-radius: 2pt;
   font-size: 7.5pt;
   font-weight: 600;
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--c-red-94);
+  color: var(--c-red-35);
 }
 
 // ── Печать: сохранить фоновые цвета ──────────────────────────────────────────
@@ -255,10 +255,10 @@
   }
 
   .TagReceipt {
-    background: #dcfce7 !important;
+    background: var(--c-green-93) !important;
   }
 
   .TagExpense {
-    background: #fee2e2 !important;
+    background: var(--c-red-94) !important;
   }
 }

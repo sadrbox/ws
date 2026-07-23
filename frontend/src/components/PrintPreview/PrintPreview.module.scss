@@ -77,9 +77,9 @@
   padding: 8px 12px;
   margin: 0 0 4px;
   background: var(--n-97a);
-  border: 1px solid #fca5a5;
+  border: 1px solid var(--c-red-82);
   border-radius: $radius2;
-  color: #b91c1c;
+  color: var(--c-red-42);
   font-size: 13px;
 }
 
@@ -87,7 +87,7 @@
   padding: 8px 12px;
   margin: 0 0 4px;
   background: var(--sv-accentBlueSoft);
-  border: 1px solid #93c5fd;
+  border: 1px solid var(--c-cyan-78);
   border-radius: $radius2;
   color: $color3;
   font-size: 13px;

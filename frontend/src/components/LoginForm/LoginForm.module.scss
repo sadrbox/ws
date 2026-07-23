@@ -4,7 +4,7 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: linear-gradient(135deg, #e8edf5 0%, #d5dce8 100%);
+	background: linear-gradient(135deg, var(--c-blue-94) 0%, var(--c-blue-87) 100%);
 	z-index: 9999;
 }
 
@@ -61,8 +61,8 @@
 
 .error {
 	padding: 10px 14px;
-	background: #ffebee;
-	color: #c62828;
+	background: var(--c-pink-96);
+	color: var(--c-red-47);
 	border-radius: 4px;
 	font-size: 13px;
 	line-height: 1.4;
@@ -70,8 +70,8 @@
 
 .success {
 	padding: 10px 14px;
-	background: #e8f5e9;
-	color: #2e7d32;
+	background: var(--c-green-94);
+	color: var(--c-green-34);
 	border-radius: 4px;
 	font-size: 13px;
 	line-height: 1.5;
@@ -121,11 +121,11 @@
 	margin-top: 8px;
 
 	&:hover:not(:disabled) {
-		background: #1565c0;
+		background: var(--c-cyan-42);
 	}
 
 	&:active:not(:disabled) {
-		background: #0d47a1;
+		background: var(--c-blue-34a);
 	}
 
 	&:disabled {
