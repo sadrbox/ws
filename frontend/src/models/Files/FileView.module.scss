@@ -38,7 +38,7 @@
 // HTML-контент (xlsx / docx) — белый «лист»
 .HtmlDoc {
   background: var(--sv-color60);
-  color: #111;
+  color: var(--n-07);
   padding: 24px 28px;
   margin: 0 auto;
   max-width: 1100px;
@@ -60,7 +60,7 @@
 
   :global(td),
   :global(th) {
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--n-84);
     padding: 3px 8px;
     font-size: 13px;
     vertical-align: top;
@@ -68,7 +68,7 @@
   }
 
   :global(th) {
-    background: #f3f4f6;
+    background: var(--n-96a);
     font-weight: 600;
   }
 

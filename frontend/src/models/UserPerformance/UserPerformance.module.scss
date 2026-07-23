@@ -29,7 +29,7 @@
 .Field input {
   font: inherit;
   padding: 3px 6px;
-  border: 1px solid var(--line, #ccc);
+  border: 1px solid var(--line, var(--n-80));
   border-radius: 5px;
   background: var(--panel, var(--sv-color60));
   color: var(--ink, #1a2230);
@@ -45,7 +45,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  border: 1px solid var(--line, #e4e7ec);
+  border: 1px solid var(--line, var(--n-91a));
   border-radius: 10px;
 }
 
@@ -55,7 +55,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--line, #eef0f3);
+  border-bottom: 1px solid var(--line, var(--n-94a));
 
   &:last-child { border-bottom: 0; }
 }

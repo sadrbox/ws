@@ -728,7 +728,7 @@
 	padding: 20px;
 	gap: 10px;
 	background: rgba(255, 255, 255, 0.9);
-	border-top: 1px solid #e0e0e0;
+	border-top: 1px solid var(--n-88);
 }
 
 .spinner {
@@ -757,7 +757,7 @@
 	padding: 20px;
 	gap: 10px;
 	background: rgba(255, 255, 255, 0.95);
-	border-top: 1px solid #e0e0e0;
+	border-top: 1px solid var(--n-88);
 	font-size: $fontsize + 1px;
 	color: var(--sv-color51);
 }
@@ -771,7 +771,7 @@
 
 	label {
 		font-weight: 500;
-		color: #333;
+		color: var(--n-20);
 		white-space: nowrap;
 		min-width: 50px;
 	}
@@ -811,7 +811,7 @@
 .SearchContainer {
 	display: flex;
 	align-items: center;
-	border: 1px solid #ccc;
+	border: 1px solid var(--n-80);
 	border-radius: $radius2;
 	overflow: hidden;
 	background: var(--sv-color60);
@@ -944,7 +944,7 @@
 .ExpandedRowCell {
 	padding: 0;
 	background: var(--bg-secondary, var(--sv-gray50));
-	border-bottom: 2px solid var(--border-color, #e0e0e0);
+	border-bottom: 2px solid var(--border-color, var(--n-88));
 }
 
 /* Обязательная ячейка без значения (read-only): такой же inset-бордер как FieldRequired.tableVariant */

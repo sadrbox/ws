@@ -19,7 +19,7 @@
 }
 
 .FilterTab {
-  border: 1px solid var(--line, #e0e0e0);
+  border: 1px solid var(--line, var(--n-88));
   background: transparent;
   color: var(--text-secondary);
   border-radius: 6px;
@@ -31,7 +31,7 @@
 
   &:hover {
     background: color-mix(in srgb, var(--color-link) 8%, transparent);
-    border-color: color-mix(in srgb, var(--color-link) 35%, var(--line, #e0e0e0));
+    border-color: color-mix(in srgb, var(--color-link) 35%, var(--line, var(--n-88)));
   }
 
   &.active {
@@ -84,7 +84,7 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--line, #e6e6e6);
+  border-bottom: 1px solid var(--line, var(--n-90));
 }
 
 .ColumnCount {
@@ -113,7 +113,7 @@
 // ── Карточка ─────────────────────────────────────────────────────────────────
 .Card {
   background: var(--panel, var(--sv-color60));
-  border: 1px solid var(--line, #e4e7ec);
+  border: 1px solid var(--line, var(--n-91a));
   border-radius: 8px;
   padding: 9px 11px;
   display: flex;
@@ -124,7 +124,7 @@
   transition: box-shadow 0.12s ease, border-color 0.12s ease;
 
   &:hover {
-    border-color: color-mix(in srgb, var(--color-link) 40%, var(--line, #e4e7ec));
+    border-color: color-mix(in srgb, var(--color-link) 40%, var(--line, var(--n-91a)));
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
   }
 

@@ -58,10 +58,10 @@
 }
 
 .Item {
-  border: 1px solid var(--border-color, #e4e7ec);
+  border: 1px solid var(--border-color, var(--n-91a));
   border-radius: 6px;
   padding: 8px 10px;
-  background: var(--surface-muted, #f9fafb);
+  background: var(--surface-muted, var(--n-98d));
 }
 
 .ItemBody {

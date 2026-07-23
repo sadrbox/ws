@@ -15,13 +15,13 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: #fafafa;
+  background: var(--n-98c);
 }
 
 .SyncDashTabs {
   display: flex;
   gap: 0;
-  border-bottom: 2px solid #e0e0e0;
+  border-bottom: 2px solid var(--n-88);
   background: var(--sv-color60);
   flex-shrink: 0;
   padding: 0 12px;
@@ -42,7 +42,7 @@
   gap: 6px;
 
   &:hover {
-    color: #333;
+    color: var(--n-20);
   }
 }
 
@@ -90,7 +90,7 @@
 
 .SyncDashCard {
   background: var(--sv-color60);
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--n-88);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -98,10 +98,10 @@
 .SyncDashCardTitle {
   font-size: $fontsize;
   font-weight: 600;
-  color: #333;
+  color: var(--n-20);
   padding: 10px 14px;
   background: var(--surface-muted);
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--n-88);
 }
 
 .SyncDashCardBody {
@@ -114,7 +114,7 @@
   justify-content: space-between;
   padding: 5px 0;
   font-size: $fontsize;
-  color: #333;
+  color: var(--n-20);
   border-bottom: 1px solid var(--surface-muted);
 
   &:last-child {
@@ -153,7 +153,7 @@
 .SyncDashProgressBar {
   flex: 1;
   height: 6px;
-  background: #e0e0e0;
+  background: var(--n-88);
   border-radius: 3px;
   position: relative;
   overflow: hidden;
@@ -200,7 +200,7 @@
   align-items: flex-start;
   gap: 10px;
   padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--n-94);
 
   &:last-child {
     border-bottom: none;
@@ -220,7 +220,7 @@
 
 .SyncDashQueueLabel {
   font-size: $fontsize;
-  color: #333;
+  color: var(--n-20);
   font-weight: 500;
 }
 
@@ -239,7 +239,7 @@
 
 .SyncDashConflict {
   padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--n-94);
 
   &:last-child {
     border-bottom: none;
@@ -261,7 +261,7 @@
 }
 
 .SyncDashConflictCol {
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--n-88);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -274,7 +274,7 @@
   letter-spacing: 0.5px;
   padding: 6px 10px;
   background: var(--surface-muted);
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--n-88);
 }
 
 .SyncDashConflictPre {
@@ -288,7 +288,7 @@
   max-height: 200px;
   overflow-y: auto;
   background: var(--sv-color60);
-  color: #333;
+  color: var(--n-20);
 }
 
 // ── Storage ──
@@ -307,7 +307,7 @@
   color: var(--sv-color5);
   letter-spacing: 0.5px;
   padding: 6px 0;
-  border-bottom: 2px solid #e0e0e0;
+  border-bottom: 2px solid var(--n-88);
 }
 
 .SyncDashStorageRow {
@@ -316,7 +316,7 @@
   font-size: $fontsize;
   padding: 5px 0;
   border-bottom: 1px solid var(--surface-muted);
-  color: #333;
+  color: var(--n-20);
 
   &:last-child {
     border-bottom: none;
@@ -415,7 +415,7 @@
 .SyncProgressTrack {
   flex: 1;
   height: 6px;
-  background: #e0e0e0;
+  background: var(--n-88);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -443,9 +443,9 @@
   flex: 1;
   min-width: 200px;
   padding: 16px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid var(--n-88);
   border-radius: 10px;
-  background: #fafafa;
+  background: var(--n-98c);
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -497,7 +497,7 @@
 .SyncMetricValue {
   font-size: 20px;
   font-weight: 700;
-  color: #333;
+  color: var(--n-20);
 }
 
 .SyncMetricLabel {
@@ -521,12 +521,12 @@
 
   &>span:nth-child(odd) {
     font-weight: 500;
-    color: #333;
+    color: var(--n-20);
   }
 }
 
 .SyncInfoBox {
-  background: #f5f7fa;
+  background: var(--n-97);
   border-left: 3px solid #90caf9;
   padding: 10px 14px;
   font-size: 13px;
@@ -546,11 +546,11 @@
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  background: #fafafa;
+  background: var(--n-98c);
   border-radius: 6px;
 
   &:hover {
-    background: #f0f0f0;
+    background: var(--n-94);
   }
 }
 
@@ -567,7 +567,7 @@
 .SyncQueueItemTitle {
   font-size: 13px;
   font-weight: 500;
-  color: #333;
+  color: var(--n-20);
 }
 
 .SyncQueueItemMeta {
@@ -606,7 +606,7 @@
 .SyncEmptyTitle {
   font-size: 16px;
   font-weight: 600;
-  color: #333;
+  color: var(--n-20);
 }
 
 .SyncEmptyDesc {
@@ -656,7 +656,7 @@
 .SyncConflictPre {
   font-size: 11px;
   background: var(--sv-color60);
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--n-88);
   border-radius: 4px;
   padding: 8px;
   overflow: auto;
@@ -666,7 +666,7 @@
 }
 
 .SyncStorageTable {
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--n-88);
   border-radius: 6px;
   overflow: hidden;
   font-size: 13px;
@@ -688,10 +688,10 @@
   padding: 6px 10px;
   align-items: center;
   cursor: pointer;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--n-94);
 
   &:hover {
-    background: #f9f9f9;
+    background: var(--n-98b);
   }
 }
 

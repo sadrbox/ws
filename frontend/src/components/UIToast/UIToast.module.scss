@@ -9,7 +9,7 @@
 
 $toastBg: rgba(28, 32, 40, 0.92);
 $toastBorder: rgba(255, 255, 255, 0.08);
-$toastText: #f3f4f6;
+$toastText: var(--n-96a);
 $toastTitle: rgba(255, 255, 255, 0.55);
 $toastShadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5), 0 4px 8px -2px rgba(0, 0, 0, 0.35);
 

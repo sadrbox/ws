@@ -22,7 +22,7 @@
   transition: background 0.15s, border-color 0.15s;
 
   &:hover:not(:disabled) {
-    background: #f3f6ff;
+    background: var(--n-98a);
     border-color: rgba(7, 57, 137, 0.5);
   }
 
@@ -84,7 +84,7 @@
   padding: 9px 12px;
   background: none;
   border: none;
-  color: #333;
+  color: var(--n-20);
   font-size: 13px;
   cursor: pointer;
   text-align: left;

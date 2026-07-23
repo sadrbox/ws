@@ -4,9 +4,9 @@
 	flex-direction: column;
 	gap: 6px;
 	padding: 8px 10px;
-	border: 1px solid #e3e3e3;
+	border: 1px solid var(--n-89a);
 	border-radius: 4px;
-	background: #fafafa;
+	background: var(--n-98c);
 }
 
 .Head {
@@ -90,7 +90,7 @@
 	align-items: flex-end;
 	gap: 10px;
 	padding-top: 4px;
-	border-top: 1px dashed #e0e0e0;
+	border-top: 1px dashed var(--n-88);
 }
 
 // Секции «ссылаются на эту запись» / «задачи по объекту» — только чтение.

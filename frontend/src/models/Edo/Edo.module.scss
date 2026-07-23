@@ -23,13 +23,13 @@
 		font-weight: 600;
 		position: sticky;
 		top: 0;
-		background: #fafafa;
+		background: var(--n-98c);
 	}
 	tbody tr {
 		cursor: pointer;
 	}
 	tbody tr:hover {
-		background: #f5f8ff;
+		background: var(--n-98f);
 	}
 }
 
@@ -59,7 +59,7 @@
 	font-size: 13px;
 	align-items: baseline;
 }
-.DocHeader dt { color: #777; }
+.DocHeader dt { color: var(--n-47); }
 .DocHeader dd { margin: 0; }
 
 .Section {
@@ -127,7 +127,7 @@
 	gap: 3px;
 	font-size: 13px;
 }
-.Field label { color: #777; }
+.Field label { color: var(--n-47); }
 .Field input, .Select {
 	font: inherit;
 	padding: 5px 7px;

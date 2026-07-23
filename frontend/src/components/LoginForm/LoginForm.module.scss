@@ -24,7 +24,7 @@
 .modeTabs {
 	display: flex;
 	gap: 0;
-	border-bottom: 2px solid #e0e0e0;
+	border-bottom: 2px solid var(--n-88);
 	margin-bottom: 4px;
 
 	button {
@@ -41,7 +41,7 @@
 		transition: color 0.15s, border-color 0.15s;
 
 		&:hover {
-			color: #333;
+			color: var(--n-20);
 		}
 	}
 }
@@ -84,13 +84,13 @@
 
 	label {
 		font-size: 13px;
-		color: #444;
+		color: var(--n-27);
 		font-weight: 500;
 	}
 
 	input {
 		padding: 8px 12px;
-		border: 1px solid #ccc;
+		border: 1px solid var(--n-80);
 		border-radius: 4px;
 		font-size: 14px;
 		outline: none;

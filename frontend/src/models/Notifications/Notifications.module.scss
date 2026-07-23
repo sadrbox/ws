@@ -20,7 +20,7 @@
 	margin: 0;
 	font-size: 14px;
 	font-weight: 700;
-	color: #333;
+	color: var(--n-20);
 }
 
 .JournalClear {
@@ -57,7 +57,7 @@
 	align-items: flex-start;
 	gap: 10px;
 	padding: 10px 16px;
-	border-bottom: 1px solid #f0f0f0;
+	border-bottom: 1px solid var(--n-94);
 	font-size: 12px;
 	line-height: 1.5;
 	&:last-child {
@@ -70,7 +70,7 @@
 }
 
 .JournalInfo {
-	background: #fafafa;
+	background: var(--n-98c);
 }
 
 .JournalIcon {
@@ -87,7 +87,7 @@
 
 .JournalLabel {
 	font-weight: 600;
-	color: #333;
+	color: var(--n-20);
 	margin-bottom: 2px;
 }
 

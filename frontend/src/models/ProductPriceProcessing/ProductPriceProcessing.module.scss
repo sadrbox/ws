@@ -31,7 +31,7 @@
   align-items: flex-end;
   gap: 8px;
   padding: 8px 10px;
-  background: #fafafa;
+  background: var(--n-98c);
   border: 1px solid var(--sv-color30);
   border-radius: 6px;
 }
@@ -47,7 +47,7 @@
 .divider {
   width: 1px;
   align-self: stretch;
-  background: #e2e2e2;
+  background: var(--n-89);
   margin: 2px 4px;
 }
 
@@ -58,7 +58,7 @@
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: #444;
+  color: var(--n-27);
 }
 
 .badge {
@@ -119,7 +119,7 @@
   align-items: center;
   gap: 5px;
   font-size: 13px;
-  color: #333;
+  color: var(--n-20);
   white-space: nowrap;
   align-self: center;
   cursor: pointer;

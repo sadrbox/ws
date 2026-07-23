@@ -9,7 +9,7 @@ $border-dash: #cbd5e1;
 $muted: var(--sv-gray400);
 $danger: #dc2626;
 $danger-border: #fca5a5;
-$danger-soft: #fef2f2;
+$danger-soft: var(--n-97a);
 $slot: 120px;
 
 .Block {
@@ -37,7 +37,7 @@ $slot: 120px;
   height: $slot;
   border-radius: 12px;
   border: 1px solid $border;
-  background: #fafafa;
+  background: var(--n-98c);
   box-sizing: border-box;
   overflow: hidden;
   display: flex;

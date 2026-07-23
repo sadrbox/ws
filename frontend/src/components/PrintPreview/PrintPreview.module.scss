@@ -76,7 +76,7 @@
 .PrintError {
   padding: 8px 12px;
   margin: 0 0 4px;
-  background: #fef2f2;
+  background: var(--n-97a);
   border: 1px solid #fca5a5;
   border-radius: $radius2;
   color: #b91c1c;
@@ -106,7 +106,7 @@
   width: 100%;
   height: 100%;
   border: none;
-  background: #282828;
+  background: var(--n-16);
   position: relative;
 
   &::after {
