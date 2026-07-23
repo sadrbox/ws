@@ -1,0 +1,49 @@
+// ObjectLink — чип-ссылка на объект системы внутри текста (сообщение чата,
+// заметка, карточка задачи). Выглядит как компактная «пилюля» со ссылкой.
+.ObjectLink {
+	display: inline-flex;
+	align-items: center;
+	max-width: 100%;
+	margin: 0 1px;
+	padding: 1px 7px;
+	border: 1px solid #c7d7ee;
+	border-radius: 10px;
+	background: #eef4fc;
+	color: #1a4f8a;
+	font: inherit;
+	font-size: 12px;
+	line-height: 1.5;
+	text-align: left;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	cursor: pointer;
+	vertical-align: baseline;
+
+	&:hover {
+		background: #dce9fa;
+		border-color: #9bbde6;
+	}
+
+	&:focus-visible {
+		outline: 2px solid #4a90d9;
+		outline-offset: 1px;
+	}
+}
+
+// Ссылка, код которой не разобрался (устаревший формат) либо объект недоступен —
+// показываем подпись, но без действия, чтобы не ломать остальной текст.
+.ObjectLinkBroken {
+	display: inline-flex;
+	align-items: center;
+	margin: 0 1px;
+	padding: 1px 7px;
+	border: 1px dashed #cfcfcf;
+	border-radius: 10px;
+	background: #f5f5f5;
+	color: #8a8a8a;
+	font-size: 12px;
+	line-height: 1.5;
+	white-space: nowrap;
+	cursor: default;
+}

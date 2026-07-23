@@ -16,7 +16,8 @@ import { showToast } from "src/components/UIToast";
 
 const PARAM = "open";
 
-function encodeRestore(r: TPaneRestore): string {
+/** Кодирует рецепт панели в компактный код (переиспользуется в ObjectRef-ссылках). */
+export function encodeRestore(r: TPaneRestore): string {
   switch (r.kind) {
     // Панель-представление: имя компонента (+ uuid записи для форм).
     case "view": return r.data?.uuid ? `v~${r.name}~${r.data.uuid}` : `v~${r.name}`;
@@ -27,7 +28,8 @@ function encodeRestore(r: TPaneRestore): string {
   }
 }
 
-function decodeRestore(s: string): TPaneRestore | null {
+/** Разбирает компактный код обратно в рецепт панели (null — код некорректен). */
+export function decodeRestore(s: string): TPaneRestore | null {
   if (s.length < 2 || s[1] !== "~") return null;
   const type = s[0];
   const rest = s.slice(2);          // часть после "<тип>~"
