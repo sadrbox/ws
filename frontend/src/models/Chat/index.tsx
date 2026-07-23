@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "src/services/api/client";
 import { getCurrentUser } from "src/services/auth";
 import { onLiveEvent } from "src/services/liveEvents";
+import { useChatUnread, markChatRead } from "src/hooks/useChatUnread";
 import { useAppContext } from "src/app/context";
 import { translate } from "src/i18";
 import { getFormatDate } from "src/utils/datetime";
@@ -58,6 +59,7 @@ export const ChatList: FC = () => {
   const [connected, setConnected] = useState(false);
   const feedRef = useRef<HTMLDivElement>(null);
 
+  const { refresh: refreshUnread } = useChatUnread();
   const queryKey = ["chat", orgUuid];
 
   const { data, isLoading, isError } = useQuery({
@@ -93,6 +95,15 @@ export const ChatList: FC = () => {
     return () => { off(); setConnected(false); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgUuid]);
+
+  // ── Отметка прочтения (E4.1) ─────────────────────────────────────────────
+  // Канал открыт и сообщения показаны → отмечаем прочитанным до текущего момента
+  // и пересчитываем бейдж. Срабатывает и при смене организации, и при приходе
+  // новых сообщений в ОТКРЫТОМ чате (иначе бейдж «горел» бы при активном окне).
+  useEffect(() => {
+    if (!orgUuid) return;
+    void markChatRead(orgUuid).then(refreshUnread);
+  }, [orgUuid, messages.length, refreshUnread]);
 
   const send = useCallback(async () => {
     const body = text.trim();

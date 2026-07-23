@@ -7,7 +7,8 @@ import { translate, getLanguage, setLanguage } from 'src/i18';
 import { getEffectiveTheme, toggleTheme } from 'src/services/theme';
 import { useAppContext } from 'src/app/context';
 import { ReloadButton, ClearButton, IconButton } from 'src/components/Toolbar';
-import { copyPaneLink } from 'src/utils/paneLink';
+import { copyPaneLink } from "src/utils/paneLink";
+import { useChatUnread } from "src/hooks/useChatUnread";
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
@@ -997,6 +998,9 @@ export const NavList = ({ label }: TypeNavListProps) => {
   /** Проверяет, имеет ли пользователь хотя бы readonly доступ к модели */
   const can = (modelName: string) => getAccessLevel(rights, modelName, isSuperAdmin).canRead;
 
+  // Непрочитанные сообщения чата — бейдж в пункте меню (E4.1).
+  const { total: chatUnread } = useChatUnread();
+
   const TradeGroups = () => (
     <>
       <div className={styles.NavGroup}>
@@ -1160,7 +1164,11 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("Todo") && <NavItem onClick={() => addPane({ component: TaskBoardList, label: translate("TaskBoard") })}>{translate("TaskBoard")}</NavItem>}
           {can("Todo") && <NavItem onClick={() => addPane({ component: TodosList })}>{translate("TodosList")}</NavItem>}
           {can("Todo") && <NavItem onClick={() => addPane({ component: UserPerformanceList, label: translate("UserPerformance") })}>{translate("UserPerformance")}</NavItem>}
-          <NavItem onClick={() => addPane({ component: ChatList, label: translate("Chat") })}>{translate("Chat")}</NavItem>
+          <NavItem onClick={() => addPane({ component: ChatList, label: translate("Chat") })}>
+            {translate("Chat")}
+            {/* Бейдж непрочитанного (E4.1): чужие сообщения позже отметки прочтения. */}
+            {chatUnread > 0 && <span className={styles.NavBadge}>{chatUnread > 99 ? "99+" : chatUnread}</span>}
+          </NavItem>
         </ul>
       </div>
     </>

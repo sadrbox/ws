@@ -1571,3 +1571,20 @@ body {
 		color: #0958d9;
 	}
 }
+// Бейдж непрочитанного в пункте навбара (E4.1) — компактный счётчик рядом с текстом.
+.NavBadge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	height: 18px;
+	margin-left: 6px;
+	padding: 0 5px;
+	border-radius: 9px;
+	background: var(--danger);
+	color: var(--sv-color60);
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1;
+	vertical-align: middle;
+}

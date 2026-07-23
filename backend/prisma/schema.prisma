@@ -420,6 +420,22 @@ model ActivityHistory {
 // Канал = организация: сообщение видят только пользователи с доступом к ней (тот
 // же tenantFilter, что и везде). authorName денормализован — чтобы история читалась
 // даже после переименования/удаления пользователя. Прямые диалоги 1:1 — на будущее.
+/// Отметка «прочитано до» для канала организации. Одна строка на пару
+/// пользователь+организация: непрочитанное = число сообщений позже lastReadAt
+/// (не считая своих). Хранить факт прочтения каждого сообщения не нужно —
+/// канал линейный, достаточно границы.
+model ChatRead {
+  id               Int      @id @default(autoincrement())
+  uuid             String   @unique @default(uuid())
+  userUuid         String
+  organizationUuid String
+  lastReadAt       DateTime @default(now())
+
+  @@unique([userUuid, organizationUuid], map: "chat_reads_user_org_key")
+  @@index([userUuid])
+  @@map("chat_reads")
+}
+
 model ChatMessage {
   id               Int           @id @default(autoincrement())
   uuid             String        @unique @default(uuid())

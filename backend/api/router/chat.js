@@ -88,4 +88,73 @@ router.post("/chat/messages", async (req, res) => {
 	}
 });
 
+// ── Непрочитанное по доступным организациям (E4.1) ───────────────────────────
+// Считаем сообщения ПОЗЖЕ отметки прочтения и НЕ свои. Организации без отметки
+// считаются непрочитанными целиком (пользователь ещё не открывал канал).
+router.get("/chat/unread", async (req, res) => {
+	try {
+		const orgs = allowedOrgs(req);
+		const marks = await prisma.chatRead.findMany({
+			where: { userUuid: req.user.uuid },
+			select: { organizationUuid: true, lastReadAt: true },
+		});
+		const readAt = new Map(marks.map((m) => [m.organizationUuid, m.lastReadAt]));
+
+		// Сначала одним groupBy находим организации, где вообще есть чужие сообщения
+		// (обычно их единицы) — чтобы не гонять счётчик по всем доступным орг.
+		const rows = await prisma.chatMessage.groupBy({
+			by: ["organizationUuid"],
+			where: {
+				deletedAt: null,
+				authorUuid: { not: req.user.uuid },
+				...(orgs === null ? {} : { organizationUuid: { in: orgs } }),
+			},
+			_count: { _all: true },
+		});
+
+		// Точный счёт непрочитанного по каждой организации (учитывая её отметку).
+		// Отдельный count нужен только там, где отметка есть; без отметки канал
+		// не открывался — непрочитано всё, и число уже посчитано в groupBy.
+		const byOrg = {};
+		let total = 0;
+		for (const r of rows) {
+			const since = readAt.get(r.organizationUuid);
+			const count = since
+				? await prisma.chatMessage.count({
+					where: {
+						organizationUuid: r.organizationUuid, deletedAt: null,
+						authorUuid: { not: req.user.uuid }, createdAt: { gt: since },
+					},
+				})
+				: r._count._all;
+			if (count > 0) { byOrg[r.organizationUuid] = count; total += count; }
+		}
+		return res.status(200).json({ success: true, total, byOrg });
+	} catch (err) {
+		console.error("GET /chat/unread error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// Отметить канал организации прочитанным (до текущего момента).
+router.post("/chat/read", async (req, res) => {
+	try {
+		const organizationUuid = String(req.body?.organizationUuid || "").trim();
+		if (!organizationUuid) return res.status(400).json({ success: false, message: "organizationUuid обязателен" });
+		if (!canAccessOrg(req, organizationUuid)) {
+			return res.status(403).json({ success: false, message: "Нет доступа к организации" });
+		}
+		const now = new Date();
+		await prisma.chatRead.upsert({
+			where: { userUuid_organizationUuid: { userUuid: req.user.uuid, organizationUuid } },
+			create: { userUuid: req.user.uuid, organizationUuid, lastReadAt: now },
+			update: { lastReadAt: now },
+		});
+		return res.status(200).json({ success: true });
+	} catch (err) {
+		console.error("POST /chat/read error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 export default router;
