@@ -1,3 +1,4 @@
+import type { TPane } from "src/app/types";
 /**
  * formRegistry.ts — Утилита для открытия формы модели по endpoint + uuid.
  * Используется в журнале уведомлений для перехода к объекту.
@@ -18,7 +19,7 @@ import type { TDataItem } from "src/components/Table/types";
 export async function openFormByEndpoint(
   endpoint: string,
   uuid: string,
-  addPane: (options: any) => void,
+  addPane: (options: Partial<TPane>) => void,
 ): Promise<void> {
   const entry = getByEndpoint(endpoint);
   if (!entry) return;
@@ -66,7 +67,7 @@ function resolveEntryByRef(ref: string): ModelRegistryEntry | undefined {
  */
 export async function openListByRef(
   ref: string,
-  addPane: (options: any) => void,
+  addPane: (options: Partial<TPane>) => void,
   paneLabel?: string,
 ): Promise<void> {
   const entry = resolveEntryByRef(ref);

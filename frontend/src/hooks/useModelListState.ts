@@ -1,3 +1,4 @@
+import type { TOpenModelFormProps } from "src/app/types";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { translate } from "src/i18";
 import type { ReactNode } from "react";
@@ -36,7 +37,10 @@ export interface UseModelListStateOptions {
 	/** Имя компонента для columns.json (например "OrganizationsList") */
 	componentName: string;
 	/** JSON-конфиг колонок */
-	columnsJson: any;
+	/** Колонки из columns.json. Тип «unknown» намеренно: структурный вывод из
+	 *  JSON не совпадает с union-полями TColumn (alignment/type), поэтому
+	 *  приведение делаем в точке использования, а не на границе. */
+	columnsJson: unknown;
 	/** Сортировка по умолчанию */
 	defaultSort?: Record<string, "asc" | "desc">;
 	/** Вариант "part" для вложенных списков */
@@ -76,7 +80,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
 	const { canRead, canWrite } = useAccessPermission(modelName);
 
 	const [columns, setColumns] = useState<TColumn[]>(() =>
-		getModelColumns(opts.columnsJson, componentName, columnsVariant),
+		getModelColumns(opts.columnsJson as TColumn[], componentName, columnsVariant),
 	);
 	// Восстанавливаем сохранённый на клиенте вид таблицы (сортировка + период).
 	const persistedView = useMemo(() => loadTableView(componentName), [componentName]);
@@ -275,7 +279,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		(extra: {
 			variant?: TTableVariant;
 			onSelectItem?: (item: TDataItem) => void;
-			openModelForm: (formProps: any) => void;
+			openModelForm: (formProps: TOpenModelFormProps) => void;
 			enableDateRange?: boolean;
 			renderCell?: (row: TDataItem, col: TColumn) => ReactNode | undefined;
 			highlightUuid?: string;

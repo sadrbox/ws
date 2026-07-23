@@ -2,7 +2,7 @@ import { FC, useMemo, useCallback, useState, useRef, useEffect } from "react";
 import { useAppContext } from "src/app/context";
 import { getModelColumns } from "src/components/Table/services";
 import { translate } from "src/i18";
-import type { TColumn, TDataItem } from "src/components/Table/types";
+import type { TColumn, TDataItem, DocRow } from "src/components/Table/types";
 import Table from "src/components/Table";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
@@ -45,10 +45,11 @@ function getPendingSummary(data: Record<string, unknown>): string {
   for (const [tableKey, tableState] of Object.entries(tables)) {
     const pending = tableState?.pending;
     if (!Array.isArray(pending) || pending.length === 0) continue;
+    const rows = pending as DocRow[];
     const label = TABLE_LABELS[tableKey] ?? tableKey;
-    const created = pending.filter((r: any) => r._pendingAction === "create").length;
-    const updated = pending.filter((r: any) => r._pendingAction === "update").length;
-    const deleted = pending.filter((r: any) => r._pendingAction === "delete").length;
+    const created = rows.filter((r) => r._pendingAction === "create").length;
+    const updated = rows.filter((r) => r._pendingAction === "update").length;
+    const deleted = rows.filter((r) => r._pendingAction === "delete").length;
     const actionParts: string[] = [];
     if (created > 0) actionParts.push(`+${created}`);
     if (updated > 0) actionParts.push(`~${updated}`);
