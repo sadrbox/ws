@@ -114,7 +114,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     defaultFields: DEFAULT_FIELDS,
     initialFields,
     paneProps,
-    mapServerToForm: (d: any, prev) => ({
+    mapServerToForm: (d, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       number: d.number ?? "",
       date: isoToLocalInput(d.date),

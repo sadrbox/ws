@@ -53,6 +53,11 @@ import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 export type { BasisTypeConfig };
 
 export interface PrintConfig {
+  /** items — строки документа, которые мапперы печати кладут в типизированные
+   *  печатные строки (SaleItemPrintRow и др.). Тип `any` здесь СУЩЕСТВЕННЫЙ:
+   *  TDataItem даёт unknown, а печатные типы требуют number/string, и конверсия
+   *  (Number(r.quantity)) изменила бы вывод при пустых значениях — это смена
+   *  поведения, а не типизация. */
   buildLayout: (fields: TFields, items: any[], cols: Record<string, boolean>) => React.ReactNode;
   columnDefs: PrintColumnDef[];
   columnsKey: string;

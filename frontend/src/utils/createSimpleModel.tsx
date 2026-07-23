@@ -59,7 +59,9 @@ export interface CreateSimpleModelOptions {
   /** Русское название для заголовка (fallback) */
   formLabel: string;
   /** Описание колонок таблицы (columns.json) */
-  columnsJson: any;
+  /** Колонки из columns.json. unknown, а не TColumn[]: структурный вывод из
+   *  JSON не совпадает с union-полями TColumn — приведение в точке использования. */
+  columnsJson: unknown;
   /** Массив описаний полей формы */
   fields: SimpleFieldDef[];
   /** Ключ AccessPermission (напр. "Brand"). Если не указан — readonly не применяется */

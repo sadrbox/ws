@@ -17,6 +17,11 @@ import PaymentInvoicePrint from "./PaymentInvoicePrint";
 const MODEL_ENDPOINT = "payment-invoices";
 const LIST_NAME = "PaymentInvoicesList";
 
+/** БИН/ИИН лежат во ВЛОЖЕННЫХ серверных объектах, которых нет в полях формы. */
+type TaxIds = { bin?: string; iin?: string };
+const orgTax = (f: unknown): TaxIds => ((f as { organization?: TaxIds })?.organization ?? {});
+const cpTax = (f: unknown): TaxIds => ((f as { counterparty?: TaxIds })?.counterparty ?? {});
+
 const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   endpoint: MODEL_ENDPOINT,
   itemsEndpoint: "paymentinvoiceitems",
@@ -30,15 +35,15 @@ const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   formDisplayName: "PaymentInvoicesForm",
   docType: "payment_invoice",
   printConfig: {
-    buildLayout: (fields: any, items, cols) => (
+    buildLayout: (fields, items, cols) => (
       <PaymentInvoicePrint data={{
         documentId: fields.id,
         documentNumber: fields.number || undefined,
         documentDate: fields.date,
         organizationName: fields.organizationName,
-        organizationBin: fields.organization?.bin ?? fields.organization?.iin ?? undefined,
+        organizationBin: orgTax(fields).bin ?? orgTax(fields).iin ?? undefined,
         counterpartyName: fields.counterpartyName,
-        counterpartyBin: fields.counterparty?.bin ?? fields.counterparty?.iin ?? undefined,
+        counterpartyBin: cpTax(fields).bin ?? cpTax(fields).iin ?? undefined,
         contractName: fields.contractName,
         items: items.map((r) => ({ number: r.number, name: r.name, unit: r.unit, quantity: r.quantity, price: r.price, vatRate: r.vatRate, vatAmount: r.vatAmount, amount: r.amount })),
         totalAmount: items.reduce((s: number, r: TDataItem) => s + Number(r.amount ?? 0), 0),

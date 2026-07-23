@@ -57,7 +57,9 @@ export interface CashOrderFormConfig {
   accessPermissionModel: string;
   docType: DocumentType;
   formDisplayName: string;
-  columnsJson: any;
+  /** Колонки из columns.json. unknown, а не TColumn[]: структурный вывод из
+   *  JSON не совпадает с union-полями TColumn — приведение в точке использования. */
+  columnsJson: unknown;
 }
 
 interface TFields {
