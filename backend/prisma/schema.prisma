@@ -518,6 +518,12 @@ model Todo {
   deadline         DateTime?
   deadlineDays     Int?
   status           String        @default("new")
+  // Полиморфная ссылка на объект-источник задачи (документ/справочник/заметка).
+  // Конвенция та же, что у basisDocumentType/Uuid/Label в документах: тип —
+  // endpoint модели, label — подпись на момент связывания (переживает удаление).
+  sourceType       String?
+  sourceUuid       String?
+  sourceLabel      String?
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   curator          User?         @relation("TodoCurator", fields: [curatorUuid], references: [uuid])
   executor         User?         @relation("TodoExecutor", fields: [executorUuid], references: [uuid])
@@ -529,6 +535,7 @@ model Todo {
   @@index([executorUuid])
   @@index([status])
   @@index([updatedAt])
+  @@index([sourceType, sourceUuid])
   @@map("todos")
 }
 

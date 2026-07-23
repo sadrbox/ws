@@ -116,19 +116,33 @@ const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; inva
   const createTask = useCallback(async (note: NoteRow) => {
     let organizationUuid: string | undefined;
     let organizationName: string | undefined;
+    // Подпись объекта-источника: имя (справочник) либо «№ номер - дата» (документ).
+    // Сохраняется в задаче, чтобы ссылка читалась даже если объект потом удалён.
+    let sourceLabel = endpoint;
     try {
       const r = await apiClient.get<{ item?: Record<string, unknown> }>(`${endpoint}/${uuid}`);
       const item = r.data?.item;
       if (item) {
         organizationUuid = (item.organizationUuid as string) || undefined;
         organizationName = ((item.organization as { name?: string } | undefined)?.name) || undefined;
+        if (item.name) {
+          sourceLabel = String(item.name);
+        } else if (item.number) {
+          const date = item.date ? ` - ${getFormatDateOnly(String(item.date))}` : "";
+          sourceLabel = `№ ${item.number}${date}`;
+        }
       }
     } catch { /* запись без организации — задача создастся без предзаполнения орг */ }
     const { TodosForm } = await import("src/models/Todos");
     addPane({
       label: translate("TodosForm") || "Задача",
       component: TodosForm,
-      data: { description: note.body, organizationUuid, organizationName },
+      // sourceType/Uuid/Label — ссылка задачи на объект, к которому написана заметка
+      // (в форме задачи показывается чипом «Источник» и открывается по клику).
+      data: {
+        description: note.body, organizationUuid, organizationName,
+        sourceType: endpoint, sourceUuid: uuid, sourceLabel,
+      },
     });
     onClose();
   }, [endpoint, uuid, addPane, onClose]);

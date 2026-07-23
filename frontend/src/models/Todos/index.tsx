@@ -9,6 +9,8 @@ import FilesPanel from "src/components/FilesPanel";
 import { Field, FieldNumber, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
+import ObjectLink from "src/components/ObjectLink";
+import { refFromRestore } from "src/utils/objectRef";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -35,6 +37,8 @@ interface TFields {
   curatorUuid: string; curatorName: string;
   executorUuid: string; executorName: string;
   createdAt: string; deadline: string; deadlineDays: string;
+  /** Объект-источник задачи (документ/справочник/заметка) — ссылка «Источник». */
+  sourceType: string; sourceUuid: string; sourceLabel: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
@@ -43,6 +47,7 @@ const DEFAULT_FIELDS: TFields = {
   curatorUuid: "", curatorName: "",
   executorUuid: "", executorName: "",
   createdAt: "", deadline: "", deadlineDays: "",
+  sourceType: "", sourceUuid: "", sourceLabel: "",
 };
 
 const TodosForm: FC<Partial<TPane>> = (paneProps) => {
@@ -55,6 +60,11 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
     const init = { ...DEFAULT_FIELDS };
     if (data?.organizationUuid) { init.organizationUuid = data?.organizationUuid as string; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
+    // Описание и ссылка на источник при создании «из заметки» (см. NotesButton).
+    if (data?.description) init.description = String(data.description);
+    if (data?.sourceType) init.sourceType = String(data.sourceType);
+    if (data?.sourceUuid) init.sourceUuid = String(data.sourceUuid);
+    if (data?.sourceLabel) init.sourceLabel = String(data.sourceLabel);
     return init;
   })();
 
@@ -68,6 +78,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
       executorUuid: d.executorUuid ?? "", executorName: d.executor?.employee?.fullName || d.executor?.username || "",
       createdAt: d.createdAt?.slice(0, 10) ?? "",
       deadline: d.deadline?.slice(0, 10) ?? "", deadlineDays: d.deadlineDays?.toString() ?? "",
+      sourceType: d.sourceType ?? "", sourceUuid: d.sourceUuid ?? "", sourceLabel: d.sourceLabel ?? "",
       id: d.id, uuid: d.uuid,
     }),
     buildPayload: (fd) => ({
@@ -75,6 +86,8 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
       organizationUuid: fd.organizationUuid || null, counterpartyUuid: null,
       curatorUuid: fd.curatorUuid || null, executorUuid: fd.executorUuid || null,
       deadline: fd.deadline || null, deadlineDays: fd.deadlineDays || null,
+      sourceType: fd.sourceType || null, sourceUuid: fd.sourceUuid || null,
+      sourceLabel: fd.sourceLabel || null,
     }),
     buildPaneLabel: (saved) => makePaneLabel("TodosList", "Задачи", saved, saved.description ? String(saved.description).slice(0, 60) : undefined),
   });
@@ -125,6 +138,21 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                 <Group>
                   <FieldTextarea label={translate("taskDescription")} name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth={FIELD_WIDTH.lg} minHeight="120px" rows={6} />
                 </Group>
+                {/* Объект, из которого создана задача (напр. заметка к документу) —
+                    клик по чипу открывает сам объект. */}
+                {form.fields.sourceUuid && (
+                  <Group>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 12, color: "#666" }}>{translate("source")}:</span>
+                      <ObjectLink
+                        objectRef={refFromRestore(
+                          { kind: "form", endpoint: form.fields.sourceType, uuid: form.fields.sourceUuid },
+                          form.fields.sourceLabel || form.fields.sourceType,
+                        )}
+                      />
+                    </div>
+                  </Group>
+                )}
               </GroupCol>
             </div>
 

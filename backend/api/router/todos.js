@@ -225,6 +225,9 @@ router.post("/todos", async (req, res) => {
 			executorUuid,
 			deadline,
 			deadlineDays,
+			sourceType,
+			sourceUuid,
+			sourceLabel,
 		} = req.body;
 
 		const item = await prisma.todo.create({
@@ -238,6 +241,10 @@ router.post("/todos", async (req, res) => {
 				executorUuid: executorUuid || null,
 				deadline: deadline ? new Date(deadline) : null,
 				deadlineDays: deadlineDays ? parseInt(deadlineDays) : null,
+				// Ссылка на объект-источник (создание «из заметки» и т.п.)
+				sourceType: sourceType || null,
+				sourceUuid: sourceUuid || null,
+				sourceLabel: sourceLabel || null,
 			},
 			include: INCLUDE,
 		});
@@ -279,6 +286,9 @@ router.put("/todos/:id", async (req, res) => {
 			executorUuid,
 			deadline,
 			deadlineDays,
+			sourceType,
+			sourceUuid,
+			sourceLabel,
 		} = req.body;
 
 		const data = {};
@@ -296,6 +306,10 @@ router.put("/todos/:id", async (req, res) => {
 			data.deadline = deadline ? new Date(deadline) : null;
 		if (deadlineDays !== undefined)
 			data.deadlineDays = deadlineDays ? parseInt(deadlineDays) : null;
+		// Ссылка на объект-источник
+		if (sourceType !== undefined) data.sourceType = sourceType || null;
+		if (sourceUuid !== undefined) data.sourceUuid = sourceUuid || null;
+		if (sourceLabel !== undefined) data.sourceLabel = sourceLabel || null;
 
 		const item = await prisma.todo.update({
 			where: whereClause,
