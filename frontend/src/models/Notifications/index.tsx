@@ -1,3 +1,4 @@
+import type { TDataItem } from "src/components/Table/types";
 import { FC, useCallback } from "react";
 import { useAppContext } from "src/app/context";
 import {
@@ -14,7 +15,7 @@ import styles from "./Notifications.module.scss";
 
 interface NotificationsListProps {
   variant?: string;
-  onSelectItem?: (item: any) => void;
+  onSelectItem?: (item: TDataItem) => void;
 }
 
 function formatDate(ts: number): string {

@@ -46,9 +46,10 @@ function useSubkontoOptions() {
   const { data } = useQuery<{ value: string; label: string }[]>({
     queryKey: ["subkonto-types-options"],
     queryFn: async () => {
-      const resp = await api.get<any>("subkonto-types", { params: { limit: 200 } });
+      type SubkontoType = { code: string; name: string };
+      const resp = await api.get<{ items?: SubkontoType[] }>("subkonto-types", { params: { limit: 200 } });
       const items = resp?.items ?? [];
-      return [{ value: "", label: "—" }, ...items.map((t: any) => ({ value: t.code, label: t.name }))];
+      return [{ value: "", label: "—" }, ...items.map((t) => ({ value: t.code, label: t.name }))];
     },
     staleTime: 5 * 60 * 1000,
   });

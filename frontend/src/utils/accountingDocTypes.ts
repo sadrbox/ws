@@ -1,3 +1,4 @@
+import type { TPane } from "src/app/types";
 import { translate } from "src/i18";
 
 /**
@@ -85,7 +86,7 @@ export function docTypeUsesPosted(type: string): boolean {
 export async function openDocumentByType(
 	documentType: string,
 	documentUuid: string,
-	addPane: (options: any) => void,
+	addPane: (options: Partial<TPane>) => void,
 ): Promise<void> {
 	const endpoint = docTypeToEndpoint(documentType);
 	if (!endpoint || !documentUuid) return;

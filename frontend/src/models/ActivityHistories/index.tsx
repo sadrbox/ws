@@ -44,8 +44,9 @@ interface TFields {
   objectId: string;
   objectType: string;
   objectName: string;
-  diff?: any;
-  props?: any;
+  /** Произвольный JSON аудита (набор полей зависит от модели). */
+  diff?: unknown;
+  props?: unknown;
 }
 
 const DEFAULT_FIELDS: TFields = {
@@ -117,7 +118,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
               <Group>
                 {/* Сводка изменений: «поле: было → стало». Полный JSON — в props ниже. */}
                 <Field label={translate("diff")} name={`${form.formUid}_diff`}
-                  value={form.fields.diff ? summarizeDiff(form.fields.diff, form.fields.actionType) : ""} disabled />
+                  value={form.fields.diff ? summarizeDiff(form.fields.diff as Record<string, { from: unknown; to: unknown }>, form.fields.actionType) : ""} disabled />
               </Group>
               <Group>
                 <Field label={translate("user")} name={`${form.formUid}_userName`} minWidth="200px" value={form.fields.userName} disabled />
@@ -127,7 +128,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
               </Group>
             </GroupCol>
 
-            {form.fields.props && (
+            {!!form.fields.props && (
               <div className={auditStyles.PropsBlock}>
                 <details className={auditStyles.PropsDetails}>
                   <summary className={auditStyles.PropsSummary}>

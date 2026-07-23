@@ -12,12 +12,18 @@
  *  - Axios: ERR_NETWORK, ECONNABORTED, "Network Error", isAxiosError без response
  *  - Offline interceptor: `data._offline === true`
  */
-export function isNetworkError(error: any): boolean {
+export function isNetworkError(error: unknown): boolean {
 	if (!error) return false;
-	if (["ERR_NETWORK", "ECONNABORTED", "ETIMEDOUT", "ECONNREFUSED"].includes(error.code)) return true;
-	if (error.message === "Network Error") return true;
-	if (error.isAxiosError && !error.response) return true;
+	// Сетевая ошибка приходит из разных источников (axios, offline-интерцептор),
+	// поэтому описываем ровно те поля, по которым её опознаём.
+	const e = error as {
+		code?: string; message?: string; isAxiosError?: boolean;
+		response?: unknown; data?: { _offline?: boolean };
+	};
+	if (["ERR_NETWORK", "ECONNABORTED", "ETIMEDOUT", "ECONNREFUSED"].includes(e.code ?? "")) return true;
+	if (e.message === "Network Error") return true;
+	if (e.isAxiosError && !e.response) return true;
 	// Offline interceptor возвращает _offline: true
-	if (error?.data?._offline) return true;
+	if (e?.data?._offline) return true;
 	return false;
 }

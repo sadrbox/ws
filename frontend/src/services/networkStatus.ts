@@ -1,3 +1,4 @@
+import type { SyncConflict } from "./syncManager";
 /**
  * networkStatus — сервис отслеживания состояния сети + интеграция с syncManager.
  *
@@ -220,7 +221,7 @@ export async function processQueue(): Promise<any> {
 /**
  * Принять локальную версию — повторить запрос.
  */
-export async function resolveConflictLocal(conflict: any): Promise<boolean> {
+export async function resolveConflictLocal(conflict: SyncConflict): Promise<boolean> {
 	try {
 		const { resolveConflictKeepLocal } = await import("./syncManager");
 		return await resolveConflictKeepLocal(conflict);
@@ -233,7 +234,7 @@ export async function resolveConflictLocal(conflict: any): Promise<boolean> {
 /**
  * Принять серверную версию — обновить локальную.
  */
-export async function resolveConflictServer(conflict: any): Promise<boolean> {
+export async function resolveConflictServer(conflict: SyncConflict): Promise<boolean> {
 	try {
 		const { resolveConflictKeepServer } = await import("./syncManager");
 		return await resolveConflictKeepServer(conflict);
