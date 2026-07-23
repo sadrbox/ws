@@ -35,6 +35,16 @@ export interface ApiError {
 	statusCode: number;
 }
 
+/**
+ * Форма ОШИБКИ запроса (axios-подобная) — для сужения `unknown` в catch без `any`.
+ * Отличается от ApiError выше: та описывает полезную нагрузку, эта — сам объект
+ * исключения, который приходит в catch.
+ */
+export interface RequestError {
+	response?: { status?: number; data?: { message?: string } };
+	message?: string;
+}
+
 export const apiClient: AxiosInstance = axios.create({
 	baseURL: getApiUrl(),
 	timeout: 15000,

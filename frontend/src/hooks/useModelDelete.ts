@@ -1,11 +1,11 @@
 import { useCallback } from "react";
-import apiClient from "src/services/api/client";
+import apiClient, { type RequestError } from "src/services/api/client";
 import type { TDataItem } from "src/components/Table/types";
 import { useAppContext } from "src/app/context";
 import { getComponentName } from "src/app/getComponentName";
 import { showToast } from "src/components/UIToast";
 import { isSyncableEndpoint } from "src/services/offlineDataService";
-import { upsertRecords, getRecordByUuid } from "src/services/offlineDb";
+import { upsertRecords, getRecordByUuid, type SyncRecord } from "src/services/offlineDb";
 import { describeRow } from "src/utils/describeRow";
 
 /**
@@ -73,9 +73,9 @@ export function useModelDelete(
 					await apiClient.delete(`/${model}/${key}`);
 					if (item.uuid) deletedUuids.add(String(item.uuid));
 					if (item.id != null) deletedIds.add(Number(item.id));
-				} catch (err: any) {
-					const status = err?.response?.status;
-					const data = err?.response?.data;
+				} catch (err: unknown) {
+					const status = (err as RequestError)?.response?.status;
+					const data = (err as RequestError)?.response?.data;
 					if (status === 409) {
 						const refsMsg =
 							typeof data?.message === "string"
@@ -93,11 +93,15 @@ export function useModelDelete(
 				// ── Batch-удаление через POST /{model}/batch-delete ───────────────
 				const uuids = items.map((i) => i.uuid).filter(Boolean);
 				try {
-					const resp: any = await apiClient.post(`/${model}/batch-delete`, {
-						uuids,
-					});
-					const failed: Array<{ uuid: string; message: string }> =
-						resp?.failed ?? [];
+					// ВАЖНО: apiClient отдаёт полный AxiosResponse (интерцептор возвращает
+					// response), поэтому тело ответа — в .data. Раньше здесь читалось
+					// resp?.failed, что ВСЕГДА давало undefined: неудалённые записи
+					// (напр. на которые есть ссылки) считались удалёнными, а их ошибки
+					// терялись. Читаем resp.data.failed.
+					const resp = await apiClient.post<{
+						failed?: Array<{ uuid: string; message: string }>;
+					}>(`/${model}/batch-delete`, { uuids });
+					const failed = resp.data?.failed ?? [];
 					const failedUuids = new Set(failed.map((f) => f.uuid));
 					for (const item of items) {
 						if (item.uuid && !failedUuids.has(String(item.uuid))) {
@@ -108,16 +112,16 @@ export function useModelDelete(
 					for (const f of failed) {
 						errors.push(f.message);
 					}
-				} catch (err: any) {
+				} catch (err: unknown) {
 					// Батч-роута у модели может не быть (журнал действий, задачи,
 					// пользователи) — тогда сервер отвечает 404, и раньше пользователь
 					// получал «Ошибка пакетного удаления», хотя записи удалимы
 					// поштучно. Мягко деградируем: удаляем по одной.
-					if (err?.response?.status === 404) {
+					if ((err as RequestError)?.response?.status === 404) {
 						for (const item of items) await deleteOne(item);
 					} else {
 						const msg =
-							err?.response?.data?.message || "Ошибка пакетного удаления";
+							(err as RequestError)?.response?.data?.message || "Ошибка пакетного удаления";
 						errors.push(msg);
 					}
 				}
@@ -128,7 +132,7 @@ export function useModelDelete(
 			// ── 1) Mark-as-deleted в Dexie для синхронизируемых endpoint-ов ──────
 			if (deletedUuids.size > 0 && isSyncableEndpoint(model)) {
 				const now = new Date().toISOString();
-				const updates: any[] = [];
+				const updates: SyncRecord[] = [];
 				for (const uuid of deletedUuids) {
 					try {
 						const existing = await getRecordByUuid(model, uuid);
