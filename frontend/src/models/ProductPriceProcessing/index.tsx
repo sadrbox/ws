@@ -38,12 +38,32 @@ const correctionColumns = [
 ].filter(Boolean);
 
 // ─── Общий рендер ячеек ────────────────────────────────────────────────────
+/** Прикладные поля строки цены (без идентификаторов). */
+interface PriceFields {
+  productUuid?: string | null;
+  product?: { name?: string | null } | null;
+  priceTypeUuid?: string | null;
+  priceType?: { name?: string | null } | null;
+  price?: unknown;
+  date?: string | null;
+  /** Исходная цена до правки — для колонок «Старая цена»/«Δ, %». */
+  _origPrice?: unknown;
+  /** Сопоставлена ли строка файла с номенклатурой. */
+  _matched?: boolean;
+}
+
+/** Строка В ТАБЛИЦЕ: идентификаторы уже есть (их требует контекст SubTable). */
+type PriceRow = TDataItem & PriceFields;
+
+/** ЧЕРНОВИК строки: добавленная кнопкой или разобранная из файла — без id/uuid. */
+type PriceDraft = PriceFields & { id?: number; uuid?: string;[key: string]: unknown };
+
 const priceCellRenderer = (
   row: TDataItem,
   col: TColumn,
   ctx: SubTableContext,
 ): React.ReactNode | undefined => {
-  const r: any = row;
+  const r = row as PriceRow;
   if (col.identifier === "product.name") {
     const isImportRow = "_matched" in r;
     const warn = isImportRow && !r.productUuid;
@@ -152,7 +172,7 @@ const PriceCorrectionPanel: FC<{
     [currentRows],
   );
 
-  const applyRows = (rows: any[]) => {
+  const applyRows = (rows: PriceDraft[]) => {
     setPendingRows(rows);
     setCurrentRows(rows);
     setFillVersion((v) => v + 1);
@@ -263,10 +283,10 @@ const PriceCorrectionPanel: FC<{
 
   // Реальная серверная строка (а не локально добавленная кнопкой «Добавить»,
   // у которой uuid вида "tmp-…"). По нему отличаем update от create.
-  const realUuid = (r: any) => (r.uuid && !String(r.uuid).startsWith("tmp-") ? r.uuid : null);
+  const realUuid = (r: PriceDraft) => (r.uuid && !String(r.uuid).startsWith("tmp-") ? r.uuid : null);
 
   const buildOps = () => {
-    const ops: any[] = [];
+    const ops: Array<Record<string, unknown>> = [];
     const wDate = writeDate();
     for (const r of currentRows) {
       const ru = realUuid(r);
@@ -496,7 +516,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
   const existingCount = useMemo(() => allRows.filter((r) => r._existing).length, [allRows]);
 
   // Показать строки с учётом опции «скрыть существующие».
-  const showRows = (rows: any[], hide: boolean) => {
+  const showRows = (rows: PriceDraft[], hide: boolean) => {
     const shown = hide ? rows.filter((r) => !r._existing) : rows;
     setPendingRows(shown);
     setCurrentRows(shown);

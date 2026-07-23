@@ -34,21 +34,47 @@ const splitBarcodes = (s: unknown): string[] =>
 
 const lc = (s: unknown) => String(s ?? "").trim().toLowerCase();
 
+/** Строка разобранного файла: известные колонки + произвольные (типы цен). */
+interface SheetRow {
+  sku?: unknown;
+  name?: unknown;
+  brand?: unknown;
+  unit?: unknown;
+  isService?: unknown;
+  barcodes?: unknown;
+  [key: string]: unknown;
+}
+
+/** Товар из справочника (ответ resolve-products) — для сопоставления строк файла. */
+interface CatalogProduct {
+  uuid?: string;
+  sku?: string | null;
+  name?: string | null;
+  barcode?: string | null;
+  barcodes?: Array<{ barcode?: string | null }>;
+  brand?: { name?: string | null } | null;
+  unitOfMeasure?: { name?: string | null } | null;
+  isService?: boolean | null;
+  /** История цен (export-full), отсортирована по дате desc. */
+  productPrices?: Array<{ priceType?: { name?: string | null } | null; price?: unknown }>;
+  [key: string]: unknown;
+}
+
 // Серверное сопоставление номенклатуры (для предпросмотра импорта, #6):
 // строим карты ШК / «артикул+бренд» / артикул / наименование.
-async function resolveImportProducts(rows: any[]) {
+async function resolveImportProducts(rows: SheetRow[]) {
   const uniq = (xs: string[]) => Array.from(new Set(xs.filter(Boolean)));
   const allBarcodes = rows.flatMap((r) => splitBarcodes(r.barcodes));
-  const skus = rows.map((r) => r.sku);
-  const names = rows.map((r) => r.name);
+  const skus = rows.map((r) => String(r.sku ?? ""));
+  const names = rows.map((r) => String(r.name ?? ""));
   const resp = await apiClient.post(`/product-prices/resolve-products`, {
     skus: uniq(skus), barcodes: uniq(allBarcodes), names: uniq(names),
   });
-  const items = (resp.data?.items ?? []) as any[];
-  const byBarcode = new Map<string, any>();
-  const bySkuBrand = new Map<string, any>();
-  const bySku = new Map<string, any>();
-  const byName = new Map<string, any>();
+  const items = (resp.data?.items ?? []) as CatalogProduct[];
+  const byBarcode = new Map<string, CatalogProduct>();
+  const bySkuBrand = new Map<string, CatalogProduct>();
+  const bySku = new Map<string, CatalogProduct>();
+  const byName = new Map<string, CatalogProduct>();
   for (const p of items) {
     if (p.barcode) byBarcode.set(String(p.barcode).trim(), p);
     for (const b of p.barcodes ?? []) if (b.barcode) byBarcode.set(String(b.barcode).trim(), p);
@@ -59,7 +85,7 @@ async function resolveImportProducts(rows: any[]) {
     if (p.name) byName.set(lc(p.name), p);
   }
   // Приоритет #6: ШК → (артикул+бренд) → артикул → наименование.
-  return (r: any) => {
+  return (r: SheetRow) => {
     for (const bc of splitBarcodes(r.barcodes)) { const p = byBarcode.get(bc); if (p) return p; }
     if (r.sku) {
       const sb = bySkuBrand.get(`${lc(r.sku)}|${lc(r.brand)}`); if (sb) return sb;
@@ -80,13 +106,13 @@ const IMPORT_COLUMNS = [
   { identifier: "prices", type: "string", width: "260px", minWidth: "140px", alignment: "left", hint: "Цены", visible: true, inlist: true },
 ];
 
-const pricesSummary = (r: any): string =>
-  (r.prices ?? []).map((p: any) => `${p.typeName}=${p.value}`).join("; ");
+const pricesSummary = (r: TDataItem): string =>
+  ((r.prices ?? []) as Array<{ typeName?: string; value?: unknown }>).map((p) => `${p.typeName}=${p.value}`).join("; ");
 
 // Фабрика рендера ячеек: замыкает дату цен (для колонки «Цены» — #5).
 const makeCellRenderer = (priceDate: string) =>
   (row: TDataItem, col: TColumn, ctx: SubTableContext): React.ReactNode | undefined => {
-    const r: any = row;
+    const r = row as TDataItem & Record<string, any>;
     // «Номенклатура» — LookupField на справочник товаров (#2). allowFreeText
     // позволяет ввести новое наименование (товар будет создан при импорте).
     if (col.identifier === "name") {
@@ -176,7 +202,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
   );
 
   // Показ строк с учётом «Скрыть существующие» (#7): существующие = сопоставленные.
-  const showRows = (rows: any[], hide: boolean) => {
+  const showRows = (rows: SheetRow[], hide: boolean) => {
     const shown = hide ? rows.filter((r) => !r.productUuid) : rows;
     setPendingRows(shown);
     setCurrentRows(shown);
@@ -204,7 +230,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       const used = new Set(Object.values(idx).filter((i) => i >= 0));
       const priceCols = header.map((h, i) => ({ name: h, i })).filter((c) => c.name && !used.has(c.i));
 
-      const get = (r: any[], i: number) => (i >= 0 ? String(r[i] ?? "").trim() : "");
+      const get = (r: unknown[], i: number) => (i >= 0 ? String(r[i] ?? "").trim() : "");
       const rows = (raw.slice(1) as any[])
         .map((r, n) => {
           const prices = priceCols
@@ -235,7 +261,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
         const match = await resolveImportProducts(rows);
         for (const r of rows) {
           const p = match(r);
-          if (p) { r.productUuid = p.uuid; r._matched = true; }
+          if (p) { r.productUuid = p.uuid ?? ""; r._matched = true; }
         }
       } catch (e) { console.error("resolveImportProducts", e); }
 
@@ -304,7 +330,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
     setIsLoading(true);
     try {
       const resp = await apiClient.get(`/${ENDPOINT}/export-full`);
-      const items = (resp.data?.items ?? []) as any[];
+      const items = (resp.data?.items ?? []) as CatalogProduct[];
       if (items.length === 0) { showToast("Номенклатуры нет", "info"); return; }
       const typeNames: string[] = [];
       const seen = new Set<string>();
@@ -314,7 +340,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       }
       const header = ["sku", "name", "brand", "unit", "isService", "barcodes", ...typeNames];
       const aoa = [header, ...items.map((p) => {
-        const bcs = Array.from(new Set([p.barcode, ...((p.barcodes ?? []).map((b: any) => b.barcode))].filter(Boolean)));
+        const bcs = Array.from(new Set([p.barcode, ...((p.barcodes ?? []).map((b) => b.barcode))].filter(Boolean)));
         const latest: Record<string, any> = {};
         for (const pp of p.productPrices ?? []) { // отсортированы date desc → первое = последнее значение
           const n = pp.priceType?.name || "(без типа)";
