@@ -148,6 +148,12 @@ const ModelForm: FC<ModelFormProps> = ({
 
   // Область меток — под табами, у сохранённой записи. Метка = ссылка на любой
   // объект системы; их может быть несколько (см. components/ObjectMarks).
+  //
+  // ВРЕМЕННО ОТКЛЮЧЕНО (запрос 2026-07-24): метки живут только в «Задачах» (форма
+  // Todos рендерит их сама внутри вкладки). Чтобы вернуть авто-область во все
+  // формы — поставить MARKS_IN_ALL_FORMS = true. Пропсы marks*/hideMarks оставлены
+  // намеренно, чтобы восстановление было бесшовным.
+  const MARKS_IN_ALL_FORMS = false;
   const marksFor = marksEndpoint ?? endpoint;
   const marksFrom = marksUuid ?? recordUuid;
 
@@ -156,7 +162,7 @@ const ModelForm: FC<ModelFormProps> = ({
       {showSkeleton ? <FormSkeleton /> : (
         <>
           <Tabs tabs={tabs} />
-          {!hideMarks && marksFor && marksFrom && (
+          {MARKS_IN_ALL_FORMS && !hideMarks && marksFor && marksFrom && (
             <ObjectMarks
               endpoint={marksFor}
               uuid={marksFrom}
