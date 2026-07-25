@@ -79,3 +79,23 @@
 .LinkBtnDanger {
   color: var(--danger, var(--c-red-49));
 }
+// Секция «Задачи по этой записи» — ссылки на созданные из заметок задачи.
+.Tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 2px;
+  border-top: 1px dashed var(--n-88);
+}
+
+.TasksTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.TasksChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

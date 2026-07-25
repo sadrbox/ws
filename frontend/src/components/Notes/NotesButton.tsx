@@ -11,6 +11,8 @@ import Modal from "src/components/Modal";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import { FieldTextarea } from "src/components/Field";
 import { Button } from "src/components/Button";
+import ObjectLink from "src/components/ObjectLink";
+import { refFromRestore } from "src/utils/objectRef";
 import { translate } from "src/i18";
 import { useAppContext } from "src/app/context";
 import { getFormatDateOnly } from "src/utils/datetime";
@@ -112,15 +114,31 @@ const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; inva
     } catch { /* тихо — список обновится при следующем открытии */ }
   }, [refresh]);
 
+  // Задачи, созданные по ЭТОЙ записи (в т.ч. из заметок) — чтобы из контекста
+  // заметок был виден и открывался результат. Задача ссылается на запись через
+  // sourceType/sourceUuid (см. createTask ниже), поэтому фильтруем по ним.
+  const { data: tasks = [] } = useQuery({
+    queryKey: [...qk(endpoint, uuid), "tasks"],
+    queryFn: async () => {
+      const r = await apiClient.get<{ items?: Array<{ uuid: string; id: number; description?: string | null }> }>(
+        "todos",
+        { params: { filter: { sourceType: { equals: endpoint }, sourceUuid: { equals: uuid } }, limit: 50 } },
+      );
+      return r.data?.items ?? [];
+    },
+    staleTime: 30_000,
+  });
+
   // Создать задачу из заметки: предзаполняем описание текстом заметки и организацию
   // из связанной записи (дочитываем её по endpoint/uuid). Форма Todo открывается
   // новой панелью; остальное (исполнитель/срок) пользователь задаёт сам.
   const createTask = useCallback(async (note: NoteRow) => {
     let organizationUuid: string | undefined;
     let organizationName: string | undefined;
-    // Подпись объекта-источника: имя (справочник) либо «№ номер - дата» (документ).
-    // Сохраняется в задаче, чтобы ссылка читалась даже если объект потом удалён.
-    let sourceLabel = endpoint;
+    // Ссылка-подпись объекта-источника: имя (справочник) либо «№ номер - дата»
+    // (документ). Имя ТИПА («Реализация…») задача добавит сама из реестра — здесь
+    // только сама ссылка. Пусто → чип покажет только имя типа (не сырой endpoint).
+    let sourceLabel = "";
     try {
       const r = await apiClient.get<{ item?: Record<string, unknown> }>(`${endpoint}/${uuid}`);
       const item = r.data?.item;
@@ -172,6 +190,25 @@ const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; inva
             {translate("add")}
           </Button>
         </div>
+
+        {/* Задачи, созданные по этой записи (в т.ч. из заметок) — ссылка на
+            результат прямо из контекста заметок; клик открывает задачу. */}
+        {tasks.length > 0 && (
+          <div className={styles.Tasks}>
+            <span className={styles.TasksTitle}>{translate("TodosList")}:</span>
+            <div className={styles.TasksChips}>
+              {tasks.map((t) => (
+                <ObjectLink
+                  key={t.uuid}
+                  objectRef={refFromRestore(
+                    { kind: "form", endpoint: "todos", uuid: t.uuid },
+                    (t.description || `#${t.id}`).slice(0, 60),
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className={styles.List}>
           {isLoading && <div className={styles.Hint}>…</div>}

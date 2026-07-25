@@ -12,6 +12,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import ObjectLink from "src/components/ObjectLink";
 import ObjectMarks from "src/components/ObjectMarks";
 import { refFromRestore } from "src/utils/objectRef";
+import { getByEndpoint } from "src/registry/modelRegistry";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -24,6 +25,18 @@ import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
 
 const MODEL_ENDPOINT = "todos";
+
+/**
+ * Читаемая подпись чипа «Источник»: человекочитаемое имя типа из реестра моделей
+ * («Реализация товара и услуг») + ссылка на запись («№ 12 - 01.02.2026»), вместо
+ * сырого кода типа («sales»/«Sale»). Если ссылки нет — только имя типа.
+ */
+function sourceChipLabel(sourceType: string, sourceLabel: string): string {
+  const typeName = getByEndpoint(sourceType)?.label || translate(sourceType) || sourceType;
+  // sourceLabel мог оказаться самим кодом типа (старые данные) — тогда игнорируем.
+  const ref = sourceLabel && sourceLabel !== sourceType ? sourceLabel : "";
+  return ref ? `${typeName} ${ref}` : typeName;
+}
 
 
 interface TFields {
@@ -159,7 +172,9 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                   <FieldTextarea label={translate("taskDescription")} name={`${form.formUid}_description`} value={form.fields.description} onChange={e => form.setField("description", e.target.value)} disabled={form.isLoading} minWidth={FIELD_WIDTH.lg} minHeight="120px" rows={6} />
                 </Group>
                 {/* Объект, из которого создана задача (напр. заметка к документу) —
-                    клик по чипу открывает сам объект. */}
+                    клик по чипу открывает сам объект. Подпись = «Тип + ссылка»
+                    (напр. «Реализация товара и услуг № 12 - 01.02.2026»), а не сырой
+                    код типа: имя типа берём из реестра моделей. */}
                 {form.fields.sourceUuid && (
                   <Group>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -167,7 +182,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                       <ObjectLink
                         objectRef={refFromRestore(
                           { kind: "form", endpoint: form.fields.sourceType, uuid: form.fields.sourceUuid },
-                          form.fields.sourceLabel || form.fields.sourceType,
+                          sourceChipLabel(form.fields.sourceType, form.fields.sourceLabel),
                         )}
                       />
                     </div>
