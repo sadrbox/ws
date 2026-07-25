@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { orgIsAccessible } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -52,6 +53,11 @@ router.post("/notes", async (req, res) => {
 		const text = String(body ?? "").trim();
 		if (!entityType || !entityUuid) return res.status(400).json({ success: false, message: "entityType и entityUuid обязательны" });
 		if (!text) return res.status(400).json({ success: false, message: "Текст заметки обязателен" });
+		// Tenant-изоляция на записи: нельзя привязать заметку к чужой организации
+		// (иначе она стала бы видна там, где нет доступа). null = глобально.
+		if (organizationUuid && !orgIsAccessible(req, organizationUuid)) {
+			return res.status(403).json({ success: false, message: "Нет доступа к указанной организации" });
+		}
 		const authorName = req.user.username || req.user.email || null;
 		const item = await prisma.note.create({
 			data: {

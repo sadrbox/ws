@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { orgIsAccessible } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -87,6 +88,12 @@ router.post("/object-marks", async (req, res) => {
 		// Не даём пометить запись самой собой — метка была бы бессмысленной.
 		if (ownerType === targetType && ownerUuid === targetUuid) {
 			return res.status(400).json({ success: false, message: "Нельзя пометить запись самой собой" });
+		}
+		// Tenant-изоляция на ЗАПИСИ: организацию берём из тела, но нельзя подсунуть
+		// чужую (иначе метка стала бы видна в организации без доступа). Легитимный UI
+		// шлёт орг самой записи, к которой у пользователя есть доступ. null = глобально.
+		if (organizationUuid && !orgIsAccessible(req, organizationUuid)) {
+			return res.status(403).json({ success: false, message: "Нет доступа к указанной организации" });
 		}
 
 		const key = { ownerType, ownerUuid, targetType, targetUuid };

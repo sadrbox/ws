@@ -88,3 +88,13 @@ test("статус задачи, использованный в задачах,
 		await prisma.todoStatus.delete({ where: { id: status.id } });
 	}
 });
+
+import { orgIsAccessible } from "../utils/auth.js";
+
+test("метка/заметка: нельзя привязать к организации без доступа (tenant на записи)", () => {
+	// Легитимный UI шлёт орг самой записи, к которой доступ есть. Чужую — отклоняем.
+	const req = { user: { organizationUuid: "org-A", allowedOrgUuids: ["org-A"] } };
+	assert.equal(orgIsAccessible(req, "org-A"), true, "своя орг — можно");
+	assert.equal(orgIsAccessible(req, "org-FOREIGN"), false, "чужая орг — нельзя");
+	// null (глобальная видимость) проверку минует по условию `organizationUuid && ...`.
+});
