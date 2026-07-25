@@ -83,6 +83,9 @@ interface ModelFormProps {
   marksUuid?: string;
   /** Организация записи — для орг-изоляции меток. */
   marksOrganizationUuid?: string;
+  /** Скрыть авто-область меток под табами: форма рендерит её сама внутри вкладки
+   *  (напр. Todos размещает метки рядом с полем «Источник»). */
+  hideMarks?: boolean;
 }
 
 const ModelForm: FC<ModelFormProps> = ({
@@ -101,6 +104,7 @@ const ModelForm: FC<ModelFormProps> = ({
   marksEndpoint,
   marksUuid,
   marksOrganizationUuid,
+  hideMarks = false,
 }) => {
   // Рендерим кнопки формы в заголовок панели через портал
   const toolbarPortal = usePaneToolbar(
@@ -152,7 +156,7 @@ const ModelForm: FC<ModelFormProps> = ({
       {showSkeleton ? <FormSkeleton /> : (
         <>
           <Tabs tabs={tabs} />
-          {marksFor && marksFrom && (
+          {!hideMarks && marksFor && marksFrom && (
             <ObjectMarks
               endpoint={marksFor}
               uuid={marksFrom}

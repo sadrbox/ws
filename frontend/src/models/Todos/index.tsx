@@ -10,6 +10,7 @@ import { Field, FieldNumber, FieldDate, FieldSelect, FieldTextarea } from "src/c
 import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import ObjectLink from "src/components/ObjectLink";
+import ObjectMarks from "src/components/ObjectMarks";
 import { refFromRestore } from "src/utils/objectRef";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -172,6 +173,16 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                     </div>
                   </Group>
                 )}
+                {/* Метки — ссылки на связанные объекты (справочники/документы/задачи).
+                    Доступны у сохранённой задачи; ObjectMarks сам скрывается без uuid. */}
+                <Group>
+                  <ObjectMarks
+                    endpoint={MODEL_ENDPOINT}
+                    uuid={form.fields.uuid}
+                    organizationUuid={form.fields.organizationUuid || undefined}
+                    readonly={!canWrite}
+                  />
+                </Group>
               </GroupCol>
             </div>
 
@@ -186,12 +197,12 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
       t.push({ id: "files", label: translate("files"), component: <FilesPanel ownerType="todo" ownerUuid={form.fields.uuid} /> });
     }
     return t;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleDeadlineDaysChange]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleDeadlineDaysChange, canWrite]);
 
   return (
     <ModelForm paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid} tabs={tabs} onSave={form.handleSave} onSaveAndClose={form.handleSaveAndClose} onClose={form.handleClose}
       onReload={form.isEditMode ? form.handleReload : undefined} isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
-      readonly={!canWrite} />
+      readonly={!canWrite} hideMarks />
   );
 };
 TodosForm.displayName = "TodosForm";
