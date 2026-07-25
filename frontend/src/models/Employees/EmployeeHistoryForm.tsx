@@ -44,6 +44,21 @@ const DEFAULT_FIELDS: TFields = {
   employeeUuid: "",
 };
 
+
+/** Серверная запись события истории сотрудника — вход mapServerToForm (T3). */
+interface EmployeeHistoryServerRecord {
+  id?: number;
+  uuid?: string;
+  eventDate?: string | null;
+  eventType?: string | null;
+  organizationUuid?: string | null;
+  organization?: { name?: string | null } | null;
+  positionUuid?: string | null;
+  position?: { name?: string | null } | null;
+  salary?: number | string | null;
+  employeeUuid?: string | null;
+}
+
 const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("EmployeeHistory");
   const data = paneProps.data;
@@ -60,7 +75,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
     defaultFields: DEFAULT_FIELDS,
     initialFields,
     paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: EmployeeHistoryServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       id: d.id,
       uuid: d.uuid,

@@ -56,6 +56,26 @@ function useSubkontoOptions() {
   return data ?? [{ value: "", label: "—" }];
 }
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface ChartOfAccountsServerRecord {
+  accountType?: string | null;
+  code?: string | null;
+  description?: string | null;
+  id?: number;
+  isActive?: boolean | null;
+  isCurrency?: boolean | null;
+  isOffBalance?: boolean | null;
+  isQuantitative?: boolean | null;
+  name?: string | null;
+  parent?: { name?: string | null; code?: string | null } | null;
+  subkonto1Type?: string | null;
+  subkonto2Type?: string | null;
+  subkonto3Type?: string | null;
+  parentUuid?: string | null;
+  uuid?: string;
+}
+
 const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("ChartOfAccount");
   const subkontoOptions = useSubkontoOptions();
@@ -71,7 +91,7 @@ const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
     storageKey: "chart-of-accounts-form",
     defaultFields: DEFAULT_FIELDS,
     paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: ChartOfAccountsServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       code: d.code ?? "",
       name: d.name ?? "",

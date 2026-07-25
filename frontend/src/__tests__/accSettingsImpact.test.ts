@@ -15,7 +15,8 @@ const SRC = readFileSync(
 describe("Параметры учёта: подсказки о последствиях", () => {
 	it("сравнивается со СНИМКОМ загруженной версии, а не с дефолтами", () => {
 		expect(SRC).toContain("savedRef");
-		expect(SRC).toMatch(/mapServerToForm: \(d, prev\) => savedSnapshot\(/);
+		// Параметр d может нести тип серверной записи (T3) — допускаем аннотацию.
+		expect(SRC).toMatch(/mapServerToForm: \(d(?::\s*\w+)?, prev\) => savedSnapshot\(/);
 	});
 
 	it("различает прошлое и будущее по «Дате начала»", () => {

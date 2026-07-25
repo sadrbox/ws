@@ -41,11 +41,28 @@ const DEFAULT_FIELDS: TFields = {
   authorUuid: "", authorName: "",
 };
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface ScheduledTasksServerRecord {
+  author?: { uuid?: string | null; username?: string | null; email?: string | null } | null;
+  authorUuid?: string | null;
+  cronExpr?: string | null;
+  description?: string | null;
+  id?: number;
+  lastRunAt?: string | null;
+  name?: string | null;
+  nextRunAt?: string | null;
+  organization?: { name?: string | null } | null;
+  organizationUuid?: string | null;
+  status?: string | null;
+  uuid?: string;
+}
+
 const ScheduledTasksForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("ScheduledTask");
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "scheduled-tasks-form", defaultFields: DEFAULT_FIELDS, paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: ScheduledTasksServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       name: d.name ?? "", description: d.description ?? "",
       cronExpr: d.cronExpr ?? "", status: d.status ?? "active",

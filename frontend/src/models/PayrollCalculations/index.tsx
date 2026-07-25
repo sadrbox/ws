@@ -83,6 +83,35 @@ function calcDeductions(baseSalary: number) {
   return { opv, ipn, socialContrib, socialTax, vosms, oosms, netSalary, totalExpense };
 }
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface PayrollCalculationsServerRecord {
+  author?: { uuid?: string | null; username?: string | null; email?: string | null } | null;
+  authorUuid?: string | null;
+  baseSalary?: number | string | null;
+  comment?: string | null;
+  date?: string | null;
+  employee?: { uuid?: string | null; fullName?: string | null } | null;
+  employeeUuid?: string | null;
+  id?: number;
+  ipn?: number | string | null;
+  netSalary?: number | string | null;
+  number?: string | null;
+  oosms?: number | string | null;
+  opv?: number | string | null;
+  organization?: { name?: string | null } | null;
+  organizationUuid?: string | null;
+  period?: string | null;
+  position?: { name?: string | null } | null;
+  positionUuid?: string | null;
+  posted?: boolean | null;
+  socialContrib?: number | string | null;
+  socialTax?: number | string | null;
+  totalExpense?: number | string | null;
+  uuid?: string;
+  vosms?: number | string | null;
+}
+
 const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const { canWrite } = useAccessPermission("PayrollCalculation");
@@ -102,7 +131,7 @@ const PayrollCalculationsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "payroll-calculations-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: PayrollCalculationsServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       number: d.number ?? "",
       date: isoToLocalInput(d.date),

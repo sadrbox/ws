@@ -47,6 +47,21 @@ interface TFields {
 
 const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", vatSeries: "", vatNumber: "", enterpriseCategory: "" };
 
+
+/** Серверная запись организации — вход mapServerToForm (T3). Узкий тип: только
+ *  поля, которые реально нужны форме; лишние серверные поля `...d` копирует в
+ *  рантайме как и раньше, но в типы результата не попадают. */
+interface OrganizationServerRecord {
+  id?: number;
+  uuid?: string;
+  bin?: string | null;
+  name?: string | null;
+  legalName?: string | null;
+  vatSeries?: string | null;
+  vatNumber?: string | null;
+  enterpriseCategory?: string | null;
+}
+
 const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const esfDict = useEsfDictionaries();
   const { canWrite } = useAccessPermission("Organization");
@@ -112,7 +127,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
         batchEndpoint: "cashboxes/batch",
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: OrganizationServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       ...d,
       bin: d.bin ?? "",

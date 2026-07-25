@@ -35,6 +35,19 @@ const DEFAULT_FIELDS: TFields = {
 
 const ENDPOINT = "subkonto-types";
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface SubkontoTypesServerRecord {
+  code?: string | null;
+  id?: number;
+  isActive?: boolean | null;
+  name?: string | null;
+  referenceEndpoint?: string | null;
+  referenceModel?: string | null;
+  sortOrder?: number | string | null;
+  uuid?: string;
+}
+
 const SubkontoTypesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("SubkontoType");
 
@@ -43,7 +56,7 @@ const SubkontoTypesForm: FC<Partial<TPane>> = (paneProps) => {
     storageKey: "subkonto-types-form",
     defaultFields: DEFAULT_FIELDS,
     paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: SubkontoTypesServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       code: d.code ?? "",
       name: d.name ?? "",

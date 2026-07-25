@@ -72,6 +72,33 @@ const DEFAULT_FIELDS: TFields = {
   authorUuid: "", authorName: "",
 };
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface ImportDeclarationsServerRecord {
+  amount?: number | string | null;
+  author?: { uuid?: string | null; username?: string | null; email?: string | null } | null;
+  authorUuid?: string | null;
+  comment?: string | null;
+  counterparty?: { name?: string | null } | null;
+  counterpartyUuid?: string | null;
+  countryCode?: string | null;
+  customsFeeAmount?: number | string | null;
+  date?: string | null;
+  declarationDate?: string | null;
+  declarationNumber?: string | null;
+  dutyAmount?: number | string | null;
+  exciseAmount?: number | string | null;
+  id?: number;
+  importVatAmount?: number | string | null;
+  number?: string | null;
+  organization?: { name?: string | null } | null;
+  organizationUuid?: string | null;
+  posted?: boolean | null;
+  uuid?: string;
+  warehouse?: { name?: string | null } | null;
+  warehouseUuid?: string | null;
+}
+
 const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
@@ -121,7 +148,7 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
         extraSkipFields: ["importDeclarationUuid"],
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: ImportDeclarationsServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       number: d.number ?? "",
       date: isoToLocalInput(d.date),

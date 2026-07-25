@@ -75,6 +75,32 @@ const DEFAULT_FIELDS: TFields = {
   basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "",
 };
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface BankStatementsServerRecord {
+  amount?: number | string | null;
+  author?: { uuid?: string | null; username?: string | null; email?: string | null } | null;
+  authorUuid?: string | null;
+  bankAccount?: { name?: string | null } | null;
+  bankAccountUuid?: string | null;
+  basisDocumentLabel?: string | null;
+  basisDocumentType?: string | null;
+  basisDocumentUuid?: string | null;
+  comment?: string | null;
+  contract?: { name?: string | null } | null;
+  contractUuid?: string | null;
+  counterparty?: { name?: string | null } | null;
+  counterpartyUuid?: string | null;
+  date?: string | null;
+  direction?: string | null;
+  id?: number;
+  number?: string | null;
+  organization?: { name?: string | null } | null;
+  organizationUuid?: string | null;
+  posted?: boolean | null;
+  uuid?: string;
+}
+
 const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const { canWrite } = useAccessPermission("BankStatement");
@@ -114,7 +140,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     defaultFields: DEFAULT_FIELDS,
     initialFields,
     paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: BankStatementsServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       number: d.number ?? "",
       date: isoToLocalInput(d.date),

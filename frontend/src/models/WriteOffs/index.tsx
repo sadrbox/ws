@@ -65,6 +65,27 @@ const DEFAULT_FIELDS: TFields = {
 /** Списание создаётся на основании Инвентаризации (недостача). */
 const BASIS_ALLOWED_TYPES = [{ type: "stock_count", endpoint: "stockcounts" }];
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface WriteOffsServerRecord {
+  amount?: number | string | null;
+  author?: { uuid?: string | null; username?: string | null; email?: string | null } | null;
+  authorUuid?: string | null;
+  basisDocumentLabel?: string | null;
+  basisDocumentType?: string | null;
+  basisDocumentUuid?: string | null;
+  comment?: string | null;
+  date?: string | null;
+  id?: number;
+  number?: string | null;
+  organization?: { name?: string | null } | null;
+  organizationUuid?: string | null;
+  posted?: boolean | null;
+  uuid?: string;
+  warehouse?: { name?: string | null } | null;
+  warehouseUuid?: string | null;
+}
+
 const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
@@ -120,7 +141,7 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
         extraSkipFields: ["writeOffUuid"],
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: WriteOffsServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       number: d.number ?? "",
       date: isoToLocalInput(d.date),

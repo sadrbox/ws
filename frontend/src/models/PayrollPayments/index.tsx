@@ -59,6 +59,26 @@ const DEFAULT_FIELDS: TFields = {
   authorUuid: "", authorName: "",
 };
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface PayrollPaymentsServerRecord {
+  amount?: number | string | null;
+  author?: { uuid?: string | null; username?: string | null; email?: string | null } | null;
+  authorUuid?: string | null;
+  comment?: string | null;
+  date?: string | null;
+  employee?: { uuid?: string | null; fullName?: string | null } | null;
+  employeeUuid?: string | null;
+  id?: number;
+  number?: string | null;
+  organization?: { name?: string | null } | null;
+  organizationUuid?: string | null;
+  paymentMethod?: string | null;
+  period?: string | null;
+  posted?: boolean | null;
+  uuid?: string;
+}
+
 const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const { canWrite } = useAccessPermission("PayrollPayment");
@@ -78,7 +98,7 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "payroll-payments-form", defaultFields: DEFAULT_FIELDS, initialFields, paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: PayrollPaymentsServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       number: d.number ?? "",
       date: isoToLocalInput(d.date),

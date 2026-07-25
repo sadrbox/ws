@@ -95,6 +95,17 @@ const DEFAULT_ITEM_FIELDS: TItemFields = {
   modelName: "", accessLevel: "none", userUuid: "", organizationUuid: null,
 };
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface AccessPermissionsServerRecord {
+  accessLevel?: string | null;
+  id?: number;
+  modelName?: string | null;
+  organizationUuid?: string | null;
+  userUuid?: string | null;
+  uuid?: string;
+}
+
 const AccessPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("AccessPermission");
 
@@ -115,7 +126,7 @@ const AccessPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
     defaultFields: DEFAULT_ITEM_FIELDS,
     initialFields,
     paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: AccessPermissionsServerRecord, prev) => ({
       ...(prev ?? DEFAULT_ITEM_FIELDS),
       ...d,
       modelName: d.modelName ?? "",

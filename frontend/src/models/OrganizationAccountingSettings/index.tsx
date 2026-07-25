@@ -74,6 +74,23 @@ const DEFAULT_FIELDS: TFields = {
 // версии, действовавшей на их дату (см. backend/services/accountingSettings.js).
 // Поэтому id растёт с каждым сохранением — это версии, а не мусор.
 // ─────────────────────────────────────────────────────────────────────────
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface OrganizationAccountingSettingsServerRecord {
+  costingMethod?: string | null;
+  exciseRate?: number | string | null;
+  id?: number;
+  organization?: { name?: string | null } | null;
+  organizationUuid?: string | null;
+  startDate?: string | null;
+  useDiscount?: boolean | null;
+  useExcise?: boolean | null;
+  useVat?: boolean | null;
+  uuid?: string;
+  vatCalculationMethod?: string | null;
+  vatRate?: number | string | null;
+}
+
 const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("OrganizationAccountingSetting");
   // Снимок ЗАГРУЖЕННОЙ версии параметров: подсказки строятся из сравнения с ним —
@@ -88,7 +105,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
     storageKey: "organization-accounting-settings-form",
     defaultFields: DEFAULT_FIELDS,
     paneProps,
-    mapServerToForm: (d, prev) => savedSnapshot({
+    mapServerToForm: (d: OrganizationAccountingSettingsServerRecord, prev) => savedSnapshot({
       ...(prev ?? DEFAULT_FIELDS),
       ...d,
       organizationUuid: (d.organizationUuid as string) ?? null,

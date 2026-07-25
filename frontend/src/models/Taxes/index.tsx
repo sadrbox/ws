@@ -29,6 +29,17 @@ interface TFields {
 }
 const DEFAULT_FIELDS: TFields = { name: "", code: "", rate: "", calculationMethod: "INCLUDED" };
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface TaxesServerRecord {
+  calculationMethod?: string | null;
+  code?: string | null;
+  id?: number;
+  name?: string | null;
+  rate?: number | string | null;
+  uuid?: string;
+}
+
 const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("Tax");
   const form = useFormStore<TFields>({
@@ -36,7 +47,7 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
     storageKey: "taxes-form",
     defaultFields: DEFAULT_FIELDS,
     paneProps,
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: TaxesServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       ...d,
       name: d.name ?? "",

@@ -31,6 +31,18 @@ const LIST_NAME = "CounterpartiesList";
 interface TFields { id?: number; uuid?: string; bin: string; name: string; legalName: string; countryCode: string; enterpriseCategory: string; }
 const DEFAULT_FIELDS: TFields = { bin: "", name: "", legalName: "", countryCode: "KZ", enterpriseCategory: "" };
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface CounterpartiesServerRecord {
+  bin?: string | null;
+  countryCode?: string | null;
+  enterpriseCategory?: string | null;
+  id?: number;
+  legalName?: string | null;
+  name?: string | null;
+  uuid?: string;
+}
+
 const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   const esfDict = useEsfDictionaries();
   const { canWrite } = useAccessPermission("Counterparty");
@@ -60,7 +72,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
       bankAccounts: { endpoint: "bankaccounts", parentField: "ownerUuid", label: translate("BankAccountsList") || "Банковские счета", batchEndpoint: "bankaccounts/batch", extraFields: { ownerType: "counterparty" } },
       contracts: { endpoint: "contracts", parentField: "counterpartyUuid", label: translate("ContractsList") || "Договора", batchEndpoint: "contracts/batch" },
     },
-    mapServerToForm: (d, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", name: d.name ?? "", legalName: d.legalName ?? "", countryCode: d.countryCode ?? "KZ", enterpriseCategory: d.enterpriseCategory ?? "" }),
+    mapServerToForm: (d: CounterpartiesServerRecord, prev) => ({ ...(prev ?? DEFAULT_FIELDS), ...d, bin: d.bin ?? "", name: d.name ?? "", legalName: d.legalName ?? "", countryCode: d.countryCode ?? "KZ", enterpriseCategory: d.enterpriseCategory ?? "" }),
     buildPayload: (fd) => {
       const bin = fd.bin?.trim() ?? "";
       if (!bin || !/^\d{12}$/.test(bin)) return translate("binMustBe12Digits");

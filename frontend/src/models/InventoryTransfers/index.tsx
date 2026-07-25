@@ -63,6 +63,26 @@ const DEFAULT_FIELDS: TFields = {
   authorUuid: "", authorName: "",
 };
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface InventoryTransfersServerRecord {
+  amount?: number | string | null;
+  author?: { uuid?: string | null; username?: string | null; email?: string | null } | null;
+  authorUuid?: string | null;
+  comment?: string | null;
+  date?: string | null;
+  fromWarehouse?: { name?: string | null } | null;
+  fromWarehouseUuid?: string | null;
+  id?: number;
+  number?: string | null;
+  organization?: { name?: string | null } | null;
+  organizationUuid?: string | null;
+  posted?: boolean | null;
+  toWarehouse?: { name?: string | null } | null;
+  toWarehouseUuid?: string | null;
+  uuid?: string;
+}
+
 const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
@@ -111,7 +131,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         extraSkipFields: ["inventoryTransferUuid"],
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: InventoryTransfersServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       number: d.number ?? "",
       date: isoToLocalInput(d.date),

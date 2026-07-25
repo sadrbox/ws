@@ -40,6 +40,26 @@ const LIST_NAME = "ProductsList";
 interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; trackSerialNumbers: boolean; trackBatches: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; tnvedCode: string; truOriginCode: string; catalogTruId: string; }
 const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, trackSerialNumbers: false, trackBatches: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "", tnvedCode: "", truOriginCode: "", catalogTruId: "" };
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface ProductsServerRecord {
+  barcode?: string | null;
+  brand?: { name?: string | null } | null;
+  brandUuid?: string | null;
+  catalogTruId?: string | null;
+  id?: number;
+  isService?: boolean | null;
+  name?: string | null;
+  sku?: string | null;
+  tnvedCode?: string | null;
+  trackBatches?: boolean | null;
+  trackSerialNumbers?: boolean | null;
+  truOriginCode?: string | null;
+  unitOfMeasure?: { name?: string | null } | null;
+  unitOfMeasureUuid?: string | null;
+  uuid?: string;
+}
+
 const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("Product");
   const queryClient = useQueryClient();
@@ -62,7 +82,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
         updatePayload: (r: TDataItem) => ({ date: r.date ?? null, priceTypeUuid: r.priceTypeUuid ?? null, price: r.price ?? null }),
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: ProductsServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       name: d.name ?? "", sku: d.sku ?? "", barcode: d.barcode ?? "",
       isService: d.isService === true,

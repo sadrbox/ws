@@ -63,6 +63,27 @@ const DEFAULT_FIELDS: TFields = {
 /** Оприходование создаётся на основании Инвентаризации (излишек). */
 const BASIS_ALLOWED_TYPES = [{ type: "stock_count", endpoint: "stockcounts" }];
 
+
+/** Серверная запись — вход mapServerToForm (T3). */
+interface GoodsReceiptsServerRecord {
+  amount?: number | string | null;
+  author?: { uuid?: string | null; username?: string | null; email?: string | null } | null;
+  authorUuid?: string | null;
+  basisDocumentLabel?: string | null;
+  basisDocumentType?: string | null;
+  basisDocumentUuid?: string | null;
+  comment?: string | null;
+  date?: string | null;
+  id?: number;
+  number?: string | null;
+  organization?: { name?: string | null } | null;
+  organizationUuid?: string | null;
+  posted?: boolean | null;
+  uuid?: string;
+  warehouse?: { name?: string | null } | null;
+  warehouseUuid?: string | null;
+}
+
 const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
@@ -117,7 +138,7 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
         extraSkipFields: ["goodsReceiptUuid"],
       },
     },
-    mapServerToForm: (d, prev) => ({
+    mapServerToForm: (d: GoodsReceiptsServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS), ...d,
       number: d.number ?? "",
       date: isoToLocalInput(d.date),
