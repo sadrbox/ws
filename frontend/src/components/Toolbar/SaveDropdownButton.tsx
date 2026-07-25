@@ -1,8 +1,8 @@
+// Кнопка «Сохранить» с выпадающим списком режимов сохранения. Тонкая обёртка над
+// ToolbarDropdown (иконка-триггер, пункты могут иметь ведущую иконку).
 import { FC, type ReactNode } from "react";
-import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
-import { useDropdownMenu } from "./useDropdownPosition";
-import styles from "./Toolbar.module.scss";
+import ToolbarDropdown from "./ToolbarDropdown";
 
 export interface SaveDropdownOption {
   id: string;
@@ -24,49 +24,15 @@ const SaveDropdownButton: FC<SaveDropdownButtonProps> = ({
   onSelect,
   disabled,
   title = "Сохранить",
-}) => {
-  const { open, toggle, setOpen, wrapRef, dropRef, dropStyle } = useDropdownMenu();
-
-  return (
-    <div ref={wrapRef} className={styles.DropdownWrap}>
-      <IconButton
-        size="md"
-        className={styles.DropdownToggleButton}
-        title={title}
-        aria-label={title}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={toggle}
-      >
-        <Icon name="save" />
-        {/* <Icon name="caretDown" width={10} height={10} /> */}
-      </IconButton>
-      {open && (
-        <div ref={dropRef} role="menu" className={styles.DropdownMenu} style={dropStyle}>
-          {options.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              role="menuitem"
-              className={styles.DropdownItem}
-              disabled={o.disabled}
-              title={o.hint}
-              onClick={() => {
-                if (o.disabled) return;
-                setOpen(false);
-                onSelect(o.id);
-              }}
-            >
-              {o.icon && <span className={styles.DropdownItemIcon}>{o.icon}</span>}
-              <span className={styles.DropdownItemLabel}>{o.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+}) => (
+  <ToolbarDropdown
+    options={options}
+    onSelect={onSelect}
+    disabled={disabled}
+    title={title}
+    trigger={<Icon name="save" />}
+  />
+);
 
 SaveDropdownButton.displayName = "Toolbar.SaveDropdownButton";
 export default SaveDropdownButton;

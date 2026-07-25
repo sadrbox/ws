@@ -1,7 +1,8 @@
+// Кнопка действий с выпадающим списком (текст-триггер: [иконка] подпись ⌄).
+// Тонкая обёртка над ToolbarDropdown с triggerVariant="button".
 import { FC } from "react";
 import { Icon, type IconName } from "src/components/IconButton/icons";
-import { useDropdownMenu } from "./useDropdownPosition";
-import styles from "./Toolbar.module.scss";
+import ToolbarDropdown from "./ToolbarDropdown";
 
 export interface ActionDropdownOption {
   id: string;
@@ -20,48 +21,23 @@ interface ActionsDropdownButtonProps {
   title?: string;
 }
 
-const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({ label, options, onSelect, disabled, icon, title }) => {
-  const { open, toggle, setOpen, wrapRef, dropRef, dropStyle } = useDropdownMenu();
-
-  return (
-    <div ref={wrapRef} className={styles.DropdownWrap}>
-      <button
-        type="button"
-        className={styles.ActionsButton}
-        disabled={disabled}
-        title={title}
-        onClick={toggle}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        {icon && <Icon name={icon} />}
-        {label}
-        <Icon name="caretDown" />
-      </button>
-      {open && (
-        <div ref={dropRef} role="menu" className={styles.DropdownMenu} style={dropStyle}>
-          {options.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              role="menuitem"
-              className={styles.DropdownItem}
-              disabled={o.disabled}
-              title={o.hint}
-              onClick={() => {
-                if (o.disabled) return;
-                setOpen(false);
-                onSelect(o.id);
-              }}
-            >
-              <span className={styles.DropdownItemLabel}>{o.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+const ActionsDropdownButton: FC<ActionsDropdownButtonProps> = ({
+  label,
+  options,
+  onSelect,
+  disabled,
+  icon,
+  title,
+}) => (
+  <ToolbarDropdown
+    options={options}
+    onSelect={onSelect}
+    disabled={disabled}
+    title={title}
+    triggerVariant="button"
+    trigger={<>{icon && <Icon name={icon} />}{label}<Icon name="caretDown" /></>}
+  />
+);
 
 ActionsDropdownButton.displayName = "Toolbar.ActionsDropdownButton";
 export default ActionsDropdownButton;

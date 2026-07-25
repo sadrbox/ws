@@ -1,8 +1,8 @@
+// Кнопка «Печать» с выпадающим списком макетов. Тонкая обёртка над ToolbarDropdown
+// (иконка-триггер, пункты без ведущих иконок).
 import { FC, type ReactNode } from "react";
-import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
-import { useDropdownMenu } from "./useDropdownPosition";
-import styles from "./Toolbar.module.scss";
+import ToolbarDropdown from "./ToolbarDropdown";
 
 export interface PrintLayoutOption {
   id: string;
@@ -23,48 +23,15 @@ const PrintDropdownButton: FC<PrintDropdownButtonProps> = ({
   onSelect,
   disabled,
   title = "Печать",
-}) => {
-  const { open, toggle, setOpen, wrapRef, dropRef, dropStyle } = useDropdownMenu();
-
-  return (
-    <div ref={wrapRef} className={styles.DropdownWrap}>
-      <IconButton
-        size="md"
-        className={styles.DropdownToggleButton}
-        title={title}
-        aria-label={title}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={toggle}
-      >
-        <Icon name="print" />
-        {/* <Icon name="caretDown" width={10} height={10} /> */}
-      </IconButton>
-      {open && (
-        <div ref={dropRef} role="menu" className={styles.DropdownMenu} style={dropStyle}>
-          {options.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              role="menuitem"
-              className={styles.DropdownItem}
-              disabled={o.disabled}
-              title={o.hint}
-              onClick={() => {
-                if (o.disabled) return;
-                setOpen(false);
-                onSelect(o.id);
-              }}
-            >
-              <span className={styles.DropdownItemLabel}>{o.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+}) => (
+  <ToolbarDropdown
+    options={options}
+    onSelect={onSelect}
+    disabled={disabled}
+    title={title}
+    trigger={<Icon name="print" />}
+  />
+);
 
 PrintDropdownButton.displayName = "Toolbar.PrintDropdownButton";
 export default PrintDropdownButton;
