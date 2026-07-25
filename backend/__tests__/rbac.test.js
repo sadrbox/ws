@@ -148,3 +148,17 @@ test("clear-basis: имя права выводится из типа докум
 	assert.equal(pascal("cash_expense_order"), "CashExpenseOrder");
 	assert.notEqual(DOC_REGISTRY.cash_receipt_order.model, DOC_REGISTRY.cash_receipt_order.model.toUpperCase());
 });
+
+// orgIsAccessible — страховка от смены настроек ЧУЖОЙ организации в маршрутах,
+// где орг приходит из запроса (нумерация документов). Middleware их не покрывает.
+import { orgIsAccessible } from "../utils/auth.js";
+
+test("orgIsAccessible: своя/разрешённая орг — да, чужая — нет, суперадмин — всегда", () => {
+	const base = { organizationUuid: "org-A", allowedOrgUuids: ["org-A", "org-B"] };
+	assert.equal(orgIsAccessible({ user: base }, "org-A"), true, "активная");
+	assert.equal(orgIsAccessible({ user: base }, "org-B"), true, "разрешённая");
+	assert.equal(orgIsAccessible({ user: base }, "org-X"), false, "чужая — отказ");
+	assert.equal(orgIsAccessible({ user: base }, null), false, "без орг — отказ");
+	assert.equal(orgIsAccessible({ user: { isSuperAdmin: true } }, "org-X"), true, "суперадмин — любая");
+	assert.equal(orgIsAccessible({ user: { isOrgAdmin: true } }, "org-X"), true, "админ орг — любая");
+});

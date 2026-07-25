@@ -3,8 +3,24 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { NUMBER_CONFIG, GLOBAL_SETTINGS_KEY, invalidateNumberSettingsCache, renumberDraftDocuments } from "../../services/documentNumbering.js";
+import { canAccessModel, orgIsAccessible } from "../../utils/auth.js";
 
 const router = express.Router();
+
+/**
+ * Право на изменение нумерации КОНКРЕТНОЙ организации: настройка орг-уровня,
+ * поэтому требует записи Organization + доступа именно к этой организации
+ * (иначе пользователь мог бы переписать формат чужой орг). Маршрут не в
+ * ROUTE_TO_MODEL — middleware его не проверяет, гейт только здесь.
+ * @returns {Promise<string|null>} текст ошибки для 403 или null, если можно.
+ */
+async function denyOrgNumberingEdit(req, organizationUuid) {
+	if (!orgIsAccessible(req, organizationUuid)) return "Нет доступа к этой организации";
+	if (!(await canAccessModel(req, "Organization", { write: true }))) {
+		return "Изменять нумерацию организации может только пользователь с правом на организации";
+	}
+	return null;
+}
 
 // GET — список видов документов с действующим префиксом для организации.
 // Query: organizationUuid (опц.) — без него возвращаются глобальные значения.
@@ -45,8 +61,13 @@ router.put("/document-number-settings/:docType", async (req, res) => {
 		if (!NUMBER_CONFIG[docType]) return res.status(400).json({ success: false, message: "Неизвестный вид документа" });
 		const organizationUuid = req.body.organizationUuid ? String(req.body.organizationUuid) : GLOBAL_SETTINGS_KEY;
 		// Нумерацию «по умолчанию (для всех организаций)» правит только суперадмин.
-		if (organizationUuid === GLOBAL_SETTINGS_KEY && !req.user?.isSuperAdmin) {
-			return res.status(403).json({ success: false, message: "Изменять нумерацию по умолчанию может только суперадминистратор" });
+		if (organizationUuid === GLOBAL_SETTINGS_KEY) {
+			if (!req.user?.isSuperAdmin) {
+				return res.status(403).json({ success: false, message: "Изменять нумерацию по умолчанию может только суперадминистратор" });
+			}
+		} else {
+			const deny = await denyOrgNumberingEdit(req, organizationUuid);
+			if (deny) return res.status(403).json({ success: false, message: deny });
 		}
 		const prefix = String(req.body.prefix ?? "").trim();
 		const enabled = req.body.enabled === undefined ? true : !!req.body.enabled;
@@ -70,8 +91,13 @@ router.delete("/document-number-settings/:docType", async (req, res) => {
 		const { docType } = req.params;
 		const organizationUuid = req.query.organizationUuid ? String(req.query.organizationUuid) : GLOBAL_SETTINGS_KEY;
 		// Сброс нумерации «по умолчанию (для всех организаций)» — только суперадмин.
-		if (organizationUuid === GLOBAL_SETTINGS_KEY && !req.user?.isSuperAdmin) {
-			return res.status(403).json({ success: false, message: "Изменять нумерацию по умолчанию может только суперадминистратор" });
+		if (organizationUuid === GLOBAL_SETTINGS_KEY) {
+			if (!req.user?.isSuperAdmin) {
+				return res.status(403).json({ success: false, message: "Изменять нумерацию по умолчанию может только суперадминистратор" });
+			}
+		} else {
+			const deny = await denyOrgNumberingEdit(req, organizationUuid);
+			if (deny) return res.status(403).json({ success: false, message: deny });
 		}
 		await prisma.documentNumberSetting.deleteMany({ where: { organizationUuid, docType } });
 		invalidateNumberSettingsCache();
@@ -89,8 +115,13 @@ router.post("/document-number-settings/renumber-drafts", async (req, res) => {
 	try {
 		const organizationUuid = req.body.organizationUuid ? String(req.body.organizationUuid) : null;
 		// Перенумерация по глобальным настройкам (без выбора организации) — только суперадмин.
-		if (!organizationUuid && !req.user?.isSuperAdmin) {
-			return res.status(403).json({ success: false, message: "Перенумерацию по умолчанию может выполнять только суперадминистратор" });
+		if (!organizationUuid) {
+			if (!req.user?.isSuperAdmin) {
+				return res.status(403).json({ success: false, message: "Перенумерацию по умолчанию может выполнять только суперадминистратор" });
+			}
+		} else {
+			const deny = await denyOrgNumberingEdit(req, organizationUuid);
+			if (deny) return res.status(403).json({ success: false, message: deny });
 		}
 		let updated = 0, skipped = 0;
 		for (const docType of Object.keys(NUMBER_CONFIG)) {

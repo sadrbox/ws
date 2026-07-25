@@ -351,6 +351,18 @@ export async function canAccessModel(req, modelName, { write = false } = {}) {
 	return write ? level === "full" : level === "readonly" || level === "full";
 }
 
+/**
+ * Доступна ли пользователю КОНКРЕТНАЯ организация (переданная в теле/квери).
+ * Нужна там, где организация приходит из запроса, а не выводится из записи, —
+ * страховка от смены настроек ЧУЖОЙ организации. Суперадмин/админ орг — всегда.
+ */
+export function orgIsAccessible(req, organizationUuid) {
+	if (hasUnconditionalAccess(req)) return true;
+	if (!organizationUuid) return false;
+	const allowed = [req.user?.organizationUuid, ...(req.user?.allowedOrgUuids || [])];
+	return allowed.includes(organizationUuid);
+}
+
 export async function accessPermissionMiddleware(req, res, next) {
 	if (req.method === "OPTIONS") return next();
 
