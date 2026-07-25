@@ -1,7 +1,7 @@
 // Кнопка «Заметки» для шапки панели (PaneItemHeaderToolbar). Показывает заметки,
 // привязанные к открытой записи (entityType = endpoint, entityUuid = uuid), даёт
-// добавить/удалить и создать из заметки задачу (Todo) с предзаполнением из
-// связанной записи (организация/описание). Монтируется в ModelForm для всех форм.
+// добавить/удалить. Показывает и прикреплённые к записи задачи (только чтение).
+// Создание задач — из шапки объекта (CreateTaskButton), а не из заметки.
 import { FC, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "src/services/api/client";
@@ -14,7 +14,6 @@ import { Button } from "src/components/Button";
 import ObjectLink from "src/components/ObjectLink";
 import { refFromRestore } from "src/utils/objectRef";
 import { translate } from "src/i18";
-import { useAppContext } from "src/app/context";
 import { getFormatDateOnly } from "src/utils/datetime";
 import styles from "./NotesButton.module.scss";
 
@@ -72,7 +71,6 @@ const NotesButton: FC<{ endpoint: string; uuid?: string }> = ({ endpoint, uuid }
 };
 
 const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; invalidate: () => void }> = ({ endpoint, uuid, onClose, invalidate }) => {
-  const { windows: { addPane } } = useAppContext();
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -114,9 +112,8 @@ const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; inva
     } catch { /* тихо — список обновится при следующем открытии */ }
   }, [refresh]);
 
-  // Задачи, созданные по ЭТОЙ записи (в т.ч. из заметок) — чтобы из контекста
-  // заметок был виден и открывался результат. Задача ссылается на запись через
-  // sourceType/sourceUuid (см. createTask ниже), поэтому фильтруем по ним.
+  // Прикреплённые задачи: созданные по ЭТОЙ записи (задача ссылается на неё через
+  // sourceType/sourceUuid). Только чтение — виден и открывается результат.
   const { data: tasks = [] } = useQuery({
     queryKey: [...qk(endpoint, uuid), "tasks"],
     queryFn: async () => {
@@ -128,44 +125,6 @@ const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; inva
     },
     staleTime: 30_000,
   });
-
-  // Создать задачу из заметки: предзаполняем описание текстом заметки и организацию
-  // из связанной записи (дочитываем её по endpoint/uuid). Форма Todo открывается
-  // новой панелью; остальное (исполнитель/срок) пользователь задаёт сам.
-  const createTask = useCallback(async (note: NoteRow) => {
-    let organizationUuid: string | undefined;
-    let organizationName: string | undefined;
-    // Ссылка-подпись объекта-источника: имя (справочник) либо «№ номер - дата»
-    // (документ). Имя ТИПА («Реализация…») задача добавит сама из реестра — здесь
-    // только сама ссылка. Пусто → чип покажет только имя типа (не сырой endpoint).
-    let sourceLabel = "";
-    try {
-      const r = await apiClient.get<{ item?: Record<string, unknown> }>(`${endpoint}/${uuid}`);
-      const item = r.data?.item;
-      if (item) {
-        organizationUuid = (item.organizationUuid as string) || undefined;
-        organizationName = ((item.organization as { name?: string } | undefined)?.name) || undefined;
-        if (item.name) {
-          sourceLabel = String(item.name);
-        } else if (item.number) {
-          const date = item.date ? ` - ${getFormatDateOnly(String(item.date))}` : "";
-          sourceLabel = `№ ${item.number}${date}`;
-        }
-      }
-    } catch { /* запись без организации — задача создастся без предзаполнения орг */ }
-    const { TodosForm } = await import("src/models/Todos");
-    addPane({
-      label: translate("TodosForm") || "Задача",
-      component: TodosForm,
-      // sourceType/Uuid/Label — ссылка задачи на объект, к которому написана заметка
-      // (в форме задачи показывается чипом «Источник» и открывается по клику).
-      data: {
-        description: note.body, organizationUuid, organizationName,
-        sourceType: endpoint, sourceUuid: uuid, sourceLabel,
-      },
-    });
-    onClose();
-  }, [endpoint, uuid, addPane, onClose]);
 
   const notices: NoticeItem[] = error ? [{ type: "error", text: error }] : [];
 
@@ -191,11 +150,28 @@ const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; inva
           </Button>
         </div>
 
-        {/* Задачи, созданные по этой записи (в т.ч. из заметок) — ссылка на
-            результат прямо из контекста заметок; клик открывает задачу. */}
+        {/* ── Заметки к записи ── */}
+        <div className={styles.List}>
+          {isLoading && <div className={styles.Hint}>…</div>}
+          {!isLoading && notes.length === 0 && <div className={styles.Hint}>{translate("noNotes")}</div>}
+          {notes.map((n) => (
+            <div key={n.uuid} className={styles.Item}>
+              <div className={styles.ItemBody}>{n.body}</div>
+              <div className={styles.ItemMeta}>
+                <span>{n.authorName || "—"} · {getFormatDateOnly(n.createdAt) ?? ""}</span>
+                <span className={styles.ItemActions}>
+                  <button className={styles.LinkBtnDanger} onClick={() => void remove(n.uuid)}>{translate("delete")}</button>
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Прикреплённые задачи (по этой записи) — отдельная область, только
+            чтение; клик открывает задачу. Создаются задачи из шапки объекта. ── */}
         {tasks.length > 0 && (
           <div className={styles.Tasks}>
-            <span className={styles.TasksTitle}>{translate("TodosList")}:</span>
+            <span className={styles.TasksTitle}>{translate("relatedTasks")}</span>
             <div className={styles.TasksChips}>
               {tasks.map((t) => (
                 <ObjectLink
@@ -209,23 +185,6 @@ const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; inva
             </div>
           </div>
         )}
-
-        <div className={styles.List}>
-          {isLoading && <div className={styles.Hint}>…</div>}
-          {!isLoading && notes.length === 0 && <div className={styles.Hint}>{translate("noNotes")}</div>}
-          {notes.map((n) => (
-            <div key={n.uuid} className={styles.Item}>
-              <div className={styles.ItemBody}>{n.body}</div>
-              <div className={styles.ItemMeta}>
-                <span>{n.authorName || "—"} · {getFormatDateOnly(n.createdAt) ?? ""}</span>
-                <span className={styles.ItemActions}>
-                  <button className={styles.LinkBtn} onClick={() => void createTask(n)}>{translate("createTaskFromNote")}</button>
-                  <button className={styles.LinkBtnDanger} onClick={() => void remove(n.uuid)}>{translate("delete")}</button>
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </Modal>
   );

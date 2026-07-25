@@ -40,6 +40,7 @@ import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import ShowInJournalButton from "src/components/ShowInJournalButton";
 import NotesButton from "src/components/Notes/NotesButton";
+import CreateTaskButton from "src/components/CreateTaskButton";
 import DeleteDocumentButton from "src/components/DeleteDocumentButton";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
@@ -640,7 +641,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
           {isSavedDoc && <DocumentChainButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
           {isSavedDoc && <DocumentEntriesButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
-          {isSavedDoc && <><NotesButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /> <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /></>} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
+          {isSavedDoc && <><NotesButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /> <CreateTaskButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /> <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /></>} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
           {hasBasis && (
             <RefillFromBasisButton
               mismatch={basisMismatch.mismatch}

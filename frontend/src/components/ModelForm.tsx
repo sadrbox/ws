@@ -5,6 +5,7 @@ import Tabs from "src/components/Tabs";
 import { usePaneToolbar, usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import ShowInJournalButton from "src/components/ShowInJournalButton";
 import NotesButton from "src/components/Notes/NotesButton";
+import CreateTaskButton from "src/components/CreateTaskButton";
 import ObjectMarks from "src/components/ObjectMarks";
 import skeletonStyles from "./ModelForm.module.scss";
 
@@ -128,6 +129,7 @@ const ModelForm: FC<ModelFormProps> = ({
     endpoint && recordUuid ? (
       <>
         <NotesButton endpoint={endpoint} uuid={recordUuid} />
+        <CreateTaskButton endpoint={endpoint} uuid={recordUuid} />
         <ShowInJournalButton endpoint={endpoint} uuid={recordUuid} />
       </>
     ) : null,
