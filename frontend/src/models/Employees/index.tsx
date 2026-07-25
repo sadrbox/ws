@@ -1,3 +1,4 @@
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { FC, useMemo, useCallback } from "react";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -132,19 +133,19 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupCol>
                 <GroupRow>
                   <Group className={styles.w1of2}>
-                    <Field label={translate("lastName")} name={`${form.formUid}_lastName`} minWidth="200px" value={form.fields.lastName} onChange={e => handleNameFieldChange("lastName", e.target.value)} disabled={form.isLoading} required />
-                    <Field label={translate("firstName")} name={`${form.formUid}_firstName`} minWidth="180px" value={form.fields.firstName} onChange={e => handleNameFieldChange("firstName", e.target.value)} disabled={form.isLoading} />
+                    <Field label={translate("lastName")} name={`${form.formUid}_lastName`} minWidth={FIELD_WIDTH.md} value={form.fields.lastName} onChange={e => handleNameFieldChange("lastName", e.target.value)} disabled={form.isLoading} required />
+                    <Field label={translate("firstName")} name={`${form.formUid}_firstName`} minWidth={FIELD_WIDTH.date} value={form.fields.firstName} onChange={e => handleNameFieldChange("firstName", e.target.value)} disabled={form.isLoading} />
                   </Group>
                   <Group className={styles.w1of2}>
-                    <Field label={translate("middleName")} name={`${form.formUid}_middleName`} minWidth="180px" value={form.fields.middleName} onChange={e => handleNameFieldChange("middleName", e.target.value)} disabled={form.isLoading} />
+                    <Field label={translate("middleName")} name={`${form.formUid}_middleName`} minWidth={FIELD_WIDTH.date} value={form.fields.middleName} onChange={e => handleNameFieldChange("middleName", e.target.value)} disabled={form.isLoading} />
                   </Group>
                 </GroupRow>
                 <Group>
-                    <Field label={translate("fullName")} name={`${form.formUid}_fullName`} minWidth="400px" value={form.fields.fullName} disabled />
+                    <Field label={translate("fullName")} name={`${form.formUid}_fullName`} minWidth={FIELD_WIDTH.xl} value={form.fields.fullName} disabled />
                 </Group>
                 <GroupRow>
                   <Group className={styles.w1of2}>
-                    <Field label={translate("iin")} name={`${form.formUid}_iin`} minWidth="200px" value={form.fields.iin} onChange={e => form.setField("iin", e.target.value)} disabled={form.isLoading} />
+                    <Field label={translate("iin")} name={`${form.formUid}_iin`} minWidth={FIELD_WIDTH.md} value={form.fields.iin} onChange={e => form.setField("iin", e.target.value)} disabled={form.isLoading} />
                   </Group>
                   {form.isEditMode && form.fields.uuid && (
                     <Group className={styles.w1of2}>

@@ -149,10 +149,10 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
                 </GroupRow>
                 <GroupRow>
                   <Group className={styles.w1of2}>
-                    <FieldDate label={translate("startDate")} name={`${form.formUid}_startDate`} minWidth="200px" value={form.fields.startDate} onChange={e => form.setField("startDate", e.target.value)} disabled={form.isLoading} />
+                    <FieldDate label={translate("startDate")} name={`${form.formUid}_startDate`} minWidth={FIELD_WIDTH.md} value={form.fields.startDate} onChange={e => form.setField("startDate", e.target.value)} disabled={form.isLoading} />
                   </Group>
                   <Group className={styles.w1of2}>
-                    <FieldDate label={translate("endDate")} name={`${form.formUid}_endDate`} minWidth="200px" value={form.fields.endDate} onChange={e => form.setField("endDate", e.target.value)} disabled={form.isLoading} />
+                    <FieldDate label={translate("endDate")} name={`${form.formUid}_endDate`} minWidth={FIELD_WIDTH.md} value={form.fields.endDate} onChange={e => form.setField("endDate", e.target.value)} disabled={form.isLoading} />
                   </Group>
                 </GroupRow>
                 <Group>

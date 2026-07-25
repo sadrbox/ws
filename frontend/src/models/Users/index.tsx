@@ -102,10 +102,10 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupCol>
                 <GroupRow>
                   <Group className={styles.w1of2}>
-                    <Field label={translate("loginLabel")} name={`${form.formUid}_username`} minWidth="150px" value={form.fields.username} onChange={e => form.setField("username", e.target.value)} disabled={form.isLoading} required />
+                    <Field label={translate("loginLabel")} name={`${form.formUid}_username`} minWidth={FIELD_WIDTH.number} value={form.fields.username} onChange={e => form.setField("username", e.target.value)} disabled={form.isLoading} required />
                   </Group>
                   <Group className={styles.w1of2}>
-                    <Field label={form.isEditMode ? translate("newPassword") : translate("password")} name={`${form.formUid}_password`} minWidth="150px" value={form.fields.password} onChange={e => form.setField("password", e.target.value)} disabled={form.isLoading} />
+                    <Field label={form.isEditMode ? translate("newPassword") : translate("password")} name={`${form.formUid}_password`} minWidth={FIELD_WIDTH.number} value={form.fields.password} onChange={e => form.setField("password", e.target.value)} disabled={form.isLoading} />
                   </Group>
                 </GroupRow>
                 <Group>

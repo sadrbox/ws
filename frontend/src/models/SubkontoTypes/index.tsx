@@ -1,3 +1,4 @@
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
  
 /**
  * Справочник «Виды субконто» (типы аналитики проводок).
@@ -92,23 +93,23 @@ const SubkontoTypesForm: FC<Partial<TPane>> = (paneProps) => {
           <GroupCol>
             <GroupRow>
               <Group className={styles.w1of2}>
-                <Field label={translate("code")} name={`${form.formUid}_code`} value={form.fields.code} onChange={e => form.setField("code", e.target.value)} disabled={form.isLoading} width="180px" />
+                <Field label={translate("code")} name={`${form.formUid}_code`} value={form.fields.code} onChange={e => form.setField("code", e.target.value)} disabled={form.isLoading} width={FIELD_WIDTH.date} />
               </Group>
               <Group className={styles.w1of2}>
-                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} minWidth="260px" />
-              </Group>
-            </GroupRow>
-            <GroupRow>
-              <Group className={styles.w1of2}>
-                <Field label={translate("subkontoReferenceEndpoint")} name={`${form.formUid}_refEndpoint`} value={form.fields.referenceEndpoint} onChange={e => form.setField("referenceEndpoint", e.target.value)} disabled={form.isLoading} width="200px" placeholder="products" />
-              </Group>
-              <Group className={styles.w1of2}>
-                <Field label={translate("subkontoReferenceModel")} name={`${form.formUid}_refModel`} value={form.fields.referenceModel} onChange={e => form.setField("referenceModel", e.target.value)} disabled={form.isLoading} width="200px" placeholder="product" />
+                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} minWidth={FIELD_WIDTH.wide} />
               </Group>
             </GroupRow>
             <GroupRow>
               <Group className={styles.w1of2}>
-                <FieldNumber label={translate("sortOrder")} name={`${form.formUid}_sortOrder`} value={form.fields.sortOrder} onChange={e => form.setField("sortOrder", e.target.value)} disabled={form.isLoading} decimals={0} width="120px" />
+                <Field label={translate("subkontoReferenceEndpoint")} name={`${form.formUid}_refEndpoint`} value={form.fields.referenceEndpoint} onChange={e => form.setField("referenceEndpoint", e.target.value)} disabled={form.isLoading} width={FIELD_WIDTH.md} placeholder="products" />
+              </Group>
+              <Group className={styles.w1of2}>
+                <Field label={translate("subkontoReferenceModel")} name={`${form.formUid}_refModel`} value={form.fields.referenceModel} onChange={e => form.setField("referenceModel", e.target.value)} disabled={form.isLoading} width={FIELD_WIDTH.md} placeholder="product" />
+              </Group>
+            </GroupRow>
+            <GroupRow>
+              <Group className={styles.w1of2}>
+                <FieldNumber label={translate("sortOrder")} name={`${form.formUid}_sortOrder`} value={form.fields.sortOrder} onChange={e => form.setField("sortOrder", e.target.value)} disabled={form.isLoading} decimals={0} width={FIELD_WIDTH.sm} />
               </Group>
               <Group className={styles.w1of2}>
                 <FieldToggle name={`${form.formUid}_isActive`} label={translate("isActive")} value={form.fields.isActive === true} onChange={(v) => form.setField("isActive", v)} disabled={form.isLoading || !canWrite} variant="success" />

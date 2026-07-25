@@ -281,7 +281,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   value={form.fields.startDate}
                   onChange={(e) => form.setField("startDate", e.target.value)}
                   disabled={form.isLoading || !canWrite}
-                  minWidth="180px"
+                  minWidth={FIELD_WIDTH.date}
                   required
                 />
                 <span className={styles.SettingHint}>
@@ -320,7 +320,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   min="0"
                   max="100"
                   decimals={2}
-                  width="140px"
+                  width={FIELD_WIDTH.number}
                 />
                 <label
                   className={[styles.SettingChip, !(canWrite && form.fields.useVat) && styles.SettingChipReadonly].filter(Boolean).join(" ")}
@@ -473,7 +473,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   step="0.01"
                   min="0"
                   decimals={4}
-                  width="200px"
+                  width={FIELD_WIDTH.md}
                 />
                 <span className={styles.SettingHint}>
                   Подставляется в новые строки документов продажи как значение

@@ -107,7 +107,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
                     <Field label={`${translate("binIin")}`} name={`${form.formUid}_bin`} minWidth={FIELD_WIDTH.lg} value={form.fields.bin} onChange={e => form.setField("bin", e.target.value)} disabled={form.isLoading} />
                   </Group>
                   <Group className={styles.w1of2}>
-                    <ClassifierLookup type="country" label={translate("countryCode")} name={`${form.formUid}_countryCode`} value={form.fields.countryCode} onChange={(code) => form.setField("countryCode", code)} disabled={form.isLoading} width="220px" />
+                    <ClassifierLookup type="country" label={translate("countryCode")} name={`${form.formUid}_countryCode`} value={form.fields.countryCode} onChange={(code) => form.setField("countryCode", code)} disabled={form.isLoading} width={FIELD_WIDTH.md} />
                     <GroupCol>
                       <FieldSelect label={translate("enterpriseCategory")} name={`${form.formUid}_enterpriseCategory`} value={form.fields.enterpriseCategory} disabled={form.isLoading}
                         onChange={(e) => form.setField("enterpriseCategory", e.target.value)}

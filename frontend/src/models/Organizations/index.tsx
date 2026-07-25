@@ -1,3 +1,4 @@
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import React, { FC, useMemo, useCallback } from "react";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
@@ -188,10 +189,10 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
                   onReload={form.handleReload} />
                 <GroupRow>
                   <Group className={styles.w1of2}>
-                    <Field label={translate("vatCertSeries")} name={`${form.formUid}_vatSeries`} value={form.fields.vatSeries} onChange={e => form.setField("vatSeries", e.target.value)} disabled={form.isLoading} width="160px" />
+                    <Field label={translate("vatCertSeries")} name={`${form.formUid}_vatSeries`} value={form.fields.vatSeries} onChange={e => form.setField("vatSeries", e.target.value)} disabled={form.isLoading} width={FIELD_WIDTH.number} />
                   </Group>
                   <Group className={styles.w1of2}>
-                    <Field label={translate("vatCertNumber")} name={`${form.formUid}_vatNumber`} value={form.fields.vatNumber} onChange={e => form.setField("vatNumber", e.target.value)} disabled={form.isLoading} width="200px" />
+                    <Field label={translate("vatCertNumber")} name={`${form.formUid}_vatNumber`} value={form.fields.vatNumber} onChange={e => form.setField("vatNumber", e.target.value)} disabled={form.isLoading} width={FIELD_WIDTH.md} />
                   </Group>
                 </GroupRow>
                 <GroupRow>

@@ -1,3 +1,4 @@
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { FC, useMemo, useCallback } from "react";
 import { translate } from "src/i18";
 import { showToast } from "src/components/UIToast";
@@ -175,7 +176,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
               </GroupRow>
               <GroupRow>
                 <Group className={styles.w1of2}>
-                  <FormLookup form={form} field="unitOfMeasure" endpoint="unit-of-measures" maxWidth="160px" />
+                  <FormLookup form={form} field="unitOfMeasure" endpoint="unit-of-measures" maxWidth={FIELD_WIDTH.number} />
                 </Group>
                 <Group className={styles.w1of2}>
                   <FieldToggle label={translate("isService")} value={form.fields.isService} disabled={form.isLoading}

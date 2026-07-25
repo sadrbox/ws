@@ -1,3 +1,4 @@
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { FC, useMemo } from "react";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
@@ -88,18 +89,18 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <Group>
-                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth="280px" value={form.fields.name} onChange={(e) => form.setField("name", e.target.value)} disabled={form.isLoading} />
+                <Field label={translate("name")} name={`${form.formUid}_name`} minWidth={FIELD_WIDTH.wide} value={form.fields.name} onChange={(e) => form.setField("name", e.target.value)} disabled={form.isLoading} />
               </Group>
               <GroupRow>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("code")} name={`${form.formUid}_code`} minWidth="160px" value={form.fields.code} onChange={(e) => form.setField("code", e.target.value)} disabled={form.isLoading} />
-                  <FieldNumber label={translate("rate")} name={`${form.formUid}_rate`} minWidth="150px" value={form.fields.rate} onChange={(e) => form.setField("rate", e.target.value)} disabled={form.isLoading} decimals={2} />
+                  <Field label={translate("code")} name={`${form.formUid}_code`} minWidth={FIELD_WIDTH.number} value={form.fields.code} onChange={(e) => form.setField("code", e.target.value)} disabled={form.isLoading} />
+                  <FieldNumber label={translate("rate")} name={`${form.formUid}_rate`} minWidth={FIELD_WIDTH.number} value={form.fields.rate} onChange={(e) => form.setField("rate", e.target.value)} disabled={form.isLoading} decimals={2} />
                 </Group>
                 <Group className={styles.w1of2}>
                   <FieldSelect label={translate("taxMethod")} name={`${form.formUid}_method`} value={form.fields.calculationMethod}
                     options={[{ value: "INCLUDED", label: "В сумме (в т.ч.)" }, { value: "ADDED", label: "Сверху (начисляется к стоимости)" }]}
                     onChange={(e) => form.setField("calculationMethod", e.target.value === "ADDED" ? "ADDED" : "INCLUDED")}
-                    disabled={form.isLoading || !canWrite} style={{ minWidth: 240 }} />
+                    disabled={form.isLoading || !canWrite} style={{ minWidth: FIELD_WIDTH.wide }} />
                 </Group>
               </GroupRow>
             </GroupCol>

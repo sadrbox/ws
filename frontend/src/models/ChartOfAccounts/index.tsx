@@ -1,3 +1,4 @@
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Справочник «План счетов» (ChartOfAccount). Поддерживает до трёх субконто.
@@ -140,10 +141,10 @@ const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
           <GroupCol>
             <GroupRow>
               <Group className={styles.w1of2}>
-                <Field label={translate("code")} name={`${form.formUid}_code`} value={form.fields.code} onChange={e => form.setField("code", e.target.value)} disabled={form.isLoading} width="120px" />
+                <Field label={translate("code")} name={`${form.formUid}_code`} value={form.fields.code} onChange={e => form.setField("code", e.target.value)} disabled={form.isLoading} width={FIELD_WIDTH.sm} />
               </Group>
               <Group className={styles.w1of2}>
-                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} minWidth="320px" />
+                <Field label={translate("name")} name={`${form.formUid}_name`} value={form.fields.name} onChange={e => form.setField("name", e.target.value)} disabled={form.isLoading} minWidth={FIELD_WIDTH.lg} />
               </Group>
             </GroupRow>
             <GroupRow>

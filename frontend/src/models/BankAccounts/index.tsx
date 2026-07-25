@@ -149,13 +149,13 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
               </Group>
               <GroupRow>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("bik")} name={`${form.formUid}_bik`} minWidth="200px" value={form.fields.bik} onChange={e => form.setField("bik", e.target.value)} disabled={form.isLoading} />
+                  <Field label={translate("bik")} name={`${form.formUid}_bik`} minWidth={FIELD_WIDTH.md} value={form.fields.bik} onChange={e => form.setField("bik", e.target.value)} disabled={form.isLoading} />
                 </Group>
                 <Group className={styles.w1of2}>
-                  <Field label={translate("kbe")} name={`${form.formUid}_kbe`} value={form.fields.kbe} onChange={e => form.setField("kbe", e.target.value)} disabled={form.isLoading} maxLength={2} width="120px" />
+                  <Field label={translate("kbe")} name={`${form.formUid}_kbe`} value={form.fields.kbe} onChange={e => form.setField("kbe", e.target.value)} disabled={form.isLoading} maxLength={2} width={FIELD_WIDTH.sm} />
                 </Group>
                 <Group className={styles.w1of2}>
-                  <FormLookup form={form} field="currency" endpoint="currencies" displayField="code" minWidth="250px"
+                  <FormLookup form={form} field="currency" endpoint="currencies" displayField="code" minWidth={FIELD_WIDTH.wide}
                     onSelect={(uuid, _display, item) => form.setFields({ currencyUuid: uuid, currencyName: uuid ? `${item.code} — ${item.name}` : "" } as any)} />
                 </Group>
               </GroupRow>
