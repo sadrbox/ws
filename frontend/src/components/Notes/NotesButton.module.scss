@@ -15,33 +15,13 @@
 
 .AddRow {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   align-items: flex-end;
 }
 
-.Textarea {
-  flex: 1;
-  resize: vertical;
-  min-height: 52px;
-  padding: 6px 8px;
-  font: inherit;
-  border: 1px solid var(--border-color, var(--c-blue-84));
-  border-radius: 6px;
-  background: var(--surface, var(--sv-color60));
-  color: inherit;
-}
 
-.AddBtn {
-  padding: 7px 14px;
-  border: none;
-  border-radius: 6px;
-  background: var(--color-link, var(--c-blue-53));
-  color: var(--sv-color60);
-  font: inherit;
-  cursor: pointer;
 
-  &:disabled { opacity: 0.5; cursor: default; }
-}
 
 .List {
   display: flex;
@@ -96,4 +76,6 @@
   color: var(--color-link, var(--c-blue-53));
 }
 
-.LinkBtnDanger { color: var(--danger, var(--c-red-49)); }
+.LinkBtnDanger {
+  color: var(--danger, var(--c-red-49));
+}

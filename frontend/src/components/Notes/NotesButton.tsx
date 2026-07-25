@@ -9,6 +9,8 @@ import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import Modal from "src/components/Modal";
 import Notice, { type NoticeItem } from "src/components/Notice";
+import { FieldTextarea } from "src/components/Field";
+import { Button } from "src/components/Button";
 import { translate } from "src/i18";
 import { useAppContext } from "src/app/context";
 import { getFormatDateOnly } from "src/utils/datetime";
@@ -153,17 +155,22 @@ const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; inva
     <Modal title={translate("notes")} onClose={onClose} style={{ minWidth: 460, maxWidth: 620 }}>
       <div className={styles.Body}>
         <Notice items={notices} />
+        {/* Ввод заметки — общими компонентами формы (FieldTextarea + Button),
+            как во всех формах, а не сырыми textarea/button. */}
         <div className={styles.AddRow}>
-          <textarea
-            className={styles.Textarea}
+          <FieldTextarea
+            label=""
+            name="note-body"
             value={text}
             placeholder={translate("notePlaceholder")}
             onChange={(e) => setText(e.target.value)}
             rows={3}
+            width="100%"
+            minHeight="60px"
           />
-          <button className={styles.AddBtn} disabled={busy || !text.trim()} onClick={() => void add()}>
+          <Button variant="primary" disabled={busy || !text.trim()} onClick={() => void add()}>
             {translate("add")}
-          </button>
+          </Button>
         </div>
 
         <div className={styles.List}>
