@@ -13,13 +13,14 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
+import { getFormatDateOnly } from "src/utils/datetime";
 import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
 import { useReportFilters } from "./_shared/useReportFilters";
 import { today } from "./_shared/reportDates";
 import reportCss from "./report.module.scss?inline";
 
 const fmtQty = (n: number) => Number(n || 0).toLocaleString("ru-KZ", { maximumFractionDigits: 3 });
-const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString("ru-KZ") : "—");
+const fmtDate = (s: string | null) => (s ? getFormatDateOnly(s) : "—");
 
 interface Batch { date: string; qty: number; unitCost: number; amount: number }
 interface ApiItem { productUuid: string | null; productName: string; sku: string; warehouseName: string; uom: string; batches: Batch[]; totalQty: number; totalAmount: number }

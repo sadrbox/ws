@@ -24,6 +24,48 @@ export function getAppUtcOffset(): number {
 	return _utcOffsetHours;
 }
 
+// ── Формат отображения даты ────────────────────────────────────────────────────
+// Управляется из «Общих настроек». Затрагивает ТОЛЬКО отображение (getFormatDateOnly
+// /getFormatDate); хранение и <input type="date"> остаются в ISO.
+export type DateFormat = "DD.MM.YYYY" | "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
+const DEFAULT_DATE_FORMAT: DateFormat = "DD.MM.YYYY";
+const DATE_FORMATS: readonly DateFormat[] = ["DD.MM.YYYY", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"];
+
+let _dateFormat: DateFormat = (() => {
+	try {
+		const raw = localStorage.getItem(GENERAL_SETTINGS_KEY);
+		if (raw) {
+			const parsed = JSON.parse(raw) as { dateFormat?: unknown };
+			if (typeof parsed.dateFormat === "string" && DATE_FORMATS.includes(parsed.dateFormat as DateFormat)) {
+				return parsed.dateFormat as DateFormat;
+			}
+		}
+	} catch { /* ignore */ }
+	return DEFAULT_DATE_FORMAT;
+})();
+
+export function setAppDateFormat(fmt: DateFormat): void {
+	if (DATE_FORMATS.includes(fmt)) _dateFormat = fmt;
+}
+
+export function getAppDateFormat(): DateFormat {
+	return _dateFormat;
+}
+
+/** Собирает строку даты из числовых компонентов по настроенному формату. */
+function applyDateFormat(year: number, month: number, day: number): string {
+	const DD = pad(day);
+	const MM = pad(month);
+	const YYYY = String(year).padStart(4, "0");
+	switch (_dateFormat) {
+		case "YYYY-MM-DD": return `${YYYY}-${MM}-${DD}`;
+		case "DD/MM/YYYY": return `${DD}/${MM}/${YYYY}`;
+		case "MM/DD/YYYY": return `${MM}/${DD}/${YYYY}`;
+		case "DD.MM.YYYY":
+		default: return `${DD}.${MM}.${YYYY}`;
+	}
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -35,9 +77,9 @@ function shiftToConfiguredTz(utcMs: number): Date {
 	return new Date(utcMs + _utcOffsetHours * MS_PER_HOUR);
 }
 
-/** "дд.мм.гггг" из объекта Date по его UTC-компонентам. */
+/** Дата из объекта Date по его UTC-компонентам, в настроенном формате отображения. */
 function formatShiftedDate(d: Date): string {
-	return `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
+	return applyDateFormat(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
 }
 
 // ── Date formatting ───────────────────────────────────────────────────────────
@@ -47,9 +89,9 @@ export const getFormatDateOnly = (dateString?: string | null): string => {
 	if (!dateString) return "";
 	const s = String(dateString).slice(0, 32).trim();
 	if (!s) return "";
-	// "YYYY-MM-DD" без TZ — чистая дата, отображаем как есть (не конвертируем).
+	// "YYYY-MM-DD" без TZ — чистая дата, формат применяем без конвертации TZ.
 	if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-		return `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}`;
+		return applyDateFormat(Number(s.slice(0, 4)), Number(s.slice(5, 7)), Number(s.slice(8, 10)));
 	}
 	// ISO с временем/TZ → сдвигаем на настроенный offset.
 	const d = new Date(s);

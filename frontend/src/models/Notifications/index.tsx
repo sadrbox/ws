@@ -7,6 +7,7 @@ import {
 } from "src/hooks/useFormStore";
 import type { NotificationJournalEntry } from "src/hooks/useFormStore";
 import { translate } from "src/i18";
+import { getFormatDate } from "src/utils/datetime";
 import styles from "./Notifications.module.scss";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -18,10 +19,9 @@ interface NotificationsListProps {
   onSelectItem?: (item: TDataItem) => void;
 }
 
+// Дата+время в настроенном формате и часовом поясе (единый рендер приложения).
 function formatDate(ts: number): string {
-  const d = new Date(ts);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return getFormatDate(new Date(ts).toISOString());
 }
 
 const NotificationsList: FC<NotificationsListProps> = () => {

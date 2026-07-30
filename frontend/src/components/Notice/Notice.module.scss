@@ -1,5 +1,6 @@
-// Notice — блок предупреждений/статуса формы документа. Три палитры:
-// success (зелёный), warning (янтарный), attention (красный).
+// Notice — блок предупреждений/статуса формы документа. Палитры:
+// info (нейтральный/бирюзовый), success (зелёный), warning (янтарный),
+// attention/error (красный).
 .Notice {
 	display: flex;
 	flex-direction: column;
@@ -38,6 +39,18 @@
 	min-width: 0;
 	white-space: pre-wrap;
 	word-break: break-word;
+}
+
+// ── info (нейтральное пояснение, не тревога) ──
+.info {
+	background: $infoBg;
+	border-color: $infoBorder;
+	border-left-color: $info;
+	color: $infoText;
+
+	.Icon {
+		background: $info;
+	}
 }
 
 // ── success ──

@@ -1,6 +1,8 @@
 import { FC } from "react";
 import { translate } from "src/i18";
-import { useGeneralSettings, UTC_OFFSET_OPTIONS } from "src/hooks/useGeneralSettings";
+import { useGeneralSettings, UTC_OFFSET_OPTIONS, DATE_FORMAT_OPTIONS } from "src/hooks/useGeneralSettings";
+import { FieldSelect } from "src/components/Field";
+import type { DateFormat } from "src/utils/datetime";
 import EgovSettingsSection from "./EgovSettingsSection";
 import TwoFactorSection from "./TwoFactorSection";
 import styles from "./GeneralSettings.module.scss";
@@ -28,6 +30,16 @@ const GeneralSettings: FC = () => {
             ))}
           </select>
           <span className={styles.Hint}>{translate("timezoneHint")}</span>
+        </div>
+        <div className={styles.Row}>
+          <FieldSelect
+            label={translate("dateFormat")}
+            name="dateFormatSelect"
+            value={settings.dateFormat}
+            onChange={(e) => update({ dateFormat: e.target.value as DateFormat })}
+            options={DATE_FORMAT_OPTIONS}
+          />
+          <span className={styles.Hint}>{translate("dateFormatHint")}</span>
         </div>
       </div>
       <TwoFactorSection />

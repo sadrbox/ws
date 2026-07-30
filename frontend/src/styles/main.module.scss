@@ -28,13 +28,9 @@ body {
 	margin: 0;
 	padding: 0;
 	background-color: var(--n-12);
-	/* Chrome, Edge, Safari (WebKit) */
+
 	-webkit-font-smoothing: antialiased;
-
-	/* Firefox на macOS */
 	-moz-osx-font-smoothing: grayscale;
-
-	/* Опционально */
 	text-rendering: optimizeLegibility;
 }
 
@@ -1571,6 +1567,7 @@ body {
 		color: var(--c-blue-44);
 	}
 }
+
 // Бейдж непрочитанного в пункте навбара (E4.1) — компактный счётчик рядом с текстом.
 .NavBadge {
 	display: inline-flex;

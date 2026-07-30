@@ -1,5 +1,6 @@
 // Notice — блок предупреждений/статуса формы документа (заменяет инлайновые
-// заметки полей). Отображает список сообщений с тремя палитрами:
+// заметки полей). Отображает список сообщений с палитрами:
+//   info      — нейтральное пояснение (как работает форма); НЕ тревога;
 //   success   — форма заполнена корректно;
 //   warning   — условное предупреждение (напр. несоответствие договора/основания);
 //   attention — незаполненные обязательные поля (нужны для проведения);
@@ -9,7 +10,7 @@
 import type { FC } from "react";
 import styles from "./Notice.module.scss";
 
-export type NoticeType = "success" | "warning" | "attention" | "error";
+export type NoticeType = "info" | "success" | "warning" | "attention" | "error";
 
 export interface NoticeItem {
   type: NoticeType;
@@ -22,6 +23,7 @@ interface NoticeProps {
 }
 
 const ICON: Record<NoticeType, string> = {
+  info: "i",
   success: "✓",
   warning: "!",
   attention: "✕",

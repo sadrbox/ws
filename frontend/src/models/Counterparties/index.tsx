@@ -15,6 +15,8 @@ import styles from "src/styles/main.module.scss";
 import { BankAccountsTable } from "../BankAccounts";
 import { ContractsTable } from "../Contracts";
 import { ContactsTable } from "../Contacts";
+import { ContactPersonsList } from "../ContactPersons";
+import FilesPanel from "src/components/FilesPanel";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
@@ -49,6 +51,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
   const { canRead: canReadBankAccounts } = useAccessPermission("BankAccount");
   const { canRead: canReadContracts } = useAccessPermission("Contract");
   const { canRead: canReadContacts } = useAccessPermission("Contact");
+  const { canRead: canReadContactPersons } = useAccessPermission("ContactPerson");
   const queryClient = useQueryClient();
 
   // refetchType: "active" — invalidateQueries вернёт Promise, который
@@ -144,8 +147,26 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
         <ContactsTable deferRemoteChanges ownerType="counterparty" parentUuid={form.fields.uuid ?? ""} parentName={form.fields.name} initialPendingRows={contacts.pending} onItemsChange={contacts.onItemsChange} showPrimaryButton={form.isEditMode && canWrite} />
       )
     });
+    // Контактные лица — list-вкладка с фильтром по владельцу (у контактного лица своя
+    // форма с под-контактами). Только у сохранённого контрагента: нужен ownerUuid.
+    if (form.isEditMode && ownerUuid && canReadContactPersons) result.push({
+      id: "tab-contactpersons", label: translate("ContactPersonsList"), component: (
+        <ContactPersonsList
+          variant="default"
+          ownerUuid={ownerUuid}
+          extraQueryParams={{ ownerType: "counterparty", ownerUuid, ownerName: form.fields.name ?? "" }}
+        />
+      )
+    });
+    // Файлы — без отдельного права (AttachedFile не назначается в UI прав; файлы
+    // вторичны к владельцу), как в Договорах/Задачах.
+    if (form.isEditMode && ownerUuid) result.push({
+      id: "tab-files", label: translate("files"), component: (
+        <FilesPanel ownerType="counterparty" ownerUuid={ownerUuid} />
+      )
+    });
     return result;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts, canWrite, ownerUuid]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, canReadBankAccounts, canReadContracts, canReadContacts, canReadContactPersons, canWrite, ownerUuid]);
 
   // БИН НЕ обязателен: контрагентом может быть физлицо или розничный покупатель, а из
   // 1С элементы приходят без него. Обязательно наименование. У ОРГАНИЗАЦИИ БИН

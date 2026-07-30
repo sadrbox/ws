@@ -18,6 +18,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingUsageStats from "src/hooks/useOrgAccountingUsageStats";
+import { getFormatDateOnly } from "src/utils/datetime";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -247,7 +248,9 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
     }
 
     // Как вообще работает сохранение — всегда, это не зависит от правок.
-    items.push({ type: "attention", text: translate("accSettingsVersioningNote") });
+    // Тип info: это нейтральное ПОЯСНЕНИЕ, а не ошибка/незаполненное поле
+    // (attention сбивал бы с толку красной ✕-плашкой на постоянной справке).
+    items.push({ type: "info", text: translate("accSettingsVersioningNote") });
     return items;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -559,7 +562,7 @@ const renderListCell = (row: TDataItem, col: TColumn) => {
   if (col.identifier === "startDate") {
     const v = row.startDate as string | null | undefined;
     if (!v) return <span className={styles.Muted}>—</span>;
-    return <span>{String(v).slice(0, 10)}</span>;
+    return <span>{getFormatDateOnly(String(v))}</span>;
   }
   return undefined;
 };
@@ -569,7 +572,9 @@ const OrganizationAccountingSettingsList: FC<{
   onSelectItem?: (item: TDataItem) => void;
   /** Ограничить список одной организацией (вкладка в форме организации). */
   organizationUuid?: string;
-}> = ({ variant, onSelectItem, organizationUuid }) => {
+  /** Имя организации-владельца — предзаполняется в новую запись (иначе поле «Организация» пустое). */
+  organizationName?: string;
+}> = ({ variant, onSelectItem, organizationUuid, organizationName }) => {
   // При монтировании списка инвалидируем кэш «активных», чтобы SaleItemsTable
   // увидел свежие настройки сразу.
   const qc = useQueryClient();
@@ -593,6 +598,7 @@ const OrganizationAccountingSettingsList: FC<{
       onSelectItem={onSelectItem}
       ownerUuid={organizationUuid}
       ownerField={organizationUuid ? "organizationUuid" : undefined}
+      extraQueryParams={organizationUuid && organizationName ? { organizationName } : undefined}
       renderCell={renderListCell}
     />
   );

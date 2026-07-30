@@ -1,4 +1,4 @@
-// Дашборд эффективности пользователей. Цвета — семантические токены (тема-независимо).
+// Дашборд показателей. Цвета — семантические токены (тема-независимо).
 
 .Wrap {
   display: flex;
@@ -8,6 +8,7 @@
   gap: 12px;
   padding: 14px 16px;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .Toolbar {
@@ -35,97 +36,176 @@
   color: var(--ink, var(--c-blue-15));
 }
 
-.Hint {
-  font-size: 12px;
-  color: var(--text-muted);
+.Spacer { flex: 1 1 auto; }
+
+.ViewToggle {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 4px 12px;
+  border: 1px solid var(--line, var(--n-88));
+  border-radius: 6px;
+  background: var(--panel, var(--sv-color60));
+  color: var(--text-secondary);
+  cursor: pointer;
+
+  &:hover { background: var(--surface-muted); }
 }
 
-// ── Таблица показателей ──────────────────────────────────────────────────────
-.Table {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  border: 1px solid var(--line, var(--n-91a));
-  border-radius: 10px;
-}
-
-.Row {
-  display: grid;
-  grid-template-columns: minmax(160px, 1.4fr) minmax(180px, 2fr) repeat(3, minmax(72px, 0.7fr));
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--line, var(--n-94a));
-
-  &:last-child { border-bottom: 0; }
-}
-
-.Row.head {
-  position: sticky;
-  top: 0;
-  background: var(--surface-muted);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-.User {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink, var(--c-blue-15));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-// ── Полоса «документов» (сравнение между пользователями) ────────────────────
-.DocBarCell {
+// ── Выбор блоков (чипы) ──────────────────────────────────────────────────────
+.Picker {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
-.DocBarTrack {
-  flex: 1 1 auto;
-  height: 8px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--color-link) 12%, transparent);
-  overflow: hidden;
-}
-
-.DocBarFill {
-  height: 100%;
-  border-radius: 4px;
-  background: var(--color-link);
-}
-
-.DocValue {
-  font-variant-numeric: tabular-nums;
-  font-size: 13px;
+.PickerLabel {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   font-weight: 600;
+}
+
+.Chip {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line, var(--n-88));
+  background: var(--panel, var(--sv-color60));
   color: var(--text-secondary);
-  min-width: 42px;
-  text-align: right;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+
+  &:hover { background: var(--surface-muted); }
 }
 
-// ── Числовые показатели задач ───────────────────────────────────────────────
-.Metric {
-  font-variant-numeric: tabular-nums;
-  font-size: 14px;
+.Chip.on {
+  background: var(--color-link);
+  border-color: var(--color-link);
+  color: #fff;
   font-weight: 600;
-  text-align: center;
 }
 
-.Metric.done { color: var(--success); }
-.Metric.active { color: var(--text-secondary); }
-.Metric.overdue { color: var(--danger); }
-.Metric.zero { color: var(--text-faint); font-weight: 400; }
+// ── KPI-плитки ───────────────────────────────────────────────────────────────
+.Kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.Kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line, var(--n-88));
+  border-radius: 12px;
+  background: var(--panel, var(--sv-color60));
+}
+
+.KpiLabel {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.KpiVal {
+  font-size: 23px;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+  color: var(--ink, var(--n-20));
+  font-variant-numeric: tabular-nums;
+}
+
+// ── Сетка карточек-графиков ──────────────────────────────────────────────────
+.Grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+  align-content: start;
+}
+
+.Card {
+  border: 1px solid var(--line, var(--n-88));
+  border-radius: 12px;
+  background: var(--panel, var(--sv-color60));
+  padding: 14px 16px 10px;
+  min-width: 0;
+}
+
+.CardHead {
+  margin-bottom: 10px;
+
+  h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 650;
+    color: var(--ink, var(--n-20));
+  }
+  p {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+}
+
+.CardStatus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+// ── Табличный вид ────────────────────────────────────────────────────────────
+.Tables {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.DataTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+
+  caption {
+    text-align: left;
+    font-weight: 650;
+    color: var(--ink, var(--n-20));
+    padding-bottom: 8px;
+  }
+
+  th, td {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--line, var(--n-94a, var(--n-88)));
+    text-align: left;
+  }
+
+  th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    font-weight: 600;
+    background: var(--surface-muted);
+  }
+
+  td { color: var(--text-secondary); }
+}
+
+.numCell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
 .Status {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -244,6 +244,7 @@
 	.FieldSelect,
 	.FieldString,
 	.FieldNumber {
+		height: $heightFieldInput - 2px;
 		// height: 100%;
 		margin: 0;
 		box-sizing: border-box;

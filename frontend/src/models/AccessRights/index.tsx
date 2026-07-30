@@ -262,7 +262,9 @@ const AccessRightsList: FC<{
   onSelectItem?: (item: TDataItem) => void;
   /** Ограничить список одной организацией (вкладка в форме организации). */
   organizationUuid?: string;
-}> = ({ variant, onSelectItem, organizationUuid }) => (
+  /** Имя организации-владельца — предзаполняется в новую запись (иначе поле «Организация» пустое). */
+  organizationName?: string;
+}> = ({ variant, onSelectItem, organizationUuid, organizationName }) => (
   <ModelList
     endpoint={ENDPOINT}
     listName="AccessRightsList"
@@ -278,6 +280,7 @@ const AccessRightsList: FC<{
     onSelectItem={onSelectItem}
     ownerUuid={organizationUuid}
     ownerField={organizationUuid ? "organizationUuid" : undefined}
+    extraQueryParams={organizationUuid && organizationName ? { orgName: organizationName } : undefined}
     defaultSort={{ id: "desc" }}
   />
 );

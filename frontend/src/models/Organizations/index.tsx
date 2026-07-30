@@ -14,8 +14,10 @@ import styles from "src/styles/main.module.scss";
 import { BankAccountsTable } from "../BankAccounts";
 import { ContractsTable } from "../Contracts";
 import { ContactsTable } from "../Contacts";
+import { ContactPersonsList } from "../ContactPersons";
 import { WarehousesTable } from "../Warehouses";
 import { CashboxesTable } from "../Cashboxes";
+import FilesPanel from "src/components/FilesPanel";
 import { OrganizationAccountingSettingsList } from "../OrganizationAccountingSettings";
 import { AccessRightsList } from "../AccessRights";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -69,6 +71,7 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
   const { canRead: canReadBankAccounts } = useAccessPermission("BankAccount");
   const { canRead: canReadContracts } = useAccessPermission("Contract");
   const { canRead: canReadContacts } = useAccessPermission("Contact");
+  const { canRead: canReadContactPersons } = useAccessPermission("ContactPerson");
   const { canRead: canReadWarehouses } = useAccessPermission("Warehouse");
   const { canRead: canReadCashboxes } = useAccessPermission("Cashbox");
   const { canRead: canReadAccSettings } = useAccessPermission("OrganizationAccountingSetting");
@@ -272,21 +275,40 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
         />
       ),
     });
+    // Контактные лица — list-вкладка (у контактного лица своя форма с под-контактами,
+    // поэтому не встраиваемый SubTable, а список с фильтром по владельцу). Доступна
+    // только у сохранённой организации: нужен ownerUuid для фильтра и создания.
+    if (form.isEditMode && ownerUuid && canReadContactPersons) result.push({
+      id: "tab-contactpersons", label: translate("ContactPersonsList"), component: (
+        <ContactPersonsList
+          variant="default"
+          ownerUuid={ownerUuid}
+          extraQueryParams={{ ownerType: "organization", ownerUuid, ownerName: form.fields.name ?? "" }}
+        />
+      ),
+    });
+    // Файлы — как в Договорах/Задачах: без отдельного права (AttachedFile не назначается
+    // в UI прав; файлы вторичны к владельцу — доступ к форме владельца их и открывает).
+    if (form.isEditMode && ownerUuid) result.push({
+      id: "tab-files", label: translate("files"), component: (
+        <FilesPanel ownerType="organization" ownerUuid={ownerUuid} />
+      ),
+    });
 
     // Вкладки-СПИСКИ (не редактируемые SubTable): показывают записи, отфильтрованные
     // по этой организации. Доступны только у сохранённой организации — фильтр по uuid.
     if (form.isEditMode && ownerUuid && canReadAccSettings) result.push({
       id: "tab-acc-settings", label: translate("OrganizationAccountingSettingsList"), component: (
-        <OrganizationAccountingSettingsList variant="default" organizationUuid={ownerUuid} />
+        <OrganizationAccountingSettingsList variant="default" organizationUuid={ownerUuid} organizationName={form.fields.name ?? ""} />
       ),
     });
     if (form.isEditMode && ownerUuid && canReadAccessRights) result.push({
       id: "tab-access-rights", label: translate("AccessRightsList"), component: (
-        <AccessRightsList variant="default" organizationUuid={ownerUuid} />
+        <AccessRightsList variant="default" organizationUuid={ownerUuid} organizationName={form.fields.name ?? ""} />
       ),
     });
     return result;
-  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, warehouses, cashboxes, canReadBankAccounts, canReadContracts, canReadContacts, canReadWarehouses, canReadCashboxes, canReadAccSettings, canReadAccessRights, canWrite, ownerUuid]);
+  }, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, contacts, bankAccounts, contracts, warehouses, cashboxes, canReadBankAccounts, canReadContracts, canReadContacts, canReadContactPersons, canReadWarehouses, canReadCashboxes, canReadAccSettings, canReadAccessRights, canWrite, ownerUuid]);
 
   return (
     <FormRequiredScope requiredKeys={["bin"]} active>

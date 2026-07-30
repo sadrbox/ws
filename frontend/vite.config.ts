@@ -47,6 +47,7 @@ export default defineConfig({
 					if (id.includes("xlsx")) return "xlsx";
 					if (id.includes("mammoth")) return "mammoth";
 					if (id.includes("pdfjs") || id.includes("react-pdf")) return "pdf";
+					if (id.includes("recharts") || id.includes("d3-") || id.includes("victory-vendor")) return "recharts";
 					if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "react-vendor";
 					if (id.includes("@tanstack")) return "tanstack";
 					// Остальные либы НЕ сливаем в один vendor — Vite распределит их
