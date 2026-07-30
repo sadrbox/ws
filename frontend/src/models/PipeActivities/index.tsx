@@ -256,4 +256,5 @@ const PipeActivitiesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TD
 );
 PipeActivitiesList.displayName = LIST_NAME;
 
+export { PipeActivitiesDashboard } from "./PipeActivitiesDashboard";
 export { PipeActivitiesList, PipeActivitiesForm };

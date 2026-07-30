@@ -32,6 +32,7 @@ import {
   ContractsList,
   ActivityHistoriesList,
   PipeActivitiesList,
+  PipeActivitiesDashboard,
   OrganizationsList,
   BankAccountsList,
   CounterpartiesList,
@@ -1203,6 +1204,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("User") && <NavItem onClick={() => addPane({ component: UsersList })}>{translate("UsersList")}</NavItem>}
           {can("ActivityHistory") && <NavItem onClick={() => addPane({ component: ActivityHistoriesList })}>{translate("ActivityHistoriesList")}</NavItem>}
           {can("ActivityHistory") && <NavItem onClick={() => addPane({ component: PipeActivitiesList })}>{translate("PipeActivitiesList")}</NavItem>}
+          {can("ActivityHistory") && <NavItem onClick={() => addPane({ component: PipeActivitiesDashboard, label: translate("PipeActivitiesDashboard") })}>{translate("PipeActivitiesDashboard")}</NavItem>}
           {can("Notification") && <NavItem onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</NavItem>}
           <NavItem onClick={() => addPane({ component: FilesList, label: translate("files") })}>{translate("files")}</NavItem>
           <NavItem onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</NavItem>

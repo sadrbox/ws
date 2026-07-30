@@ -71,6 +71,56 @@ router.get(`/${ROUTE}`, async (req, res) => {
 	}
 });
 
+// ── Показатели для дашборда (read-only агрегаты) ─────────────────────────────
+// ВАЖНО: объявлено ДО `/:uuid`, иначе "stats" распознаётся как uuid.
+router.get(`/${ROUTE}/stats`, async (req, res) => {
+	try {
+		const { dateFrom, dateTo, organizationUuid } = req.query;
+		const where = {};
+		if (dateFrom || dateTo) {
+			where.receivedAt = {};
+			if (dateFrom) where.receivedAt.gte = new Date(String(dateFrom));
+			if (dateTo) where.receivedAt.lte = new Date(String(dateTo) + "T23:59:59.999Z");
+		}
+		if (typeof organizationUuid === "string" && organizationUuid) where.organizationUuid = organizationUuid;
+
+		const cat = (rows, key) =>
+			rows.map((r) => ({ key: r[key], count: r._count._all })).sort((a, b) => b.count - a.count);
+
+		const [total, byStatus, byObject, byUser] = await Promise.all([
+			prisma[MODEL].count({ where }),
+			prisma[MODEL].groupBy({ by: ["applyStatus"], where, _count: { _all: true } }),
+			// objectName (Номенклатура/Контрагенты/…) информативнее objectType (всегда «Справочник»).
+			prisma[MODEL].groupBy({ by: ["objectName"], where, _count: { _all: true } }),
+			prisma[MODEL].groupBy({ by: ["userName"], where, _count: { _all: true } }),
+		]);
+
+		// Динамика по дням (receivedAt) — raw SQL с теми же границами.
+		const params = [];
+		let cond = "TRUE";
+		if (where.receivedAt?.gte) { params.push(where.receivedAt.gte); cond += ` AND "receivedAt" >= $${params.length}`; }
+		if (where.receivedAt?.lte) { params.push(where.receivedAt.lte); cond += ` AND "receivedAt" <= $${params.length}`; }
+		if (where.organizationUuid) { params.push(where.organizationUuid); cond += ` AND "organizationUuid" = $${params.length}`; }
+		const byDayRaw = await prisma.$queryRawUnsafe(
+			`SELECT to_char(date_trunc('day', "receivedAt"), 'YYYY-MM-DD') AS day, COUNT(*)::int AS count
+			 FROM pipe_activity WHERE ${cond} GROUP BY 1 ORDER BY 1`,
+			...params,
+		);
+
+		return res.json({
+			success: true,
+			total,
+			byStatus: cat(byStatus, "applyStatus"),
+			byObjectName: cat(byObject, "objectName").slice(0, 12),
+			byUser: cat(byUser, "userName").slice(0, 10),
+			byDay: byDayRaw.map((r) => ({ day: r.day, count: Number(r.count) })),
+		});
+	} catch (error) {
+		console.error(`GET /${ROUTE}/stats error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 // ── Одна запись ─────────────────────────────────────────────────────────────
 router.get(`/${ROUTE}/:uuid`, async (req, res) => {
 	try {

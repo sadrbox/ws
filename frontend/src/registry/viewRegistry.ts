@@ -27,6 +27,7 @@ function lazyView(name: string, loader: () => Promise<{ default: React.Component
 export const ContractsList = lazyView("ContractsList", () => import('src/models/Contracts').then(m => ({ default: m.ContractsList })));
 export const ActivityHistoriesList = lazyView("ActivityHistoriesList", () => import('src/models/ActivityHistories').then(m => ({ default: m.ActivityHistoriesList })));
 export const PipeActivitiesList = lazyView("PipeActivitiesList", () => import('src/models/PipeActivities').then(m => ({ default: m.PipeActivitiesList })));
+export const PipeActivitiesDashboard = lazyView("PipeActivitiesDashboard", () => import('src/models/PipeActivities').then(m => ({ default: m.PipeActivitiesDashboard })));
 export const OrganizationsList = lazyView("OrganizationsList", () => import('src/models/Organizations').then(m => ({ default: m.OrganizationsList })));
 export const BankAccountsList = lazyView("BankAccountsList", () => import('src/models/BankAccounts').then(m => ({ default: m.BankAccountsList })));
 export const CounterpartiesList = lazyView("CounterpartiesList", () => import('src/models/Counterparties').then(m => ({ default: m.CounterpartiesList })));
@@ -118,6 +119,7 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	ContractsList: ContractsList,
 	ActivityHistoriesList: ActivityHistoriesList,
 	PipeActivitiesList: PipeActivitiesList,
+	PipeActivitiesDashboard: PipeActivitiesDashboard,
 	OrganizationsList: OrganizationsList,
 	BankAccountsList: BankAccountsList,
 	CounterpartiesList: CounterpartiesList,

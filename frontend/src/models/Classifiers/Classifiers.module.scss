@@ -109,3 +109,143 @@
 	color: var(--sv-color5);
 	font-size: 12px;
 }
+
+// ── Дерево классификатора (родитель→дети) ────────────────────────────────────
+.Tree {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	border: 1px solid var(--line, var(--sv-color30));
+	border-radius: 6px;
+	font-size: 13px;
+	background: var(--panel, var(--sv-color60));
+}
+
+.TreeRow {
+	display: flex;
+	align-items: stretch; // рельсы-направляющие тянутся на всю высоту строки
+	min-height: 30px;
+	padding-right: 10px;
+
+	&:hover { background: var(--surface-muted); }
+}
+
+.TreeRowClickable { cursor: pointer; }
+
+.TreeRowHi { background: color-mix(in srgb, var(--color-link) 16%, transparent); }
+
+// Вертикальная направляющая уровня (одна на каждый уровень вложенности).
+.Guide {
+	flex: none;
+	width: 22px;
+	align-self: stretch;
+	border-left: 1px solid var(--line, var(--sv-color33));
+	margin-left: 10px;
+
+	&:first-child { margin-left: 6px; }
+}
+
+.TreeCaret {
+	flex: none;
+	align-self: center;
+	width: 22px;
+	height: 22px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	border-radius: 4px;
+	padding: 0;
+
+	&:hover { background: color-mix(in srgb, var(--color-link) 18%, transparent); }
+}
+
+.CaretClosed,
+.CaretOpen {
+	font-size: 9px;
+	line-height: 1;
+	color: var(--color-link, var(--sv-color3));
+	transition: transform 0.12s ease;
+	display: inline-block;
+}
+.CaretOpen { transform: rotate(90deg); }
+
+.TreeLeafDot {
+	flex: none;
+	align-self: center;
+	width: 22px;
+	text-align: center;
+	color: var(--text-faint, var(--sv-color10));
+	font-weight: 700;
+}
+
+.TreeCode {
+	align-self: center;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	white-space: nowrap;
+	color: var(--n-20, var(--sv-color6));
+	flex: none;
+	min-width: 104px;
+	padding-right: 10px;
+}
+
+// Имя листа — обычное; имя узла-родителя — акцентное (жирнее, темнее).
+.TreeName,
+.TreeNameParent {
+	align-self: center;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 1 1 auto;
+}
+.TreeName { color: var(--text-secondary, var(--sv-color51)); }
+.TreeNameParent {
+	color: var(--ink, var(--n-20, var(--sv-color6)));
+	font-weight: 600;
+}
+
+// Счётчик дочерних элементов у родителя.
+.KidCount {
+	align-self: center;
+	flex: none;
+	margin-left: 8px;
+	min-width: 20px;
+	padding: 1px 7px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	text-align: center;
+	color: var(--text-muted, var(--sv-color5));
+	background: color-mix(in srgb, var(--text-muted, #888) 16%, transparent);
+}
+
+.TreeEmpty {
+	color: var(--sv-color5);
+	padding: 20px;
+	text-align: center;
+}
+
+// Индикатор загрузки дерева.
+.Loading {
+	flex: 1 1 auto;
+	min-height: 160px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	padding: 40px;
+	color: var(--text-muted, var(--sv-color5));
+	font-size: 13px;
+}
+.Spinner {
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	border: 3px solid var(--line, var(--n-88));
+	border-top-color: var(--color-link);
+	animation: cls-spin 0.7s linear infinite;
+}
+@keyframes cls-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .Spinner { animation-duration: 2s; } }
