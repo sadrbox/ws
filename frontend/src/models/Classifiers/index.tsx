@@ -25,6 +25,12 @@ const COLUMNS: TColumn[] = [
 
 const COMPONENT = "ClassifiersList";
 
+// Классификаторы крупные (ТН ВЭД ~14к, КАТО ~15к, ГС ВС ~8.5к), но короткие
+// (код+имя) и виртуализируются в Table — грузим целиком, чтобы показывать ВСЁ, а
+// не первую страницу. Поиск фильтрует на сервере. (Лукап-автокомплит — отдельный
+// путь с малым лимитом.)
+const VIEW_LIMIT = 100000;
+
 export const ClassifiersList: FC = () => {
 	const isSuperAdmin = !!getCurrentUser()?.isSuperAdmin;
 	const [type, setType] = useState<string>("country");
@@ -38,7 +44,7 @@ export const ClassifiersList: FC = () => {
 
 	const { data, isLoading, refetch } = useQuery({
 		queryKey: ["classifiers", type, search],
-		queryFn: async () => (await fetchClassifiers(type, search)).items,
+		queryFn: async () => (await fetchClassifiers(type, search, undefined, VIEW_LIMIT)).items,
 	});
 	const rows = useMemo(() => (data ?? []).map((c, i) => ({ id: i + 1, uuid: c.code, ...c })), [data]);
 
@@ -118,7 +124,7 @@ export const ClassifierPicker: FC<PickerProps> = ({ onSelectItem, extraParams, e
 	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(COLUMNS, "ClassifierPicker"));
 	const { data, isLoading, refetch } = useQuery({
 		queryKey: ["classifiers", type, search],
-		queryFn: async () => (await fetchClassifiers(type, search)).items,
+		queryFn: async () => (await fetchClassifiers(type, search, undefined, VIEW_LIMIT)).items,
 	});
 	const rows = useMemo(() => (data ?? []).map((c, i) => ({ id: i + 1, uuid: c.code, ...c })), [data]);
 	const onClick = useCallback((d: Partial<TDataItem>) => { if (d?.code) onSelectItem?.(d as Record<string, unknown>); }, [onSelectItem]);

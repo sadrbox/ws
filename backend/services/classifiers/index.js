@@ -14,8 +14,11 @@ export async function listClassifiers({ type, search, parentCode, limit = 100 } 
 		{ code: { contains: q, mode: "insensitive" } },
 		{ name: { contains: q, mode: "insensitive" } },
 	];
+	// Потолок 100000: официальные классификаторы крупные (ТН ВЭД ~14к, КАТО ~15к,
+	// ГС ВС ~8.5к). Просмотрщик/пикер грузят целиком (Table виртуализирует строки),
+	// иначе видна лишь первая страница. Дефолт 100 — для автокомплита лукапа.
 	return prisma.classifier.findMany({
-		where, orderBy: [{ code: "asc" }], take: Math.min(Number(limit) || 100, 1000),
+		where, orderBy: [{ code: "asc" }], take: Math.min(Number(limit) || 100, 100000),
 		select: { code: true, name: true, parentCode: true },
 	});
 }
