@@ -114,8 +114,8 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
                     <GroupCol>
                       <FieldSelect label={translate("enterpriseCategory")} name={`${form.formUid}_enterpriseCategory`} value={form.fields.enterpriseCategory} disabled={form.isLoading}
                         onChange={(e) => form.setField("enterpriseCategory", e.target.value)}
+                        hint={translate("enterpriseCategoryHint")}
                         options={[{ value: "", label: "—" }, ...(esfDict?.customerType ?? []).map((o) => ({ value: o.code, label: o.label || o.code }))]} />
-                      <div className={styles.FieldHint}>{translate("enterpriseCategoryHint")}</div>
                     </GroupCol>
                   </Group>
                 </GroupRow>

@@ -77,6 +77,14 @@
 	margin-bottom: 3px;
 }
 
+// Видимая подсказка-help ПОД полем (проп hint у Field*). Не путать с title (hover).
+.FieldHint {
+	font-size: 11.5px;
+	line-height: 1.35;
+	margin-top: 3px;
+	color: var(--text-muted, #{$color5});
+}
+
 // ── Unsaved changes highlight — поле открыто через "Несохранённые записи" ──
 // Лёгкая подсветка label синим, без изменения border (не путать с required/error).
 .FieldDirty:not(.tableVariant) {

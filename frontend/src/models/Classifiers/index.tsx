@@ -16,7 +16,8 @@ import { Button } from "src/components/Button";
 import { showToast } from "src/components/UIToast";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { fetchClassifiers, importClassifiers, importClassifiersFile, CLASSIFIER_TYPES } from "src/services/classifiers/api";
-import ClassifierTree, { buildPrefixTree, type TreeNode } from "./ClassifierTree";
+import ClassifierTree, { buildNamePathTree, type TreeNode } from "./ClassifierTree";
+import { TNVED_GROUPS } from "./tnvedGroups";
 import styles from "./Classifiers.module.scss";
 
 const COLUMNS: TColumn[] = [
@@ -33,20 +34,14 @@ const COMPONENT = "ClassifiersList";
 // путь с малым лимитом.)
 const VIEW_LIMIT = 100000;
 
-// Классификаторы БЕЗ parentCode, но с иерархией В СТРУКТУРЕ КОДА → дерево синтезируется
-// по префиксам кода (виртуальные узлы-группы, невыбираемые). ТН ВЭД: группа(2)→
-// позиция(4)→субпозиция(6)→код(10). gsvs/country строятся по parentCode (тут не заданы).
-const CODE_LEVELS: Record<string, number[]> = { tnved: [2, 4, 6] };
-const TNVED_LEVEL_LABEL: Record<number, string> = { 2: "Товарная группа", 4: "Товарная позиция", 6: "Субпозиция" };
-// Подпись группы включает её код-префикс, иначе десятки узлов называются одинаково
-// («Товарная группа») и пользователь путается. Официальных названий групп ТН ВЭД в
-// файле нет — код и есть их идентификатор.
-const groupLabel = (level: number, prefix: string) => `${TNVED_LEVEL_LABEL[level] ?? `Уровень ${level}`} ${prefix}`;
+// Классификаторы БЕЗ parentCode, но с иерархией В НАИМЕНОВАНИИ (сегменты через « / »):
+// у ТН ВЭД имя листа = путь «позиция / субпозиция / … / вид», что даёт РЕАЛЬНЫЕ названия
+// уровней. Такие строим buildNamePathTree; gsvs/country — по parentCode (как есть).
+const NAMEPATH_TYPES = new Set<string>(["tnved"]);
 
-/** Готовит узлы для дерева: parentCode как есть, либо префиксное дерево по коду. */
+/** Готовит узлы для дерева: по сегментам имени (ТН ВЭД, + группы сверху) либо по parentCode. */
 function toTreeRows(type: string, rows: TreeNode[]): TreeNode[] {
-	const levels = CODE_LEVELS[type];
-	return levels ? buildPrefixTree(rows, levels, groupLabel) : rows;
+	return NAMEPATH_TYPES.has(type) ? buildNamePathTree(rows, " / ", TNVED_GROUPS) : rows;
 }
 
 export const ClassifiersList: FC = () => {

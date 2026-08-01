@@ -87,6 +87,14 @@ const FieldLabelNode: FC<{
   );
 };
 
+// Подсказка-help уровня ПОЛЯ (под контролом). Рендерится ВНУТРИ обёртки Field*, id
+// связывается с контролом через aria-describedby. Не для табличного варианта и не для
+// заметок уровня секции/формы (для тех — свои элементы вне поля).
+const FieldHintNode: FC<{ id?: string; hint?: React.ReactNode; isTable: boolean }> = ({ id, hint, isTable }) => {
+  if (isTable || hint == null || hint === '') return null;
+  return <div id={id} className={styles.FieldHint}>{hint}</div>;
+};
+
 // Варианты отображения Field*
 export type FieldVariant = 'default' | 'table';
 
@@ -118,6 +126,8 @@ interface TypeFieldStringProps {
   maxLength?: number;
   /** Поле имеет несохранённые изменения (при открытии через "Несохранённые записи") */
   isDirty?: boolean;
+  /** Видимая подсказка-help ПОД полем (не путать с `title`). Связывается через aria-describedby. */
+  hint?: React.ReactNode;
 }
 
 // Пропсы для FieldGroup
@@ -138,6 +148,8 @@ interface TypeFieldGroupProps {
   error?: boolean;
   variant?: FieldVariant;
   autoFocus?: boolean;
+  /** Видимая подсказка-help ПОД полем. */
+  hint?: React.ReactNode;
 }
 
 // // Иконки для действий (можно заменить на ваши SVG)
@@ -189,6 +201,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   autoFocus,
   maxLength,
   isDirty,
+  hint,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -238,6 +251,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       autoFocus={autoFocus}
       maxLength={maxLength}
       isDirty={isDirty}
+      hint={hint}
     />
   );
 };
@@ -261,8 +275,10 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
   autoFocus,
   maxLength,
   isDirty,
+  hint,
 }) => {
   const uid = useId();
+  const hintId = hint ? `${uid}-hint` : undefined;
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value, isDirty });
 
   return (
@@ -284,6 +300,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
           title={title}
           maxLength={maxLength}
           autoFocus={autoFocus}
+          aria-describedby={hintId}
         />
         {actions && actions.length > 0 && (
           <div className={styles.FieldActions}>
@@ -296,6 +313,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
           </div>
         )}
       </div>
+      <FieldHintNode id={hintId} hint={hint} isTable={isTable} />
     </div>
   );
 };
@@ -313,6 +331,8 @@ interface TypeFieldDateTimeProps {
   required?: boolean;
   error?: boolean;
   variant?: FieldVariant;
+  /** Видимая подсказка-help ПОД полем. */
+  hint?: React.ReactNode;
 }
 
 export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
@@ -370,6 +390,7 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
   required = false,
   error = false,
   variant = 'default',
+  hint,
 }) => {
   // Гарантируем, что value для input[type=date] имеет формат YYYY-MM-DD
   const safeValue = (() => {
@@ -380,6 +401,7 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
   })();
 
   const uid = useId();
+  const hintId = hint ? `${uid}-hint` : undefined;
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
@@ -394,8 +416,10 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
           onChange={onChange}
           className={`${styles.FieldDate} ${disabled ? styles.FieldDisabled : ''}`}
           disabled={disabled}
+          aria-describedby={hintId}
         />
       </div>
+      <FieldHintNode id={hintId} hint={hint} isTable={isTable} />
     </div>
   );
 };
@@ -518,10 +542,13 @@ type TypeFieldSelectProps = {
   variant?: FieldVariant;
   /** Компактный размер — высота подогнана под шапку панели (PaneItemHeaderToolbar). */
   size?: 'sm';
+  /** Видимая подсказка-help ПОД полем. */
+  hint?: React.ReactNode;
 };
 
-export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value = '', onChange, disabled = false, required = false, error = false, style, variant = 'default', size }) => {
+export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value = '', onChange, disabled = false, required = false, error = false, style, variant = 'default', size, hint }) => {
   const uid = useId();
+  const hintId = hint ? `${uid}-hint` : undefined;
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
   const className = size === 'sm' ? `${wrapperClass} ${styles.FieldSizeSm}` : wrapperClass;
 
@@ -529,12 +556,13 @@ export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, va
     <div className={className} style={style}>
       <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldSelectWrapper}>
-        <select name={name} id={uid} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled}>
+        <select name={name} id={uid} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled} aria-describedby={hintId}>
           {options.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
       </div>
+      <FieldHintNode id={hintId} hint={hint} isTable={isTable} />
     </div>
   );
 };
@@ -573,6 +601,8 @@ interface TypeFieldNumberProps {
    * при потере фокуса и форматирует отображение. По умолчанию — без ограничения.
    */
   decimals?: number;
+  /** Видимая подсказка-help ПОД полем. */
+  hint?: React.ReactNode;
 }
 
 export const FieldNumber: FC<TypeFieldNumberProps> = ({
@@ -597,6 +627,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   onKeyDown,
   zeroAsEmpty = false,
   decimals,
+  hint,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -754,6 +785,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
       return true;
     });
   const uid = useId();
+  const hintId = hint ? `${uid}-hint` : undefined;
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
@@ -777,6 +809,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
           disabled={disabled}
           placeholder={placeholder}
           style={{ textAlign }}
+          aria-describedby={hintId}
         />
 
         {visibleActions.length > 0 && (
@@ -795,6 +828,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
           </div>
         )}
       </div>
+      <FieldHintNode id={hintId} hint={hint} isTable={isTable} />
     </div>
   );
 };
@@ -823,6 +857,8 @@ interface TypeFieldTextareaProps {
   placeholder?: string;
   required?: boolean;
   error?: boolean;
+  /** Видимая подсказка-help ПОД полем. */
+  hint?: React.ReactNode;
 }
 
 export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
@@ -839,6 +875,7 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
   placeholder,
   required = false,
   error = false,
+  hint,
 }) => {
   const cellState = useCellFieldState();
   const formRequired = useFormRequiredScope();
@@ -854,6 +891,7 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
   ].filter(Boolean).join(' ');
 
   const uid = useId();
+  const hintId = hint ? `${uid}-hint` : undefined;
   return (
     <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
       {label && (
@@ -873,8 +911,10 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
           placeholder={placeholder}
           rows={rows}
           style={{ minHeight: minHeight ?? undefined }}
+          aria-describedby={hintId}
         />
       </div>
+      <FieldHintNode id={hintId} hint={hint} isTable={false} />
     </div>
   );
 };
