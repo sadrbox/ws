@@ -16,6 +16,8 @@ import {
 import { GLOBAL_ADAPTIVE_LIMIT_REF } from 'src/hooks/useInfiniteModelList';
 import { CellFieldStateScope } from 'src/hooks/useDirtyHighlight';
 import { Field } from 'src/components/Field';
+import { Icon } from 'src/components/IconButton/icons';
+import { translate } from 'src/i18';
 import type { TColumn, TDataItem } from './types';
 import { useTableContext, useTableVolatile } from './context';
 import { getFormatColumnValue } from './services';
@@ -321,6 +323,14 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
   } = useTableContext();
 
   const showCheckbox = variant !== 'select' && selectable;
+
+  // Первая колонка-дата: в журналах ДОКУМЕНТОВ (у строки есть булев `posted`) её
+  // значение показываем с иконкой документа и признаком проведения. У справочников и
+  // строк табличных частей `posted` нет — декорация не применяется.
+  const firstDateColId = useMemo(
+    () => columns.find((c) => c.type === 'date' || c.type === 'datetime')?.identifier,
+    [columns],
+  );
   // isActive/isSelected/activeCellId — пропсы (см. TableBodyRowProps).
   const isCheckboxCellActive = showCheckbox && isActive && activeCellId === CHECKBOX_COL_ID;
 
@@ -555,10 +565,26 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
             cellMeta?.required ? styles.CellRequired : null,
           ].filter(Boolean).join(' ');
           const value = getFormatColumnValue(row, col);
+          // Журнал документа: первая колонка-дата → иконка документа + признак проведения.
+          const isDocDate = col.identifier === firstDateColId && typeof row.posted === 'boolean';
+          const cellContent = isDocDate ? (
+            <span className={styles.DocDateCell}>
+              <span
+                className={[styles.DocDateIcon, row.posted ? styles.docPosted : undefined].filter(Boolean).join(' ')}
+                title={row.posted ? translate('posted') : translate('draft')}
+              >
+                <Icon name="document" width={15} height={15} />
+                {row.posted ? <Icon name="posted" width={9} height={9} className={styles.DocPostedBadge} /> : null}
+              </span>
+              <span>{value}</span>
+            </span>
+          ) : (
+            <span>{value}</span>
+          );
           return (
             <td key={col.identifier} {...tdProps}>
               <div className={fallbackClassName} {...(cellTitle ? { title: cellTitle } : {})}>
-                <span>{value}</span>
+                {cellContent}
                 {cellMeta?.errorTooltip}
               </div>
             </td>

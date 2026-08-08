@@ -1,0 +1,58 @@
+// Экран «Лицензии ЭСФ». Цвета — семантические токены (тема-независимо).
+.Badge {
+	display: inline-block;
+	padding: 2px 9px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 600;
+	border: 1px solid transparent;
+}
+.active {
+	color: var(--success-fg, #145523);
+	background: var(--success-bg, #e6f4ea);
+	border-color: var(--success, #1a7f37);
+}
+.inactive {
+	color: var(--text-secondary, #52514e);
+	background: var(--surface-muted, #f5f5f5);
+	border-color: var(--line, var(--n-88));
+}
+.expired {
+	color: var(--danger-fg, #6b1119);
+	background: var(--danger-bg, #fde2e4);
+	border-color: var(--danger, #d32f2f);
+}
+
+.Toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+.Toggle input { width: 16px; height: 16px; cursor: pointer; }
+
+.Form {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 340px;
+}
+.Row {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	color: var(--text-secondary, #52514e);
+	cursor: pointer;
+}
+.Meta {
+	font-size: 12px;
+	color: var(--text-muted, #898781);
+	line-height: 1.6;
+	border-top: 1px solid var(--line, var(--n-88));
+	padding-top: 10px;
+}
+.Delete {
+	display: flex;
+	justify-content: flex-end;
+}

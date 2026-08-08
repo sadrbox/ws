@@ -986,3 +986,34 @@
 	opacity: 0.3;
 	pointer-events: none;
 }
+
+/* Ячейка «Дата» журнала документа: иконка документа + признак проведения */
+.DocDateCell {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.DocDateIcon {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+	color: var(--text-muted, #898781);
+
+	padding: 0 !important;
+	zoom: 1.2;
+}
+
+.DocDateIcon.docPosted {
+	color: var(--text-secondary, #52514e);
+}
+
+.DocPostedBadge {
+	position: absolute;
+	right: 0px;
+	bottom: 0px;
+	color: var(--success, #1a7f37);
+	background: var(--panel, var(--sv-color60));
+	border-radius: 50%;
+	// zoom: ;
+}

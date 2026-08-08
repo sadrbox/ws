@@ -60,6 +60,7 @@ import {
   EdoInboxList,
   EdoOutboxList,
   ClassifiersList,
+  EsfLicensesList,
   EsfIncomingList,
   AwpOutboxList,
   SntOutboxList,
@@ -1212,6 +1213,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <NavItem onClick={() => addPane({ component: SyncDashboard, label: translate("syncOfflineData") })}>{translate("syncOfflineData")}</NavItem>
           <NavItem onClick={() => addPane({ component: OrphanRefsForm, label: translate("deletedReferenceControl") })}>{translate("deletedReferenceControl")}</NavItem>
           <NavItem onClick={() => addPane({ component: SearchReplaceRefsForm, label: translate("searchReplaceReferences") })}>{translate("searchReplaceReferences")}</NavItem>
+          {isSuperAdmin && <NavItem onClick={() => addPane({ component: EsfLicensesList, label: translate("EsfLicensesList") })}>{translate("EsfLicensesList")}</NavItem>}
         </ul>
       </div>
     </>

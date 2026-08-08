@@ -55,6 +55,7 @@ export const OutgoingInvoicesList = lazyView("OutgoingInvoicesList", () => impor
 export const EdoInboxList = lazyView("EdoInboxList", () => import('src/models/Edo').then(m => ({ default: m.EdoInboxList })));
 export const EdoOutboxList = lazyView("EdoOutboxList", () => import('src/models/Edo').then(m => ({ default: m.EdoOutboxList })));
 export const ClassifiersList = lazyView("ClassifiersList", () => import('src/models/Classifiers').then(m => ({ default: m.ClassifiersList })));
+export const EsfLicensesList = lazyView("EsfLicensesList", () => import('src/models/EsfLicenses').then(m => ({ default: m.EsfLicensesList })));
 export const EsfIncomingList = lazyView("EsfIncomingList", () => import('src/models/EsfIncoming').then(m => ({ default: m.EsfIncomingList })));
 export const AwpOutboxList = lazyView("AwpOutboxList", () => import('src/models/GovDocs').then(m => ({ default: m.AwpOutboxList })));
 export const SntOutboxList = lazyView("SntOutboxList", () => import('src/models/GovDocs').then(m => ({ default: m.SntOutboxList })));
@@ -147,6 +148,7 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	EdoInboxList: EdoInboxList,
 	EdoOutboxList: EdoOutboxList,
 	ClassifiersList: ClassifiersList,
+	EsfLicensesList: EsfLicensesList,
 	EsfIncomingList: EsfIncomingList,
 	AwpOutboxList: AwpOutboxList,
 	SntOutboxList: SntOutboxList,

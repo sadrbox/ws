@@ -102,6 +102,7 @@ import positionsRouter from "./api/router/positions.js";
 import employeeHistoriesRouter from "./api/router/employeehistories.js";
 import accessRightsRouter from "./api/router/accessrights.js";
 import accessPermissionsRouter from "./api/router/accesspermissions.js";
+import { publicRouter as esfLicensePublicRouter, adminRouter as esfLicenseAdminRouter } from "./api/router/esfLicense.js";
 import userDefaultsRouter from "./api/router/userdefaults.js";
 import payrollCalculationsRouter from "./api/router/payrollcalculations.js";
 import payrollPaymentsRouter from "./api/router/payrollpayments.js";
@@ -315,6 +316,11 @@ app.use("/api/v1", authRouter);
 // Authorization, у маршрута своя проверка токена из query (см. chatStream.js).
 app.use("/api/v1", chatStreamRouter);
 
+// Публичные эндпоинты лицензирования ЭСФ (/api1/esf-license/*) — БЕЗ авторизации:
+// их дёргает 1С-расширение, которое не проходит обычный логин. Свой rate-limit внутри.
+// Отдельный префикс /api1 не попадает под authMiddleware (тот на /api/v1).
+app.use("/api1/esf-license", esfLicensePublicRouter);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 6. ЗАЩИЩЁННЫЕ МАРШРУТЫ (требуют JWT)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -404,6 +410,8 @@ app.use("/api/v1", positionsRouter);
 app.use("/api/v1", employeeHistoriesRouter);
 app.use("/api/v1", accessRightsRouter);
 app.use("/api/v1", accessPermissionsRouter);
+// Админ-панель лицензий ЭСФ (superadmin-гейт внутри роутера).
+app.use("/api/v1", esfLicenseAdminRouter);
 app.use("/api/v1", userDefaultsRouter);
 app.use("/api/v1", payrollCalculationsRouter);
 app.use("/api/v1", payrollPaymentsRouter);

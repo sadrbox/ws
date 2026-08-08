@@ -312,6 +312,17 @@ export const DocumentChainIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+// Лист документа с загнутым углом и текстовыми линиями.
+export const DocumentIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M4 1.5h5L12.5 5v9a0.6 0.6 0 0 1-0.6 0.6H4a0.6 0.6 0 0 1-0.6-0.6V2.1A0.6 0.6 0 0 1 4 1.5z" />
+    <path d="M9 1.6V5h3.4" />
+    <path d="M5.4 8h5" />
+    <path d="M5.4 10.4h5" />
+    <path d="M5.4 5.7h2.2" />
+  </svg>
+);
+
 export const SyncFromBasisIcon: FC<SvgProps> = (props) => (
   <svg {...baseProps} {...props}>
     <path d="M13.5 8A5.5 5.5 0 0 0 8 2.5" />
@@ -406,6 +417,7 @@ export const ICONS = {
   viewSplit: ViewSplitIcon,
   viewSingle: ViewSingleIcon,
   documentChain: DocumentChainIcon,
+  document: DocumentIcon,
   open: OpenIcon,
   print: PrintIcon,
   posted: PostedIcon,

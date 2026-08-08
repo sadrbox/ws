@@ -2982,3 +2982,24 @@ model ProductBatch {
   @@index([organizationUuid])
   @@map("product_batches")
 }
+
+// Лицензирование ЭСФ по БИН для 1С-расширения esf_exchange. Публичные эндпоинты
+// /api1/esf-license/* (token/heartbeat/activation-request) вызывает 1С; активацией
+// управляет админ-панель (superadmin). См. api/router/esfLicense.js.
+model EsfLicense {
+  bin                    String    @id
+  active                 Boolean   @default(false)
+  expiresAt              DateTime?
+  note                   String?
+  lastRequestAt          DateTime?
+  requestCount           Int       @default(0)
+  lastRequestInstallId   String?
+  lastHeartbeatAt        DateTime?
+  lastHeartbeatInstallId String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([active])
+  @@index([lastRequestAt])
+  @@map("esf_licenses")
+}
