@@ -1,0 +1,9 @@
+[
+	{ "identifier": "bin", "type": "string", "width": "140px", "minWidth": "110px", "alignment": "left", "hint": "БИН", "visible": true, "inlist": true },
+	{ "identifier": "note", "type": "string", "width": "240px", "minWidth": "120px", "alignment": "left", "hint": "Организация / контакт", "visible": true, "inlist": true },
+	{ "identifier": "status", "type": "string", "width": "120px", "minWidth": "90px", "alignment": "left", "hint": "Статус лицензии", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "expiresAt", "type": "date", "width": "120px", "minWidth": "100px", "alignment": "left", "hint": "Действует до", "visible": true, "inlist": true },
+	{ "identifier": "lastRequestAt", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Заявка на активацию", "visible": true, "inlist": true },
+	{ "identifier": "lastHeartbeatAt", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Последний heartbeat", "visible": true, "inlist": true },
+	{ "identifier": "requestCount", "type": "number", "width": "80px", "minWidth": "60px", "alignment": "right", "hint": "Заявок", "visible": true, "inlist": true }
+]

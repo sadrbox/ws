@@ -6,8 +6,8 @@
 		"minWidth": "80px",
 		"alignment": "left",
 		"hint": "Внутренний номер",
-		"visible": true,
-		"inlist": true
+		"visible": false,
+		"inlist": false
 	},
 	{
 		"identifier": "uuid",
@@ -47,7 +47,7 @@
 		"alignment": "center",
 		"hint": "Документ проведён",
 		"visible": true,
-		"inlist": true
+		"inlist": false
 	},
 	{
 		"identifier": "organization.name",

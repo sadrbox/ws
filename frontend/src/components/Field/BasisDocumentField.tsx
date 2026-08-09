@@ -66,7 +66,7 @@ const extractBasisSearch = (): string => "";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const basisItemLabel = (name: string, item: Record<string, any>): string => {
   const num = item.number ?? item.documentNumber;
-  const ref = num != null && String(num).trim() !== "" ? `№${num}` : `ID ${item.id}`;
+  const ref = num != null && String(num).trim() !== "" ? `№${num}` : translate("docNoNumber");
   return `${name}: ${ref} - ${getFormatDateOnly(item.date) ?? ""}`;
 };
 

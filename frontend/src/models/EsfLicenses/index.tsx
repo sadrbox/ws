@@ -1,184 +1,207 @@
-// Админ-панель «Лицензии ЭСФ» (superadmin): список организаций по БИН, дата последней
-// заявки на активацию и последнего heartbeat, переключатель активности прямо в строке,
-// срок действия. Очередь на подключение (неактивные с заявками) — сверху.
-// Данные: backend/api/router/esfLicense.js (adminRouter). Только фронт-CRUD.
-import { FC, useCallback, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+// Справочник «Лицензии ЭСФ» (superadmin) по единому паттерну справочников:
+// ModelList (стандартный тулбар) + ModelForm (шапка сохранить/закрыть) + useFormStore +
+// стандартные Field*/Notice. Запись имеет штатные id+uuid; бизнес-ключ bin — unique
+// (публичные /api1/esf-license/* для 1С находят запись по bin, здесь только админка).
+// Активация — на форме элемента (тумблер «Активна»), в списке статус только для чтения.
+import { FC, useCallback, useMemo } from "react";
 import { translate } from "src/i18";
-import Table from "src/components/Table";
-import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
-import Modal from "src/components/Modal";
-import { Field, FieldDate, FieldSelect } from "src/components/Field";
-import { Button } from "src/components/Button";
-import { showToast } from "src/components/UIToast";
-import { buildStaticTableProps } from "src/utils/staticTableProps";
+import type { TPane } from "src/app/types";
+import type { TTableVariant } from "src/components/Table";
+import columnsJson from "./columns.json";
+import { Field, FieldDate } from "src/components/Field";
+import FieldToggle from "src/components/Field/FieldToggle";
+import { Group, GroupCol } from "src/components/UI";
+import styles from "src/styles/main.module.scss";
+import { useFormStore } from "src/hooks/useFormStore";
+import { useFormNotices } from "src/hooks/useFormNotices";
+import { FormRequiredScope } from "src/hooks/useFormRequired";
+import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { getFormatDate } from "src/utils/datetime";
-import {
-	fetchEsfLicenses, patchEsfLicense, createEsfLicense, deleteEsfLicense, type EsfLicense,
-} from "src/services/esfLicenses/api";
-import styles from "./EsfLicenses.module.scss";
+import { getCurrentUser } from "src/services/auth";
+import ModelForm from "src/components/ModelForm";
+import ModelList from "src/components/ModelList";
+import Notice from "src/components/Notice";
 
-const COMPONENT = "EsfLicensesList";
+const MODEL_ENDPOINT = "esf-licenses";
+const LIST_NAME = "EsfLicensesList";
 
-const COLUMNS: TColumn[] = [
-	{ identifier: "bin", type: "string", width: "140px", minWidth: "110px", alignment: "left", hint: "БИН", visible: true, inlist: true },
-	{ identifier: "note", type: "string", width: "240px", minWidth: "120px", alignment: "left", hint: "Организация / контакт", visible: true, inlist: true },
-	{ identifier: "status", type: "string", width: "120px", minWidth: "90px", alignment: "left", hint: "Статус", visible: true, inlist: true, sortable: false },
-	{ identifier: "lastRequestAt", type: "datetime", width: "150px", minWidth: "110px", alignment: "left", hint: "Заявка на активацию", visible: true, inlist: true },
-	{ identifier: "lastHeartbeatAt", type: "datetime", width: "150px", minWidth: "110px", alignment: "left", hint: "Последний heartbeat", visible: true, inlist: true },
-	{ identifier: "expiresAt", type: "date", width: "120px", minWidth: "100px", alignment: "left", hint: "Действует до", visible: true, inlist: true },
-	{ identifier: "active", type: "boolean", width: "110px", minWidth: "90px", alignment: "center", hint: "Активна", visible: true, inlist: true, sortable: false },
-] as unknown as TColumn[];
-
-type StatusKind = "active" | "inactive" | "expired";
-function statusOf(l: EsfLicense): StatusKind {
-	if (!l.active) return "inactive";
-	if (l.expiresAt && new Date(l.expiresAt) < new Date()) return "expired";
-	return "active";
+interface TFields {
+	id?: number;
+	uuid?: string;
+	bin: string;
+	note: string;
+	active: boolean;
+	expiresAt: string;
+	// Только для чтения (телеметрия 1С).
+	requestCount: number;
+	lastRequestAtText: string;
+	lastHeartbeatAtText: string;
+	lastHeartbeatInstallId: string;
 }
-const STATUS_LABEL: Record<StatusKind, string> = { active: "Активна", inactive: "Не активна", expired: "Истекла" };
 
-export const EsfLicensesList: FC = () => {
-	const [active, setActive] = useState<string>(""); // "" | "true" | "false"
-	const [search, setSearch] = useState("");
-	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(COLUMNS, COMPONENT));
-	const [edit, setEdit] = useState<EsfLicense | null>(null);
-	const [adding, setAdding] = useState(false);
-	const [busy, setBusy] = useState(false);
+const DEFAULT_FIELDS: TFields = {
+	bin: "", note: "", active: false, expiresAt: "",
+	requestCount: 0, lastRequestAtText: "—", lastHeartbeatAtText: "—", lastHeartbeatInstallId: "",
+};
 
-	const { data, isLoading, refetch } = useQuery({
-		queryKey: ["esf-licenses", active, search],
-		queryFn: async () => (await fetchEsfLicenses({ active: active || undefined, search, limit: 1000 })).items,
+interface EsfLicenseServerRecord {
+	id?: number;
+	uuid?: string;
+	bin?: string;
+	note?: string | null;
+	active?: boolean | null;
+	expiresAt?: string | null;
+	requestCount?: number | null;
+	lastRequestAt?: string | null;
+	lastHeartbeatAt?: string | null;
+	lastHeartbeatInstallId?: string | null;
+}
+
+const EsfLicensesForm: FC<Partial<TPane>> = (paneProps) => {
+	const isSuperAdmin = !!getCurrentUser()?.isSuperAdmin;
+
+	const form = useFormStore<TFields>({
+		endpoint: MODEL_ENDPOINT,
+		storageKey: "esf-licenses-form",
+		defaultFields: DEFAULT_FIELDS,
+		paneProps,
+		mapServerToForm: (d: EsfLicenseServerRecord, prev) => ({
+			...(prev ?? DEFAULT_FIELDS),
+			bin: d.bin ?? "",
+			note: d.note ?? "",
+			active: d.active === true,
+			expiresAt: d.expiresAt ? String(d.expiresAt).slice(0, 10) : "",
+			requestCount: d.requestCount ?? 0,
+			lastRequestAtText: d.lastRequestAt ? getFormatDate(d.lastRequestAt) : "—",
+			lastHeartbeatAtText: d.lastHeartbeatAt ? getFormatDate(d.lastHeartbeatAt) : "—",
+			lastHeartbeatInstallId: d.lastHeartbeatInstallId ?? "",
+			id: d.id,
+			uuid: d.uuid,
+		}),
+		buildPayload: (fd) => {
+			const bin = fd.bin?.trim() ?? "";
+			if (!bin) return translate("esfBinRequired");
+			return {
+				bin,
+				note: fd.note?.trim() || null,
+				active: fd.active === true,
+				expiresAt: fd.expiresAt || null,
+			};
+		},
+		buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, translate("EsfLicensesList"), saved, saved.bin),
 	});
-	const rows = useMemo(() => (data ?? []).map((l, i) => ({ id: i + 1, uuid: l.bin, ...l })), [data]);
 
-	const toggleActive = useCallback(async (bin: string, next: boolean) => {
-		try {
-			await patchEsfLicense(bin, { active: next });
-			void refetch();
-		} catch {
-			showToast("Не удалось изменить статус лицензии", "error");
-		}
-	}, [refetch]);
+	const notices = useFormNotices(form);
 
+	const tabs = useMemo(() => [
+		{
+			id: "tab-details",
+			label: translate("general"),
+			component: (
+				<div className={styles.FormWrapper}>
+					<div className={styles.Form}>
+						<GroupCol>
+							<Group>
+								{/* БИН — бизнес-ключ: у сохранённой записи не меняем. */}
+								<Field label={translate("bin")} name={`${form.formUid}_bin`} minWidth="200px"
+									value={form.fields.bin} onChange={(e) => form.setField("bin", e.target.value)}
+									disabled={form.isLoading || form.isEditMode} required />
+							</Group>
+							<Group>
+								<Field label={translate("esfNote")} name={`${form.formUid}_note`} minWidth="339px"
+									value={form.fields.note} onChange={(e) => form.setField("note", e.target.value)}
+									disabled={form.isLoading} />
+							</Group>
+							<Group>
+								<FieldToggle name={`${form.formUid}_active`} label={translate("esfActiveToggle")}
+									value={form.fields.active === true} onChange={(v) => form.setField("active", v)}
+									disabled={form.isLoading} />
+							</Group>
+							<Group>
+								<FieldDate label={translate("esfExpiresHint")} name={`${form.formUid}_expiresAt`}
+									value={form.fields.expiresAt} onChange={(e) => form.setField("expiresAt", e.target.value)}
+									disabled={form.isLoading} />
+							</Group>
+
+							{form.isEditMode && (
+								<GroupCol>
+									<Group>
+										<Field label={translate("esfRequestCountFull")} name={`${form.formUid}_requestCount`} minWidth="120px"
+											value={String(form.fields.requestCount)} disabled />
+									</Group>
+									<Group>
+										<Field label={translate("esfLastRequest")} name={`${form.formUid}_lastRequestAt`} minWidth="200px"
+											value={form.fields.lastRequestAtText} disabled />
+									</Group>
+									<Group>
+										<Field label={translate("esfLastHeartbeat")} name={`${form.formUid}_lastHeartbeatAt`} minWidth="200px"
+											value={form.fields.lastHeartbeatAtText} disabled />
+									</Group>
+									{form.fields.lastHeartbeatInstallId ? (
+										<Group>
+											<Field label={translate("esfInstallId")} name={`${form.formUid}_installId`} minWidth="339px"
+												value={form.fields.lastHeartbeatInstallId} disabled />
+										</Group>
+									) : null}
+								</GroupCol>
+							)}
+						</GroupCol>
+					</div>
+					<GroupCol className={styles.FormNotice}>
+						<Notice items={notices} />
+					</GroupCol>
+				</div>
+			),
+		},
+	], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, notices]);
+
+	return (
+		<FormRequiredScope requiredKeys={["bin"]} active>
+			<ModelForm
+				paneId={form.paneId} endpoint={MODEL_ENDPOINT} recordUuid={form.fields.uuid}
+				tabs={tabs}
+				onSave={form.handleSave}
+				onSaveAndClose={form.handleSaveAndClose}
+				onClose={form.handleClose}
+				onReload={form.isEditMode ? form.handleReload : undefined}
+				isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
+				readonly={!isSuperAdmin}
+			/>
+		</FormRequiredScope>
+	);
+};
+EsfLicensesForm.displayName = "EsfLicensesForm";
+
+// Статус лицензии для колонки списка (только чтение; активация — на форме).
+function statusCell(row: TDataItem) {
+	const active = row.active === true;
+	const expired = active && row.expiresAt && new Date(String(row.expiresAt)) < new Date();
+	const key = !active ? "esfStatusInactive" : expired ? "esfStatusExpired" : "esfStatusActive";
+	const color = !active ? "var(--text-muted)" : expired ? "var(--danger)" : "var(--success)";
+	return <span style={{ color, fontWeight: 600 }}>{translate(key)}</span>;
+}
+
+const EsfLicensesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => {
 	const renderCell = useCallback((row: TDataItem, col: TColumn) => {
-		const lic = row as unknown as EsfLicense;
-		if (col.identifier === "status") {
-			const k = statusOf(lic);
-			return <span className={`${styles.Badge} ${styles[k]}`}>{STATUS_LABEL[k]}</span>;
-		}
-		if (col.identifier === "active") {
-			return (
-				<label className={styles.Toggle} onClick={(e) => e.stopPropagation()}>
-					<input type="checkbox" checked={lic.active} onChange={(e) => void toggleActive(lic.bin, e.target.checked)} />
-				</label>
-			);
-		}
-		return undefined; // даты/строки — стандартное форматирование Table
-	}, [toggleActive]);
-
-	const toolbar = (
-		<>
-			<FieldSelect name="esf-active" size="sm" value={active}
-				onChange={(e) => setActive(e.target.value)}
-				options={[{ value: "", label: "Все" }, { value: "false", label: "Не активные" }, { value: "true", label: "Активные" }]} />
-			<Button variant="secondary" onClick={() => setAdding(true)}>Добавить БИН</Button>
-		</>
-	);
-
-	const tableProps = useMemo(() => buildStaticTableProps({
-		componentName: COMPONENT, rows, columns, setColumns, isLoading,
-		onReload: () => void refetch(), onRowClick: (d) => setEdit(d as unknown as EsfLicense),
-		renderCell, extraButtons: toolbar, search: { value: search, onChange: setSearch },
-	}), [rows, columns, isLoading, refetch, renderCell, toolbar, search]);
+		if (col.identifier === "status") return statusCell(row);
+		return undefined;
+	}, []);
 
 	return (
-		<>
-			<Table {...tableProps} />
-			{adding && <AddModal busy={busy} setBusy={setBusy} onClose={() => setAdding(false)} onDone={() => { setAdding(false); void refetch(); }} />}
-			{edit && <EditModal lic={edit} busy={busy} setBusy={setBusy} onClose={() => setEdit(null)} onDone={() => { setEdit(null); void refetch(); }} />}
-		</>
+		<ModelList
+			endpoint={MODEL_ENDPOINT}
+			listName={LIST_NAME}
+			columnsJson={columnsJson}
+			FormComponent={EsfLicensesForm}
+			getLabel={(d) => (d?.bin as string) || "?"}
+			variant={variant}
+			onSelectItem={onSelectItem}
+			renderCell={renderCell}
+		/>
 	);
 };
-EsfLicensesList.displayName = COMPONENT;
+EsfLicensesList.displayName = LIST_NAME;
 
-// ── Добавление БИН вручную ────────────────────────────────────────────────────
-const AddModal: FC<{ busy: boolean; setBusy: (b: boolean) => void; onClose: () => void; onDone: () => void }> = ({ busy, setBusy, onClose, onDone }) => {
-	const [bin, setBin] = useState("");
-	const [note, setNote] = useState("");
-	const submit = async () => {
-		if (busy) return;
-		if (!bin.trim()) { showToast("Укажите БИН", "error"); return; }
-		setBusy(true);
-		try {
-			await createEsfLicense({ bin: bin.trim(), note: note.trim() || null });
-			showToast("БИН добавлен", "success");
-			onDone();
-		} catch (e) {
-			const a = e as { response?: { data?: { message?: string } } };
-			showToast(a?.response?.data?.message || "Не удалось добавить БИН", "error");
-		} finally { setBusy(false); }
-	};
-	return (
-		<Modal title="Добавить БИН" onClose={onClose} onApply={submit}>
-			<div className={styles.Form}>
-				<Field label="БИН" name="add-bin" value={bin} onChange={(e) => setBin(e.target.value)} />
-				<Field label="Организация / контакт" name="add-note" value={note} onChange={(e) => setNote(e.target.value)} />
-			</div>
-		</Modal>
-	);
-};
-
-// ── Редактирование лицензии ───────────────────────────────────────────────────
-const EditModal: FC<{ lic: EsfLicense; busy: boolean; setBusy: (b: boolean) => void; onClose: () => void; onDone: () => void }> = ({ lic, busy, setBusy, onClose, onDone }) => {
-	const [note, setNote] = useState(lic.note ?? "");
-	const [active, setActive] = useState(lic.active);
-	const [expiresAt, setExpiresAt] = useState(lic.expiresAt ? lic.expiresAt.slice(0, 10) : "");
-
-	const save = async () => {
-		if (busy) return;
-		setBusy(true);
-		try {
-			await patchEsfLicense(lic.bin, { active, note: note.trim() || null, expiresAt: expiresAt || null });
-			showToast("Сохранено", "success");
-			onDone();
-		} catch {
-			showToast("Не удалось сохранить", "error");
-		} finally { setBusy(false); }
-	};
-	const remove = async () => {
-		if (busy) return;
-		if (!window.confirm(`Удалить лицензию БИН ${lic.bin}?`)) return;
-		setBusy(true);
-		try {
-			await deleteEsfLicense(lic.bin);
-			showToast("Удалено", "success");
-			onDone();
-		} catch {
-			showToast("Не удалось удалить", "error");
-		} finally { setBusy(false); }
-	};
-
-	return (
-		<Modal title={`Лицензия ЭСФ — ${lic.bin}`} onClose={onClose} onApply={save}>
-			<div className={styles.Form}>
-				<Field label="Организация / контакт" name="edit-note" value={note} onChange={(e) => setNote(e.target.value)} />
-				<label className={styles.Row}>
-					<input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Активна
-				</label>
-				<FieldDate label="Действует до (пусто = бессрочно)" name="edit-expires" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
-				<div className={styles.Meta}>
-					Заявок: {lic.requestCount} · последняя: {lic.lastRequestAt ? getFormatDate(lic.lastRequestAt) : "—"}<br />
-					Heartbeat: {lic.lastHeartbeatAt ? getFormatDate(lic.lastHeartbeatAt) : "—"}
-					{lic.lastHeartbeatInstallId ? ` · install ${lic.lastHeartbeatInstallId}` : ""}
-				</div>
-				<div className={styles.Delete}>
-					<Button variant="danger" onClick={remove}>Удалить</Button>
-				</div>
-			</div>
-		</Modal>
-	);
-};
-
+export { EsfLicensesList, EsfLicensesForm };
 export default EsfLicensesList;

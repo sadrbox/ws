@@ -133,6 +133,13 @@ adminRouter.use("/esf-licenses", (req, res, next) => {
 	next();
 });
 
+// Записи имеют штатные id (PK) + uuid (unique). Админка (ModelList/useFormStore)
+// ключует по uuid; `:id` принимает числовой id ИЛИ uuid. Публичные /api1/* — по bin.
+const whereById = (p) => {
+	const n = Number(p);
+	return !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: String(p) };
+};
+
 // GET /api/v1/esf-licenses?active=true|false&search=&limit=&offset=
 adminRouter.get("/esf-licenses", async (req, res) => {
 	try {
@@ -161,6 +168,18 @@ adminRouter.get("/esf-licenses", async (req, res) => {
 	}
 });
 
+// GET /api/v1/esf-licenses/:id  (id = uuid | числовой id) — загрузка формы
+adminRouter.get("/esf-licenses/:id", async (req, res) => {
+	try {
+		const item = await prisma.esfLicense.findUnique({ where: whereById(req.params.id) });
+		if (!item) return res.status(404).json({ success: false, message: "Не найдено" });
+		return res.json({ success: true, item });
+	} catch (err) {
+		console.error("GET /esf-licenses/:id error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 // POST /api/v1/esf-licenses  { bin, note?, active?, expiresAt? } — ручное добавление
 adminRouter.post("/esf-licenses", async (req, res) => {
 	try {
@@ -183,35 +202,43 @@ adminRouter.post("/esf-licenses", async (req, res) => {
 	}
 });
 
-// PATCH /api/v1/esf-licenses/:bin  { active?, expiresAt?, note? }
-adminRouter.patch("/esf-licenses/:bin", async (req, res) => {
+// PUT /api/v1/esf-licenses/:id  (id = uuid | id) { note?, active?, expiresAt? }
+// БИН — бизнес-ключ, здесь не меняется (правится удалением+созданием).
+adminRouter.put("/esf-licenses/:id", async (req, res) => {
 	try {
-		const bin = normBin(req.params.bin);
-		if (!bin) return res.status(400).json({ success: false, message: "БИН обязателен" });
 		const data = {};
-		if (typeof req.body?.active === "boolean") data.active = req.body.active;
+		if ("active" in (req.body ?? {})) data.active = req.body.active === true;
 		if ("expiresAt" in (req.body ?? {})) data.expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt) : null;
 		if ("note" in (req.body ?? {})) data.note = typeof req.body.note === "string" ? req.body.note.trim() || null : null;
-		if (Object.keys(data).length === 0) return res.status(400).json({ success: false, message: "Нечего изменять" });
-		const item = await prisma.esfLicense.update({ where: { bin }, data });
+		const item = await prisma.esfLicense.update({ where: whereById(req.params.id), data });
 		return res.json({ success: true, item });
 	} catch (err) {
-		if (err?.code === "P2025") return res.status(404).json({ success: false, message: "БИН не найден" });
-		console.error("PATCH /esf-licenses error:", err);
+		if (err?.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
+		console.error("PUT /esf-licenses/:id error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 
-// DELETE /api/v1/esf-licenses/:bin
-adminRouter.delete("/esf-licenses/:bin", async (req, res) => {
+// DELETE /api/v1/esf-licenses/:id  (id = uuid | id)
+adminRouter.delete("/esf-licenses/:id", async (req, res) => {
 	try {
-		const bin = normBin(req.params.bin);
-		if (!bin) return res.status(400).json({ success: false, message: "БИН обязателен" });
-		await prisma.esfLicense.delete({ where: { bin } });
+		await prisma.esfLicense.delete({ where: whereById(req.params.id) });
 		return res.json({ success: true });
 	} catch (err) {
-		if (err?.code === "P2025") return res.status(404).json({ success: false, message: "БИН не найден" });
-		console.error("DELETE /esf-licenses error:", err);
+		if (err?.code === "P2025") return res.status(404).json({ success: false, message: "Не найдено" });
+		console.error("DELETE /esf-licenses/:id error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// POST /api/v1/esf-licenses/batch-delete  { uuids: [<uuid>, …] }
+adminRouter.post("/esf-licenses/batch-delete", async (req, res) => {
+	try {
+		const uuids = Array.isArray(req.body?.uuids) ? req.body.uuids.filter((x) => typeof x === "string" && x) : [];
+		if (uuids.length) await prisma.esfLicense.deleteMany({ where: { uuid: { in: uuids } } });
+		return res.json({ success: true, failed: [] });
+	} catch (err) {
+		console.error("POST /esf-licenses/batch-delete error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });

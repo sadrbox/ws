@@ -66,8 +66,9 @@ export function makeDocLabel(
 	const name = resolveFormName(listName, fallback);
 	const id = saved.id;
 	if (!id) return `${name}: ${translate("new")}`;
-	// Показываем человекочитаемый номер документа, если он есть; иначе — ID.
-	const ref = saved.number ? `№ ${saved.number}` : `ID ${id}`;
+	// Показываем человекочитаемый номер документа (у документов он присваивается
+	// автоматически и обязателен); внутренний id в интерфейсе документов не светим.
+	const ref = saved.number ? `№ ${saved.number}` : translate("docNoNumber");
 	const rawDate = saved[dateField];
 	const date =
 		typeof rawDate === "string" ||
@@ -96,6 +97,8 @@ export function makePaneLabelFromData(
 ): string {
 	const name = resolveFormName(listName, fallback);
 	if (!data?.uuid && !data?.id) return `${name}: ${translate("new")}`;
+	// Генерик-функция (документы И не-документы: строки табличных частей, лукапы) —
+	// для не-документов id остаётся идентификатором; у документов номер всегда есть.
 	const ref = data.number ? `№ ${data.number}` : `ID ${data.id ?? "?"}`;
 	const detail = displayValue ?? data.name;
 	return detail ? `${name}: ${ref} - ${detail}` : `${name}: ${ref}`;

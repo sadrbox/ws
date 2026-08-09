@@ -85,7 +85,7 @@ const NodeRow: FC<{
           </span>
         )}
         <span className={styles.NodeMeta}>
-          {node.number ? `№ ${node.number}` : `ID ${node.id ?? "?"}`}{date ? ` - ${date}` : ""}{node.organizationName ? ` - ${node.organizationName}` : ""}
+          {node.number ? `№ ${node.number}` : translate("docNoNumber")}{date ? ` - ${date}` : ""}{node.organizationName ? ` - ${node.organizationName}` : ""}
         </span>
         {node.amount != null && <span className={styles.NodeAmount}>{fmtAmt(node.amount)}</span>}
       </div>

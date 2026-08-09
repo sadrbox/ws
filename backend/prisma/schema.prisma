@@ -2987,7 +2987,9 @@ model ProductBatch {
 // /api1/esf-license/* (token/heartbeat/activation-request) вызывает 1С; активацией
 // управляет админ-панель (superadmin). См. api/router/esfLicense.js.
 model EsfLicense {
-  bin                    String    @id
+  id                     Int       @id @default(autoincrement())
+  uuid                   String    @unique @default(uuid())
+  bin                    String    @unique
   active                 Boolean   @default(false)
   expiresAt              DateTime?
   note                   String?
