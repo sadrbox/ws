@@ -25,7 +25,7 @@ const IncomingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   storageKey: "incoming-invoices-form",
   listName: LIST_NAME,
   formLabel: "Счет-фактура входящая",
-  itemsTabLabel: "Товары, услуги",
+  itemsTabLabel: "ТМЗ, услуги",
   itemsComponentName: "IncomingInvoiceItemsList_part",
   accessPermissionModel: "IncomingInvoice",
   formDisplayName: "IncomingInvoicesForm",

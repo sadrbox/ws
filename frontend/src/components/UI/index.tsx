@@ -86,6 +86,7 @@ import {
   CashExpenseOrdersList,
   BrandsList,
   ProductsList,
+  FixedAssetsList,
   UnitOfMeasuresList,
   TaxesList,
   OrganizationAccountingSettingsList,
@@ -1065,6 +1066,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
         <h3>{translate("directories")}</h3>
         <ul className={styles.NavList}>
           {can("Product") && <NavItem onClick={() => addPane({ component: ProductsList })}>{translate("ProductsList")}</NavItem>}
+          {can("Product") && <NavItem onClick={() => addPane({ component: FixedAssetsList, label: translate("FixedAssetsList") })}>{translate("FixedAssetsList")}</NavItem>}
           {can("Warehouse") && <NavItem onClick={() => addPane({ component: WarehousesList })}>{translate("WarehousesList")}</NavItem>}
           {(can("ProductPrice") || can("Product")) && <NavItem onClick={() => addPane({ component: PriceTypesList })}>{translate("PriceTypesList")}</NavItem>}
           {can("Brand") && <NavItem onClick={() => addPane({ component: BrandsList })}>{translate("BrandsList")}</NavItem>}

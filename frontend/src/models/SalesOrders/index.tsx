@@ -24,7 +24,7 @@ const SalesOrdersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   storageKey: "sales-orders-form",
   listName: LIST_NAME,
   formLabel: "Заказ покупателя",
-  itemsTabLabel: "Товары, услуги",
+  itemsTabLabel: "ТМЗ, услуги",
   itemsComponentName: "SalesOrderItemsList_part",
   accessPermissionModel: "SalesOrder",
   formDisplayName: "SalesOrdersForm",

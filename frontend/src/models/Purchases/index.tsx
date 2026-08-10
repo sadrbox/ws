@@ -24,6 +24,7 @@ const { Form: PurchasesForm, List: PurchasesList } = createTradeDocForm({
   parentLabelListKey: "PurchasesList",
   accessPermissionModel: "Purchase",
   docType: "purchase",
+  hasFixedAssets: true,
   columnsJson,
   basisAllowedTypes: [
     { type: "purchase_requisition", endpoint: "purchase-requisitions" },

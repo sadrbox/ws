@@ -46,7 +46,7 @@
 		"minWidth": "70px",
 		"alignment": "center",
 		"hint": "Документ проведён",
-		"visible": true,
+		"visible": false,
 		"inlist": false
 	},
 	{

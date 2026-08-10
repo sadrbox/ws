@@ -34,6 +34,7 @@ import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/d
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
+import PurchaseFixedAssetsTable from "src/components/DocumentItemsTable/PurchaseFixedAssetsTable";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { validateDocumentFields, formatValidationErrors, getDocumentFillHint, type DocumentType } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
@@ -79,6 +80,7 @@ export interface TradeDocConfig {
   itemsComponentName: string;       // "PurchaseItemsList_part"
   itemsTableLabel: string;          // подпись таблицы в useFormStore
   itemsTabLabelKey?: string;        // i18-ключ вкладки позиций (default "SaleItemsList")
+  hasFixedAssets?: boolean;         // добавить вкладку «Основные средства» (только Поступление)
   parentLabelListKey: string;       // i18-ключ для parentLabel позиций ("PurchasesList")
   accessPermissionModel: string;     // "Purchase"
   docType: DocumentType;            // "purchase" (validate/scope/chain/entries)
@@ -272,6 +274,31 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           }),
           extraSkipFields: [cfg.itemsParentField],
         },
+        // Табличная часть «Основные средства» — вкладка рендерится только при
+        // cfg.hasFixedAssets (Поступление), но конфиг таблицы держим всегда (useTable —
+        // хук; для остальных документов таблица не используется и не фетчится).
+        fixedAssetItems: {
+          endpoint: "purchasefixedassetitems", parentField: "purchaseUuid",
+          label: "Основные средства",
+          batchEndpoint: "purchasefixedassetitems/batch",
+          requiredItemFields: ["fixedAssetUuid"],
+          requiredItemFieldLabels: { fixedAssetUuid: "Основное средство" },
+          createPayload: (r: TDataItem) => ({
+            sourceRowId: r.sourceRowId ?? null,
+            fixedAssetUuid: r.fixedAssetUuid ?? null,
+            fixedAssetName: r.fixedAssetName ?? null,
+            amount: r.amount ?? 0,
+            vatRate: r.vatRate ?? 12,
+          }),
+          updatePayload: (r: TDataItem) => ({
+            sourceRowId: r.sourceRowId ?? null,
+            fixedAssetUuid: r.fixedAssetUuid ?? null,
+            fixedAssetName: r.fixedAssetName ?? null,
+            amount: r.amount ?? 0,
+            vatRate: r.vatRate ?? 12,
+          }),
+          extraSkipFields: ["purchaseUuid"],
+        },
       },
       mapServerToForm: (d: TradeServerRecord, prev) => ({
         ...(prev ?? DEFAULT_FIELDS), ...d,
@@ -344,6 +371,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
     });
 
     const items = form.useTable("items");
+    const fixedAssetItems = form.useTable("fixedAssetItems");
 
     const hasBasis = !!form.fields.basisDocumentUuid;
 
@@ -577,7 +605,20 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           />
         )
       },
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, hasBasis, handleRefillFromBasis]);
+      // Вкладка «Основные средства» — только для Поступления (cfg.hasFixedAssets),
+      // сразу после «ТМЗ, услуги».
+      ...(cfg.hasFixedAssets ? [{
+        id: "tab-fixed-assets", label: translate("tabFixedAssets"), component: (
+          <PurchaseFixedAssetsTable
+            parentUuid={form.fields.uuid ?? ""}
+            disabled={form.isLoading}
+            deferRemoteChanges
+            initialPendingRows={fixedAssetItems.pending}
+            onItemsChange={fixedAssetItems.onItemsChange}
+          />
+        ),
+      }] : []),
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, fixedAssetItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, hasBasis, handleRefillFromBasis]);
 
     const runCreateTarget = useCallback(async (t: TradeCreateTarget) => {
       const srcLabel = cfg.basisSourceLabelKey ? translate(cfg.basisSourceLabelKey) : cfg.formLabel;

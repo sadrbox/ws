@@ -3005,3 +3005,46 @@ model EsfLicense {
   @@index([lastRequestAt])
   @@map("esf_licenses")
 }
+
+// Справочник «Основные средства» (ОС) — карточки для табличной части ОС в Поступлении
+// и проводок по счёту 2410 (субконто FixedAsset уже есть в плане счетов).
+model FixedAsset {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  name             String
+  inventoryNumber  String?
+  note             String?
+  organizationUuid String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+  deletedAt        DateTime?
+
+  @@index([organizationUuid])
+  @@index([updatedAt])
+  @@map("fixed_assets")
+}
+
+// Строка табличной части «Основные средства» документа Поступление (Purchase).
+// FK скалярные (без Prisma-relation, чтобы не менять модель Purchase); каскад/связь — в миграции.
+model PurchaseFixedAssetItem {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  purchaseUuid     String
+  fixedAssetUuid   String?
+  fixedAssetName   String?
+  amount           Decimal   @default(0) @db.Decimal(18, 2)
+  amountWithoutVat Decimal   @default(0) @db.Decimal(18, 2)
+  vatRate          Decimal   @default(12) @db.Decimal(5, 2)
+  vatAmount        Decimal   @default(0) @db.Decimal(18, 2)
+  sourceRowId      String?
+  date             DateTime?
+  posted           Boolean   @default(false)
+  organizationUuid String?
+  updatedAt        DateTime  @default(now()) @updatedAt
+  deletedAt        DateTime?
+
+  @@index([purchaseUuid])
+  @@index([fixedAssetUuid])
+  @@index([sourceRowId])
+  @@map("purchase_fixed_asset_items")
+}

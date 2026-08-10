@@ -1,0 +1,7 @@
+[
+	{ "identifier": "id", "type": "number", "width": "70px", "minWidth": "60px", "alignment": "left", "hint": "Номер", "visible": true, "inlist": true },
+	{ "identifier": "uuid", "type": "string", "width": "300px", "minWidth": "80px", "alignment": "left", "hint": "Уникальный идентификатор", "visible": false, "inlist": false },
+	{ "identifier": "name", "type": "string", "width": "320px", "minWidth": "120px", "alignment": "left", "hint": "Наименование", "visible": true, "inlist": true },
+	{ "identifier": "inventoryNumber", "type": "string", "width": "160px", "minWidth": "100px", "alignment": "left", "hint": "Инвентарный номер", "visible": true, "inlist": true },
+	{ "identifier": "note", "type": "string", "width": "240px", "minWidth": "120px", "alignment": "left", "hint": "Примечание", "visible": true, "inlist": true }
+]
