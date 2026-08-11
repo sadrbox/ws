@@ -75,7 +75,7 @@ export interface TradeDocConfig {
   itemsBatchEndpoint: string;       // "purchaseitems/batch"
   storageKey: string;               // "purchases-form"
   listName: string;                 // "PurchasesList"
-  formLabel: string;                // "Поступление товара и услуг"
+  formLabel: string;                // "Поступление ТМЗ и услуг"
   formDisplayName: string;          // displayName компонента
   itemsComponentName: string;       // "PurchaseItemsList_part"
   itemsTableLabel: string;          // подпись таблицы в useFormStore
@@ -235,6 +235,10 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
 
     const allItemsRef = useRef<TDataItem[]>([]);
     const permDefaultsRef = useRef<UserDefaultsMap>({});
+    // Итоги двух табличных частей для документов с ОС (Поступление): итог шапки =
+    // ТМЗ + ОС (= кредит 3310). Для остальных документов ветка не используется.
+    const tmzTotalsRef = useRef({ amount: 0, vatAmount: 0, amountWithoutVat: 0, discountAmount: 0 });
+    const faTotalsRef = useRef({ amount: 0, vatAmount: 0, amountWithoutVat: 0 });
 
     const form = useFormStore<TFields>({
       endpoint: cfg.endpoint,
@@ -482,19 +486,57 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
       apply: (fields) => form.setFieldsInitial(fields as Partial<TFields>),
     });
 
+    // Итог шапки = ТМЗ + ОС (для Поступления). Складываем итоги двух ТЧ из рефов.
+    const recombineTotals = useCallback(() => {
+      const t = tmzTotalsRef.current, f = faTotalsRef.current;
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      form.setFields({
+        amount: r2(t.amount + f.amount),
+        vatAmount: r2(t.vatAmount + f.vatAmount),
+        amountWithoutVat: r2(t.amountWithoutVat + f.amountWithoutVat),
+        discountAmount: r2(t.discountAmount),
+      } as Partial<TFields>);
+    }, [form.setFields]);
+
     const handleTotalChange = useCallback((total: number, rows?: TDataItem[]) => {
+      const vatSum = rows ? rows.reduce((s, r) => s + (Number(r.vatAmount) || 0), 0) : 0;
+      const discSum = rows ? rows.reduce((s, r) => s + (Number(r.discountAmount) || 0), 0) : 0;
+      if (cfg.hasFixedAssets) {
+        // Не пишем в шапку напрямую — только копим итог ТМЗ и пересчитываем сумму.
+        tmzTotalsRef.current = {
+          amount: total,
+          vatAmount: Math.round(vatSum * 100) / 100,
+          amountWithoutVat: Math.round((total - vatSum) * 100) / 100,
+          discountAmount: Math.round(discSum * 100) / 100,
+        };
+        recombineTotals();
+        return;
+      }
       form.setField("amount", Number(total));
       if (rows) {
-        const vatSum = rows.reduce((s, r) => s + (Number(r.vatAmount) || 0), 0);
-        const discSum = rows.reduce((s, r) => s + (Number(r.discountAmount) || 0), 0);
-        const amtWithoutVat = Math.round((total - vatSum) * 100) / 100;
         form.setFields({
           vatAmount: Number(Math.round(vatSum * 100) / 100),
           discountAmount: Number(Math.round(discSum * 100) / 100),
-          amountWithoutVat: Number(amtWithoutVat),
+          amountWithoutVat: Number(Math.round((total - vatSum) * 100) / 100),
         } as Partial<TFields>);
       }
-    }, [form.setField, form.setFields]);
+    }, [form.setField, form.setFields, recombineTotals]);
+
+    // Итог табличной части ОС (по всем актуальным строкам). НДС «в том числе»,
+    // если у организации включён учёт НДС; иначе весь итог — без НДС.
+    const handleFaAllItems = useCallback((rows: TDataItem[]) => {
+      const active = rows.filter(r => r._pendingAction !== "delete");
+      let amount = 0, vatAmount = 0;
+      for (const r of active) {
+        const amt = Math.round((Number(r.amount) || 0) * 100) / 100;
+        const rate = Number(r.vatRate) || 0;
+        amount += amt;
+        if (isVatEnabled && rate > 0) vatAmount += amt - amt / (1 + rate / 100);
+      }
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      faTotalsRef.current = { amount: r2(amount), vatAmount: r2(vatAmount), amountWithoutVat: r2(amount - vatAmount) };
+      recombineTotals();
+    }, [isVatEnabled, recombineTotals]);
 
     const assignNumber = useAssignNumber();
     const tabs = useMemo(() => [
@@ -615,10 +657,11 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
             deferRemoteChanges
             initialPendingRows={fixedAssetItems.pending}
             onItemsChange={fixedAssetItems.onItemsChange}
+            onAllItemsChange={handleFaAllItems}
           />
         ),
       }] : []),
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, canWrite, items, fixedAssetItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, hasBasis, handleRefillFromBasis]);
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, handleFaAllItems, canWrite, items, fixedAssetItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, hasBasis, handleRefillFromBasis]);
 
     const runCreateTarget = useCallback(async (t: TradeCreateTarget) => {
       const srcLabel = cfg.basisSourceLabelKey ? translate(cfg.basisSourceLabelKey) : cfg.formLabel;

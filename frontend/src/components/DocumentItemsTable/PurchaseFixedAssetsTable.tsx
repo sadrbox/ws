@@ -3,7 +3,7 @@
 // («в том числе»). Редактирование inline; сохранение — через useFormStore.tables
 // (deferRemoteChanges + onItemsChange → батч purchasefixedassetitems/batch).
 import { FC, useCallback, useMemo } from "react";
-import SubTable, { type SubTableContext } from "src/components/SubTable";
+import SubTable, { ReadOnlyCell, type SubTableContext } from "src/components/SubTable";
 import LookupField from "src/components/Field/LookupField";
 import { FieldNumber } from "src/components/Field";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -27,12 +27,21 @@ interface Props {
 	deferRemoteChanges?: boolean;
 	initialPendingRows?: TDataItem[];
 	onItemsChange?: (items: TDataItem[]) => void;
+	onAllItemsChange?: (rows: TDataItem[]) => void;
 }
 
-const PurchaseFixedAssetsTable: FC<Props> = ({ parentUuid, disabled = false, deferRemoteChanges = false, initialPendingRows, onItemsChange }) => {
+const PurchaseFixedAssetsTable: FC<Props> = ({ parentUuid, disabled = false, deferRemoteChanges = false, initialPendingRows, onItemsChange, onAllItemsChange }) => {
 	const defaultNewRow = useMemo(() => ({ fixedAssetUuid: null, fixedAssetName: "", amount: 0, vatRate: 12 }), []);
 
 	const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
+		if (col.identifier === "lineNumber") {
+			// indexOf по ССЫЛКЕ не годится: при disablePrimaryRowHighlight SubTable
+			// отдаёт в Table клоны строк ({...r, isPrimary:false}), а ctx.rows — исходные.
+			// Ищем по id (уникален: temp — отрицательный, сохранённые — положительный).
+			const idx = ctx.rows.findIndex((r) => r === row || r.id === row.id);
+			const value = idx >= 0 ? idx + 1 : "";
+			return <ReadOnlyCell value={String(value)} />;
+		}
 		if (col.identifier === "fixedAsset") {
 			if (ctx.inlineEditing) return (
 				<LookupField
@@ -73,6 +82,7 @@ const PurchaseFixedAssetsTable: FC<Props> = ({ parentUuid, disabled = false, def
 			deferRemoteChanges={deferRemoteChanges}
 			initialPendingRows={initialPendingRows}
 			onItemsChange={onItemsChange}
+			onAllItemsChange={onAllItemsChange}
 			renderCell={renderCell}
 			defaultNewRow={defaultNewRow}
 			disablePrimaryRowHighlight

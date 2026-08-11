@@ -46,6 +46,7 @@ model User {
   authoredInventoryTransfers   InventoryTransfer[]   @relation("InventoryTransferAuthor")
   authoredCashOrders           CashOrder[]           @relation("CashOrderAuthor")
   authoredMonthCloses          MonthClose[]          @relation("MonthCloseAuthor")
+  authoredFixedAssetAcceptances FixedAssetAcceptance[] @relation("FixedAssetAcceptanceAuthor")
   authoredPayrollCalculations  PayrollCalculation[]  @relation("PayrollCalculationAuthor")
   authoredPayrollPayments      PayrollPayment[]      @relation("PayrollPaymentAuthor")
   authoredScheduledTasks       ScheduledTask[]       @relation("ScheduledTaskAuthor")
@@ -141,6 +142,7 @@ model Organization {
   activityHistories    ActivityHistory[]
   cashOrders           CashOrder[]                     @relation("OrgCashOrders")
   monthCloses          MonthClose[]                    @relation("OrgMonthCloses")
+  fixedAssetAcceptances FixedAssetAcceptance[]         @relation("OrgFixedAssetAcceptances")
   contracts            Contract[]                      @relation("OrgContracts")
   employees            Employee[]                      @relation("EmployeeOrganization")
   incomingInvoices     IncomingInvoice[]               @relation("OrgIncomingInvoices")
@@ -3018,10 +3020,48 @@ model FixedAsset {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @default(now()) @updatedAt
   deletedAt        DateTime?
+  acceptances      FixedAssetAcceptance[] @relation("FixedAssetAcceptances")
 
   @@index([organizationUuid])
   @@index([updatedAt])
   @@map("fixed_assets")
+}
+
+// Документ «Принятие к учёту ОС» — ввод основного средства в эксплуатацию и
+// запуск амортизации. Собственных проводок НЕ делает (флаг posted=«в эксплуатации»
+// гейтит начисление амортизации). Параметры амортизации хранятся здесь (не на
+// карточке ОС): движок амортизации (services/depreciation.js) читает проведённые
+// акты и начисляет при закрытии месяца (Дт depreciationAccount Кт accumulatedAccount).
+model FixedAssetAcceptance {
+  id                    Int           @id @default(autoincrement())
+  uuid                  String        @unique @default(uuid())
+  number                String?
+  date                  DateTime      @default(now())
+  comment               String?
+  organizationUuid      String?
+  fixedAssetUuid        String
+  initialCost           Decimal       @default(0) @db.Decimal(18, 2)
+  liquidationValue      Decimal       @default(0) @db.Decimal(18, 2)
+  usefulLifeMonths      Int?
+  depreciationMethod    String        @default("linear")
+  depreciationStartDate DateTime?
+  depreciationAccount   String        @default("7210")
+  accumulatedAccount    String        @default("2420")
+  posted                Boolean       @default(true)
+  authorUuid            String
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @default(now()) @updatedAt
+  deletedAt             DateTime?
+  organization          Organization? @relation("OrgFixedAssetAcceptances", fields: [organizationUuid], references: [uuid])
+  author                User          @relation("FixedAssetAcceptanceAuthor", fields: [authorUuid], references: [uuid], onDelete: Restrict)
+  fixedAsset            FixedAsset    @relation("FixedAssetAcceptances", fields: [fixedAssetUuid], references: [uuid], onDelete: Restrict)
+
+  @@index([organizationUuid])
+  @@index([fixedAssetUuid])
+  @@index([depreciationStartDate])
+  @@index([date])
+  @@index([updatedAt])
+  @@map("fixed_asset_acceptances")
 }
 
 // Строка табличной части «Основные средства» документа Поступление (Purchase).

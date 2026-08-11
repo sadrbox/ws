@@ -217,7 +217,7 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		formName: "SalesForm",
 		listName: "SalesList",
 		storageKey: "sales-form",
-		label: "Реализация товара и услуг",
+		label: "Реализация ТМЗ и услуг",
 	},
 	{
 		endpoint: "purchases",
@@ -386,6 +386,14 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		listName: "MonthClosesList",
 		storageKey: "month-closes-form",
 		label: "Закрытие месяца",
+	},
+	{
+		endpoint: "fixed-asset-acceptances",
+		module: () => import("src/models/FixedAssetAcceptances"),
+		formName: "FixedAssetAcceptancesForm",
+		listName: "FixedAssetAcceptancesList",
+		storageKey: "fixed-asset-acceptances-form",
+		label: "Принятие к учёту ОС",
 	},
 	{
 		endpoint: "fiscal-receipts",

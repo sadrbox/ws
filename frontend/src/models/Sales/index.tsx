@@ -60,7 +60,7 @@ import DocumentTotals from "src/components/DocumentTotals";
 
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
-const FORM_LABEL = "Реализация товара и услуг";
+const FORM_LABEL = "Реализация ТМЗ и услуг";
 const SALES_DEPENDENT_ENDPOINTS = ["outgoing-invoices", "sale-returns", "cash-receipt-orders"];
 
 
@@ -479,19 +479,19 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     form.setFields(updates);
   }, [form.setFields]);
 
-    // Смена контрагента: подставляем ОСНОВНОЙ договор нового контрагента, иначе
-    // чистим чужой (см. useContractSync). Очистка контрагента приходит сюда же —
-    // LookupField зовёт onSelect("", "", {}).
-    const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string) => {
-      form.setFields({ counterpartyUuid: uuid, counterpartyName: displayValue } as Partial<TFields>);
-      const cur = form.store.getSnapshot().fields;
-      const patch = await syncContract({
-        counterpartyUuid: uuid,
-        organizationUuid: cur.organizationUuid,
-        currentContractUuid: cur.contractUuid,
-      });
-      if (patch) form.setFields(patch as Partial<TFields>);
-    }, [form.setFields, form.store, syncContract]);
+  // Смена контрагента: подставляем ОСНОВНОЙ договор нового контрагента, иначе
+  // чистим чужой (см. useContractSync). Очистка контрагента приходит сюда же —
+  // LookupField зовёт onSelect("", "", {}).
+  const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string) => {
+    form.setFields({ counterpartyUuid: uuid, counterpartyName: displayValue } as Partial<TFields>);
+    const cur = form.store.getSnapshot().fields;
+    const patch = await syncContract({
+      counterpartyUuid: uuid,
+      organizationUuid: cur.organizationUuid,
+      currentContractUuid: cur.contractUuid,
+    });
+    if (patch) form.setFields(patch as Partial<TFields>);
+  }, [form.setFields, form.store, syncContract]);
 
   // Смена организации: зависимые поля (склад/договор) → дефолт пользователя для
   // новой орг, иначе очистка (значение принадлежало прежней организации).

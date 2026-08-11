@@ -36,6 +36,7 @@ export const KZ_CHART_OF_ACCOUNTS = [
 	{ code: "1330", name: "Товары", accountType: "active", isQuantitative: true, sub: ["Nomenclature", "Warehouse"] },
 	{ code: "1420", name: "НДС к возмещению", accountType: "active" },
 	{ code: "2410", name: "Основные средства", accountType: "active", sub: ["FixedAsset"] },
+	{ code: "2420", name: "Амортизация основных средств", accountType: "passive", sub: ["FixedAsset"] },
 	{ code: "3310", name: "Краткосрочная задолженность поставщикам и подрядчикам", accountType: "passive", sub: ["Counterparty", "Contract"] },
 	{ code: "3130", name: "Налог на добавленную стоимость (к уплате)", accountType: "passive" },
 	{ code: "3390", name: "Прочая краткосрочная кредиторская задолженность (таможенные платежи)", accountType: "passive" },

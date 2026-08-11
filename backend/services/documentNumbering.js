@@ -36,6 +36,7 @@ export const NUMBER_CONFIG = {
 	payroll_calculation: { prefix: "НЗП", label: "Начисление зарплаты" },
 	payroll_payment: { prefix: "ВЗП", label: "Выплата зарплаты" },
 	month_close: { prefix: "ЗМ", label: "Закрытие месяца" },
+	fixed_asset_acceptance: { prefix: "ПрОС", label: "Принятие к учёту ОС" },
 	import_declaration: { prefix: "ГТД", label: "ГТД по импорту" },
 	write_off: { prefix: "СПИС", label: "Списание товара" },
 	goods_receipt: { prefix: "ОПРХ", label: "Оприходование товара" },
@@ -123,6 +124,7 @@ const DOC_JOURNAL = {
 	payroll_calculation: { table: "payroll_calculations" },
 	payroll_payment: { table: "payroll_payments" },
 	month_close: { table: "month_closes" },
+	fixed_asset_acceptance: { table: "fixed_asset_acceptances" },
 };
 
 /**

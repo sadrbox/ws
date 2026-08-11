@@ -1,4 +1,5 @@
 [
+	{ "identifier": "lineNumber", "type": "number", "width": "50px", "minWidth": "40px", "alignment": "right", "hint": "Номер строки", "visible": true, "inlist": true, "sortable": false },
 	{ "identifier": "fixedAsset", "type": "string", "width": "340px", "minWidth": "160px", "alignment": "left", "hint": "Основное средство", "visible": true, "inlist": true, "sortable": false },
 	{ "identifier": "amount", "type": "number", "width": "150px", "minWidth": "110px", "alignment": "right", "hint": "Сумма", "visible": true, "inlist": true, "sortable": false },
 	{ "identifier": "vatRate", "type": "number", "width": "110px", "minWidth": "80px", "alignment": "right", "hint": "Ставка НДС, %", "visible": true, "inlist": true, "sortable": false },

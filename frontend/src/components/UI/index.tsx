@@ -87,6 +87,7 @@ import {
   BrandsList,
   ProductsList,
   FixedAssetsList,
+  FixedAssetAcceptancesList,
   UnitOfMeasuresList,
   TaxesList,
   OrganizationAccountingSettingsList,
@@ -1127,6 +1128,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavGroup}>
         <h3>{translate("monthCloseRegulatory")}</h3>
         <ul className={styles.NavList}>
+          {can("Product") && <NavItem onClick={() => addPane({ component: FixedAssetAcceptancesList })}>{translate("FixedAssetAcceptancesList")}</NavItem>}
           {can("MonthClose") && <NavItem onClick={() => addPane({ component: MonthClosesList })}>{translate("MonthClosesList")}</NavItem>}
         </ul>
       </div>

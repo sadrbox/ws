@@ -75,7 +75,7 @@ const TABLE_LABELS: Record<string, string> = {
   contactpersons: "Контактные лица",
   bankaccounts: "Банковские счета", users: "Пользователи",
   todos: "Задачи", notifications: "Уведомления",
-  warehouses: "Склады", sales: "Реализация товара и услуг",
+  warehouses: "Склады", sales: "Реализация ТМЗ и услуг",
   purchases: "Поступления", "outgoing-invoices": "Счета-фактуры исходящие",
   "incoming-invoices": "Счета-фактуры входящие", "payment-invoices": "Счета на оплату",
   "scheduled-tasks": "Регламентные задачи", "inventory-transfers": "Перемещение ТМЗ",

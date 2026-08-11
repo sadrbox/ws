@@ -20,6 +20,7 @@ import { allocateImportLandedCost } from "./importLandedCost.js";
 import { getSnapshotFor } from "./costSnapshot.js";
 import { getSettingsAt } from "./accountingSettings.js";
 import { getCached } from "./refCache.js";
+import { computeDepreciationEntries } from "./depreciation.js";
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -260,6 +261,27 @@ export const POSTING_RULES = {
 				out.push({
 					debit: ACC.VAT_IN, credit: ACC.AP, amount: vat,
 					description: "НДС по приобретённым товарам (к зачёту)",
+					debitAnalytics: [], creditAnalytics: apAnalytics,
+				});
+			}
+		}
+		// Табличная часть «Основные средства»: Дт 2410 (без НДС, субконто ОС) + Дт 1420
+		// (входящий НДС) Кт 3310. Строки — из doc._fixedAssetItems (см. loadDocument).
+		for (const fa of doc._fixedAssetItems ?? []) {
+			const { net, vat } = splitVat(fa, ctx.useVat);
+			const apAnalytics = compact([an("Counterparty", doc.counterpartyUuid), an("Contract", doc.contractUuid)]);
+			if (net > 0) {
+				out.push({
+					debit: ACC.FIXED, credit: ACC.AP, amount: net,
+					description: "Приобретение основного средства",
+					debitAnalytics: compact([an("FixedAsset", fa.fixedAssetUuid)]),
+					creditAnalytics: apAnalytics,
+				});
+			}
+			if (vat > 0) {
+				out.push({
+					debit: ACC.VAT_IN, credit: ACC.AP, amount: vat,
+					description: "НДС по приобретённым ОС (к зачёту)",
 					debitAnalytics: [], creditAnalytics: apAnalytics,
 				});
 			}
@@ -605,8 +627,28 @@ export const POSTING_RULES = {
 		const periodLabel = `${fmtDateUTC(start)}–${fmtDateUTC(endRaw)}`;
 
 		const out = [];
+
+		// Амортизация ОС за период — начисляется В СОСТАВЕ закрытия месяца, ДО переноса
+		// расходов на 5610, чтобы попасть в оборот счёта расходов (7210). Проводки
+		// принадлежат month_close (reconcile пересобирает их идемпотентно). Начисленная
+		// здесь сумма в `posted` не входит (это оборот того же документа), поэтому её
+		// добавляем в дебет закрываемого счёта вручную (depDebitByAccount).
+		const depEntries = await computeDepreciationEntries(ctx.client, doc.organizationUuid, start, endRaw);
+		const depDebitByAccount = {};
+		for (const de of depEntries) {
+			out.push({
+				debit: de.debitAccount,
+				credit: de.creditAccount,
+				amount: de.amount,
+				description: `Амортизация ОС за ${periodLabel}`,
+				debitAnalytics: [],
+				creditAnalytics: compact([an("FixedAsset", de.fixedAssetUuid)]),
+			});
+			depDebitByAccount[de.debitAccount] = r2((depDebitByAccount[de.debitAccount] || 0) + de.amount);
+		}
+
 		for (const { account, normal } of CLOSE_ACCOUNTS) {
-			let debit = 0;
+			let debit = depDebitByAccount[account] || 0; // + амортизация, начисленная этим закрытием
 			let credit = 0;
 			for (const e of posted) {
 				if (e.debitAccountCode === account) debit += Number(e.amount) || 0;
@@ -1054,6 +1096,13 @@ async function loadDocument(documentType, documentUuid, client) {
 	if (doc && cfg.itemModel && cfg.parentField) {
 		items = await client[cfg.itemModel].findMany({
 			where: { [cfg.parentField]: documentUuid, deletedAt: null },
+		});
+	}
+	// Поступление: догружаем строки табличной части «Основные средства» → на doc,
+	// чтобы правило провело их на счёт 2410 (Дт) отдельно от товаров (1330).
+	if (doc && documentType === "purchase") {
+		doc._fixedAssetItems = await client.purchaseFixedAssetItem.findMany({
+			where: { purchaseUuid: documentUuid, deletedAt: null },
 		});
 	}
 	return { cfg, doc, items };

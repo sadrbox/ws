@@ -33,7 +33,8 @@ export type DocumentType =
 	| "write_off"
 	| "goods_receipt"
 	| "stock_count"
-	| "month_close";
+	| "month_close"
+	| "fixed_asset_acceptance";
 
 export interface ValidationError {
 	field: string;
@@ -161,6 +162,7 @@ export const REQUIRED_FIELDS_MAP: Record<DocumentType, readonly string[]> = {
 
 	// ── Регламентные операции ────────────────────────────────────────────────
 	month_close: ["periodStart", "periodEnd", "organizationUuid"],
+	fixed_asset_acceptance: ["organizationUuid", "fixedAssetUuid", "initialCost", "usefulLifeMonths", "depreciationStartDate"],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -274,6 +276,10 @@ export function getFieldLabel(fieldName: string): string {
 		declarationNumber: "№ декларации (ГТД)",
 		declarationDate: "Дата декларации",
 		countryCode: "Страна происхождения",
+		fixedAssetUuid: "Основное средство",
+		initialCost: "Первоначальная стоимость",
+		usefulLifeMonths: "Срок полезного использования (мес.)",
+		depreciationStartDate: "Дата начала амортизации",
 	};
 	return labels[fieldName] ?? fieldName;
 }

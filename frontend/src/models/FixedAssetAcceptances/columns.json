@@ -1,0 +1,112 @@
+[
+	{
+		"identifier": "id",
+		"type": "number",
+		"width": "80px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Внутренний номер",
+		"visible": false,
+		"inlist": false
+	},
+	{
+		"identifier": "uuid",
+		"hint": "Уникальный идентификатор",
+		"type": "string",
+		"visible": false,
+		"inlist": false,
+		"width": "300px",
+		"minWidth": "80px",
+		"alignment": "left"
+	},
+	{
+		"identifier": "number",
+		"type": "string",
+		"width": "130px",
+		"minWidth": "90px",
+		"alignment": "left",
+		"hint": "Номер документа",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "date",
+		"type": "datetime",
+		"width": "150px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Дата документа",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "fixedAsset.name",
+		"type": "string",
+		"width": "220px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"hint": "Основное средство",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "initialCost",
+		"type": "number",
+		"width": "140px",
+		"minWidth": "90px",
+		"alignment": "right",
+		"hint": "Первоначальная стоимость",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "usefulLifeMonths",
+		"type": "number",
+		"width": "120px",
+		"minWidth": "80px",
+		"alignment": "right",
+		"hint": "Срок полезного использования (мес.)",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "depreciationStartDate",
+		"type": "datetime",
+		"width": "140px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Дата начала амортизации",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "posted",
+		"type": "boolean",
+		"width": "100px",
+		"minWidth": "80px",
+		"alignment": "center",
+		"hint": "Проведён",
+		"visible": true,
+		"inlist": false
+	},
+	{
+		"identifier": "organization.name",
+		"type": "string",
+		"width": "200px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Организация",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "comment",
+		"type": "string",
+		"width": "200px",
+		"minWidth": "80px",
+		"alignment": "left",
+		"hint": "Комментарий",
+		"visible": true,
+		"inlist": true
+	}
+]

@@ -35,8 +35,8 @@ interface ProductDetailReportProps {
 }
 
 const DOC_TYPE_LABELS: Record<string, string> = {
-  purchase: "Поступление товара и услуг",
-  sale: "Реализация товара и услуг",
+  purchase: "Поступление ТМЗ и услуг",
+  sale: "Реализация ТМЗ и услуг",
   purchaseReturn: "Возврат поставщику",
   saleReturn: "Возврат от покупателя",
 };

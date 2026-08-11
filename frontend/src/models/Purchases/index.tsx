@@ -17,7 +17,7 @@ const { Form: PurchasesForm, List: PurchasesList } = createTradeDocForm({
   itemsBatchEndpoint: "purchaseitems/batch",
   storageKey: "purchases-form",
   listName: "PurchasesList",
-  formLabel: "Поступление товара и услуг",
+  formLabel: "Поступление ТМЗ и услуг",
   formDisplayName: "PurchasesForm",
   itemsComponentName: "PurchaseItemsList_part",
   itemsTableLabel: "Товары поступления",

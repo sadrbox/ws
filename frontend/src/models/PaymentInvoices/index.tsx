@@ -61,7 +61,7 @@ const PaymentInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
   },
   createFromBasisTargets: [
     {
-      docLabel: "Реализация товара и услуг",
+      docLabel: "Реализация ТМЗ и услуг",
       FormComponent: SalesForm,
       basisType: "payment_invoice",
       sourceItemsEndpoint: "paymentinvoiceitems",

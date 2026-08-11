@@ -4,7 +4,7 @@ vi.mock("src/i18", () => ({
 	translate: (key: string) => {
 		const dict: Record<string, string> = {
 			SaleItemsList: "Товары реализации",
-			SalesList: "Реализация товара и услуг",
+			SalesList: "Реализация ТМЗ и услуг",
 			CashboxesList: "Кассы",
 			new: "Новый",
 			docNoNumber: "б/н",
@@ -67,18 +67,22 @@ describe("makeDocLabel", () => {
 	it("формирует метку документа с датой (без номера → б/н)", () => {
 		expect(
 			makeDocLabel("SalesList", "fallback", { id: 42, date: "2026-04-21" }),
-		).toBe("Реализация товара и услуг: б/н - 21.04.2026");
+		).toBe("Реализация ТМЗ и услуг: б/н - 21.04.2026");
 	});
 
 	it("с номером — показывает номер", () => {
 		expect(
-			makeDocLabel("SalesList", "fallback", { id: 42, number: "РЕАЛ-7", date: "2026-04-21" }),
-		).toBe("Реализация товара и услуг: № РЕАЛ-7 - 21.04.2026");
+			makeDocLabel("SalesList", "fallback", {
+				id: 42,
+				number: "РЕАЛ-7",
+				date: "2026-04-21",
+			}),
+		).toBe("Реализация ТМЗ и услуг: № РЕАЛ-7 - 21.04.2026");
 	});
 
 	it("если даты нет — только ссылка (б/н)", () => {
 		expect(makeDocLabel("SalesList", "fallback", { id: 12 })).toBe(
-			"Реализация товара и услуг: б/н",
+			"Реализация ТМЗ и услуг: б/н",
 		);
 	});
 
@@ -90,7 +94,7 @@ describe("makeDocLabel", () => {
 				{ id: 8, postedAt: "2026-01-10" },
 				"postedAt",
 			),
-		).toBe("Реализация товара и услуг: б/н - 10.01.2026");
+		).toBe("Реализация ТМЗ и услуг: б/н - 10.01.2026");
 	});
 });
 
@@ -113,10 +117,10 @@ describe("makePaneLabelFromData", () => {
 				"SaleItemsList",
 				"fallback",
 				{ id: 9, uuid: "u" },
-				"Реализация товара и услуг: ID 7 - 21.04.2026 - Товар",
+				"Реализация ТМЗ и услуг: ID 7 - 21.04.2026 - Товар",
 			),
 		).toBe(
-			"Товары реализации: ID 9 - Реализация товара и услуг: ID 7 - 21.04.2026 - Товар",
+			"Товары реализации: ID 9 - Реализация ТМЗ и услуг: ID 7 - 21.04.2026 - Товар",
 		);
 	});
 
@@ -136,18 +140,23 @@ describe("makePaneLabelFromData", () => {
 	it("у документа с номером ссылка — номер, а не ID (как в makeDocLabel)", () => {
 		const doc = { id: 965, uuid: "u", number: "РЕАЛ-2", date: "2026-07-15" };
 
-		expect(makePaneLabelFromData("SalesList", "fallback", doc, "15.07.2026")).toBe(
-			"Реализация товара и услуг: № РЕАЛ-2 - 15.07.2026",
-		);
+		expect(
+			makePaneLabelFromData("SalesList", "fallback", doc, "15.07.2026"),
+		).toBe("Реализация ТМЗ и услуг: № РЕАЛ-2 - 15.07.2026");
 		// Обе функции обязаны давать одну и ту же подпись — иначе панель переименуется.
-		expect(makePaneLabelFromData("SalesList", "fallback", doc, "15.07.2026")).toBe(
-			makeDocLabel("SalesList", "fallback", doc),
-		);
+		expect(
+			makePaneLabelFromData("SalesList", "fallback", doc, "15.07.2026"),
+		).toBe(makeDocLabel("SalesList", "fallback", doc));
 	});
 
 	it("без номера — прежний вид с ID", () => {
 		expect(
-			makePaneLabelFromData("SalesList", "fallback", { id: 965, uuid: "u" }, "15.07.2026"),
-		).toBe("Реализация товара и услуг: ID 965 - 15.07.2026");
+			makePaneLabelFromData(
+				"SalesList",
+				"fallback",
+				{ id: 965, uuid: "u" },
+				"15.07.2026",
+			),
+		).toBe("Реализация ТМЗ и услуг: ID 965 - 15.07.2026");
 	});
 });

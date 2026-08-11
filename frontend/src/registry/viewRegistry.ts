@@ -77,6 +77,7 @@ export const ReservationsList = lazyView("ReservationsList", () => import('src/m
 export const PurchaseOrdersList = lazyView("PurchaseOrdersList", () => import('src/models/PurchaseOrders').then(m => ({ default: m.PurchaseOrdersList })));
 export const BankStatementsList = lazyView("BankStatementsList", () => import('src/models/BankStatements').then(m => ({ default: m.BankStatementsList })));
 export const MonthClosesList = lazyView("MonthClosesList", () => import('src/models/MonthCloses').then(m => ({ default: m.MonthClosesList })));
+export const FixedAssetAcceptancesList = lazyView("FixedAssetAcceptancesList", () => import('src/models/FixedAssetAcceptances').then(m => ({ default: m.FixedAssetAcceptancesList })));
 export const FiscalReceiptsList = lazyView("FiscalReceiptsList", () => import('src/models/FiscalReceipts').then(m => ({ default: m.FiscalReceiptsList })));
 export const CashReceiptOrdersList = lazyView("CashReceiptOrdersList", () => import('src/models/CashReceiptOrders').then(m => ({ default: m.CashReceiptOrdersList })));
 export const CashExpenseOrdersList = lazyView("CashExpenseOrdersList", () => import('src/models/CashExpenseOrders').then(m => ({ default: m.CashExpenseOrdersList })));
@@ -171,6 +172,7 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	PurchaseOrdersList: PurchaseOrdersList,
 	BankStatementsList: BankStatementsList,
 	MonthClosesList: MonthClosesList,
+	FixedAssetAcceptancesList: FixedAssetAcceptancesList,
 	FiscalReceiptsList: FiscalReceiptsList,
 	CashReceiptOrdersList: CashReceiptOrdersList,
 	CashExpenseOrdersList: CashExpenseOrdersList,
