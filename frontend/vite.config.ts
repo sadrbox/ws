@@ -14,10 +14,16 @@ const HMR_CLIENT_PORT = Number(process.env.VITE_HMR_CLIENT_PORT) || 443;
 // https://vite.dev/config/
 // Cast to any to allow Vitest-specific `test` field without TypeScript errors
 export default defineConfig({
+	base: process.env.VITE_BASE_URL || "./",
 	server: {
 		host: true, // слушать 0.0.0.0 — доступ из туннеля (cloudflared) и LAN
 		// Разрешённые хосты: туннель + локальные + переопределённый HMR-хост.
-		allowedHosts: ["aleppo.kz", "localhost", "127.0.0.1", ...(HMR_HOST !== "aleppo.kz" ? [HMR_HOST] : [])],
+		allowedHosts: [
+			"aleppo.kz",
+			"localhost",
+			"127.0.0.1",
+			...(HMR_HOST !== "aleppo.kz" ? [HMR_HOST] : []),
+		],
 		hmr: {
 			protocol: HMR_PROTOCOL,
 			host: HMR_HOST,
@@ -47,8 +53,14 @@ export default defineConfig({
 					if (id.includes("xlsx")) return "xlsx";
 					if (id.includes("mammoth")) return "mammoth";
 					if (id.includes("pdfjs") || id.includes("react-pdf")) return "pdf";
-					if (id.includes("recharts") || id.includes("d3-") || id.includes("victory-vendor")) return "recharts";
-					if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "react-vendor";
+					if (
+						id.includes("recharts") ||
+						id.includes("d3-") ||
+						id.includes("victory-vendor")
+					)
+						return "recharts";
+					if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id))
+						return "react-vendor";
 					if (id.includes("@tanstack")) return "tanstack";
 					// Остальные либы НЕ сливаем в один vendor — Vite распределит их
 					// по чанкам-потребителям (часто ленивым), это эффективнее.
