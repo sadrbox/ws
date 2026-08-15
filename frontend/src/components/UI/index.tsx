@@ -1325,7 +1325,21 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      return this.props.fallback;
+      const err = this.state.error;
+      // В релизном бандле Tauri консоль недоступна — показываем реальную ошибку
+      // на экране под фолбэком, чтобы её можно было диагностировать без DevTools.
+      return (
+        <div>
+          {this.props.fallback}
+          {err && (
+            <details style={{ margin: "12px", fontFamily: "monospace", fontSize: "12px", whiteSpace: "pre-wrap", opacity: 0.85 }}>
+              <summary style={{ cursor: "pointer" }}>Детали ошибки</summary>
+              <div style={{ marginTop: 8, color: "#b00020" }}>{String(err.message || err)}</div>
+              {err.stack && <pre style={{ overflow: "auto", maxHeight: "50vh" }}>{err.stack}</pre>}
+            </details>
+          )}
+        </div>
+      );
     }
 
     return this.props.children;

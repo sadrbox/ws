@@ -6,7 +6,49 @@
  */
 import { logger } from "src/utils/logger";
 
+/**
+ * Десктоп-бандл Tauri: страница грузится с кастомного протокола (tauri://localhost),
+ * вся статика локальна. Service Worker там НЕ нужен и ВРЕДЕН: sw.js на установке
+ * делает skipWaiting()+clients.claim(), registerSW на controllerchange —
+ * window.location.reload(); под кастомным протоколом Cache-First + смена хешей
+ * чанков между сборками дают «Failed to fetch dynamically imported module», которое
+ * всплывает в ErrorBoundary вокруг Suspense → «Что-то пошло не так». В вебе (aleppo.kz)
+ * SW работает штатно. Поэтому в Tauri SW не регистрируем, а ранее установленный
+ * (например, от прежней сборки, уже сломавшей приложение) — снимаем и чистим кэши.
+ */
+const isTauri = (): boolean =>
+  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/** Снять все регистрации SW и удалить его кэши (best-effort). */
+async function purgeServiceWorkers(): Promise<void> {
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if (typeof caches !== "undefined") {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch {
+    /* best-effort: недоступность SW/Cache API не должна ронять старт */
+  }
+}
+
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  // Tauri-бандл: SW отключён. Дополнительно восстанавливаем уже сломанные установки —
+  // снимаем старый SW/кэши и, если страница СЕЙЧАС под его контролем, один раз
+  // перезагружаемся уже без него (флаг в sessionStorage страхует от петли).
+  if (isTauri()) {
+    await purgeServiceWorkers();
+    try {
+      if (navigator.serviceWorker?.controller && !sessionStorage.getItem("__sw_purged")) {
+        sessionStorage.setItem("__sw_purged", "1");
+        window.location.reload();
+      }
+    } catch { /* sessionStorage/reload недоступны — игнорируем */ }
+    return null;
+  }
   if (!("serviceWorker" in navigator)) {
     return null;
   }
