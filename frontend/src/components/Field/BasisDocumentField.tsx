@@ -145,9 +145,11 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   // подтягиваем документ-основание по uuid и собираем корректную метку.
   const [resolvedLabel, setResolvedLabel] = useState<string | undefined>(undefined);
   useEffect(() => {
-    // Канонична только метка с «№…» — метку с «ID {n}» перерезолвим по документу-
-    // основанию, чтобы показать номер (№), если он присвоен.
-    const isCanonical = !!basisDocumentLabel && /:\s*№\S+/.test(basisDocumentLabel);
+    // Каноничны ФИНАЛЬНЫЕ формы метки — «№…» и «б/н» (docNoNumber). Перерезолвим
+    // только легаси-метку с «ID {n}» (данные генератора/старые панели), чтобы
+    // показать № или «б/н». Иначе «б/н»-документ (без номера) перезапрашивался при
+    // каждом рендере и метка «мигала» — лишний эффект.
+    const isCanonical = !!basisDocumentLabel && !/:\s*ID\s/.test(basisDocumentLabel);
     const type = basisDocumentType || "";
     const endpoint = allowedTypes.find((t) => t.type === type)?.endpoint ?? docTypeToEndpoint(type);
     if (!basisDocumentUuid || !type || !endpoint || isCanonical) {
@@ -155,7 +157,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
       return;
     }
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const resp = await api.get<any>(`${endpoint}/${basisDocumentUuid}`);
         const item = resp?.item ?? resp;

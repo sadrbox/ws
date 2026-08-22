@@ -273,7 +273,8 @@
 
 .FieldActions {
 	box-sizing: content-box;
-	margin-right: 4px;
+	margin-left: 1px;
+	margin-right: 3px;
 	// background-color: $color60;
 	// Действия поля видны ВСЕГДА. Раньше они показывались только по :focus-within —
 	// пользователь не знал, что у поля вообще есть кнопки («Открыть», «Список»,

@@ -408,7 +408,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       const session = persistedSessionRef.current;
       // Ссылка на панель (?open=…) — открыть конкретную форму/справочник/файл.
       const linked = readPaneLink(window.location.search);

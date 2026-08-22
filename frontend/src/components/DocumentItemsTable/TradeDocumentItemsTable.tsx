@@ -90,8 +90,6 @@ export interface TradeDocumentItemsTableProps {
   organizationUuid?: string | null;
   /** Дата документа (ISO YYYY-MM-DD) — для исторического подбора настроек. */
   documentDate?: string | null;
-  /** Заголовок-префикс для подвкладок строк. */
-  parentLabel?: string;
   disabled?: boolean;
   onTotalChange?: (total: number, items?: TDataItem[]) => void;
   deferRemoteChanges?: boolean;

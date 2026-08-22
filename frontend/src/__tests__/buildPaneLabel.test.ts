@@ -149,14 +149,22 @@ describe("makePaneLabelFromData", () => {
 		).toBe(makeDocLabel("SalesList", "fallback", doc));
 	});
 
-	it("без номера — прежний вид с ID", () => {
+	// Документ без номера (есть дата) → «б/н», НЕ ID — совпадает с makeDocLabel,
+	// чтобы заголовок панели/поле «Основание» не мигали ID→б/н после загрузки формы.
+	it("документ без номера (есть дата) → «б/н», не ID", () => {
+		const doc = { id: 965, uuid: "u", date: "2026-07-15" };
 		expect(
-			makePaneLabelFromData(
-				"SalesList",
-				"fallback",
-				{ id: 965, uuid: "u" },
-				"15.07.2026",
-			),
-		).toBe("Реализация ТМЗ и услуг: ID 965 - 15.07.2026");
+			makePaneLabelFromData("SalesList", "fallback", doc, "15.07.2026"),
+		).toBe("Реализация ТМЗ и услуг: б/н - 15.07.2026");
+		expect(
+			makePaneLabelFromData("SalesList", "fallback", doc, "15.07.2026"),
+		).toBe(makeDocLabel("SalesList", "fallback", doc));
+	});
+
+	// Не-документ (нет number/date: строка табличной части, лукап) — прежний вид с ID.
+	it("запись без признаков документа — прежний вид с ID", () => {
+		expect(
+			makePaneLabelFromData("SaleItemsList", "fallback", { id: 5, uuid: "u", name: "Альфа" }),
+		).toBe("Товары реализации: ID 5 - Альфа");
 	});
 });

@@ -63,7 +63,7 @@ const FileViewPane: FC<FileViewPaneProps & Record<string, unknown>> = (props) =>
     let cancelled = false;
     let revoke: string | undefined;
     setState({ kind: "loading" });
-    (async () => {
+    void (async () => {
       try {
         const res = await apiClient.get(`/files/download/${uuid}`, { responseType: "arraybuffer" });
         if (cancelled) return;

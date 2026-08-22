@@ -38,8 +38,8 @@ import { useFormNotices } from "src/hooks/useFormNotices";
 const MODEL_ENDPOINT = "products";
 const LIST_NAME = "ProductsList";
 
-interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; trackSerialNumbers: boolean; trackBatches: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; tnvedCode: string; truOriginCode: string; catalogTruId: string; }
-const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, trackSerialNumbers: false, trackBatches: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "", tnvedCode: "", truOriginCode: "", catalogTruId: "" };
+interface TFields { id?: number; uuid?: string; name: string; sku: string; barcode: string; isService: boolean; assetKind: string; trackSerialNumbers: boolean; trackBatches: boolean; brandUuid: string; brandName: string; unitOfMeasureUuid: string; unitOfMeasureName: string; tnvedCode: string; truOriginCode: string; catalogTruId: string; }
+const DEFAULT_FIELDS: TFields = { name: "", sku: "", barcode: "", isService: false, assetKind: "goods", trackSerialNumbers: false, trackBatches: false, brandUuid: "", brandName: "", unitOfMeasureUuid: "", unitOfMeasureName: "", tnvedCode: "", truOriginCode: "", catalogTruId: "" };
 
 
 /** Серверная запись — вход mapServerToForm (T3). */
@@ -87,6 +87,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       ...(prev ?? DEFAULT_FIELDS), ...d,
       name: d.name ?? "", sku: d.sku ?? "", barcode: d.barcode ?? "",
       isService: d.isService === true,
+      assetKind: (d as { assetKind?: string | null }).assetKind ?? "goods",
       trackSerialNumbers: d.trackSerialNumbers === true,
       trackBatches: d.trackBatches === true,
       brandUuid: d.brandUuid ?? "", brandName: d.brand?.name ?? "",
@@ -98,7 +99,7 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       // price НЕ отправляем: Product.price — денормализованная цена, автоматически
       // пересчитывается из вкладки «Цены» (services/productPricing.js). Источник
       // истины — «Цены», ручной ввод убран как избыточный.
-      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, trackSerialNumbers: fd.trackSerialNumbers === true, trackBatches: fd.trackBatches === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null, tnvedCode: fd.tnvedCode?.trim() || null, truOriginCode: fd.truOriginCode || null, catalogTruId: fd.catalogTruId?.trim() || null };
+      return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, assetKind: fd.assetKind || "goods", trackSerialNumbers: fd.trackSerialNumbers === true, trackBatches: fd.trackBatches === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null, tnvedCode: fd.tnvedCode?.trim() || null, truOriginCode: fd.truOriginCode || null, catalogTruId: fd.catalogTruId?.trim() || null };
     },
     buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
     afterSave: async (saved) => {
@@ -197,6 +198,18 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
                 <Group className={styles.w1of2}>
                   <FieldToggle label={translate("trackBatches")} value={form.fields.trackBatches} disabled={form.isLoading}
                     onChange={(v) => { form.setField("trackBatches", v); void warnTrackingToggle("batch", v); }} />
+                </Group>
+              </GroupRow>
+              {/* Вид актива (Трек A): при импорте вх. ЭСФ строки-ОС идут в ТЧ «Основные средства». */}
+              <GroupRow>
+                <Group className={styles.w1of2}>
+                  <FieldSelect label={translate("assetKind")} name={`${form.formUid}_assetKind`} value={form.fields.assetKind} disabled={form.isLoading}
+                    onChange={(e) => form.setField("assetKind", e.target.value)}
+                    options={[
+                      { value: "goods", label: translate("assetKindGoods") },
+                      { value: "material", label: translate("assetKindMaterial") },
+                      { value: "fixed_asset", label: translate("assetKindFixedAsset") },
+                    ]} />
                 </Group>
               </GroupRow>
               {/* Реквизиты для гос-документов (СНТ): ТН ВЭД ЕАЭС + признак происхождения ТРУ */}

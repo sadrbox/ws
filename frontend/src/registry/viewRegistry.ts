@@ -16,10 +16,40 @@
  */
 import React from "react";
 
+/** Сбой загрузки динамического чанка (устаревший модуль после перезапуска Vite-dev
+ * или деплоя прод-сборки, пока вкладка открыта). Сообщение зависит от браузера. */
+function isChunkLoadError(err: unknown): boolean {
+	const msg = String((err as { message?: string })?.message ?? err ?? "");
+	return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(msg);
+}
+
+/**
+ * Ретрай ленивого импорта. При устаревшем чанке (Vite-dev перезапустился / прод
+ * задеплоил новую сборку, а вкладка держит старые URL) повторяем import один раз,
+ * затем — однократная перезагрузка страницы (флаг в sessionStorage от петли,
+ * сбрасывается при успешной загрузке). Иначе ошибка уходит в ErrorBoundary.
+ */
+function retryImport<T>(loader: () => Promise<T>, name: string): Promise<T> {
+	const key = `__lazy_reloaded_${name}`;
+	const clear = (m: T): T => { try { sessionStorage.removeItem(key); } catch { /* noop */ } return m; };
+	return loader().then(clear).catch((err: unknown) => {
+		if (!isChunkLoadError(err)) throw err;
+		return loader().then(clear).catch((err2: unknown) => {
+			try {
+				if (!sessionStorage.getItem(key)) {
+					sessionStorage.setItem(key, "1");
+					window.location.reload();
+				}
+			} catch { /* sessionStorage недоступен — просто пробрасываем ошибку */ }
+			throw err2;
+		});
+	});
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function lazyView(name: string, loader: () => Promise<{ default: React.ComponentType<any> }>): React.FC<any> {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const C = React.lazy(loader) as unknown as React.FC<any> & { displayName?: string };
+	const C = React.lazy(() => retryImport(loader, name)) as unknown as React.FC<any> & { displayName?: string };
 	C.displayName = name;
 	return C;
 }

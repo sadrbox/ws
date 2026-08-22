@@ -314,7 +314,6 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
             hasTaxes={false} hasPricing={false} showStockCountColumns
             organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
             disabled={form.isLoading} deferRemoteChanges
-            parentLabel={`${translate("StockCountsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
             key={itemsTableKey}
             initialPendingRows={items.pending}
             onItemsChange={items.onItemsChange}

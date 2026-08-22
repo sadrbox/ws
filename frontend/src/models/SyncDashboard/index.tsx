@@ -557,8 +557,8 @@ const SyncDashboard: FC<Partial<TPane>> = (paneProps) => {
     const uniqId = paneProps.uniqId;
     if (!uniqId) return;
     const reload = () => {
-      refreshStats();
-      if (isOnline && !isSyncing) syncNow();
+      void refreshStats();
+      if (isOnline && !isSyncing) void syncNow();
     };
     formStoreAPI.register(uniqId, { reload });
     return () => formStoreAPI.unregister(uniqId);

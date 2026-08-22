@@ -129,7 +129,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
   useEffect(() => {
     if (!fOwnerType || !fOwnerUuid || fOwnerName) return;
     let alive = true;
-    import("src/utils/resolveOwnerName").then(async ({ resolveOwnerName }) => {
+    void import("src/utils/resolveOwnerName").then(async ({ resolveOwnerName }) => {
       const name = await resolveOwnerName(fOwnerType, fOwnerUuid);
       if (alive && name) form.setField("ownerName", name);
     });

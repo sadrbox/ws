@@ -600,7 +600,7 @@ const Table: FC<TableProps> = memo((props) => {
     if (e.key === 'Delete') {
       e.preventDefault();
       e.stopPropagation();
-      handleDeleteClick();
+      void handleDeleteClick();
       return;
     }
     // ── Пробел: переключить выделение активной строки ───────────────────────

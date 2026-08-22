@@ -1,0 +1,74 @@
+# Ворота качества: тесты + типы + линт на каждый push/PR.
+#
+# До этого CI собирал только Windows-бандл (desktop-windows.yml) — регрессы в тестах,
+# типах и линте проходили незамеченными (см. аудит, эпик E13/Q1). Здесь:
+#   • frontend — tsc (strict) + vitest (блокирующие) + eslint-ТРЕЩОТКА (блокирующая:
+#     падает, если ошибок стало больше .eslint-baseline; полный долг ~1656 гасится
+#     монотонно вниз — новый код обязан быть чистым, см. Q2/Q1 в ROADMAP E13);
+#   • backend  — prisma migrate + seed плана счетов + node --test против Postgres-сервиса.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: TypeScript (tsc -b)
+        run: npx tsc -b
+      - name: Unit tests (vitest)
+        run: npx vitest run
+      - name: ESLint ratchet (без роста ошибок vs .eslint-baseline)
+        run: npm run lint:ratchet
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: buhprof_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/buhprof_test
+      JWT_SECRET: ci_test_secret_ci_test_secret_ci_test_secret_0123456789
+      JWT_EXPIRES_IN: 24h
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Prisma migrate + generate
+        run: npx prisma migrate deploy && npx prisma generate
+      - name: Seed (план счетов/субконто — нужен тестам проводок)
+        run: node prisma/seed-accounting.js
+      - name: Tests (node --test)
+        run: npm test

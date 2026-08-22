@@ -145,7 +145,7 @@ const DocumentNumberSettings: FC = () => {
         await api.put(`document-number-settings/${c.docType}`, { prefix: String(c.prefix ?? "").trim(), enabled: true, organizationUuid: orgKey });
       }
       showToast(translate("saved"), "success");
-      qc.invalidateQueries({ queryKey: QKEY(orgKey) });
+      void qc.invalidateQueries({ queryKey: QKEY(orgKey) });
     } catch (e: unknown) {
       const status = (e as RequestError)?.response?.status as number | undefined;
       const msg = (e as RequestError)?.response?.data?.message || translate("numberingSaveError");
@@ -164,7 +164,7 @@ const DocumentNumberSettings: FC = () => {
       await api.delete(`document-number-settings/${docType}`, {
         params: orgKey ? { organizationUuid: orgKey } : undefined,
       });
-      qc.invalidateQueries({ queryKey: QKEY(orgKey) });
+      void qc.invalidateQueries({ queryKey: QKEY(orgKey) });
       showToast(translate("resetDone"), "success");
     } catch {
       /* noop */
@@ -185,7 +185,7 @@ const DocumentNumberSettings: FC = () => {
         if (!r.isOverridden) continue;
         await api.delete(`document-number-settings/${r.docType}`, { params: orgKey ? { organizationUuid: orgKey } : undefined });
       }
-      qc.invalidateQueries({ queryKey: QKEY(orgKey) });
+      void qc.invalidateQueries({ queryKey: QKEY(orgKey) });
       showToast(translate("resetDone"), "success");
     } catch (e: unknown) {
       const status = (e as RequestError)?.response?.status as number | undefined;

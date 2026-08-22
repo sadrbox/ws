@@ -277,7 +277,6 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
           serialMode="issue" serialDocType="write_off" batchMode="issue" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
-          parentLabel={`${translate("WriteOffsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           initialPendingRows={items.pending.length > 0 ? items.pending : basisItems}
           onItemsChange={items.onItemsChange}
           onAllItemsChange={(rows) => { allItemsRef.current = rows; }}

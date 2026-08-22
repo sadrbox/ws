@@ -807,7 +807,6 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             fieldsReadOnly={basisLock}
             deferRemoteChanges
             onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
-            parentLabel={`${cfg.formLabel}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
             key={itemsTableKey}
             initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
             onTotalChange={handleTotalChange}

@@ -81,7 +81,6 @@ export interface TradeDocConfig {
   itemsTableLabel: string;          // подпись таблицы в useFormStore
   itemsTabLabelKey?: string;        // i18-ключ вкладки позиций (default "SaleItemsList")
   hasFixedAssets?: boolean;         // добавить вкладку «Основные средства» (только Поступление)
-  parentLabelListKey: string;       // i18-ключ для parentLabel позиций ("PurchasesList")
   accessPermissionModel: string;     // "Purchase"
   docType: DocumentType;            // "purchase" (validate/scope/chain/entries)
   columnsJson: unknown;
@@ -636,7 +635,6 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
             priceTypeUuid={form.fields.priceTypeUuid}
             disabled={form.isLoading} deferRemoteChanges
             onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
-            parentLabel={`${translate(cfg.parentLabelListKey)}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
             key={itemsTableKey}
             initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
             onTotalChange={handleTotalChange}

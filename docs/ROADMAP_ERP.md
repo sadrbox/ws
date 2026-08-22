@@ -158,14 +158,21 @@ backend-node` — только по команде пользователя.
   Sale для ЭАВР — только `awpStatus/awpId/...`, поля «связанный АВР» НЕТ (маппер цепочку не
   строит). Добавить `awpRelatedUuid` (+ в маппер, как в ЭСФ). Аналогично `sntRelatedUuid` для
   `RETURNED_SNT`/`FIXED_SNT`.
-- **T7.13 (H1) Импорт входящих СНТ/ЭАВР с find-or-create** — ❌ (иначе, чем в 1C). Сейчас
-  `/snt/incoming`, `/awp/incoming` зовут только `queryUpdate` → список заголовков; тела не
-  тянутся, локальные документы НЕ создаются → проблемы «ссылка навсегда null» ещё нет, потому что
-  импорта нет. Построить импорт (fetch тела по id → парсинг → создание документа) и СРАЗУ
-  заложить find-or-create `Counterparty` по БИН / `Product` по `tnvedCode`/наименованию.
-- **T7.14 (H2) Общий резолвер справочников** — ❌. Сервис `resolveCounterpartyByBin`/
-  `resolveProduct` с кэшем, переиспользуемый всеми тремя импортами одной сделки (ЭСФ+СНТ+ЭАВР),
-  чтобы не плодить дубли справочников между связанными документами.
+- **T7.13 (H1) Импорт входящего ЭСФ → Поступление с find-or-create** — ⏳ BACKEND ГОТОВ
+  (ОС Трек B, 2026-08-15): модели `EsfInbound`/`EsfInboundLine`, роутер `esf-inbounds` (список/
+  деталь/ручное создание + `POST /:id/to-purchase`), сервис `services/esf/inboundToPurchase.js`
+  (`buildPurchaseFromInbound`: разнос строк ТМЗ/ОС → Purchase + purchaseItems +
+  purchaseFixedAssetItems; суммы ОС уже на 2410). ОСТАЛОСЬ: живой pull строк из ИС ЭСФ
+  (`queryInvoiceById` даёт только статусы — нужен парсер полного тела + сессия, под T7.1);
+  UI-мастер разнесения (пока через API/overrides). Импорт СНТ/ЭАВР — по этому же паттерну.
+- **T7.14 (H2) Общий резолвер справочников** — ⏳ ЧАСТИЧНО (2026-08-15):
+  `resolveCounterpartyByBin`/`resolveOrCreateProduct`/`resolveOrCreateFixedAsset` в
+  `inboundToPurchase.js` + память маппинга `EsfLineMapping`. Осталось: единый резолвер с общим
+  кэшем для всех трёх импортов одной сделки (ЭСФ+СНТ+ЭАВР).
+- **ОС Трек A — классификация номенклатуры** — ✅ (2026-08-15): `Product.assetKind`
+  (goods|material|fixed_asset) + селектор в карточке; `EsfLineMapping` (память) +
+  `suggestAssetKind` (эвристика по цене) в `services/esf/classification.js`. D1 разрешён: overrides
+  → строка → память → подсказка. Тесты esfClassification(5)+esfInboundToPurchase(4).
 - **T7.G1 (G) NCALayer в СНТ/ЭАВР** — ✅ подключён (исх. подпись + вх. CONFIRM/DECLINE). Остаётся
   подтвердить приём подписи контуром в рамках T7.1b/T7.1c.
 
@@ -199,6 +206,42 @@ backend-node` — только по команде пользователя.
 - **T12.2 Покрытие тестами**: юниты сервисов/мапперов (по образцу `esfInvoiceMapper.test.js`),
   мультиарендность/права (`test-multitenancy.js`).
 - **T12.3 Рефактор по SOLID/DRY**: вынести повторы (фабрики уже частично); убрать мёртвый код.
+
+### E13 — Технический долг / качество (по аудиту 2026-08-15)
+Замеры на момент аудита: backend-тесты 275/275 ✅, frontend-тесты 390/390 (~14% файлов) ✅,
+`tsc` strict ✅, **ESLint frontend 1668 ошибок** (не в CI), 281 источник `any`, CI гонял только
+Windows-бандл. Статус: ✅ сделано · ⏳ в работе · ❌ бэклог.
+- **Q1 ✅ Ворота CI** (`.github/workflows/ci.yml`, 2026-08-15): frontend `tsc -b`+`vitest` (блок.) +
+  `eslint` (non-blocking baseline); backend `prisma migrate deploy`+`seed-accounting`+`node --test`
+  на сервисе Postgres. Первый прогон на GitHub проверить (окружение не воспроизводилось локально).
+- **Q4 ✅ `no-floating-promises`** (16 мест, 2026-08-15): `void`/`.catch` в app/index, BasisDocumentField,
+  Table (Delete), Contacts (dynamic import), DocumentNumberSettings, OrganizationAccountingSettings,
+  Files/FileView*Pane, SyncDashboard, UserDefaults. Убирает тихие необработанные отклонения.
+- **Q12 ✅ Устойчивость ленивой загрузки** (`registry/viewRegistry.ts`, 2026-08-15): `retryImport` в
+  `lazyView` — при «Failed to fetch dynamically imported module» (перезапуск Vite-dev / устаревший
+  чанк после деплоя) повтор import + однократный reload (флаг в sessionStorage). Лечит наблюдаемые
+  на aleppo.kz сбои `/src/models/*.tsx`.
+- **Q2 ⏳ Тип-безопасность (каскад any)**: 281 источник → ~1400 eslint-ошибок (`no-unsafe-*`,
+  `no-explicit-any`). Чинить В ИСТОЧНИКАХ помодульно, мерить eslint после каждого (см. [[project_type_safety_6]]).
+  Крупная фазовая. **Трещотка включена** (2026-08-15): `frontend/.eslint-baseline`=1656 +
+  `scripts/eslint-ratchet.mjs` + шаг CI `lint:ratchet` (блокирует РОСТ ошибок; при снижении —
+  опустить baseline). Так долг гасится монотонно вниз, новый код обязан быть чистым.
+- **Q3 ❌ `react-hooks/exhaustive-deps` — 116**: риск устаревших замыканий; каждый разобрать
+  (дописать deps или подавить с обоснованием).
+- **Q5 ❌ `no-base-to-string` — 96**: объекты в `String(...)`/шаблонах → «[object Object]»; защитить
+  построители подписей (`resolveOwnerName`, `paneLink`, `buildPaneLabel`, `renderAuditCell`).
+- **Q6 ✅ Мёртвый код** (2026-08-15): удалён `backend/api/v1_old.js` (0 ссылок). Заодно вычищен
+  мёртвый проп `parentLabel` (объявлен в `TradeDocumentItemsTable`, не рендерился) + 8 call-site и
+  осиротевший конфиг `parentLabelListKey` (3 конфига + интерфейс фабрики).
+- **Q7 ❌ Строгость неиспользуемого**: убрать 33 `no-unused-vars`, затем вернуть `noUnusedLocals/
+  noUnusedParameters:true` в tsconfig (сейчас отключены).
+- **Q8 ✅ Хардкод конфига** (2026-08-15): `LOCAL_API_URL` в `services/api/client.ts` теперь
+  `import.meta.env.VITE_LOCAL_API_URL || <прежний фолбэк>`.
+- **Q9 ❌ Декомпозиция мега-модулей**: `hooks/useFormStore.ts` 2261, `components/UI/index.tsx` 1394,
+  `components/Field/index.tsx` 1148, `components/SubTable/index.tsx` 990 (паттерн [[reference_table_decomposition]]).
+- **Q10 ❌ ESLint для backend**: сейчас отсутствует; flat-config + скрипт `lint`.
+- **Q11 ❌ Покрытие тестами** (пересекается с T12.2): `esf/snt/awp` мапперы, `documentChain`,
+  `recomputeCosting`, `useFormStore`.
 
 ---
 

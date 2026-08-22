@@ -40,7 +40,7 @@ const FileViewerPane: FC<Record<string, unknown>> = (props) => {
     const meta = data.ownerType ? OWNER_META[data.ownerType] : undefined;
     if (!meta || !data.ownerUuid) { setOwnerLabel(null); return; }
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const res = await apiClient.get(`/${meta.endpoint}/${data.ownerUuid}`);
         if (cancelled) return;
@@ -63,7 +63,7 @@ const FileViewerPane: FC<Record<string, unknown>> = (props) => {
     const { ownerType, ownerUuid } = data;
     if (!ownerType || !ownerUuid) return;
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const res = await apiClient.get(
           `/files?ownerType=${encodeURIComponent(ownerType)}&ownerUuid=${encodeURIComponent(ownerUuid)}`,

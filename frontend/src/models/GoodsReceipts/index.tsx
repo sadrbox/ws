@@ -264,7 +264,6 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
           serialMode="receipt" serialDocType="goods_receipt" batchMode="receipt" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
-          parentLabel={`${translate("GoodsReceiptsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           initialPendingRows={items.pending.length > 0 ? items.pending : basisItems}
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}

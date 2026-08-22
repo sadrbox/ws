@@ -322,7 +322,6 @@ const ImportDeclarationsForm: FC<Partial<TPane>> = (paneProps) => {
           serialMode="receipt" serialDocType="import_declaration" batchMode="receipt" warehouseUuid={form.fields.warehouseUuid}
           organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
           disabled={form.isLoading} deferRemoteChanges
-          parentLabel={`${translate("ImportDeclarationsList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           initialPendingRows={items.pending}
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}

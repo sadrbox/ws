@@ -21,7 +21,6 @@ const { Form: PurchasesForm, List: PurchasesList } = createTradeDocForm({
   formDisplayName: "PurchasesForm",
   itemsComponentName: "PurchaseItemsList_part",
   itemsTableLabel: "Товары поступления",
-  parentLabelListKey: "PurchasesList",
   accessPermissionModel: "Purchase",
   docType: "purchase",
   hasFixedAssets: true,

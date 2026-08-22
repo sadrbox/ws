@@ -847,7 +847,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           disabled={form.isLoading}
           deferRemoteChanges
           onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
-          parentLabel={`${translate("SalesList")}: ID${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           key={itemsTableKey}
           initialPendingRows={itemsTableKey > 0 ? basisItems : (saleItems.pending.length > 0 ? saleItems.pending : basisItems)}
           onTotalChange={handleTotalChange}

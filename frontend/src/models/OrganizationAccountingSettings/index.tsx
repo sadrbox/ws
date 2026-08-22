@@ -579,7 +579,7 @@ const OrganizationAccountingSettingsList: FC<{
   // увидел свежие настройки сразу.
   const qc = useQueryClient();
   useEffect(() => {
-    qc.invalidateQueries({
+    void qc.invalidateQueries({
       queryKey: ["organization-accounting-settings", "active"],
     });
   }, [qc]);

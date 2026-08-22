@@ -202,7 +202,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 // ── POST ────────────────────────────────────────────────────────────────
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { name, sku, barcode, brandUuid, unitOfMeasureUuid, isService, trackSerialNumbers, trackBatches, tnvedCode, truOriginCode, catalogTruId } = req.body;
+		const { name, sku, barcode, brandUuid, unitOfMeasureUuid, isService, trackSerialNumbers, trackBatches, tnvedCode, truOriginCode, catalogTruId, assetKind } = req.body;
 		if (!name?.trim())
 			return res
 				.status(400)
@@ -226,6 +226,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				tnvedCode: tnvedCode?.trim() || null,
 				truOriginCode: truOriginCode?.trim() || null,
 				catalogTruId: catalogTruId?.trim() || null,
+				assetKind: ["goods", "material", "fixed_asset"].includes(assetKind) ? assetKind : "goods",
 				brandUuid: brandUuid || null,
 				unitOfMeasureUuid: unitOfMeasureUuid || null,
 				organizationUuid: req.user?.organizationUuid ?? null,
@@ -253,6 +254,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;
 		}
 		if (req.body.isService !== undefined) data.isService = req.body.isService === true;
+			if (req.body.assetKind !== undefined) data.assetKind = ["goods", "material", "fixed_asset"].includes(req.body.assetKind) ? req.body.assetKind : "goods";
 		if (req.body.trackSerialNumbers !== undefined) data.trackSerialNumbers = req.body.trackSerialNumbers === true;
 		if (req.body.trackBatches !== undefined) data.trackBatches = req.body.trackBatches === true;
 		const existing = await prisma[MODEL].findUnique({

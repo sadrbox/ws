@@ -87,9 +87,9 @@ const UserDefaultsTable: FC<UserDefaultsTableProps> = ({
             options={availableOptions}
             value={(row.valueType as string) ?? ""}
             onChange={e => {
-              ctx.handleInlineChange(row, "valueType", e.target.value);
-              ctx.handleInlineChange(row, "valueUuid", "");
-              ctx.handleInlineChange(row, "valueName", "");
+              void ctx.handleInlineChange(row, "valueType", e.target.value);
+              void ctx.handleInlineChange(row, "valueUuid", "");
+              void ctx.handleInlineChange(row, "valueName", "");
             }}
             disabled={ctx.disabled}
             variant="table"

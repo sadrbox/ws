@@ -1115,6 +1115,10 @@ model Product {
   // Хранит код позиции ГС ВС; см. классификатор type="gsvs".
   catalogTruId             String?
   isService                Boolean                   @default(false)
+  /// Вид актива для учёта ОС/материалов (Трек A): goods (товар) | material
+  /// (материал) | fixed_asset (основное средство). При импорте входящего ЭСФ
+  /// строки с assetKind=fixed_asset идут в ТЧ «Основные средства» → счёт 2410.
+  assetKind                String                    @default("goods")
   /// Учёт по серийным номерам (T6.1): при приёмке серии вводятся, при выбытии
   /// списываются. Кол-во строки документа должно совпадать с числом серий.
   trackSerialNumbers       Boolean                   @default(false)
@@ -3087,4 +3091,78 @@ model PurchaseFixedAssetItem {
   @@index([fixedAssetUuid])
   @@index([sourceRowId])
   @@map("purchase_fixed_asset_items")
+}
+
+// ─── ЭСФ: классификация номенклатуры и импорт входящих (Треки A/B) ────────────
+
+// Память классификации строк ЭСФ (Трек A2): по поставщику + ТН ВЭД + наименованию
+// запоминаем, как строка была разнесена (товар/материал/ОС) и на какую карточку
+// сопоставлена. При следующем импорте от того же поставщика подставляется авто.
+// matchKey = `${bin}|${tnved}|${nameKey}|${org}` — единый уникальный ключ для upsert.
+model EsfLineMapping {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  matchKey         String    @unique
+  supplierBin      String
+  tnvedCode        String?
+  nameKey          String
+  assetKind        String    @default("goods") // goods | material | fixed_asset
+  productUuid      String? // сопоставленная номенклатура (ТМЗ/материал)
+  fixedAssetUuid   String? // сопоставленное основное средство
+  organizationUuid String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+
+  @@index([supplierBin])
+  @@index([organizationUuid])
+  @@map("esf_line_mappings")
+}
+
+// Входящий ЭСФ (Трек B1): шапка + строки, сохранённые локально для превращения в
+// Поступление. Наполняется из ИС ЭСФ (живой pull строк — под T7.1) либо вручную.
+model EsfInbound {
+  id                    Int              @id @default(autoincrement())
+  uuid                  String           @unique @default(uuid())
+  esfId                 String? // id в ИС ЭСФ
+  registrationNumber    String?
+  invoiceDate           DateTime?
+  supplierBin           String?
+  supplierName          String?
+  totalAmount           Decimal          @default(0) @db.Decimal(18, 2)
+  status                String           @default("received") // received | processed
+  processedPurchaseUuid String? // созданное Поступление (после разнесения)
+  organizationUuid      String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @default(now()) @updatedAt
+  deletedAt             DateTime?
+  lines                 EsfInboundLine[]
+
+  @@index([organizationUuid])
+  @@index([supplierBin])
+  @@index([status])
+  @@index([updatedAt])
+  @@map("esf_inbounds")
+}
+
+model EsfInboundLine {
+  id               Int        @id @default(autoincrement())
+  uuid             String     @unique @default(uuid())
+  inboundUuid      String
+  lineNumber       Int        @default(0)
+  name             String
+  tnvedCode        String?
+  catalogTruId     String?
+  unitCode         String?
+  quantity         Decimal    @default(0) @db.Decimal(18, 4)
+  price            Decimal    @default(0) @db.Decimal(18, 2)
+  amount           Decimal    @default(0) @db.Decimal(18, 2) // с НДС
+  amountWithoutVat Decimal    @default(0) @db.Decimal(18, 2)
+  vatRate          Decimal    @default(12) @db.Decimal(5, 2)
+  vatAmount        Decimal    @default(0) @db.Decimal(18, 2)
+  // Классификация строки (мастер разнесения): goods | material | fixed_asset.
+  assetKind        String     @default("goods")
+  inbound          EsfInbound @relation(fields: [inboundUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([inboundUuid])
+  @@map("esf_inbound_lines")
 }

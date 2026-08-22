@@ -97,9 +97,16 @@ export function makePaneLabelFromData(
 ): string {
 	const name = resolveFormName(listName, fallback);
 	if (!data?.uuid && !data?.id) return `${name}: ${translate("new")}`;
-	// Генерик-функция (документы И не-документы: строки табличных частей, лукапы) —
-	// для не-документов id остаётся идентификатором; у документов номер всегда есть.
-	const ref = data.number ? `№ ${data.number}` : `ID ${data.id ?? "?"}`;
+	// Генерик-функция (документы И не-документы: строки табличных частей, лукапы).
+	// Признак документа — как в describeRow: есть number или date. У документа без
+	// номера показываем «б/н» (совпадает с makeDocLabel — метка не «прыгает» ID→б/н
+	// после загрузки формы); у не-документов id остаётся идентификатором.
+	const isDocument = data.number != null || data.date != null;
+	const ref = data.number
+		? `№ ${data.number}`
+		: isDocument
+			? translate("docNoNumber")
+			: `ID ${data.id ?? "?"}`;
 	const detail = displayValue ?? data.name;
 	return detail ? `${name}: ${ref} - ${detail}` : `${name}: ${ref}`;
 }

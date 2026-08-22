@@ -255,7 +255,6 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
           serialMode="transfer" serialDocType="inventory_transfer" batchMode="issue"
           warehouseUuid={form.fields.fromWarehouseUuid} toWarehouseUuid={form.fields.toWarehouseUuid}
           disabled={form.isLoading} deferRemoteChanges
-          parentLabel={`${translate("InventoryTransfersList")}: ID ${form.fields.id ?? "?"}${form.fields.date ? " - " + getFormatDateOnly(String(form.fields.date)) : ""}`}
           initialPendingRows={items.pending}
           onTotalChange={handleTotalChange}
           onItemsChange={items.onItemsChange}

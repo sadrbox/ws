@@ -7,7 +7,10 @@ import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from "../auth";
 import { isNetworkError as isNetworkLikeError } from "../networkUtils";
 import { showToast } from "src/components/UIToast";
 
-const LOCAL_API_URL = "http://192.168.1.112:3000/api/v1";
+// Локальный API для разработки по LAN/IP. Хост конфигурируется через env
+// (VITE_LOCAL_API_URL), чтобы не хардкодить конкретный адрес рабочей станции;
+// фолбэк оставлен для совместимости с прежним окружением.
+const LOCAL_API_URL = import.meta.env.VITE_LOCAL_API_URL || "http://192.168.1.112:3000/api/v1";
 const REMOTE_API_URL = "https://api.aleppo.kz/api/v1";
 
 /** Десктоп-клиент (Tauri): фронт зашит в бинарник, страница грузится с tauri.localhost. */
