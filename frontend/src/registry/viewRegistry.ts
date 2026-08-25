@@ -24,26 +24,32 @@ function isChunkLoadError(err: unknown): boolean {
 }
 
 /**
- * Ретрай ленивого импорта. При устаревшем чанке (Vite-dev перезапустился / прод
- * задеплоил новую сборку, а вкладка держит старые URL) повторяем import один раз,
- * затем — однократная перезагрузка страницы (флаг в sessionStorage от петли,
- * сбрасывается при успешной загрузке). Иначе ошибка уходит в ErrorBoundary.
+ * Ретрай ленивого импорта. При устаревшем чанке (Vite-dev дозревает после HMR/
+ * перезапуска, или прод задеплоил новую сборку, а вкладка держит старые URL)
+ * повторяем import НЕСКОЛЬКО раз с нарастающей задержкой — даём dev-серверу
+ * восстановиться, чтобы кратковременная недоступность самолечилась и НЕ доходила
+ * до ErrorBoundary. Если и это не помогло — однократная перезагрузка страницы
+ * (флаг в sessionStorage от петли, сбрасывается при успехе). Иначе — в ErrorBoundary.
  */
 function retryImport<T>(loader: () => Promise<T>, name: string): Promise<T> {
 	const key = `__lazy_reloaded_${name}`;
 	const clear = (m: T): T => { try { sessionStorage.removeItem(key); } catch { /* noop */ } return m; };
-	return loader().then(clear).catch((err: unknown) => {
-		if (!isChunkLoadError(err)) throw err;
-		return loader().then(clear).catch((err2: unknown) => {
+	const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+	// n оставшихся ретраев; задержки перед повтором: 250, 500, 750 мс (~1.5с суммарно).
+	const attempt = (n: number): Promise<T> =>
+		loader().then(clear).catch((err: unknown) => {
+			if (!isChunkLoadError(err)) throw err;
+			if (n > 0) return delay((4 - n) * 250).then(() => attempt(n - 1));
+			// Ретраи исчерпаны → однократная перезагрузка (последняя страховка).
 			try {
 				if (!sessionStorage.getItem(key)) {
 					sessionStorage.setItem(key, "1");
 					window.location.reload();
 				}
-			} catch { /* sessionStorage недоступен — просто пробрасываем ошибку */ }
-			throw err2;
+			} catch { /* sessionStorage недоступен — пробрасываем ошибку */ }
+			throw err;
 		});
-	});
+	return attempt(3);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

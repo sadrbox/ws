@@ -59,14 +59,25 @@ export async function checkStockAvailability(
 	}
 }
 
-/** RU-сообщение со списком дефицитов для показа пользователю. */
+/** RU-сообщение со списком дефицитов: сгруппировано по складу, упорядочено по
+ *  наименованию товара. Заголовок — первой строкой (без маркера), позиции — с «•». */
 export function formatStockShortages(shortages: StockShortage[]): string {
 	if (!shortages.length) return "";
-	const lines = shortages.map(
-		(s) =>
-			`• ${s.productName || s.productUuid || "товар"}` +
-			`${s.warehouseName ? ` (${s.warehouseName})` : ""}: ` +
-			`нужно ${s.requested}, доступно ${s.available} (не хватает ${s.deficit})`,
-	);
+	// Группировка по складу.
+	const byWarehouse = new Map<string, StockShortage[]>();
+	for (const s of shortages) {
+		const wh = s.warehouseName || "";
+		const arr = byWarehouse.get(wh);
+		if (arr) arr.push(s); else byWarehouse.set(wh, [s]);
+	}
+	const multiWarehouse = byWarehouse.size > 1;
+	const lines: string[] = [];
+	for (const [wh, list] of byWarehouse) {
+		list.sort((a, b) => (a.productName || "").localeCompare(b.productName || "", "ru"));
+		if (multiWarehouse && wh) lines.push(`Склад «${wh}»:`);
+		for (const s of list) {
+			lines.push(`• ${s.productName || s.productUuid || "товар"} — нужно ${s.requested}, доступно ${s.available}, не хватает ${s.deficit}`);
+		}
+	}
 	return `Недостаточно остатка для проведения:\n${lines.join("\n")}`;
 }

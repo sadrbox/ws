@@ -20,7 +20,7 @@ import {
 import IconButton, {
   type IconButtonProps,
 } from "src/components/IconButton/IconButton";
-import { Icon, type IconName, ClearIcon } from "src/components/IconButton/icons";
+import { Icon, type IconName, ClearIcon, CloseIcon } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
 import styles from "./Toolbar.module.scss";
 
@@ -92,6 +92,25 @@ const PrintButton = makeButton("print", translate("print"));
 
 // ─── Toolbar.ClearButton ────────────────────────────────────────────────
 
+const CloseButton: FC<Omit<ToolbarIconButtonProps, "icon" | "children">> = ({
+  className,
+  title,
+  ...props
+}) => (
+  <ToolbarIconButton
+    className={[styles.CloseButton, className].filter(Boolean).join(" ")}
+    title={title ?? translate("close")}
+    aria-label={translate("close")}
+    {...props}
+  >
+    <CloseIcon />
+  </ToolbarIconButton>
+);
+CloseButton.displayName = "Toolbar.CloseButton";
+
+
+// ─── Toolbar.ClearButton ────────────────────────────────────────────────
+
 const ClearButton: FC<Omit<ToolbarIconButtonProps, "icon" | "children">> = ({
   className,
   title,
@@ -144,6 +163,7 @@ type ToolbarComponent = typeof ToolbarRoot & {
   RefillButton: typeof RefillButton;
   PrintButton: typeof PrintButton;
   ClearButton: typeof ClearButton;
+  CloseButton: typeof CloseButton;
 };
 
 const Toolbar = ToolbarRoot as ToolbarComponent;
@@ -162,6 +182,7 @@ Toolbar.RecalcButton = RecalcButton;
 Toolbar.RefillButton = RefillButton;
 Toolbar.PrintButton = PrintButton;
 Toolbar.ClearButton = ClearButton;
+Toolbar.CloseButton = CloseButton;
 
 export {
   Toolbar,
@@ -178,5 +199,6 @@ export {
   RefillButton,
   PrintButton,
   ClearButton,
+  CloseButton,
 };
 export default Toolbar;

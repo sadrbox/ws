@@ -396,6 +396,14 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		label: "Принятие к учёту ОС",
 	},
 	{
+		endpoint: "esf-licenses",
+		module: () => import("src/models/EsfLicenses"),
+		formName: "EsfLicensesForm",
+		listName: "EsfLicensesList",
+		storageKey: "esf-licenses-form",
+		label: "Лицензия ЭСФ",
+	},
+	{
 		endpoint: "fiscal-receipts",
 		module: () => import("src/models/FiscalReceipts"),
 		formName: "FiscalReceiptsForm",

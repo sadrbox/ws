@@ -391,6 +391,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
               <GroupRow className={styles.SectionGap}>
                 <Button
                   variant="secondary"
+                  size="min"
                   disabled={recomputing || form.isLoading || !canWrite || !form.fields.organizationUuid}
                   onClick={async () => {
                     const org = form.fields.organizationUuid;
@@ -411,6 +412,31 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     }
                   }}
                 >
+                  <svg
+                    width="30"
+                    height="30"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    style={{ verticalAlign: "middle" }}
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M21 12a9 9 0 1 1-3.51-7.14"
+                      stroke="#2E7D32"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <polyline
+                      points="21 3 21 9 15 9"
+                      stroke="#EF6C00"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle cx="12" cy="12" r="2.5" fill="#1976D2" />
+                  </svg>
                   {recomputing ? "Пересчёт…" : "Пересчитать себестоимость"}
                 </Button>
                 <span className={styles.SettingHint}>
@@ -537,17 +563,17 @@ const renderListCell = (row: TDataItem, col: TColumn) => {
   if (col.identifier === "vatRate") {
     const useVat = Boolean(row.useVat);
     if (!useVat) return <span className={styles.Muted}>—</span>;
-    const r = row.vatRate;
+    const r = row.vatRate as number | string | null;
     return <span>{r != null ? `${r}%` : "—"}</span>;
   }
   if (col.identifier === "vatCalculationMethod") {
     const useVat = Boolean(row.useVat);
     if (!useVat) return <span className={styles.Muted}>—</span>;
-    const m = String(row.vatCalculationMethod ?? "INCLUDED").toUpperCase();
+    const m = String((row.vatCalculationMethod as string | null) ?? "INCLUDED").toUpperCase();
     return <span>{m === "ADDED" ? "Сверху" : "В сумме"}</span>;
   }
   if (col.identifier === "costingMethod") {
-    const m = String(row.costingMethod ?? "AVERAGE").toUpperCase();
+    const m = String((row.costingMethod as string | null) ?? "AVERAGE").toUpperCase();
     return <span>{m === "FIFO" ? "ФИФО" : "Средняя"}</span>;
   }
   if (col.identifier === "useVat") {

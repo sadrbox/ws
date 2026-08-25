@@ -1,5 +1,8 @@
 import { createRoot } from 'react-dom/client'
 import App from './app'
+// Глобальные keyframes эффектов панелей/вкладок (имена не хешируются — нужны для
+// подстановки через CSS-переменные --pane-*-name; см. styles/paneEffects.css).
+import './styles/paneEffects.css'
 import { registerServiceWorker } from './services/registerSW'
 import { startHealthCheck } from './services/networkStatus'
 import { ensureOfflineDb } from './services/offlineDb'

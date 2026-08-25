@@ -39,6 +39,20 @@ import { buildPaneUniqId } from "./paneUniqId";
 const getUniqId = (component: TComponentNode, data?: Partial<TDataItem>): string =>
   buildPaneUniqId(component, data);
 
+// Длительность exit-эффекта панели — из ЕДИНОГО источника настроек: CSS-переменной
+// --pane-anim-duration (задаётся в :root, styles/main.module.scss). requestClose
+// ждёт её перед фактическим удалением панели, чтобы вкладка и Pane-контент успели
+// проиграть анимацию закрытия. Так эффект срабатывает на ВСЕ способы закрытия.
+const PANE_ANIM_FALLBACK_MS = 200;
+const readPaneAnimMs = (): number => {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--pane-anim-duration").trim();
+    if (v.endsWith("ms")) return parseFloat(v) || PANE_ANIM_FALLBACK_MS;
+    if (v.endsWith("s")) return (parseFloat(v) || 0.2) * 1000;
+  } catch { /* getComputedStyle недоступен — фолбэк */ }
+  return PANE_ANIM_FALLBACK_MS;
+};
+
 
 // ────────────────────────────────────────────────
 // Главный компонент приложения
@@ -181,6 +195,13 @@ const App: React.FC = () => {
 
   const [panes, setPanes] = useState<TPane[]>([]);
   const [activePaneId, _setActivePaneId] = useState<string>("");
+
+  // Зеркала для стабильного requestClose (deps []): нужны, чтобы ДО удаления панели
+  // активировать следующую (показать её под закрывающимся оверлеем).
+  const panesRef = useRef(panes);
+  panesRef.current = panes;
+  const activePaneIdRef = useRef(activePaneId);
+  activePaneIdRef.current = activePaneId;
 
   // Стек истории активных панелей (для возврата к предыдущей при закрытии)
   const paneHistoryRef = useRef<string[]>([]);
@@ -337,41 +358,46 @@ const App: React.FC = () => {
       }
     }
     beforeCloseGuardsRef.current.delete(uniqId);
-    setPanes((prev) => {
-      const index = prev.findIndex((p) => p.uniqId === uniqId);
-      if (index === -1) return prev;
 
-      const closed = prev[index];
-      const next = prev.filter((_, i) => i !== index);
-      const remainingIds = new Set(next.map((p) => p.uniqId));
+    // Централизованный эффект закрытия. Идея: следующую панель активируем СРАЗУ
+    // (она видна снизу), а закрывающуюся держим оверлеем сверху и уводим в exit —
+    // иначе под уводимой в прозрачность был бы пустой фон. Через длительность
+    // анимации панель удаляется. force (массовая очистка) — мгновенно, без эффекта.
+    const cur = panesRef.current;
+    const index = cur.findIndex((p) => p.uniqId === uniqId);
+    if (index === -1) return;
+    const closed = cur[index];
+    const rest = cur.filter((p) => p.uniqId !== uniqId);
+    const remainingIds = new Set(rest.map((p) => p.uniqId));
+    const wasActive = activePaneIdRef.current === uniqId;
 
-      paneHistoryRef.current = paneHistoryRef.current.filter(
-        (h) => h !== uniqId && remainingIds.has(h)
-      );
+    // Новая активная панель (если закрывалась активная). Логика прежняя: selector →
+    // открыватель → история → сосед по индексу.
+    const pickNextActive = (): string => {
+      if (rest.length === 0) return "";
+      const selectorPane = rest.find((p) => p.isSelector);
+      if (selectorPane) return selectorPane.uniqId;
+      if (closed.openerPaneId && remainingIds.has(closed.openerPaneId)) return closed.openerPaneId;
+      const history = paneHistoryRef.current;
+      if (history.length > 0) return history.pop()!;
+      const newIndex = index > 0 ? index - 1 : 0;
+      return rest[Math.min(newIndex, rest.length - 1)].uniqId;
+    };
 
-      _setActivePaneId((currentActive) => {
-        if (currentActive !== uniqId) return currentActive;
-        if (next.length === 0) return "";
+    paneHistoryRef.current = paneHistoryRef.current.filter((h) => h !== uniqId && remainingIds.has(h));
 
-        const selectorPane = next.find((p) => p.isSelector);
-        if (selectorPane) return selectorPane.uniqId;
+    // Активируем следующую панель СРАЗУ (до удаления закрывающейся) — она мягко
+    // проявляется, а закрывающаяся скрывается; пустого фона нет.
+    if (wasActive) _setActivePaneId(pickNextActive());
 
-        // Возврат к панели-открывателю (напр. форме с полем «Основание»,
-        // из которого открыли документ), если она ещё открыта.
-        if (closed.openerPaneId && remainingIds.has(closed.openerPaneId)) {
-          return closed.openerPaneId;
-        }
+    if (!force) {
+      // Событие для ВКЛАДКИ: она проигрывает свой exit, пока requestClose ждёт
+      // длительность и затем удаляет панель (контент выхода не имеет).
+      window.dispatchEvent(new CustomEvent("pane-closing", { detail: { uniqId } }));
+      await new Promise((resolve) => setTimeout(resolve, readPaneAnimMs()));
+    }
 
-        const history = paneHistoryRef.current;
-        if (history.length > 0) {
-          return history.pop()!;
-        }
-        const newIndex = index > 0 ? index - 1 : 0;
-        return next[Math.min(newIndex, next.length - 1)].uniqId;
-      });
-
-      return next;
-    });
+    setPanes((prev) => prev.filter((p) => p.uniqId !== uniqId));
   }, []);
 
   const setActivePane = useCallback((uniqId: string) => {

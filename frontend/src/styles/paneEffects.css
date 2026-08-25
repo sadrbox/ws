@@ -1,0 +1,117 @@
+/*
+ * paneEffects.css — ГЛОБАЛЬНЫЕ keyframes эффектов панелей/вкладок.
+ *
+ * Вынесены из main.module.scss намеренно: в CSS-модуле имена @keyframes хешируются
+ * (_paneFadeIn_xxx), поэтому их НЕЛЬЗЯ подставлять через CSS-переменную
+ * (--pane-in-name и т.п.) — литерал «paneFadeIn» не совпал бы с хешем. Здесь имена
+ * глобальные, поэтому смена пресета = смена одной переменной в :root
+ * (см. styles/main.module.scss, блок «ВЫБОР ЭФФЕКТА»).
+ *
+ * Пресеты (пары появление/закрытие):
+ *   slide → paneTabIn/paneTabOut (вкладка), paneIn/paneOut (Pane) — сдвиг+масштаб
+ *           (параметры --pane-tab-shift/scale и --pane-shift/scale);
+ *   fade  → paneFadeIn/paneFadeOut — прозрачность + масштаб 0.1↔1.
+ * Параметры (длительность/плавность/сдвиг/масштаб) — переменные :root в main.module.scss.
+ */
+
+@keyframes paneTabIn {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--pane-tab-shift) * -1)) scale(var(--pane-tab-scale));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes paneTabOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--pane-tab-shift) * -1)) scale(var(--pane-tab-scale));
+  }
+}
+
+@keyframes paneIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--pane-shift)) scale(var(--pane-scale));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes paneOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--pane-shift) * -1)) scale(var(--pane-scale));
+  }
+}
+
+/* Пресет «fade»: прозрачность + масштаб. Стартовый/конечный масштаб настраивается
+   переменной --pane-fade-scale (:root). Годится и для Pane, и для вкладки. */
+@keyframes paneFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(var(--pane-fade-scale));
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes paneFadeOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(var(--pane-fade-scale));
+  }
+}
+
+/* Пресет «opacity»: чистое изменение прозрачности (без сдвига/масштаба). */
+@keyframes paneOpacityIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes paneOpacityOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* Пресет «blur»: появление/уход из размытия (+ прозрачность). Радиус — --pane-blur. */
+@keyframes paneBlurIn {
+  from {
+    opacity: 0;
+    filter: blur(var(--pane-blur));
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes paneBlurOut {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(var(--pane-blur));
+  }
+}

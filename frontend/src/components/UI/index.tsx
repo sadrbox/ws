@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { translate, getLanguage, setLanguage } from 'src/i18';
 import { getEffectiveTheme, toggleTheme } from 'src/services/theme';
 import { useAppContext } from 'src/app/context';
-import { ReloadButton, ClearButton, IconButton } from 'src/components/Toolbar';
+import { ReloadButton, ClearButton, CloseButton, IconButton } from 'src/components/Toolbar';
 import { copyPaneLink } from "src/utils/paneLink";
 import { useChatUnread } from "src/hooks/useChatUnread";
 import type { TPane } from 'src/app/types';
@@ -173,6 +173,13 @@ export const Container: FC = () => {
 }
 
 /** Одна вкладка — отдельный компонент */
+// uniqId вкладок, у которых enter-анимация уже проигралась. Enter должен запускаться
+// РОВНО ОДИН РАЗ при реальном добавлении вкладки — не при перерисовке className
+// (смена active) и не при кратковременном re-mount из-за пересчёта видимых вкладок
+// после закрытия соседа. Освобождается с задержкой при размонтировании (быстрый
+// churn-remount не переиграет enter, осознанное переоткрытие позже — переиграет).
+const paneTabEntered = new Set<string>();
+
 const PaneTabItem: FC<{
   pane: { uniqId: string; label: string; isSelector?: boolean; selectorPaneId?: string };
   isActive: boolean;
@@ -180,6 +187,36 @@ const PaneTabItem: FC<{
   onActivate: () => void;
   onClose: () => void;
 }> = ({ pane, isActive, isLocked, onActivate, onClose }) => {
+  // Появление: одноразовый класс .PaneTabItemEntering (снимается после проигрыша).
+  const [entering, setEntering] = useState(() => {
+    if (paneTabEntered.has(pane.uniqId)) return false;
+    paneTabEntered.add(pane.uniqId);
+    return true;
+  });
+  useEffect(() => {
+    if (!entering) return;
+    const t = window.setTimeout(() => setEntering(false), 400);
+    return () => window.clearTimeout(t);
+  }, [entering]);
+  useEffect(() => {
+    const uid = pane.uniqId;
+    return () => { window.setTimeout(() => paneTabEntered.delete(uid), 800); };
+  }, [pane.uniqId]);
+
+  // Анимация закрытия: exit-эффектом и удалением панели централизованно управляет
+  // requestClose (см. app/index.tsx) — он шлёт "pane-closing", ждёт длительность
+  // и удаляет панель. Здесь лишь навешиваем .PaneTabItemClosing по этому событию,
+  // чтобы вкладка проиграла exit НЕЗАВИСИМО от способа закрытия (× вкладки, кнопка
+  // «Закрыть» в шапке, ToolbarSlot и т.д.). Кнопка × просто зовёт onClose=requestClose.
+  const [closing, setClosing] = useState(false);
+  useEffect(() => {
+    const onClosing = (e: Event) => {
+      if ((e as CustomEvent<{ uniqId?: string }>).detail?.uniqId === pane.uniqId) setClosing(true);
+    };
+    window.addEventListener("pane-closing", onClosing);
+    return () => window.removeEventListener("pane-closing", onClosing);
+  }, [pane.uniqId]);
+
   return (
     <div
       className={[
@@ -187,8 +224,10 @@ const PaneTabItem: FC<{
         isActive && styles.PaneTabItemActive,
         pane.isSelector && styles.PaneTabItemSelector,
         isLocked && styles.PaneTabItemDisabled,
+        entering && styles.PaneTabItemEntering,
+        closing && styles.PaneTabItemClosing,
       ].filter(Boolean).join(" ")}
-      onClick={isLocked ? undefined : onActivate}
+      onClick={isLocked || closing ? undefined : onActivate}
       title={pane.label}
       role="tab"
       tabIndex={isLocked ? -1 : 0}
@@ -441,6 +480,31 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
   // Это даёт мгновенную клавиатурную навигацию (Up/Down/Left/Right/Insert/
   // Delete/Home/End/PgUp/PgDn) по таблице внутри Pane без доп. клика мыши.
   const paneRootRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Анимация Pane (best practice: только «появление» активной панели) ─────
+  // При открытии/переключении/после закрытия соседа активная панель мягко
+  // проявляется (opacity + лёгкий сдвиг, GPU-friendly — без filter:blur и оверлеев).
+  // ВЫХОДА у контента нет: закрывающаяся панель просто скрывается, а следующую
+  // активируют сразу (requestClose) → пустого фона/мерцания нет. Настройки — в :root.
+  // useLayoutEffect: класс показа навешиваем СИНХРОННО до отрисовки — иначе панель
+  // на 1 кадр мелькнёт в полной непрозрачности.
+  const [revealing, setRevealing] = useState(isActive);
+  const prevActiveRef = useRef(isActive);
+  useLayoutEffect(() => {
+    const was = prevActiveRef.current;
+    prevActiveRef.current = isActive;
+    if (isActive && !was) setRevealing(true);
+  }, [isActive]);
+  // Снимаем класс после проигрыша: по animationend + страховка таймаутом (reduced-motion),
+  // чтобы следующая активация могла ПЕРЕИГРАТЬ показ.
+  useEffect(() => {
+    if (!revealing) return;
+    const t = window.setTimeout(() => setRevealing(false), 1000);
+    return () => window.clearTimeout(t);
+  }, [revealing]);
+  const handleAnimationEnd = useCallback((e: React.AnimationEvent<HTMLDivElement>) => {
+    if (revealing && e.target === e.currentTarget) setRevealing(false);
+  }, [revealing]);
   // Отслеживаем смену isActive: при переходе false → true (или при первой
   // активации) принудительно переводим фокус на таблицу, даже если форма
   // уже автофокусила какой-то свой input. При обычном ре-рендере (isActive
@@ -492,7 +556,12 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
   return (
     <div
       ref={paneRootRef}
-      className={[styles.PaneItem, isActive && styles.PaneItemActive].filter(Boolean).join(" ")}
+      className={[
+        styles.PaneItem,
+        isActive && styles.PaneItemActive,
+        revealing && styles.PaneItemEntering,
+      ].filter(Boolean).join(" ")}
+      onAnimationEnd={handleAnimationEnd}
     >
       <div className={styles.PaneItemHeader}>
         <h2 className={styles.PaneItemHeaderLabel}>
@@ -518,7 +587,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
             />
           )}
           {hasToolbar && <ReloadButton onClick={onReload} disabled={!isEditMode} />}
-          <ClearButton onClick={onClose} />
+          <CloseButton onClick={onClose} />
         </div>
       </div>
       {hasToolbar && <div className={styles.PaneItemBottomToolbar}>

@@ -145,11 +145,11 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   // подтягиваем документ-основание по uuid и собираем корректную метку.
   const [resolvedLabel, setResolvedLabel] = useState<string | undefined>(undefined);
   useEffect(() => {
-    // Каноничны ФИНАЛЬНЫЕ формы метки — «№…» и «б/н» (docNoNumber). Перерезолвим
-    // только легаси-метку с «ID {n}» (данные генератора/старые панели), чтобы
-    // показать № или «б/н». Иначе «б/н»-документ (без номера) перезапрашивался при
-    // каждом рендере и метка «мигала» — лишний эффект.
-    const isCanonical = !!basisDocumentLabel && !/:\s*ID\s/.test(basisDocumentLabel);
+    // Каноничны только ФИНАЛЬНЫЕ формы метки — «№…» и «б/н» (docNoNumber). Любую
+    // иную (легаси «ID {n}», данные генератора и т.п.) перерезолвим по документу,
+    // чтобы показать № или «б/н» — у документов ID в UI не светим.
+    const isCanonical = !!basisDocumentLabel &&
+      (/:\s*№/.test(basisDocumentLabel) || basisDocumentLabel.includes(translate("docNoNumber")));
     const type = basisDocumentType || "";
     const endpoint = allowedTypes.find((t) => t.type === type)?.endpoint ?? docTypeToEndpoint(type);
     if (!basisDocumentUuid || !type || !endpoint || isCanonical) {
@@ -183,6 +183,12 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
 
   const hasValue = !!basisDocumentUuid;
   const hasMultipleTypes = allowedTypes.length > 1;
+
+  // Отображаемая метка: перерезолвленная (№/б/н) или исходная, но НИКОГДА не показываем
+  // сырой «ID {n}» — на время перерезолва подменяем на «б/н» (документы ID не светят).
+  const displayLabel = resolvedLabel ?? (basisDocumentLabel
+    ? basisDocumentLabel.replace(/(:\s*)ID\b\s*\S*/i, `$1${translate("docNoNumber")}`)
+    : basisDocumentLabel);
 
   // Селектор типа документа-основания (встроен в label поля, как в OwnerLookupField).
   // Доступен в обеих ветках: при выбранном значении смена типа сбрасывает его
@@ -234,7 +240,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           label={hasMultipleTypes ? typeSelectLabel : `${translate("basisDocument")} (${typeName})`}
           name={`${formUid}_basisDocument`}
           value={basisDocumentUuid}
-          displayValue={resolvedLabel ?? basisDocumentLabel}
+          displayValue={displayLabel}
           endpoint={activeType?.endpoint ?? docTypeToEndpoint(valueType) ?? ""}
           displayField="id"
           getSuggestionLabel={(item) => basisItemLabel(typeName, item)}

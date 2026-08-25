@@ -19,12 +19,12 @@ export function describeRow(endpoint: string, row: LabelSource): string {
 	const listName = entry?.listName ?? endpoint;
 	const fallback = entry?.label ?? endpoint;
 	const isDocument = row.number != null || row.date != null;
-	return isDocument
-		? makeDocLabel(listName, fallback, row, "date")
-		: makePaneLabelFromData(
-				listName,
-				fallback,
-				row,
-				typeof row.name === "string" ? row.name : undefined,
-			);
+	if (isDocument) return makeDocLabel(listName, fallback, row, "date");
+	// Деталь справочника — первое осмысленное человекочитаемое поле (не только name):
+	// напр. у лицензии ЭСФ это БИН, у договора — номер, у банк-счёта — IBAN.
+	const r = row as Record<string, unknown>;
+	const detailKey = ["name", "title", "fullName", "bin", "iin", "code", "contractNumber", "iban", "sku", "login", "username"]
+		.find((k) => typeof r[k] === "string" && String(r[k]).trim() !== "");
+	const detail = detailKey ? String(r[detailKey]) : undefined;
+	return makePaneLabelFromData(listName, fallback, row, detail);
 }

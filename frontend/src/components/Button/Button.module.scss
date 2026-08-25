@@ -50,3 +50,39 @@
 		pointer-events: none;
 	}
 }
+
+// ── Размеры кнопки (проп size) ───────────────────────────────────────────────
+// md — размер по умолчанию (совпадает с базовым .Button). Меняются высота,
+// внутренние отступы и размер шрифта; min — ширина по содержимому (не тянется).
+.sizeSm {
+	height: $heightFieldInput - 2px;
+	padding: 0 5px;
+	font-size: 88%;
+
+	span {
+		padding: 0 2px;
+	}
+}
+
+.sizeMd {
+	height: $heightFieldInput + 4px;
+	padding: 0 6px;
+	font-size: 100%;
+}
+
+.sizeLg {
+	height: $heightFieldInput + 10px;
+	padding: 0 14px;
+	font-size: 112%;
+
+	span {
+		padding: 0 4px;
+	}
+}
+
+// min-content: ширина «обнимает» содержимое (кнопка не растягивается флексом).
+.sizeMin {
+	height: min-content;
+	padding: 3px 6px;
+	// flex: 0 0 auto;
+}

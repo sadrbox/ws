@@ -18,7 +18,7 @@ import {
 	pipeUpdate,
 	isOfflineFirst,
 } from "src/services/persistencePipe";
-import { translateError } from "src/i18";
+import { translateError, translate } from "src/i18";
 import { getCurrentUser } from "src/services/auth";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -1748,7 +1748,7 @@ export function useFormStore<F extends object>(
 				storeCache.delete(store.getStorageKey());
 				return true;
 			}
-			const answer = await confirm(`Закрыть без сохранения ? `);
+			const answer = await confirm(translate("confirmCloseUnsaved"));
 			if (!answer) return false;
 			// Очистка при подтверждённом закрытии
 			store.clearStorage();
@@ -2118,7 +2118,7 @@ export function useFormStore<F extends object>(
 			// Нет uniqId — прямое закрытие с проверкой
 			const wasDirty = store.isDirty();
 			if (wasDirty) {
-				const answer = await confirm(`Закрыть без сохранения?`);
+				const answer = await confirm(translate("confirmCloseUnsaved"));
 				if (!answer) return;
 			}
 			store.clearStorage();
@@ -2131,7 +2131,7 @@ export function useFormStore<F extends object>(
 
 	const handleReload = useCallback(async () => {
 		if (store.isDirty()) {
-			const answer = await confirm(`Обновить данные?`);
+			const answer = await confirm(translate("confirmReloadUnsaved"));
 			if (!answer) return;
 		}
 		// При reload отбрасываем pending-stash (несохранённые правки из прошлого

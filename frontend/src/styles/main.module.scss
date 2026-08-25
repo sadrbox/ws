@@ -6,13 +6,46 @@
 @use "./adaptivity.scss" as *;
 
 
+// ═══════════════════════════════════════════════════════════════════════════
+// НАСТРОЙКА ЭФФЕКТА ПАНЕЛЕЙ И ВКЛАДОК (единое место)
+// Best practice: анимируем только ПОЯВЛЕНИЕ активной панели (opacity + лёгкий сдвиг,
+// GPU-friendly, без filter:blur на крупном контенте и без оверлеев). Контент выхода
+// не имеет — закрывающаяся панель просто скрывается, следующую активируют сразу
+// (пустого фона/мерцания нет). Выход есть у ВКЛАДКИ (мелкий элемент — дёшево).
+// Длительность указывать в ЕДИНИЦАХ ВРЕМЕНИ (ms/s!): её же читает JS
+// (app/index.tsx → readPaneAnimMs) как задержку удаления под exit вкладки.
+// ═══════════════════════════════════════════════════════════════════════════
+:global(:root) {
+	--pane-anim-duration: 160ms; // держи коротким (120–200ms) — быстрее ощущается «живее»
+	--pane-anim-easing: ease-out; // для появления естественнее замедление в конце
+
+	// ── ВЫБОР ПРЕСЕТА ────────────────────────────────────────────────────────
+	// Появление Pane-контента (--pane-in-name) и появление/закрытие вкладки:
+	//   slide   → paneIn / paneTabIn / paneTabOut — сдвиг (+масштаб)
+	//   opacity → paneOpacityIn / paneOpacityOut — только прозрачность
+	//   fade    → paneFadeIn / paneFadeOut — прозрачность + масштаб (--pane-fade-scale)
+	//   blur    → paneBlurIn / paneBlurOut — из размытия (--pane-blur); тяжелее — на свой риск
+	--pane-in-name: paneIn; // появление Pane-контента (по умолчанию — мягкий подъём)
+	--pane-tab-in-name: paneTabIn; // появление вкладки
+	--pane-tab-out-name: paneTabOut; // закрытие вкладки (мелкий элемент)
+
+	// Параметры пресета «slide».
+	--pane-shift: 6px; // Pane-контент: подъём снизу
+	--pane-scale: 1; // Pane-контент: масштаб (1 = без масштаба — чётче на крупной области)
+	--pane-tab-shift: 6px; // вкладка: сдвиг
+	--pane-tab-scale: 0.94; // вкладка: масштаб
+
+	--pane-fade-scale: 0.9; // пресет «fade»: старт/конец масштаба
+	--pane-blur: 8px; // пресет «blur»: радиус размытия
+}
+
 :focus-visible {
 	outline: none;
 }
 
 :global(.blur5) {
 	filter: blur(5px);
-	transition: filter 0.2s ease;
+	transition: filter 0.3s ease;
 }
 
 * {
@@ -552,6 +585,14 @@ body {
 	height: -webkit-fill-available;
 }
 
+// Появление активной панели (открытие/переключение/после закрытия соседа). Класс
+// навешивается синхронно из JS и снимается по окончании анимации. У контента ВЫХОДА
+// нет (best practice: анимируем только вход), поэтому пустого фона/оверлеев не нужно.
+.PaneItemEntering {
+	animation: var(--pane-in-name) var(--pane-anim-duration) var(--pane-anim-easing) both;
+	will-change: opacity, transform;
+}
+
 .PaneItemHeader {
 	display: flex;
 	gap: 6px;
@@ -885,9 +926,26 @@ body {
 		flex-shrink: 0;
 
 		letter-spacing: 0.2px;
+	}
 
+	// Появление при добавлении вкладки. Класс навешивается ОДНОРАЗОВО (управляется из
+	// JS по факту первого появления uniqId), поэтому enter не переигрывается при
+	// перерисовке className (смена active) или re-mount от пересчёта видимых вкладок.
+	// Тайминги/плавность — из :root (--pane-anim-*), смещение/масштаб вкладки — --pane-tab-*.
+	.PaneTabItemEntering {
+		animation: var(--pane-tab-in-name) var(--pane-anim-duration) var(--pane-anim-easing) both;
+	}
 
+	// Закрытие вкладки: exit-эффект по событию "pane-closing" (централизованно из
+	// requestClose), само удаление панели тоже делает requestClose после длительности.
+	.PaneTabItemClosing {
+		animation: var(--pane-tab-out-name) var(--pane-anim-duration) var(--pane-anim-easing) forwards;
+		pointer-events: none;
+	}
 
+	// В скрытом зеркале-замере (.PaneTabsMeasure) анимация не нужна — оно только меряет ширину.
+	.PaneTabsMeasure .PaneTabItem {
+		animation: none;
 	}
 
 	.PaneTabItemActive {
@@ -1585,3 +1643,7 @@ body {
 	line-height: 1;
 	vertical-align: middle;
 }
+
+// keyframes эффектов панелей/вкладок вынесены в ГЛОБАЛЬНЫЙ styles/paneEffects.css
+// (в CSS-модуле имена @keyframes хешируются и не подставились бы через переменную
+// --pane-*-name). Импортируется в main.tsx. Смена пресета — переменными в :root выше.

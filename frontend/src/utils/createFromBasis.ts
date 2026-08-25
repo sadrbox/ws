@@ -525,7 +525,7 @@ export async function openDocumentFromBasis(
 	// Приоритет: если меню уже определило существующий зависимый — открываем его напрямую.
 	if (target.knownExisting?.uuid) {
 		const d = target.knownExisting.date ? " - " + getFormatDateOnly(String(target.knownExisting.date)) : "";
-		const ref = target.knownExisting.number ? `№ ${target.knownExisting.number}` : `ID ${target.knownExisting.id ?? "?"}`;
+		const ref = target.knownExisting.number ? `№ ${target.knownExisting.number}` : translate("docNoNumber");
 		addPane({
 			component: target.FormComponent,
 			label: `${target.docLabel}: ${ref}${d}`,
@@ -549,7 +549,7 @@ export async function openDocumentFromBasis(
 				const existingDate = existingDoc.date
 					? " - " + getFormatDateOnly(String(existingDoc.date))
 					: "";
-				const ref = existingDoc.number ? `№ ${existingDoc.number}` : `ID ${existingDoc.id ?? "?"}`;
+				const ref = existingDoc.number ? `№ ${existingDoc.number}` : translate("docNoNumber");
 				addPane({
 					component: target.FormComponent,
 					label: `${target.docLabel}: ${ref}${existingDate}`,
@@ -583,7 +583,7 @@ export async function openDocumentFromBasis(
 	const dateStr = sourceFields.date ? getFormatDateOnly(sourceFields.date) : "";
 	const basisRef = sourceFields.number != null && String(sourceFields.number).trim() !== ""
 		? `№${sourceFields.number}`
-		: `ID ${sourceFields.id ?? "?"}`;
+		: translate("docNoNumber");
 	const basisLabel = dateStr
 		? `${sourceTypeLabel}: ${basisRef} - ${dateStr}`
 		: `${sourceTypeLabel}: ${basisRef}`;
