@@ -54,17 +54,24 @@ export function useSplitResize({
     return v >= min && v <= max ? v : defaultPercent;
   });
   const containerRef = useRef<HTMLDivElement>(null);
+  // Зеркало текущего процента — стартовое значение для дельта-перетаскивания
+  // (без зависимости startResize от percent).
+  const percentRef = useRef(percent);
+  percentRef.current = percent;
 
   const startResize = useCallback(
     (e: ReactPointerEvent) => {
       e.preventDefault();
+      // ДЕЛЬТА, а не абсолют: двигаем от стартовой позиции/процента, поэтому граница
+      // не «прыгает» под курсор при клике не ровно по разделителю (offset схвата).
+      const startClientX = e.clientX;
+      const startPercent = percentRef.current;
       const move = (ev: PointerEvent) => {
         const box = containerRef.current?.getBoundingClientRect();
         if (!box || box.width === 0) return;
-        const raw =
-          side === "right"
-            ? ((box.right - ev.clientX) / box.width) * 100
-            : ((ev.clientX - box.left) / box.width) * 100;
+        const dxPercent = ((ev.clientX - startClientX) / box.width) * 100;
+        // side "right": движение вправо сужает правую панель; "left": расширяет левую.
+        const raw = side === "right" ? startPercent - dxPercent : startPercent + dxPercent;
         setPercent(Math.min(max, Math.max(min, raw)));
       };
       const up = () => {
