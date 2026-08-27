@@ -16,6 +16,7 @@
  */
 
 import type { FC } from "react";
+import type { TPane } from "src/app/types";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Типы
@@ -23,7 +24,7 @@ import type { FC } from "react";
 
 export interface ModelRegistryEntry {
 	endpoint: string;
-	module: () => Promise<any>;
+	module: () => Promise<Record<string, unknown>>;
 	formName: string;
 	listName: string;
 	storageKey: string;
@@ -528,11 +529,12 @@ export function getAllEntries(): readonly ModelRegistryEntry[] {
  */
 export async function loadFormByEndpoint(
 	endpoint: string,
-): Promise<FC<any> | undefined> {
+): Promise<FC<Partial<TPane>> | undefined> {
 	const entry = byEndpoint.get(endpoint);
 	if (!entry) return undefined;
 	const mod = await entry.module();
-	return mod[entry.formName] || mod.default;
+	const forms = mod as Record<string, FC<Partial<TPane>> | undefined>;
+	return forms[entry.formName] || forms.default;
 }
 
 /**
@@ -541,11 +543,12 @@ export async function loadFormByEndpoint(
  */
 export async function loadListByEndpoint(
 	endpoint: string,
-): Promise<FC<any> | undefined> {
+): Promise<FC<Partial<TPane>> | undefined> {
 	const entry = byEndpoint.get(endpoint);
 	if (!entry) return undefined;
 	const mod = await entry.module();
-	return mod[entry.listName] || mod.default;
+	const forms = mod as Record<string, FC<Partial<TPane>> | undefined>;
+	return forms[entry.listName] || forms.default;
 }
 
 export default MODEL_REGISTRY;

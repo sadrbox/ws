@@ -81,7 +81,7 @@ export const CategoryBars: FC<{
 				<XAxis
 					type="number"
 					tick={{ fill: AXIS_TICK, fontSize: 11 }}
-					tickFormatter={(v) => fmtValue(v, format, true)}
+					tickFormatter={(v: number) => fmtValue(v, format, true)}
 					axisLine={{ stroke: AXIS_LINE }}
 					tickLine={false}
 				/>

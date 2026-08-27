@@ -199,7 +199,7 @@ export async function triggerSync(): Promise<void> {
 /**
  * @deprecated Используйте triggerSync(). Оставлено для обратной совместимости.
  */
-export async function processQueue(): Promise<any> {
+export async function processQueue(): Promise<{ pending: number; syncing: number; synced: number; failed: number; conflict: number; total: number }> {
 	await triggerSync();
 	// Возвращаем совместимый формат
 	const { getPendingChangesCount } = await import("./offlineDb");

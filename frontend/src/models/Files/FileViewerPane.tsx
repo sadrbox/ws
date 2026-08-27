@@ -42,7 +42,7 @@ const FileViewerPane: FC<Record<string, unknown>> = (props) => {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await apiClient.get(`/${meta.endpoint}/${data.ownerUuid}`);
+        const res = await apiClient.get<{ item?: Record<string, unknown> } & Record<string, unknown>>(`/${meta.endpoint}/${data.ownerUuid}`);
         if (cancelled) return;
         const item = (res.data?.item ?? res.data) as Record<string, unknown> | undefined;
         if (!item) return;
@@ -65,7 +65,7 @@ const FileViewerPane: FC<Record<string, unknown>> = (props) => {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await apiClient.get(
+        const res = await apiClient.get<{ items?: FileRow[] }>(
           `/files?ownerType=${encodeURIComponent(ownerType)}&ownerUuid=${encodeURIComponent(ownerUuid)}`,
         );
         if (cancelled) return;

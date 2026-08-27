@@ -151,7 +151,7 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
     try {
       const saved = localStorage.getItem(lsColKey);
       if (saved) {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(saved) as Record<string, boolean>;
         if (parsed && typeof parsed === "object") return parsed;
       }
     } catch { /* ignore */ }
@@ -222,7 +222,7 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
     const mime = format === "xls"
       ? "application/vnd.ms-excel"
       : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    const ab = XLSX.write(wb, { type: "array", bookType });
+    const ab = XLSX.write(wb, { type: "array", bookType }) as ArrayBuffer;
     download(new Blob([ab], { type: mime }), `${baseName}.${format}`);
   }, [data, baseName]);
 

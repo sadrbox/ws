@@ -265,32 +265,32 @@ function checkAllHaveInlist(
 
 describe("columns.json — поле inlist присутствует во всех колонках", () => {
 	it("CashExpenseOrders", () =>
-		checkAllHaveInlist(cashExpenseOrdersCols as any, "CashExpenseOrders"));
+		checkAllHaveInlist(cashExpenseOrdersCols as Array<Record<string, unknown>>, "CashExpenseOrders"));
 	it("CashReceiptOrders", () =>
-		checkAllHaveInlist(cashReceiptOrdersCols as any, "CashReceiptOrders"));
+		checkAllHaveInlist(cashReceiptOrdersCols as Array<Record<string, unknown>>, "CashReceiptOrders"));
 	it("IncomingInvoices", () =>
-		checkAllHaveInlist(incomingInvoicesCols as any, "IncomingInvoices"));
+		checkAllHaveInlist(incomingInvoicesCols as Array<Record<string, unknown>>, "IncomingInvoices"));
 	it("OutgoingInvoices", () =>
-		checkAllHaveInlist(outgoingInvoicesCols as any, "OutgoingInvoices"));
+		checkAllHaveInlist(outgoingInvoicesCols as Array<Record<string, unknown>>, "OutgoingInvoices"));
 	it("PaymentInvoices", () =>
-		checkAllHaveInlist(paymentInvoicesCols as any, "PaymentInvoices"));
-	it("Purchases", () => checkAllHaveInlist(purchasesCols as any, "Purchases"));
-	it("Sales", () => checkAllHaveInlist(salesCols as any, "Sales"));
+		checkAllHaveInlist(paymentInvoicesCols as Array<Record<string, unknown>>, "PaymentInvoices"));
+	it("Purchases", () => checkAllHaveInlist(purchasesCols as Array<Record<string, unknown>>, "Purchases"));
+	it("Sales", () => checkAllHaveInlist(salesCols as Array<Record<string, unknown>>, "Sales"));
 	it("InventoryTransfers", () =>
-		checkAllHaveInlist(inventoryTransfersCols as any, "InventoryTransfers"));
+		checkAllHaveInlist(inventoryTransfersCols as Array<Record<string, unknown>>, "InventoryTransfers"));
 	it("PayrollCalculations", () =>
-		checkAllHaveInlist(payrollCalculationsCols as any, "PayrollCalculations"));
+		checkAllHaveInlist(payrollCalculationsCols as Array<Record<string, unknown>>, "PayrollCalculations"));
 	it("PayrollPayments", () =>
-		checkAllHaveInlist(payrollPaymentsCols as any, "PayrollPayments"));
-	it("Products", () => checkAllHaveInlist(productsCols as any, "Products"));
+		checkAllHaveInlist(payrollPaymentsCols as Array<Record<string, unknown>>, "PayrollPayments"));
+	it("Products", () => checkAllHaveInlist(productsCols as Array<Record<string, unknown>>, "Products"));
 	it("UnitOfMeasures", () =>
-		checkAllHaveInlist(unitOfMeasuresCols as any, "UnitOfMeasures"));
+		checkAllHaveInlist(unitOfMeasuresCols as Array<Record<string, unknown>>, "UnitOfMeasures"));
 	it("BankAccounts", () =>
-		checkAllHaveInlist(bankAccountsCols as any, "BankAccounts"));
-	it("Contacts", () => checkAllHaveInlist(contactsCols as any, "Contacts"));
-	it("Contracts", () => checkAllHaveInlist(contractsCols as any, "Contracts"));
+		checkAllHaveInlist(bankAccountsCols as Array<Record<string, unknown>>, "BankAccounts"));
+	it("Contacts", () => checkAllHaveInlist(contactsCols as Array<Record<string, unknown>>, "Contacts"));
+	it("Contracts", () => checkAllHaveInlist(contractsCols as Array<Record<string, unknown>>, "Contracts"));
 	it("AccessPermissions", () =>
-		checkAllHaveInlist(accessPermissionsCols as any, "AccessPermissions"));
+		checkAllHaveInlist(accessPermissionsCols as Array<Record<string, unknown>>, "AccessPermissions"));
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -472,13 +472,13 @@ describe("AccessRightsTable — filterRows", () => {
 
 describe("AccessPermissions columns.json — структура", () => {
 	it("содержит ключевые колонки modelName и accessLevel", () => {
-		const ids = (accessPermissionsCols as any[]).map((c: any) => c.identifier);
+		const ids = (accessPermissionsCols as Array<{ identifier: string }>).map((c) => c.identifier);
 		expect(ids).toContain("modelName");
 		expect(ids).toContain("accessLevel");
 	});
 
 	it("не содержит organization.bin", () => {
-		const ids = (accessPermissionsCols as any[]).map((c: any) => c.identifier);
+		const ids = (accessPermissionsCols as Array<{ identifier: string }>).map((c) => c.identifier);
 		expect(ids).not.toContain("organization.bin");
 	});
 });
@@ -522,19 +522,19 @@ describe("AccessPermissionsTable — roleMap", () => {
 
 describe("AccessRights subColumns.json — структура", () => {
 	it("содержит поля id, organization.name, role", () => {
-		const ids = (accessRightsSubCols as any[]).map((c: any) => c.identifier);
+		const ids = (accessRightsSubCols as Array<{ identifier: string }>).map((c) => c.identifier);
 		expect(ids).toContain("id");
 		expect(ids).toContain("organization.name");
 		expect(ids).toContain("role");
 	});
 
 	it("не содержит organization.bin", () => {
-		const ids = (accessRightsSubCols as any[]).map((c: any) => c.identifier);
+		const ids = (accessRightsSubCols as Array<{ identifier: string }>).map((c) => c.identifier);
 		expect(ids).not.toContain("organization.bin");
 	});
 
 	it("не содержит _expand", () => {
-		const ids = (accessRightsSubCols as any[]).map((c: any) => c.identifier);
+		const ids = (accessRightsSubCols as Array<{ identifier: string }>).map((c) => c.identifier);
 		expect(ids).not.toContain("_expand");
 	});
 });

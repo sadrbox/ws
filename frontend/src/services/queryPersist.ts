@@ -8,7 +8,7 @@
  * ранее загруженные данные.
  */
 
-import type { QueryClient } from "@tanstack/react-query";
+import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { logger } from "src/utils/logger";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -124,7 +124,7 @@ function hydrateClient(client: QueryClient, persisted: PersistedCache): void {
     // Пропускаем устаревшие записи
     if (now - entry.state.dataUpdatedAt > MAX_AGE_MS) continue;
     try {
-      client.setQueryData(entry.queryKey as any, entry.state.data, {
+      client.setQueryData(entry.queryKey as QueryKey, entry.state.data, {
         updatedAt: entry.state.dataUpdatedAt,
       });
     } catch {

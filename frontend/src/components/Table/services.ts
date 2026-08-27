@@ -104,7 +104,7 @@ export function getModelColumns(
 	const storageColumns = localStorage.getItem(storageKey);
 	if (storageColumns !== null) {
 		try {
-			const parsed: TColumn[] = JSON.parse(storageColumns);
+			const parsed = JSON.parse(storageColumns) as TColumn[];
 			// Служебные колонки (identifier начинается с "__", напр. "__rowActions")
 			// инжектируются в рантайме и НЕ участвуют в кэше/сигнатуре — иначе
 			// сигнатура не совпадёт с defaults и настройки колонок будут сбрасываться.
@@ -151,7 +151,7 @@ export function loadTableView(componentName: string): TableViewState | null {
 	try {
 		const raw = localStorage.getItem(TABLE_VIEW_PREFIX + componentName);
 		if (!raw) return null;
-		const parsed = JSON.parse(raw);
+		const parsed = JSON.parse(raw) as unknown;
 		return parsed && typeof parsed === "object" ? (parsed as TableViewState) : null;
 	} catch {
 		return null;

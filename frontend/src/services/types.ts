@@ -25,7 +25,7 @@ export interface Product extends BaseEntity {
 	sku: string;
 	stock: number;
 	images: string[];
-	attributes: Record<string, any>;
+	attributes: Record<string, unknown>;
 	isFeatured: boolean;
 	rating?: number;
 }

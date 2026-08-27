@@ -481,7 +481,7 @@ const LookupField: FC<LookupFieldProps> = ({
         data: { uuid: value } as Partial<TDataItem>,
       });
     }).catch(() => { /* тихо игнорируем ошибку загрузки */ });
-  }, [value, disabled, endpoint, displayValue, addPane]);
+  }, [value, endpoint, addPane]);
 
   // ── Создать новый элемент справочника (открывает форму создания) ─────────
   // Токен ждущего создания: по нему созданный объект вернётся ИМЕННО в это поле
@@ -612,7 +612,7 @@ const LookupField: FC<LookupFieldProps> = ({
       e.stopPropagation();
       setIsDropdownOpen(false);
     }
-  }, [isDropdownOpen, suggestions, activeIndex, inputText, displayValue, isLoading, debouncedText, disabled, handleOpenModal, handleSuggestionClick, handleQuickSelect, onEnterKey]);
+  }, [isDropdownOpen, suggestions, activeIndex, inputText, displayValue, isLoading, debouncedText, disabled, handleSuggestionClick, handleQuickSelect, onEnterKey]);
 
   // Разрешение отложенного Enter: как только поиск завершился — выбираем точное
   // совпадение по тексту (иначе первое), либо переходим дальше, если совпадений нет.

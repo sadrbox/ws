@@ -43,7 +43,7 @@ const AvatarUpload: FC<AvatarUploadProps> = ({
         responseType: "blob",
       });
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-      const url = URL.createObjectURL(res.data);
+      const url = URL.createObjectURL(res.data as Blob);
       blobUrlRef.current = url;
       setAvatarUrl(url);
     } catch {

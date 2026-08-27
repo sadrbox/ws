@@ -170,7 +170,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
         </div>
       )
     },
-  ], [form.fields, form.isLoading, form.isEditMode, form.formUid, notices]);
+  ], [form.fields, form.formUid, notices]);
 
   return (
     <ModelForm paneId={form.paneId} tabs={tabs} readonly

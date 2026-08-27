@@ -214,7 +214,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		}
 
 		return result;
-	}, [cacheVersion, ownerFilter, search, columns, componentName, serverWordSearch]);
+	}, [cacheVersion, ownerFilter, search, columns, serverWordSearch]);
 
 	// ── Handlers ───────────────────────────────────────────────────────────
 	const handleSortChange = useCallback(

@@ -187,7 +187,7 @@ const ReportPane: FC<ReportPaneProps> = ({
     const mime = format === "xls"
       ? "application/vnd.ms-excel"
       : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    const ab = XLSX.write(wb, { type: "array", bookType });
+    const ab = XLSX.write(wb, { type: "array", bookType }) as ArrayBuffer;
     download(new Blob([ab], { type: mime }), `${fileBaseName}.${format}`);
   }, [canExport, workbook, fileBaseName]);
 

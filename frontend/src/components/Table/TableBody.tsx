@@ -407,7 +407,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
       // preventScroll — чтобы не дёргать видимую область при программном фокусе
       try { scroller.focus({ preventScroll: true }); } catch { scroller.focus(); }
     }
-  }, [setActiveRow, setActiveCell, row.id, scrollRef, variant]);
+  }, [setActiveRow, setActiveCell, row.id, scrollRef]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!inlineEditingRef?.current) {

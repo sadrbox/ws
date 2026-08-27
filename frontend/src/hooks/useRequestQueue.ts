@@ -10,7 +10,7 @@ import { useCallback, useRef } from "react";
 
 interface QueuedRequest {
 	id: string;
-	execute: () => Promise<any>;
+	execute: () => Promise<unknown>;
 	timestamp: number;
 	timeout?: ReturnType<typeof setTimeout>;
 	/** Callback для отмены (когда компонент размонтирован) */
@@ -60,7 +60,7 @@ function processQueue() {
 	}
 }
 
-function addRequestGlobal(id: string, execute: () => Promise<any>) {
+function addRequestGlobal(id: string, execute: () => Promise<unknown>) {
 	const req: QueuedRequest = { id, execute, timestamp: Date.now() };
 	queue.push(req);
 	processQueue();
@@ -90,7 +90,7 @@ export const useRequestQueue = () => {
 	const groupIdRef = useRef(`rq-${++instanceCounter}`);
 
 	const addRequest = useCallback(
-		(id: string, execute: () => Promise<any>) => {
+		(id: string, execute: () => Promise<unknown>) => {
 			const fullId = `${groupIdRef.current}:${id}`;
 			addRequestGlobal(fullId, execute);
 		},

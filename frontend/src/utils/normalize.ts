@@ -36,7 +36,7 @@ export const IGNORED_DIFF_KEYS: ReadonlySet<string> = new Set([
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	if (v === null || typeof v !== "object") return false;
-	const proto = Object.getPrototypeOf(v);
+	const proto = Object.getPrototypeOf(v) as object | null;
 	return proto === null || proto === Object.prototype;
 }
 

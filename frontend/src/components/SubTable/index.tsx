@@ -750,7 +750,7 @@ const SubTable: FC<SubTableProps> = ({
     })();
     if (!hasError && !isCellEmpty) return undefined;
     return <ReadOnlyCell row={row} column={col} />;
-  }, [renderCellProp, ctx, deferRemoteChanges, cellErrors, requiredFields, inlineEditing, rowActions]);
+  }, [renderCellProp, ctx, deferRemoteChanges, cellErrors, requiredFields, rowActions]);
 
   // ── getCellMeta ────────────────────────────────────────────────────────
   // Возвращает required/error-флаги и визуальный errorTooltip. Table передаёт

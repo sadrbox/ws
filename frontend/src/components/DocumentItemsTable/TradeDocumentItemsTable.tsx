@@ -345,7 +345,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
       }
       return withSaleItemRecalc({ ...row, ...enforced, vatCalculationMethod }, enforced);
     },
-    [isVatEnabled, useDiscount, useExcise, vatCalculationMethod, orgVatRate, orgExciseRate, hasTaxes],
+    [isVatEnabled, useDiscount, useExcise, vatCalculationMethod, hasTaxes],
   );
 
   // Автоподбор цены при выборе номенклатуры в строке — ТОЛЬКО по выбранному в

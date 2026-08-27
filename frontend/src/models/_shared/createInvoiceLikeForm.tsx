@@ -477,7 +477,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       } finally {
         setIsRefilling(false);
       }
-    }, [form, currentUser?.uuid, cfg.itemsEndpoint, cfg.itemsParentField, cfg.hasWarehouse]);
+    }, [form, currentUser?.uuid]);
 
     const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
       form.fields.organizationUuid || null,

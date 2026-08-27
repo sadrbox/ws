@@ -69,7 +69,7 @@ const App: React.FC = () => {
         networkMode: "offlineFirst",
         staleTime: 2 * 60 * 1000,
         gcTime: 30 * 60 * 1000,
-        retry: (failureCount, error: any) => {
+        retry: (failureCount, error: { code?: string; message?: string }) => {
           // Не ретраить при сетевых ошибках — бессмысленно
           if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") return false;
           return failureCount < 1;
@@ -340,7 +340,7 @@ const App: React.FC = () => {
     setNavbarItems((prev) => prev.map((n) => ({ ...n, isActive: false })));
 
     return uniqId;
-  }, [panes, activePaneId]);
+  }, [panes, activePaneId, setActivePaneId]);
 
   /** Закрытие панели.
    * force=true — принудительно, без guards (после сохранения).
@@ -412,7 +412,7 @@ const App: React.FC = () => {
     if (panes.some((p) => p.uniqId === uniqId)) {
       setActivePaneId(uniqId);
     }
-  }, [panes]);
+  }, [panes, setActivePaneId]);
 
   const updatePaneLabel = useCallback((uniqId: string, label: string) => {
     setPanes(prev => prev.map(p => p.uniqId === uniqId ? { ...p, label } : p));

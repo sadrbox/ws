@@ -248,7 +248,7 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
       if (dev > 0) s += dev; else d += -dev;
     }
     return { surplus: Math.round(s * 10000) / 10000, shortage: Math.round(d * 10000) / 10000 };
-  }, [itemsTableKey, items]);
+  }, []);
   const fmtQty = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 4 });
 
   const isSaved = form.isEditMode && !!form.fields.uuid;

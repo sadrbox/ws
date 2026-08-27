@@ -45,9 +45,14 @@ vi.mock('src/app', () => ({
 
 // ── Мок useFormStore — возвращает стабильное состояние ──────────────────
 // Перехватываем аргумент options, чтобы проверить initialFields.
-let capturedInitialFields: any = undefined;
+let capturedInitialFields: Record<string, unknown> | undefined = undefined;
+type MockFormOptions = {
+  initialFields?: Record<string, unknown>;
+  defaultFields?: Record<string, unknown>;
+  paneProps?: { data?: Record<string, unknown> };
+};
 vi.mock('src/hooks/useFormStore', () => ({
-  useFormStore: (options: any) => {
+  useFormStore: (options: MockFormOptions) => {
     capturedInitialFields = options.initialFields;
     const d = options.paneProps?.data;
     const isEditMode = !!(d?.uuid);
@@ -102,9 +107,9 @@ vi.mock('src/components/Field/LookupField', () => ({
 }));
 
 vi.mock('src/components/UI', () => ({
-  Group: ({ children }: any) => React.createElement('div', null, children),
-  GroupCol: ({ children }: any) => React.createElement('div', null, children),
-  GroupRow: ({ children }: any) => React.createElement('div', null, children),
+  Group: ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children),
+  GroupCol: ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children),
+  GroupRow: ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children),
 }));
 
 vi.mock('src/styles/main.module.scss', () => ({
@@ -148,12 +153,12 @@ describe('OrgRightsPanel', () => {
     // Форма строки права несёт в initialFields userUuid и organizationUuid
     // (поля orgShortName в TItemFields нет — форма не отображает имя орг).
     expect(capturedInitialFields).toBeTruthy();
-    expect(capturedInitialFields.userUuid).toBe('u1');
-    expect(capturedInitialFields.organizationUuid).toBe('o1');
+    expect((capturedInitialFields as Record<string, unknown> | undefined)?.userUuid).toBe('u1');
+    expect((capturedInitialFields as Record<string, unknown> | undefined)?.organizationUuid).toBe('o1');
   });
 
   it('initialFields = undefined когда uuid передан (edit-mode)', () => {
-    capturedInitialFields = 'not-set';
+    capturedInitialFields = { __marker: 'not-set' };
     render(React.createElement(OrgRightsPanel, {
       data: { uuid: '5', userUuid: 'u1', organizationUuid: 'o1' },
     }));

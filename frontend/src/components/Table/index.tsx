@@ -710,7 +710,7 @@ const Table: FC<TableProps> = memo((props) => {
     e.preventDefault();
     e.stopPropagation();
     setActiveRow(nextId);
-  }, [handleCreate, handleDeleteClick, rows, activeRow, activeCell, columns, variant, onSelectItem, openModelForm, refetch, isAllSelectedMode, selectedRows, excludedRows, setSelectedRows, setIsAllSelectedMode, setExcludedRows]);
+  }, [handleCreate, handleDeleteClick, rows, activeRow, activeCell, columns, variant, onSelectItem, openModelForm, refetch, isAllSelectedMode, setSelectedRows, setIsAllSelectedMode, setExcludedRows]);
 
   const handleConfigOpen = useCallback(() => {
     setConfigModalAction('open');
