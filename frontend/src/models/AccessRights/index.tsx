@@ -18,7 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
+import { makePaneLabel, makePaneLabelFromData, type LabelSource } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import { AccessPermissionsTable, MODEL_NAME_OPTIONS } from "src/models/AccessPermissions";
 import { UserDefaultsTable, PERMISSION_DEFAULT_TYPE_OPTIONS } from "src/models/UserDefaults";
@@ -143,9 +143,12 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
       if (!fd.organizationUuid) return "Организация обязательна";
       return { userUuid: fd.userUuid, organizationUuid: fd.organizationUuid, role: fd.role };
     },
-    buildPaneLabel: (saved) => {
-      const userName = saved.userDisplayName || (saved).user?.username || "";
-      const orgName = saved.orgShortName || (saved).organization?.name || "";
+    buildPaneLabel: (saved: LabelSource & {
+      userDisplayName?: string | null; user?: { username?: string | null } | null;
+      orgShortName?: string | null; organization?: { name?: string | null } | null;
+    }) => {
+      const userName = saved.userDisplayName || saved.user?.username || "";
+      const orgName = saved.orgShortName || saved.organization?.name || "";
       const detail = [userName, orgName].filter(Boolean).join(" / ");
       return makePaneLabel("AccessRightsList", translate("accessPermission"), saved, detail || undefined);
     },
@@ -162,13 +165,13 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
   // allRows содержит все строки SubTable (сервер + pending), обновляется через onAllItemsChange.
   const allModelsUsed = useMemo(
     () => MODEL_NAME_OPTIONS.length > 0 && MODEL_NAME_OPTIONS.every(o =>
-      accessPermissions.allRows.some(r => (r as any).modelName === o.value && (r as any)._pendingAction !== "delete")
+      accessPermissions.allRows.some(r => r.modelName === o.value && r._pendingAction !== "delete")
     ),
     [accessPermissions.allRows],
   );
   const allTypesUsed = useMemo(
     () => PERMISSION_DEFAULT_TYPE_OPTIONS.length > 0 && PERMISSION_DEFAULT_TYPE_OPTIONS.every(o =>
-      userDefaults.allRows.some(r => (r as any).valueType === o.value && (r as any)._pendingAction !== "delete")
+      userDefaults.allRows.some(r => r.valueType === o.value && r._pendingAction !== "delete")
     ),
     [userDefaults.allRows],
   );
@@ -271,9 +274,9 @@ const AccessRightsList: FC<{
     columnsJson={listColumnsJson}
     FormComponent={AccessRightsForm}
     getLabel={(d) => {
-      const item = d as any;
+      const item = d as { user?: { username?: string | null } | null; organization?: { name?: string | null } | null };
       return item?.user?.username
-        ? `${String(item.user.username)} / ${String(item.organization?.name ?? "")}`
+        ? `${item.user.username} / ${item.organization?.name ?? ""}`
         : "";
     }}
     variant={variant}
@@ -317,10 +320,10 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
             label=""
             name={`uo_org_${row.id}`}
             value={(row.organizationUuid as string) ?? ""}
-            displayValue={(row.organization as any)?.name ?? ""}
+            displayValue={(row.organization as { name?: string | null } | null)?.name ?? ""}
             endpoint="organizations"
             displayField="name"
-            onSelect={(uuid, _dv, item) => {
+            onSelect={(uuid, _dv, item: { name?: string | null; bin?: string | null }) => {
               void ctx.handleLookupChange(row, "organizationUuid", uuid, {
                 organization: item && uuid
                   ? { uuid, name: item.name ?? "", bin: item.bin ?? null }
@@ -336,7 +339,7 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
           />
         );
       }
-      return <span>{(row.organization as any)?.name ?? ""}</span>;
+      return <span>{(row.organization as { name?: string | null } | null)?.name ?? ""}</span>;
     }
 
     if (col.identifier === "role") {
@@ -364,7 +367,7 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
       invalidate: () => void queryClient.invalidateQueries({ queryKey: [ENDPOINT] }),
       component: AccessRightsForm,
       label: (d, isEdit) => isEdit
-        ? `${((d?.organization as any)?.name as string | undefined) ?? (d?.organizationUuid as string | undefined) ?? "Организация"}`
+        ? `${(d?.organization as { name?: string | null } | null)?.name ?? (d?.organizationUuid as string | undefined) ?? "Организация"}`
         : makePaneLabelFromData("AccessRightsTable", "Пользователь / Организация", null),
       newContext: () => (userUuid ? { userUuid } : {}),
     }, data, ctx, sourceRow);

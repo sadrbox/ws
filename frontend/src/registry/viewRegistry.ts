@@ -15,11 +15,12 @@
  * же идёт восстановление.
  */
 import React from "react";
+import { asText } from "src/utils/asText";
 
 /** Сбой загрузки динамического чанка (устаревший модуль после перезапуска Vite-dev
  * или деплоя прод-сборки, пока вкладка открыта). Сообщение зависит от браузера. */
 function isChunkLoadError(err: unknown): boolean {
-	const msg = String((err as { message?: string })?.message ?? err ?? "");
+	const msg = asText((err as { message?: string })?.message ?? err ?? "");
 	return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(msg);
 }
 

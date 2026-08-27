@@ -133,7 +133,6 @@ const XlsxReportPane: FC<XlsxReportPaneProps> = ({
     // from a controlled XLSX template, not from user/network text input.
     <div
       className={styles.XlsxSheet}
-      // eslint-disable-next-line react/no-danger
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

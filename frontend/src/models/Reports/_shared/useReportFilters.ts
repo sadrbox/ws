@@ -37,7 +37,7 @@ export function useReportFilters<F extends Record<string, unknown>>(
 
 	// applied считается синхронно: drill-target (есть initial) формируется сразу.
 	const [applied, setApplied] = useState<F | null>(() =>
-		hasInitial && autoApplyInitial ? { ...fields, ...(initial as Partial<F>) } : null,
+		hasInitial && autoApplyInitial ? { ...fields, ...initial } : null,
 	);
 
 	// Один раз вмерживаем props-initial поверх восстановленных фильтров (initial важнее).
@@ -45,7 +45,7 @@ export function useReportFilters<F extends Record<string, unknown>>(
 	useEffect(() => {
 		if (hasInitial && !merged.current) {
 			merged.current = true;
-			setFields((prev) => ({ ...prev, ...(initial as Partial<F>) }));
+			setFields((prev) => ({ ...prev, ...initial }));
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);

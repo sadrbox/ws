@@ -18,7 +18,9 @@ export interface OrgAccountingSettingItem {
 	/** Числовая Ставка НДС, % (ранее бралась из справочника VatRate, который удалён). */
 	vatRate: number | string | null;
 	/** Способ расчёта НДС: "INCLUDED" — в сумме; "ADDED" — сверху. */
-	vatCalculationMethod: "INCLUDED" | "ADDED" | string;
+	// (string & {}) сохраняет автоподсказку известных значений, не «схлопывая»
+	// союз в просто string (иначе no-redundant-type-constituents).
+	vatCalculationMethod: "INCLUDED" | "ADDED" | (string & {});
 	/** Включает колонки скидок в SaleItemsTable (discountPercent, discountAmount). */
 	useDiscount: boolean;
 	/** Включает колонки акциза в SaleItemsTable (exciseRate, exciseAmount). НК РК ст. 463. */

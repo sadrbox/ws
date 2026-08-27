@@ -1,6 +1,5 @@
 import type { TOpenModelFormProps } from "src/app/types";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { translate } from "src/i18";
 import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {

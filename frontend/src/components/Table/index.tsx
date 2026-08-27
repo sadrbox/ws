@@ -2,16 +2,15 @@ import styles from './Table.module.scss';
 import { TableConfigModalForm } from './TableConfigModalForm';
 import { DateRangeBar, FieldDateRangeModal, FieldFastSearchInternal } from './TableToolbarControls';
 import { TableArea } from './TableArea';
-import { ROW_HEIGHT, OVERSCAN } from './constants';
+import { ROW_HEIGHT } from './constants';
 
 import {
   TColumn,
   TDataItem,
   TypeFormAction,
-  TypeFormMethod,
 } from './types';
 
-import { getTranslateColumn, translate } from 'src/i18';
+import { translate } from 'src/i18';
 import {
   CHECKBOX_COL_ID,
   computeNextActiveColId,
@@ -20,11 +19,9 @@ import {
   getTableNavDirection,
 } from './tableKeyboardNav';
 
-import Modal from '../Modal';
 import { Button } from '../Button';
 import { LoadingSpinner } from '../UI';
 import Toolbar from 'src/components/Toolbar';
-import { Group } from 'src/components/UI';
 
 // dnd-kit / PiDots переехали в ./TableConfigColumns вместе с компонентами настройки.
 

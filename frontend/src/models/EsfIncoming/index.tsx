@@ -2,6 +2,7 @@
 // Единый вид — стандартный <Table/>; загрузка через /esf/incoming (queryInvoice
 // INBOUND), подтверждение — без подписи. Сквозной сценарий — с реальным ЭЦП.
 import { FC, useCallback, useMemo, useState } from "react";
+import { asText } from "src/utils/asText";
 import { translate } from "src/i18";
 import { useEsfSession } from "src/hooks/useEsfSession";
 import Notice, { type NoticeItem } from "src/components/Notice";
@@ -62,7 +63,7 @@ export const EsfIncomingList: FC = () => {
 	})), [rows]);
 
 	const renderCell = useCallback((row: TDataItem, col: TColumn) => {
-		if (col.identifier === "date") return <span>{row.date ? getFormatDateOnly(String(row.date)) : "—"}</span>;
+		if (col.identifier === "date") return <span>{row.date ? getFormatDateOnly(asText(row.date)) : "—"}</span>;
 		if (col.identifier === "__confirm") return (
 			<button className={styles.Btn} disabled={busy} onClick={() => void confirm(row.invoiceId as string | null)}>{translate("esfConfirm")}</button>
 		);

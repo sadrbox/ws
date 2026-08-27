@@ -1,4 +1,5 @@
 import { TDataItem } from "src/components/Table/types";
+import { asText } from "src/utils/asText";
 import { getComponentName } from "src/app/getComponentName";
 import type { TComponentNode } from "src/app/types";
 
@@ -35,7 +36,7 @@ function serializePaneUniqValue(value: unknown): string {
 			);
 		return `{${entries.join("|")}}`;
 	}
-	return String(value);
+	return asText(value);
 }
 
 export function buildPaneUniqId(

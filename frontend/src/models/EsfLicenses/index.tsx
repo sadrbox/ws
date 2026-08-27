@@ -4,6 +4,7 @@
 // (публичные /api1/esf-license/* для 1С находят запись по bin, здесь только админка).
 // Активация — на форме элемента (тумблер «Активна»), в списке статус только для чтения.
 import { FC, useCallback, useMemo } from "react";
+import { asText } from "src/utils/asText";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -176,7 +177,7 @@ EsfLicensesForm.displayName = "EsfLicensesForm";
 // Статус лицензии для колонки списка (только чтение; активация — на форме).
 function statusCell(row: TDataItem) {
 	const active = row.active === true;
-	const expired = active && row.expiresAt && new Date(String(row.expiresAt)) < new Date();
+	const expired = active && row.expiresAt && new Date(asText(row.expiresAt)) < new Date();
 	const key = !active ? "esfStatusInactive" : expired ? "esfStatusExpired" : "esfStatusActive";
 	const color = !active ? "var(--text-muted)" : expired ? "var(--danger)" : "var(--success)";
 	return <span style={{ color, fontWeight: 600 }}>{translate(key)}</span>;

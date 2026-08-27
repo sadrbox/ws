@@ -1,9 +1,10 @@
 import { FC, useMemo, useCallback, useState, useRef } from "react";
+import { asText } from "src/utils/asText";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
-import type { TDataItem } from "src/components/Table/types";
+import type { TDataItem, DocRow } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
@@ -22,7 +23,7 @@ import { useContractSync } from "src/hooks/useContractSync";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
-import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -45,7 +46,7 @@ import { useGovDocs } from "src/hooks/useGovDocs";
 import { useAppContext } from "src/app/context";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
-import { openDocumentFromBasis, mapCommonTradeFields, mapPaymentFromBasis, fetchDocumentItems, resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, mapPaymentFromBasis, fetchDocumentItems, resolveOrgChangeFields, type BasisSource } from "src/utils/createFromBasis";
 import { CashReceiptOrdersForm } from "src/models/CashReceiptOrders";
 import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
@@ -321,7 +322,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         basisDocumentLabel: fd.basisDocumentLabel || null,
       };
     },
-    buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
+    buildPaneLabel: (saved: LabelSource) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
     afterSave,
     afterReload,
     // Контроль остатка перед проведением: при posted=true проверяем, что склад
@@ -463,7 +464,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     return p;
   }, [form.fields.organizationUuid, form.fields.counterpartyUuid]);
   const syncContract = useContractSync();
-  const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
+  const handleContractSelect = useCallback((uuid: string, displayValue: string, item: {
+    organizationUuid?: string; organization?: { name?: string | null } | null;
+    counterpartyUuid?: string; counterparty?: { name?: string | null } | null;
+  }) => {
     const updates: Partial<TFields> = {
       contractUuid: uuid,
       contractName: displayValue,
@@ -634,11 +638,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     existingCheckEndpoint?: string,
     // Платёжный документ (ПКО) не переносит позиции, а сумму берёт из итога
     // реализации — переопределяем маппер и обнуляем перенос строк.
-    mapFieldsFn: (src: any) => Record<string, any> = mapCommonTradeFields,
-    mapItemsFn?: (items: any[]) => any[],
+    mapFieldsFn: (src: BasisSource) => Record<string, unknown> = mapCommonTradeFields,
+    mapItemsFn?: (items: DocRow[]) => DocRow[],
   ) => {
     await openDocumentFromBasis(
-      form.fields as any,
+      form.fields as unknown as BasisSource,
       translate("saleRealization"),
       {
         docLabel,
@@ -666,10 +670,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     const uuid = form.fields.uuid;
     if (!uuid) return;
     try {
-      if (id === "awp") { const r = await govDocs.issueAwp(uuid); form.setFields({ awpStatus: r.awpStatus, awpId: r.awpId, awpRegistrationNumber: r.awpRegistrationNumber } as any); }
-      else if (id === "awpStatus") { const r = await govDocs.refreshAwp(uuid); form.setFields({ awpStatus: r.awpStatus, awpRegistrationNumber: r.awpRegistrationNumber } as any); }
-      else if (id === "snt") { const r = await govDocs.issueSnt("sales", uuid); form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as any); }
-      else if (id === "sntStatus") { const r = await govDocs.refreshSnt("sales", uuid); form.setFields({ sntStatus: r.sntStatus, sntRegistrationNumber: r.sntRegistrationNumber } as any); }
+      if (id === "awp") { const r = await govDocs.issueAwp(uuid); form.setFields({ awpStatus: r.awpStatus, awpId: r.awpId, awpRegistrationNumber: r.awpRegistrationNumber } as unknown as Partial<TFields>); }
+      else if (id === "awpStatus") { const r = await govDocs.refreshAwp(uuid); form.setFields({ awpStatus: r.awpStatus, awpRegistrationNumber: r.awpRegistrationNumber } as unknown as Partial<TFields>); }
+      else if (id === "snt") { const r = await govDocs.issueSnt("sales", uuid); form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>); }
+      else if (id === "sntStatus") { const r = await govDocs.refreshSnt("sales", uuid); form.setFields({ sntStatus: r.sntStatus, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>); }
     } catch { /* ошибка показывается через govDocs.error */ }
   }, [form.fields.uuid, form.setFields, govDocs]);
 
@@ -891,9 +895,9 @@ const SalesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
           parentUuid={String(row.uuid ?? "")} parentField="saleUuid"
           endpoint="saleitems" componentName="SaleItemsList_part"
           serialMode="issue" serialDocType="sale" batchMode="issue"
-          warehouseUuid={row.warehouseUuid ? String(row.warehouseUuid) : undefined}
-          organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
-          documentDate={row.date ? String(row.date) : null}
+          warehouseUuid={row.warehouseUuid ? asText(row.warehouseUuid) : undefined}
+          organizationUuid={row.organizationUuid ? asText(row.organizationUuid) : null}
+          documentDate={row.date ? asText(row.date) : null}
           disabled disableAddRows disableDeleteRows
           emptyMessage={translate("noItems") || "Нет позиций"}
           defaultHiddenColumns={["amountNetOfIndirectTaxes", "amountWithoutVat"]}

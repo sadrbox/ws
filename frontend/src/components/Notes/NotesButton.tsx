@@ -80,7 +80,7 @@ const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; inva
     queryKey: qk(endpoint, uuid),
     queryFn: async () => {
       const r = await apiClient.get<{ items?: NoteRow[] }>("notes", { params: { entityType: endpoint, entityUuid: uuid } });
-      return (r.data?.items ?? []) as NoteRow[];
+      return r.data?.items ?? [];
     },
     staleTime: 0,
   });

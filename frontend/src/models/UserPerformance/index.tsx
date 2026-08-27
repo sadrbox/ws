@@ -14,6 +14,7 @@
  * цвета/тема — из CSS-токенов.
  */
 import { FC, useEffect, useMemo, useState } from "react";
+import { asText } from "src/utils/asText";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "src/services/api/client";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
@@ -64,7 +65,7 @@ const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);
 
 function barData(rows: Array<Record<string, unknown>>, nameKey: string, valueKey: string): CatDatum[] {
 	return rows
-		.map((r) => ({ name: String(r[nameKey] ?? "—"), value: num(r[valueKey]) }))
+		.map((r) => ({ name: asText(r[nameKey] ?? "—"), value: num(r[valueKey]) }))
 		.filter((d) => d.value !== 0)
 		.sort((a, b) => b.value - a.value)
 		.slice(0, TOP_N);
@@ -144,7 +145,7 @@ export const UserPerformanceList: FC = () => {
 	const toggleBlock = (id: string) =>
 		setSelected((prev) => {
 			const next = new Set(prev);
-			next.has(id) ? next.delete(id) : next.add(id);
+			if (next.has(id)) next.delete(id); else next.add(id);
 			return next;
 		});
 

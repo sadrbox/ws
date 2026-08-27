@@ -1,4 +1,5 @@
 import { FC, useMemo } from "react";
+import { asText } from "src/utils/asText";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -197,7 +198,7 @@ PayrollPaymentsForm.displayName = "PayrollPaymentsForm";
 
 const PayrollPaymentsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={PayrollPaymentsForm}
-    getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => d?.date ? getFormatDateOnly(asText(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />

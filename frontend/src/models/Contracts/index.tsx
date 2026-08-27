@@ -1,4 +1,4 @@
-import { FC, useCallback, useMemo, useState } from "react";
+import { FC, useCallback, useMemo } from "react";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -25,7 +25,7 @@ import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
 
@@ -125,8 +125,8 @@ const ContractsForm: FC<Partial<TPane>> = (paneProps) => {
         counterpartyUuid: fd.counterpartyUuid || null,
       };
     },
-    buildPaneLabel: (saved) =>
-      makePaneLabel("ContractsList", "Договора", saved, saved.name || saved.contractNumber),
+    buildPaneLabel: (saved: LabelSource & { contractNumber?: string | null }) =>
+      makePaneLabel("ContractsList", "Договора", saved, saved.name || saved.contractNumber || undefined),
   });
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
@@ -273,21 +273,21 @@ const ContractsTable: FC<ContractsTableProps> = ({
     }
     if (col.identifier === "counterparty.name") {
       if (ctx.inlineEditing) return (
-        <LookupField label="" name={`ct_cpty_${row.id}`} value={(row.counterpartyUuid as string) ?? ""} displayValue={(row.counterparty as any)?.name ?? ""} endpoint="counterparties" displayField="name"
-          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "counterpartyUuid", uuid, { counterparty: item && uuid ? { uuid, name: item.name ?? "" } : null })}
+        <LookupField label="" name={`ct_cpty_${row.id}`} value={(row.counterpartyUuid as string) ?? ""} displayValue={(row.counterparty as { name?: string | null } | null)?.name ?? ""} endpoint="counterparties" displayField="name"
+          onSelect={(uuid, _dv, item: { name?: string | null }) => ctx.handleLookupChange(row, "counterpartyUuid", uuid, { counterparty: item && uuid ? { uuid, name: item.name ?? "" } : null })}
           onClear={() => ctx.handleLookupChange(row, "counterpartyUuid", null, { counterparty: null })}
           disabled={ctx.disabled} width="100%" variant="table" />
       );
-      return <span>{(row.counterparty as any)?.name ?? ""}</span>;
+      return <span>{(row.counterparty as { name?: string | null } | null)?.name ?? ""}</span>;
     }
     if (col.identifier === "organization.name") {
       if (ctx.inlineEditing) return (
-        <LookupField label="" name={`ct_org_${row.id}`} value={(row.organizationUuid as string) ?? ""} displayValue={(row.organization as any)?.name ?? ""} endpoint="organizations" displayField="name"
-          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "organizationUuid", uuid, { organization: item && uuid ? { uuid, name: item.name ?? "" } : null })}
+        <LookupField label="" name={`ct_org_${row.id}`} value={(row.organizationUuid as string) ?? ""} displayValue={(row.organization as { name?: string | null } | null)?.name ?? ""} endpoint="organizations" displayField="name"
+          onSelect={(uuid, _dv, item: { name?: string | null }) => ctx.handleLookupChange(row, "organizationUuid", uuid, { organization: item && uuid ? { uuid, name: item.name ?? "" } : null })}
           onClear={() => ctx.handleLookupChange(row, "organizationUuid", null, { organization: null })}
           disabled={ctx.disabled} width="100%" variant="table" />
       );
-      return <span>{(row.organization as any)?.name ?? ""}</span>;
+      return <span>{(row.organization as { name?: string | null } | null)?.name ?? ""}</span>;
     }
     return undefined;
   }, []);
@@ -298,7 +298,7 @@ const ContractsTable: FC<ContractsTableProps> = ({
       addPane,
       invalidate: () => void queryClient.invalidateQueries({ queryKey: [CR_TABLE_ENDPOINT] }),
       component: ContractsForm,
-      label: (d, isEdit) => makePaneLabelFromData("ContractsList", "Договора", isEdit ? d as any : null, (d?.name || d?.contractNumber) as string),
+      label: (d, isEdit) => makePaneLabelFromData("ContractsList", "Договора", isEdit ? d as LabelSource : null, (d?.name || d?.contractNumber) as string),
       newContext: () => ({ [parentKey]: parentUuid, [nameKey]: parentName }),
     }, data, ctx, sourceRow);
   }, [addPane, parentKey, parentUuid, parentName, queryClient]);

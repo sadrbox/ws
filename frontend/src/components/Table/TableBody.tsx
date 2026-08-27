@@ -15,7 +15,6 @@ import {
 } from 'react';
 import { GLOBAL_ADAPTIVE_LIMIT_REF } from 'src/hooks/useInfiniteModelList';
 import { CellFieldStateScope } from 'src/hooks/useDirtyHighlight';
-import { Field } from 'src/components/Field';
 import { Icon } from 'src/components/IconButton/icons';
 import { translate } from 'src/i18';
 import type { TColumn, TDataItem } from './types';

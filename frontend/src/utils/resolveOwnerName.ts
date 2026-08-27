@@ -1,4 +1,5 @@
 import { api } from "src/services/api/client";
+import { asText } from "src/utils/asText";
 import { unwrapItem } from "src/utils/apiUnwrap";
 
 /**
@@ -28,8 +29,8 @@ export async function resolveOwnerName(
     const item = unwrapItem<Record<string, unknown> | null>(
       await api.get(`/${config.endpoint}/${ownerUuid}`),
     );
-    return String(
-      item?.[config.displayField] ?? item?.name ?? item?.fullName ?? "",
+    return asText(
+      item?.[config.displayField] ?? item?.name ?? item?.fullName,
     );
   } catch {
     return "";

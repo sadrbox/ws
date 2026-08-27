@@ -41,7 +41,7 @@ import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
-import { validateDocumentFields, formatValidationErrors, getDocumentFillHint } from "src/utils/validatePostedDocument";
+import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 
 const ENDPOINT = "month-closes";

@@ -27,6 +27,16 @@ interface CardRow {
   description: string; analytics: string;
 }
 
+/** Ответ отчёта «Карточка счёта» (accounting/account-card). */
+interface AccountCardResponse {
+  items?: CardRow[];
+  opening?: number;
+  turnDebit?: number;
+  turnCredit?: number;
+  closing?: number;
+  accountName?: string;
+}
+
 interface Filters extends Record<string, unknown> {
   dateFrom: string; dateTo: string; orgUuid: string; orgName: string;
   accountCode: string; accountName: string;
@@ -65,14 +75,14 @@ const AccountCard: FC<Props> = ({
   });
   const drill = useReportDrill({ orgName: fields.orgName });
 
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading } = useQuery<AccountCardResponse>({
     queryKey: ["accounting-account-card", applied],
     queryFn: async () => {
       const p: Record<string, string> = { accountCode: applied!.accountCode };
       if (applied!.dateFrom) p.dateFrom = applied!.dateFrom;
       if (applied!.dateTo) p.dateTo = applied!.dateTo;
       if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
-      return await api.get<any>("accounting/account-card", { params: p });
+      return await api.get<AccountCardResponse>("accounting/account-card", { params: p });
     },
     enabled: !!applied && !!applied.accountCode,
   });
@@ -96,7 +106,7 @@ const AccountCard: FC<Props> = ({
           onSelect={(u, d) => patch({ orgUuid: u, orgName: d })} onClear={() => patch({ orgUuid: "", orgName: "" })} />
         <LookupField label={translate("account")} name="ac_acc" value={fields.accountCode} displayValue={fields.accountName}
           endpoint="chart-of-accounts" displayField="name"
-          onSelect={(_u, d, item) => patch({ accountCode: item.code, accountName: `${item.code} ${d}` })}
+          onSelect={(_u, d, item: { code?: string }) => patch({ accountCode: item.code ?? "", accountName: `${item.code ?? ""} ${d}` })}
           onClear={() => patch({ accountCode: "", accountName: "" })} />
       </GroupCol>
     </>

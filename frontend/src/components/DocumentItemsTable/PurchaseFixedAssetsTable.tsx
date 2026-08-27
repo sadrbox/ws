@@ -3,6 +3,7 @@
 // («в том числе»). Редактирование inline; сохранение — через useFormStore.tables
 // (deferRemoteChanges + onItemsChange → батч purchasefixedassetitems/batch).
 import { FC, useCallback, useMemo } from "react";
+import { asText } from "src/utils/asText";
 import SubTable, { ReadOnlyCell, type SubTableContext } from "src/components/SubTable";
 import LookupField from "src/components/Field/LookupField";
 import { FieldNumber } from "src/components/Field";
@@ -57,11 +58,11 @@ const PurchaseFixedAssetsTable: FC<Props> = ({ parentUuid, disabled = false, def
 			return <span>{(row.fixedAssetName as string) ?? ""}</span>;
 		}
 		if (col.identifier === "amount") {
-			if (ctx.inlineEditing) return <FieldNumber label="" name={`fa_amt_${row.id}`} value={String(row.amount ?? "")} onChange={e => ctx.handleInlineChange(row, "amount", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" decimals={2} textAlign="right" />;
+			if (ctx.inlineEditing) return <FieldNumber label="" name={`fa_amt_${row.id}`} value={asText(row.amount)} onChange={e => ctx.handleInlineChange(row, "amount", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" decimals={2} textAlign="right" />;
 			return <span>{fmt(row.amount)}</span>;
 		}
 		if (col.identifier === "vatRate") {
-			if (ctx.inlineEditing) return <FieldNumber label="" name={`fa_vr_${row.id}`} value={String(row.vatRate ?? 12)} onChange={e => ctx.handleInlineChange(row, "vatRate", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" decimals={2} textAlign="right" />;
+			if (ctx.inlineEditing) return <FieldNumber label="" name={`fa_vr_${row.id}`} value={asText(row.vatRate ?? 12)} onChange={e => ctx.handleInlineChange(row, "vatRate", e.target.value)} disabled={ctx.disabled} width="100%" variant="table" decimals={2} textAlign="right" />;
 			return <span>{fmt(row.vatRate)}</span>;
 		}
 		if (col.identifier === "vatAmount") {

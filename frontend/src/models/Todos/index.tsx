@@ -1,4 +1,5 @@
 import { FC, useMemo, useCallback } from "react";
+import { asText } from "src/utils/asText";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
@@ -6,7 +7,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import FilesPanel from "src/components/FilesPanel";
-import { Field, FieldNumber, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
+import { FieldNumber, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import ObjectLink from "src/components/ObjectLink";
@@ -94,10 +95,10 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
     if (data?.organizationUuid) { init.organizationUuid = data?.organizationUuid as string; }
     else if (defaultOrg.organizationUuid) { init.organizationUuid = defaultOrg.organizationUuid; init.organizationName = defaultOrg.organizationName; }
     // Описание и ссылка на источник при создании «из заметки» (см. NotesButton).
-    if (data?.description) init.description = String(data.description);
-    if (data?.sourceType) init.sourceType = String(data.sourceType);
-    if (data?.sourceUuid) init.sourceUuid = String(data.sourceUuid);
-    if (data?.sourceLabel) init.sourceLabel = String(data.sourceLabel);
+    if (data?.description) init.description = asText(data.description);
+    if (data?.sourceType) init.sourceType = asText(data.sourceType);
+    if (data?.sourceUuid) init.sourceUuid = asText(data.sourceUuid);
+    if (data?.sourceLabel) init.sourceLabel = asText(data.sourceLabel);
     return init;
   })();
 

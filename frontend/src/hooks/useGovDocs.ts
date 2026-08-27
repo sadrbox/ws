@@ -1,18 +1,16 @@
 import { useCallback, useRef, useState } from "react";
-import { getKeyInfo, NcaLayerUnavailableError } from "src/services/ncalayer";
+import { getKeyInfo } from "src/services/ncalayer";
 import { useNcaLayerSign } from "src/hooks/useNcaLayerSign";
 import { useEsfSession } from "src/hooks/useEsfSession";
+import { friendlyEsfError } from "src/utils/esfFriendlyError";
 import {
 	buildAwpXml, uploadAwp, refreshAwpStatus,
 	buildSntXml, uploadSnt, refreshSntStatus,
 	type SntSource, type AwpResult, type SntResult,
 } from "src/services/govdocs/api";
 
-function errMsg(e: unknown): string {
-	if (e instanceof NcaLayerUnavailableError) return e.message;
-	const a = e as { response?: { data?: { message?: string } }; message?: string };
-	return a?.response?.data?.message || a?.message || "Ошибка гос-документа";
-}
+// Понятное пользователю сообщение (без сырых тех-деталей ИС ЭСФ). См. esfFriendlyError.
+const errMsg = (e: unknown): string => friendlyEsfError(e);
 
 /**
  * Оркестрация выписки гос-документов РК: ЭАВР (акт работ/услуг) и СНТ

@@ -27,7 +27,7 @@ import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
 import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
 import { makeDocLabel } from "src/utils/buildPaneLabel";
-import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
+import { isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import { validateDocumentFields, formatValidationErrors, getDocumentFillHint } from "src/utils/validatePostedDocument";

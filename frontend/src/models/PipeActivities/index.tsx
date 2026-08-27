@@ -8,6 +8,7 @@
 // а интеграция.
 // ─────────────────────────────────────────────────────────────────────────────
 import { FC, useMemo } from "react";
+import { asText } from "src/utils/asText";
 import type { ReactNode } from "react";
 import { translate } from "src/i18";
 import type { TDataItem, TColumn } from "src/components/Table/types";
@@ -20,7 +21,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDate } from "src/utils/datetime";
 import { FormLookup } from "src/components/Field/FormLookup";
 import Notice from "src/components/Notice";
@@ -35,7 +36,7 @@ const ACTION_LABEL_KEYS: Record<string, string> = {
 };
 const actionLabel = (v: unknown): string => {
   const k = ACTION_LABEL_KEYS[String(v)];
-  return k ? translate(k) : String(v ?? "");
+  return k ? translate(k) : asText(v ?? "");
 };
 
 /** Результат применения события к справочнику (см. services/pipeReference.js). */
@@ -45,16 +46,16 @@ const APPLY_LABEL_KEYS: Record<string, string> = {
 };
 const applyLabel = (v: unknown): string => {
   const k = APPLY_LABEL_KEYS[String(v)];
-  return k ? translate(k) : String(v ?? "");
+  return k ? translate(k) : asText(v ?? "");
 };
 
 /** JSON-реквизиты от 1С → компактная строка «ключ: значение; …». */
 function formatProps(v: unknown): string {
   if (v === null || v === undefined || v === "") return "";
-  if (typeof v !== "object") return String(v);
+  if (typeof v !== "object") return asText(v);
   try {
     return Object.entries(v as Record<string, unknown>)
-      .map(([k, val]) => `${k}: ${val === null || val === undefined ? "—" : String(val)}`)
+      .map(([k, val]) => `${k}: ${val === null || val === undefined ? "—" : asText(val)}`)
       .join("; ");
   } catch {
     return "";
@@ -85,26 +86,50 @@ const DEFAULT_FIELDS: TFields = {
   applyStatus: "", applyMessage: "",
 };
 
+/** Серверная запись события 1С — вход mapServerToForm. Пишет внешняя система
+ *  (1С → POST /pipe), поэтому поля опциональны; props/payload — произвольный JSON. */
+interface PipeActivityServerRecord {
+  id?: number;
+  uuid?: string;
+  receivedAt?: string | null;
+  actionDate?: string | null;
+  actionType?: string | null;
+  objectType?: string | null;
+  objectName?: string | null;
+  objectId?: string | null;
+  userName?: string | null;
+  organizationShortName?: string | null;
+  bin?: string | null;
+  host?: string | null;
+  ip?: string | null;
+  props?: unknown;
+  payload?: unknown;
+  applyStatus?: string | null;
+  applyMessage?: string | null;
+  user?: { username?: string | null; uuid?: string | null } | null;
+  organization?: { name?: string | null; uuid?: string | null } | null;
+}
+
 const PipeActivitiesForm: FC<Partial<TPane>> = (paneProps) => {
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT,
     storageKey: "pipe-activities-form",
     defaultFields: DEFAULT_FIELDS,
     paneProps,
-    mapServerToForm: (d) => ({
+    mapServerToForm: (d: PipeActivityServerRecord) => ({
       id: d.id, uuid: d.uuid,
-      receivedAt: d.receivedAt ? (getFormatDate(String(d.receivedAt)) ?? "") : "",
-      actionDate: d.actionDate ? (getFormatDate(String(d.actionDate)) ?? "") : "",
+      receivedAt: d.receivedAt ? (getFormatDate(d.receivedAt) ?? "") : "",
+      actionDate: d.actionDate ? (getFormatDate(d.actionDate) ?? "") : "",
       actionType: actionLabel(d.actionType),
       objectType: d.objectType ?? "",
       objectName: d.objectName ?? "",
       objectId: d.objectId ?? "",
       // Имя показываем НАШЕ (из справочника), если объект сопоставлен: в 1С оно может
       // быть записано иначе. Если не сопоставлен — то, что прислала 1С.
-      userName: (d.user as { username?: string } | null)?.username ?? d.userName ?? "",
-      organizationShortName: (d.organization as { name?: string } | null)?.name ?? d.organizationShortName ?? "",
-      organizationUuid: (d.organization as { uuid?: string } | null)?.uuid ?? "",
-      userUuid: (d.user as { uuid?: string } | null)?.uuid ?? "",
+      userName: d.user?.username ?? d.userName ?? "",
+      organizationShortName: d.organization?.name ?? d.organizationShortName ?? "",
+      organizationUuid: d.organization?.uuid ?? "",
+      userUuid: d.user?.uuid ?? "",
       bin: d.bin ?? "",
       host: d.host ?? "",
       ip: d.ip ?? "",
@@ -119,7 +144,8 @@ const PipeActivitiesForm: FC<Partial<TPane>> = (paneProps) => {
     }),
     // Записи создаёт 1С (POST /pipe). У роутера нет POST/PUT — сохранять нечего.
     buildPayload: () => ({}),
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Событие 1С", saved, saved.objectName || undefined),
+    buildPaneLabel: (saved: LabelSource & { objectName?: string | null }) =>
+      makePaneLabel(LIST_NAME, "Событие 1С", saved, saved.objectName || undefined),
   });
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).

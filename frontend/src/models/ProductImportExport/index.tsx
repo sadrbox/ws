@@ -1,4 +1,5 @@
 import React, { FC, useMemo, useState } from "react";
+import { asText } from "src/utils/asText";
 import { translate } from "src/i18";
 import { Field, FieldFile, FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
@@ -6,7 +7,6 @@ import { HelpBox, HelpText } from "src/components/HelpBox";
 import { Button } from "src/components/Button";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { GroupRow } from "src/components/UI";
-import mainStyles from "src/styles/main.module.scss";
 import styles from "./ProductImportExport.module.scss";
 import apiClient from "src/services/api/client";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
@@ -30,9 +30,9 @@ const FIXED: Record<string, string[]> = {
 };
 
 const splitBarcodes = (s: unknown): string[] =>
-  String(s ?? "").split(/[;,\s]+/).map((x) => x.trim()).filter(Boolean);
+  asText(s ?? "").split(/[;,\s]+/).map((x) => x.trim()).filter(Boolean);
 
-const lc = (s: unknown) => String(s ?? "").trim().toLowerCase();
+const lc = (s: unknown) => asText(s ?? "").trim().toLowerCase();
 
 /** Строка разобранного файла: известные колонки + произвольные (типы цен). */
 interface SheetRow {
@@ -65,8 +65,8 @@ interface CatalogProduct {
 async function resolveImportProducts(rows: SheetRow[]) {
   const uniq = (xs: string[]) => Array.from(new Set(xs.filter(Boolean)));
   const allBarcodes = rows.flatMap((r) => splitBarcodes(r.barcodes));
-  const skus = rows.map((r) => String(r.sku ?? ""));
-  const names = rows.map((r) => String(r.name ?? ""));
+  const skus = rows.map((r) => asText(r.sku ?? ""));
+  const names = rows.map((r) => asText(r.name ?? ""));
   const resp = await apiClient.post(`/product-prices/resolve-products`, {
     skus: uniq(skus), barcodes: uniq(allBarcodes), names: uniq(names),
   });
@@ -107,7 +107,7 @@ const IMPORT_COLUMNS = [
 ];
 
 const pricesSummary = (r: TDataItem): string =>
-  ((r.prices ?? []) as Array<{ typeName?: string; value?: unknown }>).map((p) => `${p.typeName}=${p.value}`).join("; ");
+  ((r.prices ?? []) as Array<{ typeName?: string; value?: unknown }>).map((p) => `${p.typeName ?? ""}=${asText(p.value)}`).join("; ");
 
 // Фабрика рендера ячеек: замыкает дату цен (для колонки «Цены» — #5).
 const makeCellRenderer = (priceDate: string) =>
@@ -219,7 +219,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
       if (!raw || raw.length === 0) { showToast("Файл пуст", "warning"); return; }
-      const header = (raw[0] as any[]).map((h) => String(h ?? "").trim());
+      const header = raw[0].map((h) => asText(h).trim());
       const headerL = header.map((h) => h.toLowerCase());
       const findIdx = (names: string[]) => {
         for (const n of names) { const i = headerL.indexOf(n.toLowerCase()); if (i >= 0) return i; }
@@ -230,7 +230,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       const used = new Set(Object.values(idx).filter((i) => i >= 0));
       const priceCols = header.map((h, i) => ({ name: h, i })).filter((c) => c.name && !used.has(c.i));
 
-      const get = (r: unknown[], i: number) => (i >= 0 ? String(r[i] ?? "").trim() : "");
+      const get = (r: unknown[], i: number) => (i >= 0 ? asText(r[i] ?? "").trim() : "");
       const rows = (raw.slice(1) as any[])
         .map((r, n) => {
           const prices = priceCols

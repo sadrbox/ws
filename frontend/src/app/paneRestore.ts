@@ -14,6 +14,7 @@
  * (несохранённых) записей.
  */
 import type { ComponentType } from "react";
+import { asText } from "src/utils/asText";
 import { VIEWS } from "src/registry/viewRegistry";
 import { getComponentName } from "src/app/getComponentName";
 import type { TPane, TPaneRestore } from "./types";
@@ -43,7 +44,7 @@ export function inferListRestore(
 	if (!VIEWS[name]) return undefined;
 
 	const uuid = data?.uuid ?? data?.id;
-	return { kind: "view", name, ...(uuid ? { data: { uuid: String(uuid) } } : {}) };
+	return { kind: "view", name, ...(uuid ? { data: { uuid: asText(uuid) } } : {}) };
 }
 
 export interface PersistedPane {

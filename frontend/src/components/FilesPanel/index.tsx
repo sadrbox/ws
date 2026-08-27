@@ -1,4 +1,5 @@
 import { FC, useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import Table from "src/components/Table";
@@ -118,7 +119,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
         ? formatFileSize(Number(row.fileSize))
         : "",
       // Метка владельца для колонки (сырой ownerType сохраняется для просмотрщика).
-      owner: OWNER_TYPE_LABELS[String(row.ownerType ?? "")] ?? (row.ownerType ?? ""),
+      owner: OWNER_TYPE_LABELS[asText(row.ownerType ?? "")] ?? (row.ownerType ?? ""),
     } as TDataItem));
 
     // Клиентская фильтрация
@@ -205,7 +206,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
       // Ясное подтверждение перед безвозвратным удалением файлов.
       const names = tableRows
         .filter((r) => selectedRowIds.has(Number(r.id)))
-        .map((r) => String(r.fileName ?? ""))
+        .map((r) => asText(r.fileName ?? ""))
         .filter(Boolean);
       const msg = uuids.length === 1
         ? `Удалить файл «${names[0] ?? ""}»? \nДействие необратимо.`

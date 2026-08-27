@@ -1,4 +1,5 @@
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
+import { asText } from "src/utils/asText";
  
 /**
  * Справочник «Виды субконто» (типы аналитики проводок).
@@ -145,7 +146,7 @@ const SubkontoTypesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDa
 ) => (
   <ModelList
     endpoint={ENDPOINT} listName="SubkontoTypesList" columnsJson={columnsJson} FormComponent={SubkontoTypesForm}
-    getLabel={(d) => (d?.name ? String(d.name) : "?")}
+    getLabel={(d) => (d?.name ? asText(d.name) : "?")}
     variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ sortOrder: "asc" }}
   />

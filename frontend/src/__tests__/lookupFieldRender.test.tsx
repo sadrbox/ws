@@ -76,26 +76,26 @@ describe("LookupField — клавиатурная навигация (RTL)", ()
 		expect(activeBeforeDown?.textContent).toContain("Alpha");
 
 		// ArrowDown → выделяет Beta
-		await act(async () => {
+		act(() => {
 			fireEvent.keyDown(input, { key: "ArrowDown" });
 		});
 		const activeAfterDown = document.querySelector('[class*="LookupDropdownItemActive"]');
 		expect(activeAfterDown?.textContent).toContain("Beta");
 
 		// ArrowDown → Gamma
-		await act(async () => {
+		act(() => {
 			fireEvent.keyDown(input, { key: "ArrowDown" });
 		});
 		expect(document.querySelector('[class*="LookupDropdownItemActive"]')?.textContent).toContain("Gamma");
 
 		// ArrowUp → Beta
-		await act(async () => {
+		act(() => {
 			fireEvent.keyDown(input, { key: "ArrowUp" });
 		});
 		expect(document.querySelector('[class*="LookupDropdownItemActive"]')?.textContent).toContain("Beta");
 
 		// Enter → выбор Beta
-		await act(async () => {
+		act(() => {
 			fireEvent.keyDown(input, { key: "Enter" });
 		});
 		expect(onSelect).toHaveBeenCalledWith("b", "Beta", expect.objectContaining({ uuid: "b" }));

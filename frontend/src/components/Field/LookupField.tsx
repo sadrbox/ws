@@ -525,11 +525,6 @@ const LookupField: FC<LookupFieldProps> = ({
   // Право на создание нового элемента справочника (гейт кнопки «Создать»).
   const { canWrite: canCreateByRight } = useAccessPermission(ENDPOINT_ACCESS_MODEL[endpoint] ?? "");
   const canCreate = allowCreate && !disabled && !!getByEndpoint(endpoint) && canCreateByRight;
-  // Название справочника для кнопки «Создать» (не введённый текст — он не
-  // подставляется в форму создания, поэтому показывать его в label некорректно).
-  const createEntityLabel = (typeof label === "string" && label.trim())
-    ? translate(label)
-    : (getByEndpoint(endpoint)?.label ?? "");
 
   // Выбор элемента из dropdown
   const handleSuggestionClick = useCallback((item: Record<string, any>) => {

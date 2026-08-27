@@ -9,6 +9,7 @@ import { translate } from "src/i18";
 import { useAppContext } from "src/app/context";
 import apiClient from "src/services/api/client";
 import { getFormatDateOnly } from "src/utils/datetime";
+import { asText } from "src/utils/asText";
 
 const CreateTaskButton: FC<{ endpoint: string; uuid?: string }> = ({ endpoint, uuid }) => {
   const { windows: { addPane } } = useAppContext();
@@ -27,10 +28,10 @@ const CreateTaskButton: FC<{ endpoint: string; uuid?: string }> = ({ endpoint, u
         organizationUuid = (item.organizationUuid as string) || undefined;
         organizationName = ((item.organization as { name?: string } | undefined)?.name) || undefined;
         if (item.name) {
-          sourceLabel = String(item.name);
+          sourceLabel = asText(item.name);
         } else if (item.number) {
-          const date = item.date ? ` - ${getFormatDateOnly(String(item.date))}` : "";
-          sourceLabel = `№ ${item.number}${date}`;
+          const date = item.date ? ` - ${getFormatDateOnly(asText(item.date))}` : "";
+          sourceLabel = `№ ${asText(item.number)}${date}`;
         }
       }
     } catch { /* запись без организации — задача создастся без предзаполнения орг */ }

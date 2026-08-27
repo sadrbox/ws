@@ -6,6 +6,7 @@
 // акциза/скидки — таблица использует TradeDocumentItemsTable hasTaxes=false.
 // ─────────────────────────────────────────────────────────────────────────────
 import { FC, useMemo, useCallback, useRef } from "react";
+import { asText } from "src/utils/asText";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { translate } from "src/i18";
@@ -314,7 +315,7 @@ InventoryTransfersForm.displayName = "InventoryTransfersForm";
 
 const InventoryTransfersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={InventoryTransfersForm}
-    getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => d?.date ? getFormatDateOnly(asText(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
     previewTabs={(row) => [{
@@ -325,11 +326,11 @@ const InventoryTransfersList: FC<{ variant?: TTableVariant; onSelectItem?: (item
           parentUuid={String(row.uuid ?? "")} parentField="inventoryTransferUuid"
           endpoint="inventorytransferitems" componentName="InventoryTransferItemsList_part"
           hasTaxes={false} hasPricing={false}
-          organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
-          documentDate={row.date ? String(row.date) : null}
+          organizationUuid={row.organizationUuid ? asText(row.organizationUuid) : null}
+          documentDate={row.date ? asText(row.date) : null}
           serialMode="transfer" serialDocType="inventory_transfer" batchMode="issue"
-          warehouseUuid={row.fromWarehouseUuid ? String(row.fromWarehouseUuid) : undefined}
-          toWarehouseUuid={row.toWarehouseUuid ? String(row.toWarehouseUuid) : undefined}
+          warehouseUuid={row.fromWarehouseUuid ? asText(row.fromWarehouseUuid) : undefined}
+          toWarehouseUuid={row.toWarehouseUuid ? asText(row.toWarehouseUuid) : undefined}
           disabled disableAddRows disableDeleteRows
           emptyMessage={translate("noItems") || "Нет позиций"}
         />

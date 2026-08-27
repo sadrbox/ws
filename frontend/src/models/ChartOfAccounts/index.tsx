@@ -1,4 +1,5 @@
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
+import { asText } from "src/utils/asText";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Справочник «План счетов» (ChartOfAccount). Поддерживает до трёх субконто.
@@ -199,7 +200,7 @@ const ChartOfAccountsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: T
 ) => (
   <ModelList
     endpoint={ENDPOINT} listName="ChartOfAccountsList" columnsJson={columnsJson} FormComponent={ChartOfAccountsForm}
-    getLabel={(d) => (d?.code ? `${d.code} ${d.name ?? ""}`.trim() : "?")}
+    getLabel={(d) => (d?.code ? `${asText(d.code)} ${asText(d.name)}`.trim() : "?")}
     variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ code: "asc" }}
   />

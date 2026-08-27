@@ -1,6 +1,7 @@
 // ЭДО (документооборот с контрагентами) — UI: списки Входящие/Исходящие + форма
 // документа с действиями (подпись NCALayer, приём/отклонение/отзыв/аннулирование).
 import { FC, useCallback, useMemo, useState } from "react";
+import { asText } from "src/utils/asText";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import type { TPane } from "src/app/types";
@@ -16,7 +17,7 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { getFormatDateOnly } from "src/utils/datetime";
 import {
-	fetchInbox, fetchOutbox, fetchEdoDocument, createEdoDocument, type EdoDocument,
+	fetchInbox, fetchOutbox, fetchEdoDocument, createEdoDocument,
 } from "src/services/edo/api";
 import styles from "./Edo.module.scss";
 
@@ -56,12 +57,12 @@ const EdoList: FC<{ mode: "inbox" | "outbox" }> = ({ mode }) => {
 	})), [data, mode]);
 
 	const openDoc = useCallback((d: Partial<TDataItem>) => {
-		addPane({ component: EdoDocumentForm, label: `${translate("edo")}: ${d.number || (d.uuid as string || "").slice(0, 8)}`, data: { uuid: d.uuid } });
+		addPane({ component: EdoDocumentForm, label: `${translate("edo")}: ${asText(d.number) || (d.uuid as string || "").slice(0, 8)}`, data: { uuid: d.uuid } });
 	}, [addPane]);
 	const openCreate = useCallback(() => addPane({ component: EdoDocumentCreateForm, label: translate("edoNew") }), [addPane]);
 
 	const renderCell = useCallback((row: TDataItem, col: TColumn) => {
-		if (col.identifier === "date") return <span>{row.date ? getFormatDateOnly(String(row.date)) : "—"}</span>;
+		if (col.identifier === "date") return <span>{row.date ? getFormatDateOnly(asText(row.date)) : "—"}</span>;
 		if (col.identifier === "status") {
 			const s = String(row.status);
 			return <span className={[styles.Badge, styles[STATUS_PALETTE[s] || "pending"]].join(" ")}>{statusLabel(s)}</span>;

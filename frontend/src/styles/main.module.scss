@@ -923,6 +923,7 @@ body {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		min-width: 0;
+		max-width: 300px;
 		flex-shrink: 0;
 
 		letter-spacing: 0.2px;

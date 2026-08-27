@@ -9,7 +9,6 @@
  */
 import {
   FC, useMemo, useCallback, useState, useEffect, useRef, ReactNode,
-  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { SubTableInternalContext } from "./context";
 import { translate } from "src/i18";
@@ -19,7 +18,6 @@ import type { TTableVariant } from "src/components/Table";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import { useModelDelete } from "src/hooks/useModelDelete";
 import { useAppContext } from "src/app/context";
-import Toolbar from "src/components/Toolbar";
 import { useQueryClient } from "@tanstack/react-query";
 import styles from "./SubTable.module.scss";
 import { getRowId, extractServerError, ReadOnlyCell, type ReadOnlyCellProps } from "./SubTableCells";

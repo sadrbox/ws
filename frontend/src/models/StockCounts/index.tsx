@@ -9,10 +9,11 @@
 //   • deviation          — факт − учёт (вычисляется в таблице)
 // ─────────────────────────────────────────────────────────────────────────────
 import { FC, useMemo, useCallback, useState, useRef } from "react";
+import { asText } from "src/utils/asText";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { translate } from "src/i18";
-import type { TDataItem } from "src/components/Table/types";
+import type { TDataItem, DocRow } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
@@ -39,17 +40,17 @@ import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
-import { openDocumentFromBasis, type BasisFromTarget } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, type BasisFromTarget, type BasisSource } from "src/utils/createFromBasis";
 import { useAppContext } from "src/app/context";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import { WriteOffsForm } from "src/models/WriteOffs";
 import { GoodsReceiptsForm } from "src/models/GoodsReceipts";
 
 /** Отклонение строки инвентаризации: факт − учёт. */
-const deviationOf = (r: TDataItem) => (Number(r.quantity) || 0) - (Number(r.accountingQuantity) || 0);
+const deviationOf = (r: DocRow) => (Number(r.quantity) || 0) - (Number(r.accountingQuantity) || 0);
 
 /** Шапка Списания/Оприходования наследует организацию и склад инвентаризации. */
-const mapStockCountFields = (src: TDataItem) => ({
+const mapStockCountFields = (src: BasisSource) => ({
   organizationUuid: src.organizationUuid ?? "",
   organizationName: src.organizationName ?? "",
   warehouseUuid: src.warehouseUuid ?? "",
@@ -61,7 +62,7 @@ const mapStockCountFields = (src: TDataItem) => ({
  * знака отклонения, количество = модуль отклонения (а не факт и не учёт).
  * sourceRowId сохраняем — он делает «Перезаполнить по основанию» идемпотентным.
  */
-const mapDeviationItems = (sign: 1 | -1) => (sourceItems: TDataItem[]) => {
+const mapDeviationItems = (sign: 1 | -1) => (sourceItems: DocRow[]) => {
   const ts = Date.now();
   return sourceItems
     .map((r) => ({ r, dev: deviationOf(r) }))
@@ -397,7 +398,7 @@ StockCountsForm.displayName = "StockCountsForm";
 
 const StockCountsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={StockCountsForm}
-    getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => d?.date ? getFormatDateOnly(asText(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
   />

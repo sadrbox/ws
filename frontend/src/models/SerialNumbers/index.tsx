@@ -2,6 +2,7 @@
 // они появляются при приёмке товара и выбывают при продаже/списании. Здесь —
 // просмотр и фильтрация (статус, товар).
 import { FC, useMemo } from "react";
+import { asText } from "src/utils/asText";
 import { translate } from "src/i18";
 import type { TDataItem, TColumn } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -13,7 +14,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
 
@@ -26,10 +27,19 @@ const STATUS_KEYS: Record<string, string> = {
 interface TFields { id?: number; uuid?: string; serialNumber: string; status: string; productName: string; }
 const DEFAULT_FIELDS: TFields = { serialNumber: "", status: "", productName: "" };
 
+/** Серверная запись серийного номера — вход mapServerToForm. */
+interface SerialNumberServerRecord {
+  id?: number;
+  uuid?: string;
+  serialNumber?: string | null;
+  status?: string | null;
+  product?: { name?: string | null } | null;
+}
+
 const SerialNumbersForm: FC<Partial<TPane>> = (paneProps) => {
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "serial-numbers-form", defaultFields: DEFAULT_FIELDS, paneProps,
-    mapServerToForm: (d) => ({
+    mapServerToForm: (d: SerialNumberServerRecord) => ({
       id: d.id, uuid: d.uuid,
       serialNumber: d.serialNumber ?? "",
       status: d.status ?? "",
@@ -38,7 +48,8 @@ const SerialNumbersForm: FC<Partial<TPane>> = (paneProps) => {
     // Запись невозможна: у роутера serialnumbers нет POST/PUT. Форма — только
     // просмотр карточки серии (номер, статус, товар), открывается двойным кликом.
     buildPayload: () => ({}),
-    buildPaneLabel: (saved) => makePaneLabel("SerialNumbersList", "Серийный номер", saved, saved.serialNumber || undefined),
+    buildPaneLabel: (saved: LabelSource & { serialNumber?: string | null }) =>
+      makePaneLabel("SerialNumbersList", "Серийный номер", saved, saved.serialNumber || undefined),
   });
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
@@ -81,7 +92,7 @@ SerialNumbersForm.displayName = "SerialNumbersForm";
 function renderSerialCell(row: TDataItem, col: TColumn) {
   if (col.identifier === "status") {
     const key = STATUS_KEYS[String(row.status)];
-    return <span>{key ? translate(key) : String(row.status ?? "")}</span>;
+    return <span>{key ? translate(key) : asText(row.status ?? "")}</span>;
   }
   return undefined;
 }

@@ -51,7 +51,7 @@ async function renderPdf(buf: ArrayBuffer, container: HTMLDivElement): Promise<v
 interface FileViewPaneProps { file?: FileMeta }
 
 const FileViewPane: FC<FileViewPaneProps & Record<string, unknown>> = (props) => {
-  const file = (props.file ?? (props.data as FileMeta | undefined) ?? (props as FileMeta)) as FileMeta;
+  const file = props.file ?? (props.data as FileMeta | undefined) ?? (props as FileMeta);
   const [state, setState] = useState<ViewState>({ kind: "loading" });
   const pdfRef = useRef<HTMLDivElement>(null);
   const pdfBufRef = useRef<ArrayBuffer | null>(null);

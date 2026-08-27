@@ -1,4 +1,5 @@
 import type { FC } from "react";
+import { asText } from "src/utils/asText";
 import type { TPane } from "src/app/types";
 import type { TDataItem, DocRow } from "src/components/Table/types";
 import { translate } from "src/i18";
@@ -41,14 +42,14 @@ export interface BasisFromTarget {
 	/** Имя FK-поля для фильтрации позиций исходника */
 	sourceItemsParentField: string;
 	/** Маппинг полей шапки исходного документа в поля нового */
-	mapFields: (source: any) => Record<string, any>;
+	mapFields: (source: BasisSource) => Record<string, unknown>;
 	/**
 	 * Маппинг СТРОК основания в строки нового документа. По умолчанию —
 	 * mapItemsForBasis (перенос 1:1). Переопределяется, когда переносится не весь
 	 * набор строк: напр. Инвентаризация → Списание берёт только строки с
 	 * недостачей, а количество = модуль отклонения.
 	 */
-	mapItems?: (sourceItems: any[]) => any[];
+	mapItems?: (sourceItems: DocRow[]) => DocRow[];
 	/**
 	 * Эндпоинт для проверки уже существующего зависимого документа.
 	 * Если указан, при нажатии «На основании» система сначала ищет
@@ -178,7 +179,7 @@ function refillFieldEqual(key: string, a: unknown, b: unknown): boolean {
 		if (Number.isNaN(na) || Number.isNaN(nb)) return String(a) === String(b);
 		return na === nb;
 	}
-	return String(a ?? "") === String(b ?? "");
+	return asText(a ?? "") === asText(b ?? "");
 }
 
 /** Является ли строка серверной (сохранена в БД), а не локальным tmp-черновиком. */
@@ -353,19 +354,31 @@ export interface OrgDependentField {
 // (из-за чего «Перезаполнить» иногда срабатывало только со второго клика).
 const lastRefillBasis = new WeakMap<object, string>();
 
+/** Поля формы, которые читает перезаполнение (+ произвольные по строковому ключу). */
+interface BasisFieldsSnapshot {
+	basisDocumentType?: string;
+	basisDocumentUuid?: string;
+	uuid?: string;
+}
+/** Минимальный контракт формы (useFormStore), нужный runBasisRefill. */
+interface RefillFormHandle {
+	store: { getSnapshot: () => { fields: BasisFieldsSnapshot } };
+	setFields: (patch: Record<string, unknown>) => void;
+}
+
 export async function runBasisRefill(opts: {
-	form: any;
+	form: RefillFormHandle;
 	skipFields: boolean;
 	currentUserUuid: string;
 	permDefaults: UserDefaultsMap;
 	itemsEndpoint: string;
 	itemsParentField: string;
 	orgFields: OrgDependentField[];
-	allItemsRef: { current: any[] };
-	setBasisItems: (rows: any[]) => void;
+	allItemsRef: { current: TDataItem[] };
+	setBasisItems: (rows: TDataItem[]) => void;
 	bumpItemsTableKey: () => void;
 }): Promise<void> {
-	const snap = opts.form.store.getSnapshot().fields as any;
+	const snap = opts.form.store.getSnapshot().fields;
 	const basisType = snap.basisDocumentType;
 	const basisUuid = snap.basisDocumentUuid;
 	if (!basisUuid || !basisType) return;
@@ -378,12 +391,13 @@ export async function runBasisRefill(opts: {
 	if (!result) return;
 
 	if (!opts.skipFields) {
-		const cur = opts.form.store.getSnapshot().fields as any;
+		const cur = opts.form.store.getSnapshot().fields;
+		const curRec = cur as unknown as Record<string, unknown>;
 		// Org-зависимые поля (склад/договор), которых нет у основания: при смене
 		// организации — дефолт пользователя для новой орг, иначе очистка.
 		const orgPatch = await resolveOrgDependentRefill(
 			result.fields,
-			cur,
+			curRec,
 			opts.currentUserUuid,
 			opts.permDefaults,
 			opts.orgFields,
@@ -397,7 +411,7 @@ export async function runBasisRefill(opts: {
 		);
 		// Применяем только при реальном изменении — иначе ложный Dirty.
 		if (
-			Object.keys(patch).some((k) => !isEquivalent(cur[k], (patch as any)[k]))
+			Object.keys(patch).some((k) => !isEquivalent(curRec[k], patch[k]))
 		) {
 			opts.form.setFields(patch);
 		}
@@ -413,7 +427,9 @@ export async function runBasisRefill(opts: {
 	lastRefillBasis.set(storeKey, basisUuid);
 
 	// Текущее отображаемое состояние таблицы (сервер + pending, без delete).
-	const live = opts.allItemsRef.current.filter(
+	// allItemsRef/setBasisItems приходят как TDataItem[] (тип useState/useRef формы);
+	// внутри работаем с DocRow[] (шире: id опционален + бизнес-поля) — апкаст безопасен.
+	const live: DocRow[] = opts.allItemsRef.current.filter(
 		(r: DocRow) => r._pendingAction !== "delete",
 	);
 
@@ -454,7 +470,7 @@ export async function runBasisRefill(opts: {
 	// При смене основания обновляем таблицу всегда (даже если merged пуст — основание
 	// без позиций → очистить); при том же основании — только если есть изменения.
 	if (merged.length || basisChanged) {
-		opts.setBasisItems(merged);
+		opts.setBasisItems(merged as TDataItem[]);
 		opts.bumpItemsTableKey();
 	}
 }
@@ -517,10 +533,10 @@ export async function fetchDocumentItems(
  * открывает его вместо создания нового.
  */
 export async function openDocumentFromBasis(
-	sourceFields: Record<string, any>,
+	sourceFields: BasisSource,
 	sourceTypeLabel: string,
 	target: BasisFromTarget,
-	addPane: (pane: any) => void,
+	addPane: (pane: Partial<TPane>) => void,
 ): Promise<void> {
 	// Приоритет: если меню уже определило существующий зависимый — открываем его напрямую.
 	if (target.knownExisting?.uuid) {
@@ -543,13 +559,13 @@ export async function openDocumentFromBasis(
 					limit: 1,
 				},
 			});
-			const existing = unwrapList(resp);
+			const existing = unwrapList<DocRow>(resp);
 			if (existing.length > 0) {
 				const existingDoc = existing[0];
 				const existingDate = existingDoc.date
-					? " - " + getFormatDateOnly(String(existingDoc.date))
+					? " - " + getFormatDateOnly(asText(existingDoc.date))
 					: "";
-				const ref = existingDoc.number ? `№ ${existingDoc.number}` : translate("docNoNumber");
+				const ref = existingDoc.number ? `№ ${asText(existingDoc.number)}` : translate("docNoNumber");
 				addPane({
 					component: target.FormComponent,
 					label: `${target.docLabel}: ${ref}${existingDate}`,
@@ -646,8 +662,8 @@ async function fetchOrgUserDefaults(
  * (для текущей организации используются уже загруженные currentOrgDefaults).
  */
 export async function resolveOrgDependentRefill(
-	basisFields: Record<string, any>,
-	currentFields: Record<string, any>,
+	basisFields: Record<string, unknown>,
+	currentFields: Record<string, unknown>,
 	userUuid: string,
 	currentOrgDefaults: UserDefaultsMap,
 	orgFields: Array<{
@@ -655,9 +671,10 @@ export async function resolveOrgDependentRefill(
 		uuidKey: string;
 		nameKey: string;
 	}>,
-): Promise<Record<string, any>> {
-	const targetOrg =
-		basisFields.organizationUuid ?? currentFields.organizationUuid ?? "";
+): Promise<Record<string, string>> {
+	const targetOrg = asText(
+		basisFields.organizationUuid ?? currentFields.organizationUuid ?? "",
+	);
 	const orgChanged =
 		!!basisFields.organizationUuid &&
 		basisFields.organizationUuid !== currentFields.organizationUuid;
@@ -673,7 +690,7 @@ export async function resolveOrgDependentRefill(
 	if (!orgChanged) return {};
 
 	const defaults = await fetchOrgUserDefaults(userUuid, targetOrg);
-	const patch: Record<string, any> = {};
+	const patch: Record<string, string> = {};
 	for (const f of missing) {
 		const def = defaults[f.valueType];
 		// При смене орг: дефолт новой орг, иначе очищаем (нельзя оставлять ссылку на старую орг).
@@ -701,11 +718,11 @@ export async function resolveOrgChangeFields(
 		uuidKey: string;
 		nameKey: string;
 	}>,
-): Promise<Record<string, any>> {
+): Promise<Record<string, string>> {
 	const defaults = newOrgUuid
 		? await fetchOrgUserDefaults(userUuid, newOrgUuid)
 		: {};
-	const patch: Record<string, any> = {};
+	const patch: Record<string, string> = {};
 	for (const f of orgFields) {
 		const def = defaults[f.valueType];
 		if (def) {
@@ -735,7 +752,7 @@ export async function resolveOrgChangeFields(
  */
 export function mapPaymentFromBasis(src: BasisSource): Record<string, unknown> {
 	const out = mapCommonTradeFields(src);
-	if (src.amount != null && src.amount !== "") out.amount = String(src.amount);
+	if (src.amount != null && src.amount !== "") out.amount = asText(src.amount);
 	return out;
 }
 

@@ -35,7 +35,7 @@ describe("serial and batch UI cells", () => {
   });
 
   it("renders serial numbers cell and opens the serial modal", async () => {
-    getMock.mockImplementation(async (url: string) => {
+    getMock.mockImplementation((url: string) => {
       if (url === "products/prod-serial") {
         return { data: { item: { trackSerialNumbers: true, serialTrackingSince: "2020-01-01T00:00:00.000Z" } } };
       }
@@ -66,7 +66,7 @@ describe("serial and batch UI cells", () => {
   });
 
   it("renders batch cell and opens the batch modal", async () => {
-    getMock.mockImplementation(async (url: string) => {
+    getMock.mockImplementation((url: string) => {
       if (url === "products/prod-batch") {
         return { data: { item: { trackBatches: true, batchTrackingSince: "2020-01-01T00:00:00.000Z" } } };
       }

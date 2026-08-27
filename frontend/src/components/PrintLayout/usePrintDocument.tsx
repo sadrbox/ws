@@ -189,8 +189,9 @@ function printNode(
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const doc2 = iframe.contentDocument as Document & { fonts?: { ready?: Promise<unknown> } };
-        if (doc2.fonts?.ready) {
-          doc2.fonts.ready.then(trigger).catch(trigger);
+        const fontsReady = doc2.fonts?.ready;
+        if (fontsReady != null) {
+          fontsReady.then(trigger).catch(trigger);
         } else {
           setTimeout(trigger, 100);
         }

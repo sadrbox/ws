@@ -8,6 +8,7 @@
 // два склада/без контрагента/без НДС.)
 // ─────────────────────────────────────────────────────────────────────────────
 import { FC, ReactNode, useMemo, useCallback, useState, useRef } from "react";
+import { asText } from "src/utils/asText";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import BasisDocumentField, { type BasisTypeConfig } from "src/components/Field/BasisDocumentField";
@@ -777,10 +778,10 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           <TradeDocumentItemsTable
             parentUuid={String(row.uuid ?? "")} parentField={cfg.itemsParentField}
             endpoint={cfg.itemsEndpoint} componentName={cfg.itemsComponentName}
-            serialMode={cfg.serialMode} serialDocType={cfg.serialDocType} batchMode={cfg.batchMode} originIssueDocUuid={row.basisDocumentUuid ? String(row.basisDocumentUuid) : undefined}
-            warehouseUuid={row.warehouseUuid ? String(row.warehouseUuid) : undefined}
-            organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
-            documentDate={row.date ? String(row.date) : null}
+            serialMode={cfg.serialMode} serialDocType={cfg.serialDocType} batchMode={cfg.batchMode} originIssueDocUuid={row.basisDocumentUuid ? asText(row.basisDocumentUuid) : undefined}
+            warehouseUuid={row.warehouseUuid ? asText(row.warehouseUuid) : undefined}
+            organizationUuid={row.organizationUuid ? asText(row.organizationUuid) : null}
+            documentDate={row.date ? asText(row.date) : null}
             disabled disableAddRows disableDeleteRows
             emptyMessage={translate("noItems") || "Нет позиций"}
             defaultHiddenColumns={cfg.defaultHiddenColumns ?? ["amountNetOfIndirectTaxes", "amountWithoutVat"]}

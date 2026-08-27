@@ -1,4 +1,5 @@
 import { FC, useState, useCallback, useEffect, useMemo } from "react";
+import { asText } from "src/utils/asText";
 import { FieldSelect } from "src/components/Field";
 import { GroupRow, GroupCol } from "src/components/UI";
 import { Button } from "src/components/Button";
@@ -20,6 +21,15 @@ interface ExecuteSummary {
   modelLabel: string; sourceLabel: string; sourceIsDeleted: boolean;
   targetLabel: string; totalAffected: number; executedAt: string;
 }
+
+// ── Формы ответов API /ref-replace/* ────────────────────────────────────────
+interface ModelsResp { models?: ModelOption[]; }
+interface RecordsResp { items?: RecordItem[]; displayField?: string; }
+interface PreviewResp { refs?: RefEntry[]; source?: { label: string; isDeleted?: boolean } | null; }
+interface ExecuteResp { summary: ExecuteSummary; protocol?: ProtocolEntry[]; }
+interface SafeDeleteResp { label: string; deletedAt: string; }
+/** Ошибка axios-подобного запроса (сообщение бэкенда в response.data.message). */
+type ApiErr = { response?: { data?: { message?: string } }; message?: string };
 
 // ── Step card ─────────────────────────────────────────────────────────────────
 
@@ -162,18 +172,18 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
 
   useEffect(() => {
     setModelsError(null);
-    apiClient.get("/ref-replace/models")
+    apiClient.get<ModelsResp>("/ref-replace/models")
       .then(r => setModels(r.data.models ?? []))
-      .catch(err => setModelsError(err?.response?.data?.message ?? err?.message ?? "Ошибка загрузки"));
+      .catch((err: ApiErr) => setModelsError(err?.response?.data?.message ?? err?.message ?? "Ошибка загрузки"));
   }, []);
 
   useEffect(() => {
     if (!selectedModel) { setRecords([]); setSourceUuid(""); setTargetUuid(""); setRefs(null); setSourceInfo(null); setDeleted(null); return; }
     setIsLoadingRecords(true);
     setError(null);
-    apiClient.get(`/ref-replace/records?model=${selectedModel}&includeDeleted=true`)
+    apiClient.get<RecordsResp>(`/ref-replace/records?model=${selectedModel}&includeDeleted=true`)
       .then(r => { setRecords(r.data.items ?? []); setDisplayField(r.data.displayField ?? "name"); setSourceUuid(""); setTargetUuid(""); setRefs(null); setSourceInfo(null); setDeleted(null); })
-      .catch(err => setError(err?.response?.data?.message ?? "Ошибка загрузки записей"))
+      .catch((err: ApiErr) => setError(err?.response?.data?.message ?? "Ошибка загрузки записей"))
       .finally(() => setIsLoadingRecords(false));
   }, [selectedModel]);
 
@@ -181,14 +191,14 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
     { value: "", label: "— выберите запись —" },
     ...records.map(r => ({
       value: r.uuid,
-      label: r.deletedAt ? `✕ ${String(r[displayField] ?? r.uuid)} (удалена)` : String(r[displayField] ?? r.uuid),
+      label: r.deletedAt ? `✕ ${asText(r[displayField] ?? r.uuid)} (удалена)` : asText(r[displayField] ?? r.uuid),
     })),
   ], [records, displayField]);
 
   const targetOptions = useMemo(() => [
     { value: "", label: "— выберите замену —" },
     ...records.filter(r => !r.deletedAt && r.uuid !== sourceUuid).map(r => ({
-      value: r.uuid, label: String(r[displayField] ?? r.uuid),
+      value: r.uuid, label: asText(r[displayField] ?? r.uuid),
     })),
   ], [records, displayField, sourceUuid]);
 
@@ -196,7 +206,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
     if (!selectedModel || !sourceUuid) return;
     setIsLoadingRefs(true); setError(null); setRefs(null); setSourceInfo(null); setDeleted(null);
     try {
-      const r = await apiClient.post("/ref-replace/preview", { model: selectedModel, sourceUuid });
+      const r = await apiClient.post<PreviewResp>("/ref-replace/preview", { model: selectedModel, sourceUuid });
       setRefs(r.data.refs ?? []);
       if (r.data.source) {
         setSourceInfo({ label: r.data.source.label, isDeleted: !!r.data.source.isDeleted });
@@ -213,7 +223,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
     if (!window.confirm(`Заменить все ссылки?\n\n${srcLabel}\n→ ${tgtLabel}\n\nДействие необратимо.`)) return;
     setIsExecuting(true); setError(null);
     try {
-      const r = await apiClient.post("/ref-replace/execute", { model: selectedModel, sourceUuid, targetUuid });
+      const r = await apiClient.post<ExecuteResp>("/ref-replace/execute", { model: selectedModel, sourceUuid, targetUuid });
       setProtocol(prev => [{ summary: r.data.summary, entries: r.data.protocol ?? [] }, ...prev]);
       setRefs(null); setSourceUuid(""); setTargetUuid("");
     } catch (err: unknown) {
@@ -226,11 +236,11 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
     if (!window.confirm(`Удалить запись «${sourceInfo.label}»?\n\nЗапись будет помечена как удалённая. Отменить это действие нельзя.`)) return;
     setIsDeleting(true); setError(null);
     try {
-      const r = await apiClient.post("/ref-replace/safe-delete", { model: selectedModel, uuid: sourceUuid });
+      const r = await apiClient.post<SafeDeleteResp>("/ref-replace/safe-delete", { model: selectedModel, uuid: sourceUuid });
       setDeleted({ label: r.data.label, deletedAt: r.data.deletedAt });
       setSourceUuid(""); setTargetUuid(""); setRefs(null); setSourceInfo(null);
       setIsLoadingRecords(true);
-      apiClient.get(`/ref-replace/records?model=${selectedModel}&includeDeleted=true`)
+      apiClient.get<RecordsResp>(`/ref-replace/records?model=${selectedModel}&includeDeleted=true`)
         .then(res => { setRecords(res.data.items ?? []); setDisplayField(res.data.displayField ?? "name"); })
         .catch(() => {})
         .finally(() => setIsLoadingRecords(false));
@@ -262,7 +272,7 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
                 <span style={{ fontSize: 12, color: "var(--danger)" }}>Ошибка: {modelsError}</span>
                 <Button variant="secondary" onClick={() => {
                   setModelsError(null);
-                  apiClient.get("/ref-replace/models").then(r => setModels(r.data.models ?? [])).catch(e => setModelsError(e?.message ?? "Ошибка"));
+                  apiClient.get<ModelsResp>("/ref-replace/models").then(r => setModels(r.data.models ?? [])).catch((e: ApiErr) => setModelsError(e?.message ?? "Ошибка"));
                 }}>{translate("retry")}</Button>
               </GroupRow>
             ) : (

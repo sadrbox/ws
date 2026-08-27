@@ -9,6 +9,7 @@
  */
 
 import { FC, useCallback, useMemo, useState } from "react";
+import { asText } from "src/utils/asText";
 import { Button } from "src/components/Button";
 import { translate } from "src/i18";
 import type { SyncConflict } from "src/services/syncManager";
@@ -40,9 +41,9 @@ function allKeys(a: Record<string, unknown> | null | undefined, b: Record<string
 function formatValue(v: unknown): string {
   if (v == null) return "—";
   if (typeof v === "object") {
-    try { return JSON.stringify(v); } catch { return String(v); }
+    try { return JSON.stringify(v); } catch { return asText(v); }
   }
-  return String(v);
+  return asText(v);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

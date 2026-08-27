@@ -27,7 +27,8 @@ import { useContractSync } from "src/hooks/useContractSync";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAppContext } from "src/app/context";
-import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel, type LabelSource } from "src/utils/buildPaneLabel";
+import { asText } from "src/utils/asText";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -107,7 +108,12 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   const { auth: { user: currentUser }, windows: { addPane } } = useAppContext();
 
   const initialFields: TFields | undefined = (() => {
-    const data = paneProps.data as any;
+    const data = paneProps.data as {
+      uuid?: string;
+      fromBasisFields?: Partial<TFields>;
+      organizationUuid?: string; organizationName?: string;
+      counterpartyUuid?: string; counterpartyName?: string;
+    } | undefined;
     if (data?.uuid) return undefined;
     // Создание «на основании» (толчок из счёта/накладной): переносим шапку целиком
     // (включая линк основания и сумму), а НАПРАВЛЕНИЕ выводим из типа основания —
@@ -121,15 +127,15 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     const init = { ...DEFAULT_FIELDS };
     init.date = isoToLocalInput(new Date().toISOString());
     if (data?.organizationUuid) {
-      init.organizationUuid = data.organizationUuid as string;
-      init.organizationName = (data.organizationName as string) || "";
+      init.organizationUuid = data.organizationUuid;
+      init.organizationName = data.organizationName || "";
     } else if (defaultOrg.organizationUuid) {
       init.organizationUuid = defaultOrg.organizationUuid;
       init.organizationName = defaultOrg.organizationName;
     }
     if (data?.counterpartyUuid) {
-      init.counterpartyUuid = data.counterpartyUuid as string;
-      init.counterpartyName = (data.counterpartyName as string) || "";
+      init.counterpartyUuid = data.counterpartyUuid;
+      init.counterpartyName = data.counterpartyName || "";
     }
     return init;
   })();
@@ -181,11 +187,14 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
         basisDocumentLabel: fd.basisDocumentLabel || null,
       };
     },
-    buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, translate("docType_bank_statement"), saved, "date"),
+    buildPaneLabel: (saved: LabelSource) => makeDocLabel(LIST_NAME, translate("docType_bank_statement"), saved, "date"),
   });
 
   const syncContract = useContractSync();
-  const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
+  const handleContractSelect = useCallback((uuid: string, displayValue: string, item: {
+    organizationUuid?: string; organization?: { name?: string | null } | null;
+    counterpartyUuid?: string; counterparty?: { name?: string | null } | null;
+  }) => {
     const updates: Partial<TFields> = { contractUuid: uuid, contractName: displayValue };
     if (item.organizationUuid) { updates.organizationUuid = item.organizationUuid; updates.organizationName = item.organization?.name ?? ""; }
     if (item.counterpartyUuid) { updates.counterpartyUuid = item.counterpartyUuid; updates.counterpartyName = item.counterparty?.name ?? ""; }
@@ -209,7 +218,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   // Смена организации: зависимые поля (договор, банк-счёт) → дефолт пользователя
   // для новой орг, иначе очистка.
   const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
-    const cur = form.store.getSnapshot().fields as any;
+    const cur = form.store.getSnapshot().fields;
     if (cur.organizationUuid === uuid) return;
     form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
     const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
@@ -244,18 +253,18 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   // Header-документ без позиций: перезаполняем только поля шапки
   // (организация/контрагент/договор) из документа-основания.
   const handleRefillFromBasis = useCallback(async () => {
-    const snap = form.store.getSnapshot().fields as any;
+    const snap = form.store.getSnapshot().fields;
     if (!snap.basisDocumentUuid || !snap.basisDocumentType) return;
     setIsRefilling(true);
     try {
       const result = await refillFromBasisSource(snap.basisDocumentType, snap.basisDocumentUuid, mapCommonTradeFields);
       if (!result) return;
-      const cur = form.store.getSnapshot().fields as any;
+      const cur = form.store.getSnapshot().fields as unknown as Record<string, unknown>;
       // Только поля, существующие у банк-выписки (склад и т.п. отбрасываются).
       const patch = Object.fromEntries(
         Object.keys(result.fields).filter(k => k in cur).map(k => [k, result.fields[k]]),
       ) as Partial<TFields>;
-      if (Object.keys(patch).some(k => String(cur[k] ?? "") !== String((patch as any)[k] ?? ""))) {
+      if ((Object.keys(patch) as (keyof TFields)[]).some(k => asText(cur[k]) !== asText(patch[k]))) {
         form.setFields(patch);
       }
     } catch (e) {

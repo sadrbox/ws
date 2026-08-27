@@ -1,3 +1,4 @@
+import { asText } from "src/utils/asText";
 import {
 	useCallback,
 	useRef,
@@ -2039,7 +2040,7 @@ export function useFormStore<F extends object>(
 			// мигрируем ключ, чтобы при F5 данные были привязаны к uuid записи.
 			const newUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid;
 			if (newUuid) {
-				const uuidKey = `${STORAGE_PREFIX}${storageKey}:${newUuid}`;
+				const uuidKey = `${STORAGE_PREFIX}${storageKey}:${asText(newUuid)}`;
 				if (store.getStorageKey() !== uuidKey) {
 					store.migrateStorageKey(uuidKey);
 				}

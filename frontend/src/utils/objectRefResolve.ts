@@ -6,6 +6,7 @@
  * токена, покрыты тестами), здесь — обращения к сети и словарю.
  */
 import type { TPaneRestore } from "src/app/types";
+import { asText } from "src/utils/asText";
 import { apiClient } from "src/services/api/client";
 import { decodeRestore } from "src/utils/paneLink";
 import { refFromRestore, type ObjectRef } from "src/utils/objectRef";
@@ -14,10 +15,10 @@ import { getFormatDateOnly } from "src/utils/datetime";
 
 /** Подпись записи: имя (справочник) либо «№ номер - дата» (документ). */
 function labelOfItem(item: Record<string, unknown>, fallback: string): string {
-	if (item.name) return String(item.name);
+	if (item.name) return asText(item.name);
 	if (item.number) {
-		const date = item.date ? ` - ${getFormatDateOnly(String(item.date))}` : "";
-		return `№ ${item.number}${date}`;
+		const date = item.date ? ` - ${getFormatDateOnly(asText(item.date))}` : "";
+		return `№ ${asText(item.number)}${date}`;
 	}
 	return fallback;
 }

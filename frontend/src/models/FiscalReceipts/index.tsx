@@ -3,6 +3,7 @@
  * через FiscalReceiptPane. Чеки создаются из терминала (см. SalesTerminal).
  */
 import { FC, useEffect, useState } from "react";
+import { asText } from "src/utils/asText";
 import type { ReactNode } from "react";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -44,10 +45,10 @@ const FiscalReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
 FiscalReceiptsForm.displayName = "FiscalReceiptsForm";
 
 function renderCell(row: TDataItem, col: TColumn): ReactNode | undefined {
-  if (col.identifier === "status") return <span>{STATUS_LABEL[String(row.status)] ?? String(row.status ?? "")}</span>;
-  if (col.identifier === "paymentMethod") return <span>{PAY_LABEL[String(row.paymentMethod)] ?? String(row.paymentMethod ?? "")}</span>;
-  if (col.identifier === "documentType") return <span>{DOC_LABEL[String(row.documentType)] ?? String(row.documentType ?? "")}</span>;
-  if (col.identifier === "createdAt") return <span>{row.createdAt ? getFormatDate(String(row.createdAt)) : ""}</span>;
+  if (col.identifier === "status") return <span>{STATUS_LABEL[asText(row.status)] ?? asText(row.status ?? "")}</span>;
+  if (col.identifier === "paymentMethod") return <span>{PAY_LABEL[asText(row.paymentMethod)] ?? asText(row.paymentMethod ?? "")}</span>;
+  if (col.identifier === "documentType") return <span>{DOC_LABEL[asText(row.documentType)] ?? asText(row.documentType ?? "")}</span>;
+  if (col.identifier === "createdAt") return <span>{row.createdAt ? getFormatDate(asText(row.createdAt)) : ""}</span>;
   return undefined;
 }
 

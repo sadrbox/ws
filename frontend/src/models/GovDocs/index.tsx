@@ -2,6 +2,7 @@
 // Реализации/Перемещения, со статусом и рег.номером). Единый вид — стандартный
 // <Table/>; клик по строке открывает документ-источник.
 import { FC, useCallback, useMemo, useRef, useState } from "react";
+import { asText } from "src/utils/asText";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { useAppContext } from "src/app/context";
@@ -31,7 +32,7 @@ const PALETTE: Record<string, "ok" | "pending" | "bad"> = {
 const badge = (s: string | null) => (
 	<span className={[styles.Badge, styles[PALETTE[String(s)] || "pending"]].join(" ")}>{s || "—"}</span>
 );
-const fmtDate = (d: unknown) => (d ? getFormatDateOnly(String(d)) : "—");
+const fmtDate = (d: unknown) => (d ? getFormatDateOnly(asText(d)) : "—");
 
 // ── Исходящие ЭАВР ────────────────────────────────────────────────────────────
 const AWP_COLUMNS: TColumn[] = [
@@ -169,7 +170,7 @@ function useGovIncoming(kind: "awp" | "snt", componentName: string) {
 		if (col.identifier === "date") return <span>{fmtDate(row.date)}</span>;
 		if (col.identifier === "status") return badge(row.status as string | null);
 		if (col.identifier === "__actions") {
-			const id = String(row.docId || "");
+			const id = asText(row.docId || "");
 			if (!id) return <span>—</span>;
 			return (
 				<div className={styles.Actions}>

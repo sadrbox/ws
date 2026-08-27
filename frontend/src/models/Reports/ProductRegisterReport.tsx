@@ -155,7 +155,7 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
               <Td col="date">{fmtDate(r.date)}</Td>
               <Td col="name">
                 {r.documentUuid
-                  ? <DrillLink onOpen={() => drill.toDocument(r.documentType, r.documentUuid!)}>{docLabel}</DrillLink>
+                  ? <DrillLink onOpen={() => drill.toDocument(r.documentType, r.documentUuid)}>{docLabel}</DrillLink>
                   : docLabel}
               </Td>
               <Td col="tag">

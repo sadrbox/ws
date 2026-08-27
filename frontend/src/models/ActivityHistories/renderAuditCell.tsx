@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { asText } from "src/utils/asText";
 import type { TDataItem, TColumn } from "src/components/Table/types";
 import { translate } from "src/i18";
 
@@ -16,7 +17,7 @@ const ACTION_KEYS: Record<string, string> = {
 function fmt(v: unknown): string {
   if (v === null || v === undefined || v === "") return "—";
   if (typeof v === "boolean") return v ? translate("yes") : translate("no");
-  return String(v);
+  return asText(v);
 }
 
 /**
@@ -44,7 +45,7 @@ export function summarizeDiff(diff: Record<string, DiffEntry>, actionType: strin
 export function renderAuditCell(row: TDataItem, col: TColumn): ReactNode | undefined {
   if (col.identifier === "actionType") {
     const key = ACTION_KEYS[String(row.actionType)];
-    return <span>{key ? translate(key) : String(row.actionType ?? "")}</span>;
+    return <span>{key ? translate(key) : asText(row.actionType ?? "")}</span>;
   }
   if (col.identifier === "diff") {
     const diff = row.diff as Record<string, DiffEntry> | null | undefined;

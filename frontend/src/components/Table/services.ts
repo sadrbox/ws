@@ -1,4 +1,5 @@
 import { getFormatDateOnly } from "src/utils/datetime";
+import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import { TColumn, TDataItem, TypeTableTypes } from "./types";
 import { getTranslateColumn } from "src/i18";
@@ -195,13 +196,13 @@ export function getFormatColumnValue(
 	) {
 		return getFormatNumerical(rawValue as number, column.decimals);
 	} else if (column.identifier === "position" && column.type === "position") {
-		return rawValue + "";
+		return asText(rawValue);
 	} else if (column.type === "date") {
 		return getFormatDateOnly(rawValue as string);
 	} else if (column.type === "datetime") {
 		return getFormatDate(rawValue as string);
 	} else if (column.type === "string") {
-		return rawValue != null ? rawValue + "" : "";
+		return asText(rawValue);
 	} else if (column.type === "boolean") {
 		return rawValue ? "✔" : "";
 	}

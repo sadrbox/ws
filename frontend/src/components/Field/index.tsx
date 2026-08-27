@@ -457,7 +457,7 @@ interface TypeFieldFileProps {
 
 export const FieldFile: FC<TypeFieldFileProps> = ({
   label, name, accept, disabled = false, required = false, error = false,
-  variant = 'default', width, minWidth, maxWidth,
+  variant = 'default',
   buttonLabel = 'Выбрать файл',
   placeholder = 'Файл не выбран', fileName, loading = false, progress, onSelect, onChange,
 }) => {
@@ -465,7 +465,7 @@ export const FieldFile: FC<TypeFieldFileProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const [internalName, setInternalName] = useState('');
   const displayName = fileName !== undefined ? fileName : internalName;
-  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value: displayName });
+  const { isTable, effectiveRequired } = useFieldBase({ name, variant, required, error, value: displayName });
 
   const openPicker = () => { if (!disabled) inputRef.current?.click(); };
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -482,7 +482,7 @@ export const FieldFile: FC<TypeFieldFileProps> = ({
 
   const hasProgress = typeof progress === 'number' && Number.isFinite(progress);
   const showBar = loading || hasProgress;
-  const pct = hasProgress ? Math.max(0, Math.min(100, progress as number)) : 0;
+  const pct = hasProgress ? Math.max(0, Math.min(100, progress)) : 0;
   const canClear = !!displayName && !disabled && !loading;
 
   return (

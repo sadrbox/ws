@@ -44,7 +44,7 @@ export function subscribeHighlight(endpoint: string, fn: Listener): () => void {
   }
   set.add(fn);
   return () => {
-    set!.delete(fn);
-    if (set!.size === 0) listeners.delete(endpoint);
+    set.delete(fn);
+    if (set.size === 0) listeners.delete(endpoint);
   };
 }

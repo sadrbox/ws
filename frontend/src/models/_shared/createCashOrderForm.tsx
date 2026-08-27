@@ -4,6 +4,7 @@
  * Оба документа имеют идентичную структуру — отличаются только endpoint/docType/метки.
  */
 import { FC, useMemo, useCallback, useState } from "react";
+import { asText } from "src/utils/asText";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -125,7 +126,7 @@ function mapCashHeader(src: BasisSource): Record<string, unknown> {
 // Шапка для ЗАПОЛНЕНИЯ — то же + сумма основания.
 function mapCashRefill(src: BasisSource): Record<string, unknown> {
   const out = mapCashHeader(src);
-  if (src.amount != null) out.amount = String(src.amount);
+  if (src.amount != null) out.amount = asText(src.amount);
   return out;
 }
 // Обязательные поля зависят от типа операции (перевод банк↔касса не требует контрагента/договора).

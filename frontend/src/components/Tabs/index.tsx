@@ -29,15 +29,6 @@ const Tabs: React.FC<TypeTabs> = ({
   // навигации SubTable: Up/Down/Left/Right/Insert/Delete/Home/End/PgUp/PgDn).
   const panelRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // Если нет табов или массив пустой
-  if (!tabs || tabs.length === 0) {
-    return (
-      <div className={styles.emptyState}>
-        No tabs available
-      </div>
-    );
-  }
-
   const handleTabClick = useCallback((tabId: string) => {
     setActiveTab(tabId);
     // После применения CSS-видимости панели (display) — фокусируем первый
@@ -65,6 +56,15 @@ const Tabs: React.FC<TypeTabs> = ({
       });
     });
   }, []);
+
+  // Если нет табов или массив пустой (после хуков — иначе rules-of-hooks).
+  if (!tabs || tabs.length === 0) {
+    return (
+      <div className={styles.emptyState}>
+        No tabs available
+      </div>
+    );
+  }
 
   return (
     <div

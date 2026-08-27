@@ -8,6 +8,7 @@
 // себестоимость + импортный НДС + проводки — Этап 2.
 // ─────────────────────────────────────────────────────────────────────────────
 import { FC, useMemo, useCallback } from "react";
+import { asText } from "src/utils/asText";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { translate } from "src/i18";
@@ -353,7 +354,7 @@ ImportDeclarationsForm.displayName = "ImportDeclarationsForm";
 
 const ImportDeclarationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName={LIST_NAME} columnsJson={columnsJson} FormComponent={ImportDeclarationsForm}
-    getLabel={(d) => d?.date ? getFormatDateOnly(String(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
+    getLabel={(d) => d?.date ? getFormatDateOnly(asText(d.date)) : ""} variant={variant} onSelectItem={onSelectItem}
     ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
     previewTabs={(row) => [{
@@ -365,9 +366,9 @@ const ImportDeclarationsList: FC<{ variant?: TTableVariant; onSelectItem?: (item
           endpoint="importdeclarationitems" componentName="ImportDeclarationItemsList_part"
           hasTaxes={false}
           serialMode="receipt" serialDocType="import_declaration" batchMode="receipt"
-          warehouseUuid={row.warehouseUuid ? String(row.warehouseUuid) : undefined}
-          organizationUuid={row.organizationUuid ? String(row.organizationUuid) : null}
-          documentDate={row.date ? String(row.date) : null}
+          warehouseUuid={row.warehouseUuid ? asText(row.warehouseUuid) : undefined}
+          organizationUuid={row.organizationUuid ? asText(row.organizationUuid) : null}
+          documentDate={row.date ? asText(row.date) : null}
           disabled disableAddRows disableDeleteRows
           emptyMessage={translate("noItems") || "Нет позиций"}
         />

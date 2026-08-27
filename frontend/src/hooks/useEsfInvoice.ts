@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { getKeyInfo, NcaLayerUnavailableError } from "src/services/ncalayer";
+import { getKeyInfo } from "src/services/ncalayer";
+import { friendlyEsfError } from "src/utils/esfFriendlyError";
 import { useNcaLayerSign } from "src/hooks/useNcaLayerSign";
 import {
 	requestAuthTicket, createSession, buildInvoiceXml,
@@ -16,12 +17,8 @@ interface EsfInvoiceState {
 	errors: EsfError[];
 }
 
-/** Достаёт понятный текст ошибки из ответа axios/Error. */
-function errMessage(e: unknown): string {
-	if (e instanceof NcaLayerUnavailableError) return e.message;
-	const anyE = e as { response?: { data?: { message?: string } }; message?: string };
-	return anyE?.response?.data?.message || anyE?.message || "Ошибка ЭСФ";
-}
+/** Понятное пользователю сообщение об ошибке ИС ЭСФ (без сырых тех-деталей). */
+const errMessage = (e: unknown): string => friendlyEsfError(e);
 
 /**
  * Оркестрация отправки исходящего счёта-фактуры в ИС ЭСФ по схеме NCALayer

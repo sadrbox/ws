@@ -21,7 +21,6 @@ import { getCurrentUser } from "src/services/auth";
 import { useTodoStatuses } from "src/hooks/useTodoStatuses";
 import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
-import type { TDataItem } from "src/components/Table/types";
 import styles from "./TaskBoard.module.scss";
 
 // Статусы = колонки. Порядок значим (слева направо по жизненному циклу).
@@ -106,7 +105,7 @@ export const TaskBoardList: FC = () => {
   // Колонки и признак «завершающий статус» — из справочника (E9.5).
   const { statuses, finalCodes } = useTodoStatuses();
   const [filter, setFilter] = useState<Filter>("all");
-  const [dragId, setDragId] = useState<string | null>(null);
+  const [_dragId, setDragId] = useState<string | null>(null);
 
   // Небольшой порог, чтобы клик по карточке не считался перетаскиванием.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));

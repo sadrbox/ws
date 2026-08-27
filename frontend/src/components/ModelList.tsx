@@ -1,5 +1,5 @@
 // 1. React
-import { FC, ComponentType, Component, useMemo, useCallback, useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { FC, ComponentType, Component, useMemo, useCallback, useState, useEffect } from "react";
 import { consumePendingHighlight, subscribeHighlight } from "src/utils/listHighlight";
 import type { ReactNode } from "react";
 

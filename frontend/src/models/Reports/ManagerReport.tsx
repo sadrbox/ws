@@ -111,7 +111,7 @@ const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
               <Td col="n">{idx + 1}</Td>
               <Td col="name">
                 {row.managerUuid
-                  ? <DrillLink onOpen={() => drill.toEntity("employees", row.managerUuid!)}>{row.managerName}</DrillLink>
+                  ? <DrillLink onOpen={() => drill.toEntity("employees", row.managerUuid)}>{row.managerName}</DrillLink>
                   : row.managerName}
               </Td>
               <Td col="num">{fmtInt(row.salesCount)}</Td>

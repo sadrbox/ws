@@ -1,4 +1,5 @@
 import React, { FC, useEffect, useMemo, useRef, useState } from "react";
+import { asText } from "src/utils/asText";
 import { translate } from "src/i18";
 import { FieldDate, FieldNumber, FieldSelect, FieldFile } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
@@ -6,7 +7,7 @@ import { HelpBox, HelpText } from "src/components/HelpBox";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { Button } from "src/components/Button";
 import priceColumns from "../Products/priceColumns.json";
-import { Group, GroupCol, GroupRow } from "src/components/UI";
+import { GroupRow } from "src/components/UI";
 import mainStyles from "src/styles/main.module.scss";
 import styles from "./ProductPriceProcessing.module.scss";
 import apiClient from "src/services/api/client";
@@ -81,7 +82,7 @@ const priceCellRenderer = (
     return <span className={warn ? styles.warn : undefined}>{warn ? "⚠ " : ""}{String(r.product?.name ?? "")}</span>;
   }
   if (col.identifier === "oldPrice") {
-    return <span className={styles.oldPrice}>{r._origPrice != null ? String(r._origPrice) : ""}</span>;
+    return <span className={styles.oldPrice}>{r._origPrice != null ? asText(r._origPrice) : ""}</span>;
   }
   if (col.identifier === "priceDelta") {
     const orig = toNum(r._origPrice);
@@ -120,11 +121,11 @@ const priceCellRenderer = (
     if (ctx.inlineEditing)
       return (
         <FieldNumber
-          label="" name={`ppp_price_${r.id}`} value={String(r.price ?? "")} width="140px" variant="table" disabled={ctx.disabled} decimals={2}
+          label="" name={`ppp_price_${r.id}`} value={asText(r.price)} width="140px" variant="table" disabled={ctx.disabled} decimals={2}
           onChange={(e) => ctx.handleInlineChange(r, "price", e.target.value)}
         />
       );
-    return <span className={changed ? styles.priceChanged : undefined}>{r.price != null ? String(r.price) : ""}</span>;
+    return <span className={changed ? styles.priceChanged : undefined}>{r.price != null ? asText(r.price) : ""}</span>;
   }
   return undefined;
 };
@@ -466,7 +467,7 @@ function normalizeDateCell(v: unknown): string | null {
   if (v instanceof Date && !Number.isNaN(v.getTime())) {
     return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
   }
-  const s = String(v).trim();
+  const s = asText(v).trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
   const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (m) return `${m[3]}-${m[2]}-${m[1]}`;
@@ -499,8 +500,10 @@ async function fetchExistingKeySet(): Promise<Set<string>> {
 export const ProductPriceImport: FC<Partial<TPane>> = () => {
   const canWrite = usePriceCanWrite();
   const { actions: { confirm } } = useAppContext();
-  const [priceTypeUuid, setPriceTypeUuid] = useState("");
-  const [priceTypeName, setPriceTypeName] = useState("");
+  // Тип цены в импорте берётся только из файла (fileType) — собственного
+  // выбора типа в этой форме нет, поэтому значения фиксированы пустыми.
+  const priceTypeUuid = "";
+  const priceTypeName = "";
   const [date, setDate] = useState(todayDateOnly());
   const [file, setFile] = useState<File | null>(null);
   const [allRows, setAllRows] = useState<any[]>([]); // все распарсенные строки (с тегами)
@@ -537,7 +540,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
       if (!raw || raw.length === 0) { showToast("Файл пуст", "warning"); return; }
-      const header = (raw[0] as any[]).map((h) => String(h ?? "").trim().toLowerCase());
+      const header = raw[0].map((h) => asText(h).trim().toLowerCase());
       const col = (names: string[]) => {
         for (const n of names) {
           const idx = header.findIndex((h) => h === n.toLowerCase());

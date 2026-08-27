@@ -1,4 +1,5 @@
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
+import { asText } from "src/utils/asText";
 import { FC, useMemo, useCallback } from "react";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -19,7 +20,7 @@ import EmployeeHistoryForm from "./EmployeeHistoryForm";
 import AvatarUpload from "src/components/AvatarUpload";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
+import { makePaneLabel, makePaneLabelFromData, type LabelSource } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -104,7 +105,7 @@ const EmployeesForm: FC<Partial<TPane>> = (paneProps) => {
         middleName: fd.middleName.trim(), fullName: fd.fullName.trim(), iin: fd.iin.trim(),
       };
     },
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Сотрудники", saved, saved.fullName),
+    buildPaneLabel: (saved: LabelSource & { fullName?: string | null }) => makePaneLabel(LIST_NAME, "Сотрудники", saved, saved.fullName ?? undefined),
     afterSave: invalidateSubTables,
   });
 
@@ -248,24 +249,24 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
     }
     if (col.identifier === "organization.name") {
       if (ctx.inlineEditing) return (
-        <LookupField label="" name={`hist_org_${row.id}`} value={(row.organizationUuid as string) ?? ""} displayValue={(row.organization as any)?.name ?? ""} endpoint="organizations" displayField="name"
-          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "organizationUuid", uuid, { organization: item && uuid ? { uuid, name: item.name ?? "" } : null })}
+        <LookupField label="" name={`hist_org_${row.id}`} value={(row.organizationUuid as string) ?? ""} displayValue={(row.organization as { name?: string | null } | null)?.name ?? ""} endpoint="organizations" displayField="name"
+          onSelect={(uuid, _dv, item: { name?: string | null }) => ctx.handleLookupChange(row, "organizationUuid", uuid, { organization: item && uuid ? { uuid, name: item.name ?? "" } : null })}
           onClear={() => ctx.handleLookupChange(row, "organizationUuid", null, { organization: null })}
           disabled={ctx.disabled} width="100%" variant="table" />
       );
-      return <span>{(row.organization as any)?.name ?? ""}</span>;
+      return <span>{(row.organization as { name?: string | null } | null)?.name ?? ""}</span>;
     }
     if (col.identifier === "position.name") {
       if (ctx.inlineEditing) return (
-        <LookupField label="" name={`hist_pos_${row.id}`} value={(row.positionUuid as string) ?? ""} displayValue={(row.position as any)?.name ?? ""} endpoint="positions" displayField="name"
-          onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "positionUuid", uuid, { position: item && uuid ? { uuid, name: item.name ?? "" } : null })}
+        <LookupField label="" name={`hist_pos_${row.id}`} value={(row.positionUuid as string) ?? ""} displayValue={(row.position as { name?: string | null } | null)?.name ?? ""} endpoint="positions" displayField="name"
+          onSelect={(uuid, _dv, item: { name?: string | null }) => ctx.handleLookupChange(row, "positionUuid", uuid, { position: item && uuid ? { uuid, name: item.name ?? "" } : null })}
           onClear={() => ctx.handleLookupChange(row, "positionUuid", null, { position: null })}
           disabled={ctx.disabled} width="100%" variant="table" />
       );
-      return <span>{(row.position as any)?.name ?? ""}</span>;
+      return <span>{(row.position as { name?: string | null } | null)?.name ?? ""}</span>;
     }
     if (col.identifier === "salary") {
-      if (ctx.inlineEditing) return <FieldNumber name={`hist_salary_${row.id}`} value={row.salary != null ? String(row.salary) : ""} onChange={e => ctx.handleInlineChange(row, "salary", e.target.value)} disabled={ctx.disabled} step="0.1" decimals={2} textAlign="right" width="100%" actions={[]} variant="table" />;
+      if (ctx.inlineEditing) return <FieldNumber name={`hist_salary_${row.id}`} value={row.salary != null ? asText(row.salary) : ""} onChange={e => ctx.handleInlineChange(row, "salary", e.target.value)} disabled={ctx.disabled} step="0.1" decimals={2} textAlign="right" width="100%" actions={[]} variant="table" />;
       return <span>{row.salary != null ? String(Number(row.salary)) : ""}</span>;
     }
     return undefined;
@@ -287,7 +288,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
       addPane,
       invalidate: () => void queryClient.invalidateQueries({ queryKey: [EH_MODEL] }),
       component: EmployeeHistoryForm,
-      label: (d, isEdit) => makePaneLabelFromData("EmployeeHistoriesList", "Кадровая история", isEdit ? d as any : null),
+      label: (d, isEdit) => makePaneLabelFromData("EmployeeHistoriesList", "Кадровая история", isEdit ? d as LabelSource : null),
       newContext: () => ({ employeeUuid }),
     }, data, ctx, sourceRow);
   }, [addPane, employeeUuid, queryClient]);

@@ -1,4 +1,5 @@
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
+import { asText } from "src/utils/asText";
 import { FC, useMemo, useCallback } from "react";
 import { translate } from "src/i18";
 import { showToast } from "src/components/UIToast";
@@ -314,7 +315,7 @@ const ProductBarcodesTable: FC<ProductBarcodesTableProps> = ({
   }, []);
 
   const validationRules = useMemo<Record<string, TCellValidator>>(() => ({
-    barcode: (value) => (!value || String(value).trim() === "" ? "Штрих-код обязателен" : undefined),
+    barcode: (value) => (!value || asText(value).trim() === "" ? "Штрих-код обязателен" : undefined),
   }), []);
 
   const defaultNewRow = useMemo(() => ({ barcode: "", comment: null }), []);
@@ -387,8 +388,8 @@ const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, productN
       );
     }
     if (col.identifier === "price") {
-      if (!ctx.inlineEditing) return <span>{row.price != null ? String(row.price) : ""}</span>;
-      return <FieldNumber name={`pp_price_${row.id}`} value={row.price != null ? String(row.price) : ""} onChange={e => ctx.handleInlineChange(row, "price", e.target.value)} disabled={ctx.disabled} decimals={2} width="100%" variant="table" />;
+      if (!ctx.inlineEditing) return <span>{row.price != null ? asText(row.price) : ""}</span>;
+      return <FieldNumber name={`pp_price_${row.id}`} value={row.price != null ? asText(row.price) : ""} onChange={e => ctx.handleInlineChange(row, "price", e.target.value)} disabled={ctx.disabled} decimals={2} width="100%" variant="table" />;
     }
     return undefined;
   }, []);

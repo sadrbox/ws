@@ -147,7 +147,7 @@ const DocumentNumberSettings: FC = () => {
       showToast(translate("saved"), "success");
       void qc.invalidateQueries({ queryKey: QKEY(orgKey) });
     } catch (e: unknown) {
-      const status = (e as RequestError)?.response?.status as number | undefined;
+      const status = (e as RequestError)?.response?.status;
       const msg = (e as RequestError)?.response?.data?.message || translate("numberingSaveError");
       // Ошибка ДАННЫХ (префикс занят, номер конфликтует) → <Notice /> рядом с полями,
       // которые её и вызвали. Системный сбой → <UIToast />.
@@ -188,7 +188,7 @@ const DocumentNumberSettings: FC = () => {
       void qc.invalidateQueries({ queryKey: QKEY(orgKey) });
       showToast(translate("resetDone"), "success");
     } catch (e: unknown) {
-      const status = (e as RequestError)?.response?.status as number | undefined;
+      const status = (e as RequestError)?.response?.status;
       const msg = (e as RequestError)?.response?.data?.message || translate("numberingSaveError");
       if (isSystemError(status)) showToast(msg, "error", 7000);
       else setNotices([{ type: "error", text: msg }]);
@@ -208,7 +208,7 @@ const DocumentNumberSettings: FC = () => {
       const n = res?.updated ?? 0;
       showToast(n > 0 ? `${translate("renumberDraftsDone")}: ${n}` : translate("renumberDraftsNone"), "success");
     } catch (e: unknown) {
-      const status = (e as RequestError)?.response?.status as number | undefined;
+      const status = (e as RequestError)?.response?.status;
       const msg = (e as RequestError)?.response?.data?.message || translate("numberingSaveError");
       if (isSystemError(status)) showToast(msg, "error", 7000);
       else setNotices([{ type: "error", text: msg }]);

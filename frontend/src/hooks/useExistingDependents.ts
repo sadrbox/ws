@@ -24,7 +24,7 @@ async function fetchDependent(
 	const resp = await api.get<DependentRow[] | ListResponse>(`/${ep}`, { params: { filter, limit: 1 } });
 	const items: DependentRow[] = Array.isArray(resp)
 		? resp
-		: ((resp as ListResponse)?.items ?? (resp as ListResponse)?.data ?? []);
+		: (resp?.items ?? resp?.data ?? []);
 	if (!items[0]) return null;
 	return { uuid: items[0].uuid, id: items[0].id, number: items[0].number ?? null, date: items[0].date };
 }

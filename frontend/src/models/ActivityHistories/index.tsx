@@ -14,7 +14,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { renderAuditCell, summarizeDiff } from "./renderAuditCell";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
 
@@ -55,6 +55,28 @@ const DEFAULT_FIELDS: TFields = {
   objectId: "", objectType: "", objectName: "",
 };
 
+/** Серверная запись журнала действий — вход mapServerToForm. Пишет наш
+ *  аудит-middleware; diff/props — произвольный JSON (набор полей зависит от модели). */
+interface ActivityHistoryServerRecord {
+  id?: number;
+  uuid?: string;
+  actionType?: string | null;
+  actionDate?: string | null;
+  organizationUuid?: string | null;
+  organizationShortName?: string | null;
+  bin?: string | null;
+  userName?: string | null;
+  host?: string | null;
+  ip?: string | null;
+  city?: string | null;
+  objectId?: string | null;
+  objectType?: string | null;
+  objectName?: string | null;
+  diff?: unknown;
+  props?: unknown;
+  organization?: { name?: string | null } | null;
+}
+
 const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
   // Форма — только просмотр записи журнала: у роутера нет PUT, редактировать нечем
   // (и не нужно — журнал аудита, который правят руками, перестаёт быть журналом).
@@ -63,7 +85,7 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
     storageKey: "activity-histories-form",
     defaultFields: DEFAULT_FIELDS,
     paneProps,
-    mapServerToForm: (d) => ({
+    mapServerToForm: (d: ActivityHistoryServerRecord) => ({
       ...DEFAULT_FIELDS,
       actionType: d.actionType ?? "",
       organizationUuid: d.organizationUuid ?? "",
@@ -80,13 +102,14 @@ const ActivityHistoriesForm: FC<Partial<TPane>> = (paneProps) => {
       props: d.props,
       id: d.id,
       uuid: d.uuid,
-      actionDate: d.actionDate,
+      actionDate: d.actionDate ?? undefined,
     }),
     buildPayload: (fd) => ({
       actionType: fd.actionType, objectId: fd.objectId,
       objectType: fd.objectType, objectName: fd.objectName,
     }),
-    buildPaneLabel: (saved) => makePaneLabel("ActivityHistoriesList", "Журнал", saved, saved.userName || undefined),
+    buildPaneLabel: (saved: LabelSource & { userName?: string | null }) =>
+      makePaneLabel("ActivityHistoriesList", "Журнал", saved, saved.userName || undefined),
   });
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).

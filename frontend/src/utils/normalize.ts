@@ -74,6 +74,10 @@ export function normalizeValue(v: unknown): unknown {
 			Object.prototype.hasOwnProperty.call(v, "toString") &&
 			(v as { toString?: unknown }).toString !== Object.prototype.toString;
 		if (!isPlainObject(v) || ownToString) {
+			// Намеренно вызываем собственный toString объекта (Decimal/BigNumber);
+			// случай «[object Object]» отсеивается ниже. asText здесь неприменим —
+			// он вернул бы "" для таких объектов.
+			// eslint-disable-next-line @typescript-eslint/no-base-to-string
 			const s = String(v);
 			if (s !== "[object Object]") {
 				const t = s.trim();

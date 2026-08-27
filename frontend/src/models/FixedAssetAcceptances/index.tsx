@@ -7,6 +7,7 @@
  * на самом акте.
  */
 import { FC, useMemo } from "react";
+import { asText } from "src/utils/asText";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -74,7 +75,7 @@ interface AcceptanceServerRecord {
   authorUuid?: string | null; author?: { uuid?: string; username?: string; email?: string } | null;
 }
 
-const num = (v: unknown): string => (v == null || v === "" ? "" : String(v));
+const num = (v: unknown): string => (v == null || v === "" ? "" : asText(v));
 
 const FixedAssetAcceptancesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();

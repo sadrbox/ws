@@ -94,7 +94,6 @@ const ModelForm: FC<ModelFormProps> = ({
   onSave,
   onSaveAndClose,
   onClose, // закрытие теперь через ✕ в PaneHeaderControls
-  onReload,
   isLoading,
   isInitialLoading,
   // showReload,

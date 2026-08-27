@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { translate, getLanguage, setLanguage } from 'src/i18';
 import { getEffectiveTheme, toggleTheme } from 'src/services/theme';
 import { useAppContext } from 'src/app/context';
-import { ReloadButton, ClearButton, CloseButton, IconButton } from 'src/components/Toolbar';
+import { ReloadButton, CloseButton, IconButton } from 'src/components/Toolbar';
 import { copyPaneLink } from "src/utils/paneLink";
 import { useChatUnread } from "src/hooks/useChatUnread";
 import type { TPane } from 'src/app/types';

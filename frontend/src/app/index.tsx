@@ -30,7 +30,6 @@ import { formStoreAPI } from "src/hooks/useFormStore";
 import { AppContextProvider } from "src/app/context";
 import { loadPersistedSession, savePersistedSession, restorePane, inferListRestore, type PersistedSession } from "src/app/paneRestore";
 import { readPaneLink, clearPaneLinkParam } from "src/utils/paneLink";
-import { openFormByRef } from "src/utils/openFormByRef";
 import { getComponentName } from "./getComponentName";
 import { buildPaneUniqId } from "./paneUniqId";
 

@@ -1,3 +1,4 @@
+import { asText } from "src/utils/asText";
 type SaleItemCalcInput = {
 	quantity?: unknown;
 	price?: unknown;
@@ -15,7 +16,7 @@ function toNumber(value: unknown): number {
 
 /** Нормализует значение метода расчёта НДС к "INCLUDED" | "ADDED". */
 function normalizeMethod(v: unknown): "INCLUDED" | "ADDED" {
-	const s = String(v ?? "").toUpperCase();
+	const s = asText(v ?? "").toUpperCase();
 	return s === "ADDED" ? "ADDED" : "INCLUDED";
 }
 

@@ -103,7 +103,7 @@ const SettlementsReport: FC<Props> = ({ uniqId }) => {
               <Td col="n">{idx + 1}</Td>
               <Td col="name">
                 {r.counterpartyUuid
-                  ? <DrillLink onOpen={() => drill.toEntity("counterparties", r.counterpartyUuid!)}>{r.counterpartyName}</DrillLink>
+                  ? <DrillLink onOpen={() => drill.toEntity("counterparties", r.counterpartyUuid)}>{r.counterpartyName}</DrillLink>
                   : r.counterpartyName}
               </Td>
               <Td col="num"><Money value={r.opening} /></Td>
