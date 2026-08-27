@@ -59,7 +59,7 @@ const SalesReport: FC<SalesReportProps> = ({ uniqId }) => {
       if (f.dateTo) p.dateTo = f.dateTo;
       if (f.orgUuid) p.organizationUuid = f.orgUuid;
       if (f.cptyUuid) p.counterpartyUuid = f.cptyUuid;
-      const resp = await api.get<any>("reports/sales-by-product", { params: p });
+      const resp = await api.get<{ items?: ProductRow[]; orgName?: string }>("reports/sales-by-product", { params: p });
       return { items: resp?.items ?? [], orgName: resp?.orgName ?? "" };
     },
     enabled: !!applied,

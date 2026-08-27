@@ -51,7 +51,7 @@ const InventoryTurnoverReport: FC<Props> = ({ uniqId }) => {
       if (f.dateTo) p.dateTo = f.dateTo;
       if (f.orgUuid) p.organizationUuid = f.orgUuid;
       if (f.whUuid) p.warehouseUuid = f.whUuid;
-      const resp = await api.get<any>("reports/material-statement", { params: p });
+      const resp = await api.get<{ items?: MsRow[] }>("reports/material-statement", { params: p });
       return resp?.items ?? [];
     },
     enabled: !!applied,

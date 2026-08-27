@@ -9,7 +9,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 
 const MODEL_ENDPOINT = "employee-histories";
@@ -62,7 +62,7 @@ interface EmployeeHistoryServerRecord {
 const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("EmployeeHistory");
   const data = paneProps.data;
-  const employeeUuid = (data as any)?.employeeUuid as string | undefined;
+  const employeeUuid = (data as { employeeUuid?: string } | undefined)?.employeeUuid;
 
   const initialFields: TFields | undefined = (() => {
     if (data?.uuid) return undefined;
@@ -100,7 +100,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
         employeeUuid: fd.employeeUuid,
       };
     },
-    buildPaneLabel: (saved) => {
+    buildPaneLabel: (saved: LabelSource & { eventType?: string | null; eventDate?: string | null }) => {
       const typeLabel = EVENT_TYPE_OPTIONS.find(o => o.value === saved.eventType)?.label;
       const detail = [typeLabel, saved.eventDate].filter(Boolean).join(" - ");
       return makePaneLabel("EmployeeHistoriesList", "Кадровая история", saved, detail || undefined);

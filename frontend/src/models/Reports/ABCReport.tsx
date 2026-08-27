@@ -41,7 +41,7 @@ const ABCReport: FC<Props> = ({ uniqId }) => {
       if (applied!.dateFrom) p.dateFrom = applied!.dateFrom;
       if (applied!.dateTo) p.dateTo = applied!.dateTo;
       if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
-      const resp = await api.get<any>("reports/sales-by-product", { params: p });
+      const resp = await api.get<{ items?: SrcRow[] }>("reports/sales-by-product", { params: p });
       return resp?.items ?? [];
     },
     enabled: !!applied,

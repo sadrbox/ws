@@ -21,7 +21,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -102,8 +102,8 @@ const ProductsForm: FC<Partial<TPane>> = (paneProps) => {
       // истины — «Цены», ручной ввод убран как избыточный.
       return { name: fd.name.trim(), sku: fd.sku?.trim() || null, barcode: fd.barcode?.trim() || null, isService: fd.isService === true, assetKind: fd.assetKind || "goods", trackSerialNumbers: fd.trackSerialNumbers === true, trackBatches: fd.trackBatches === true, brandUuid: fd.brandUuid || null, unitOfMeasureUuid: fd.unitOfMeasureUuid || null, tnvedCode: fd.tnvedCode?.trim() || null, truOriginCode: fd.truOriginCode || null, catalogTruId: fd.catalogTruId?.trim() || null };
     },
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
-    afterSave: async (saved) => {
+    buildPaneLabel: (saved: LabelSource) => makePaneLabel(LIST_NAME, "Номенклатура", saved),
+    afterSave: async (saved: { uuid?: string } | undefined) => {
       const uuid = saved?.uuid ?? form.fields.uuid;
       if (uuid) await invalidateSubTableFor(queryClient, "productbarcodes", "productUuid", uuid);
       if (uuid) await invalidateSubTableFor(queryClient, "product-prices", "productUuid", uuid);
@@ -377,9 +377,9 @@ const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, productN
       return <FieldDate label="" name={`pp_date_${row.id}`} value={isoToLocalInput(row.date as string)} onChange={e => ctx.handleInlineChange(row, "date", isoToLocalInput(e.target.value))} disabled={ctx.disabled} width="100%" variant="table" />;
     }
     if (col.identifier === "priceType.name") {
-      if (!ctx.inlineEditing) return <span>{(row.priceType as any)?.name ?? ""}</span>;
+      if (!ctx.inlineEditing) return <span>{(row.priceType as { name?: string | null } | null)?.name ?? ""}</span>;
       return (
-        <LookupField label="" name={`pp_pt_${row.id}`} value={(row.priceTypeUuid as string) ?? ""} displayValue={(row.priceType as any)?.name ?? ""}
+        <LookupField label="" name={`pp_pt_${row.id}`} value={(row.priceTypeUuid as string) ?? ""} displayValue={(row.priceType as { name?: string | null } | null)?.name ?? ""}
           endpoint="price-types" displayField="name"
           columns={[{ key: "name", label: "Наименование" }]}
           onSelect={(uuid, _dv, item) => ctx.handleLookupChange(row, "priceTypeUuid", uuid, { priceType: item && uuid ? { uuid, name: item.name ?? "" } : null })}
@@ -401,7 +401,7 @@ const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, productN
   // (Склад/Касса/Договоры). Колонку убираем из набора (а не просто visible:false),
   // чтобы сбросить возможный устаревший кэш ширин/видимости.
   const adjustedColumns = useMemo(
-    () => (priceColumns as any[]).filter((c) => c.identifier !== "product.name"),
+    () => (priceColumns as TColumn[]).filter((c) => c.identifier !== "product.name"),
     [],
   );
 

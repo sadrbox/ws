@@ -13,7 +13,7 @@ import styles from "src/styles/main.module.scss";
 import AvatarUpload from "src/components/AvatarUpload";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useFormStore } from "src/hooks/useFormStore";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -77,14 +77,14 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
     }),
     buildPayload: (fd) => {
       if (!fd.username?.trim()) return "Логин обязателен";
-      const payload: Record<string, any> = {
+      const payload: Record<string, unknown> = {
         username: fd.username.trim(),
         employeeUuid: fd.employeeUuid || null,
       };
       if (fd.password?.trim()) payload.password = fd.password.trim();
       return payload;
     },
-    buildPaneLabel: (saved) => makePaneLabel("UsersList", "Пользователи", saved, saved.username),
+    buildPaneLabel: (saved: LabelSource & { username?: string | null }) => makePaneLabel("UsersList", "Пользователи", saved, saved.username ?? undefined),
     afterSave: invalidateSubTables,
   });
 
@@ -157,7 +157,7 @@ UsersForm.displayName = "UsersForm";
 
 const UsersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName="UsersList" columnsJson={columnsJson} FormComponent={UsersForm}
-    getLabel={(d) => d?.username ? (d.username as string) : (d?.employee as any)?.fullName || "?"} variant={variant} onSelectItem={onSelectItem} />
+    getLabel={(d) => d?.username ? (d.username as string) : (d?.employee as { fullName?: string | null } | null)?.fullName || "?"} variant={variant} onSelectItem={onSelectItem} />
 );
 UsersList.displayName = "UsersList";
 

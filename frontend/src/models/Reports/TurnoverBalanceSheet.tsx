@@ -35,14 +35,14 @@ const TurnoverBalanceSheet: FC<Props> = ({ uniqId }) => {
   });
   const drill = useReportDrill({ applied, orgName: fields.orgName });
 
-  const { data, isLoading } = useQuery<{ items: OsvRow[]; totals: OsvRow }>({
+  const { data, isLoading } = useQuery<{ items: OsvRow[]; totals?: OsvRow }>({
     queryKey: ["accounting-osv", applied],
     queryFn: async () => {
       const p: Record<string, string> = {};
       if (applied!.dateFrom) p.dateFrom = applied!.dateFrom;
       if (applied!.dateTo) p.dateTo = applied!.dateTo;
       if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
-      const resp = await api.get<any>("accounting/balance-sheet", { params: p });
+      const resp = await api.get<{ items?: OsvRow[]; totals?: OsvRow }>("accounting/balance-sheet", { params: p });
       return { items: resp?.items ?? [], totals: resp?.totals };
     },
     enabled: !!applied,

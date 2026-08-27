@@ -16,7 +16,7 @@ import ModelList from "src/components/ModelList";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useUniqueOptionRows } from "src/hooks/useUniqueOptionRows";
-import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
+import { makePaneLabel, makePaneLabelFromData, type LabelSource } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
@@ -144,7 +144,7 @@ const AccessPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
         organizationUuid: fd.organizationUuid ?? null,
       };
     },
-    buildPaneLabel: (saved) =>
+    buildPaneLabel: (saved: LabelSource & { modelName?: string | null }) =>
       makePaneLabel("AccessPermissionsList", "Право доступа к разделу", saved, MODEL_NAME_OPTIONS.find(o => o.value === saved.modelName)?.label),
   });
 
@@ -199,7 +199,7 @@ const AccessPermissionsList: FC<{
       columnsJson={columnsJson}
       FormComponent={AccessPermissionsForm}
       getLabel={(d) => {
-        const item = d as any;
+        const item = d as { modelName?: string | null };
         const modelLabel = MODEL_NAME_OPTIONS.find(o => o.value === item?.modelName)?.label ?? (item?.modelName ?? "");
         return modelLabel;
       }}
@@ -308,7 +308,7 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
       addPane,
       invalidate: () => void queryClient.invalidateQueries({ queryKey: [ENDPOINT] }),
       component: AccessPermissionsForm,
-      label: (d, isEdit) => makePaneLabelFromData("AccessPermissionsTable", "Право доступа к разделу", isEdit ? d as any : null),
+      label: (d, isEdit) => makePaneLabelFromData("AccessPermissionsTable", "Право доступа к разделу", isEdit ? d as LabelSource : null),
       newContext: () => ({ userUuid, ...(organizationUuid ? { organizationUuid } : {}) }),
       blockNew: () => disableAddProp ?? false,
     }, data, ctx, sourceRow);

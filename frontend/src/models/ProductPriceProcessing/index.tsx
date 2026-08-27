@@ -28,7 +28,7 @@ const toNum = (v: unknown): number | null =>
   v == null || v === "" ? null : Number.isNaN(Number(v)) ? null : Number(v);
 
 // Колонки для «Корректировки»: добавлены «Старая цена» и «Δ, %».
-const colBy = (id: string) => (priceColumns as any[]).find((c) => c.identifier === id);
+const colBy = (id: string) => (priceColumns as { identifier: string }[]).find((c) => c.identifier === id);
 const correctionColumns = [
   colBy("product.name"),
   { identifier: "oldPrice", type: "number", width: "120px", minWidth: "90px", alignment: "right", visible: true, inlist: true, sortable: false },
@@ -36,7 +36,7 @@ const correctionColumns = [
   { identifier: "priceDelta", type: "number", width: "90px", minWidth: "70px", alignment: "right", visible: true, inlist: true, sortable: false },
   colBy("date"),
   colBy("priceType.name"),
-].filter(Boolean);
+].filter(Boolean) as TColumn[];
 
 // ─── Общий рендер ячеек ────────────────────────────────────────────────────
 /** Прикладные поля строки цены (без идентификаторов). */
@@ -58,6 +58,29 @@ type PriceRow = TDataItem & PriceFields;
 
 /** ЧЕРНОВИК строки: добавленная кнопкой или разобранная из файла — без id/uuid. */
 type PriceDraft = PriceFields & { id?: number; uuid?: string;[key: string]: unknown };
+
+/** Запись цены из API (product-prices GET/export). */
+interface PriceEntry {
+  uuid?: string;
+  productUuid?: string | null;
+  product?: { name?: string | null; sku?: string | null; barcode?: string | null; brand?: { name?: string | null } | null } | null;
+  priceTypeUuid?: string | null;
+  priceType?: { uuid?: string | null; name?: string | null } | null;
+  date?: string | null;
+  price?: number | string | null;
+}
+/** Товар из resolve-products (сопоставление строк файла с номенклатурой). */
+interface ResolvedProduct {
+  uuid?: string;
+  sku?: string | null;
+  barcode?: string | null;
+  name?: string | null;
+  barcodes?: Array<{ barcode?: string | null }> | null;
+}
+/** Элемент справочника типов цен (price-types). */
+interface PriceTypeItem { uuid?: string; name?: string | null }
+/** Итог батч-операции цен (product-prices/batch). */
+interface BatchSummary { created?: number; updated?: number; deleted?: number; skipped?: number }
 
 const priceCellRenderer = (
   row: TDataItem,
@@ -155,8 +178,8 @@ const PriceCorrectionPanel: FC<{
   // Дата необязательна: пустая = без фильтра по дате (грузим все цены).
   // При записи, если не задана, подставляется сегодня.
   const [date, setDate] = useState("");
-  const [pendingRows, setPendingRows] = useState<any[]>([]);
-  const [currentRows, setCurrentRows] = useState<any[]>([]);
+  const [pendingRows, setPendingRows] = useState<PriceDraft[]>([]);
+  const [currentRows, setCurrentRows] = useState<PriceDraft[]>([]);
   const [fillVersion, setFillVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [filled, setFilled] = useState(false);
@@ -183,12 +206,12 @@ const PriceCorrectionPanel: FC<{
     setIsLoading(true);
     try {
       // Все фильтры необязательны: без них загрузим все цены (последние, до limit).
-      const params: Record<string, any> = { limit: 5000 };
+      const params: Record<string, string | number> = { limit: 5000 };
       if (priceTypeUuid) params.priceTypeUuid = priceTypeUuid;
       if (productUuid) params.productUuid = productUuid;
       if (date) params.date = date; // сырая дата YYYY-MM-DD (UTC-день, как в БД)
-      const resp = await apiClient.get(`/${ENDPOINT}`, { params });
-      const items = (resp.data?.items ?? []) as any[];
+      const resp = await apiClient.get<{ items?: PriceEntry[] }>(`/${ENDPOINT}`, { params });
+      const items = resp.data?.items ?? [];
       const rows = items.map((e, i) => {
         const price = e.price != null ? Number(e.price) : null;
         return {
@@ -257,8 +280,8 @@ const PriceCorrectionPanel: FC<{
     if (currentRows.length === 0) return;
     setIsLoading(true);
     try {
-      const resp = await apiClient.get(`/${ENDPOINT}`, { params: { priceTypeUuid: srcPriceTypeUuid, limit: 5000 } });
-      const items = (resp.data?.items ?? []) as any[];
+      const resp = await apiClient.get<{ items?: PriceEntry[] }>(`/${ENDPOINT}`, { params: { priceTypeUuid: srcPriceTypeUuid, limit: 5000 } });
+      const items = resp.data?.items ?? [];
       // Берём самую свежую цену по каждому товару (items отсортированы date desc).
       const srcMap = new Map<string, number>();
       for (const e of items) {
@@ -337,7 +360,7 @@ const PriceCorrectionPanel: FC<{
     if (!(await confirm(msg))) return;
     setIsLoading(true);
     try {
-      const resp = await apiClient.post(`/${ENDPOINT}/batch`, { operations: ops });
+      const resp = await apiClient.post<{ summary?: BatchSummary }>(`/${ENDPOINT}/batch`, { operations: ops });
       const s = resp.data?.summary;
       showToast(s
         ? `Готово. Обновлено: ${s.updated || 0}, создано: ${s.created || 0}, удалено: ${s.deleted || 0}, пропущено: ${s.skipped || 0}`
@@ -420,7 +443,7 @@ const PriceCorrectionPanel: FC<{
           parentUuid=""
           deferRemoteChanges
           clientSort
-          initialPendingRows={pendingRows}
+          initialPendingRows={pendingRows as TDataItem[]}
           defaultInlineEditing
           emptyMessage={"Нажмите «Заполнить» — фильтры необязательны"}
           onAllItemsChange={setCurrentRows}
@@ -443,11 +466,11 @@ PriceCorrectionPanel.displayName = "PriceCorrectionPanel";
 // Вкладка «Загрузка цен» (импорт из Excel)
 // ═══════════════════════════════════════════════════════════════════════════
 async function resolveProducts(skus: string[], barcodes: string[], names: string[]) {
-  const resp = await apiClient.post(`/${ENDPOINT}/resolve-products`, { skus, barcodes, names });
-  const items = (resp.data?.items ?? []) as any[];
-  const skuMap = new Map<string, any>();
-  const barcodeMap = new Map<string, any>();
-  const nameMap = new Map<string, any>();
+  const resp = await apiClient.post<{ items?: ResolvedProduct[] }>(`/${ENDPOINT}/resolve-products`, { skus, barcodes, names });
+  const items = resp.data?.items ?? [];
+  const skuMap = new Map<string, ResolvedProduct>();
+  const barcodeMap = new Map<string, ResolvedProduct>();
+  const nameMap = new Map<string, ResolvedProduct>();
   for (const p of items) {
     if (p.sku) skuMap.set(String(p.sku).trim(), p);
     if (p.barcode) barcodeMap.set(String(p.barcode).trim(), p);
@@ -476,19 +499,19 @@ function normalizeDateCell(v: unknown): string | null {
 
 // Карта «имя типа цены (lowercase) → {uuid,name}» для восстановления типа из файла.
 async function fetchPriceTypeMap() {
-  const resp = await apiClient.get(`/price-types`, { params: { limit: 1000 } });
+  const resp = await apiClient.get<{ items?: PriceTypeItem[] }>(`/price-types`, { params: { limit: 1000 } });
   const map = new Map<string, { uuid: string; name: string }>();
-  for (const t of (resp.data?.items ?? []) as any[]) {
-    if (t.name) map.set(String(t.name).trim().toLowerCase(), { uuid: t.uuid, name: t.name });
+  for (const t of resp.data?.items ?? []) {
+    if (t.name) map.set(asText(t.name).trim().toLowerCase(), { uuid: t.uuid ?? "", name: t.name ?? "" });
   }
   return map;
 }
 
 // Множество ключей уже существующих цен (для опции «Скрыть существующие»).
 async function fetchExistingKeySet(): Promise<Set<string>> {
-  const resp = await apiClient.get(`/${ENDPOINT}/export`);
+  const resp = await apiClient.get<{ items?: PriceEntry[] }>(`/${ENDPOINT}/export`);
   const set = new Set<string>();
-  for (const e of (resp.data?.items ?? []) as any[]) {
+  for (const e of resp.data?.items ?? []) {
     set.add(priceKey(e.productUuid, e.priceTypeUuid ?? e.priceType?.uuid, e.date, e.price));
   }
   return set;
@@ -506,10 +529,10 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
   const priceTypeName = "";
   const [date, setDate] = useState(todayDateOnly());
   const [file, setFile] = useState<File | null>(null);
-  const [allRows, setAllRows] = useState<any[]>([]); // все распарсенные строки (с тегами)
+  const [allRows, setAllRows] = useState<PriceDraft[]>([]); // все распарсенные строки (с тегами)
   const [hideExisting, setHideExisting] = useState(false);
-  const [pendingRows, setPendingRows] = useState<any[]>([]);
-  const [currentRows, setCurrentRows] = useState<any[]>([]);
+  const [pendingRows, setPendingRows] = useState<PriceDraft[]>([]);
+  const [currentRows, setCurrentRows] = useState<PriceDraft[]>([]);
   const [fillVersion, setFillVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [parsed, setParsed] = useState(false);
@@ -538,7 +561,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array", cellDates: true });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
+      const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
       if (!raw || raw.length === 0) { showToast("Файл пуст", "warning"); return; }
       const header = raw[0].map((h) => asText(h).trim().toLowerCase());
       const col = (names: string[]) => {
@@ -555,14 +578,14 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       const ptIdx = col(["pricetype", "тип цены", "price type", "типцены"]);
       const dateIdx = col(["date", "дата"]);
 
-      const data = (raw.slice(1) as any[])
+      const data = raw.slice(1)
         .map((r) => {
-          const sku = skuIdx >= 0 ? String(r[skuIdx] ?? "").trim() : "";
-          const barcode = barcodeIdx >= 0 ? String(r[barcodeIdx] ?? "").trim() : "";
-          const name = nameIdx >= 0 ? String(r[nameIdx] ?? "").trim() : "";
+          const sku = skuIdx >= 0 ? asText(r[skuIdx]).trim() : "";
+          const barcode = barcodeIdx >= 0 ? asText(r[barcodeIdx]).trim() : "";
+          const name = nameIdx >= 0 ? asText(r[nameIdx]).trim() : "";
           const praw = priceIdx >= 0 ? r[priceIdx] : null;
-          const price = praw == null || praw === "" ? null : parseFloat(String(praw).replace(",", "."));
-          const ptName = ptIdx >= 0 ? String(r[ptIdx] ?? "").trim() : "";
+          const price = praw == null || praw === "" ? null : parseFloat(asText(praw).replace(",", "."));
+          const ptName = ptIdx >= 0 ? asText(r[ptIdx]).trim() : "";
           const dateCell = dateIdx >= 0 ? normalizeDateCell(r[dateIdx]) : null;
           return { sku, barcode, name, price, ptName, dateCell };
         })
@@ -642,7 +665,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
 
     setIsLoading(true);
     try {
-      const resp = await apiClient.post(`/${ENDPOINT}/batch`, { operations: ops });
+      const resp = await apiClient.post<{ summary?: BatchSummary }>(`/${ENDPOINT}/batch`, { operations: ops });
       const s = resp.data?.summary;
       showToast(s ? `Загрузка завершена. Создано: ${s.created || 0}, пропущено: ${s.skipped || 0}` : "Загрузка завершена", "success");
       setFile(null);
@@ -673,8 +696,8 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
   const handleDownloadBackup = async () => {
     setIsLoading(true);
     try {
-      const resp = await apiClient.get(`/${ENDPOINT}/export`);
-      const items = (resp.data?.items ?? []) as any[];
+      const resp = await apiClient.get<{ items?: PriceEntry[] }>(`/${ENDPOINT}/export`);
+      const items = resp.data?.items ?? [];
       if (items.length === 0) { showToast("Цен для бэкапа нет", "info"); return; }
       const aoa = [
         ["sku", "barcode", "name", "brand", "priceType", "date", "price"],
@@ -775,7 +798,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
             parentUuid=""
             deferRemoteChanges
             clientSort
-            initialPendingRows={pendingRows}
+            initialPendingRows={pendingRows as TDataItem[]}
             defaultInlineEditing
             emptyMessage={"Выберите файл и нажмите «Заполнить»"}
             onAllItemsChange={setCurrentRows}

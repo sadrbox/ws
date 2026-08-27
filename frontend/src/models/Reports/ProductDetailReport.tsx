@@ -69,7 +69,7 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
       if (f.dateFrom) p.dateFrom = f.dateFrom;
       if (f.dateTo) p.dateTo = f.dateTo;
       if (f.orgUuid) p.organizationUuid = f.orgUuid;
-      const resp = await api.get<any>("reports/product-movements", { params: p });
+      const resp = await api.get<{ items?: MovementRow[]; productName?: string }>("reports/product-movements", { params: p });
       return { items: resp?.items ?? [], productName: resp?.productName ?? f.productName };
     },
     enabled: !!applied,

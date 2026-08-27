@@ -23,7 +23,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
 
@@ -130,8 +130,8 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
         ownerUuid: fd.ownerUuid || null,
       };
     },
-    buildPaneLabel: (saved) =>
-      makePaneLabel("BankAccountsList", "Банковские счета", saved, saved.name || saved.iban),
+    buildPaneLabel: (saved: LabelSource & { iban?: string | null }) =>
+      makePaneLabel("BankAccountsList", "Банковские счета", saved, saved.name || saved.iban || undefined),
   });
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
@@ -156,7 +156,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
                 </Group>
                 <Group className={styles.w1of2}>
                   <FormLookup form={form} field="currency" endpoint="currencies" displayField="code" minWidth={FIELD_WIDTH.wide}
-                    onSelect={(uuid, _display, item) => form.setFields({ currencyUuid: uuid, currencyName: uuid ? `${item.code} — ${item.name}` : "" } as any)} />
+                    onSelect={(uuid, _display, item: { code?: string | null; name?: string | null }) => form.setFields({ currencyUuid: uuid, currencyName: uuid ? `${item.code ?? ""} — ${item.name ?? ""}` : "" } as Partial<TFields>)} />
                 </Group>
               </GroupRow>
               <Group>
@@ -164,7 +164,7 @@ const BankAccountsForm: FC<Partial<TPane>> = (paneProps) => {
               </Group>
               <Group>
                 <OwnerLookupField ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
-                  name={`${form.formUid}_owner`} onOwnerChange={({ ownerType, ownerUuid, ownerName }) => form.setFields({ ownerType, ownerUuid, ownerName } as any)}
+                  name={`${form.formUid}_owner`} onOwnerChange={({ ownerType, ownerUuid, ownerName }) => form.setFields({ ownerType, ownerUuid, ownerName } as Partial<TFields>)}
                   typeLocked={!form.uuid && !!data?.ownerType} allowedTypes={["organization", "counterparty"]} disabled={form.isLoading} />
               </Group>
             </GroupCol>
@@ -306,7 +306,7 @@ const BankAccountsTable: FC<BankAccountsTableProps> = ({
       addPane,
       invalidate: () => void queryClient.invalidateQueries({ queryKey: [BA_TABLE_ENDPOINT] }),
       component: BankAccountsForm,
-      label: (d, isEdit) => makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? d as any : null, (d?.name || d?.iban) as string),
+      label: (d, isEdit) => makePaneLabelFromData("BankAccountsList", "Банковские счета", isEdit ? d as LabelSource : null, (d?.name || d?.iban) as string),
       newContext: () => ({ ownerType, ownerUuid: parentUuid, ownerName: parentName }),
     }, data, ctx, sourceRow);
   }, [addPane, ownerType, parentUuid, parentName, queryClient]);

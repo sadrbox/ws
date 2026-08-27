@@ -22,7 +22,7 @@ import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import EgovFillButton from "src/components/EgovFillButton";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
@@ -81,7 +81,7 @@ const CounterpartiesForm: FC<Partial<TPane>> = (paneProps) => {
       if (!bin || !/^\d{12}$/.test(bin)) return translate("binMustBe12Digits");
       return { bin, name: fd.name?.trim() || null, legalName: fd.legalName?.trim() || null, countryCode: fd.countryCode?.trim() || "KZ", enterpriseCategory: fd.enterpriseCategory || null };
     },
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, translate("counterparty"), saved, saved.name || saved.bin),
+    buildPaneLabel: (saved: LabelSource & { bin?: string | null }) => makePaneLabel(LIST_NAME, translate("counterparty"), saved, saved.name || saved.bin || undefined),
     afterSave: invalidateSubTables,
   });
 

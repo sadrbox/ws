@@ -24,7 +24,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import Notice from "src/components/Notice";
 import { useDocumentNotices } from "src/hooks/useDocumentNotices";
@@ -103,7 +103,7 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
 
   // Строки, перенесённые из документа-основания (Инвентаризация: излишек).
   const basisItems = useMemo<TDataItem[]>(() => {
-    const rows = (paneProps.data as any)?.fromBasisItems;
+    const rows = (paneProps.data as { fromBasisItems?: TDataItem[] } | undefined)?.fromBasisItems;
     return Array.isArray(rows) ? rows : [];
   }, [paneProps.data]);
 
@@ -172,7 +172,7 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
         basisDocumentLabel: fd.basisDocumentLabel || null,
       };
     },
-    buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
+    buildPaneLabel: (saved: LabelSource) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
     afterSave: invalidateSubTables,
   });
 
@@ -184,7 +184,7 @@ const GoodsReceiptsForm: FC<Partial<TPane>> = (paneProps) => {
 
   // Смена организации: склад принадлежал прежней орг — очищаем.
   const handleOrganizationSelect = useCallback((uuid: string, displayValue: string) => {
-    const cur = form.store.getSnapshot().fields as any;
+    const cur = form.store.getSnapshot().fields;
     if (cur.organizationUuid === uuid) {
       form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
       return;

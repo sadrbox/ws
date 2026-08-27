@@ -26,7 +26,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import Notice from "src/components/Notice";
 import { useDocumentNotices } from "src/hooks/useDocumentNotices";
@@ -162,7 +162,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         organizationUuid: fd.organizationUuid || null,
       };
     },
-    buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
+    buildPaneLabel: (saved: LabelSource) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
     afterSave: invalidateSubTables,
     // Контроль остатка перед проведением (расход со склада-источника fromWarehouse).
     onBeforeSave: async (fd) => {
@@ -190,7 +190,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
   // Смена организации: склады принадлежали прежней орг — очищаем оба
   // (для перемещения единый дефолт-склад неприменим к источнику и приёмнику).
   const handleOrganizationSelect = useCallback((uuid: string, displayValue: string) => {
-    const cur = form.store.getSnapshot().fields as any;
+    const cur = form.store.getSnapshot().fields;
     if (cur.organizationUuid === uuid) {
       form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
       return;
@@ -274,8 +274,8 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     const uuid = form.fields.uuid;
     if (!uuid) return;
     try {
-      if (id === "snt") { const r = await govDocs.issueSnt("inventory-transfers", uuid); form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as any); }
-      else if (id === "sntStatus") { const r = await govDocs.refreshSnt("inventory-transfers", uuid); form.setFields({ sntStatus: r.sntStatus, sntRegistrationNumber: r.sntRegistrationNumber } as any); }
+      if (id === "snt") { const r = await govDocs.issueSnt("inventory-transfers", uuid); form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>); }
+      else if (id === "sntStatus") { const r = await govDocs.refreshSnt("inventory-transfers", uuid); form.setFields({ sntStatus: r.sntStatus, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>); }
     } catch { /* ошибка через govDocs.error */ }
   }, [form.fields.uuid, form.setFields, govDocs]);
 

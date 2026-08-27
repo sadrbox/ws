@@ -19,7 +19,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useTodoStatuses } from "src/hooks/useTodoStatuses";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import Notice from "src/components/Notice";
@@ -123,7 +123,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
       sourceType: fd.sourceType || null, sourceUuid: fd.sourceUuid || null,
       sourceLabel: fd.sourceLabel || null,
     }),
-    buildPaneLabel: (saved) => makePaneLabel("TodosList", "Задачи", saved, saved.description ? String(saved.description).slice(0, 60) : undefined),
+    buildPaneLabel: (saved: LabelSource & { description?: string | null }) => makePaneLabel("TodosList", "Задачи", saved, saved.description ? String(saved.description).slice(0, 60) : undefined),
   });
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
@@ -156,9 +156,9 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                 </Group>
                 <Group>
                   <FormLookup form={form} field="curator" endpoint="users" displayField="username" secondaryFields={["employee.fullName"]} minWidth={FIELD_WIDTH.lg}
-                    onSelect={(uuid, display, item) => form.setFields({ curatorUuid: uuid, curatorName: item?.employee?.fullName || display } as Partial<TFields>)} />
+                    onSelect={(uuid, display, item: { employee?: { fullName?: string | null } | null }) => form.setFields({ curatorUuid: uuid, curatorName: item?.employee?.fullName || display } as Partial<TFields>)} />
                   <FormLookup form={form} field="executor" endpoint="users" displayField="username" secondaryFields={["employee.fullName"]} minWidth={FIELD_WIDTH.lg}
-                    onSelect={(uuid, display, item) => form.setFields({ executorUuid: uuid, executorName: item?.employee?.fullName || display } as Partial<TFields>)} />
+                    onSelect={(uuid, display, item: { employee?: { fullName?: string | null } | null }) => form.setFields({ executorUuid: uuid, executorName: item?.employee?.fullName || display } as Partial<TFields>)} />
                 </Group>
                 <GroupRow>
                   <Group className={styles.w1of2}>

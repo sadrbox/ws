@@ -20,7 +20,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
 
@@ -120,7 +120,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
         ownerUuid: fd.ownerUuid || null,
       };
     },
-    buildPaneLabel: (saved) => makePaneLabel("ContactsList", translate("ContactsList"), saved, saved.value),
+    buildPaneLabel: (saved: LabelSource & { value?: string | null }) => makePaneLabel("ContactsList", translate("ContactsList"), saved, saved.value ?? undefined),
   });
 
   // Владелец пришёл из родителя (extraParams: ownerType+ownerUuid), но без имени —
@@ -165,7 +165,7 @@ const ContactsForm: FC<Partial<TPane>> = (paneProps) => {
                 ownerType={form.fields.ownerType} ownerUuid={form.fields.ownerUuid} ownerName={form.fields.ownerName}
                 name={`${form.formUid}_owner`}
                 onOwnerChange={({ ownerType, ownerUuid, ownerName }) =>
-                  form.setFields({ ownerType, ownerUuid, ownerName } as any)}
+                  form.setFields({ ownerType, ownerUuid, ownerName } as Partial<TContactFields>)}
                 typeLocked={!form.uuid && !!data?.ownerType}
                 disabled={form.isLoading}
               />
@@ -281,7 +281,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
       addPane,
       invalidate: () => void queryClient.invalidateQueries({ queryKey: [MODEL_ENDPOINT] }),
       component: ContactsForm,
-      label: (d, isEdit) => makePaneLabelFromData("ContactsList", translate("ContactsList"), isEdit ? d as any : null),
+      label: (d, isEdit) => makePaneLabelFromData("ContactsList", translate("ContactsList"), isEdit ? d as LabelSource : null),
       newContext: () => ({ ownerType, ownerUuid: parentUuid, ownerName: parentName }),
     }, data, ctx, sourceRow);
   }, [addPane, ownerType, parentUuid, parentName, queryClient]);

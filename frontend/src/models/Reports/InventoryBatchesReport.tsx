@@ -45,7 +45,7 @@ const InventoryBatchesReport: FC<Props> = ({ uniqId }) => {
       if (f.orgUuid) p.organizationUuid = f.orgUuid;
       if (f.whUuid) p.warehouseUuid = f.whUuid;
       if (f.productUuid) p.productUuid = f.productUuid;
-      const resp = await api.get<any>("reports/inventory-batches", { params: p });
+      const resp = await api.get<{ items?: ApiItem[] }>("reports/inventory-batches", { params: p });
       return resp?.items ?? [];
     },
     enabled: !!applied,

@@ -49,14 +49,14 @@ const ManagerReport: FC<ManagerReportProps> = ({ uniqId }) => {
   });
   const drill = useReportDrill({ applied, orgName: fields.orgName });
 
-  const { data, isLoading, isError } = useQuery<{ items: ManagerRow[]; totals: Totals }>({
+  const { data, isLoading, isError } = useQuery<{ items: ManagerRow[]; totals: Totals | null }>({
     queryKey: ["report-sales-by-manager", applied],
     queryFn: async () => {
       const p: Record<string, string> = {};
       if (applied!.dateFrom) p.dateFrom = applied!.dateFrom;
       if (applied!.dateTo) p.dateTo = applied!.dateTo;
       if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
-      const resp = await api.get<any>("reports/sales-by-manager", { params: p });
+      const resp = await api.get<{ items?: ManagerRow[]; totals?: Totals }>("reports/sales-by-manager", { params: p });
       return { items: resp?.items ?? [], totals: resp?.totals ?? null };
     },
     enabled: !!applied,

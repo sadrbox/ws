@@ -70,7 +70,7 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
   const { data: movements = [], isLoading: loadingMov } = useQuery<MovementRow[]>({
     queryKey: ["product-register", "movements", applied],
     queryFn: async () => {
-      const resp = await api.get<any>("product-register", { params: buildAppliedParams() });
+      const resp = await api.get<{ items?: MovementRow[] }>("product-register", { params: buildAppliedParams() });
       return resp?.items ?? [];
     },
     enabled: view === "movements" && !!applied,
@@ -79,7 +79,7 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
   const { data: balances = [], isLoading: loadingBal } = useQuery<BalanceRow[]>({
     queryKey: ["product-register", "balances", applied],
     queryFn: async () => {
-      const resp = await api.get<any>("product-register/balances", { params: buildAppliedParams() });
+      const resp = await api.get<{ items?: BalanceRow[] }>("product-register/balances", { params: buildAppliedParams() });
       return resp?.items ?? [];
     },
     enabled: view === "balances" && !!applied,

@@ -38,7 +38,7 @@ const SettlementsReport: FC<Props> = ({ uniqId }) => {
   });
   const drill = useReportDrill({ applied, orgName: fields.orgName });
 
-  const { data, isLoading, isError } = useQuery<{ items: Row[]; totals: Totals; accountName: string }>({
+  const { data, isLoading, isError } = useQuery<{ items: Row[]; totals: Totals | null; accountName: string }>({
     queryKey: ["report-settlements", applied],
     queryFn: async () => {
       const p: Record<string, string> = { accountCode: applied!.accountCode };
@@ -46,7 +46,7 @@ const SettlementsReport: FC<Props> = ({ uniqId }) => {
       if (applied!.dateTo) p.dateTo = applied!.dateTo;
       if (applied!.orgUuid) p.organizationUuid = applied!.orgUuid;
       if (applied!.cptyUuid) p.counterpartyUuid = applied!.cptyUuid;
-      const resp = await api.get<any>("accounting/settlements", { params: p });
+      const resp = await api.get<{ items?: Row[]; totals?: Totals; accountName?: string }>("accounting/settlements", { params: p });
       return { items: resp?.items ?? [], totals: resp?.totals ?? null, accountName: resp?.accountName ?? "" };
     },
     enabled: !!applied,
