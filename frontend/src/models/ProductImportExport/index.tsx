@@ -129,7 +129,11 @@ const makeCellRenderer = (priceDate: string) =>
               </span>
             }
             onTextChange={(text) => ctx.updateLocalRow(r, { name: text, productUuid: "", _matched: false })}
-            onSelect={(u, dv, item) => ctx.handleLookupChange(r, "productUuid", u, {
+            onSelect={(u, dv, item: {
+              name?: string | null; sku?: string | null;
+              brand?: { name?: string | null } | null; brandUuid?: string | null;
+              unitOfMeasure?: { name?: string | null } | null; unitOfMeasureUuid?: string | null;
+            }) => ctx.handleLookupChange(r, "productUuid", u, {
               name: item?.name ?? dv,
               _matched: !!u,
               ...(item?.sku !== undefined ? { sku: item.sku ?? "" } : {}),

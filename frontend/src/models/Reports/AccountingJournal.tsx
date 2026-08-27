@@ -80,7 +80,7 @@ const AccountingJournal: FC<Props> = ({ uniqId }) => {
           onSelect={(u, d) => patch({ orgUuid: u, orgName: d })} onClear={() => patch({ orgUuid: "", orgName: "" })} />
         <LookupField label={translate("account")} name="aj_acc" value={fields.accountCode} displayValue={fields.accountName}
           endpoint="chart-of-accounts" displayField="name"
-          onSelect={(_u, d, item) => patch({ accountCode: item.code, accountName: `${item.code} ${d}` })}
+          onSelect={(_u, d, item: { code?: string }) => patch({ accountCode: item.code ?? "", accountName: `${item.code ?? ""} ${d}` })}
           onClear={() => patch({ accountCode: "", accountName: "" })} />
         <LookupField label={translate("counterparty")} name="aj_cp" value={fields.cpUuid} displayValue={fields.cpName}
           endpoint="counterparties" displayField="name"

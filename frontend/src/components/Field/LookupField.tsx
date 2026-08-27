@@ -2,6 +2,9 @@ import { FC, useCallback, useEffect, useId, useMemo, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import styles from "./Field.module.scss";
 import { fetchList } from "src/services/offlineDataService";
+import { asText } from "src/utils/asText";
+import type { TDataItem } from "src/components/Table/types";
+import type { TPane } from "src/app/types";
 import {
   LOOKUP_CREATE_TOKEN_KEY,
   newLookupCreateToken,
@@ -36,6 +39,10 @@ const FIELD_ACTION_META: Record<LookupActionType, { icon: IconName; label: strin
   open: { icon: "open", label: "Открыть" },
 };
 
+/** Элемент справочника из произвольного эндпоинта: известные поля через
+ *  индекс-сигнатуру как unknown (компилятор заставляет сузить перед использованием). */
+export type LookupItem = Record<string, unknown>;
+
 export interface LookupFieldProps {
   /** Заголовок поля */
   label?: React.ReactNode;
@@ -51,7 +58,7 @@ export interface LookupFieldProps {
   /** Отображаемое значение (name, value и т.д.) */
   displayValue?: string;
   /** Колбэк при выборе элемента: (uuid, displayValue, item) */
-  onSelect: (uuid: string, displayValue: string, item: Record<string, any>) => void;
+  onSelect: (uuid: string, displayValue: string, item: LookupItem) => void;
   /** Колбэк при очистке */
   onClear?: () => void;
   /** Endpoint API, напр. "organizations", "counterparties" */
@@ -61,7 +68,7 @@ export interface LookupFieldProps {
   /** Дополнительные колонки (совместимость, не используется в новой версии) */
   columns?: { key: string; label: string }[];
   /** Кастомная функция для формирования текста подсказки в LookupDropdown */
-  getSuggestionLabel?: (item: Record<string, any>) => string;
+  getSuggestionLabel?: (item: LookupItem) => string;
   /** Автофокус поля при монтировании (например единственное поле ввода в терминале). */
   autoFocus?: boolean;
   /** Показывать индикатор проведения (цветная точка) для элементов-документов
@@ -81,7 +88,7 @@ export interface LookupFieldProps {
   /** Placeholder */
   placeholder?: string;
   /** Компонент списка для модалки. Если не указан — используется маппинг по endpoint */
-  listComponent?: FC<any>;
+  listComponent?: FC<Record<string, unknown>>;
   /** Вариант отображения: default (форма) или table (внутри ячейки таблицы) */
   variant?: FieldVariant;
   /** Поля для отображения справа в автокомплите (напр. ["bin"] → показывает "(123456789012)").
@@ -258,7 +265,7 @@ const LookupField: FC<LookupFieldProps> = ({
   // область «Создать» при пустом списке (иначе — только при вводе текста).
   const [qsOpened, setQsOpened] = useState(false);
   useEffect(() => { if (!isDropdownOpen) setQsOpened(false); }, [isDropdownOpen]);
-  const [suggestions, setSuggestions] = useState<Record<string, any>[]>([]);
+  const [suggestions, setSuggestions] = useState<LookupItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -315,14 +322,14 @@ const LookupField: FC<LookupFieldProps> = ({
     if (!searchText && searchTransform) {
       // Transform вернул "" — загружаем все записи и фильтруем на клиенте
       // по getSuggestionLabel (или displayField), чтобы поиск по лейблу работал.
-      fetchList(endpoint, undefined, { limit: 200, ...extraParams })
+      fetchList<LookupItem>(endpoint, undefined, { limit: 200, ...extraParams })
         .then((result) => {
           if (cancelled) return;
-          const all = result.items as any[];
+          const all = result.items;
           const filtered = all.filter((item) => {
             const label = getSuggestionLabel
               ? getSuggestionLabel(item)
-              : String(item[displayField] ?? "");
+              : asText(item[displayField]);
             // Слово-ориентированный матч по видимой метке (см. matchesAllWords).
             return matchesAllWords(label, debouncedText);
           });
@@ -333,10 +340,10 @@ const LookupField: FC<LookupFieldProps> = ({
         .catch(() => { if (!cancelled) setSuggestions([]); })
         .finally(() => { if (!cancelled) setIsLoading(false); });
     } else if (searchText) {
-      fetchList(endpoint, undefined, { search: searchText, limit: 10, ...extraParams })
+      fetchList<LookupItem>(endpoint, undefined, { search: searchText, limit: 10, ...extraParams })
         .then((result) => {
           if (cancelled) return;
-          const items = result.items as any[];
+          const items = result.items;
           setSuggestions(items);
           setIsDropdownOpen(true);
           setActiveIndex(items.length > 0 ? 0 : -1);
@@ -382,12 +389,12 @@ const LookupField: FC<LookupFieldProps> = ({
       component: SelectPaneWrapper,
       label: `${translate("selectTitle")}: ${(typeof label === "string" && label.trim()) ? translate(label) : (getByEndpoint(endpoint)?.label ?? endpoint)}`,
       isSelector: true,
-      data: { endpoint, listComponent, extraParams } as any,
-      onSelectResult: (item: Record<string, any>) => {
+      data: { endpoint, listComponent, extraParams } as Partial<TDataItem>,
+      onSelectResult: (item: LookupItem) => {
         const uuid = item.uuid as string;
         const display = getSuggestionLabel
           ? getSuggestionLabel(item)
-          : String(item[displayField] ?? item.value ?? item.name ?? uuid);
+          : asText(item[displayField] ?? item.value ?? item.name ?? uuid);
         onSelect(uuid, display, item);
         setIsDropdownOpen(false);
         setInputText(display);
@@ -416,9 +423,9 @@ const LookupField: FC<LookupFieldProps> = ({
     inputRef.current?.focus();
     setQsOpened(true);
     setIsLoading(true);
-    fetchList(endpoint, undefined, { limit: 200, ...extraParams })
+    fetchList<LookupItem>(endpoint, undefined, { limit: 200, ...extraParams })
       .then((result) => {
-        const items = result.items as any[];
+        const items = result.items;
         setSuggestions(items);
         setIsDropdownOpen(true);
         // Первый элемент сразу выделен — Up/Down навигация + Enter работают.
@@ -428,11 +435,11 @@ const LookupField: FC<LookupFieldProps> = ({
       .finally(() => setIsLoading(false));
   }, [disabled, endpoint, extraParams]);
 
-  const handleSelectItem = useCallback((item: Record<string, any>) => {
+  const handleSelectItem = useCallback((item: LookupItem) => {
     const uuid = item.uuid as string;
     const display = getSuggestionLabel
       ? getSuggestionLabel(item)
-      : String(item[displayField] ?? item.value ?? item.name ?? uuid);
+      : asText(item[displayField] ?? item.value ?? item.name ?? uuid);
     onSelect(uuid, display, item);
     setIsDropdownOpen(false);
     setInputText(display);
@@ -464,13 +471,14 @@ const LookupField: FC<LookupFieldProps> = ({
     const entry = getByEndpoint(endpoint);
     if (!entry) return;
     entry.module().then((mod) => {
-      const FormComp: FC<any> | undefined = mod[entry.formName] || mod.default;
+      const forms = mod as Record<string, FC<Partial<TPane>> | undefined>;
+      const FormComp: FC<Partial<TPane>> | undefined = forms[entry.formName] || forms.default;
       if (!FormComp) return;
       const t = translate;
       addPane({
         label: t(entry.formName) || entry.label || endpoint,
         component: FormComp,
-        data: { uuid: value } as any,
+        data: { uuid: value } as Partial<TDataItem>,
       });
     }).catch(() => { /* тихо игнорируем ошибку загрузки */ });
   }, [value, disabled, endpoint, displayValue, addPane]);
@@ -485,7 +493,8 @@ const LookupField: FC<LookupFieldProps> = ({
     const entry = getByEndpoint(endpoint);
     if (!entry) return;
     entry.module().then((mod) => {
-      const FormComp: FC<any> | undefined = mod[entry.formName] || mod.default;
+      const forms = mod as Record<string, FC<Partial<TPane>> | undefined>;
+      const FormComp: FC<Partial<TPane>> | undefined = forms[entry.formName] || forms.default;
       if (!FormComp) return;
       const token = newLookupCreateToken();
       setPendingCreateToken(token);
@@ -501,7 +510,7 @@ const LookupField: FC<LookupFieldProps> = ({
           ...(extraParams ?? {}),
           ...(createDefaults ?? {}),
           [LOOKUP_CREATE_TOKEN_KEY]: token,
-        } as any,
+        } as Partial<TDataItem>,
       });
       setIsDropdownOpen(false);
     }).catch(() => { /* тихо игнорируем ошибку загрузки */ });
@@ -527,7 +536,7 @@ const LookupField: FC<LookupFieldProps> = ({
   const canCreate = allowCreate && !disabled && !!getByEndpoint(endpoint) && canCreateByRight;
 
   // Выбор элемента из dropdown
-  const handleSuggestionClick = useCallback((item: Record<string, any>) => {
+  const handleSuggestionClick = useCallback((item: LookupItem) => {
     handleSelectItem(item);
   }, [handleSelectItem]);
 
@@ -613,7 +622,7 @@ const LookupField: FC<LookupFieldProps> = ({
     if (suggestions.length > 0) {
       const norm = inputText.trim().toLowerCase();
       const exact = suggestions.find((s) => {
-        const label = getSuggestionLabel ? getSuggestionLabel(s) : String(s[displayField] ?? "");
+        const label = getSuggestionLabel ? getSuggestionLabel(s) : asText(s[displayField]);
         return label.trim().toLowerCase() === norm;
       });
       handleSuggestionClick(exact ?? suggestions[0]);
@@ -665,22 +674,22 @@ const LookupField: FC<LookupFieldProps> = ({
   }, [disabled, visibleActions, isTable, value, inputText, endpoint, handleClear, handleOpenItemForm, handleQuickSelect, handleOpenModal]);
 
   // Получить отображаемое поле элемента
-  const getItemDisplay = useCallback((item: Record<string, any>) => {
+  const getItemDisplay = useCallback((item: LookupItem) => {
     if (getSuggestionLabel) {
       return getSuggestionLabel(item);
     }
-    return String(item[displayField] ?? item.value ?? item.name ?? item.uuid ?? "");
+    return asText(item[displayField] ?? item.value ?? item.name ?? item.uuid);
   }, [displayField, getSuggestionLabel]);
 
   // Вспомогательная: получить значение по ключу с поддержкой вложенности ("brand.name")
-  const getNestedValue = useCallback((item: Record<string, any>, key: string): string => {
+  const getNestedValue = useCallback((item: LookupItem, key: string): string => {
     const parts = key.split(".");
-    let val: any = item;
+    let val: unknown = item;
     for (const p of parts) {
       if (val == null || typeof val !== "object") return "";
-      val = val[p];
+      val = (val as Record<string, unknown>)[p];
     }
-    return val != null && typeof val !== "object" ? String(val) : "";
+    return val != null && typeof val !== "object" ? asText(val) : "";
   }, []);
 
   // Определить итоговый набор вторичных полей:
@@ -693,15 +702,15 @@ const LookupField: FC<LookupFieldProps> = ({
   // Штрих-код элемента, совпавший с введённым запросом (если искали по ШК).
   // Источники: скалярное поле `barcode` + связанные `barcodes: [{ barcode }]`.
   // Точное совпадение приоритетнее частичного. Для не-товаров вернёт "".
-  const getMatchedBarcode = useCallback((item: Record<string, any>) => {
+  const getMatchedBarcode = useCallback((item: LookupItem) => {
     const q = (searchTransform ? searchTransform(debouncedText) : debouncedText).trim().toLowerCase();
     if (!q) return "";
     const candidates: string[] = [];
-    if (item.barcode) candidates.push(String(item.barcode));
+    if (item.barcode) candidates.push(asText(item.barcode));
     if (Array.isArray(item.barcodes)) {
       for (const b of item.barcodes) {
-        const code = typeof b === "string" ? b : b?.barcode;
-        if (code) candidates.push(String(code));
+        const code = typeof b === "string" ? b : (b as { barcode?: unknown })?.barcode;
+        if (code) candidates.push(asText(code));
       }
     }
     if (candidates.length === 0) return "";
@@ -713,7 +722,7 @@ const LookupField: FC<LookupFieldProps> = ({
   // Получить вторичную строку для элемента автокомплита.
   // Формат: "ШК - sku - бренд" (через разделитель) — только непустые значения.
   // Совпавший штрих-код (если искали по ШК) показываем первым — рядом с названием.
-  const getItemSecondary = useCallback((item: Record<string, any>) => {
+  const getItemSecondary = useCallback((item: LookupItem) => {
     const parts: string[] = [];
     const barcode = getMatchedBarcode(item);
     if (barcode) parts.push(barcode);
@@ -811,7 +820,7 @@ const LookupField: FC<LookupFieldProps> = ({
               const secondary = getItemSecondary(item);
               return (
                 <div
-                  key={item.uuid ?? idx}
+                  key={(item.uuid as string | undefined) ?? idx}
                   className={`${styles.LookupDropdownItem} ${idx === activeIndex ? styles.LookupDropdownItemActive : ""}`}
                   onMouseDown={(e) => {
                     if (e.button !== 0) return; // только ЛКМ (ПКМ/СКМ не выбирают)
@@ -864,7 +873,7 @@ const LookupField: FC<LookupFieldProps> = ({
             const secondary = getItemSecondary(item);
             return (
               <div
-                key={item.uuid ?? idx}
+                key={(item.uuid as string | undefined) ?? idx}
                 className={`${styles.LookupDropdownItem} ${idx === activeIndex ? styles.LookupDropdownItemActive : ""}`}
                 onMouseDown={(e) => {
                   if (e.button !== 0) return; // только ЛКМ (ПКМ/СКМ не выбирают)
