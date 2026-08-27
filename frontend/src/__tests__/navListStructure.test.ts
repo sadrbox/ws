@@ -11,7 +11,7 @@ import { resolve } from "node:path";
  * Отсюда и якоря теста: границы этих блоков, а не текст подписей (меню
  * интернационализировано — пункты заданы через translate(ключ)).
  */
-const SRC = readFileSync(resolve(__dirname, "../components/UI/index.tsx"), "utf-8");
+const SRC = readFileSync(resolve(__dirname, "../components/UI/NavList.tsx"), "utf-8");
 
 /** Тело блока `const XGroups = () => (...)` — до начала следующего блока/секции. */
 const groupsOf = (section: string) => {
