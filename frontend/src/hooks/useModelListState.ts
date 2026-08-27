@@ -191,7 +191,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		if (ownerFilter) {
 			result = result.filter((row: TDataItem) => {
 				for (const [field, cond] of Object.entries(ownerFilter)) {
-					if (cond.operator === "equals" && (row as any)[field] !== cond.value)
+					if (cond.operator === "equals" && (row as Record<string, unknown>)[field] !== cond.value)
 						return false;
 				}
 				return true;

@@ -78,7 +78,7 @@ export type TPane = {
 	/** Панель является формой выбора (selector) — приоритетная, требует результат */
 	isSelector?: boolean;
 	/** Callback при выборе элемента в selector-панели */
-	onSelectResult?: (item: Record<string, any>) => void;
+	onSelectResult?: (item: Record<string, unknown>) => void;
 	/** ID selector-панели, из которой была открыта эта дочерняя панель */
 	selectorPaneId?: string;
 	/** ID панели-открывателя (была активна в момент открытия этой панели).
@@ -95,10 +95,10 @@ export type TPane = {
 export type TPaneRestore =
 	// Универсальный: панель поднимается по ИМЕНИ компонента через viewRegistry.
 	// Покрывает всё, что открывается из навбара (списки, ЭСФ/СНТ, терминал, обработки).
-	| { kind: "view"; name: string; data?: Record<string, any> }
+	| { kind: "view"; name: string; data?: Record<string, unknown> }
 	| { kind: "list"; ref: string }
 	| { kind: "form"; endpoint: string; uuid?: string }
-	| { kind: "report"; key: string; data?: Record<string, any> }
+	| { kind: "report"; key: string; data?: Record<string, unknown> }
 	| { kind: "file"; uuid: string; fileName?: string; mimeType?: string | null };
 
 export type TComponentNode =

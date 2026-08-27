@@ -18,7 +18,7 @@ export function invalidateSubTableFor(
   if (!parentUuid) return Promise.resolve();
   return queryClient.invalidateQueries({
     predicate: (query) => {
-      const [m, tag, params] = query.queryKey as [string, string, any];
+      const [m, tag, params] = query.queryKey as [string, string, { extra?: Record<string, unknown> }];
       if (m !== model || tag !== "infinite") return false;
       const extraVal = params?.extra?.[parentField];
       // Invalidate: эта SubTable родителя ИЛИ standalone-список (без фильтра по parentField)

@@ -12,6 +12,13 @@ export type UserDefaultsMap = Partial<Record<
 	UserDefault
 >>;
 
+/** Запись основного значения пользователя (ответ user-defaults). */
+interface UserDefaultRecord {
+	valueType?: string;
+	valueUuid?: string;
+	valueName?: string | null;
+}
+
 export function useUserDefaults(
 	userUuid: string,
 	organizationUuid: string,
@@ -21,7 +28,7 @@ export function useUserDefaults(
 	const { data } = useQuery({
 		queryKey: ["user-defaults", userUuid, organizationUuid],
 		queryFn: () =>
-			api.get("/user-defaults", {
+			api.get<UserDefaultRecord[] | { items?: UserDefaultRecord[] }>("/user-defaults", {
 				params: { userUuid, organizationUuid, limit: 100 },
 			}),
 		enabled,
@@ -29,13 +36,13 @@ export function useUserDefaults(
 	});
 
 	return useMemo(() => {
-		const items: any[] = Array.isArray(data)
+		const items: UserDefaultRecord[] = Array.isArray(data)
 			? data
-			: ((data as any)?.items ?? []);
+			: (data?.items ?? []);
 		const map: UserDefaultsMap = {};
 		for (const item of items) {
 			if (item.valueType && item.valueUuid) {
-				(map as any)[item.valueType] = {
+				(map as Record<string, UserDefault>)[item.valueType] = {
 					uuid: item.valueUuid,
 					name: item.valueName ?? "",
 				};

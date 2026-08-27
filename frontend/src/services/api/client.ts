@@ -10,7 +10,7 @@ import { showToast } from "src/components/UIToast";
 // Локальный API для разработки по LAN/IP. Хост конфигурируется через env
 // (VITE_LOCAL_API_URL), чтобы не хардкодить конкретный адрес рабочей станции;
 // фолбэк оставлен для совместимости с прежним окружением.
-const LOCAL_API_URL = import.meta.env.VITE_LOCAL_API_URL || "http://192.168.1.112:3000/api/v1";
+const LOCAL_API_URL = (import.meta.env.VITE_LOCAL_API_URL as string | undefined) || "http://192.168.1.112:3000/api/v1";
 const REMOTE_API_URL = "https://api.aleppo.kz/api/v1";
 
 /** Десктоп-клиент (Tauri): фронт зашит в бинарник, страница грузится с tauri.localhost. */
@@ -91,7 +91,7 @@ apiClient.interceptors.request.use((config) => {
 // Interceptor: при 401 ответе — очищаем токен и перенаправляем на логин
 apiClient.interceptors.response.use(
 	(response) => response,
-	(error) => {
+	(error: AxiosError) => {
 		const status = error.response?.status;
 
 		if (status === 401) {
@@ -110,7 +110,7 @@ apiClient.interceptors.response.use(
 		}
 
 		if (status === 403) {
-			const serverMessage: string | undefined = error.response?.data?.message;
+			const serverMessage: string | undefined = (error.response?.data as { message?: string } | undefined)?.message;
 			const message =
 				serverMessage && serverMessage.length < 200
 					? serverMessage
@@ -141,7 +141,7 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 	}
 
 	// Retry-After header или экспоненциальный backoff
-	const retryAfterHeader = error.response?.headers?.["retry-after"];
+	const retryAfterHeader = error.response?.headers?.["retry-after"] as string | undefined;
 	const baseDelay = retryAfterHeader
 		? Number(retryAfterHeader) * 1000
 		: 1000 * Math.pow(2, config._retryCount - 1); // 1s, 2s, 4s
@@ -169,12 +169,12 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 	if (!config) return Promise.reject(error);
 
 	// Если это retry-запрос из sync engine — не оборачиваем
-	if ((config as any)._fromSyncEngine) {
+	if ((config as { _fromSyncEngine?: boolean })._fromSyncEngine) {
 		return Promise.reject(error);
 	}
 
 	// Health-check запросы не оборачиваем — они используются для определения статуса сети
-	if ((config as any)._healthCheck) {
+	if ((config as { _healthCheck?: boolean })._healthCheck) {
 		return Promise.reject(error);
 	}
 

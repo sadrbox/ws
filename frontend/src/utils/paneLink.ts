@@ -1,4 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
+import { asText } from "src/utils/asText";
 // paneLink — короткие ссылки на открытие конкретной панели (форма документа/
 // справочника, список, отчёт, файл). Кодируем «рецепт» панели (TPaneRestore)
 // компактной схемой `<тип>~<сегменты>` в query-параметр ?open=…; при открытии
@@ -20,7 +21,7 @@ const PARAM = "open";
 export function encodeRestore(r: TPaneRestore): string {
   switch (r.kind) {
     // Панель-представление: имя компонента (+ uuid записи для форм).
-    case "view": return r.data?.uuid ? `v~${r.name}~${r.data.uuid}` : `v~${r.name}`;
+    case "view": return r.data?.uuid ? `v~${r.name}~${asText(r.data.uuid)}` : `v~${r.name}`;
     case "list": return `l~${r.ref}`;
     case "form": return `f~${r.endpoint}~${r.uuid ?? ""}`;
     case "file": return `x~${r.uuid}~${r.fileName ?? ""}`;
@@ -54,7 +55,7 @@ export function decodeRestore(s: string): TPaneRestore | null {
       }
       case "r": {
         const key = i < 0 ? rest : rest.slice(0, i);
-        const data = i < 0 ? undefined : JSON.parse(decodeURIComponent(atob(rest.slice(i + 1))));
+        const data = i < 0 ? undefined : JSON.parse(decodeURIComponent(atob(rest.slice(i + 1)))) as Record<string, unknown>;
         return { kind: "report", key, data };
       }
       default:

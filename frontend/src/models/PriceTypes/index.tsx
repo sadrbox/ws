@@ -1,5 +1,5 @@
 import { createSimpleModel } from "src/utils/createSimpleModel";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import columnsJson from "./columns.json";
 
 const { Form: PriceTypesForm, List: PriceTypesList } = createSimpleModel({
@@ -14,7 +14,7 @@ const { Form: PriceTypesForm, List: PriceTypesList } = createSimpleModel({
     { key: "isDefault", label: "По умолчанию", type: "toggle" },
     { key: "sortOrder", label: "Порядок сортировки" },
   ],
-  buildPaneLabel: (saved) =>
+  buildPaneLabel: (saved: LabelSource) =>
     makePaneLabel("PriceTypesList", "Типы цен", saved, (saved?.name as string | undefined) || undefined),
   getLabel: (d) => `${(d?.name as string | undefined) || "?"}`,
 });

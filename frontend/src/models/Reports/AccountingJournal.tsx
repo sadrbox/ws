@@ -59,7 +59,7 @@ const AccountingJournal: FC<Props> = ({ uniqId }) => {
       if (f.accountCode) p.accountCode = f.accountCode;
       if (f.cpUuid) p.counterpartyUuid = f.cpUuid;
       if (f.productUuid) p.productUuid = f.productUuid;
-      const resp = await api.get<any>("accounting/journal", { params: p });
+      const resp = await api.get<{ items?: JournalRow[]; total?: number }>("accounting/journal", { params: p });
       return { items: resp?.items ?? [], total: resp?.total ?? 0 };
     },
     enabled: !!applied,

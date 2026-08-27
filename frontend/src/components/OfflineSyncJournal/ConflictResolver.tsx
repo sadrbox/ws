@@ -98,8 +98,8 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ conflict, onClose }) => {
           <div className={styles.ConflictColumnTitle}>🖥️ {translate("conflictResolverLocalTitle")}</div>
           {localData ? (
             keys.map(key => {
-              const localVal = formatValue((localData as any)[key]);
-              const serverVal = serverData ? formatValue((serverData as any)[key]) : "—";
+              const localVal = formatValue(localData[key]);
+              const serverVal = serverData ? formatValue(serverData[key]) : "—";
               const isDiff = localVal !== serverVal;
               return (
                 <div key={key} className={styles.ConflictRow}>
@@ -120,8 +120,8 @@ const ConflictResolver: FC<ConflictResolverProps> = ({ conflict, onClose }) => {
           <div className={styles.ConflictColumnTitle}>☁️ {translate("conflictResolverServerTitle")}</div>
           {serverData ? (
             keys.map(key => {
-              const localVal = localData ? formatValue((localData as any)[key]) : "—";
-              const serverVal = formatValue((serverData as any)[key]);
+              const localVal = localData ? formatValue(localData[key]) : "—";
+              const serverVal = formatValue(serverData[key]);
               const isDiff = localVal !== serverVal;
               return (
                 <div key={key} className={styles.ConflictRow}>

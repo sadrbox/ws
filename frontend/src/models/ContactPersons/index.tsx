@@ -15,7 +15,7 @@ import AvatarUpload from "src/components/AvatarUpload";
 import { resolveOwnerName } from "src/utils/resolveOwnerName";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import Notice from "src/components/Notice";
@@ -83,7 +83,7 @@ const ContactPersonsForm: FC<Partial<TPane>> = (paneProps) => {
       fullName: fd.fullName?.trim() || null, comment: fd.comment?.trim() || null,
       ownerType: fd.ownerType || null, ownerUuid: fd.ownerUuid || null,
     }),
-    buildPaneLabel: (saved) => makePaneLabel("ContactPersonsList", "Контактные лица", saved, saved.fullName),
+    buildPaneLabel: (saved: LabelSource & { fullName?: string | null }) => makePaneLabel("ContactPersonsList", "Контактные лица", saved, saved.fullName ?? undefined),
     afterSave: async (savedData: { uuid?: string } | undefined) => {
       await invalidateSubTableFor(queryClient, "contacts", "ownerUuid", savedData?.uuid ?? "");
       await queryClient.invalidateQueries({ queryKey: ["contactpersons"] });

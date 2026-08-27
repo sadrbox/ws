@@ -26,7 +26,7 @@ import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
 import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
-import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import { isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
@@ -374,7 +374,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           } : {}),
         };
       },
-      buildPaneLabel: (saved) => makeDocLabel(cfg.listName, cfg.formLabel, saved, "date"),
+      buildPaneLabel: (saved: LabelSource) => makeDocLabel(cfg.listName, cfg.formLabel, saved, "date"),
       afterSave,
       afterReload,
     });
@@ -387,7 +387,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     const basisMismatch = useBasisMismatch({
       basisType: form.fields.basisDocumentType,
       basisUuid: form.fields.basisDocumentUuid,
-      currentFields: form.fields,
+      currentFields: form.fields as unknown as Record<string, unknown>,
       currentItems: allItemsRef.current,
       mapFields: mapCommonTradeFields,
       // У документов без склада (счёт-фактура, счёт на оплату) поля «Склад» нет —

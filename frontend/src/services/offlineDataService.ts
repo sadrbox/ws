@@ -74,7 +74,7 @@ export interface OfflineListResult<T = SyncRecord> {
 export async function fetchList<T = SyncRecord>(
 	endpoint: string,
 	params?: OfflineListParams,
-	apiParams?: Record<string, any>,
+	apiParams?: Record<string, unknown>,
 ): Promise<OfflineListResult<T>> {
 	const ep = normalizeEndpoint(endpoint);
 	const syncable = isSyncableEndpoint(ep);
@@ -82,12 +82,12 @@ export async function fetchList<T = SyncRecord>(
 	// ── Online: пробуем сервер ──
 	if (getIsOnline()) {
 		try {
-			const response = await apiClient.get(`/${ep}`, { params: apiParams });
+			const response = await apiClient.get<{ items?: T[]; nextCursor?: number | null; hasMore?: boolean; total?: number }>(`/${ep}`, { params: apiParams });
 			const data = response.data;
 
 			// Кэшируем в Dexie (в фоне, не блокируя UI)
 			if (syncable && Array.isArray(data.items) && data.items.length > 0) {
-				upsertRecords(ep, data.items).catch((err) =>
+				upsertRecords(ep, data.items as unknown as SyncRecord[]).catch((err) =>
 					console.warn(`[OfflineData] Ошибка кэширования ${ep}:`, err),
 				);
 			}
@@ -151,8 +151,8 @@ async function fetchFromDexie<T>(
 		total = items.length;
 		// Сортировка
 		items.sort((a, b) => {
-			const va = (a as any)[sortField];
-			const vb = (b as any)[sortField];
+			const va = a[sortField];
+			const vb = b[sortField];
 			if (va == null && vb == null) return 0;
 			if (va == null) return 1;
 			if (vb == null) return -1;
@@ -212,7 +212,7 @@ export async function fetchOne<T = SyncRecord>(
 	// ── Online ──
 	if (getIsOnline()) {
 		try {
-			const response = await apiClient.get(`/${ep}/${uuid}`, {
+			const response = await apiClient.get<{ item?: T; _offline?: boolean }>(`/${ep}/${uuid}`, {
 				headers: options.noCache
 					? { "Cache-Control": "no-cache", Pragma: "no-cache" }
 					: undefined,
@@ -222,7 +222,7 @@ export async function fetchOne<T = SyncRecord>(
 
 			// Кэш в Dexie
 			if (syncable && item) {
-				upsertRecords(ep, [item]).catch((err) =>
+				upsertRecords(ep, [item] as unknown as SyncRecord[]).catch((err) =>
 					console.warn(`[OfflineData] Ошибка кэширования ${ep}/${uuid}:`, err),
 				);
 			}
@@ -269,7 +269,7 @@ export async function createRecord<T = SyncRecord>(
 	// ── Online ──
 	if (getIsOnline()) {
 		try {
-			const response = await apiClient.post(`/${ep}`, { ...data, uuid });
+			const response = await apiClient.post<{ item?: T; _offline?: boolean }>(`/${ep}`, { ...data, uuid });
 			const item = response.data?.item ?? response.data;
 
 			// Offline-interceptor вернул заглушку
@@ -279,7 +279,7 @@ export async function createRecord<T = SyncRecord>(
 
 			// Кэш
 			if (syncable && item) {
-				upsertRecords(ep, [item]).catch(console.warn);
+				upsertRecords(ep, [item] as unknown as SyncRecord[]).catch(console.warn);
 			}
 
 			return { item: item as T, offline: false };
@@ -343,7 +343,7 @@ export async function updateRecord<T = SyncRecord>(
 	// ── Online ──
 	if (getIsOnline()) {
 		try {
-			const response = await apiClient.put(`/${ep}/${uuid}`, data);
+			const response = await apiClient.put<{ item?: T; _offline?: boolean }>(`/${ep}/${uuid}`, data);
 
 			if (response.data?._offline) {
 				return handleOfflineUpdate(ep, syncable, uuid, data, now);
@@ -352,7 +352,7 @@ export async function updateRecord<T = SyncRecord>(
 			const item = response.data?.item ?? response.data;
 
 			if (syncable && item) {
-				upsertRecords(ep, [item]).catch(console.warn);
+				upsertRecords(ep, [item] as unknown as SyncRecord[]).catch(console.warn);
 			}
 
 			return { item: item as T, offline: false };
@@ -437,7 +437,7 @@ export async function deleteRecord(
 	// ── Online ──
 	if (getIsOnline()) {
 		try {
-			const response = await apiClient.delete(`/${ep}/${uuid}`);
+			const response = await apiClient.delete<{ _offline?: boolean }>(`/${ep}/${uuid}`);
 
 			if (response.data?._offline) {
 				return handleOfflineDelete(ep, syncable, uuid, now);

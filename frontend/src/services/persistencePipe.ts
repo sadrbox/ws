@@ -45,14 +45,14 @@ import type { SyncRecord } from "./offlineDb";
 export async function pipeList<T = SyncRecord>(
 	endpoint: string,
 	params?: OfflineListParams,
-	apiParams?: Record<string, any>,
+	apiParams?: Record<string, unknown>,
 ): Promise<OfflineListResult<T>> {
 	if (isOfflineFirst()) {
 		return offlineFetchList<T>(endpoint, params, apiParams);
 	}
 
 	// ── Transactional: сервер-only ──
-	const response = await apiClient.get(`/${endpoint.replace(/^\/+/, "")}`, {
+	const response = await apiClient.get<{ items?: T[]; nextCursor?: number | null; hasMore?: boolean; total?: number }>(`/${endpoint.replace(/^\/+/, "")}`, {
 		params: apiParams,
 	});
 	const data = response.data;
@@ -90,7 +90,7 @@ export async function pipeFetchOne<T = SyncRecord>(
 
 	// ── Transactional ──
 	const ep = endpoint.replace(/^\/+/, "");
-	const response = await apiClient.get(`/${ep}/${uuid}`, {
+	const response = await apiClient.get<{ item?: T }>(`/${ep}/${uuid}`, {
 		headers: options.noCache
 			? {
 					"Cache-Control": "no-cache",
@@ -125,7 +125,7 @@ export async function pipeCreate<T = SyncRecord>(
 
 	// ── Transactional ──
 	const ep = endpoint.replace(/^\/+/, "");
-	const response = await apiClient.post(`/${ep}`, data);
+	const response = await apiClient.post<{ item?: T }>(`/${ep}`, data);
 	const item = response.data?.item ?? response.data;
 	return { item: item as T, offline: false };
 }
@@ -148,7 +148,7 @@ export async function pipeUpdate<T = SyncRecord>(
 
 	// ── Transactional ──
 	const ep = endpoint.replace(/^\/+/, "");
-	const response = await apiClient.put(`/${ep}/${uuid}`, data);
+	const response = await apiClient.put<{ item?: T }>(`/${ep}/${uuid}`, data);
 	const item = response.data?.item ?? response.data;
 	return { item: item as T, offline: false };
 }

@@ -231,7 +231,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   const basisMismatch = useBasisMismatch({
     basisType: form.fields.basisDocumentType,
     basisUuid: form.fields.basisDocumentUuid,
-    currentFields: form.fields,
+    currentFields: form.fields as unknown as Record<string, unknown>,
     currentItems: [],
     mapFields: mapCommonTradeFields,
     ignoreItems: true, // банк-выписка без табличной части — сверяем только шапку

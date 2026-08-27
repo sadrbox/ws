@@ -9,12 +9,14 @@
  * выписка) перезаполняют шапку по-своему и этот хук НЕ используют.
  */
 import { useCallback, useState } from "react";
+import type { RefillFormHandle } from "src/utils/createFromBasis";
+import type { TDataItem } from "src/components/Table/types";
 import { runBasisRefill, type OrgDependentField } from "src/utils/createFromBasis";
 import type { UserDefaultsMap } from "src/hooks/useUserDefaults";
 
 export interface UseRefillFromBasisArgs {
   /** Стор формы зависимого документа (useFormStore). */
-  form: any;
+  form: RefillFormHandle;
   /** UUID текущего пользователя (для подстановки менеджера и т.п.). */
   currentUserUuid: string;
   /** Ref с дефолтами прав/организации пользователя. */
@@ -26,9 +28,9 @@ export interface UseRefillFromBasisArgs {
   /** Поля шапки, зависящие от организации (склад/договор и т.п.). */
   orgFields: OrgDependentField[];
   /** Ref со всеми строками таблицы (для пересборки). */
-  allItemsRef: { current: any[] };
+  allItemsRef: { current: TDataItem[] };
   /** Сеттер строк, подставляемых из основания. */
-  setBasisItems: (rows: any[]) => void;
+  setBasisItems: (rows: TDataItem[]) => void;
   /** Инкремент ключа таблицы (форс-ремоунт после перезаполнения). */
   bumpItemsTableKey: () => void;
 }

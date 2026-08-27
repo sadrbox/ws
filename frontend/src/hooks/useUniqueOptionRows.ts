@@ -36,7 +36,7 @@ export function useUniqueOptionRows(
 		() =>
 			new Set(
 				rows
-					.filter((r) => (r as any)._pendingAction !== "delete")
+					.filter((r) => r._pendingAction !== "delete")
 					.map((r) => r[fieldKey] as string)
 					.filter(Boolean),
 			),
@@ -54,7 +54,7 @@ export function useUniqueOptionRows(
 		(currentRows: TDataItem[]): string => {
 			const used = new Set(
 				currentRows
-					.filter((r) => (r as any)._pendingAction !== "delete")
+					.filter((r) => r._pendingAction !== "delete")
 					.map((r) => r[fieldKey] as string)
 					.filter(Boolean),
 			);
@@ -71,7 +71,7 @@ export function useUniqueOptionRows(
 		(currentRows: TDataItem[], currentValue?: string): OptionItem[] => {
 			const used = new Set(
 				currentRows
-					.filter((r) => (r as any)._pendingAction !== "delete")
+					.filter((r) => r._pendingAction !== "delete")
 					.map((r) => r[fieldKey] as string)
 					.filter(Boolean),
 			);

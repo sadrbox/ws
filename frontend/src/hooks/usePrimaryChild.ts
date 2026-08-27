@@ -10,7 +10,7 @@ interface ListResponse<T> {
 interface PrimaryItem {
 	uuid?: string;
 	isPrimary?: boolean;
-	[k: string]: any;
+	[k: string]: unknown;
 }
 
 /**

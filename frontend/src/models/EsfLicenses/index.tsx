@@ -17,7 +17,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useFormNotices } from "src/hooks/useFormNotices";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDate } from "src/utils/datetime";
 import { getCurrentUser } from "src/services/auth";
 import ModelForm from "src/components/ModelForm";
@@ -90,7 +90,7 @@ const EsfLicensesForm: FC<Partial<TPane>> = (paneProps) => {
 				expiresAt: fd.expiresAt || null,
 			};
 		},
-		buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, translate("EsfLicensesList"), saved, saved.bin),
+		buildPaneLabel: (saved: LabelSource & { bin?: string | null }) => makePaneLabel(LIST_NAME, translate("EsfLicensesList"), saved, saved.bin ?? undefined),
 	});
 
 	const notices = useFormNotices(form);

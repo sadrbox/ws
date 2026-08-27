@@ -3,10 +3,10 @@ import type { UserDefaultsMap } from "./useUserDefaults";
 
 /** Заполняет пустые поля из permDefaults. Не перезаписывает поля, уже заполненные из основания. */
 export function mergeUserDefaultsIntoFields(
-	fields: Record<string, any>,
+	fields: Record<string, unknown>,
 	defaults: UserDefaultsMap,
 	fieldMappings: Array<{ type: keyof UserDefaultsMap; uuidKey: string; nameKey: string }>,
-): Record<string, any> {
+): Record<string, unknown> {
 	const result = { ...fields };
 	for (const mapping of fieldMappings) {
 		const def = defaults[mapping.type];

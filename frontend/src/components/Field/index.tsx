@@ -211,7 +211,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       if (onChange) {
         const event = new Event('input', { bubbles: true });
         Object.defineProperty(event, 'target', { writable: false, value: inputRef.current });
-        onChange(event as any);
+        onChange(event as unknown as ChangeEvent<HTMLInputElement>);
       }
     }
   };
@@ -713,7 +713,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
       if (onChange) {
         const event = new Event('input', { bubbles: true });
         Object.defineProperty(event, 'target', { writable: false, value: inputRef.current });
-        onChange(event as any);
+        onChange(event as unknown as ChangeEvent<HTMLInputElement>);
       }
     }
   }, [onChange]);

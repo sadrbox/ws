@@ -107,7 +107,7 @@ const DocumentChainButton: FC<Props> = ({ documentType, documentUuid, disabled }
   const { data, isLoading, isFetching, refetch } = useQuery<ChainResponse | null>({
     queryKey: ["document-chain", documentType, documentUuid],
     queryFn: async () => {
-      const resp = await api.get<any>(`documents/${documentType}/${documentUuid}/document-chain`);
+      const resp = await api.get<ChainResponse>(`documents/${documentType}/${documentUuid}/document-chain`);
       return resp ?? null;
     },
     enabled: open && !!documentUuid,

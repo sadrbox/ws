@@ -42,7 +42,7 @@ export interface FormLookupProps<F extends Record<string, any>>
    * Кастомная логика выбора ВМЕСТО стандартной записи пары uuid/name.
    * Если не задана — FormLookup сам пишет { [uuidField]: uuid, [nameField]: display }.
    */
-  onSelect?: (uuid: string, display: string, item: Record<string, any>) => void;
+  onSelect?: (uuid: string, display: string, item: Record<string, unknown>) => void;
 }
 
 export function FormLookup<F extends Record<string, any>>({

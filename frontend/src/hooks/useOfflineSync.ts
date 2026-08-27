@@ -233,7 +233,7 @@ export function useOfflineSync(): UseOfflineSyncResult {
 
 			// Обратная совместимость
 			pendingChangesCount: pendingCount,
-			entries: pendingChanges as any,
+			entries: pendingChanges,
 			removeEntry: removePending,
 			clearSynced: clearAllPending,
 			summary: compatSummary,

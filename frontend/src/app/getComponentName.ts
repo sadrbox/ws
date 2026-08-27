@@ -17,22 +17,24 @@ export const getComponentName = (node: TComponentNode): string => {
 		const type = (node as ReactElement).type;
 		if (typeof type === "string") return type;
 		if (typeof type === "function") {
-			return (type as any).displayName || (type as any).name || "AnonymousComponent";
+			const fn = type as { displayName?: string; name?: string };
+			return fn.displayName || fn.name || "AnonymousComponent";
 		}
 		return "UnknownElement";
 	}
 
 	if (typeof node === "function") {
-		return (node as any).displayName || (node as any).name || "AnonymousComponent";
+		const fn = node as { displayName?: string; name?: string };
+		return fn.displayName || fn.name || "AnonymousComponent";
 	}
 
 	if (typeof node === "object") {
-		const anyNode = node as any;
 		// React.lazy / memo / forwardRef: имя берётся из заданного displayName.
 		// (lazy — это объект, а не функция, поэтому ветки выше его не ловят; без
 		// этого все ленивые панели получали бы одно имя и схлопывались в одну.)
-		if (anyNode.displayName) return anyNode.displayName;
-		if (anyNode.type && anyNode.type.displayName) return anyNode.type.displayName;
+		const obj = node as { displayName?: string; type?: { displayName?: string } };
+		if (obj.displayName) return obj.displayName;
+		if (obj.type && obj.type.displayName) return obj.type.displayName;
 	}
 	return "NonComponent";
 };

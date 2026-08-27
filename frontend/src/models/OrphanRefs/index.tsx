@@ -180,7 +180,7 @@ const OrphanRefsForm: FC<Partial<TPane>> = () => {
     setError(null);
     setGroups(null);
     try {
-      const r = await apiClient.get("/ref-replace/orphans");
+      const r = await apiClient.get<{ groups?: OrphanGroup[]; totalViolations?: number }>("/ref-replace/orphans");
       setGroups(r.data.groups ?? []);
       setTotalViolations(r.data.totalViolations ?? 0);
     } catch (err: unknown) {

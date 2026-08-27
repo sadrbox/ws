@@ -16,7 +16,7 @@ import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
-import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import Notice from "src/components/Notice";
 import { useDocumentNotices } from "src/hooks/useDocumentNotices";
@@ -127,7 +127,7 @@ const PayrollPaymentsForm: FC<Partial<TPane>> = (paneProps) => {
         posted: fd.posted === true,
       };
     },
-    buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
+    buildPaneLabel: (saved: LabelSource) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
   });
 
   const notices = useDocumentNotices({ docType: "payroll_payment", fields: form.fields as unknown as Record<string, unknown>, formError: form.errorKind === "form" ? form.error : null });

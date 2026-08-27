@@ -16,7 +16,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -79,7 +79,7 @@ const SubkontoTypesForm: FC<Partial<TPane>> = (paneProps) => {
         sortOrder: fd.sortOrder ? parseInt(fd.sortOrder, 10) || 0 : 0,
       };
     },
-    buildPaneLabel: (saved) => makePaneLabel("SubkontoTypesList", "Виды субконто", saved),
+    buildPaneLabel: (saved: LabelSource) => makePaneLabel("SubkontoTypesList", "Виды субконто", saved),
   });
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).

@@ -19,7 +19,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingUsageStats from "src/hooks/useOrgAccountingUsageStats";
 import { getFormatDateOnly } from "src/utils/datetime";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 
@@ -160,7 +160,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
         costingMethod: fd.costingMethod === "FIFO" ? "FIFO" : "AVERAGE",
       };
     },
-    buildPaneLabel: (saved) => {
+    buildPaneLabel: (saved: LabelSource) => {
       const orgName = (saved as { organization?: { name?: string } } | null)
         ?.organization?.name;
       return makePaneLabel(

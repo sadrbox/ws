@@ -77,7 +77,7 @@ export const ClassifiersList: FC = () => {
 				showToast(`${translate("clsImported")} (${detail})`, "success");
 			} else {
 				let parsed: { code: string; name: string; parentCode?: string }[];
-				try { parsed = JSON.parse(importText); if (!Array.isArray(parsed)) throw new Error(); }
+				try { parsed = JSON.parse(importText) as { code: string; name: string; parentCode?: string }[]; if (!Array.isArray(parsed)) throw new Error(); }
 				catch { showToast(translate("clsImportBadJson"), "error"); return; }
 				const r = await importClassifiers(type, parsed);
 				showToast(`${translate("clsImported")}: ${r.upserted}`, "success");

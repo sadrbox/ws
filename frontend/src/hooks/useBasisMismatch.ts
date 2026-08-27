@@ -15,6 +15,9 @@ import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { refillFromBasisSource } from "src/utils/createFromBasis";
 import { isEquivalent } from "src/utils/normalize";
+import { asText } from "src/utils/asText";
+import type { BasisSource } from "src/utils/createFromBasis";
+import type { TDataItem } from "src/components/Table/types";
 
 const DEFAULT_ITEM_KEYS = [
 	"productUuid",
@@ -29,11 +32,11 @@ export interface UseBasisMismatchArgs {
 	basisType?: string | null;
 	basisUuid?: string | null;
 	/** Текущие поля формы зависимого документа. */
-	currentFields: Record<string, any>;
+	currentFields: Record<string, unknown>;
 	/** Текущие строки таблицы (включая pending; delete-маркеры отфильтровываются). */
-	currentItems: any[];
+	currentItems: TDataItem[];
 	/** Маппинг шапки основания → поля зависимого документа (напр. mapCommonTradeFields). */
-	mapFields: (src: any) => Record<string, any>;
+	mapFields: (src: BasisSource) => Record<string, unknown>;
 	/** Метки полей для тултипа (ключ зависимого документа → подпись). */
 	fieldLabels?: Record<string, string>;
 	/** Поля строк для сравнения (по умолчанию товар/кол-во/цена/ставки). */
@@ -109,17 +112,17 @@ export function useBasisMismatch({
 		// строк пропускается — иначе расхождение было бы всегда.
 		const basisItems = ignoreItems ? [] : (data.items ?? []);
 		const cur = (currentItems ?? []).filter(
-			(r: any) => r._pendingAction !== "delete",
+			(r: TDataItem) => r._pendingAction !== "delete",
 		);
 
 		// ВОЗВРАТЫ: частичный возврат допустим → не сверяем кол-во/суммы, а только
 		// что каждая номенклатура зависимого документа присутствует в основании.
 		if (!ignoreItems && itemMatchMode === "productsSubset") {
 			const basisProducts = new Set(
-				basisItems.map((r: any) => r?.productUuid).filter(Boolean),
+				basisItems.map((r: Record<string, unknown>) => r?.productUuid).filter(Boolean),
 			);
 			const hasExtraneous = cur.some(
-				(r: any) => r?.productUuid && !basisProducts.has(r.productUuid),
+				(r: Record<string, unknown>) => r?.productUuid && !basisProducts.has(r.productUuid as string),
 			);
 			if (hasExtraneous) {
 				differences.push(
@@ -129,17 +132,17 @@ export function useBasisMismatch({
 			return { mismatch: differences.length > 0, differences };
 		}
 
-		const serializeRow = (r: any) =>
+		const serializeRow = (r: Record<string, unknown>) =>
 			itemKeys
 				.map((k) => {
 					const v = r?.[k];
 					// Нормализуем "30" vs 30 vs null → единая строка (как isEquivalent).
 					if (v === null || v === undefined || v === "") return "";
 					const n = Number(v);
-					return Number.isFinite(n) && String(v).trim() !== "" ? String(n) : String(v);
+					return Number.isFinite(n) && asText(v).trim() !== "" ? String(n) : asText(v);
 				})
 				.join("|");
-		const sortedSig = (rows: any[]) => rows.map(serializeRow).sort();
+		const sortedSig = (rows: Record<string, unknown>[]) => rows.map(serializeRow).sort();
 		const curSig = sortedSig(cur);
 		const basisSig = sortedSig(basisItems);
 		const itemsSame =

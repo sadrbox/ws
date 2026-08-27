@@ -53,7 +53,7 @@ const DocumentNumberSettings: FC = () => {
   const { data, isLoading, isError, refetch } = useQuery<Row[]>({
     queryKey: QKEY(orgKey),
     queryFn: async () =>
-      (await api.get<any>("document-number-settings", {
+      (await api.get<{ items?: Row[] }>("document-number-settings", {
         params: orgKey ? { organizationUuid: orgKey } : undefined,
       }))?.items ?? [],
     retry: 1,

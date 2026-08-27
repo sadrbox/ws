@@ -111,8 +111,8 @@ const ProductImagesField: FC<ProductImagesFieldProps> = ({ productUuid, disabled
   const loadImages = useCallback(async () => {
     if (!productUuid) { setImages([]); return; }
     try {
-      const res = await apiClient.get("/files", { params: { ownerType: "product", ownerUuid: productUuid } });
-      const all: ImgFile[] = (res.data?.items ?? []).filter((f: ImgFile) => (f.mimeType ?? "").startsWith("image/"));
+      const res = await apiClient.get<{ items?: ImgFile[] }>("/files", { params: { ownerType: "product", ownerUuid: productUuid } });
+      const all: ImgFile[] = (res.data?.items ?? []).filter((f) => (f.mimeType ?? "").startsWith("image/"));
       // главное фото — первым, остальные по времени загрузки (стабильный порядок)
       all.sort((a, b) => {
         if (isMain(a) !== isMain(b)) return isMain(a) ? -1 : 1;

@@ -3,7 +3,7 @@
 // (иначе осиротели бы уже созданные задачи) — сервер игнорирует его в PUT.
 // `isFinal` помечает завершающие статусы: по нему считается просрочка на доске.
 import { createSimpleModel } from "src/utils/createSimpleModel";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import columnsJson from "./columns.json";
 
 const { Form: TodoStatusesForm, List: TodoStatusesList } = createSimpleModel({
@@ -19,7 +19,7 @@ const { Form: TodoStatusesForm, List: TodoStatusesList } = createSimpleModel({
     { key: "sortOrder", label: "Порядок колонки на доске" },
     { key: "isFinal", label: "Завершающий (задача не считается просроченной)", type: "toggle" },
   ],
-  buildPaneLabel: (saved) =>
+  buildPaneLabel: (saved: LabelSource) =>
     makePaneLabel("TodoStatusesList", "Статусы задач", saved, (saved?.name as string | undefined) || undefined),
   getLabel: (d) => `${(d?.name as string | undefined) || "?"}`,
 });

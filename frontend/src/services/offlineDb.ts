@@ -397,8 +397,8 @@ export async function getActiveRecords(
 		const field = options.sortField;
 		const dir = options.sortDir === "desc" ? -1 : 1;
 		all.sort((a, b) => {
-			const va = (a as any)[field];
-			const vb = (b as any)[field];
+			const va = a[field];
+			const vb = b[field];
 			if (va == null && vb == null) return 0;
 			if (va == null) return 1;
 			if (vb == null) return -1;
@@ -450,7 +450,7 @@ export async function searchRecords(
 			const fieldsToSearch = searchColumns ?? Object.keys(r);
 			return words.every((word) =>
 				fieldsToSearch.some((field) => {
-					const val = (r as any)[field];
+					const val = r[field];
 					if (typeof val === "string") return val.toLowerCase().includes(word);
 					if (typeof val === "number") return String(val).includes(word);
 					return false;

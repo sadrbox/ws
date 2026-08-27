@@ -24,7 +24,7 @@ export type TTemplateData   = Record<string, TTemplateScalar | TTemplateItem[]>;
 const PLACEHOLDER_RE = /\{\{([^{}]+)\}\}/g;
 
 function replacePlaceholders(text: string, ctx: Record<string, TTemplateScalar>): string {
-  return text.replace(PLACEHOLDER_RE, (_, key) => {
+  return text.replace(PLACEHOLDER_RE, (_: string, key: string) => {
     const v = ctx[key.trim()];
     return v == null ? "" : String(v);
   });
@@ -89,7 +89,7 @@ function decodeSheet(ws: WorkSheet): { rows: TemplateRow[]; numCols: number } {
     for (let c = 0; c < numCols; c++) {
       const absCol = range.s.c + c;
       const addr = XLSX.utils.encode_cell({ r: absRow, c: absCol });
-      const cell: CellObject | undefined = ws[addr];
+      const cell = ws[addr] as CellObject | undefined;
       cells.push(cell ?? null);
       if (cell && typeof cell.v === "string") {
         const m = cell.v.trim().match(/^\{\{(#|\/)([^{}]+)\}\}$/);

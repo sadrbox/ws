@@ -359,7 +359,7 @@ function createFormStore<F extends object>(
 		};
 		for (const k of Object.keys(patch)) {
 			if (derivedFields.has(k)) continue;
-			if (prevFields[k as keyof F] !== (patch as any)[k]) {
+			if (prevFields[k as keyof F] !== (patch as Record<string, unknown>)[k]) {
 				userChangeSeq++;
 				break;
 			}
@@ -426,7 +426,7 @@ function createFormStore<F extends object>(
 		tables: Record<string, TableState>;
 	};
 	try {
-		parsedSnapshot = JSON.parse(_initSnapStr);
+		parsedSnapshot = JSON.parse(_initSnapStr) as typeof parsedSnapshot;
 	} catch {
 		parsedSnapshot = { fields: {}, tables: emptyTables };
 	}
@@ -438,7 +438,7 @@ function createFormStore<F extends object>(
 			tables: state.tables,
 		});
 		try {
-			parsedSnapshot = JSON.parse(savedSnapshot);
+			parsedSnapshot = JSON.parse(savedSnapshot) as typeof parsedSnapshot;
 		} catch {
 			parsedSnapshot = { fields: {}, tables: {} };
 		}
@@ -552,17 +552,17 @@ function createFormStore<F extends object>(
 			showToast(msg, noteType === "warning" ? "warning" : "error");
 		}
 		if (msg && _paneUniqId) {
-			const entityUuid = state.meta.uuid || (state.fields as any)?.uuid;
+			const entityUuid = state.meta.uuid || (state.fields as unknown as { uuid?: string }).uuid;
 			// Человекочитаемый идентификатор источника: «№ X от ДД.ММ.ГГГГ»,
 			// иначе наименование, иначе ничего (ссылка покажет короткий uuid).
-			const f = state.fields as any;
+			const f = state.fields as unknown as { number?: unknown; date?: unknown; name?: unknown };
 			const parts: string[] = [];
-			if (f?.number) parts.push(`№ ${f.number}`);
-			if (f?.date) {
-				const d = new Date(f.date);
+			if (f.number) parts.push(`№ ${asText(f.number)}`);
+			if (f.date) {
+				const d = new Date(asText(f.date));
 				if (!Number.isNaN(d.getTime())) parts.push(`от ${d.toLocaleDateString("ru-KZ")}`);
 			}
-			const label = parts.length ? parts.join(" ") : (f?.name ? String(f.name) : undefined);
+			const label = parts.length ? parts.join(" ") : (f.name ? asText(f.name) : undefined);
 			addPaneNotification(_paneUniqId, noteType ?? "error", msg, {
 				paneLabel: _paneLabel,
 				ref: entityUuid ? { endpoint, uuid: String(entityUuid), label } : undefined,
@@ -716,8 +716,8 @@ function createFormStore<F extends object>(
 		try {
 			const isEdit =
 				state.meta.isEditMode &&
-				(state.meta.uuid || (state.fields as any).uuid);
-			const entityUuid = state.meta.uuid || (state.fields as any).uuid;
+				(state.meta.uuid || (state.fields as unknown as { uuid?: string }).uuid);
+			const entityUuid = state.meta.uuid || (state.fields as unknown as { uuid?: string }).uuid;
 
 			let saved: Record<string, unknown>;
 			let wasOffline = false;
@@ -739,7 +739,7 @@ function createFormStore<F extends object>(
 			setMeta({
 				isLoading: keepLoadingOnSuccess ? true : false,
 				isEditMode: true,
-				uuid: saved.uuid ?? entityUuid,
+				uuid: (saved.uuid as string | undefined) ?? entityUuid,
 			});
 
 			if (wasOffline) {
@@ -1168,7 +1168,7 @@ const JOURNAL_MAX = 200;
 
 function loadJournal(): NotificationJournalEntry[] {
 	try {
-		return JSON.parse(localStorage.getItem(JOURNAL_KEY) || "[]");
+		return JSON.parse(localStorage.getItem(JOURNAL_KEY) || "[]") as NotificationJournalEntry[];
 	} catch {
 		return [];
 	}
@@ -1568,7 +1568,7 @@ export function useFormStore<F extends object>(
 	// При восстановлении из UnsavedForms — data._formStorageKey содержит оригинальный ключ.
 	const userId = getFormStoreUserId();
 	const fullStorageKey =
-		((data as any)?._formStorageKey as string) ||
+		(data as { _formStorageKey?: string } | undefined)?._formStorageKey ||
 		`${STORAGE_PREFIX}${userId}:${storageKey}:${uuid ?? uniqId ?? "new"}`;
 	// ── Предзаполнение НОВОЙ формы значениями из paneProps.data ──────────────
 	// Общий паттерн для ВСЕХ форм: открываешь новый элемент из контекста
@@ -1594,7 +1594,7 @@ export function useFormStore<F extends object>(
 		})();
 	// Открыта через "Несохранённые записи" — нужно автоматически применить stash
 	// и подсветить поля с изменёнными значениями.
-	const isFromUnsaved = !!(data as any)?._formStorageKey;
+	const isFromUnsaved = !!(data as { _formStorageKey?: string } | undefined)?._formStorageKey;
 
 	// Создаём/получаем store из кэша.
 	// Set из derivedFields передаётся в createFormStore при ПЕРВОМ создании
@@ -1987,7 +1987,7 @@ export function useFormStore<F extends object>(
 
 			// Если документ имеет основание — инвалидируем кэш зависимых документов
 			// в форме основания, чтобы dropdown "На основании" обновил метку.
-			const basisUuid = savedData?.basisDocumentUuid ?? (store.getSnapshot().fields as any)?.basisDocumentUuid;
+			const basisUuid = (savedData as { basisDocumentUuid?: string } | undefined)?.basisDocumentUuid ?? (store.getSnapshot().fields as unknown as { basisDocumentUuid?: string }).basisDocumentUuid;
 			if (basisUuid) {
 				void queryClient.invalidateQueries({ queryKey: ["existingDependent", basisUuid, endpoint], refetchType: "active" });
 			}
@@ -2177,7 +2177,7 @@ export function useFormStore<F extends object>(
 	// ── Совместимость со старым API ──
 	const handleFieldChange = useCallback(
 		(field: keyof F, value: string) => {
-			store.setField(field, value as any);
+			store.setField(field, value as F[keyof F]);
 		},
 		[store],
 	);

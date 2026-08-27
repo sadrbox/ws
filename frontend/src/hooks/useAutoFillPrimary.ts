@@ -36,7 +36,7 @@ export function useAutoFillPrimary(opts: {
 	/** Идёт загрузка/сохранение — не подставляем. */
 	isLoading: boolean;
 	/** Колбэк применения найденного primary (uuid, name, raw item). */
-	apply: (uuid: string, name: string, item: any) => void;
+	apply: (uuid: string, name: string, item: Record<string, unknown> | null) => void;
 	/** Полное отключение хука. */
 	enabled?: boolean;
 }) {

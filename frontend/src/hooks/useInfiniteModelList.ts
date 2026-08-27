@@ -31,7 +31,7 @@ export interface InfiniteModelParams {
 	sort?: Record<string, "desc" | "asc"> | null;
 	search?: string;
 	filter?: Record<string, { value: unknown; operator: string }>;
-	extra?: Record<string, any>;
+	extra?: Record<string, unknown>;
 }
 
 type InfiniteQueryKey = readonly [
@@ -41,7 +41,7 @@ type InfiniteQueryKey = readonly [
 		sort?: Record<string, "asc" | "desc"> | null;
 		search?: string;
 		filter?: Record<string, { value: unknown; operator: string }> | undefined;
-		extra?: Record<string, any>;
+		extra?: Record<string, unknown>;
 	},
 ];
 
@@ -109,7 +109,7 @@ export function useInfiniteModelList<TData = unknown>({
 
 	const wrappedQueryFn = useCallback(
 		async ({ pageParam }: { pageParam: number | null }) => {
-			const query: Record<string, any> = {};
+			const query: Record<string, unknown> = {};
 
 			if (pageParam !== null && pageParam !== undefined) {
 				query.cursor = pageParam;
@@ -199,7 +199,7 @@ export function useInfiniteModelList<TData = unknown>({
 							const result = await fetchList<TData>(
 								model,
 								{
-									limit: query.limit,
+									limit: query.limit as number | undefined,
 									cursor: pageParam,
 									sort: currentParams.sort,
 									search: currentParams.search,
@@ -230,7 +230,7 @@ export function useInfiniteModelList<TData = unknown>({
 						// Кэшируем данные в Dexie для будущего offline-доступа
 						if (isSyncableEndpoint(model) && response.data?.items?.length > 0) {
 							void import("src/services/offlineDb").then(({ upsertRecords }) =>
-								upsertRecords(model, response.data.items as any[]).catch(
+								upsertRecords(model, response.data.items as unknown as SyncRecord[]).catch(
 									() => {},
 								),
 							);
@@ -253,7 +253,7 @@ export function useInfiniteModelList<TData = unknown>({
 
 								let items: SyncRecord[];
 								let total: number;
-								const limit = query.limit ?? 200;
+								const limit = (query.limit as number | undefined) ?? 200;
 								const offset = pageParam ?? 0;
 
 								if (currentParams.search) {
@@ -354,7 +354,7 @@ export function useInfiniteModelList<TData = unknown>({
 		const flat = result.data?.pages.flatMap((p) => p.items) ?? [];
 		const seen = new Set<unknown>();
 		return flat.filter((item) => {
-			const id = (item as any)?.id;
+			const id = (item as { id?: unknown })?.id;
 			if (id === undefined || id === null) return true;
 			if (seen.has(id)) return false;
 			seen.add(id);

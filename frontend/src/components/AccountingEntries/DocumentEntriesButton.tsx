@@ -74,7 +74,7 @@ const DocumentEntriesButton: FC<Props> = ({ documentType, documentUuid, disabled
   const { data, isFetching } = useQuery<{ items: EntryRow[]; count: number; total: number }>({
     queryKey: ["document-entries", documentType, documentUuid],
     queryFn: async () => {
-      const resp = await api.get<any>("accounting/document-entries", {
+      const resp = await api.get<{ items?: EntryRow[]; count?: number; total?: number }>("accounting/document-entries", {
         params: { documentType, documentUuid: documentUuid! },
       });
       return { items: resp?.items ?? [], count: resp?.count ?? 0, total: resp?.total ?? 0 };

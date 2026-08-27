@@ -1440,7 +1440,7 @@ export const LoadingSpinner: React.FC<{ variant?: 'default' | 'overlay' }> = ({ 
  */
 function usePaneReload(uniqId?: string): () => void {
   const ctx = useAppContext();
-  const reloadPane = (ctx?.windows as any)?.reloadPane;
+  const reloadPane = (ctx?.windows as { reloadPane?: (uniqId: string) => void })?.reloadPane;
 
   const handleReload = useCallback(() => {
     if (!uniqId) return;

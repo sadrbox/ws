@@ -26,7 +26,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
-import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import {
   getFormatDateOnly,
   isoToLocalInput,
@@ -144,7 +144,7 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
         organizationUuid: fd.organizationUuid || null,
       };
     },
-    buildPaneLabel: (saved) => makeDocLabel(LIST_NAME, translate("docType_month_close"), saved, "date"),
+    buildPaneLabel: (saved: LabelSource) => makeDocLabel(LIST_NAME, translate("docType_month_close"), saved, "date"),
   });
 
   // Выбор месяца → пересчёт границ периода.

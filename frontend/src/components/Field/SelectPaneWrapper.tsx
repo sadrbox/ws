@@ -27,11 +27,16 @@ import { getByEndpoint } from "src/registry/modelRegistry";
 const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId }) => {
   const { windows: { requestClose } } = useAppContext();
 
-  const endpoint = (data as any)?.endpoint as string | undefined;
-  const ListComponentProp = (data as any)?.listComponent as FC<any> | undefined;
-  const extraParams = (data as any)?.extraParams as Record<string, string> | undefined;
+  const paneData = data as {
+    endpoint?: string;
+    listComponent?: FC<Record<string, unknown>>;
+    extraParams?: Record<string, string>;
+  } | undefined;
+  const endpoint = paneData?.endpoint;
+  const ListComponentProp = paneData?.listComponent;
+  const extraParams = paneData?.extraParams;
 
-  const [ResolvedList, setResolvedList] = useState<FC<any> | null>(ListComponentProp || null);
+  const [ResolvedList, setResolvedList] = useState<FC<Record<string, unknown>> | null>(ListComponentProp || null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,19 +56,20 @@ const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId })
     let cancelled = false;
     entry.module().then((mod) => {
       if (cancelled) return;
-      const ListComp = mod[entry.listName] || mod.default;
+      const forms = mod as Record<string, FC<Record<string, unknown>> | undefined>;
+      const ListComp = forms[entry.listName] || forms.default;
       if (ListComp) {
         setResolvedList(() => ListComp);
       } else {
         setLoadError(`Компонент ${entry.listName} не найден в модуле`);
       }
     }).catch((err) => {
-      if (!cancelled) setLoadError(err?.message || "Ошибка загрузки модуля");
+      if (!cancelled) setLoadError((err as { message?: string })?.message || "Ошибка загрузки модуля");
     });
     return () => { cancelled = true; };
   }, [endpoint, ListComponentProp]);
 
-  const handleSelectItem = useCallback((item: Record<string, any>) => {
+  const handleSelectItem = useCallback((item: Record<string, unknown>) => {
     onSelectResult?.(item);
     if (uniqId) void requestClose(uniqId, { force: true });
   }, [onSelectResult, uniqId, requestClose]);

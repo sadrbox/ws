@@ -10,7 +10,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
 import Notice from "src/components/Notice";
@@ -74,7 +74,7 @@ const TaxesForm: FC<Partial<TPane>> = (paneProps) => {
         calculationMethod: fd.calculationMethod === "ADDED" ? "ADDED" : "INCLUDED",
       };
     },
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Налоги", saved),
+    buildPaneLabel: (saved: LabelSource) => makePaneLabel(LIST_NAME, "Налоги", saved),
   });
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).

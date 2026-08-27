@@ -1,4 +1,5 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
+import { asText } from "src/utils/asText";
 import LookupField from "./LookupField";
 import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
@@ -63,11 +64,10 @@ const extractBasisSearch = (): string => "";
  * Метка документа-основания: «{Тип}: №{number} - {дата}». Если номер документа
  * не задан — фолбэк на «ID {id}». Независимо от типа/вида документа.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const basisItemLabel = (name: string, item: Record<string, any>): string => {
+const basisItemLabel = (name: string, item: Record<string, unknown>): string => {
   const num = item.number ?? item.documentNumber;
-  const ref = num != null && String(num).trim() !== "" ? `№${num}` : translate("docNoNumber");
-  return `${name}: ${ref} - ${getFormatDateOnly(item.date) ?? ""}`;
+  const ref = num != null && asText(num).trim() !== "" ? `№${asText(num)}` : translate("docNoNumber");
+  return `${name}: ${ref} - ${getFormatDateOnly(asText(item.date)) ?? ""}`;
 };
 
 const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
@@ -156,7 +156,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     let cancelled = false;
     void (async () => {
       try {
-        const resp = await api.get<any>(`${endpoint}/${basisDocumentUuid}`);
+        const resp = await api.get<{ item?: Record<string, unknown> } & Record<string, unknown>>(`${endpoint}/${basisDocumentUuid}`);
         const item = resp?.item ?? resp;
         if (!cancelled && item) {
           const name = nameForType(type, allowedTypes.find((t) => t.type === type));
@@ -170,10 +170,10 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   }, [basisDocumentUuid, basisDocumentType, basisDocumentLabel, allowedTypes, nameForType]);
 
   const handleSelect = useCallback(
-    (_uuid: string, _display: string, item: Record<string, any>) => {
+    (_uuid: string, _display: string, item: Record<string, unknown>) => {
       if (!activeType) return;
       const label = basisItemLabel(nameForType(activeType.type, activeType), item);
-      onSelect(activeType.type, item.uuid, label);
+      onSelect(activeType.type, item.uuid as string, label);
     },
     [activeType, onSelect, nameForType],
   );

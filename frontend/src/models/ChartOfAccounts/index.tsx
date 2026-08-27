@@ -19,7 +19,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -127,7 +127,7 @@ const ChartOfAccountsForm: FC<Partial<TPane>> = (paneProps) => {
         subkonto3Type: fd.subkonto3Type || null,
       };
     },
-    buildPaneLabel: (saved) => makePaneLabel("ChartOfAccountsList", "План счетов", saved),
+    buildPaneLabel: (saved: LabelSource) => makePaneLabel("ChartOfAccountsList", "План счетов", saved),
   });
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).

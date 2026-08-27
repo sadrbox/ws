@@ -16,6 +16,7 @@
 import { FC, useMemo } from "react";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
+import { asText } from "src/utils/asText";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { Field } from "src/components/Field";
@@ -67,7 +68,7 @@ export interface CreateSimpleModelOptions {
   /** Ключ AccessPermission (напр. "Brand"). Если не указан — readonly не применяется */
   accessPermission?: string;
   /** Формирование метки панели из сохранённых данных */
-  buildPaneLabel?: (saved: Record<string, any>) => string;
+  buildPaneLabel?: (saved: Record<string, unknown>) => string;
   /** Формирование метки строки в списке */
   getLabel?: (data: TDataItem | undefined) => string;
   /** Сортировка по умолчанию */
@@ -91,12 +92,12 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
   } = opts;
 
   // Формируем defaultFields и TFields-тип динамически
-  type TFields = Record<string, any> & { id?: number; uuid?: string };
+  type TFields = Record<string, unknown> & { id?: number; uuid?: string };
   const DEFAULT_FIELDS: TFields = {};
   for (const f of fields) DEFAULT_FIELDS[f.key] = f.type === "toggle" ? false : "";
 
   // buildPaneLabel по умолчанию
-  const buildPaneLabel = opts.buildPaneLabel ?? ((saved: Record<string, any>) => makePaneLabel(listName, formLabel, saved));
+  const buildPaneLabel = opts.buildPaneLabel ?? ((saved: Record<string, unknown>) => makePaneLabel(listName, formLabel, saved));
 
   // getLabel по умолчанию
   const getLabel = opts.getLabel ?? ((d: TDataItem | undefined) =>
@@ -119,7 +120,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
       storageKey,
       defaultFields: DEFAULT_FIELDS,
       paneProps,
-      mapServerToForm: (d, prev) => {
+      mapServerToForm: (d: Record<string, unknown>, prev) => {
         const result: TFields = { ...(prev ?? DEFAULT_FIELDS), ...d };
         for (const f of fields) result[f.key] = d[f.key] ?? (f.type === "toggle" ? false : "");
         return result;
@@ -136,7 +137,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
         // Собираем payload. Значения с сервера могут быть НЕ строками (boolean
         // isDefault, number sortOrder) — нельзя звать .trim() на них (иначе
         // ошибка при сохранении). Строки тримим, остальное передаём как есть.
-        const payload: Record<string, any> = {};
+        const payload: Record<string, unknown> = {};
         for (const f of fields) {
           const raw = fd[f.key];
           if (typeof raw === "string") {
@@ -175,7 +176,7 @@ export function createSimpleModel(opts: CreateSimpleModelOptions) {
                       label={f.label}
                       name={`${form.formUid}_${f.key}`}
                       minWidth={f.minWidth ?? "339px"}
-                      value={form.fields[f.key] ?? ""}
+                      value={asText(form.fields[f.key])}
                       onChange={(e) => form.setField(f.key, e.target.value)}
                       disabled={form.isLoading}
                     />

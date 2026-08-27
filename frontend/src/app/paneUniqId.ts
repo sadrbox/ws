@@ -49,7 +49,7 @@ export function buildPaneUniqId(
 
 	if (data?.uuid || data?.id) return `${name}-${data.uuid ?? data.id}`;
 
-	if ((data as any)?._paneToken) return `${name}-${(data as any)._paneToken}`;
+	if ((data as { _paneToken?: string })?._paneToken) return `${name}-${(data as { _paneToken?: string })._paneToken}`;
 
 	const signature = Object.entries(data ?? {})
 		.filter(

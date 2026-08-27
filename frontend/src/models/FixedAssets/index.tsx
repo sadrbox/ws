@@ -2,7 +2,7 @@
 // средства» в Поступлении и проводок по счёту 2410 (субконто FixedAsset). Единый
 // паттерн справочника (createSimpleModel).
 import { createSimpleModel } from "src/utils/createSimpleModel";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import columnsJson from "./columns.json";
 
 const { Form: FixedAssetsForm, List: FixedAssetsList } = createSimpleModel({
@@ -16,7 +16,7 @@ const { Form: FixedAssetsForm, List: FixedAssetsList } = createSimpleModel({
 		{ key: "inventoryNumber", label: "Инвентарный номер" },
 		{ key: "note", label: "Примечание" },
 	],
-	buildPaneLabel: (saved) =>
+	buildPaneLabel: (saved: LabelSource) =>
 		makePaneLabel("FixedAssetsList", "Основные средства", saved, (saved?.name as string | undefined) || undefined),
 	getLabel: (d) => `${(d?.name as string | undefined) || "?"}`,
 	defaultSort: { name: "asc" },

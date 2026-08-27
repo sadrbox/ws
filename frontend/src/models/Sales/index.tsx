@@ -352,7 +352,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const basisMismatch = useBasisMismatch({
     basisType: form.fields.basisDocumentType,
     basisUuid: form.fields.basisDocumentUuid,
-    currentFields: form.fields,
+    currentFields: form.fields as unknown as Record<string, unknown>,
     currentItems: allItemsRef.current,
     mapFields: mapCommonTradeFields,
   });

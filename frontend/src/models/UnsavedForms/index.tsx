@@ -1,4 +1,5 @@
 import { FC, useMemo, useCallback, useState, useRef, useEffect } from "react";
+import type { TPane } from "src/app/types";
 import { useAppContext } from "src/app/context";
 import { getModelColumns } from "src/components/Table/services";
 import { translate } from "src/i18";
@@ -179,7 +180,8 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
 
     // Ленивая загрузка Form-компонента
     regEntry.module().then((mod) => {
-      const FormComponent = mod[regEntry.formName] || mod.default;
+      const forms = mod as Record<string, FC<Partial<TPane>> | undefined>;
+      const FormComponent = forms[regEntry.formName] || forms.default;
       if (!FormComponent) {
         alert(`Компонент ${regEntry.formName} не найден в модуле`);
         return;
@@ -192,7 +194,7 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
         onClose: () => loadEntries(),
       });
     }).catch((err) => {
-      alert(`Ошибка загрузки формы: ${err?.message || "неизвестная ошибка"}`);
+      alert(`Ошибка загрузки формы: ${(err as { message?: string })?.message || "неизвестная ошибка"}`);
     });
   }, [addPane, t, loadEntries]);
 

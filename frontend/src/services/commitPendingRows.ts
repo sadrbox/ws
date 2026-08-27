@@ -157,7 +157,7 @@ function buildGenericPayload(
 		uuid: _u,
 		_tempId,
 		...rest
-	} = row as any;
+	} = row as Record<string, unknown>;
 	// Убираем вложенные объекты (relation includes) — они не нужны в payload
 	const payload: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(rest)) {

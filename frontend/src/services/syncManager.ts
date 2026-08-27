@@ -22,6 +22,7 @@ import {
   ensureOfflineDb,
   SYNCABLE_TABLES,
   type SyncableTable,
+  type SyncRecord,
   getLastSyncAt,
   setLastSyncAt,
   getAllPendingChanges,
@@ -273,7 +274,7 @@ async function pushChanges(): Promise<PushResult> {
   }));
 
   try {
-    const response = await apiClient.post("/sync/push", { changes }, {
+    const response = await apiClient.post<{ success?: boolean; message?: string; applied?: number; conflicts?: SyncConflict[]; errors?: SyncError[] }>("/sync/push", { changes }, {
       signal: abortController?.signal,
     });
     const body = response.data;
@@ -284,7 +285,7 @@ async function pushChanges(): Promise<PushResult> {
 
     // Удаляем успешно синхронизированные записи из pending
     // Если сервер не вернул детализацию applied, удаляем все кроме conflicts/errors
-    if (body.applied > 0) {
+    if ((body.applied ?? 0) > 0) {
       // Удаляем все pending, кроме тех, что попали в conflicts/errors
       const conflictUuids = new Set(
         (body.conflicts ?? []).map((c: SyncRowRef) => `${c.table}:${c.uuid}`),
@@ -349,7 +350,7 @@ async function pullChanges(tables: SyncableTable[]): Promise<PullResult> {
   }
 
   try {
-    const response = await apiClient.post("/sync/pull", {
+    const response = await apiClient.post<{ success?: boolean; message?: string; serverTime?: string; data?: Record<string, SyncRecord[]> }>("/sync/pull", {
       lastSyncAt: oldestSync,
       tables,
     }, {
@@ -363,7 +364,7 @@ async function pullChanges(tables: SyncableTable[]): Promise<PullResult> {
     }
 
     const serverTime = body.serverTime as string;
-    const data = body.data as Record<string, any[]>;
+    const data = body.data as Record<string, SyncRecord[]>;
 
     let totalRecords = 0;
     const tablesUpdated: string[] = [];
@@ -419,7 +420,7 @@ export async function pullSingleTable(table: SyncableTable): Promise<number> {
   const lastSync = await getLastSyncAt(table);
 
   try {
-    const response = await apiClient.post("/sync/pull", {
+    const response = await apiClient.post<{ success?: boolean; message?: string; serverTime?: string; data?: Record<string, SyncRecord[]> }>("/sync/pull", {
       lastSyncAt: lastSync,
       tables: [table],
     }, { timeout: 30_000 });
@@ -429,12 +430,12 @@ export async function pullSingleTable(table: SyncableTable): Promise<number> {
     const records = body.data?.[table];
     if (!Array.isArray(records) || records.length === 0) {
       // Обновляем timestamp даже если нет изменений
-      await setLastSyncAt(table, body.serverTime);
+      await setLastSyncAt(table, body.serverTime as string);
       return 0;
     }
 
     await upsertRecords(table, records);
-    await setLastSyncAt(table, body.serverTime);
+    await setLastSyncAt(table, body.serverTime as string);
     return records.length;
   } catch {
     return 0;
@@ -521,7 +522,7 @@ export async function resolveConflictKeepServer(
   conflict: SyncConflict,
 ): Promise<boolean> {
   try {
-    await upsertRecords(conflict.table, [conflict.serverData as any]);
+    await upsertRecords(conflict.table, [conflict.serverData as unknown as SyncRecord]);
     return true;
   } catch (err) {
     console.error("[SyncManager] resolveConflictKeepServer failed:", err);

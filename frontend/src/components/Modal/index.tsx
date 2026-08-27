@@ -32,14 +32,14 @@ type ModalProps = {
 
 import modalManager from './modalManager';
 
-const ModalContextInstance = createContext<{ values: Record<string, any>; setValues: (values: Record<string, any>) => void } | null>(null);
+const ModalContextInstance = createContext<{ values: Record<string, unknown>; setValues: (values: Record<string, unknown>) => void } | null>(null);
 
 const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, className, children, buttons }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const AppContext = useAppContext();
   const { screenRef } = AppContext;
-  const [values, setValues] = useState<Record<string, any>>({});
+  const [values, setValues] = useState<Record<string, unknown>>({});
 
   const handleClose = useCallback(() => {
     if (onClose) onClose();
@@ -96,10 +96,10 @@ const Modal: FC<ModalProps> = ({ method, onApply, onClose, title, style, classNa
       }
     };
 
-    modalEl.addEventListener('keydown', handleKeyDown as any);
+    modalEl.addEventListener('keydown', handleKeyDown as EventListener);
 
     return () => {
-      modalEl.removeEventListener('keydown', handleKeyDown as any);
+      modalEl.removeEventListener('keydown', handleKeyDown as EventListener);
       queueMicrotask(() => {
         // If another modal is still open, move focus into that modal instead of
         // restoring it to the element that opened the nested dialog.

@@ -67,10 +67,10 @@ async function resolveImportProducts(rows: SheetRow[]) {
   const allBarcodes = rows.flatMap((r) => splitBarcodes(r.barcodes));
   const skus = rows.map((r) => asText(r.sku ?? ""));
   const names = rows.map((r) => asText(r.name ?? ""));
-  const resp = await apiClient.post(`/product-prices/resolve-products`, {
+  const resp = await apiClient.post<{ items?: CatalogProduct[] }>(`/product-prices/resolve-products`, {
     skus: uniq(skus), barcodes: uniq(allBarcodes), names: uniq(names),
   });
-  const items = (resp.data?.items ?? []) as CatalogProduct[];
+  const items = resp.data?.items ?? [];
   const byBarcode = new Map<string, CatalogProduct>();
   const bySkuBrand = new Map<string, CatalogProduct>();
   const bySku = new Map<string, CatalogProduct>();
@@ -112,14 +112,14 @@ const pricesSummary = (r: TDataItem): string =>
 // Фабрика рендера ячеек: замыкает дату цен (для колонки «Цены» — #5).
 const makeCellRenderer = (priceDate: string) =>
   (row: TDataItem, col: TColumn, ctx: SubTableContext): React.ReactNode | undefined => {
-    const r = row as TDataItem & Record<string, any>;
+    const r = row as TDataItem & Record<string, unknown>;
     // «Номенклатура» — LookupField на справочник товаров (#2). allowFreeText
     // позволяет ввести новое наименование (товар будет создан при импорте).
     if (col.identifier === "name") {
       if (ctx.inlineEditing)
         return (
           <LookupField
-            label="" name={`pie_name_${r.id}`} value={String(r.productUuid ?? "")} displayValue={String(r.name ?? "")}
+            label="" name={`pie_name_${r.id}`} value={asText(r.productUuid ?? "")} displayValue={asText(r.name ?? "")}
             endpoint="products" displayField="name" variant="table" disabled={ctx.disabled}
             allowFreeText
             prefix={
@@ -143,7 +143,7 @@ const makeCellRenderer = (priceDate: string) =>
             onClear={() => ctx.handleLookupChange(r, "productUuid", null, { _matched: false })}
           />
         );
-      return <span>{r.productUuid ? "" : "＋ "}{String(r.name ?? "")}</span>;
+      return <span>{r.productUuid ? "" : "＋ "}{asText(r.name ?? "")}</span>;
     }
     // Бренд / Ед. изм. — ссылки на справочники (по наименованию; бэкенд сопоставляет по имени).
     if (col.identifier === "brand" || col.identifier === "unit") {
@@ -152,21 +152,21 @@ const makeCellRenderer = (priceDate: string) =>
       if (ctx.inlineEditing)
         return (
           <LookupField
-            label="" name={`pie_${col.identifier}_${r.id}`} value={String(r[uuidKey] ?? "")} displayValue={String(r[col.identifier] ?? "")}
+            label="" name={`pie_${col.identifier}_${r.id}`} value={asText(r[uuidKey] ?? "")} displayValue={asText(r[col.identifier] ?? "")}
             endpoint={endpoint} displayField="name" variant="table" disabled={ctx.disabled}
             onSelect={(u, dv) => ctx.handleLookupChange(r, uuidKey, u, { [col.identifier]: dv })}
             onClear={() => ctx.handleLookupChange(r, uuidKey, null, { [col.identifier]: "" })}
           />
         );
-      return <span>{String(r[col.identifier] ?? "")}</span>;
+      return <span>{asText(r[col.identifier] ?? "")}</span>;
     }
     if (["sku", "barcodes"].includes(col.identifier)) {
       if (ctx.inlineEditing)
         return (
-          <Field label="" name={`pie_${col.identifier}_${r.id}`} value={String(r[col.identifier] ?? "")} variant="table" width="100%"
+          <Field label="" name={`pie_${col.identifier}_${r.id}`} value={asText(r[col.identifier] ?? "")} variant="table" width="100%"
             onChange={(e) => ctx.handleInlineChange(r, col.identifier, e.target.value)} disabled={ctx.disabled} />
         );
-      return <span>{String(r[col.identifier] ?? "")}</span>;
+      return <span>{asText(r[col.identifier] ?? "")}</span>;
     }
     if (col.identifier === "isService") {
       return (
@@ -188,10 +188,10 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
   const { actions: { confirm } } = useAppContext();
   const [file, setFile] = useState<File | null>(null);
   const [priceDate, setPriceDate] = useState(today());
-  const [allRows, setAllRows] = useState<any[]>([]);
+  const [allRows, setAllRows] = useState<SheetRow[]>([]);
   const [hideExisting, setHideExisting] = useState(false);
-  const [pendingRows, setPendingRows] = useState<any[]>([]);
-  const [currentRows, setCurrentRows] = useState<any[]>([]);
+  const [pendingRows, setPendingRows] = useState<SheetRow[]>([]);
+  const [currentRows, setCurrentRows] = useState<SheetRow[]>([]);
   const [fillVersion, setFillVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [parsed, setParsed] = useState(false);
@@ -221,7 +221,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
+      const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
       if (!raw || raw.length === 0) { showToast("Файл пуст", "warning"); return; }
       const header = raw[0].map((h) => asText(h).trim());
       const headerL = header.map((h) => h.toLowerCase());
@@ -235,12 +235,12 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       const priceCols = header.map((h, i) => ({ name: h, i })).filter((c) => c.name && !used.has(c.i));
 
       const get = (r: unknown[], i: number) => (i >= 0 ? asText(r[i] ?? "").trim() : "");
-      const rows = (raw.slice(1) as any[])
+      const rows = raw.slice(1)
         .map((r, n) => {
           const prices = priceCols
             .map((c) => ({ typeName: c.name, value: r[c.i] }))
             .filter((p) => p.value != null && p.value !== "")
-            .map((p) => ({ typeName: p.typeName, value: parseFloat(String(p.value).replace(",", ".")) }))
+            .map((p) => ({ typeName: p.typeName, value: parseFloat(asText(p.value).replace(",", ".")) }))
             .filter((p) => !Number.isNaN(p.value));
           return {
             id: -(n + 1),
@@ -310,7 +310,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
 
     setIsLoading(true);
     try {
-      const resp = await apiClient.post(`/${ENDPOINT}/import`, { rows, date: priceDate });
+      const resp = await apiClient.post<{ summary?: { created?: number; updated?: number; barcodesAdded?: number; pricesAdded?: number; skipped?: number } }>(`/${ENDPOINT}/import`, { rows, date: priceDate });
       const s = resp.data?.summary;
       showToast(s
         ? `Готово. Создано: ${s.created || 0}, обновлено: ${s.updated || 0}, штрих-кодов: +${s.barcodesAdded || 0}, цен: +${s.pricesAdded || 0}, пропущено: ${s.skipped || 0}`
@@ -333,8 +333,8 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
   const handleExport = async () => {
     setIsLoading(true);
     try {
-      const resp = await apiClient.get(`/${ENDPOINT}/export-full`);
-      const items = (resp.data?.items ?? []) as CatalogProduct[];
+      const resp = await apiClient.get<{ items?: CatalogProduct[] }>(`/${ENDPOINT}/export-full`);
+      const items = resp.data?.items ?? [];
       if (items.length === 0) { showToast("Номенклатуры нет", "info"); return; }
       const typeNames: string[] = [];
       const seen = new Set<string>();
@@ -345,7 +345,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       const header = ["sku", "name", "brand", "unit", "isService", "barcodes", ...typeNames];
       const aoa = [header, ...items.map((p) => {
         const bcs = Array.from(new Set([p.barcode, ...((p.barcodes ?? []).map((b) => b.barcode))].filter(Boolean)));
-        const latest: Record<string, any> = {};
+        const latest: Record<string, unknown> = {};
         for (const pp of p.productPrices ?? []) { // отсортированы date desc → первое = последнее значение
           const n = pp.priceType?.name || "(без типа)";
           if (!(n in latest)) latest[n] = pp.price;
@@ -370,8 +370,8 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
     try {
       let typeNames: string[] = [];
       try {
-        const resp = await apiClient.get(`/price-types`, { params: { limit: 1000 } });
-        typeNames = ((resp.data?.items ?? []) as any[]).map((t) => t.name).filter(Boolean);
+        const resp = await apiClient.get<{ items?: { name?: string }[] }>(`/price-types`, { params: { limit: 1000 } });
+        typeNames = (resp.data?.items ?? []).map((t) => t.name).filter((n): n is string => !!n);
       } catch { /* ignore */ }
       const header = ["sku", "name", "brand", "unit", "isService", "barcodes", ...typeNames];
       const sample = ["ART-001", "Пример товара", "Бренд", "шт", 0, "4870000000001;4870000000002", ...typeNames.map((_, i) => (i === 0 ? 1000 : ""))];
@@ -431,7 +431,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
           parentUuid=""
           deferRemoteChanges
           clientSort
-          initialPendingRows={pendingRows}
+          initialPendingRows={pendingRows as unknown as TDataItem[]}
           defaultInlineEditing
           emptyMessage={"Выберите файл и нажмите «Заполнить», либо выгрузите всю номенклатуру"}
           onAllItemsChange={setCurrentRows}

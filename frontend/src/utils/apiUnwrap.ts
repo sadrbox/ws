@@ -8,7 +8,7 @@
  */
 
 /** Вернуть массив элементов из ответа API (массив | {data} | {items}). */
-export function unwrapList<T = any>(resp: unknown): T[] {
+export function unwrapList<T = unknown>(resp: unknown): T[] {
 	if (Array.isArray(resp)) return resp as T[];
 	const r = resp as { data?: unknown; items?: unknown } | null | undefined;
 	if (Array.isArray(r?.data)) return r.data as T[];
@@ -17,7 +17,7 @@ export function unwrapList<T = any>(resp: unknown): T[] {
 }
 
 /** Вернуть одиночную сущность из ответа API ({item} | сам объект). */
-export function unwrapItem<T = any>(resp: unknown): T {
+export function unwrapItem<T = unknown>(resp: unknown): T {
 	const r = resp as { item?: unknown } | null | undefined;
 	return (r && typeof r === "object" && "item" in r ? r.item : resp) as T;
 }

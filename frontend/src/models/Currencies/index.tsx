@@ -1,5 +1,5 @@
 import { createSimpleModel } from "src/utils/createSimpleModel";
-import { makePaneLabel } from "src/utils/buildPaneLabel";
+import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import columnsJson from "./columns.json";
 
 const { Form: CurrenciesForm, List: CurrenciesList } = createSimpleModel({
@@ -14,7 +14,7 @@ const { Form: CurrenciesForm, List: CurrenciesList } = createSimpleModel({
     { key: "name", label: "Наименование *", required: true, requiredMessage: "Наименование обязательно" },
     { key: "symbol", label: "Символ", minWidth: "100px" },
   ],
-  buildPaneLabel: (saved) =>
+  buildPaneLabel: (saved: LabelSource) =>
     makePaneLabel("CurrenciesList", "Валюты", saved, [saved.code, saved.name].filter(Boolean).join(" ") || undefined),
   getLabel: (d) => `${(d?.code as string | undefined) || "?"} — ${(d?.name as string | undefined) || "?"}`,
 });

@@ -355,13 +355,13 @@ export interface OrgDependentField {
 const lastRefillBasis = new WeakMap<object, string>();
 
 /** Поля формы, которые читает перезаполнение (+ произвольные по строковому ключу). */
-interface BasisFieldsSnapshot {
+export interface BasisFieldsSnapshot {
 	basisDocumentType?: string;
 	basisDocumentUuid?: string;
 	uuid?: string;
 }
 /** Минимальный контракт формы (useFormStore), нужный runBasisRefill. */
-interface RefillFormHandle {
+export interface RefillFormHandle {
 	store: { getSnapshot: () => { fields: BasisFieldsSnapshot } };
 	setFields: (patch: Record<string, unknown>) => void;
 }

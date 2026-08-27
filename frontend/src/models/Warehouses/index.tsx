@@ -11,7 +11,7 @@ import { Group, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { makePaneLabel, makePaneLabelFromData } from "src/utils/buildPaneLabel";
+import { makePaneLabel, makePaneLabelFromData , type LabelSource } from "src/utils/buildPaneLabel";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -54,7 +54,7 @@ const WarehousesForm: FC<Partial<TPane>> = (paneProps) => {
       id: d.id, uuid: d.uuid,
     }),
     buildPayload: (fd) => ({ name: fd.name?.trim() || null, address: fd.address?.trim() || null, comment: fd.comment?.trim() || null, organizationUuid: fd.organizationUuid || null }),
-    buildPaneLabel: (saved) => makePaneLabel(LIST_NAME, "Склады", saved),
+    buildPaneLabel: (saved: LabelSource) => makePaneLabel(LIST_NAME, "Склады", saved),
   });
 
   // Ошибки ДАННЫХ формы → <Notice /> внутри формы (системные — в <UIToast />).
@@ -139,7 +139,7 @@ const WarehousesTable: FC<WarehousesTableProps> = ({
       addPane,
       invalidate: () => void queryClient.invalidateQueries({ queryKey: [WH_TABLE_ENDPOINT] }),
       component: WarehousesForm,
-      label: (d, isEdit) => makePaneLabelFromData("WarehousesList", "Склады", isEdit ? d as any : null, d?.name as string),
+      label: (d, isEdit) => makePaneLabelFromData("WarehousesList", "Склады", isEdit ? d as LabelSource : null, d?.name as string),
       newContext: () => ({ organizationUuid: parentUuid, organizationName: parentName }),
     }, data, ctx, sourceRow);
   }, [addPane, parentUuid, parentName, queryClient]);

@@ -181,7 +181,7 @@ export function withSaleItemRecalc<T extends SaleItemCalcInput>(
 	const next = { ...current, ...patch };
 	// Метод расчёта НДС передаётся вызывающей стороной
 	// (vatCalculationMethod из настроек НУО организации), иначе — INCLUDED.
-	const method = (next as any).vatCalculationMethod ?? "INCLUDED";
+	const method = (next as { vatCalculationMethod?: string }).vatCalculationMethod ?? "INCLUDED";
 	return {
 		...patch,
 		...recalcSaleItemAmounts(
@@ -211,7 +211,7 @@ export function withSaleItemRecalcFromDiscountAmount<
 	const discPct =
 		base > 0 ? Math.round((discAmt / base) * 100 * 10000) / 10000 : 0;
 
-	const method = (current as any).vatCalculationMethod;
+	const method = (current as { vatCalculationMethod?: string }).vatCalculationMethod;
 	const recalc = recalcSaleItemAmounts(
 		q,
 		p,

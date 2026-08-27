@@ -32,7 +32,7 @@ import { useUserDefaults } from "src/hooks/useUserDefaults";
 import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
 import { resolveOrgChangeFields } from "src/utils/createFromBasis";
 import { useAppContext } from "src/app/context";
-import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -234,11 +234,11 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
           cashboxUuid: fd.cashboxUuid || null,
         };
       },
-      buildPaneLabel: (saved) => makeDocLabel(cfg.listName, cfg.formLabel, saved, "date"),
+      buildPaneLabel: (saved: LabelSource) => makeDocLabel(cfg.listName, cfg.formLabel, saved, "date"),
     });
 
     const syncContract = useContractSync();
-    const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
+    const handleContractSelect = useCallback((uuid: string, displayValue: string, item: { organizationUuid?: string; organization?: { name?: string | null } | null; counterpartyUuid?: string; counterparty?: { name?: string | null } | null }) => {
       const updates: Partial<TFields> = { contractUuid: uuid, contractName: displayValue };
       if (item.organizationUuid) { updates.organizationUuid = item.organizationUuid; updates.organizationName = item.organization?.name ?? ""; }
       if (item.counterpartyUuid) { updates.counterpartyUuid = item.counterpartyUuid; updates.counterpartyName = item.counterparty?.name ?? ""; }
@@ -314,7 +314,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
     const basisMismatch = useBasisMismatch({
       basisType: form.fields.basisDocumentType,
       basisUuid: form.fields.basisDocumentUuid,
-      currentFields: form.fields,
+      currentFields: form.fields as unknown as Record<string, unknown>,
       currentItems: [],
       mapFields: mapCashHeader,
       ignoreItems: true,

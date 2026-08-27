@@ -49,7 +49,7 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
       if (f.dateTo) p.dateTo = f.dateTo;
       if (f.orgUuid) p.organizationUuid = f.orgUuid;
       if (f.warehouseUuid) p.warehouseUuid = f.warehouseUuid;
-      const resp = await api.get<any>("reports/material-statement", { params: p });
+      const resp = await api.get<{ items?: ProductMovement[] }>("reports/material-statement", { params: p });
       return resp?.items ?? [];
     },
     enabled: !!applied,

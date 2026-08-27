@@ -7,6 +7,7 @@
  * сам решает, что делать с отсутствующим компонентом).
  */
 import type { FC } from "react";
+import type { TPane } from "src/app/types";
 
 export interface LazyComponentEntry {
 	/** Динамический import модуля с компонентом. */
@@ -18,10 +19,11 @@ export interface LazyComponentEntry {
 /** Загружает компонент по записи реестра. Возвращает null при любой ошибке. */
 export async function loadLazyComponent(
 	entry: LazyComponentEntry,
-): Promise<FC<any> | null> {
+): Promise<FC<Partial<TPane>> | null> {
 	try {
 		const mod = await entry.loader();
-		return ((mod[entry.key] ?? mod.default) as FC<any> | undefined) ?? null;
+		const forms = mod as Record<string, FC<Partial<TPane>> | undefined>;
+		return (forms[entry.key] ?? forms.default) ?? null;
 	} catch {
 		return null;
 	}

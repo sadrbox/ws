@@ -30,7 +30,7 @@ import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
-import { makeDocLabel } from "src/utils/buildPaneLabel";
+import { makeDocLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -49,7 +49,7 @@ import DocumentChainButton from "src/components/DocumentChain/DocumentChainButto
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app/context";
-import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, fetchDocumentItems, type BasisFromTarget } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, fetchDocumentItems, type BasisFromTarget , type BasisSource } from "src/utils/createFromBasis";
 import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
@@ -58,7 +58,7 @@ import { useExistingDependents, formatDependentOption } from "src/hooks/useExist
 import DocumentTotals from "src/components/DocumentTotals";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
-import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
+import { checkStockAvailability, formatStockShortages, type ExpenseDocumentType } from "src/utils/stockControl";
 
 /** «Создать на основании»: одна цель (документ, который можно породить). */
 export interface TradeCreateTarget {
@@ -352,22 +352,22 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           basisDocumentLabel: fd.basisDocumentLabel || null,
         };
       },
-      buildPaneLabel: (saved) => makeDocLabel(cfg.listName, cfg.formLabel, saved, "date"),
+      buildPaneLabel: (saved: LabelSource) => makeDocLabel(cfg.listName, cfg.formLabel, saved, "date"),
       afterSave,
       afterReload,
       // Контроль остатка перед проведением (расходные документы: возвраты, реализация).
       ...(cfg.stockCheckDocType ? {
         onBeforeSave: async (fd: TFields) => {
           if (fd.posted !== true) return null;
-          let rows = allItemsRef.current.filter((r) => (r as any)._pendingAction !== "delete");
+          let rows = allItemsRef.current.filter((r) => r._pendingAction !== "delete");
           if (rows.length === 0 && fd.uuid) {
             rows = await fetchDocumentItems(cfg.itemsEndpoint, cfg.itemsParentField, fd.uuid);
           }
           const shortages = await checkStockAvailability({
-            documentType: cfg.stockCheckDocType as any,
+            documentType: cfg.stockCheckDocType as ExpenseDocumentType,
             documentUuid: fd.uuid || undefined,
             warehouseUuid: fd.warehouseUuid || null,
-            items: rows.map((r) => ({ productUuid: (r as any).productUuid, quantity: (r as any).quantity })),
+            items: rows.map((r) => ({ productUuid: (r.productUuid as string | null) ?? null, quantity: (r.quantity as number | string | null) ?? null })),
           });
           return shortages.length ? formatStockShortages(shortages) : null;
         },
@@ -382,7 +382,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
     const basisMismatch = useBasisMismatch({
       basisType: form.fields.basisDocumentType,
       basisUuid: form.fields.basisDocumentUuid,
-      currentFields: form.fields,
+      currentFields: form.fields as unknown as Record<string, unknown>,
       currentItems: allItemsRef.current,
       mapFields: mapCommonTradeFields,
       // Возвраты (поставщику/покупателя) допускают частичный объём → сверяем
@@ -421,7 +421,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
       form.fields.date || null,
     );
 
-    const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
+    const handleContractSelect = useCallback((uuid: string, displayValue: string, item: { organizationUuid?: string; organization?: { name?: string | null } | null; counterpartyUuid?: string; counterparty?: { name?: string | null } | null }) => {
       const updates: Partial<TFields> = { contractUuid: uuid, contractName: displayValue };
       if (item.organizationUuid) { updates.organizationUuid = item.organizationUuid; updates.organizationName = item.organization?.name ?? ""; }
       if (item.counterpartyUuid) { updates.counterpartyUuid = item.counterpartyUuid; updates.counterpartyName = item.counterparty?.name ?? ""; }
@@ -664,13 +664,19 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
 
     const runCreateTarget = useCallback(async (t: TradeCreateTarget) => {
       const srcLabel = cfg.basisSourceLabelKey ? translate(cfg.basisSourceLabelKey) : cfg.formLabel;
-      await openDocumentFromBasis(form.fields as any, srcLabel, t.target, addPane);
+      await openDocumentFromBasis(form.fields as unknown as BasisSource, srcLabel, t.target, addPane);
     }, [form.fields, addPane]);
 
     const handlePrint = useCallback(() => {
       if (!cfg.print || !form.fields.uuid) return;
       const rows: TradePrintRow[] = allItemsRef.current.map((raw, i) => {
-        const r = raw as any;
+        const r = raw as {
+          product?: { name?: string | null } | null; productName?: string | null;
+          unitOfMeasure?: { name?: string | null } | null; unitName?: string | null;
+          quantity?: unknown; price?: unknown; amount?: unknown; amountWithoutVat?: unknown;
+          vatRate?: unknown; vatAmount?: unknown; exciseRate?: unknown; exciseAmount?: unknown;
+          discountPercent?: unknown; discountAmount?: unknown;
+        };
         return {
           number: i + 1,
           name: r.product?.name ?? r.productName ?? "",
@@ -766,7 +772,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
     { variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }
   ) => (
     <ModelList
-      endpoint={cfg.endpoint} listName={cfg.listName} columnsJson={cfg.columnsJson as any} FormComponent={Form}
+      endpoint={cfg.endpoint} listName={cfg.listName} columnsJson={cfg.columnsJson} FormComponent={Form}
       getLabel={(d) => d?.date ? getFormatDateOnly(d.date as string) : ""}
       variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
       defaultSort={{ id: "desc" }} enableDateRange

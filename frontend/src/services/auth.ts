@@ -185,7 +185,7 @@ export function logout(): void {
 export function getCurrentUser(): AuthUser | null {
 	try {
 		const json = localStorage.getItem(AUTH_USER_KEY);
-		return json ? JSON.parse(json) : null;
+		return json ? (JSON.parse(json) as AuthUser) : null;
 	} catch {
 		return null;
 	}
@@ -222,7 +222,7 @@ export async function registerOrganization(data: {
 		if (d.success && d.token) {
 			localStorage.setItem(AUTH_TOKEN_KEY, d.token);
 			localStorage.setItem(AUTH_USER_KEY, JSON.stringify(d.user));
-			return { success: true, user: d.user, inviteCode: (d as any).inviteCode };
+			return { success: true, user: d.user, inviteCode: (d as { inviteCode?: string }).inviteCode };
 		}
 		return { success: false, message: d.message || "Ошибка регистрации" };
 	} catch (err: unknown) {

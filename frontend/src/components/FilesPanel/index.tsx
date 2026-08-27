@@ -3,6 +3,7 @@ import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import Table from "src/components/Table";
+import type { TableProps } from "src/components/Table";
 import columnsJson from "./columns.json";
 import apiClient from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
@@ -98,7 +99,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
       const url = allFiles
         ? `/${MODEL_ENDPOINT}/all`
         : `/${MODEL_ENDPOINT}?ownerType=${encodeURIComponent(ownerType ?? "")}&ownerUuid=${encodeURIComponent(ownerUuid ?? "")}`;
-      const res = await apiClient.get(url);
+      const res = await apiClient.get<{ items?: TDataItem[] }>(url);
       setRows(res.data?.items ?? []);
     } catch (_e) {
       showToast("Ошибка загрузки списка файлов", "error");
@@ -295,7 +296,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
       {uploadInfo && (
         <UploadProgress name={uploadInfo.name} size={uploadInfo.size} percent={uploadInfo.percent} />
       )}
-      <Table {...(tableProps as any)} />
+      <Table {...(tableProps as unknown as TableProps)} />
     </>
   );
 };
