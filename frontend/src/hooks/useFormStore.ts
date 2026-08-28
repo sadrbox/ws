@@ -1,5 +1,6 @@
 import { asText } from "src/utils/asText";
 import { addPaneNotification, resolvePaneNotifications, dismissNetworkNotifications, type PaneNotification } from "./paneNotifications";
+import { persistToSession, restoreFromSession, clearSession } from "./formSession";
 import { setPaneDirty, setPaneIsEditMode } from "./paneFormState";
 import {
 	useCallback,
@@ -29,93 +30,11 @@ import useUID from "./useUID";
 import { stableStringify } from "src/utils/normalize";
 import { setPendingHighlight } from "src/utils/listHighlight";
 import { LOOKUP_CREATE_TOKEN_KEY, emitLookupCreated } from "src/utils/lookupCreateBus";
+import { isItemFieldEmpty } from "./formStore.types";
+import type { ApiError, TableDef, TableState, FormStoreState, Listener } from "./formStore.types";
+export type { TableDef, FieldDefs, TableState, FormStoreState } from "./formStore.types";
+export { isItemFieldEmpty } from "./formStore.types";
 
-/**
- * Axios-подобная ошибка запроса — для сужения `unknown` в catch (T3).
- * Позволяет читать response.status/data.message без `any`.
- */
-type ApiError = {
-	response?: { status?: number; data?: { message?: string } };
-	message?: string;
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ═══════════════════════════════════════════════════════════════════════════
-
-/** Возвращает true, если значение обязательного поля считается пустым: null/undefined/""/числовой 0 (включая "0.0000"). */
-export const isItemFieldEmpty = (value: unknown): boolean => {
-	if (value === null || value === undefined || value === "") return true;
-	const n = Number(value);
-	return !isNaN(n) && n === 0;
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ТИПЫ
-// ═══════════════════════════════════════════════════════════════════════════
-
-/** Описание одной вложенной таблицы */
-export interface TableDef {
-	/** API endpoint SubTable (например "contacts", "saleitems") */
-	endpoint: string;
-	/** FK-поле, связывающее строки с родителем (например "ownerUuid") */
-	parentField: string;
-	/** Человекочитаемое имя (для ошибок) */
-	label: string;
-	/** Доп. поля, добавляемые к каждому payload (например { ownerType: "organization" }) */
-	extraFields?: Record<string, unknown>;
-	/** Кастомные payload-функции */
-	createPayload?: (row: TDataItem) => Record<string, unknown>;
-	updatePayload?: (row: TDataItem) => Record<string, unknown>;
-	extraSkipFields?: string[];
-	/** Если true — не добавлять [parentField]: parentUuid к payload createPayload/updatePayload (createPayload сам отвечает за все поля) */
-	skipParentField?: boolean;
-	/** Batch endpoint (без /). Если задан — все pending-строки отправляются одним POST /{batchEndpoint}/batch */
-	batchEndpoint?: string;
-	/** Поля, обязательные в каждой не-удалённой строке. Сохранение блокируется, если хотя бы одно пустое. */
-	requiredItemFields?: string[];
-	/** Читаемые имена для обязательных полей (field → label), используются в сообщении об ошибке. */
-	requiredItemFieldLabels?: Record<string, string>;
-}
-
-/** Описание полей формы: ключ → значение по умолчанию */
-export type FieldDefs<F extends object> = {
-	[K in keyof F]: F[K];
-};
-
-/** Данные одной вложенной таблицы в store */
-export interface TableState {
-	/** Строки с _pendingAction (create | update | delete) */
-	pending: TDataItem[];
-}
-
-/** Полное состояние формы */
-export interface FormStoreState<F extends object> {
-	fields: F;
-	tables: Record<string, TableState>;
-	meta: {
-		uuid: string | undefined;
-		endpoint: string;
-		isLoading: boolean;
-		isEditMode: boolean;
-		error: string | null;
-		/**
-		 * Класс ошибки — определяет, ГДЕ её показывать (см. памятку Notice vs Toast):
-		 *   "form"   — ошибка ДАННЫХ формы: клиентская валидация или бизнес-отказ бэка
-		 *              (400/409/422/423: «серий меньше количества», «период закрыт»…).
-		 *              Показывается в <Notice /> ВНУТРИ формы — её чинят правкой полей.
-		 *   "system" — сбой, к форме не относящийся (сеть, 5xx, нет прав). Правкой полей
-		 *              не лечится → уходит в <UIToast />.
-		 */
-		errorKind: "form" | "system";
-		errorRevision: number;
-		tablesValidationFailed: boolean;
-		headerValidationFailed: boolean;
-	};
-}
-
-/** Тип подписки */
-type Listener = () => void;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PERSIST (localStorage, по userId)
@@ -143,68 +62,6 @@ export function getFormStoreUserId(): string {
 // случайном Ctrl+R / падении страницы) и «черновик другой вкладки / прошлой
 // сессии» (предложить восстановить через кнопку stash).
 // ═══════════════════════════════════════════════════════════════════════════
-const SESSION_TOKEN_KEY = "_st";
-const TAB_ID_STORAGE_KEY = "formStore:tabId";
-const CURRENT_SESSION_TOKEN = (() => {
-	try {
-		const existing = sessionStorage.getItem(TAB_ID_STORAGE_KEY);
-		if (existing) return existing;
-		const fresh = Math.random().toString(36).slice(2) + Date.now().toString(36);
-		sessionStorage.setItem(TAB_ID_STORAGE_KEY, fresh);
-		return fresh;
-	} catch {
-		// sessionStorage недоступен (приватный режим и т.п.) — fallback: in-memory.
-		return Math.random().toString(36).slice(2) + Date.now().toString(36);
-	}
-})();
-
-function persistToSession<F extends object>(
-	storageKey: string,
-	state: FormStoreState<F>,
-): void {
-	try {
-		// Сохраняем fields + tables + токен текущей сессии
-		const payload = {
-			fields: state.fields,
-			tables: state.tables,
-			[SESSION_TOKEN_KEY]: CURRENT_SESSION_TOKEN,
-		};
-		localStorage.setItem(storageKey, JSON.stringify(payload));
-	} catch {
-		/* quota exceeded */
-	}
-}
-
-function restoreFromSession<F extends object>(
-	storageKey: string,
-): {
-	fields: F;
-	tables: Record<string, TableState>;
-	fromCurrentSession: boolean;
-} | null {
-	try {
-		const raw = localStorage.getItem(storageKey);
-		if (!raw) return null;
-		const parsed = JSON.parse(raw) as {
-			fields: F;
-			tables: Record<string, TableState>;
-			[SESSION_TOKEN_KEY]?: string;
-		};
-		const fromCurrentSession =
-			parsed[SESSION_TOKEN_KEY] === CURRENT_SESSION_TOKEN;
-		return { fields: parsed.fields, tables: parsed.tables, fromCurrentSession };
-	} catch {
-		return null;
-	}
-}
-
-function clearSession(storageKey: string): void {
-	try {
-		localStorage.removeItem(storageKey);
-	} catch {
-		/* ignore */
-	}
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CORE STORE (чистый JS, без React)
